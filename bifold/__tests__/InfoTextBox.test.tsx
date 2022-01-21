@@ -1,7 +1,7 @@
 import React from 'react'
 import renderer from 'react-test-renderer'
 
-import { InfoTextBox } from '../App/components/texts/TextBox'
+import InfoTextBox from '../App/components/texts/InfoTextBox'
 
 jest.mock('react-native-vector-icons/MaterialIcons', () => 'Icon')
 
