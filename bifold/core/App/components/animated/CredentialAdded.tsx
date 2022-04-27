@@ -8,7 +8,7 @@ import WalletFront from '../../assets/img/wallet-front.svg'
 
 const ConnectionLoading: React.FC = () => {
   const fadeAnim = useRef(new Animated.Value(0)).current
-  const tranAnim = useRef(new Animated.Value(-140)).current
+  const tranAnim = useRef(new Animated.Value(-105)).current
   const slideTiming: Animated.TimingAnimationConfig = {
     toValue: -15,
     duration: 2000,
