@@ -79,22 +79,22 @@ const CredentialOfferDecline: React.FC<CredentialOfferDeclineProps> = ({
             <>
               <InfoBox
                 notificationType={InfoBoxType.Warn}
-                title={'Are you sure you want to decline this credential?'}
-                message={'In order to receive the credential offer again, you will need to reapply with the issuer.'}
+                title={t('CredentialOffer.ConfirmDeclinedTitle')}
+                message={t('CredentialOffer.ConfirmDeclinedMessage')}
               />
               <CredentialCard credential={credential} style={{ marginVertical: 25 }} />
               <View>
                 <Button
-                  title={t('CredentialOffer.ConfirmDeclineCredential')}
-                  accessibilityLabel={t('CredentialOffer.ConfirmDeclineCredential')}
+                  title={t('CredentialOffer.ConfirmDecline')}
+                  accessibilityLabel={t('CredentialOffer.ConfirmDecline')}
                   testID={testIdWithKey('ConfirmDeclineCredential')}
                   onPress={onDeclinedConformationTouched}
                   buttonType={ButtonType.Primary}
                 />
                 <View style={[{ marginTop: 10 }]}>
                   <Button
-                    title={t('CredentialOffer.AbortDeclineCredential')}
-                    accessibilityLabel={t('CredentialOffer.AbortDeclineCredential')}
+                    title={t('CredentialOffer.AbortDecline')}
+                    accessibilityLabel={t('CredentialOffer.AbortDecline')}
                     testID={testIdWithKey('AbortDeclineCredential')}
                     onPress={onGoBackTouched}
                     buttonType={ButtonType.Secondary}
