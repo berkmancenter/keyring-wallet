@@ -2,7 +2,7 @@ import { useCredentialById } from '@aries-framework/react-hooks'
 import { useNavigation } from '@react-navigation/core'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Modal, StyleSheet, Text, View } from 'react-native'
+import { Modal, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import CredentialDeclined from '../assets/img/credential-declined.svg'
@@ -12,6 +12,7 @@ import InfoBox, { InfoBoxType } from '../components/misc/InfoBox'
 import { useTheme } from '../contexts/theme'
 import { GenericFn } from '../types/fn'
 import { Screens, TabStacks } from '../types/navigators'
+import { statusBarStyleForColor } from '../utils/luminance'
 import { testIdWithKey } from '../utils/testable'
 
 export interface CredentialOfferDeclineProps {
@@ -73,28 +74,29 @@ const CredentialOfferDecline: React.FC<CredentialOfferDeclineProps> = ({
 
   return (
     <Modal visible={modalVisible} transparent={true} animationType={'none'}>
+      <StatusBar barStyle={statusBarStyleForColor(styles.container.backgroundColor)} />
       <SafeAreaView style={[styles.container]}>
         <View style={[{ marginTop: 25 }]}>
           {!didDeclineOffer && (
             <>
               <InfoBox
                 notificationType={InfoBoxType.Warn}
-                title={'Are you sure you want to decline this credential?'}
-                message={'In order to receive the credential offer again, you will need to reapply with the issuer.'}
+                title={t('CredentialOffer.ConfirmDeclinedTitle')}
+                message={t('CredentialOffer.ConfirmDeclinedMessage')}
               />
               <CredentialCard credential={credential} style={{ marginVertical: 25 }} />
               <View>
                 <Button
-                  title={t('CredentialOffer.ConfirmDeclineCredential')}
-                  accessibilityLabel={t('CredentialOffer.ConfirmDeclineCredential')}
+                  title={t('CredentialOffer.ConfirmDecline')}
+                  accessibilityLabel={t('CredentialOffer.ConfirmDecline')}
                   testID={testIdWithKey('ConfirmDeclineCredential')}
                   onPress={onDeclinedConformationTouched}
                   buttonType={ButtonType.Primary}
                 />
                 <View style={[{ marginTop: 10 }]}>
                   <Button
-                    title={t('CredentialOffer.AbortDeclineCredential')}
-                    accessibilityLabel={t('CredentialOffer.AbortDeclineCredential')}
+                    title={t('CredentialOffer.AbortDecline')}
+                    accessibilityLabel={t('CredentialOffer.AbortDecline')}
                     testID={testIdWithKey('AbortDeclineCredential')}
                     onPress={onGoBackTouched}
                     buttonType={ButtonType.Secondary}
