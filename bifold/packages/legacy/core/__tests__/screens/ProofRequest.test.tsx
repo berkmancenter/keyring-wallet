@@ -1,14 +1,21 @@
-import { INDY_PROOF_REQUEST_ATTACHMENT_ID, V1RequestPresentationMessage } from '@aries-framework/anoncreds'
-import { CredentialExchangeRecord, CredentialState, ProofExchangeRecord, ProofState } from '@aries-framework/core'
-import { Attachment, AttachmentData } from '@aries-framework/core/build/decorators/attachment/Attachment'
-import { useAgent, useProofById } from '@aries-framework/react-hooks'
+import { INDY_PROOF_REQUEST_ATTACHMENT_ID, V1RequestPresentationMessage } from '@credo-ts/anoncreds'
+import {
+  CredentialExchangeRecord,
+  CredentialRole,
+  CredentialState,
+  ProofExchangeRecord,
+  ProofRole,
+  ProofState,
+} from '@credo-ts/core'
+import { Attachment, AttachmentData } from '@credo-ts/core/build/decorators/attachment/Attachment'
+import { useAgent, useProofById } from '@credo-ts/react-hooks'
 import mockRNCNetInfo from '@react-native-community/netinfo/jest/netinfo-mock'
 import { useNavigation } from '@react-navigation/core'
 import '@testing-library/jest-native/extend-expect'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
-import { useTranslation } from 'react-i18next'
 
+import { useTranslation } from 'react-i18next'
 import { ConfigurationContext } from '../../App/contexts/configuration'
 import { NetworkContext, NetworkProvider } from '../../App/contexts/network'
 import ProofRequest from '../../App/screens/ProofRequest'
@@ -62,6 +69,7 @@ describe('displays a proof request screen', () => {
     const { t } = useTranslation()
 
     const { id: credentialId } = new CredentialExchangeRecord({
+      role: CredentialRole.Holder,
       threadId: '1',
       state: CredentialState.Done,
       credentialAttributes: [
@@ -117,6 +125,7 @@ describe('displays a proof request screen', () => {
     })
 
     const testProofRequest = new ProofExchangeRecord({
+      role: ProofRole.Prover,
       connectionId: '',
       threadId: presentationMessageId,
       state: ProofState.RequestReceived,
@@ -290,6 +299,7 @@ describe('displays a proof request screen', () => {
       const testAge2 = '17'
 
       const { id: credentialId2 } = new CredentialExchangeRecord({
+        role: CredentialRole.Holder,
         threadId: '1',
         state: CredentialState.Done,
         credentialAttributes: [
