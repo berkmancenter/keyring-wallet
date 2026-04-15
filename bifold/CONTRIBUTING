@@ -1,0 +1,27 @@
+## Contributor's Guide:
+
+Thanks for your interest in the project! We welcome pull requests from developers of all skill levels.
+
+If you would like to contribute but don't already have something in mind,
+we invite you to take a look at our roadmap list. If you see one you'd like
+to work on, please leave a quick comment so that we don't end up with
+duplicated effort. Thanks in advance!
+
+Please note that all contributors and maintainers of this project are subject to our [Code of Conduct][coc].
+
+### Pull Requests
+
+Before submitting a pull request, please ensure you have added or updated tests as appropriate, and that all existing tests still pass with your changes. Please also ensure that your coding style is consistent with existing code in the project. A checklist is included in the PR template as a friendly reminder. 
+
+**If your changes should result in a new version, please add a changeset with `yarn changeset add`**
+
+### Commit Messages
+
+We require all contributors to agree to the [DCO](https://developercertificate.org/). Every commit must contain a DCO `Signed-off-by` line. To automatically add this line, simply include the `-s` flag when executing `git commit`.
+
+### Test coverage
+
+At minimum, all pull requests should maintain current test coverage, and preferably increase it. To run tests with coverage output, run `yarn coverage` from the root of the repo.
+
+
+[coc]: ./CODE_OF_CONDUCT.md

@@ -1,0 +1,29 @@
+name: Setup NodeJS
+description: Setup NodeJS with caching
+author: 'timo@animo.id'
+
+inputs:
+  node-version:
+    description: Node version to use
+    required: false
+    default: '20.19.2'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup node v${{ inputs.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: 'https://registry.npmjs.org/'
+
+    - name: Enable corepack and setup Yarn 4.9.2
+      shell: bash
+      run: |
+        corepack enable
+        corepack prepare yarn@4.9.2 --activate
+
+    - name: Node Version
+      shell: bash
+      run: |
+        node -v && yarn -v

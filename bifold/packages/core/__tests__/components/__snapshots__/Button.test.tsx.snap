@@ -1,0 +1,176 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Button Component Primary renders correctly 1`] = `
+<View
+  accessibilityLabel="primary"
+  accessibilityRole="button"
+  accessibilityState={
+    Object {
+      "busy": undefined,
+      "checked": undefined,
+      "disabled": false,
+      "expanded": undefined,
+      "selected": undefined,
+    }
+  }
+  accessibilityValue={
+    Object {
+      "max": undefined,
+      "min": undefined,
+      "now": undefined,
+      "text": undefined,
+    }
+  }
+  accessible={true}
+  collapsable={false}
+  focusable={true}
+  onBlur={[Function]}
+  onClick={[Function]}
+  onFocus={[Function]}
+  onResponderGrant={[Function]}
+  onResponderMove={[Function]}
+  onResponderRelease={[Function]}
+  onResponderTerminate={[Function]}
+  onResponderTerminationRequest={[Function]}
+  onStartShouldSetResponder={[Function]}
+  style={
+    Array [
+      Object {
+        "overflow": "hidden",
+      },
+      Object {
+        "backgroundColor": "#42803E",
+        "borderRadius": 4,
+        "padding": 16,
+      },
+      false,
+      false,
+      false,
+    ]
+  }
+>
+  <View
+    style={
+      Object {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "center",
+      }
+    }
+  >
+    <Text
+      maxFontSizeMultiplier={2}
+      style={
+        Array [
+          Object {
+            "color": "#FFFFFF",
+            "fontSize": 18,
+            "fontWeight": "normal",
+          },
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "bold",
+              "textAlign": "center",
+            },
+            false,
+            false,
+            false,
+          ],
+        ]
+      }
+    >
+      Hello Primary
+    </Text>
+  </View>
+</View>
+`;
+
+exports[`Button Component Secondary renders correctly 1`] = `
+<View
+  accessibilityLabel="secondary"
+  accessibilityRole="button"
+  accessibilityState={
+    Object {
+      "busy": undefined,
+      "checked": undefined,
+      "disabled": false,
+      "expanded": undefined,
+      "selected": undefined,
+    }
+  }
+  accessibilityValue={
+    Object {
+      "max": undefined,
+      "min": undefined,
+      "now": undefined,
+      "text": undefined,
+    }
+  }
+  accessible={true}
+  collapsable={false}
+  focusable={true}
+  onBlur={[Function]}
+  onClick={[Function]}
+  onFocus={[Function]}
+  onResponderGrant={[Function]}
+  onResponderMove={[Function]}
+  onResponderRelease={[Function]}
+  onResponderTerminate={[Function]}
+  onResponderTerminationRequest={[Function]}
+  onStartShouldSetResponder={[Function]}
+  style={
+    Array [
+      Object {
+        "overflow": "hidden",
+      },
+      Object {
+        "borderColor": "#42803E",
+        "borderRadius": 4,
+        "borderWidth": 2,
+        "padding": 16,
+      },
+      false,
+      false,
+      false,
+    ]
+  }
+>
+  <View
+    style={
+      Object {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "center",
+      }
+    }
+  >
+    <Text
+      maxFontSizeMultiplier={2}
+      style={
+        Array [
+          Object {
+            "color": "#FFFFFF",
+            "fontSize": 18,
+            "fontWeight": "normal",
+          },
+          Array [
+            Object {
+              "color": "#42803E",
+              "fontSize": 18,
+              "fontWeight": "bold",
+              "textAlign": "center",
+            },
+            false,
+            false,
+            false,
+          ],
+        ]
+      }
+    >
+      Hello Secondary
+    </Text>
+  </View>
+</View>
+`;

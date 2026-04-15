@@ -1,0 +1,28 @@
+# Node modules
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables
+.env
+
+# Certificate files
+.certs/
+
+# Wallet storage (local SQLite databases - never commit)
+.wallets/
+
+# Persistent invitation file
+.oob-invitation.json
+.witness-seed.json
+.reporting/
+
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

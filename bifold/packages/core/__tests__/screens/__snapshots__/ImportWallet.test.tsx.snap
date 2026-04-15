@@ -1,0 +1,490 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ImportWallet Screen screen renders correctly 1`] = `
+<RNCSafeAreaView
+  edges={
+    Object {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "off",
+    }
+  }
+  style={
+    Object {
+      "backgroundColor": "#000000",
+      "flex": 1,
+    }
+  }
+>
+  <View
+    onLayout={[Function]}
+    style={
+      Array [
+        Object {
+          "flex": 1,
+        },
+        Object {
+          "paddingBottom": 0,
+        },
+      ]
+    }
+  >
+    <RCTScrollView
+      keyboardShouldPersistTaps="handled"
+      style={
+        Object {
+          "padding": 20,
+        }
+      }
+    >
+      <View>
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "marginBottom": 32,
+            }
+          }
+        >
+          <
+            fill="#42803E"
+            height={80}
+            width={80}
+          />
+        </View>
+        <View
+          style={
+            Object {
+              "marginBottom": 24,
+            }
+          }
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                undefined,
+              ]
+            }
+          >
+            Settings.ImportWalletDescription
+          </Text>
+        </View>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "bold",
+                "marginBottom": 4,
+                "marginTop": 16,
+              },
+            ]
+          }
+        >
+          Settings.ImportWalletSelectFile
+        </Text>
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onClick={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "alignItems": "center",
+              "backgroundColor": "#000000",
+              "borderColor": "#FFFFFFFF",
+              "borderRadius": 4,
+              "borderWidth": 2,
+              "color": "#FFFFFF",
+              "flexDirection": "row",
+              "fontSize": 16,
+              "justifyContent": "space-between",
+              "opacity": 1,
+              "padding": 10,
+            }
+          }
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Array [
+                  Object {
+                    "color": "#313132",
+                    "flex": 1,
+                    "fontSize": 16,
+                  },
+                  Object {
+                    "color": "#606060",
+                  },
+                ],
+              ]
+            }
+          >
+            Settings.ImportWalletNoFileSelected
+          </Text>
+          <Text
+            allowFontScaling={false}
+            selectable={false}
+            style={
+              Array [
+                Object {
+                  "color": "#42803E",
+                  "fontSize": 22,
+                },
+                undefined,
+                Object {
+                  "fontFamily": "Material Icons",
+                  "fontStyle": "normal",
+                  "fontWeight": "normal",
+                },
+                Object {},
+              ]
+            }
+          >
+            
+          </Text>
+        </View>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Object {
+                "color": "#606060",
+                "fontSize": 14,
+                "fontWeight": "normal",
+                "marginTop": 4,
+              },
+            ]
+          }
+        >
+          Select all 3 backup files: .db, .db-shm, and .db-wal (hold to multi-select)
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "bold",
+                  "marginBottom": 4,
+                  "marginTop": 16,
+                },
+                Object {
+                  "marginTop": 24,
+                },
+              ],
+            ]
+          }
+        >
+          Settings.ImportWalletPasswordLabel
+        </Text>
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={[Function]}
+          placeholder="Settings.ImportWalletPasswordPlaceholder"
+          placeholderTextColor="#606060"
+          secureTextEntry={true}
+          style={
+            Object {
+              "backgroundColor": "#000000",
+              "borderColor": "#FFFFFFFF",
+              "borderRadius": 4,
+              "borderWidth": 2,
+              "color": "#FFFFFF",
+              "fontSize": 16,
+              "padding": 10,
+            }
+          }
+          testID="com.ariesbifold:id/ImportPassword"
+          value=""
+        />
+        <View
+          style={
+            Object {
+              "alignItems": "flex-start",
+              "backgroundColor": "#313132",
+              "borderColor": "#D8292F",
+              "borderRadius": 8,
+              "borderWidth": 1,
+              "flexDirection": "row",
+              "marginTop": 24,
+              "padding": 16,
+            }
+          }
+        >
+          <Text
+            allowFontScaling={false}
+            selectable={false}
+            style={
+              Array [
+                Object {
+                  "color": "#D8292F",
+                  "fontSize": 22,
+                },
+                Object {
+                  "marginRight": 8,
+                  "marginTop": 2,
+                },
+                Object {
+                  "fontFamily": "Material Icons",
+                  "fontStyle": "normal",
+                  "fontWeight": "normal",
+                },
+                Object {},
+              ]
+            }
+          >
+            
+          </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Array [
+                  Object {
+                    "flex": 1,
+                  },
+                  Object {
+                    "color": "#FFFFFF",
+                  },
+                ],
+              ]
+            }
+          >
+            Warning: Importing will replace ALL current wallet data with the backup. This action cannot be undone.
+          </Text>
+        </View>
+        <View
+          style={
+            Object {
+              "marginTop": 32,
+            }
+          }
+        >
+          <View
+            accessibilityLabel="Settings.ImportWalletConfirm"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": true,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Array [
+                Object {
+                  "overflow": "hidden",
+                },
+                Object {
+                  "backgroundColor": "#42803E",
+                  "borderRadius": 4,
+                  "padding": 16,
+                },
+                Object {
+                  "backgroundColor": "rgba(53, 130, 63, 0.35)",
+                  "borderRadius": 4,
+                  "padding": 16,
+                },
+                false,
+                false,
+              ]
+            }
+            testID="com.ariesbifold:id/ImportButton"
+          >
+            <View
+              style={
+                Object {
+                  "alignItems": "center",
+                  "flexDirection": "row",
+                  "justifyContent": "center",
+                }
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "bold",
+                        "textAlign": "center",
+                      },
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "bold",
+                        "textAlign": "center",
+                      },
+                      false,
+                      false,
+                    ],
+                  ]
+                }
+              >
+                Settings.ImportWalletConfirm
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View
+          style={
+            Array [
+              Object {
+                "alignItems": "flex-start",
+                "backgroundColor": "#313132",
+                "borderColor": "#0099FF",
+                "borderRadius": 8,
+                "borderWidth": 1,
+                "flexDirection": "row",
+                "marginTop": 24,
+                "padding": 16,
+              },
+              Object {
+                "marginBottom": 32,
+              },
+            ]
+          }
+        >
+          <Text
+            allowFontScaling={false}
+            selectable={false}
+            style={
+              Array [
+                Object {
+                  "color": "#0099FF",
+                  "fontSize": 22,
+                },
+                Object {
+                  "marginRight": 8,
+                  "marginTop": 2,
+                },
+                Object {
+                  "fontFamily": "Material Icons",
+                  "fontStyle": "normal",
+                  "fontWeight": "normal",
+                },
+                Object {},
+              ]
+            }
+          >
+            
+          </Text>
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Array [
+                  Object {
+                    "flex": 1,
+                  },
+                  Object {
+                    "color": "#FFFFFF",
+                  },
+                ],
+              ]
+            }
+          >
+            You will need the password that was used when creating the backup.
+          </Text>
+        </View>
+      </View>
+    </RCTScrollView>
+  </View>
+</RNCSafeAreaView>
+`;

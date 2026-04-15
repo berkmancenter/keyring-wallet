@@ -1,0 +1,1252 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`QRScanner Component Renders QR code view when defaultToConnect is true and showTabs is false 1`] = `
+<View
+  style={
+    Object {
+      "flex": 1,
+    }
+  }
+>
+  <RNCSafeAreaView
+    edges={
+      Object {
+        "bottom": "off",
+        "left": "additive",
+        "right": "additive",
+        "top": "off",
+      }
+    }
+    style={
+      Object {
+        "backgroundColor": "#313132",
+        "flex": 1,
+      }
+    }
+  >
+    <View
+      style={
+        Object {
+          "alignItems": "center",
+          "flex": 1,
+          "justifyContent": "center",
+          "paddingHorizontal": 20,
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "justifyContent": "center",
+            "width": "100%",
+          }
+        }
+      >
+        <View
+          style={
+            Object {
+              "backgroundColor": "white",
+              "flexGrow": 1,
+              "marginVertical": 20,
+            }
+          }
+          testID="com.ariesbifold:id/QRRenderer"
+        >
+          <RNSVGSvgView
+            align="xMidYMid"
+            bbHeight="710"
+            bbWidth="710"
+            focusable={false}
+            height={710}
+            meetOrSlice={0}
+            minX={0}
+            minY={0}
+            style={
+              Array [
+                Object {
+                  "backgroundColor": "transparent",
+                  "borderWidth": 0,
+                },
+                Object {
+                  "flex": 0,
+                  "height": 710,
+                  "width": 710,
+                },
+              ]
+            }
+            vbHeight={710}
+            vbWidth={710}
+            width={710}
+          >
+            <RNSVGGroup
+              fill={
+                Object {
+                  "payload": 4278190080,
+                  "type": 0,
+                }
+              }
+            >
+              <RNSVGDefs>
+                <RNSVGLinearGradient
+                  gradient={
+                    Array [
+                      0,
+                      -65536,
+                      1,
+                      -16711681,
+                    ]
+                  }
+                  gradientTransform={null}
+                  gradientUnits={0}
+                  name="grad"
+                  x1="0%"
+                  x2="100%"
+                  y1="0%"
+                  y2="100%"
+                />
+              </RNSVGDefs>
+              <RNSVGGroup
+                fill={
+                  Object {
+                    "payload": 4278190080,
+                    "type": 0,
+                  }
+                }
+              >
+                <RNSVGRect
+                  fill={
+                    Object {
+                      "payload": 4294967295,
+                      "type": 0,
+                    }
+                  }
+                  height="710"
+                  propList={
+                    Array [
+                      "fill",
+                    ]
+                  }
+                  width="710"
+                  x="0"
+                  y="0"
+                />
+              </RNSVGGroup>
+              <RNSVGGroup
+                fill={
+                  Object {
+                    "payload": 4278190080,
+                    "type": 0,
+                  }
+                }
+              >
+                <RNSVGPath
+                  d="M0 14.2 L198.79999999999998 14.2 M284 14.2 L312.4 14.2 M397.59999999999997 14.2 L426 14.2 M511.2 14.2 L710 14.2 M0 42.599999999999994 L28.4 42.599999999999994 M170.39999999999998 42.599999999999994 L198.79999999999998 42.599999999999994 M255.6 42.599999999999994 L312.4 42.599999999999994 M369.2 42.599999999999994 L426 42.599999999999994 M454.4 42.599999999999994 L482.79999999999995 42.599999999999994 M511.2 42.599999999999994 L539.6 42.599999999999994 M681.5999999999999 42.599999999999994 L710 42.599999999999994 M0 71 L28.4 71 M56.8 71 L142 71 M170.39999999999998 71 L198.79999999999998 71 M255.6 71 L284 71 M312.4 71 L340.79999999999995 71 M397.59999999999997 71 L426 71 M511.2 71 L539.6 71 M568 71 L653.1999999999999 71 M681.5999999999999 71 L710 71 M0 99.39999999999999 L28.4 99.39999999999999 M56.8 99.39999999999999 L142 99.39999999999999 M170.39999999999998 99.39999999999999 L198.79999999999998 99.39999999999999 M227.2 99.39999999999999 L255.6 99.39999999999999 M284 99.39999999999999 L397.59999999999997 99.39999999999999 M454.4 99.39999999999999 L482.79999999999995 99.39999999999999 M511.2 99.39999999999999 L539.6 99.39999999999999 M568 99.39999999999999 L653.1999999999999 99.39999999999999 M681.5999999999999 99.39999999999999 L710 99.39999999999999 M0 127.8 L28.4 127.8 M56.8 127.8 L142 127.8 M170.39999999999998 127.8 L198.79999999999998 127.8 M227.2 127.8 L255.6 127.8 M312.4 127.8 L340.79999999999995 127.8 M369.2 127.8 L397.59999999999997 127.8 M454.4 127.8 L482.79999999999995 127.8 M511.2 127.8 L539.6 127.8 M568 127.8 L653.1999999999999 127.8 M681.5999999999999 127.8 L710 127.8 M0 156.2 L28.4 156.2 M170.39999999999998 156.2 L198.79999999999998 156.2 M255.6 156.2 L312.4 156.2 M397.59999999999997 156.2 L426 156.2 M511.2 156.2 L539.6 156.2 M681.5999999999999 156.2 L710 156.2 M0 184.59999999999997 L198.79999999999998 184.59999999999997 M227.2 184.59999999999997 L255.6 184.59999999999997 M284 184.59999999999997 L312.4 184.59999999999997 M340.79999999999995 184.59999999999997 L369.2 184.59999999999997 M397.59999999999997 184.59999999999997 L426 184.59999999999997 M454.4 184.59999999999997 L482.79999999999995 184.59999999999997 M511.2 184.59999999999997 L710 184.59999999999997 M255.6 212.99999999999997 L284 212.99999999999997 M340.79999999999995 212.99999999999997 L369.2 212.99999999999997 M397.59999999999997 212.99999999999997 L482.79999999999995 212.99999999999997 M0 241.39999999999998 L56.8 241.39999999999998 M142 241.39999999999998 L227.2 241.39999999999998 M255.6 241.39999999999998 L397.59999999999997 241.39999999999998 M568 241.39999999999998 L624.8 241.39999999999998 M0 269.8 L28.4 269.8 M85.19999999999999 269.8 L113.6 269.8 M198.79999999999998 269.8 L227.2 269.8 M284 269.8 L340.79999999999995 269.8 M369.2 269.8 L511.2 269.8 M539.6 269.8 L681.5999999999999 269.8 M56.8 298.2 L85.19999999999999 298.2 M113.6 298.2 L227.2 298.2 M255.6 298.2 L284 298.2 M340.79999999999995 298.2 L482.79999999999995 298.2 M539.6 298.2 L568 298.2 M596.4 298.2 L624.8 298.2 M653.1999999999999 298.2 L710 298.2 M0 326.59999999999997 L28.4 326.59999999999997 M56.8 326.59999999999997 L113.6 326.59999999999997 M284 326.59999999999997 L312.4 326.59999999999997 M397.59999999999997 326.59999999999997 L426 326.59999999999997 M454.4 326.59999999999997 L482.79999999999995 326.59999999999997 M511.2 326.59999999999997 L568 326.59999999999997 M596.4 326.59999999999997 L624.8 326.59999999999997 M681.5999999999999 326.59999999999997 L710 326.59999999999997 M28.4 354.99999999999994 L85.19999999999999 354.99999999999994 M142 354.99999999999994 L227.2 354.99999999999994 M255.6 354.99999999999994 L340.79999999999995 354.99999999999994 M426 354.99999999999994 L482.79999999999995 354.99999999999994 M511.2 354.99999999999994 L568 354.99999999999994 M681.5999999999999 354.99999999999994 L710 354.99999999999994 M0 383.4 L85.19999999999999 383.4 M198.79999999999998 383.4 L227.2 383.4 M284 383.4 L340.79999999999995 383.4 M369.2 383.4 L397.59999999999997 383.4 M426 383.4 L482.79999999999995 383.4 M539.6 383.4 L568 383.4 M653.1999999999999 383.4 L681.5999999999999 383.4 M0 411.79999999999995 L28.4 411.79999999999995 M85.19999999999999 411.79999999999995 L113.6 411.79999999999995 M142 411.79999999999995 L198.79999999999998 411.79999999999995 M284 411.79999999999995 L312.4 411.79999999999995 M426 411.79999999999995 L454.4 411.79999999999995 M511.2 411.79999999999995 L624.8 411.79999999999995 M653.1999999999999 411.79999999999995 L710 411.79999999999995 M0 440.2 L28.4 440.2 M56.8 440.2 L113.6 440.2 M255.6 440.2 L284 440.2 M340.79999999999995 440.2 L369.2 440.2 M482.79999999999995 440.2 L568 440.2 M596.4 440.2 L653.1999999999999 440.2 M681.5999999999999 440.2 L710 440.2 M0 468.59999999999997 L28.4 468.59999999999997 M56.8 468.59999999999997 L113.6 468.59999999999997 M142 468.59999999999997 L312.4 468.59999999999997 M340.79999999999995 468.59999999999997 L426 468.59999999999997 M454.4 468.59999999999997 L596.4 468.59999999999997 M624.8 468.59999999999997 L653.1999999999999 468.59999999999997 M227.2 496.99999999999994 L255.6 496.99999999999994 M284 496.99999999999994 L340.79999999999995 496.99999999999994 M369.2 496.99999999999994 L397.59999999999997 496.99999999999994 M454.4 496.99999999999994 L482.79999999999995 496.99999999999994 M568 496.99999999999994 L596.4 496.99999999999994 M0 525.4 L198.79999999999998 525.4 M227.2 525.4 L284 525.4 M312.4 525.4 L369.2 525.4 M454.4 525.4 L482.79999999999995 525.4 M511.2 525.4 L539.6 525.4 M568 525.4 L596.4 525.4 M681.5999999999999 525.4 L710 525.4 M0 553.8000000000001 L28.4 553.8000000000001 M170.39999999999998 553.8000000000001 L198.79999999999998 553.8000000000001 M227.2 553.8000000000001 L255.6 553.8000000000001 M284 553.8000000000001 L312.4 553.8000000000001 M426 553.8000000000001 L482.79999999999995 553.8000000000001 M568 553.8000000000001 L596.4 553.8000000000001 M0 582.2 L28.4 582.2 M56.8 582.2 L142 582.2 M170.39999999999998 582.2 L198.79999999999998 582.2 M284 582.2 L312.4 582.2 M369.2 582.2 L596.4 582.2 M624.8 582.2 L681.5999999999999 582.2 M0 610.6 L28.4 610.6 M56.8 610.6 L142 610.6 M170.39999999999998 610.6 L198.79999999999998 610.6 M312.4 610.6 L340.79999999999995 610.6 M454.4 610.6 L539.6 610.6 M653.1999999999999 610.6 L710 610.6 M0 639 L28.4 639 M56.8 639 L142 639 M170.39999999999998 639 L198.79999999999998 639 M255.6 639 L284 639 M369.2 639 L454.4 639 M596.4 639 L653.1999999999999 639 M681.5999999999999 639 L710 639 M0 667.4 L28.4 667.4 M170.39999999999998 667.4 L198.79999999999998 667.4 M227.2 667.4 L284 667.4 M340.79999999999995 667.4 L369.2 667.4 M426 667.4 L511.2 667.4 M539.6 667.4 L596.4 667.4 M681.5999999999999 667.4 L710 667.4 M0 695.8 L198.79999999999998 695.8 M227.2 695.8 L255.6 695.8 M340.79999999999995 695.8 L369.2 695.8 M454.4 695.8 L482.79999999999995 695.8 M511.2 695.8 L539.6 695.8 M596.4 695.8 L624.8 695.8 M681.5999999999999 695.8 L710 695.8 "
+                  fill={
+                    Object {
+                      "payload": 4278190080,
+                      "type": 0,
+                    }
+                  }
+                  propList={
+                    Array [
+                      "stroke",
+                      "strokeWidth",
+                      "strokeLinecap",
+                    ]
+                  }
+                  stroke={
+                    Object {
+                      "payload": 4278190080,
+                      "type": 0,
+                    }
+                  }
+                  strokeLinecap={0}
+                  strokeWidth="28.4"
+                />
+              </RNSVGGroup>
+            </RNSVGGroup>
+          </RNSVGSvgView>
+        </View>
+      </View>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#606060",
+              "fontSize": 14,
+              "marginTop": 16,
+              "textAlign": "center",
+            },
+          ]
+        }
+      >
+        Scan.YourQRCodeInstruction
+      </Text>
+    </View>
+  </RNCSafeAreaView>
+</View>
+`;
+
+exports[`QRScanner Component Renders correctly on first tab 1`] = `
+<View
+  style={
+    Object {
+      "flex": 1,
+    }
+  }
+>
+  <RNCSafeAreaView
+    edges={
+      Object {
+        "bottom": "off",
+        "left": "additive",
+        "right": "additive",
+        "top": "off",
+      }
+    }
+    style={
+      Object {
+        "backgroundColor": "#313132",
+        "flex": 1,
+      }
+    }
+  >
+    <View
+      style={
+        Object {
+          "alignItems": "center",
+          "flex": 1,
+          "justifyContent": "center",
+          "paddingHorizontal": 20,
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "justifyContent": "center",
+            "width": "100%",
+          }
+        }
+      >
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "justifyContent": "center",
+            }
+          }
+          testID="com.ariesbifold:id/LoadingActivityIndicator"
+        >
+          <Image
+            source={
+              Object {
+                "default": "",
+              }
+            }
+            style={
+              Object {
+                "height": 120,
+                "objectFit": "contain",
+                "width": 120,
+              }
+            }
+            testID="com.ariesbifold:id/LoadingActivityIndicatorImage"
+          />
+          <View
+            collapsable={false}
+            style={
+              Object {
+                "position": "absolute",
+                "transform": Array [
+                  Object {
+                    "rotate": "360deg",
+                  },
+                ],
+              }
+            }
+          >
+            <
+              fill="#FFFFFF"
+              height={200}
+              width={200}
+            />
+          </View>
+        </View>
+      </View>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#606060",
+              "fontSize": 14,
+              "marginTop": 16,
+              "textAlign": "center",
+            },
+          ]
+        }
+      >
+        Scan.YourQRCodeInstruction
+      </Text>
+    </View>
+    <View
+      accessibilityRole="tablist"
+      accessible={true}
+      style={
+        Object {
+          "backgroundColor": "#313132",
+          "borderTopWidth": 0,
+          "flexDirection": "row",
+          "height": 60,
+          "paddingBottom": 0,
+          "shadowColor": "#000000",
+          "shadowOffset": Object {
+            "height": -3,
+            "width": 0,
+          },
+          "shadowOpacity": 0.1,
+          "shadowRadius": 6,
+        }
+      }
+    >
+      <View
+        accessibilityLabel="Scan.ScanQRCode"
+        accessibilityRole="tab"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Object {
+            "alignItems": "center",
+            "flex": 1,
+            "justifyContent": "center",
+            "opacity": 1,
+          }
+        }
+        testID="com.ariesbifold:id/Scan.ScanQRCode"
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 30,
+              },
+              undefined,
+              Object {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              Object {},
+            ]
+          }
+        >
+          
+        </Text>
+      </View>
+      <View
+        accessibilityLabel="Scan.MyQRCode"
+        accessibilityRole="tab"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Object {
+            "alignItems": "center",
+            "flex": 1,
+            "justifyContent": "center",
+            "opacity": 1,
+          }
+        }
+        testID="com.ariesbifold:id/Scan.MyQRCode"
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            Array [
+              Object {
+                "color": "#42803E",
+                "fontSize": 30,
+              },
+              undefined,
+              Object {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              Object {},
+            ]
+          }
+        >
+          
+        </Text>
+      </View>
+    </View>
+  </RNCSafeAreaView>
+  <RNCSafeAreaView
+    edges={
+      Object {
+        "bottom": "additive",
+        "left": "off",
+        "right": "off",
+        "top": "off",
+      }
+    }
+    style={
+      Object {
+        "backgroundColor": "#313132",
+        "flex": 0,
+      }
+    }
+  />
+</View>
+`;
+
+exports[`QRScanner Component Renders correctly on second tab 1`] = `
+<View
+  style={
+    Object {
+      "flex": 1,
+    }
+  }
+>
+  <RNCSafeAreaView
+    edges={
+      Object {
+        "bottom": "off",
+        "left": "additive",
+        "right": "additive",
+        "top": "off",
+      }
+    }
+    style={
+      Object {
+        "backgroundColor": "#313132",
+        "flex": 1,
+      }
+    }
+  >
+    <View
+      style={
+        Object {
+          "alignItems": "center",
+          "flex": 1,
+          "justifyContent": "center",
+          "paddingHorizontal": 20,
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "justifyContent": "center",
+            "width": "100%",
+          }
+        }
+      >
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "justifyContent": "center",
+            }
+          }
+          testID="com.ariesbifold:id/LoadingActivityIndicator"
+        >
+          <Image
+            source={
+              Object {
+                "default": "",
+              }
+            }
+            style={
+              Object {
+                "height": 120,
+                "objectFit": "contain",
+                "width": 120,
+              }
+            }
+            testID="com.ariesbifold:id/LoadingActivityIndicatorImage"
+          />
+          <View
+            collapsable={false}
+            style={
+              Object {
+                "position": "absolute",
+                "transform": Array [
+                  Object {
+                    "rotate": "360deg",
+                  },
+                ],
+              }
+            }
+          >
+            <
+              fill="#FFFFFF"
+              height={200}
+              width={200}
+            />
+          </View>
+        </View>
+      </View>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
+              "fontWeight": "normal",
+            },
+            Object {
+              "color": "#606060",
+              "fontSize": 14,
+              "marginTop": 16,
+              "textAlign": "center",
+            },
+          ]
+        }
+      >
+        Scan.YourQRCodeInstruction
+      </Text>
+    </View>
+    <View
+      accessibilityRole="tablist"
+      accessible={true}
+      style={
+        Object {
+          "backgroundColor": "#313132",
+          "borderTopWidth": 0,
+          "flexDirection": "row",
+          "height": 60,
+          "paddingBottom": 0,
+          "shadowColor": "#000000",
+          "shadowOffset": Object {
+            "height": -3,
+            "width": 0,
+          },
+          "shadowOpacity": 0.1,
+          "shadowRadius": 6,
+        }
+      }
+    >
+      <View
+        accessibilityLabel="Scan.ScanQRCode"
+        accessibilityRole="tab"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Object {
+            "alignItems": "center",
+            "flex": 1,
+            "justifyContent": "center",
+            "opacity": 1,
+          }
+        }
+        testID="com.ariesbifold:id/Scan.ScanQRCode"
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 30,
+              },
+              undefined,
+              Object {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              Object {},
+            ]
+          }
+        >
+          
+        </Text>
+      </View>
+      <View
+        accessibilityLabel="Scan.MyQRCode"
+        accessibilityRole="tab"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Object {
+            "alignItems": "center",
+            "flex": 1,
+            "justifyContent": "center",
+            "opacity": 1,
+          }
+        }
+        testID="com.ariesbifold:id/Scan.MyQRCode"
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            Array [
+              Object {
+                "color": "#42803E",
+                "fontSize": 30,
+              },
+              undefined,
+              Object {
+                "fontFamily": "Material Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              Object {},
+            ]
+          }
+        >
+          
+        </Text>
+      </View>
+    </View>
+  </RNCSafeAreaView>
+  <RNCSafeAreaView
+    edges={
+      Object {
+        "bottom": "additive",
+        "left": "off",
+        "right": "off",
+        "top": "off",
+      }
+    }
+    style={
+      Object {
+        "backgroundColor": "#313132",
+        "flex": 0,
+      }
+    }
+  />
+</View>
+`;
+
+exports[`QRScanner Component Scanner with no tabs renders correctly 1`] = `
+<View
+  style={
+    Object {
+      "flex": 1,
+    }
+  }
+>
+  <RNCSafeAreaView
+    edges={
+      Object {
+        "bottom": "off",
+        "left": "additive",
+        "right": "additive",
+        "top": "off",
+      }
+    }
+    style={
+      Object {
+        "backgroundColor": "#313132",
+        "flex": 1,
+      }
+    }
+  >
+    <View
+      style={
+        Array [
+          Object {
+            "bottom": 0,
+            "left": 0,
+            "position": "absolute",
+            "right": 0,
+            "top": 0,
+          },
+          Object {
+            "transform": Array [
+              Object {
+                "rotate": "0deg",
+              },
+            ],
+          },
+        ]
+      }
+    />
+    <RNSVGSvgView
+      bbHeight="1334"
+      bbWidth="750"
+      focusable={false}
+      height={1334}
+      style={
+        Array [
+          Object {
+            "backgroundColor": "transparent",
+            "borderWidth": 0,
+          },
+          Object {
+            "position": "absolute",
+          },
+          Object {
+            "flex": 0,
+            "height": 1334,
+            "width": 750,
+          },
+        ]
+      }
+      width={750}
+    >
+      <RNSVGGroup
+        fill={
+          Object {
+            "payload": 4278190080,
+            "type": 0,
+          }
+        }
+      >
+        <RNSVGDefs>
+          <RNSVGMask
+            fill={
+              Object {
+                "payload": 4278190080,
+                "type": 0,
+              }
+            }
+            height="100%"
+            maskContentUnits={1}
+            maskUnits={0}
+            name="overlayMask"
+            width="100%"
+            x="0%"
+            y="0%"
+          >
+            <RNSVGRect
+              fill={
+                Object {
+                  "payload": 4294967295,
+                  "type": 0,
+                }
+              }
+              height="1334"
+              propList={
+                Array [
+                  "fill",
+                ]
+              }
+              width="750"
+              x="0"
+              y="0"
+            />
+            <RNSVGRect
+              fill={
+                Object {
+                  "payload": 4278190080,
+                  "type": 0,
+                }
+              }
+              height="675"
+              propList={
+                Array [
+                  "fill",
+                  "stroke",
+                  "strokeWidth",
+                ]
+              }
+              stroke={
+                Object {
+                  "payload": 4294967295,
+                  "type": 0,
+                }
+              }
+              strokeWidth="2"
+              width="675"
+              x="37.5"
+              y="217"
+            />
+          </RNSVGMask>
+        </RNSVGDefs>
+        <RNSVGRect
+          fill={
+            Object {
+              "payload": 4278190080,
+              "type": 0,
+            }
+          }
+          fillOpacity={0.6}
+          height="1334"
+          mask="overlayMask"
+          propList={
+            Array [
+              "fill",
+              "fillOpacity",
+            ]
+          }
+          width="750"
+          x="0"
+          y="0"
+        />
+        <RNSVGRect
+          fill={
+            Object {
+              "payload": 0,
+              "type": 0,
+            }
+          }
+          height="675"
+          propList={
+            Array [
+              "fill",
+              "stroke",
+              "strokeWidth",
+            ]
+          }
+          stroke={
+            Object {
+              "payload": 4294967295,
+              "type": 0,
+            }
+          }
+          strokeWidth="2"
+          width="675"
+          x="37.5"
+          y="217"
+        />
+      </RNSVGGroup>
+    </RNSVGSvgView>
+    <View
+      style={
+        Object {
+          "flex": 1,
+          "justifyContent": "space-between",
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "alignSelf": "center",
+            "flexDirection": "row",
+            "marginHorizontal": 40,
+            "paddingTop": 30,
+          }
+        }
+      >
+        <Text
+          allowFontScaling={false}
+          selectable={false}
+          style={
+            Array [
+              Object {
+                "color": undefined,
+                "fontSize": 40,
+              },
+              Object {
+                "color": "#FFFFFF",
+                "padding": 4,
+              },
+              Object {
+                "fontFamily": "Material Design Icons",
+                "fontStyle": "normal",
+                "fontWeight": "normal",
+              },
+              Object {},
+            ]
+          }
+        >
+          󰐳
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 20,
+                "fontWeight": "bold",
+              },
+              Object {
+                "color": "white",
+                "marginHorizontal": 10,
+                "textAlign": "center",
+              },
+            ]
+          }
+        >
+          Scan.WillScanAutomatically
+        </Text>
+      </View>
+      <View
+        style={Object {}}
+      >
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "justifyContent": "center",
+            }
+          }
+        >
+          <View
+            accessibilityLabel="Scan.ScanNow"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            hitSlop={
+              Object {
+                "bottom": 44,
+                "left": 44,
+                "right": 44,
+                "top": 44,
+              }
+            }
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Array [
+                Object {
+                  "opacity": 1,
+                },
+              ]
+            }
+            testID="com.ariesbifold:id/ScanNow"
+          >
+            <Text
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": undefined,
+                    "fontSize": 60,
+                  },
+                  Object {
+                    "color": "white",
+                    "marginBottom": -15,
+                  },
+                  Object {
+                    "fontFamily": "Material Design Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+            >
+              󰝦
+            </Text>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "flexDirection": "row",
+              "height": 24,
+              "marginBottom": 60,
+              "marginHorizontal": 24,
+            }
+          }
+        >
+          <View
+            accessibilityLabel="Scan.ScanHelp"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            hitSlop={
+              Object {
+                "bottom": 44,
+                "left": 44,
+                "right": 44,
+                "top": 44,
+              }
+            }
+            onBlur={[Function]}
+            onClick={[Function]}
+            onFocus={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Array [
+                Object {
+                  "opacity": 1,
+                },
+              ]
+            }
+            testID="com.ariesbifold:id/ScanHelp"
+          >
+            <Text
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": undefined,
+                    "fontSize": 24,
+                  },
+                  Object {
+                    "color": "white",
+                  },
+                  Object {
+                    "fontFamily": "Material Design Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+            >
+              󰋗
+            </Text>
+          </View>
+          <View
+            style={
+              Object {
+                "marginLeft": "auto",
+                "width": 10,
+              }
+            }
+          />
+          <View
+            accessibilityLabel="Scan.TorchOff"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={true}
+            hitSlop={
+              Object {
+                "bottom": 44,
+                "left": 44,
+                "right": 44,
+                "top": 44,
+              }
+            }
+            onClick={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "alignItems": "center",
+                "backgroundColor": undefined,
+                "borderColor": "#FFFFFF",
+                "borderRadius": 24,
+                "borderWidth": 1,
+                "height": 24,
+                "justifyContent": "center",
+                "marginBottom": 50,
+                "opacity": 1,
+                "width": 24,
+              }
+            }
+            testID="com.ariesbifold:id/ScanTorch"
+          >
+            <Text
+              allowFontScaling={false}
+              selectable={false}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 24,
+                  },
+                  Object {
+                    "alignItems": "center",
+                  },
+                  Object {
+                    "fontFamily": "Material Icons",
+                    "fontStyle": "normal",
+                    "fontWeight": "normal",
+                  },
+                  Object {},
+                ]
+              }
+            >
+              
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  </RNCSafeAreaView>
+</View>
+`;

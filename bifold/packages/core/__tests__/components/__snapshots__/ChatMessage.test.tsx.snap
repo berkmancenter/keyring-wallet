@@ -1,0 +1,510 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ChatMessage Credential offer renders correctly 1`] = `
+<View>
+  <View
+    style={
+      Object {
+        "alignItems": "center",
+        "marginVertical": 16,
+      }
+    }
+  >
+    <Text
+      style={
+        Object {
+          "color": "#888888",
+          "fontSize": 14,
+          "fontWeight": "500",
+        }
+      }
+    >
+      January 1, 2024 12:00 AM
+    </Text>
+  </View>
+  <View
+    style={
+      Object {
+        "flexDirection": "row",
+        "justifyContent": "flex-end",
+      }
+    }
+  >
+    <View
+      style={
+        Object {
+          "alignItems": "flex-start",
+          "alignSelf": "flex-end",
+          "flexDirection": "column",
+          "marginBottom": 16,
+          "marginLeft": 16,
+          "marginRight": 16,
+        }
+      }
+    >
+      <View
+        style={
+          Array [
+            Object {
+              "alignItems": "flex-start",
+              "flex": 1,
+            },
+            Object {
+              "margin": 0,
+            },
+          ]
+        }
+      >
+        <View
+          style={
+            Array [
+              Object {
+                "backgroundColor": "#f0f0f0",
+                "borderRadius": 15,
+                "justifyContent": "flex-end",
+                "marginRight": 60,
+                "minHeight": 20,
+              },
+              null,
+              null,
+              Object {
+                "backgroundColor": "#313132",
+                "borderRadius": 4,
+                "marginLeft": 0,
+                "minHeight": 0,
+                "padding": 16,
+              },
+            ]
+          }
+        >
+          <View
+            accessibilityRole="text"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessible={true}
+            focusable={true}
+            onClick={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+          >
+            <View />
+            <View
+              style={
+                Array [
+                  Object {
+                    "flexDirection": "row",
+                    "justifyContent": "flex-start",
+                  },
+                  Object {
+                    "marginBottom": 0,
+                    "paddingBottom": 0,
+                  },
+                ]
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Object {
+                      "color": "#D3D3D3",
+                      "fontSize": 12,
+                      "marginTop": 8,
+                    },
+                  ]
+                }
+              >
+                12:00 AM
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+</View>
+`;
+
+exports[`ChatMessage Proof request renders correctly 1`] = `
+<View>
+  <View
+    style={
+      Object {
+        "alignItems": "center",
+        "marginVertical": 16,
+      }
+    }
+  >
+    <Text
+      style={
+        Object {
+          "color": "#888888",
+          "fontSize": 14,
+          "fontWeight": "500",
+        }
+      }
+    >
+      January 1, 2024 12:00 AM
+    </Text>
+  </View>
+  <View
+    style={
+      Object {
+        "flexDirection": "row",
+        "justifyContent": "flex-end",
+      }
+    }
+  >
+    <View
+      style={
+        Object {
+          "alignItems": "flex-start",
+          "alignSelf": "flex-end",
+          "flexDirection": "column",
+          "marginBottom": 16,
+          "marginLeft": 16,
+          "marginRight": 16,
+        }
+      }
+    >
+      <View
+        style={
+          Array [
+            Object {
+              "alignItems": "flex-start",
+              "flex": 1,
+            },
+            Object {
+              "margin": 0,
+            },
+          ]
+        }
+      >
+        <View
+          style={
+            Array [
+              Object {
+                "backgroundColor": "#f0f0f0",
+                "borderRadius": 15,
+                "justifyContent": "flex-end",
+                "marginRight": 60,
+                "minHeight": 20,
+              },
+              null,
+              null,
+              Object {
+                "backgroundColor": "#313132",
+                "borderRadius": 4,
+                "marginLeft": 0,
+                "minHeight": 0,
+                "padding": 16,
+              },
+            ]
+          }
+        >
+          <View
+            accessibilityRole="text"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessible={true}
+            focusable={true}
+            onClick={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+          >
+            <View />
+            <View
+              style={
+                Array [
+                  Object {
+                    "flexDirection": "row",
+                    "justifyContent": "flex-start",
+                  },
+                  Object {
+                    "marginBottom": 0,
+                    "paddingBottom": 0,
+                  },
+                ]
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Object {
+                      "color": "#D3D3D3",
+                      "fontSize": 12,
+                      "marginTop": 8,
+                    },
+                  ]
+                }
+              >
+                12:00 AM
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+</View>
+`;
+
+exports[`ChatMessage Reporting DID renders correctly 1`] = `
+<View>
+  <View
+    style={
+      Object {
+        "alignItems": "center",
+        "marginVertical": 16,
+      }
+    }
+  >
+    <Text
+      style={
+        Object {
+          "color": "#888888",
+          "fontSize": 14,
+          "fontWeight": "500",
+        }
+      }
+    >
+      January 1, 2024 12:00 AM
+    </Text>
+  </View>
+  <View
+    style={
+      Object {
+        "backgroundColor": "#FFFFFF",
+        "borderColor": "rgba(170, 170, 170, 0.4)",
+        "borderRadius": 12,
+        "borderWidth": 1,
+        "elevation": 2,
+        "justifyContent": "center",
+        "marginHorizontal": 12,
+        "marginVertical": 10,
+        "minHeight": 62,
+        "paddingHorizontal": 12,
+        "paddingVertical": 10,
+        "shadowColor": "#000",
+        "shadowOffset": Object {
+          "height": 1,
+          "width": 0,
+        },
+        "shadowOpacity": 0.15,
+        "shadowRadius": 4,
+      }
+    }
+  >
+    <View
+      style={
+        Object {
+          "alignItems": "center",
+          "flexDirection": "row",
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "center",
+            "backgroundColor": "#F1D2D6",
+            "borderRadius": 20,
+            "flexShrink": 0,
+            "height": 40,
+            "justifyContent": "center",
+            "marginRight": 10,
+            "width": 40,
+          }
+        }
+      >
+        <
+          fill="#622C62"
+          height={20}
+          width={20}
+        />
+      </View>
+      <View
+        style={
+          Object {
+            "flex": 1,
+          }
+        }
+      />
+    </View>
+  </View>
+</View>
+`;
+
+exports[`ChatMessage Sent presentation renders correctly 1`] = `
+<View>
+  <View
+    style={
+      Object {
+        "alignItems": "center",
+        "marginVertical": 16,
+      }
+    }
+  >
+    <Text
+      style={
+        Object {
+          "color": "#888888",
+          "fontSize": 14,
+          "fontWeight": "500",
+        }
+      }
+    >
+      January 1, 2024 12:00 AM
+    </Text>
+  </View>
+  <View
+    style={
+      Object {
+        "flexDirection": "row",
+        "justifyContent": "flex-end",
+      }
+    }
+  >
+    <View
+      style={
+        Object {
+          "alignItems": "flex-start",
+          "alignSelf": "flex-end",
+          "flexDirection": "column",
+          "marginBottom": 16,
+          "marginLeft": 16,
+          "marginRight": 16,
+        }
+      }
+    >
+      <View
+        style={
+          Array [
+            Object {
+              "alignItems": "flex-start",
+              "flex": 1,
+            },
+            Object {
+              "margin": 0,
+            },
+          ]
+        }
+      >
+        <View
+          style={
+            Array [
+              Object {
+                "backgroundColor": "#f0f0f0",
+                "borderRadius": 15,
+                "justifyContent": "flex-end",
+                "marginRight": 60,
+                "minHeight": 20,
+              },
+              null,
+              null,
+              Object {
+                "backgroundColor": "#313132",
+                "borderRadius": 4,
+                "marginLeft": 0,
+                "minHeight": 0,
+                "padding": 16,
+              },
+            ]
+          }
+        >
+          <View
+            accessibilityRole="text"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": undefined,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessible={true}
+            focusable={true}
+            onClick={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+          >
+            <View />
+            <View
+              style={
+                Array [
+                  Object {
+                    "flexDirection": "row",
+                    "justifyContent": "flex-start",
+                  },
+                  Object {
+                    "marginBottom": 0,
+                    "paddingBottom": 0,
+                  },
+                ]
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Object {
+                      "color": "#D3D3D3",
+                      "fontSize": 12,
+                      "marginTop": 8,
+                    },
+                  ]
+                }
+              >
+                12:00 AM
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+</View>
+`;

@@ -1,0 +1,267 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`JSONDetails Screen JSONDetails Screen render render matches snapshot 1`] = `
+<RNCSafeAreaView
+  edges={
+    Object {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "off",
+    }
+  }
+  style={
+    Object {
+      "backgroundColor": "#000000",
+      "flex": 1,
+      "padding": 20,
+    }
+  }
+>
+  <View>
+    <RCTScrollView
+      collapsable={false}
+      handlerTag={1}
+      handlerType="NativeViewGestureHandler"
+      onGestureHandlerEvent={[Function]}
+      onGestureHandlerStateChange={[Function]}
+      style={
+        Object {
+          "backgroundColor": "#313132",
+          "borderRadius": 5,
+          "borderStyle": "solid",
+          "borderWidth": 1,
+          "height": "75%",
+          "padding": 16,
+        }
+      }
+      testID="com.ariesbifold:id/JSONDetails.ScrollView"
+      waitFor={
+        Array [
+          Object {
+            "current": null,
+          },
+        ]
+      }
+    >
+      <View>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              undefined,
+            ]
+          }
+        >
+          {
+  "caller_info": "{\\n  \\"_tags\\": {\\n    \\"anonCredsCredentialRevocationId\\": \\"712\\",\\n    \\"anonCredsRevocationRegistryId\\": \\"did:indy:bcovrin:test:QEquAHkM35w4XVT3Ku5yat/anoncreds/v0/REV_REG_DEF/834674/member_card/3ccbf09e-1d5e-4484-a906-86cca6809a39\\",\\n    \\"anonCredsUnqualifiedRevocationRegistryId\\": \\"QEquAHkM35w4XVT3Ku5yat:4:QEquAHkM35w4XVT3Ku5yat:3:CL:834674:member_card:CL_ACCUM:3ccbf09e-1d5e-4484-a906-86cca6809a39\\",\\n    \\"connectionId\\": \\"abb78f2d-887f-4fdf-bdf3-5ceb0635a32b\\",\\n    \\"credentialIds\\": [\\n      \\"19d9ac9a-1bc6-468c-b6ab-8693c20a392d\\"\\n    ],\\n    \\"role\\": \\"holder\\",\\n    \\"state\\": \\"done\\",\\n    \\"threadId\\": \\"d731ad63-dbe0-4c2e-a09a-21da3f0075b6\\"\\n  },\\n  \\"metadata\\": {\\n    \\"_anoncreds/credentialRequest\\": {\\n      \\"link_secret_blinding_data\\": {\\n        \\"v_prime\\": \\"12558773405074986407016595755241195883585779298582197944359249133865516016194613099767720410485680081743270874834017963311561019043224403447871278209091147039916466337112528947479366499888501586461830241682366172465715848761522159899079494671142161829575233674895307880988572289916781251544511562158623409488178204177240603595488837714704523136331508652697210478698797729843348277225169275100843643358846942895804457070602440440792748829796565199381305645795934116742717037341472565117176530625111703271008556298303087440031396822606652491380349684609402532631859436252512176801201030553690693417528622326283838533756817531187410658514180224\\",\\n        \\"vr_prime\\": \\"07E3F3B42E72F43F4F7D35E51AAB90A43E11F953FB023074F88E16CFFFE6D912\\"\\n      },\\n      \\"nonce\\": \\"543894974289883359961803\\",\\n      \\"link_secret_name\\": \\"85772c8c-cca9-4055-9ec9-5fc53db296e6\\"\\n    },\\n    \\"_anoncreds/credential\\": {\\n      \\"credentialDefinitionId\\": \\"QEquAHkM35w4XVT3Ku5yat:3:CL:834674:member_card\\",\\n      \\"schemaId\\": \\"QEquAHkM35w4XVT3Ku5yat:2:member_card:1.54\\",\\n      \\"credentialRevocationId\\": \\"712\\",\\n      \\"revocationRegistryId\\": \\"did:indy:bcovrin:test:QEquAHkM35w4XVT3Ku5yat/anoncreds/v0/REV_REG_DEF/834674/member_card/3ccbf09e-1d5e-4484-a906-86cca6809a39\\"\\n    }\\n  },\\n  \\"credentials\\": [\\n    {\\n      \\"credentialRecordType\\": \\"w3c\\",\\n      \\"credentialRecordId\\": \\"19d9ac9a-1bc6-468c-b6ab-8693c20a392d\\"\\n    }\\n  ],\\n  \\"id\\": \\"911baea9-3984-4a93-92a9-1735eaf3e372\\",\\n  \\"createdAt\\": \\"2025-06-16T16:16:45.341Z\\",\\n  \\"state\\": \\"done\\",\\n  \\"role\\": \\"holder\\",\\n  \\"connectionId\\": \\"abb78f2d-887f-4fdf-bdf3-5ceb0635a32b\\",\\n  \\"threadId\\": \\"d731ad63-dbe0-4c2e-a09a-21da3f0075b6\\",\\n  \\"protocolVersion\\": \\"v1\\",\\n  \\"updatedAt\\": \\"2025-06-16T16:16:54.544Z\\",\\n  \\"credentialAttributes\\": [\\n    {\\n      \\"mime-type\\": \\"text/plain\\",\\n      \\"name\\": \\"Member Status\\",\\n      \\"value\\": \\"Active\\"\\n    },\\n    {\\n      \\"mime-type\\": \\"text/plain\\",\\n      \\"name\\": \\"Given Name\\",\\n      \\"value\\": \\"Joyce\\"\\n    },\\n    {\\n      \\"mime-type\\": \\"text/plain\\",\\n      \\"name\\": \\"PPID\\",\\n      \\"value\\": \\"MC12349\\"\\n    },\\n    {\\n      \\"mime-type\\": \\"text/plain\\",\\n      \\"name\\": \\"Member Status Code\\",\\n      \\"value\\": \\"1\\"\\n    },\\n    {\\n      \\"mime-type\\": \\"text/plain\\",\\n      \\"name\\": \\"Surname\\",\\n      \\"value\\": \\"Lee-Martinez\\"\\n    }\\n  ]\\n}\\n",
+  "network_info": {
+    "type": "cellular",
+    "isConnected": true,
+    "isInternetReachable": true,
+    "details": {
+      "isConnectionExpensive": true,
+      "cellularGeneration": "3g"
+    }
+  }
+}
+        </Text>
+      </View>
+    </RCTScrollView>
+    <View
+      style={
+        Object {
+          "paddingVertical": 8,
+          "width": "100%",
+        }
+      }
+    >
+      <View
+        accessibilityLabel="JSONDetails.Share"
+        accessibilityRole="button"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": false,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onBlur={[Function]}
+        onClick={[Function]}
+        onFocus={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Array [
+            Object {
+              "overflow": "hidden",
+            },
+            Object {
+              "backgroundColor": "#42803E",
+              "borderRadius": 4,
+              "padding": 16,
+            },
+            false,
+            false,
+            false,
+          ]
+        }
+        testID="com.ariesbifold:id/Share"
+      >
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "justifyContent": "center",
+            }
+          }
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "bold",
+                    "textAlign": "center",
+                  },
+                  false,
+                  false,
+                  false,
+                ],
+              ]
+            }
+          >
+            JSONDetails.Share
+          </Text>
+        </View>
+      </View>
+    </View>
+    <View
+      style={
+        Object {
+          "paddingVertical": 8,
+          "width": "100%",
+        }
+      }
+    >
+      <View
+        accessibilityLabel="JSONDetails.Copy"
+        accessibilityRole="button"
+        accessibilityState={
+          Object {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": false,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          Object {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onBlur={[Function]}
+        onClick={[Function]}
+        onFocus={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          Array [
+            Object {
+              "overflow": "hidden",
+            },
+            Object {
+              "borderColor": "#42803E",
+              "borderRadius": 4,
+              "borderWidth": 2,
+              "padding": 16,
+            },
+            false,
+            false,
+            false,
+          ]
+        }
+        testID="com.ariesbifold:id/CopyToClipboard"
+      >
+        <View
+          style={
+            Object {
+              "alignItems": "center",
+              "flexDirection": "row",
+              "justifyContent": "center",
+            }
+          }
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Array [
+                  Object {
+                    "color": "#42803E",
+                    "fontSize": 18,
+                    "fontWeight": "bold",
+                    "textAlign": "center",
+                  },
+                  false,
+                  false,
+                  false,
+                ],
+              ]
+            }
+          >
+            JSONDetails.Copy
+          </Text>
+        </View>
+      </View>
+    </View>
+  </View>
+</RNCSafeAreaView>
+`;

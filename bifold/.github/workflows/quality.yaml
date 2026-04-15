@@ -1,0 +1,70 @@
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    name: Linting and formatter
+    steps:
+      - name: Checkout aries-mobile-agent-react-native
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup NodeJS
+        uses: ./.github/actions/setup-node
+
+      - name: Install dependencies
+        run: |
+          yarn install --immutable
+
+      - name: Build Workspace
+        run: |
+          yarn build
+
+      - name: Run formatter
+        run: |
+          yarn prettier
+
+      - name: Run linter
+        run: |
+          yarn lint
+
+  test:
+    runs-on: ubuntu-22.04
+    name: Testing
+    steps:
+      - name: Checkout aries-mobile-agent-react-native
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup NodeJS
+        uses: ./.github/actions/setup-node
+
+      - name: Install dependencies
+        run: |
+          yarn install --immutable
+
+      - name: Build Workspace
+        run: |
+          yarn build
+
+      - name: Automated testing
+        run: |
+          yarn coverage
+
+      - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+        if: always()

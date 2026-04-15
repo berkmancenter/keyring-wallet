@@ -1,0 +1,115 @@
+{
+  "name": "@bifold/react-native-attestation",
+  "version": "0.1.0-alpha.1",
+  "description": "Mobile app attestation",
+  "main": "build/commonjs/index.js",
+  "module": "build/module/index.js",
+  "types": "build/typescript/index.d.ts",
+  "source": "build/commonjs/index.js",
+  "react-native": "build/commonjs/index.js",
+  "files": [
+    "build",
+    "ios",
+    "android",
+    "react-native-attestation.podspec"
+  ],
+  "scripts": {
+    "build": "echo 'building react-native-attestation 🏗️' && yarn run clean && bob build && echo 'react-native-attestation built ✅'",
+    "clean": "rimraf ./build && del-cli android/build ios/build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
+    "directory": "packages/react-native-attestation"
+  },
+  "author": "Jason C. Leach <jason.leach@fullboar.ca> (https://github.com/fullboar)",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/berkmancenter/keyring-bifold/issues"
+  },
+  "homepage": "https://github.com/berkmancenter/keyring-bifold",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "installConfig": {
+    "hoistingLimits": "workspaces"
+  },
+  "devDependencies": {
+    "@babel/core": "~7.22.20",
+    "@babel/plugin-proposal-class-properties": "~7.17.12",
+    "@babel/preset-env": "~7.22.20",
+    "@babel/preset-react": "~7.17.12",
+    "@babel/preset-typescript": "~7.17.12",
+    "@commitlint/config-conventional": "~17.0.3",
+    "@react-native/eslint-config": "~0.73.2",
+    "@types/jest": "~29.5.14",
+    "@types/react": "~18.2.79",
+    "commitlint": "~17.7.2",
+    "del-cli": "~5.0.1",
+    "eslint": "~8.57.1",
+    "eslint-config-prettier": "~8.5.0",
+    "eslint-plugin-ft-flow": "~3.0.11",
+    "eslint-plugin-prettier": "~5.2.6",
+    "jest": "~29.6.4",
+    "pod-install": "~0.1.39",
+    "prettier": "~2.8.8",
+    "react": "*",
+    "react-native": "*",
+    "react-native-builder-bob": "~0.21.3",
+    "rimraf": "~5.0.10",
+    "typescript": "~5.5.4"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "jest": {
+    "preset": "react-native",
+    "modulePathIgnorePatterns": [
+      "<rootDir>/example/node_modules",
+      "<rootDir>/lib/"
+    ]
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "prettier": {
+    "quoteProps": "consistent",
+    "singleQuote": true,
+    "tabWidth": 2,
+    "trailingComma": "es5",
+    "useTabs": false
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "build",
+    "targets": [
+      "commonjs",
+      "module",
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  },
+  "codegenConfig": {
+    "name": "RNAttestationSpec",
+    "type": "modules",
+    "jsSrcsDir": "src"
+  }
+}

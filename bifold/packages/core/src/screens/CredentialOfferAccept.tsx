@@ -1,0 +1,234 @@
+import { CredentialState } from '@credo-ts/core'
+import { useCredentialById } from '@credo-ts/react-hooks'
+import { useNavigation, CommonActions } from '@react-navigation/native'
+import React, { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { AccessibilityInfo, ScrollView, StyleSheet, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+
+import Button, { ButtonType } from '../components/buttons/Button'
+import SafeAreaModal from '../components/modals/SafeAreaModal'
+import { useAnimatedComponents } from '../contexts/animated-components'
+import { useTheme } from '../contexts/theme'
+import { Stacks, TabStacks } from '../types/navigators'
+import { testIdWithKey } from '../utils/testable'
+import { TOKENS, useServices } from '../container-api'
+import { ThemedText } from '../components/texts/ThemedText'
+
+enum DeliveryStatus {
+  Pending,
+  Completed,
+  Declined,
+}
+
+export interface CredentialOfferAcceptProps {
+  visible: boolean
+  credentialId: string
+  confirmationOnly?: boolean
+  /**
+   * If true, navigate to Contacts screen instead of Credentials screen after accepting.
+   * Used for relationship credentials (VRC) that should show in Contacts, not Wallet.
+   */
+  navigateToContacts?: boolean
+}
+
+const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
+  visible,
+  credentialId,
+  confirmationOnly,
+  navigateToContacts,
+}) => {
+  const { t } = useTranslation()
+  const [shouldShowDelayMessage, setShouldShowDelayMessage] = useState<boolean>(false)
+  const [credentialDeliveryStatus, setCredentialDeliveryStatus] = useState<DeliveryStatus>(DeliveryStatus.Pending)
+  const [timerDidFire, setTimerDidFire] = useState<boolean>(false)
+  const [timer, setTimer] = useState<NodeJS.Timeout>()
+  const credential = useCredentialById(credentialId)
+  const navigation = useNavigation()
+  const { ListItems } = useTheme()
+  const { CredentialAdded, CredentialPending } = useAnimatedComponents()
+  const [{ connectionTimerDelay }] = useServices([TOKENS.CONFIG])
+  const connTimerDelay = connectionTimerDelay ?? 10000 // in ms
+  const styles = StyleSheet.create({
+    container: {
+      ...ListItems.credentialOfferBackground,
+      height: '100%',
+      padding: 20,
+    },
+    image: {
+      marginTop: 20,
+    },
+    messageContainer: {
+      alignItems: 'center',
+    },
+    messageText: {
+      textAlign: 'center',
+      marginTop: 30,
+    },
+    controlsContainer: {
+      marginTop: 'auto',
+      margin: 20,
+    },
+    delayMessageText: {
+      textAlign: 'center',
+      marginTop: 20,
+    },
+  })
+
+  if (!credential && !confirmationOnly) {
+    throw new Error('Unable to fetch credential from Credo')
+  }
+
+  const onBackToHomeTouched = useCallback(() => {
+    navigation.getParent()?.navigate(Stacks.TabStack)
+  }, [navigation])
+
+  const onDoneTouched = useCallback(() => {
+    if (navigateToContacts) {
+      // Navigate to Contacts tab for relationship credentials (VRC)
+      // Use TabStacks.ContactStack to navigate within the TabStack, preserving bottom tabs
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [
+            {
+              name: Stacks.TabStack,
+              state: {
+                routes: [{ name: TabStacks.ContactStack }],
+              },
+            },
+          ],
+        })
+      )
+    } else {
+      // Default: navigate to Credentials/Wallet
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [
+            {
+              name: Stacks.TabStack,
+              state: {
+                routes: [{ name: TabStacks.CredentialStack }],
+              },
+            },
+          ],
+        })
+      )
+    }
+  }, [navigation, navigateToContacts])
+
+  useEffect(() => {
+    if (!credential) {
+      return
+    }
+    if (credential.state === CredentialState.CredentialReceived || credential.state === CredentialState.Done) {
+      timer && clearTimeout(timer)
+      setCredentialDeliveryStatus(DeliveryStatus.Completed)
+    }
+  }, [credential, timer])
+
+  useEffect(() => {
+    if (confirmationOnly) {
+      timer && clearTimeout(timer)
+      setCredentialDeliveryStatus(DeliveryStatus.Completed)
+    }
+  }, [confirmationOnly, timer])
+
+  useEffect(() => {
+    if (timerDidFire || credentialDeliveryStatus !== DeliveryStatus.Pending || !visible) {
+      return
+    }
+
+    const timer = setTimeout(() => {
+      setShouldShowDelayMessage(true)
+      setTimerDidFire(true)
+    }, connTimerDelay)
+
+    setTimer(timer)
+
+    return () => {
+      timer && clearTimeout(timer)
+    }
+  }, [timerDidFire, credentialDeliveryStatus, visible, connTimerDelay])
+
+  useEffect(() => {
+    if (shouldShowDelayMessage && credentialDeliveryStatus !== DeliveryStatus.Completed) {
+      AccessibilityInfo.announceForAccessibility(t('Connection.TakingTooLong'))
+    }
+  }, [shouldShowDelayMessage, credentialDeliveryStatus, t])
+
+  return (
+    <SafeAreaModal visible={visible} transparent={true} animationType={'none'}>
+      <SafeAreaView style={{ ...ListItems.credentialOfferBackground }}>
+        <ScrollView style={styles.container}>
+          <View style={styles.messageContainer}>
+            {credentialDeliveryStatus === DeliveryStatus.Pending && (
+              <ThemedText
+                style={[ListItems.credentialOfferTitle, styles.messageText]}
+                testID={testIdWithKey(navigateToContacts ? 'ContactOnTheWay' : 'CredentialOnTheWay')}
+              >
+                {t((navigateToContacts ? 'Contacts.ContactOnTheWay' : 'CredentialOffer.CredentialOnTheWay') as any)}
+              </ThemedText>
+            )}
+
+            {credentialDeliveryStatus === DeliveryStatus.Completed && (
+              <ThemedText
+                style={[ListItems.credentialOfferTitle, styles.messageText]}
+                testID={testIdWithKey(navigateToContacts ? 'ContactAddedToYourWallet' : 'CredentialAddedToYourWallet')}
+              >
+                {t(
+                  (navigateToContacts
+                    ? 'Contacts.ContactAddedToYourWallet'
+                    : 'CredentialOffer.CredentialAddedToYourWallet') as any
+                )}
+              </ThemedText>
+            )}
+          </View>
+
+          <View style={[styles.image, { minHeight: 250, alignItems: 'center', justifyContent: 'flex-end' }]}>
+            {credentialDeliveryStatus === DeliveryStatus.Completed && <CredentialAdded />}
+            {credentialDeliveryStatus === DeliveryStatus.Pending && <CredentialPending />}
+          </View>
+
+          {shouldShowDelayMessage && credentialDeliveryStatus === DeliveryStatus.Pending && (
+            <ThemedText
+              style={[ListItems.credentialOfferDetails, styles.delayMessageText]}
+              testID={testIdWithKey('TakingTooLong')}
+            >
+              {t('Connection.TakingTooLong')}
+            </ThemedText>
+          )}
+        </ScrollView>
+
+        <View style={styles.controlsContainer}>
+          {credentialDeliveryStatus === DeliveryStatus.Pending && (
+            <View>
+              <Button
+                title={t('Loading.BackToHome')}
+                accessibilityLabel={t('Loading.BackToHome')}
+                testID={testIdWithKey('BackToHome')}
+                onPress={onBackToHomeTouched}
+                buttonType={ButtonType.ModalSecondary}
+              />
+            </View>
+          )}
+
+          {credentialDeliveryStatus === DeliveryStatus.Completed && (
+            <View>
+              <Button
+                title={t('Global.Done')}
+                accessibilityLabel={t('Global.Done')}
+                testID={testIdWithKey('Done')}
+                onPress={onDoneTouched}
+                buttonType={ButtonType.ModalPrimary}
+              />
+            </View>
+          )}
+        </View>
+      </SafeAreaView>
+    </SafeAreaModal>
+  )
+}
+
+export default CredentialOfferAccept

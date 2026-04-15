@@ -1,0 +1,70 @@
+{
+  "name": "@bifold/remote-logs",
+  "version": "0.1.0-alpha.1",
+  "description": "Remote logging for credo-ts agents",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "source": "build/index.js",
+  "files": [
+    "build"
+  ],
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "echo 'building remote-logs 🏗️' && yarn run clean && yarn run compile && echo 'remote-logs built ✅'",
+    "clean": "rimraf ./build",
+    "compile": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
+    "directory": "packages/remote-logging"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "bugs": {
+    "url": "https://github.com/berkmancenter/keyring-bifold/issues"
+  },
+  "homepage": "https://github.com/berkmancenter/keyring-bifold",
+  "devDependencies": {
+    "@babel/core": "~7.25.2",
+    "@babel/plugin-transform-runtime": "~7.25.4",
+    "@babel/preset-env": "~7.25.4",
+    "@babel/preset-flow": "~7.24.7",
+    "@babel/preset-typescript": "~7.24.7",
+    "@babel/runtime": "~7.23.9",
+    "@types/jest": "~29.5.12",
+    "@typescript-eslint/parser": "~7.18.0",
+    "babel-jest": "~29.7.0",
+    "eslint": "~8.57.1",
+    "eslint-import-resolver-typescript": "~3.6.3",
+    "jest": "~29.7.0",
+    "react-test-renderer": "~18.3.1",
+    "rimraf": "~5.0.10",
+    "typescript": "~5.5.4"
+  },
+  "peerDependencies": {
+    "@credo-ts/core": "0.5.17",
+    "axios": "~1.4.0",
+    "buffer": "~6.0.3",
+    "react": "~18.3.1",
+    "react-native": "0.73.11",
+    "react-native-logs": "~5.1.0"
+  },
+  "installConfig": {
+    "hoistingLimits": "workspaces"
+  },
+  "dependencies": {
+    "@bifold/core": "2.7.4",
+    "@credo-ts/core": "0.5.17",
+    "axios": "~1.4.0",
+    "buffer": "~6.0.3",
+    "react": "~18.3.1",
+    "react-native": "~0.73.11",
+    "react-native-logs": "~5.1.0"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "name": "keyring-bifold",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "license": "Apache-2.0",
+  "workspaces": [
+    "packages/*",
+    "samples/*"
+  ],
+  "repository": {
+    "url": "https://github.com/berkmancenter/keyring-bifold/",
+    "type": "git"
+  },
+  "homepage": "https://github.com/berkmancenter/keyring-bifold/",
+  "scripts": {
+    "preinstall": "npx husky install .husky",
+    "clean": "yarn workspaces foreach --all --topological-dev -p run clean && echo 'Cleaned all packages 🧹'",
+    "build": "yarn workspaces foreach --all --topological-dev -p run build",
+    "test": "yarn workspaces foreach --all --topological-dev run test",
+    "test:watch": "cd packages/core && yarn test:watch",
+    "coverage": "yarn workspaces foreach --all --topological-dev run coverage",
+    "prettier": "prettier --ignore-path .gitignore '**/*.+(js|jsx|json|ts|tsx|md|yml|yaml)'",
+    "lint": "eslint --color .",
+    "typecheck": "yarn workspaces foreach --all --topological-dev -p run typecheck",
+    "release": "yarn build && yarn changeset publish --no-git-tag",
+    "changeset-version": "changeset version && yarn install --no-immutable",
+    "ledgers": "ts-node ./scripts/refresh-ledgers.ts"
+  },
+  "devDependencies": {
+    "@changesets/cli": "~2.29.5",
+    "@commitlint/cli": "~11.0.0",
+    "@eslint/js": "~8.57.1",
+    "@react-native/eslint-config": "~0.73.2",
+    "@types/conventional-recommended-bump": "~6.1.1",
+    "@types/eslint__js": "~8.42.3",
+    "@typescript-eslint/eslint-plugin": "~7.18.0",
+    "@typescript-eslint/parser": "~7.18.0",
+    "commitlint": "~17.7.2",
+    "conventional-changelog-conventionalcommits": "~5.0.0",
+    "conventional-recommended-bump": "~6.1.0",
+    "eslint": "~8.57.1",
+    "eslint-import-resolver-typescript": "~3.6.3",
+    "eslint-plugin-import": "~2.29.1",
+    "eslint-plugin-jest": "~28.8.3",
+    "eslint-plugin-prettier": "~5.2.6",
+    "eslint-plugin-react": "~7.35.2",
+    "eslint-plugin-react-hooks": "~4.6.2",
+    "husky": "~7.0.4",
+    "lint-staged": "~15.5.2",
+    "prettier": "~2.8.8",
+    "ts-node": "~10.0.0",
+    "typescript": "~5.5.4",
+    "typescript-eslint": "~7.18.0"
+  },
+  "engines": {
+    "node": ">=20.19.2 <21.0.0",
+    "yarn": "^4.9.2"
+  },
+  "packageManager": "yarn@4.9.2",
+  "resolutions": {
+    "@unimodules/react-native-adapter": "./noop",
+    "@unimodules/core": "./noop",
+    "tsyringe": "4.8.0",
+    "expo": "~50.0.21",
+    "expo-secure-store": "~12.8.1",
+    "nanoid": "3.3.7",
+    "react": "18.3.1",
+    "react-native": "0.73.11",
+    "@types/react": "18.2.79",
+    "@credo-ts/anoncreds@npm:0.5.17": "patch:@credo-ts/anoncreds@npm%3A0.5.17#~/.yarn/patches/@credo-ts-anoncreds-npm-0.5.17-9f101d8e96.patch",
+    "@credo-ts/core@npm:0.5.17": "patch:@credo-ts/core@npm%3A0.5.17#~/.yarn/patches/@credo-ts-core-npm-0.5.17-c528a69dd8.patch",
+    "@credo-ts/indy-vdr@0npm:0.5.17": "patch:@credo-ts/indy-vdr@npm%3A0.5.17#~/.yarn/patches/@credo-ts-indy-vdr-npm-0.5.17-aa0b05041f.patch",
+    "@hyperledger/indy-vdr-react-native@0.2.2": "patch:@hyperledger/indy-vdr-react-native@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-react-native-npm-0.2.2-627d424b96.patch",
+    "@hyperledger/indy-vdr-shared@0.2.2": "patch:@hyperledger/indy-vdr-shared@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-shared-npm-0.2.2-b989282fc6.patch",
+    "@animo-id/pex@npm:4.1.1-alpha.0": "patch:@animo-id/pex@npm%3A4.1.1-alpha.0#~/.yarn/patches/@animo-id-pex-npm-4.1.1-alpha.0-f29edfffa2.patch",
+    "@sphereon/pex@npm:5.0.0-unstable.24": "patch:@sphereon/pex@npm%3A5.0.0-unstable.24#~/.yarn/patches/@sphereon-pex-npm-5.0.0-unstable.24-921df3a8ac.patch"
+  }
+}
