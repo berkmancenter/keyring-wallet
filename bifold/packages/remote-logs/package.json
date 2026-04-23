@@ -59,7 +59,7 @@
     "hoistingLimits": "workspaces"
   },
   "dependencies": {
-    "@bifold/core": "2.7.4",
+    "@bifold/core": "workspace:*",
     "@credo-ts/core": "0.5.17",
     "axios": "~1.4.0",
     "buffer": "~6.0.3",

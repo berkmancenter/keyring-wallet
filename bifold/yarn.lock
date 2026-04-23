@@ -2175,16 +2175,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@bifold/core@npm:2.7.4, @bifold/core@workspace:packages/core":
+"@bifold/core@npm:2.7.4, @bifold/core@workspace:*, @bifold/core@workspace:packages/core":
   version: 0.0.0-use.local
   resolution: "@bifold/core@workspace:packages/core"
   dependencies:
     "@babel/core": "npm:~7.22.20"
     "@babel/runtime": "npm:~7.23.9"
-    "@bifold/oca": "npm:2.7.4"
-    "@bifold/react-native-attestation": "npm:2.7.4"
-    "@bifold/verifier": "npm:2.7.4"
-    "@bifold/vrc-contexts": "npm:0.0.1"
+    "@bifold/oca": "workspace:*"
+    "@bifold/react-native-attestation": "workspace:*"
+    "@bifold/verifier": "workspace:*"
+    "@bifold/vrc-contexts": "workspace:*"
     "@commitlint/cli": "npm:~11.0.0"
     "@credo-ts/anoncreds": "npm:0.5.17"
     "@credo-ts/askar": "npm:0.5.17"
@@ -2372,7 +2372,20 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@bifold/oca@npm:2.7.4, @bifold/oca@workspace:packages/oca":
+"@bifold/oca@npm:2.7.4":
+  version: 2.7.4
+  resolution: "@bifold/oca@npm:2.7.4"
+  dependencies:
+    "@credo-ts/anoncreds": "npm:0.5.17"
+    "@credo-ts/core": "npm:0.5.17"
+    axios: "npm:~1.4.0"
+    lodash.startcase: "npm:~4.4.0"
+    react-native-fs: "npm:~2.20.0"
+  checksum: 10c0/65b17117c71ed2438f1605d00a4692c0280b49e45c88c7fcdca52e867fa0006b9de3915d5a77ccd0be5e47d5b7cf7e4d4b9b0e33123819ba8ea65a350576abd8
+  languageName: node
+  linkType: hard
+
+"@bifold/oca@workspace:*, @bifold/oca@workspace:packages/oca":
   version: 0.0.0-use.local
   resolution: "@bifold/oca@workspace:packages/oca"
   dependencies:
@@ -2394,7 +2407,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@bifold/react-native-attestation@npm:2.7.4, @bifold/react-native-attestation@workspace:packages/react-native-attestation":
+"@bifold/react-native-attestation@workspace:*, @bifold/react-native-attestation@workspace:packages/react-native-attestation":
   version: 0.0.0-use.local
   resolution: "@bifold/react-native-attestation@workspace:packages/react-native-attestation"
   dependencies:
@@ -2437,7 +2450,7 @@ __metadata:
     "@babel/preset-flow": "npm:~7.24.7"
     "@babel/preset-typescript": "npm:~7.24.7"
     "@babel/runtime": "npm:~7.23.9"
-    "@bifold/core": "npm:2.7.4"
+    "@bifold/core": "workspace:*"
     "@credo-ts/core": "npm:0.5.17"
     "@types/jest": "npm:~29.5.12"
     "@typescript-eslint/parser": "npm:~7.18.0"
@@ -2463,7 +2476,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@bifold/verifier@npm:2.7.4, @bifold/verifier@workspace:packages/verifier":
+"@bifold/verifier@workspace:*, @bifold/verifier@workspace:packages/verifier":
   version: 0.0.0-use.local
   resolution: "@bifold/verifier@workspace:packages/verifier"
   dependencies:
@@ -2491,7 +2504,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@bifold/vrc-contexts@npm:0.0.1, @bifold/vrc-contexts@workspace:*, @bifold/vrc-contexts@workspace:packages/vrc-contexts":
+"@bifold/vrc-contexts@workspace:*, @bifold/vrc-contexts@workspace:packages/vrc-contexts":
   version: 0.0.0-use.local
   resolution: "@bifold/vrc-contexts@workspace:packages/vrc-contexts"
   dependencies:
@@ -4693,9 +4706,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hyperledger/indy-vdr-react-native@patch:@hyperledger/indy-vdr-react-native@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-react-native-npm-0.2.2-627d424b96.patch::locator=bifold-wallet-root%40workspace%3A.":
+"@hyperledger/indy-vdr-react-native@patch:@hyperledger/indy-vdr-react-native@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-react-native-npm-0.2.2-627d424b96.patch::locator=keyring-bifold%40workspace%3A.":
   version: 0.2.2
-  resolution: "@hyperledger/indy-vdr-react-native@patch:@hyperledger/indy-vdr-react-native@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-react-native-npm-0.2.2-627d424b96.patch::version=0.2.2&hash=28418c&locator=bifold-wallet-root%40workspace%3A."
+  resolution: "@hyperledger/indy-vdr-react-native@patch:@hyperledger/indy-vdr-react-native@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-react-native-npm-0.2.2-627d424b96.patch::version=0.2.2&hash=28418c&locator=keyring-bifold%40workspace%3A."
   dependencies:
     "@hyperledger/indy-vdr-shared": "npm:0.2.2"
     "@mapbox/node-pre-gyp": "npm:^1.0.10"
@@ -4713,9 +4726,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hyperledger/indy-vdr-shared@patch:@hyperledger/indy-vdr-shared@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-shared-npm-0.2.2-b989282fc6.patch::locator=bifold-wallet-root%40workspace%3A.":
+"@hyperledger/indy-vdr-shared@patch:@hyperledger/indy-vdr-shared@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-shared-npm-0.2.2-b989282fc6.patch::locator=keyring-bifold%40workspace%3A.":
   version: 0.2.2
-  resolution: "@hyperledger/indy-vdr-shared@patch:@hyperledger/indy-vdr-shared@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-shared-npm-0.2.2-b989282fc6.patch::version=0.2.2&hash=4d1d6e&locator=bifold-wallet-root%40workspace%3A."
+  resolution: "@hyperledger/indy-vdr-shared@patch:@hyperledger/indy-vdr-shared@npm%3A0.2.2#./.yarn/patches/@hyperledger-indy-vdr-shared-npm-0.2.2-b989282fc6.patch::version=0.2.2&hash=4d1d6e&locator=keyring-bifold%40workspace%3A."
   checksum: 10c0/ae7f65d1572e4bc72bea6574ea5eb6ad00818ad5d77802c849828763c9e6dc2a49cc27b7757269fb3d53374556d2a203222b153289f31ebc337120bd0f91f5d1
   languageName: node
   linkType: hard
@@ -7954,16 +7967,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@unimodules/core@file:./noop::locator=bifold-wallet-root%40workspace%3A.":
+"@unimodules/core@file:./noop::locator=keyring-bifold%40workspace%3A.":
   version: 1.0.0
-  resolution: "@unimodules/core@file:./noop#./noop::hash=08da70&locator=bifold-wallet-root%40workspace%3A."
+  resolution: "@unimodules/core@file:./noop#./noop::hash=08da70&locator=keyring-bifold%40workspace%3A."
   checksum: 10c0/e7a3061c158a19ea058c642d3ff32668e3b4df5aecf97e2496307fa90e42315f31158e4e3820c933e877f3a9b2f2143418e505aa3210aa5c6d275f4e6988987b
   languageName: node
   linkType: hard
 
-"@unimodules/react-native-adapter@file:./noop::locator=bifold-wallet-root%40workspace%3A.":
+"@unimodules/react-native-adapter@file:./noop::locator=keyring-bifold%40workspace%3A.":
   version: 1.0.0
-  resolution: "@unimodules/react-native-adapter@file:./noop#./noop::hash=54c074&locator=bifold-wallet-root%40workspace%3A."
+  resolution: "@unimodules/react-native-adapter@file:./noop#./noop::hash=54c074&locator=keyring-bifold%40workspace%3A."
   checksum: 10c0/9b8d172c38672e5c33a01574603a5ae02cf931d901637223f978cae5252199ebb6944085a30c669fe326a89db66b52ba8cd1e91fff8c798126eaa6f8f3bc2942
   languageName: node
   linkType: hard
@@ -9194,37 +9207,6 @@ __metadata:
     tsyringe: "npm:~4.8.0"
     typescript: "npm:~5.5.4"
     uuid: "npm:~9.0.1"
-  languageName: unknown
-  linkType: soft
-
-"bifold-wallet-root@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "bifold-wallet-root@workspace:."
-  dependencies:
-    "@changesets/cli": "npm:~2.29.5"
-    "@commitlint/cli": "npm:~11.0.0"
-    "@eslint/js": "npm:~8.57.1"
-    "@react-native/eslint-config": "npm:~0.73.2"
-    "@types/conventional-recommended-bump": "npm:~6.1.1"
-    "@types/eslint__js": "npm:~8.42.3"
-    "@typescript-eslint/eslint-plugin": "npm:~7.18.0"
-    "@typescript-eslint/parser": "npm:~7.18.0"
-    commitlint: "npm:~17.7.2"
-    conventional-changelog-conventionalcommits: "npm:~5.0.0"
-    conventional-recommended-bump: "npm:~6.1.0"
-    eslint: "npm:~8.57.1"
-    eslint-import-resolver-typescript: "npm:~3.6.3"
-    eslint-plugin-import: "npm:~2.29.1"
-    eslint-plugin-jest: "npm:~28.8.3"
-    eslint-plugin-prettier: "npm:~5.2.6"
-    eslint-plugin-react: "npm:~7.35.2"
-    eslint-plugin-react-hooks: "npm:~4.6.2"
-    husky: "npm:~7.0.4"
-    lint-staged: "npm:~15.5.2"
-    prettier: "npm:~2.8.8"
-    ts-node: "npm:~10.0.0"
-    typescript: "npm:~5.5.4"
-    typescript-eslint: "npm:~7.18.0"
   languageName: unknown
   linkType: soft
 
@@ -15911,6 +15893,37 @@ __metadata:
   checksum: 10c0/de75bbf89220746c388cf6a7b71e56080437b77d2edb29bae1c2155048b02c6b8c59a3e5e8d6ccdfd54f0b8bda25226e491a4f1b55ac5f8da04cfbadec4e546c
   languageName: node
   linkType: hard
+
+"keyring-bifold@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "keyring-bifold@workspace:."
+  dependencies:
+    "@changesets/cli": "npm:~2.29.5"
+    "@commitlint/cli": "npm:~11.0.0"
+    "@eslint/js": "npm:~8.57.1"
+    "@react-native/eslint-config": "npm:~0.73.2"
+    "@types/conventional-recommended-bump": "npm:~6.1.1"
+    "@types/eslint__js": "npm:~8.42.3"
+    "@typescript-eslint/eslint-plugin": "npm:~7.18.0"
+    "@typescript-eslint/parser": "npm:~7.18.0"
+    commitlint: "npm:~17.7.2"
+    conventional-changelog-conventionalcommits: "npm:~5.0.0"
+    conventional-recommended-bump: "npm:~6.1.0"
+    eslint: "npm:~8.57.1"
+    eslint-import-resolver-typescript: "npm:~3.6.3"
+    eslint-plugin-import: "npm:~2.29.1"
+    eslint-plugin-jest: "npm:~28.8.3"
+    eslint-plugin-prettier: "npm:~5.2.6"
+    eslint-plugin-react: "npm:~7.35.2"
+    eslint-plugin-react-hooks: "npm:~4.6.2"
+    husky: "npm:~7.0.4"
+    lint-staged: "npm:~15.5.2"
+    prettier: "npm:~2.8.8"
+    ts-node: "npm:~10.0.0"
+    typescript: "npm:~5.5.4"
+    typescript-eslint: "npm:~7.18.0"
+  languageName: unknown
+  linkType: soft
 
 "keyv@npm:^4.5.3":
   version: 4.5.4

@@ -139,8 +139,8 @@ export interface ISVGAssets {
   historyConnectionRemovedIcon: React.FC<SvgProps>
   historyActivateBiometryIcon: React.FC<SvgProps>
   historyDeactivateBiometryIcon: React.FC<SvgProps>
-  walletExport?: React.FC<SvgProps>
-  walletImport?: React.FC<SvgProps>
+  walletExport: React.FC<SvgProps>
+  walletImport: React.FC<SvgProps>
   iconChevronRight: React.FC<SvgProps>
   homeCenterImg: React.FC<SvgProps>
   iconDelete: React.FC<SvgProps>
