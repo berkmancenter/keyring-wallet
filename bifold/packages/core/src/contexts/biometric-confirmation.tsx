@@ -15,6 +15,8 @@ import BiometricConfirmationModal from '../components/modals/BiometricConfirmati
 
 export type BiometricConfirmationStatus = 'confirmed' | 'cancelled' | 'error' | 'not_available'
 
+export type AuthMode = 'biometric' | 'passcode'
+
 export interface BiometricConfirmationRequest {
   counterpartyName: string
   connectionId: string
@@ -24,6 +26,8 @@ export interface BiometricConfirmationRequest {
    * will trigger its own biometric prompt
    */
   skipNativeBiometric?: boolean
+  /** Whether the user will authenticate with biometric or device passcode */
+  authMode?: AuthMode
 }
 
 export interface BiometricConfirmationResponse {
@@ -37,10 +41,7 @@ export interface BiometricConfirmationContextType {
    * Request biometric confirmation from the user via modal
    * Returns a promise that resolves when user completes or cancels
    */
-  requestConfirmation: (
-    counterpartyName: string,
-    connectionId: string
-  ) => Promise<BiometricConfirmationResponse>
+  requestConfirmation: (counterpartyName: string, connectionId: string) => Promise<BiometricConfirmationResponse>
 
   /**
    * Current pending request (for modal to display)
@@ -82,7 +83,12 @@ export const useBiometricConfirmation = (): BiometricConfirmationContextType => 
 
 // Global reference for non-React code to access the context
 let globalRequestConfirmation:
-  | ((counterpartyName: string, connectionId: string, skipNativeBiometric?: boolean) => Promise<BiometricConfirmationResponse>)
+  | ((
+      counterpartyName: string,
+      connectionId: string,
+      skipNativeBiometric?: boolean,
+      authMode?: AuthMode
+    ) => Promise<BiometricConfirmationResponse>)
   | null = null
 
 /**
@@ -91,13 +97,16 @@ let globalRequestConfirmation:
  *
  * @param skipNativeBiometric - If true, skip loadWalletKey biometric
  *   because hardware signing will trigger its own biometric prompt
+ * @param authMode - Whether to show biometric or passcode UI
  */
 export async function requestBiometricConfirmationUI(
   counterpartyName: string,
   connectionId: string,
-  skipNativeBiometric: boolean = false
+  skipNativeBiometric: boolean = false,
+  authMode: AuthMode = 'biometric'
 ): Promise<BiometricConfirmationResponse> {
   if (!globalRequestConfirmation) {
+    // eslint-disable-next-line no-console
     console.warn('[BiometricConfirmation] Provider not mounted, falling back to allow')
     return {
       status: 'not_available',
@@ -106,7 +115,7 @@ export async function requestBiometricConfirmationUI(
     }
   }
 
-  return globalRequestConfirmation(counterpartyName, connectionId, skipNativeBiometric)
+  return globalRequestConfirmation(counterpartyName, connectionId, skipNativeBiometric, authMode)
 }
 
 export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -117,11 +126,13 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
   const resolveRef = useRef<((response: BiometricConfirmationResponse) => void) | null>(null)
 
   const requestConfirmation = useCallback(
-    async (counterpartyName: string, connectionId: string, skipNativeBiometric: boolean = false): Promise<BiometricConfirmationResponse> => {
+    async (
+      counterpartyName: string,
+      connectionId: string,
+      skipNativeBiometric: boolean = false,
+      authMode: AuthMode = 'biometric'
+    ): Promise<BiometricConfirmationResponse> => {
       const timestamp = new Date().toISOString()
-
-      console.log(`[BiometricConfirmation] Request received for ${counterpartyName}`)
-      console.log(`[BiometricConfirmation] Skip native biometric: ${skipNativeBiometric}`)
 
       // Create a promise that will be resolved when user completes action
       return new Promise((resolve) => {
@@ -132,6 +143,7 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
           connectionId,
           timestamp,
           skipNativeBiometric,
+          authMode,
         })
         setIsModalVisible(true)
       })
@@ -140,7 +152,6 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
   )
 
   const onConfirm = useCallback(() => {
-    console.log('[BiometricConfirmation] User confirmed with biometrics')
     if (resolveRef.current) {
       resolveRef.current({
         status: 'confirmed',
@@ -153,7 +164,6 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
   }, [])
 
   const onCancel = useCallback(() => {
-    console.log('[BiometricConfirmation] User cancelled')
     if (resolveRef.current) {
       resolveRef.current({
         status: 'cancelled',
@@ -166,7 +176,6 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
   }, [])
 
   const onError = useCallback((error: string) => {
-    console.log(`[BiometricConfirmation] Error: ${error}`)
     if (resolveRef.current) {
       resolveRef.current({
         status: 'error',
@@ -182,11 +191,9 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
   // Register the global function for non-React access
   React.useEffect(() => {
     globalRequestConfirmation = requestConfirmation
-    console.log('[BiometricConfirmation] Provider mounted, global function registered')
 
     return () => {
       globalRequestConfirmation = null
-      console.log('[BiometricConfirmation] Provider unmounted, global function cleared')
     }
   }, [requestConfirmation])
 
@@ -208,5 +215,3 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
 }
 
 export default BiometricConfirmationProvider
-
-

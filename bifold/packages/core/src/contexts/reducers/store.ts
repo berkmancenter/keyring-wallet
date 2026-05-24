@@ -201,7 +201,6 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       const preferences = {
         ...state.preferences,
         useBiometry: choice,
-        useHardwareAttestation: choice,
       }
       const onboarding = {
         ...state.onboarding,

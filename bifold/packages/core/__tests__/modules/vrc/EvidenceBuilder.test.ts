@@ -30,10 +30,7 @@ jest.mock('@credo-ts/core', () => {
   }
 })
 
-import {
-  getHardwareKeyAttestation,
-  isHardwareAttestationAvailable,
-} from '@bifold/react-native-attestation'
+import { getHardwareKeyAttestation, isHardwareAttestationAvailable } from '@bifold/react-native-attestation'
 
 const mockGetHardwareKeyAttestation = getHardwareKeyAttestation as jest.Mock
 const mockIsHardwareAttestationAvailable = isHardwareAttestationAvailable as jest.Mock
@@ -322,6 +319,131 @@ describe('EvidenceBuilder', () => {
     })
   })
 
+  describe('passcode authentication evidence', () => {
+    beforeEach(() => {
+      mockRepository.findValidByPublicKey.mockResolvedValue({
+        certificateChain: testCertificateChain,
+      } as any)
+    })
+
+    const createPasscodeSignature = (platform: 'ios' | 'android'): VrcHardwareSignature => ({
+      type: 'HardwareBackedBiometric',
+      publicKey: testPublicKey,
+      signature: testSignature,
+      algorithm: 'ECDSA-SHA256',
+      timestamp: '2025-01-24T12:00:00.000Z',
+      keyStorage: platform === 'ios' ? 'SecureEnclave' : 'StrongBox',
+      platform,
+      authenticationMethod: 'DevicePasscode',
+    })
+
+    it('should set type to DeviceAuthentication when passcode used', async () => {
+      const signingResult: HardwareSigningResult = {
+        success: true,
+        reason: 'signed',
+        signature: createPasscodeSignature('ios'),
+      }
+      const result = await evidenceBuilder.buildEvidenceFromSignature(signingResult)
+
+      expect(result.success).toBe(true)
+      expect(result.evidence?.type).toEqual(['DeviceAuthentication', 'HardwareKeyAttestation'])
+    })
+
+    it('should set authenticationMethod to DevicePasscode', async () => {
+      const signingResult: HardwareSigningResult = {
+        success: true,
+        reason: 'signed',
+        signature: createPasscodeSignature('android'),
+      }
+      const result = await evidenceBuilder.buildEvidenceFromSignature(signingResult)
+
+      expect(result.success).toBe(true)
+      expect(result.evidence?.authenticationMethod?.type).toBe('DevicePasscode')
+      expect(result.evidence?.authenticationMethod?.authenticatorType).toBe('platform')
+      expect(result.evidence?.authenticationMethod?.userVerification).toBe('required')
+    })
+
+    it('should NOT include biometricMethod for passcode auth', async () => {
+      const signingResult: HardwareSigningResult = {
+        success: true,
+        reason: 'signed',
+        signature: createPasscodeSignature('ios'),
+      }
+      const result = await evidenceBuilder.buildEvidenceFromSignature(signingResult)
+
+      expect(result.success).toBe(true)
+      expect(result.evidence?.biometricMethod).toBeUndefined()
+    })
+
+    it('should include backward-compat biometricMethod for biometric auth', async () => {
+      const biometricSig: VrcHardwareSignature = {
+        type: 'HardwareBackedBiometric',
+        publicKey: testPublicKey,
+        signature: testSignature,
+        algorithm: 'ECDSA-SHA256',
+        timestamp: '2025-01-24T12:00:00.000Z',
+        keyStorage: 'SecureEnclave',
+        platform: 'ios',
+        authenticationMethod: 'FaceID',
+      }
+      const signingResult: HardwareSigningResult = {
+        success: true,
+        reason: 'signed',
+        signature: biometricSig,
+      }
+      const result = await evidenceBuilder.buildEvidenceFromSignature(signingResult)
+
+      expect(result.success).toBe(true)
+      expect(result.evidence?.type).toEqual(['BiometricAttestation', 'HardwareKeyAttestation'])
+      expect(result.evidence?.biometricMethod).toBeDefined()
+      expect(result.evidence?.biometricMethod?.type).toBe('FaceID')
+      expect(result.evidence?.authenticationMethod?.type).toBe('FaceID')
+    })
+
+    it('should default to platform biometric when authenticationMethod not provided', async () => {
+      const legacySig: VrcHardwareSignature = {
+        type: 'HardwareBackedBiometric',
+        publicKey: testPublicKey,
+        signature: testSignature,
+        algorithm: 'ECDSA-SHA256',
+        timestamp: '2025-01-24T12:00:00.000Z',
+        keyStorage: 'SecureEnclave',
+        platform: 'ios',
+      }
+      const signingResult: HardwareSigningResult = {
+        success: true,
+        reason: 'signed',
+        signature: legacySig,
+      }
+      const result = await evidenceBuilder.buildEvidenceFromSignature(signingResult)
+
+      expect(result.success).toBe(true)
+      expect(result.evidence?.type).toEqual(['BiometricAttestation', 'HardwareKeyAttestation'])
+      expect(result.evidence?.authenticationMethod?.type).toBe('FaceID')
+    })
+
+    it('should default to Fingerprint for Android when authenticationMethod not provided', async () => {
+      const legacyAndroidSig: VrcHardwareSignature = {
+        type: 'HardwareBackedBiometric',
+        publicKey: testPublicKey,
+        signature: testSignature,
+        algorithm: 'ECDSA-SHA256',
+        timestamp: '2025-01-24T12:00:00.000Z',
+        keyStorage: 'StrongBox',
+        platform: 'android',
+      }
+      const signingResult: HardwareSigningResult = {
+        success: true,
+        reason: 'signed',
+        signature: legacyAndroidSig,
+      }
+      const result = await evidenceBuilder.buildEvidenceFromSignature(signingResult)
+
+      expect(result.success).toBe(true)
+      expect(result.evidence?.authenticationMethod?.type).toBe('Fingerprint')
+    })
+  })
+
   describe('buildEvidenceBlock (via buildEvidenceFromSignature)', () => {
     beforeEach(() => {
       mockRepository.findValidByPublicKey.mockResolvedValue({
@@ -443,10 +565,7 @@ describe('EvidenceBuilder', () => {
       const result = await evidenceBuilder.hasCachedAttestation(testPublicKey)
 
       expect(result).toBe(true)
-      expect(mockRepository.findValidByPublicKey).toHaveBeenCalledWith(
-        mockAgent.context,
-        testPublicKey
-      )
+      expect(mockRepository.findValidByPublicKey).toHaveBeenCalledWith(mockAgent.context, testPublicKey)
     })
 
     it('should return false when no attestation exists', async () => {
@@ -472,15 +591,13 @@ describe('EvidenceBuilder', () => {
     it('should retry on fetch failure and succeed on second attempt', async () => {
       mockRepository.findValidByPublicKey.mockResolvedValue(null)
       mockIsHardwareAttestationAvailable.mockResolvedValue(true)
-      mockGetHardwareKeyAttestation
-        .mockRejectedValueOnce(new Error('Network timeout'))
-        .mockResolvedValueOnce({
-          success: true,
-          certificateChain: testCertificateChain,
-          format: 'apple-appattest-v1',
-          platform: 'ios',
-          securityLevel: 'SecureEnclave',
-        })
+      mockGetHardwareKeyAttestation.mockRejectedValueOnce(new Error('Network timeout')).mockResolvedValueOnce({
+        success: true,
+        certificateChain: testCertificateChain,
+        format: 'apple-appattest-v1',
+        platform: 'ios',
+        securityLevel: 'SecureEnclave',
+      })
       mockRepository.saveAttestation.mockResolvedValue({} as any)
 
       const signingResult: HardwareSigningResult = {

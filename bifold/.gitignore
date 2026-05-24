@@ -176,3 +176,6 @@ lib/
 **/.yarn/install-state.gz
 **/.xcode.env.local
 **/app/vendor/bundle/**
+
+# Local-only docs (not committed)
+.docs-local/

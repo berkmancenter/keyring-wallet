@@ -396,20 +396,37 @@ RCT_EXPORT_METHOD(signWithHardwareBiometricAuth:(NSArray<NSNumber *> *)dataToSig
         return;
     }
     
-    // Require biometric (Face ID / Touch ID) before each sign so the user explicitly approves
+    // Authenticate user before signing — allows biometric OR device passcode fallback.
+    // LAPolicyDeviceOwnerAuthentication: prefers biometric when enrolled, falls back to passcode.
     LAContext *laContext = [[LAContext alloc] init];
-    [laContext evaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics
+    
+    // Detect which authentication method will be used (for evidence metadata)
+    NSString *authMethod = @"DevicePasscode";
+    if ([laContext canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics error:nil]) {
+        if (@available(iOS 11.0, *)) {
+            switch (laContext.biometryType) {
+                case LABiometryTypeFaceID:   authMethod = @"FaceID"; break;
+                case LABiometryTypeTouchID:  authMethod = @"TouchID"; break;
+                default:                     authMethod = @"DevicePasscode"; break;
+            }
+        } else {
+            authMethod = @"TouchID";
+        }
+    }
+    NSLog(@"[VRC:iOS] Authentication method: %@", authMethod);
+    
+    [laContext evaluatePolicy:LAPolicyDeviceOwnerAuthentication
               localizedReason:@"Confirm your identity to sign this relationship credential"
                         reply:^(BOOL success, NSError * _Nullable authError) {
         if (!success) {
             if (authError && (authError.code == LAErrorUserCancel || authError.code == LAErrorUserFallback || authError.code == LAErrorSystemCancel)) {
-                NSLog(@"[VRC:iOS] ✗ Biometric cancelled");
+                NSLog(@"[VRC:iOS] ✗ Authentication cancelled");
                 _signingInProgress = NO;
                 reject(@"error", @"Biometric authentication cancelled or failed", authError);
             } else {
-                NSLog(@"[VRC:iOS] ✗ Biometric failed: %@", authError);
+                NSLog(@"[VRC:iOS] ✗ Authentication failed: %@", authError);
                 _signingInProgress = NO;
-                reject(@"error", authError.localizedDescription ?: @"Biometric authentication failed", authError);
+                reject(@"error", authError.localizedDescription ?: @"Authentication failed", authError);
             }
             return;
         }
@@ -425,15 +442,16 @@ RCT_EXPORT_METHOD(signWithHardwareBiometricAuth:(NSArray<NSNumber *> *)dataToSig
                 reject(@"error", @"Empty assertion", errorWithReason(@"Empty assertion", 104));
                 return;
             }
-            NSLog(@"[VRC:iOS] ✓ Assertion created [%lu bytes]",
-                  (unsigned long)assertion.length);
+            NSLog(@"[VRC:iOS] ✓ Assertion created [%lu bytes, auth=%@]",
+                  (unsigned long)assertion.length, authMethod);
 
             _signingInProgress = NO;
             resolve(@{
                 @"success": @YES,
                 @"signature": dataToBytes(assertion),
                 @"algorithm": @"ECDSA-SHA256",
-                @"clientDataHash": [clientDataHash base64EncodedStringWithOptions:0]
+                @"clientDataHash": [clientDataHash base64EncodedStringWithOptions:0],
+                @"authenticationMethod": authMethod
             });
         }];
     }];

@@ -1,12 +1,12 @@
 /**
  * VRC Biometric Confirmation
- * 
+ *
  * Handles user confirmation for VRC signing with biometric authentication.
- * 
+ *
  * CONFIRMATION MODES:
  * 1. UI-only: Shows modal, uses wallet key biometric
  * 2. Hardware signing: Shows modal, then triggers hardware key signing
- * 
+ *
  * FLOW:
  * 1. Check if biometrics available
  * 2. Show confirmation modal (BiometricConfirmationModal)
@@ -22,12 +22,9 @@ import { isBiometricsActive } from '../../services/keychain'
 import {
   requestBiometricConfirmationUI,
   BiometricConfirmationResponse,
+  type AuthMode,
 } from '../../contexts/biometric-confirmation'
-import {
-  signVrcWithHardwareKey,
-  isHardwareSigningAvailable,
-  VrcHardwareSignature,
-} from './vrc-hardware-signing'
+import { signVrcWithHardwareKey, isHardwareSigningAvailable, VrcHardwareSignature } from './vrc-hardware-signing'
 
 const LOG_PREFIX = '[VRC:Biometric]'
 const MAX_SIGNING_RETRIES = 2
@@ -115,10 +112,7 @@ export async function requestBiometricConfirmationWithUI(
       return { success: true, reason: 'not_available', timestamp: new Date().toISOString() }
     }
 
-    const response: BiometricConfirmationResponse = await requestBiometricConfirmationUI(
-      counterpartyName,
-      connectionId
-    )
+    const response: BiometricConfirmationResponse = await requestBiometricConfirmationUI(counterpartyName, connectionId)
 
     switch (response.status) {
       case 'confirmed':
@@ -164,14 +158,14 @@ export async function requestBiometricConfirmationWithUI(
 
 /**
  * Request biometric confirmation with hardware signing.
- * 
+ *
  * FLOW:
  * 1. Check hardware signing availability
  * 2. Check biometrics availability
  * 3. Show confirmation modal (skipNativeBiometric=true)
  * 4. User confirms → sign VRC with hardware key (triggers biometric)
  * 5. Return hardware signature for inclusion in evidence block
- * 
+ *
  * @param agent - Credo agent
  * @param counterpartyName - Name for modal display
  * @param connectionId - Connection ID for DIDComm notifications
@@ -193,16 +187,19 @@ export async function requestBiometricWithHardwareSigning(
       return requestBiometricConfirmationWithUI(agent, counterpartyName, connectionId)
     }
 
-    // Check biometrics availability
-    if (!(await isBiometricsActive())) {
-      return { success: true, reason: 'not_available', timestamp: new Date().toISOString() }
-    }
+    // Determine auth mode: biometric if available, passcode otherwise
+    const biometricsAvailable = await isBiometricsActive()
+    const authMode: AuthMode = biometricsAvailable ? 'biometric' : 'passcode'
+    logger.info(
+      `${LOG_PREFIX} Auth mode: ${authMode} (biometrics ${biometricsAvailable ? 'available' : 'unavailable'})`
+    )
 
-    // Show modal (skip wallet biometric - hardware signing will prompt)
+    // Show modal (skip wallet biometric - hardware signing will prompt its own auth)
     const uiResponse: BiometricConfirmationResponse = await requestBiometricConfirmationUI(
       counterpartyName,
       connectionId,
-      true // skipNativeBiometric
+      true, // skipNativeBiometric
+      authMode
     )
 
     if (uiResponse.status === 'cancelled') {
@@ -227,13 +224,11 @@ export async function requestBiometricWithHardwareSigning(
     let signingResult = await signVrcWithHardwareKey(agent, vrcContent)
     let retryCount = 0
 
-    while (
-      !signingResult.success &&
-      signingResult.retryable &&
-      retryCount < MAX_SIGNING_RETRIES
-    ) {
+    while (!signingResult.success && signingResult.retryable && retryCount < MAX_SIGNING_RETRIES) {
       retryCount++
-      logger.warn(`${LOG_PREFIX} Signing failed (retryable) — waiting for app to return to foreground [attempt ${retryCount}/${MAX_SIGNING_RETRIES}]`)
+      logger.warn(
+        `${LOG_PREFIX} Signing failed (retryable) — waiting for app to return to foreground [attempt ${retryCount}/${MAX_SIGNING_RETRIES}]`
+      )
 
       const returned = await waitForForeground()
       if (!returned) {
@@ -242,7 +237,7 @@ export async function requestBiometricWithHardwareSigning(
       }
 
       // Small delay after foreground to let the system settle
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 500))
       logger.info(`${LOG_PREFIX} App is active — retrying hardware signing`)
       signingResult = await signVrcWithHardwareKey(agent, vrcContent)
     }
@@ -262,7 +257,11 @@ export async function requestBiometricWithHardwareSigning(
       }
     }
 
-    logger.info(`${LOG_PREFIX} ✓ Hardware signing complete [${signingResult.signature?.keyStorage}]${retryCount > 0 ? ` (after ${retryCount} retry)` : ''}`)
+    logger.info(
+      `${LOG_PREFIX} ✓ Hardware signing complete [${signingResult.signature?.keyStorage}]${
+        retryCount > 0 ? ` (after ${retryCount} retry)` : ''
+      }`
+    )
 
     return {
       success: true,

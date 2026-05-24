@@ -1,9 +1,9 @@
 /**
  * EvidenceBuilder
- * 
+ *
  * Constructs W3C-compliant evidence blocks for VRC credentials.
  * Combines biometric signature with attestation certificate chain.
- * 
+ *
  * EVIDENCE STRUCTURE (W3C VC format):
  * - id: Unique URN UUID
  * - type: ['BiometricAttestation', 'HardwareKeyAttestation']
@@ -11,7 +11,7 @@
  * - hardwareBinding: Platform, key storage, public key, algorithm
  * - attestation: Certificate chain from Apple/Google
  * - signature: ECDSA-SHA256 signature over VRC content
- * 
+ *
  * ATTESTATION CACHING:
  * - iOS attestation certs expire in ~72 hours
  * - Attestation is cached to avoid repeated Apple server calls
@@ -21,7 +21,12 @@
 import { Agent, utils } from '@credo-ts/core'
 
 import type { HardwareSigningResult } from '../vrc-hardware-signing'
-import type { HardwareAttestationEvidence, BuildEvidenceInput } from '../types/evidence'
+import type {
+  HardwareAttestationEvidence,
+  BuildEvidenceInput,
+  EvidenceTypeArray,
+  AuthenticationMethodType,
+} from '../types/evidence'
 import { AttestationStorageRepository } from './AttestationStorageRepository'
 import {
   getHardwareKeyAttestation,
@@ -53,7 +58,10 @@ export class EvidenceBuilder {
    * @param signingResult - Result from signVrcWithHardwareKey()
    * @param signedContentHash - Base64-encoded SHA256 hash of the signed content
    */
-  public async buildEvidenceFromSignature(signingResult: HardwareSigningResult, signedContentHash?: string): Promise<BuildEvidenceResult> {
+  public async buildEvidenceFromSignature(
+    signingResult: HardwareSigningResult,
+    signedContentHash?: string
+  ): Promise<BuildEvidenceResult> {
     if (!signingResult.success || !signingResult.signature) {
       return { success: false, error: 'No signature available to build evidence', hasAttestation: false }
     }
@@ -67,14 +75,18 @@ export class EvidenceBuilder {
     const hasChain = attestationResult.certificateChain.length > 0
 
     if (hasChain) {
-      logger.info(`${LOG_PREFIX}   Attestation: ${attestationResult.source} (${attestationResult.certificateChain.length} certs)`)
+      logger.info(
+        `${LOG_PREFIX}   Attestation: ${attestationResult.source} (${attestationResult.certificateChain.length} certs)`
+      )
     } else {
       logger.warn(`${LOG_PREFIX}   Attestation: none`)
     }
 
     // Build W3C evidence block
+    const authMethod: AuthenticationMethodType =
+      signature.authenticationMethod || this.getDefaultAuthMethod(signature.platform)
     const evidence = this.buildEvidenceBlock({
-      biometricType: this.getBiometricType(signature.platform),
+      authenticationMethodType: authMethod,
       keyStorage: signature.keyStorage,
       platform: signature.platform,
       publicKey: signature.publicKey,
@@ -124,13 +136,19 @@ export class EvidenceBuilder {
           if (attestation.success && attestation.certificateChain.length > 0) break
           // On iOS, "already attested" returns success but empty chain — don't retry
           if (attestation.success && (attestation as any).alreadyAttested) {
-            this.agent.config.logger.info(`${LOG_PREFIX} Key already attested (iOS) — cert chain must be fetched separately or was not cached`)
+            this.agent.config.logger.info(
+              `${LOG_PREFIX} Key already attested (iOS) — cert chain must be fetched separately or was not cached`
+            )
             break
           }
-          if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000))
+          if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 2000))
         } catch (fetchErr) {
-          this.agent.config.logger.warn(`${LOG_PREFIX} Attestation fetch attempt ${attempt}/3 failed: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`)
-          if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000))
+          this.agent.config.logger.warn(
+            `${LOG_PREFIX} Attestation fetch attempt ${attempt}/3 failed: ${
+              fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+            }`
+          )
+          if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 2000))
         }
       }
 
@@ -165,12 +183,17 @@ export class EvidenceBuilder {
 
   /** Build the W3C evidence block structure */
   private buildEvidenceBlock(input: BuildEvidenceInput): HardwareAttestationEvidence {
-    return {
+    const isPasscode = input.authenticationMethodType === 'DevicePasscode'
+    const evidenceType: EvidenceTypeArray = isPasscode
+      ? ['DeviceAuthentication', 'HardwareKeyAttestation']
+      : ['BiometricAttestation', 'HardwareKeyAttestation']
+
+    const evidence: HardwareAttestationEvidence = {
       id: `urn:uuid:${utils.uuid()}`,
-      type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+      type: evidenceType,
       created: new Date().toISOString(),
-      biometricMethod: {
-        type: input.biometricType,
+      authenticationMethod: {
+        type: input.authenticationMethodType,
         authenticatorType: 'platform',
         userVerification: 'required',
       },
@@ -191,10 +214,21 @@ export class EvidenceBuilder {
         ...(input.signedContentHash ? { signedContentHash: input.signedContentHash } : {}),
       },
     }
+
+    // Backward compat: also set biometricMethod for non-passcode auth
+    if (!isPasscode) {
+      evidence.biometricMethod = {
+        type: input.authenticationMethodType as 'FaceID' | 'TouchID' | 'Fingerprint' | 'Face' | 'Iris',
+        authenticatorType: 'platform',
+        userVerification: 'required',
+      }
+    }
+
+    return evidence
   }
 
-  /** Get biometric type based on platform (simplified assumption) */
-  private getBiometricType(platform: 'ios' | 'android'): 'FaceID' | 'TouchID' | 'Fingerprint' {
+  /** Default authentication method when native doesn't report one (backward compat) */
+  private getDefaultAuthMethod(platform: 'ios' | 'android'): AuthenticationMethodType {
     return platform === 'ios' ? 'FaceID' : 'Fingerprint'
   }
 

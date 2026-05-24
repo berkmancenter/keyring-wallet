@@ -106,7 +106,7 @@ describe('BiometricSignatureVerifier', () => {
         'test-content',
         testEvidence.hardwareBinding.publicKey,
         testEvidence.attestation.format,
-        testEvidence.signature.signedContentHash,
+        testEvidence.signature.signedContentHash
       )
     })
 
@@ -276,7 +276,7 @@ describe('BiometricSignatureVerifier', () => {
         expect.anything(),
         expect.anything(),
         'apple-appattest-v1',
-        expect.anything(),
+        expect.anything()
       )
     })
 
@@ -304,7 +304,7 @@ describe('BiometricSignatureVerifier', () => {
         expect.anything(),
         expect.anything(),
         'android-key-attestation-v3',
-        expect.anything(),
+        expect.anything()
       )
     })
 
@@ -351,7 +351,7 @@ describe('BiometricSignatureVerifier', () => {
         expect.anything(),
         expect.anything(),
         expect.anything(),
-        undefined,
+        undefined
       )
     })
   })
@@ -411,6 +411,99 @@ describe('BiometricSignatureVerifier', () => {
     })
   })
 
+  describe('DeviceAuthentication (passcode) evidence', () => {
+    const passcodeEvidence: HardwareAttestationEvidence = {
+      id: 'urn:uuid:test-passcode-evidence',
+      type: ['DeviceAuthentication', 'HardwareKeyAttestation'],
+      created: '2025-01-23T12:00:00.000Z',
+      authenticationMethod: {
+        type: 'DevicePasscode',
+        authenticatorType: 'platform',
+        userVerification: 'required',
+      },
+      hardwareBinding: {
+        keyStorage: 'StrongBox',
+        platform: 'android',
+        keyType: 'EC-P256',
+        algorithm: 'ECDSA-SHA256',
+        publicKey: 'dGVzdC1wdWJsaWMta2V5',
+      },
+      attestation: {
+        format: 'android-key-attestation-v3',
+        certificateChain: ['cert1-base64', 'cert2-base64'],
+      },
+      signature: {
+        value: 'dGVzdC1zaWduYXR1cmU=',
+        algorithm: 'ECDSA-SHA256',
+        signedContentHash: 'dGVzdC1oYXNo',
+      },
+    }
+
+    it('should verify DeviceAuthentication evidence via native', async () => {
+      mockVerifyHardwareEvidence.mockResolvedValue({
+        valid: true,
+        certificateChainValid: true,
+        publicKeyMatchesLeafCert: true,
+        signatureValid: true,
+      })
+
+      const verifier = new HardwareSignatureVerifier()
+      const result = await verifier.verifyEvidence(passcodeEvidence, 'test-content')
+
+      expect(result.valid).toBe(true)
+      expect(result.platform).toBe('android')
+      expect(result.securityLevel).toBe('StrongBox')
+    })
+
+    it('should find DeviceAuthentication evidence in credential', async () => {
+      mockVerifyHardwareEvidence.mockResolvedValue({
+        valid: true,
+        certificateChainValid: true,
+        publicKeyMatchesLeafCert: true,
+        signatureValid: true,
+      })
+
+      const credentialWithPasscodeEvidence = {
+        ...testCredential,
+        evidence: [passcodeEvidence],
+      }
+
+      const result = await verifyVrcHardwareEvidence(credentialWithPasscodeEvidence)
+
+      expect(result).not.toBeNull()
+      expect(result?.valid).toBe(true)
+    })
+
+    it('should find evidence using authenticationMethod when biometricMethod is absent', async () => {
+      mockVerifyHardwareEvidence.mockResolvedValue({
+        valid: true,
+        certificateChainValid: true,
+        publicKeyMatchesLeafCert: true,
+        signatureValid: true,
+      })
+
+      const authMethodOnlyEvidence: HardwareAttestationEvidence = {
+        ...passcodeEvidence,
+        type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+        authenticationMethod: {
+          type: 'FaceID',
+          authenticatorType: 'platform',
+          userVerification: 'required',
+        },
+      }
+
+      const credentialWithAuthMethodEvidence = {
+        ...testCredential,
+        evidence: [authMethodOnlyEvidence],
+      }
+
+      const result = await verifyVrcHardwareEvidence(credentialWithAuthMethodEvidence)
+
+      expect(result).not.toBeNull()
+      expect(result?.valid).toBe(true)
+    })
+  })
+
   describe('Evidence Structure Validation', () => {
     it('should validate a complete evidence structure', () => {
       const verifier = new HardwareSignatureVerifier()
@@ -448,6 +541,61 @@ describe('BiometricSignatureVerifier', () => {
       }
 
       expect(verifier.hasValidEvidenceFormat(noSigEvidence)).toBe(false)
+    })
+
+    it('should validate DeviceAuthentication evidence with authenticationMethod only', () => {
+      const verifier = new HardwareSignatureVerifier()
+
+      const passcodeEvidence: HardwareAttestationEvidence = {
+        id: 'urn:uuid:test-passcode',
+        type: ['DeviceAuthentication', 'HardwareKeyAttestation'],
+        created: '2025-01-23T12:00:00.000Z',
+        authenticationMethod: {
+          type: 'DevicePasscode',
+          authenticatorType: 'platform',
+          userVerification: 'required',
+        },
+        hardwareBinding: testEvidence.hardwareBinding,
+        attestation: testEvidence.attestation,
+        signature: testEvidence.signature,
+      }
+
+      expect(verifier.hasValidEvidenceFormat(passcodeEvidence)).toBe(true)
+    })
+
+    it('should validate legacy evidence with biometricMethod only (no authenticationMethod)', () => {
+      const verifier = new HardwareSignatureVerifier()
+
+      const legacyEvidence: HardwareAttestationEvidence = {
+        id: 'urn:uuid:test-legacy',
+        type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+        created: '2025-01-23T12:00:00.000Z',
+        biometricMethod: {
+          type: 'FaceID',
+          authenticatorType: 'platform',
+          userVerification: 'required',
+        },
+        hardwareBinding: testEvidence.hardwareBinding,
+        attestation: testEvidence.attestation,
+        signature: testEvidence.signature,
+      }
+
+      expect(verifier.hasValidEvidenceFormat(legacyEvidence)).toBe(true)
+    })
+
+    it('should reject evidence with neither authenticationMethod nor biometricMethod', () => {
+      const verifier = new HardwareSignatureVerifier()
+
+      const noAuthEvidence = {
+        id: 'urn:uuid:test-no-auth',
+        type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+        created: '2025-01-23T12:00:00.000Z',
+        hardwareBinding: testEvidence.hardwareBinding,
+        attestation: testEvidence.attestation,
+        signature: testEvidence.signature,
+      } as any
+
+      expect(verifier.hasValidEvidenceFormat(noAuthEvidence)).toBe(false)
     })
   })
 })

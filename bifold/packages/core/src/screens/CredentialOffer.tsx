@@ -40,7 +40,10 @@ import { BaseTourID } from '../types/tour'
 import { ThemedText } from '../components/texts/ThemedText'
 import { isDTGCredentialType } from '../types/credential-display'
 import { validateRelationshipCredential, RelationshipCredentialValidation } from '../modules/vrc/vrc-manager'
-import { verifyVrcHardwareEvidence, SignatureVerificationResult } from '../modules/vrc/services/BiometricSignatureVerifier'
+import {
+  verifyVrcHardwareEvidence,
+  SignatureVerificationResult,
+} from '../modules/vrc/services/BiometricSignatureVerifier'
 import type { HardwareAttestationEvidence } from '../modules/vrc/types/evidence'
 import WitnessVerifiedBanner from '../modules/vrc/components/WitnessVerifiedBanner'
 
@@ -299,31 +302,41 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
             }
 
             // Verify attestation certificate chain if evidence is present
-            if (credentialData.evidence && Array.isArray(credentialData.evidence) && credentialData.evidence.length > 0) {
+            if (
+              credentialData.evidence &&
+              Array.isArray(credentialData.evidence) &&
+              credentialData.evidence.length > 0
+            ) {
               const evidence = credentialData.evidence[0] as HardwareAttestationEvidence
-              
+
               // Only verify if there's a certificate chain
               if (evidence?.attestation?.certificateChain && evidence.attestation.certificateChain.length > 0) {
                 logger?.info(`[CredentialOffer] Verifying attestation certificate chain...`)
                 logger?.info(`[CredentialOffer] Platform: ${evidence.hardwareBinding?.platform}`)
                 logger?.info(`[CredentialOffer] Key Storage: ${evidence.hardwareBinding?.keyStorage}`)
                 logger?.info(`[CredentialOffer] Chain Length: ${evidence.attestation.certificateChain.length}`)
-                
+
                 try {
                   // Use the convenience function that automatically extracts signed content
                   // The signature was over the credential WITHOUT the evidence block
                   const attestationResult = await verifyVrcHardwareEvidence(credentialData as Record<string, unknown>)
                   setAttestationValidation(attestationResult)
-                  
+
                   if (attestationResult && attestationResult.valid) {
                     logger?.info(`[CredentialOffer] ✅ Attestation verification PASSED`)
-                    logger?.info(`[CredentialOffer]   Certificate chain valid: ${attestationResult.details.certificateChainValid}`)
+                    logger?.info(
+                      `[CredentialOffer]   Certificate chain valid: ${attestationResult.details.certificateChainValid}`
+                    )
                     logger?.info(`[CredentialOffer]   Platform: ${attestationResult.platform}`)
                     logger?.info(`[CredentialOffer]   Security Level: ${attestationResult.securityLevel}`)
                   } else if (attestationResult) {
                     logger?.warn(`[CredentialOffer] ⚠️ Attestation verification FAILED: ${attestationResult.error}`)
-                    logger?.warn(`[CredentialOffer]   Certificate chain valid: ${attestationResult.details.certificateChainValid}`)
-                    logger?.warn(`[CredentialOffer]   Public key matches: ${attestationResult.details.publicKeyMatchesCert}`)
+                    logger?.warn(
+                      `[CredentialOffer]   Certificate chain valid: ${attestationResult.details.certificateChainValid}`
+                    )
+                    logger?.warn(
+                      `[CredentialOffer]   Public key matches: ${attestationResult.details.publicKeyMatchesCert}`
+                    )
                     logger?.warn(`[CredentialOffer]   Signature valid: ${attestationResult.details.signatureValid}`)
                   }
                 } catch (err) {
@@ -402,7 +415,9 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
         logger?.error(`[CredentialOffer] Error processing credential: ${err}`)
 
         if (errorMsg.includes('RecordDuplicateError') || errorMsg.includes('Multiple records found')) {
-          logger?.warn('[CredentialOffer] Duplicate DidCommMessage records detected — credential may have been accepted already')
+          logger?.warn(
+            '[CredentialOffer] Duplicate DidCommMessage records detected — credential may have been accepted already'
+          )
         }
       }
 
@@ -561,12 +576,11 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
             <ThemedText style={{ fontWeight: '600', color: '#DC2626', marginBottom: 4 }}>
               ⚠️ {t('Attestation.SecurityWarning')}
             </ThemedText>
-            <ThemedText style={{ color: '#7F1D1D', fontSize: 13 }}>
-              {t('Attestation.DIDMismatchWarning')}
-            </ThemedText>
+            <ThemedText style={{ color: '#7F1D1D', fontSize: 13 }}>{t('Attestation.DIDMismatchWarning')}</ThemedText>
             {!didValidation.issuerDidMatches && (
               <ThemedText style={{ color: '#7F1D1D', fontSize: 12, marginTop: 8 }}>
-                • {t('Attestation.IssuerDIDMismatch')}{'\n'}
+                • {t('Attestation.IssuerDIDMismatch')}
+                {'\n'}
                 {t('Attestation.Expected')}: {didValidation.expectedIssuerDid || t('Attestation.NotSet')}
                 {'\n'}
                 {t('Attestation.Received')}: {didValidation.actualIssuerDid}
@@ -574,7 +588,8 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
             )}
             {!didValidation.subjectDidMatches && (
               <ThemedText style={{ color: '#7F1D1D', fontSize: 12, marginTop: 8 }}>
-                • {t('Attestation.YourRDIDMismatch')}{'\n'}
+                • {t('Attestation.YourRDIDMismatch')}
+                {'\n'}
                 {t('Attestation.Expected')}: {didValidation.expectedSubjectDid || t('Attestation.NotSet')}
                 {'\n'}
                 {t('Attestation.Received')}: {didValidation.actualSubjectDid}
@@ -610,43 +625,62 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
                 Secure Exchange
               </ThemedText>
               <ThemedText style={{ fontSize: 12, color: '#4D7A8B', opacity: 0.9 }}>
-                Signed by {attestationValidation.platform === 'ios' ? 'Apple Secure Enclave' : attestationValidation.platform === 'android' ? 'Android TEE' : 'Secure Hardware'}
+                Signed by{' '}
+                {attestationValidation.platform === 'ios'
+                  ? 'Apple Secure Enclave'
+                  : attestationValidation.platform === 'android'
+                  ? 'Android TEE'
+                  : 'Secure Hardware'}
+                {(() => {
+                  const evidence = jsonLdCredentialData?.evidence?.[0]
+                  const authType = evidence?.authenticationMethod?.type || evidence?.biometricMethod?.type
+                  if (!authType) return ''
+                  const label: Record<string, string> = {
+                    FaceID: 'Face ID',
+                    TouchID: 'Touch ID',
+                    Fingerprint: 'Fingerprint',
+                    DevicePasscode: 'Passcode',
+                  }
+                  return ` via ${label[authType] || authType}`
+                })()}
               </ThemedText>
             </View>
             <Icon name="check-circle" size={20} color="#4D7A8B" />
           </View>
         )}
-        {attestationValidation && !attestationValidation.valid && attestationValidation.error !== 'No certificate chain provided' && (
-          <View
-            style={{
-              backgroundColor: '#FEF3C7',
-              borderColor: '#F59E0B',
-              borderWidth: 1,
-              borderRadius: 8,
-              marginHorizontal: 15,
-              marginTop: 8,
-              marginBottom: 8,
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}
-            testID={testIdWithKey('AttestationWarning')}
-          >
-            <View style={{ marginRight: 12 }}>
-              <Icon name="shield-alert" size={28} color="#92400E" />
+        {attestationValidation &&
+          !attestationValidation.valid &&
+          attestationValidation.error !== 'No certificate chain provided' && (
+            <View
+              style={{
+                backgroundColor: '#FEF3C7',
+                borderColor: '#F59E0B',
+                borderWidth: 1,
+                borderRadius: 8,
+                marginHorizontal: 15,
+                marginTop: 8,
+                marginBottom: 8,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+              testID={testIdWithKey('AttestationWarning')}
+            >
+              <View style={{ marginRight: 12 }}>
+                <Icon name="shield-alert" size={28} color="#92400E" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={{ fontWeight: 'bold', fontSize: 14, color: '#92400E', marginBottom: 2 }}>
+                  Hardware Verification Issue
+                </ThemedText>
+                <ThemedText style={{ fontSize: 12, color: '#92400E', opacity: 0.9 }}>
+                  Could not verify hardware attestation
+                </ThemedText>
+              </View>
+              <Icon name="alert-circle" size={20} color="#92400E" />
             </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={{ fontWeight: 'bold', fontSize: 14, color: '#92400E', marginBottom: 2 }}>
-                Hardware Verification Issue
-              </ThemedText>
-              <ThemedText style={{ fontSize: 12, color: '#92400E', opacity: 0.9 }}>
-                Could not verify hardware attestation
-              </ThemedText>
-            </View>
-            <Icon name="alert-circle" size={20} color="#92400E" />
-          </View>
-        )}
+          )}
         {!loading && credential && !isJsonLdCredential && (
           <View style={{ marginHorizontal: 15, marginBottom: 16 }}>
             <CredentialCard credential={credential} />

@@ -107,10 +107,12 @@ const BiometricConfirmationModal: React.FC = () => {
     },
   })
 
+  const isPasscodeMode = pendingRequest?.authMode === 'passcode'
+
   const handleConfirmPress = useCallback(async () => {
     if (!pendingRequest) return
 
-    // If skipNativeBiometric is true, hardware signing will trigger its own biometric prompt
+    // If skipNativeBiometric is true, hardware signing will trigger its own biometric/passcode prompt
     if (pendingRequest.skipNativeBiometric) {
       onConfirm()
       return
@@ -128,7 +130,7 @@ const BiometricConfirmationModal: React.FC = () => {
       if (result) {
         onConfirm()
       } else {
-        onError('Biometric authentication was cancelled or failed')
+        onError('Authentication was cancelled or failed')
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -166,29 +168,39 @@ const BiometricConfirmationModal: React.FC = () => {
 
           <View style={styles.container}>
             <View style={styles.contentContainer}>
-              {/* Lock icon */}
+              {/* Auth icon */}
               <View style={styles.iconContainer}>
-                <Icon name="fingerprint" size={40} color={ColorPalette.brand.primary} />
+                <Icon name={isPasscodeMode ? 'lock' : 'fingerprint'} size={40} color={ColorPalette.brand.primary} />
               </View>
 
               {/* Title */}
-              <ThemedText style={styles.title}>{t('Biometry.ConfirmRelationship') || 'Confirm Relationship'}</ThemedText>
+              <ThemedText style={styles.title}>
+                {isPasscodeMode
+                  ? 'Confirm with Device Passcode'
+                  : String(t('Biometry.ConfirmRelationship') || 'Confirm Relationship')}
+              </ThemedText>
 
               {/* Counterparty name */}
               <ThemedText style={styles.counterpartyName}>{pendingRequest.counterpartyName}</ThemedText>
 
               {/* Description */}
               <ThemedText style={styles.description}>
-                {t('Biometry.VrcConfirmationDescription') ||
-                  "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection."}
+                {String(
+                  t('Biometry.VrcConfirmationDescription') ||
+                    "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection."
+                )}
               </ThemedText>
 
               {/* Security note */}
               <View style={styles.securityNote}>
                 <Icon name="security" size={20} color={ColorPalette.notification.infoIcon || '#1976D2'} />
                 <ThemedText style={styles.securityNoteText}>
-                  {t('Biometry.SecurityNote') ||
-                    'Your biometric data never leaves your device. Only you can authorize this signature.'}
+                  {isPasscodeMode
+                    ? 'Your device passcode will be used to authorize this signature. The signing key is still protected by secure hardware.'
+                    : String(
+                        t('Biometry.SecurityNote') ||
+                          'Your biometric data never leaves your device. Only you can authorize this signature.'
+                      )}
                 </ThemedText>
               </View>
             </View>
@@ -205,8 +217,16 @@ const BiometricConfirmationModal: React.FC = () => {
               ) : (
                 <>
                   <Button
-                    title={t('Biometry.ConfirmWithBiometrics') || 'Confirm with Biometrics'}
-                    accessibilityLabel={t('Biometry.ConfirmWithBiometrics') || 'Confirm with Biometrics'}
+                    title={
+                      isPasscodeMode
+                        ? 'Confirm with Device Passcode'
+                        : String(t('Biometry.ConfirmWithBiometrics') || 'Confirm with Biometrics')
+                    }
+                    accessibilityLabel={
+                      isPasscodeMode
+                        ? 'Confirm with Device Passcode'
+                        : String(t('Biometry.ConfirmWithBiometrics') || 'Confirm with Biometrics')
+                    }
                     testID={testIdWithKey('ConfirmBiometric')}
                     onPress={handleConfirmPress}
                     buttonType={ButtonType.Primary}

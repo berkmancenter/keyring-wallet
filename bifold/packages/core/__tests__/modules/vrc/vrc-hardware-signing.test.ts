@@ -75,7 +75,7 @@ const createMockAgent = () =>
     },
     context: { contextCorrelationId: 'test-context' },
     dependencyManager: { resolve: jest.fn() },
-  }) as any
+  } as any)
 
 describe('VRC Hardware Signing', () => {
   let mockAgent: ReturnType<typeof createMockAgent>
@@ -102,9 +102,7 @@ describe('VRC Hardware Signing', () => {
     it('should recover via attestation when key exists but public key not cached', async () => {
       const pubKeyBuffer = { toString: (enc?: string) => (enc === 'base64' ? 'cmVjb3ZlcmVkS2V5' : 'recoveredKey') }
       mockNativeHasKey.mockResolvedValue(true)
-      mockNativeGetPublicKey
-        .mockRejectedValueOnce(new Error('Public key not found'))
-        .mockResolvedValue(pubKeyBuffer)
+      mockNativeGetPublicKey.mockRejectedValueOnce(new Error('Public key not found')).mockResolvedValue(pubKeyBuffer)
       mockIsHardwareAttestationAvailable.mockResolvedValue(true)
       mockGetHardwareKeyAttestation.mockResolvedValue({
         success: true,
@@ -161,9 +159,67 @@ describe('VRC Hardware Signing', () => {
       mockNativeCreateKey.mockRejectedValue(new Error('Hardware not supported'))
 
       await expect(ensureHardwareSigningKey(mockAgent)).rejects.toThrow('Hardware not supported')
-      expect(mockAgent.config.logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Key creation failed')
+      expect(mockAgent.config.logger.error).toHaveBeenCalledWith(expect.stringContaining('Key creation failed'))
+    })
+  })
+
+  describe('Android key migration for device credential support', () => {
+    it('should migrate biometric-only key when supportsDeviceCredential is false', async () => {
+      const p = Platform as any
+      p.OS = 'android'
+      const oldPubKeyBuffer = { toString: (enc?: string) => (enc === 'base64' ? 'b2xkS2V5' : 'oldKey') }
+      const newPubKeyBuffer = { toString: (enc?: string) => (enc === 'base64' ? 'bmV3S2V5' : 'newKey') }
+
+      mockNativeHasKey.mockResolvedValue(true)
+      mockNativeGetPublicKey.mockResolvedValue(oldPubKeyBuffer)
+      mockNativeGetKeyInfo.mockResolvedValue({ storage: 'StrongBox', supportsDeviceCredential: false })
+      mockNativeDeleteKey.mockResolvedValue(undefined)
+      mockNativeCreateKey.mockResolvedValue({
+        success: true,
+        publicKey: newPubKeyBuffer,
+        storage: 'StrongBox',
+      })
+
+      const result = await ensureHardwareSigningKey(mockAgent)
+
+      expect(mockNativeDeleteKey).toHaveBeenCalled()
+      expect(mockNativeCreateKey).toHaveBeenCalled()
+      expect(result.publicKey).toBe('bmV3S2V5')
+      expect(mockAgent.config.logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('migrating to support device credential')
       )
+    })
+
+    it('should not migrate key when supportsDeviceCredential is true', async () => {
+      const p = Platform as any
+      p.OS = 'android'
+      const pubKeyBuffer = { toString: (enc?: string) => (enc === 'base64' ? 'ZXhpc3RpbmdLZXk=' : 'existingKey') }
+
+      mockNativeHasKey.mockResolvedValue(true)
+      mockNativeGetPublicKey.mockResolvedValue(pubKeyBuffer)
+      mockNativeGetKeyInfo.mockResolvedValue({ storage: 'StrongBox', supportsDeviceCredential: true })
+
+      const result = await ensureHardwareSigningKey(mockAgent)
+
+      expect(mockNativeDeleteKey).not.toHaveBeenCalled()
+      expect(mockNativeCreateKey).not.toHaveBeenCalled()
+      expect(result.publicKey).toBe('ZXhpc3RpbmdLZXk=')
+    })
+
+    it('should not migrate key on iOS regardless of supportsDeviceCredential', async () => {
+      const p = Platform as any
+      p.OS = 'ios'
+      const pubKeyBuffer = { toString: (enc?: string) => (enc === 'base64' ? 'aW9zS2V5' : 'iosKey') }
+
+      mockNativeHasKey.mockResolvedValue(true)
+      mockNativeGetPublicKey.mockResolvedValue(pubKeyBuffer)
+      mockNativeGetKeyInfo.mockResolvedValue({ storage: 'SecureEnclave', supportsDeviceCredential: false })
+
+      const result = await ensureHardwareSigningKey(mockAgent)
+
+      expect(mockNativeDeleteKey).not.toHaveBeenCalled()
+      expect(mockNativeCreateKey).not.toHaveBeenCalled()
+      expect(result.publicKey).toBe('aW9zS2V5')
     })
   })
 
@@ -204,6 +260,36 @@ describe('VRC Hardware Signing', () => {
       expect(result.signature?.clientDataHash).toBe('aGFzaGJhc2U2NA==')
     })
 
+    it('should include authenticationMethod in signing result', async () => {
+      const sigBuffer = { toString: (enc?: string) => (enc === 'base64' ? 'c2lnbmF0dXJl' : 'signature'), length: 64 }
+      mockNativeSign.mockResolvedValue({
+        success: true,
+        signature: sigBuffer,
+        algorithm: 'ECDSA-SHA256',
+        clientDataHash: 'aGFzaA==',
+        authenticationMethod: 'DevicePasscode',
+      })
+
+      const result = await signVrcWithHardwareKey(mockAgent, vrcContent)
+
+      expect(result.success).toBe(true)
+      expect(result.signature?.authenticationMethod).toBe('DevicePasscode')
+    })
+
+    it('should handle missing authenticationMethod from native (backward compat)', async () => {
+      const sigBuffer = { toString: (enc?: string) => (enc === 'base64' ? 'c2lnbmF0dXJl' : 'signature'), length: 64 }
+      mockNativeSign.mockResolvedValue({
+        success: true,
+        signature: sigBuffer,
+        algorithm: 'ECDSA-SHA256',
+      })
+
+      const result = await signVrcWithHardwareKey(mockAgent, vrcContent)
+
+      expect(result.success).toBe(true)
+      expect(result.signature?.authenticationMethod).toBeUndefined()
+    })
+
     it('should return error when signing returns success=false', async () => {
       mockNativeSign.mockResolvedValue({ success: false })
 
@@ -223,7 +309,8 @@ describe('VRC Hardware Signing', () => {
     })
 
     it('should mark iOS assertion failure as retryable', async () => {
-      (Platform as any).OS = 'ios'
+      const p = Platform as any
+      p.OS = 'ios'
       mockNativeSign.mockRejectedValue(new Error('generate assertion failed'))
 
       const result = await signVrcWithHardwareKey(mockAgent, vrcContent)
@@ -234,7 +321,8 @@ describe('VRC Hardware Signing', () => {
     })
 
     it('should not mark Android errors as retryable', async () => {
-      (Platform as any).OS = 'android'
+      const p = Platform as any
+      p.OS = 'android'
       mockNativeSign.mockRejectedValue(new Error('signing failed unexpectedly'))
 
       const result = await signVrcWithHardwareKey(mockAgent, vrcContent)
@@ -254,12 +342,8 @@ describe('VRC Hardware Signing', () => {
 
       await signVrcWithHardwareKey(mockAgent, vrcContent)
 
-      expect(mockAgent.config.logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('VRC to sign')
-      )
-      expect(mockAgent.config.logger.info).toHaveBeenCalledWith(
-        expect.stringContaining(vrcContent.substring(0, 80))
-      )
+      expect(mockAgent.config.logger.info).toHaveBeenCalledWith(expect.stringContaining('VRC to sign'))
+      expect(mockAgent.config.logger.info).toHaveBeenCalledWith(expect.stringContaining(vrcContent.substring(0, 80)))
     })
   })
 

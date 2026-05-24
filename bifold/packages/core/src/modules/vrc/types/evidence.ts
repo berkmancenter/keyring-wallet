@@ -11,11 +11,28 @@
  */
 
 /**
- * Biometric method details
+ * Authentication method type — biometric or device credential
+ */
+export type AuthenticationMethodType = 'FaceID' | 'TouchID' | 'Fingerprint' | 'Face' | 'Iris' | 'DevicePasscode'
+
+/**
+ * Biometric method details (kept for backward compatibility)
  */
 export interface BiometricMethod {
   /** Type of biometric used */
   type: 'FaceID' | 'TouchID' | 'Fingerprint' | 'Face' | 'Iris'
+  /** W3C WebAuthn authenticator type */
+  authenticatorType: 'platform'
+  /** User verification requirement */
+  userVerification: 'required'
+}
+
+/**
+ * Authentication method details — superset of BiometricMethod, includes passcode
+ */
+export interface AuthenticationMethod {
+  /** How the user authenticated */
+  type: AuthenticationMethodType
   /** W3C WebAuthn authenticator type */
   authenticatorType: 'platform'
   /** User verification requirement */
@@ -61,10 +78,19 @@ export interface HardwareSignature {
 }
 
 /**
+ * Evidence type arrays:
+ * - BiometricAttestation + HardwareKeyAttestation: user authenticated via biometric
+ * - DeviceAuthentication + HardwareKeyAttestation: user authenticated via passcode/PIN/pattern
+ */
+export type EvidenceTypeArray =
+  | ['BiometricAttestation', 'HardwareKeyAttestation']
+  | ['DeviceAuthentication', 'HardwareKeyAttestation']
+
+/**
  * Complete hardware attestation evidence block for W3C VC
  *
  * This evidence proves:
- * 1. A human biometrically approved the VRC (biometricMethod)
+ * 1. A human approved the VRC via biometric or device passcode (authenticationMethod)
  * 2. The signing key is in secure hardware (hardwareBinding)
  * 3. Apple/Google vouch for the hardware key (attestation.certificateChain)
  * 4. The hardware key signed this specific VRC (signature)
@@ -72,12 +98,14 @@ export interface HardwareSignature {
 export interface HardwareAttestationEvidence {
   /** Unique identifier for this evidence (URN UUID) */
   id: string
-  /** Evidence types */
-  type: ['BiometricAttestation', 'HardwareKeyAttestation']
+  /** Evidence types — distinguishes biometric vs device credential authentication */
+  type: EvidenceTypeArray
   /** When the evidence was created (ISO 8601) */
   created: string
-  /** Biometric authentication details */
-  biometricMethod: BiometricMethod
+  /** Authentication method details (superset of biometricMethod, includes passcode) */
+  authenticationMethod?: AuthenticationMethod
+  /** @deprecated Use authenticationMethod. Kept for backward compatibility with existing evidence. */
+  biometricMethod?: BiometricMethod
   /** Hardware key binding information */
   hardwareBinding: HardwareBinding
   /** Attestation certificate chain from Apple/Google */
@@ -90,8 +118,8 @@ export interface HardwareAttestationEvidence {
  * Input for building evidence
  */
 export interface BuildEvidenceInput {
-  /** Biometric type used */
-  biometricType: 'FaceID' | 'TouchID' | 'Fingerprint' | 'Face' | 'Iris'
+  /** How the user authenticated */
+  authenticationMethodType: AuthenticationMethodType
   /** Key storage type */
   keyStorage: 'SecureEnclave' | 'StrongBox' | 'TEE' | 'Software' | 'Unknown'
   /** Platform */
