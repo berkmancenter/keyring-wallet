@@ -1,6 +1,56 @@
 import type { TurboModule } from 'react-native';
 import { TurboModuleRegistry } from 'react-native';
 
+/** Native bridge payloads (typed loosely; index.ts maps to public interfaces). */
+type NativeHardwareKeyGenerationResult = {
+  success: boolean;
+  publicKey: number[];
+  keyType: string;
+  storage: string;
+};
+
+type NativeHardwareSignatureResult = {
+  success: boolean;
+  signature: number[];
+  algorithm: string;
+  clientDataHash?: string;
+  authenticationMethod?: string;
+};
+
+type NativeHardwareKeyInfo = {
+  exists: boolean;
+  keyType?: string;
+  storage?: string;
+  biometricBound?: boolean;
+  algorithm?: string;
+  supportsDeviceCredential?: boolean;
+};
+
+type NativeHardwareKeyAttestationResult = {
+  success: boolean;
+  certificateChain?: string[];
+  publicKey?: string;
+  securityLevel?: string;
+  rawAttestationObject?: string;
+};
+
+type NativeVerificationResult = {
+  valid: boolean;
+  certificateChainValid?: boolean;
+  signatureValid?: boolean;
+  publicKeyMatchesLeafCert?: boolean;
+  leafPublicKeyBase64?: string;
+  errors?: unknown[];
+  attestationSecurityLevel?: string;
+  keymasterSecurityLevel?: string;
+  verifiedBootState?: string;
+  deviceLocked?: boolean;
+  attestationChallengeBase64?: string;
+  userAuthType?: string;
+  authTimeout?: number;
+  revocationChecked?: boolean;
+};
+
 /**
  * TurboModule spec for the Attestation native module.
  *
@@ -23,20 +73,22 @@ export interface Spec extends TurboModule {
   googleAttestation(nonce: string): Promise<string>;
 
   // Cross-platform: Hardware-backed signing key
-  createSecureEnclaveKey(): Promise<Object>;
+  createSecureEnclaveKey(): Promise<NativeHardwareKeyGenerationResult>;
   hasHardwareSigningKey(): Promise<boolean>;
   getHardwarePublicKey(): Promise<number[]>;
   signWithHardwareBiometricAuth(
     dataToSign: number[],
     authMode: string
-  ): Promise<Object>;
+  ): Promise<NativeHardwareSignatureResult>;
   deleteHardwareSigningKey(): Promise<boolean>;
-  getHardwareKeyInfo(): Promise<Object>;
+  getHardwareKeyInfo(): Promise<NativeHardwareKeyInfo>;
   isHardwareAttestationAvailable(): Promise<boolean>;
 
   // Platform-specific attestation
-  attestHardwareSigningKey(challenge: string): Promise<Object>; // iOS
-  getKeyAttestation(): Promise<Object>;                         // Android
+  attestHardwareSigningKey(
+    challenge: string
+  ): Promise<NativeHardwareKeyAttestationResult>; // iOS
+  getKeyAttestation(): Promise<NativeHardwareKeyAttestationResult>; // Android
 
   // Cross-platform: Native hardware evidence verification
   verifyHardwareEvidence(
@@ -46,7 +98,7 @@ export interface Spec extends TurboModule {
     publicKeyBase64: string,
     attestationFormat: string,
     signedContentHashBase64: string
-  ): Promise<Object>;
+  ): Promise<NativeVerificationResult>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('Attestation');
