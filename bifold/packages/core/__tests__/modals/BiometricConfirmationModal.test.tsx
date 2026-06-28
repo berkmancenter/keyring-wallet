@@ -6,6 +6,7 @@
 
 import { render } from '@testing-library/react-native'
 import React from 'react'
+import { Platform } from 'react-native'
 
 import { BasicAppContext } from '../helpers/app'
 
@@ -75,7 +76,7 @@ describe('BiometricConfirmationModal', () => {
     expect(queryAllByText(/Confirm with Device Passcode/i)).toHaveLength(0)
   })
 
-  it('should render passcode mode with passcode-specific text', () => {
+  it('should render passcode mode with Continue button and Confirm Relationship title', () => {
     mockUseBiometricConfirmation.mockReturnValue({
       ...baseContextValue,
       pendingRequest: {
@@ -87,15 +88,37 @@ describe('BiometricConfirmationModal', () => {
       },
     })
 
-    const { getByText, getAllByText } = render(
+    const { getByText, queryAllByText } = render(
       <BasicAppContext>
         <BiometricConfirmationModal />
       </BasicAppContext>
     )
 
     expect(getByText('Bob')).toBeTruthy()
+    expect(getByText('Biometry.ConfirmRelationship')).toBeTruthy()
+    expect(getByText('Continue')).toBeTruthy()
+    expect(queryAllByText(/Confirm with Device Passcode/i)).toHaveLength(0)
+  })
+
+  it('should render passcode mode with device passcode button when not hardware signing', () => {
+    mockUseBiometricConfirmation.mockReturnValue({
+      ...baseContextValue,
+      pendingRequest: {
+        counterpartyName: 'Bob',
+        connectionId: 'conn-456',
+        timestamp: '2025-01-24T12:00:00.000Z',
+        skipNativeBiometric: false,
+        authMode: 'passcode',
+      },
+    })
+
+    const { getAllByText } = render(
+      <BasicAppContext>
+        <BiometricConfirmationModal />
+      </BasicAppContext>
+    )
+
     expect(getAllByText(/Confirm with Device Passcode/i)).not.toHaveLength(0)
-    expect(getByText(/device passcode will be used/i)).toBeTruthy()
   })
 
   it('should show biometric security note in biometric mode', () => {
@@ -120,7 +143,7 @@ describe('BiometricConfirmationModal', () => {
     expect(getByText('Biometry.SecurityNote')).toBeTruthy()
   })
 
-  it('should show passcode security note in passcode mode', () => {
+  it('should show passcode security note in passcode mode on iOS', () => {
     mockUseBiometricConfirmation.mockReturnValue({
       ...baseContextValue,
       pendingRequest: {
@@ -138,8 +161,35 @@ describe('BiometricConfirmationModal', () => {
       </BasicAppContext>
     )
 
-    expect(getByText(/device passcode will be used to authorize/i)).toBeTruthy()
-    expect(getByText(/signing key is still protected by secure hardware/i)).toBeTruthy()
+    expect(getByText(/Face ID or your device passcode may appear/i)).toBeTruthy()
+    expect(getByText(/signing key stays in secure hardware/i)).toBeTruthy()
+  })
+
+  it('should show passcode security note in passcode mode on Android', () => {
+    const originalOs = Platform.OS
+    Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' })
+
+    mockUseBiometricConfirmation.mockReturnValue({
+      ...baseContextValue,
+      pendingRequest: {
+        counterpartyName: 'Dave',
+        connectionId: 'conn-abc',
+        timestamp: '2025-01-24T12:00:00.000Z',
+        skipNativeBiometric: true,
+        authMode: 'passcode',
+      },
+    })
+
+    const { getByText } = render(
+      <BasicAppContext>
+        <BiometricConfirmationModal />
+      </BasicAppContext>
+    )
+
+    expect(getByText(/device passcode will authorize this signature/i)).toBeTruthy()
+    expect(getByText(/signing key stays in secure hardware/i)).toBeTruthy()
+
+    Object.defineProperty(Platform, 'OS', { configurable: true, get: () => originalOs })
   })
 
   it('should default to biometric mode when authMode is undefined', () => {
