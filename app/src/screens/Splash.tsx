@@ -208,10 +208,7 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
             </View>
             <View style={styles.dotsContainer}>
               {steps.map((_, index) => (
-                <View
-                  key={index}
-                  style={[styles.dot, index <= currentStep ? styles.dotActive : styles.dotInactive]}
-                />
+                <View key={index} style={[styles.dot, index <= currentStep ? styles.dotActive : styles.dotInactive]} />
               ))}
             </View>
             <Text style={styles.stepText}>{stepText}</Text>

@@ -132,9 +132,7 @@ const Biometry: React.FC = () => {
         {biometryAvailable ? t('Biometry.EnabledText1') : t('Biometry.NotEnabledText1')}
       </ThemedText>
       {biometryAvailable ? (
-        <ThemedText style={{ textAlign: 'center', marginBottom: Spacing.md }}>
-          {t('Biometry.EnabledText2')}
-        </ThemedText>
+        <ThemedText style={{ textAlign: 'center', marginBottom: Spacing.md }}>{t('Biometry.EnabledText2')}</ThemedText>
       ) : (
         <ThemedText style={{ textAlign: 'center', marginBottom: Spacing.md }}>
           {t('Biometry.NotEnabledText2')}
