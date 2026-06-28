@@ -42,10 +42,17 @@ const EmptyList = ({ message }: EmptyListProps) => {
       <View style={styles.iconCircle}>
         <WalletIcon width={ICON_SIZE} height={ICON_SIZE} fill="#000000" />
       </View>
-      <ThemedText variant="headingThree" style={[styles.text, { marginTop: 28, fontSize: 22, fontWeight: '700' }]} accessibilityRole="header">
+      <ThemedText
+        variant="headingThree"
+        style={[styles.text, { marginTop: 28, fontSize: 22, fontWeight: '700' }]}
+        accessibilityRole="header"
+      >
         {message || t('Credentials.EmptyList')}
       </ThemedText>
-      <ThemedText style={[styles.text, { color: ColorPalette.grayscale.mediumGrey, fontSize: 16, lineHeight: 22 }]} testID={testIdWithKey('NoCredentials')}>
+      <ThemedText
+        style={[styles.text, { color: ColorPalette.grayscale.mediumGrey, fontSize: 16, lineHeight: 22 }]}
+        testID={testIdWithKey('NoCredentials')}
+      >
         {t('Credentials.EmptyListDescription')}
       </ThemedText>
       <View style={styles.buttonContainer}>

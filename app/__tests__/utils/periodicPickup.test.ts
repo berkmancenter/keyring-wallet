@@ -17,7 +17,7 @@ const createMockAgent = () =>
         error: jest.fn(),
       },
     },
-  }) as unknown as Agent
+  } as unknown as Agent)
 
 describe('startPeriodicTrustPing', () => {
   let mockAgent: Agent
@@ -73,9 +73,7 @@ describe('startPeriodicTrustPing', () => {
   })
 
   it('survives errors and keeps pinging', async () => {
-    (mockAgent.connections.sendPing as jest.Mock)
-      .mockRejectedValueOnce(new Error('WebSocket dead'))
-      .mockResolvedValue(undefined)
+    jest.mocked(mockAgent.connections.sendPing).mockRejectedValueOnce(new Error('WebSocket dead'))
 
     startPeriodicTrustPing(mockAgent, 15000)
 
@@ -89,7 +87,7 @@ describe('startPeriodicTrustPing', () => {
   })
 
   it('skips ping if no default mediator is found', async () => {
-    (mockAgent.mediationRecipient.findDefaultMediator as jest.Mock).mockResolvedValue(null)
+    jest.mocked(mockAgent.mediationRecipient.findDefaultMediator).mockResolvedValue(null)
 
     startPeriodicTrustPing(mockAgent, 15000)
 

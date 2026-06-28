@@ -16,7 +16,12 @@ const packageDirs = [
 ]
 
 // In development, resolve these to source for hot reload; CI/production uses built output.
-const BIFOLD_SOURCE_PACKAGES = ['@bifold/core', '@bifold/verifier', '@bifold/vrc-contexts', '@bifold/react-native-attestation']
+const BIFOLD_SOURCE_PACKAGES = [
+  '@bifold/core',
+  '@bifold/verifier',
+  '@bifold/vrc-contexts',
+  '@bifold/react-native-attestation',
+]
 const bifoldSourceDirByPackage = {}
 for (const dir of packageDirs) {
   try {

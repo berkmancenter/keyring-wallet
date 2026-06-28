@@ -46,7 +46,7 @@ jobs:
       - name: Initialize submodules with PAT
         run: |
           git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/bifold.git"
+          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
           git submodule update --init --recursive --force
 
       - name: Extract version from package.json
@@ -108,7 +108,7 @@ jobs:
       - name: Initialize submodules with PAT
         run: |
           git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/bifold.git"
+          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
           git submodule update --init --recursive --force
 
       - uses: actions/setup-python@v5
@@ -145,7 +145,7 @@ jobs:
       - name: Initialize submodules with PAT
         run: |
           git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/bifold.git"
+          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
           git submodule update --init --recursive --force
 
       - name: Verify bifold submodule commit
@@ -619,7 +619,7 @@ jobs:
       - name: Initialize submodules with PAT
         run: |
           git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/bifold.git"
+          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
           git submodule update --init --recursive --force
 
       - name: Verify bifold submodule commit
@@ -871,7 +871,7 @@ jobs:
       - name: Initialize submodules with PAT
         run: |
           git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/bifold.git"
+          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
           git submodule update --init --recursive
 
       - name: Extract version
@@ -904,7 +904,7 @@ jobs:
       - name: Initialize submodules with PAT
         run: |
           git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/bifold.git"
+          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
           git submodule update --init --recursive --force
 
       - name: Extract version

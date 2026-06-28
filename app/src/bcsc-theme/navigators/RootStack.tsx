@@ -77,7 +77,7 @@ const BCSCRootStack: React.FC = () => {
       <AgentProvider agent={agent}>
         <OpenIDCredentialRecordProvider>
           <VrcNameCacheProvider>
-          {loading ? <TempLoadingView /> : store.bcsc.verified ? <BCSCMainStack /> : <VerifyIdentityStack />}
+            {loading ? <TempLoadingView /> : store.bcsc.verified ? <BCSCMainStack /> : <VerifyIdentityStack />}
           </VrcNameCacheProvider>
         </OpenIDCredentialRecordProvider>
       </AgentProvider>

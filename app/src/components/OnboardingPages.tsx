@@ -1,9 +1,4 @@
-import {
-  ITheme,
-  createStyles,
-  GenericFn,
-  Link,
-} from '@bifold/core'
+import { ITheme, createStyles, GenericFn, Link } from '@bifold/core'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -70,12 +65,8 @@ const CreatePage = (
         </View>
       </View>
       <View style={slideStyles.textContainer}>
-        <Text style={[defaultStyle.headerText, { fontSize: 24, textAlign: 'center' }]}>
-          {t(titleKey)}
-        </Text>
-        <Text style={[defaultStyle.bodyText, { marginTop: 14, textAlign: 'center' }]}>
-          {t(bodyKey)}
-        </Text>
+        <Text style={[defaultStyle.headerText, { fontSize: 24, textAlign: 'center' }]}>{t(titleKey)}</Text>
+        <Text style={[defaultStyle.bodyText, { marginTop: 14, textAlign: 'center' }]}>{t(bodyKey)}</Text>
         {extra}
       </View>
     </ScrollView>
@@ -113,8 +104,26 @@ export const pages = (_onTutorialCompleted: GenericFn, theme: ITheme['Onboarding
   const fill = theme.imageDisplayOptions.fill
   return [
     WelcomePage(theme, strokeProps(512, fill)),
-    CreatePage('Onboarding.CredentialsHeading', 'Onboarding.CredentialsParagraph', theme, PassIcon, strokeProps(24, fill)),
-    CreatePage('Onboarding.ConnectionsHeading', 'Onboarding.ConnectionsParagraph', theme, NetworkIcon, strokeProps(536, fill)),
-    CreatePage('Onboarding.SecurityHeading', 'Onboarding.SecurityParagraph', theme, AccessControlIcon, strokeProps(64, fill)),
+    CreatePage(
+      'Onboarding.CredentialsHeading',
+      'Onboarding.CredentialsParagraph',
+      theme,
+      PassIcon,
+      strokeProps(24, fill)
+    ),
+    CreatePage(
+      'Onboarding.ConnectionsHeading',
+      'Onboarding.ConnectionsParagraph',
+      theme,
+      NetworkIcon,
+      strokeProps(536, fill)
+    ),
+    CreatePage(
+      'Onboarding.SecurityHeading',
+      'Onboarding.SecurityParagraph',
+      theme,
+      AccessControlIcon,
+      strokeProps(64, fill)
+    ),
   ]
 }

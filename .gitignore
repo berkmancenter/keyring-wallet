@@ -77,3 +77,6 @@ release.keystore
 # AI copilots
 .aider*
 .clinerules
+
+# Local-only docs (not committed)
+.docs-local/

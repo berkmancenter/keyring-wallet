@@ -1,11 +1,4 @@
-import {
-  Button,
-  ButtonType,
-  DispatchAction,
-  testIdWithKey,
-  useTheme,
-  useStore,
-} from '@bifold/core'
+import { Button, ButtonType, DispatchAction, testIdWithKey, useTheme, useStore } from '@bifold/core'
 import React, { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'

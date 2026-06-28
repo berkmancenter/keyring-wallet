@@ -1,6 +1,6 @@
 {
   "name": "keyring-wallet-mobile-app",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "private": true,
   "description": "Keyring Wallet to hold Verifiable Credentials",
   "main": "index.js",
