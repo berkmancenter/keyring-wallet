@@ -4,9 +4,9 @@
  * Bottom sheet modal for VRC biometric confirmation.
  */
 
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet, TouchableOpacity, View, ActivityIndicator } from 'react-native'
+import { Platform, StyleSheet, TouchableOpacity, View, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons'
 
@@ -24,6 +24,31 @@ const BiometricConfirmationModal: React.FC = () => {
   const { ColorPalette, TextTheme } = useTheme()
   const { isModalVisible, pendingRequest, onConfirm, onCancel, onError } = useBiometricConfirmation()
   const [isAuthenticating, setIsAuthenticating] = useState(false)
+
+  const isPasscodeMode = pendingRequest?.authMode === 'passcode'
+  const isHardwareSigningFlow = pendingRequest?.skipNativeBiometric === true
+
+  const modalCopy = useMemo(() => {
+    if (isPasscodeMode) {
+      const securityNote =
+        Platform.OS === 'ios'
+          ? 'Biometrics are off in this app. Face ID or your device passcode may appear — tap Enter Passcode if needed. The signing key stays in secure hardware.'
+          : 'Your device passcode will authorize this signature. The signing key stays in secure hardware.'
+
+      return {
+        securityNote,
+        confirmLabel: isHardwareSigningFlow ? 'Continue' : 'Confirm with Device Passcode',
+      }
+    }
+
+    return {
+      securityNote: String(
+        t('Biometry.SecurityNote') ||
+          'Your biometric data never leaves your device. Only you can authorize this signature.'
+      ),
+      confirmLabel: String(t('Biometry.ConfirmWithBiometrics') || 'Confirm with Biometrics'),
+    }
+  }, [isHardwareSigningFlow, isPasscodeMode, t])
 
   const styles = StyleSheet.create({
     overlay: {
@@ -110,7 +135,7 @@ const BiometricConfirmationModal: React.FC = () => {
   const handleConfirmPress = useCallback(async () => {
     if (!pendingRequest) return
 
-    // If skipNativeBiometric is true, hardware signing will trigger its own biometric prompt
+    // If skipNativeBiometric is true, hardware signing will trigger its own biometric/passcode prompt
     if (pendingRequest.skipNativeBiometric) {
       onConfirm()
       return
@@ -128,7 +153,7 @@ const BiometricConfirmationModal: React.FC = () => {
       if (result) {
         onConfirm()
       } else {
-        onError('Biometric authentication was cancelled or failed')
+        onError('Authentication was cancelled or failed')
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -166,30 +191,27 @@ const BiometricConfirmationModal: React.FC = () => {
 
           <View style={styles.container}>
             <View style={styles.contentContainer}>
-              {/* Lock icon */}
+              {/* Auth icon */}
               <View style={styles.iconContainer}>
-                <Icon name="fingerprint" size={40} color={ColorPalette.brand.primary} />
+                <Icon name={isPasscodeMode ? 'lock' : 'fingerprint'} size={40} color={ColorPalette.brand.primary} />
               </View>
 
-              {/* Title */}
-              <ThemedText style={styles.title}>{t('Biometry.ConfirmRelationship') || 'Confirm Relationship'}</ThemedText>
-
-              {/* Counterparty name */}
-              <ThemedText style={styles.counterpartyName}>{pendingRequest.counterpartyName}</ThemedText>
-
-              {/* Description */}
-              <ThemedText style={styles.description}>
-                {t('Biometry.VrcConfirmationDescription') ||
-                  "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection."}
+              <ThemedText style={styles.title}>
+                {String(t('Biometry.ConfirmRelationship') || 'Confirm Relationship')}
               </ThemedText>
 
-              {/* Security note */}
+              <ThemedText style={styles.counterpartyName}>{pendingRequest.counterpartyName}</ThemedText>
+
+              <ThemedText style={styles.description}>
+                {String(
+                  t('Biometry.VrcConfirmationDescription') ||
+                    "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection."
+                )}
+              </ThemedText>
+
               <View style={styles.securityNote}>
                 <Icon name="security" size={20} color={ColorPalette.notification.infoIcon || '#1976D2'} />
-                <ThemedText style={styles.securityNoteText}>
-                  {t('Biometry.SecurityNote') ||
-                    'Your biometric data never leaves your device. Only you can authorize this signature.'}
-                </ThemedText>
+                <ThemedText style={styles.securityNoteText}>{modalCopy.securityNote}</ThemedText>
               </View>
             </View>
 
@@ -205,8 +227,8 @@ const BiometricConfirmationModal: React.FC = () => {
               ) : (
                 <>
                   <Button
-                    title={t('Biometry.ConfirmWithBiometrics') || 'Confirm with Biometrics'}
-                    accessibilityLabel={t('Biometry.ConfirmWithBiometrics') || 'Confirm with Biometrics'}
+                    title={modalCopy.confirmLabel}
+                    accessibilityLabel={modalCopy.confirmLabel}
                     testID={testIdWithKey('ConfirmBiometric')}
                     onPress={handleConfirmPress}
                     buttonType={ButtonType.Primary}

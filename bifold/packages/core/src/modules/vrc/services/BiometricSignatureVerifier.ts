@@ -59,7 +59,12 @@ export interface SignatureVerificationResult {
 export class HardwareSignatureVerifier {
   private log: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void }
 
-  constructor(logger?: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void }) {
+  constructor(logger?: {
+    info: (...args: any[]) => void
+    warn: (...args: any[]) => void
+    error: (...args: any[]) => void
+  }) {
+    // eslint-disable-next-line no-console
     this.log = logger ?? { info: console.log, warn: console.warn, error: console.error }
   }
 
@@ -108,15 +113,17 @@ export class HardwareSignatureVerifier {
         verifiedAt,
         platform,
         securityLevel: keyStorage,
-        attestationExtension: nativeResult.attestationSecurityLevel ? {
-          attestationSecurityLevel: nativeResult.attestationSecurityLevel,
-          keymasterSecurityLevel: nativeResult.keymasterSecurityLevel,
-          verifiedBootState: nativeResult.verifiedBootState,
-          deviceLocked: nativeResult.deviceLocked,
-          attestationChallengeBase64: nativeResult.attestationChallengeBase64,
-          userAuthType: nativeResult.userAuthType,
-          authTimeout: nativeResult.authTimeout,
-        } : undefined,
+        attestationExtension: nativeResult.attestationSecurityLevel
+          ? {
+              attestationSecurityLevel: nativeResult.attestationSecurityLevel,
+              keymasterSecurityLevel: nativeResult.keymasterSecurityLevel,
+              verifiedBootState: nativeResult.verifiedBootState,
+              deviceLocked: nativeResult.deviceLocked,
+              attestationChallengeBase64: nativeResult.attestationChallengeBase64,
+              userAuthType: nativeResult.userAuthType,
+              authTimeout: nativeResult.authTimeout,
+            }
+          : undefined,
         revocationChecked: nativeResult.revocationChecked,
       }
     } catch (error) {
@@ -143,13 +150,15 @@ export class HardwareSignatureVerifier {
 
   /** Quick format validation for evidence structure */
   public hasValidEvidenceFormat(evidence: HardwareAttestationEvidence): boolean {
+    const hasAuthMethod = Boolean(evidence.authenticationMethod?.type || evidence.biometricMethod?.type)
     return Boolean(
       evidence.id &&
-      Array.isArray(evidence.type) && evidence.type.length > 0 &&
-      evidence.created &&
-      evidence.biometricMethod?.type &&
-      evidence.hardwareBinding?.publicKey &&
-      evidence.signature?.value
+        Array.isArray(evidence.type) &&
+        evidence.type.length > 0 &&
+        evidence.created &&
+        hasAuthMethod &&
+        evidence.hardwareBinding?.publicKey &&
+        evidence.signature?.value
     )
   }
 }
@@ -190,7 +199,11 @@ export async function verifyVrcHardwareEvidence(
   try {
     if (!credential.evidence?.length) return null
 
-    const hardwareEvidence = credential.evidence.find(e => e.type.includes('BiometricAttestation'))
+    const hardwareEvidence = credential.evidence.find(
+      (e) =>
+        (e.type as readonly string[]).includes('BiometricAttestation') ||
+        (e.type as readonly string[]).includes('DeviceAuthentication')
+    )
     if (!hardwareEvidence) return null
 
     const signedContent = extractSignedContent(credential)
@@ -198,6 +211,7 @@ export async function verifyVrcHardwareEvidence(
     return verifier.verifyEvidence(hardwareEvidence, signedContent)
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
+    // eslint-disable-next-line no-console
     console.warn(`${LOG_PREFIX} Verification error: ${errorMsg}`)
 
     return {

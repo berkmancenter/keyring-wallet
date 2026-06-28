@@ -229,7 +229,10 @@ class AttestationModule : AttestationSpec {
         .setAttestationChallenge(attestationChallenge)
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        builder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+        builder.setUserAuthenticationParameters(
+          0,
+          KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
+        )
       } else {
         @Suppress("DEPRECATION")
         builder.setUserAuthenticationValidityDurationSeconds(-1)
@@ -278,7 +281,10 @@ class AttestationModule : AttestationSpec {
           .setAttestationChallenge(attestationChallenge)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-          fallbackBuilder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+          fallbackBuilder.setUserAuthenticationParameters(
+            0,
+            KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
+          )
         }
 
         keyPairGenerator.initialize(fallbackBuilder.build())
@@ -352,8 +358,9 @@ class AttestationModule : AttestationSpec {
   }
 
   @ReactMethod
-  override fun signWithHardwareBiometricAuth(dataToSign: ReadableArray, promise: Promise) {
-    Log.i(TAG, "▶ Signing with biometric [${dataToSign.size()} bytes]")
+  override fun signWithHardwareBiometricAuth(dataToSign: ReadableArray, authMode: String?, promise: Promise) {
+    val passcodeOnly = authMode == "passcode"
+    Log.i(TAG, "▶ Signing with ${if (passcodeOnly) "passcode" else "biometric"} auth [${dataToSign.size()} bytes]")
 
     try {
       val activity = currentActivity as? FragmentActivity
@@ -395,6 +402,15 @@ class AttestationModule : AttestationSpec {
 
       val executor = ContextCompat.getMainExecutor(reactContext)
 
+      // Detect available authentication method for evidence metadata (biometric mode only)
+      val biometricManager = BiometricManager.from(reactContext)
+      val hasBiometric = if (passcodeOnly) {
+        false
+      } else {
+        biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+          BiometricManager.BIOMETRIC_SUCCESS
+      }
+
       val callback = object : BiometricPrompt.AuthenticationCallback() {
         override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
           try {
@@ -403,7 +419,13 @@ class AttestationModule : AttestationSpec {
               cryptoSignature.update(dataBytes)
               val signatureBytes = cryptoSignature.sign()
 
-              Log.i(TAG, "✓ Signature created [${signatureBytes.size} bytes]")
+              val authMethod = when (result.authenticationType) {
+                BiometricPrompt.AUTHENTICATION_RESULT_TYPE_BIOMETRIC -> "Fingerprint"
+                BiometricPrompt.AUTHENTICATION_RESULT_TYPE_DEVICE_CREDENTIAL -> "DevicePasscode"
+                else -> if (passcodeOnly || !hasBiometric) "DevicePasscode" else "Fingerprint"
+              }
+
+              Log.i(TAG, "✓ Signature created [${signatureBytes.size} bytes, auth=$authMethod]")
 
               val contentHash = java.security.MessageDigest.getInstance("SHA-256").digest(dataBytes)
 
@@ -412,6 +434,7 @@ class AttestationModule : AttestationSpec {
               resultMap.putArray("signature", bytesToWritableArray(signatureBytes))
               resultMap.putString("algorithm", "ECDSA-SHA256")
               resultMap.putString("clientDataHash", android.util.Base64.encodeToString(contentHash, android.util.Base64.NO_WRAP))
+              resultMap.putString("authenticationMethod", authMethod)
 
               promise.resolve(resultMap)
             } else {
@@ -428,7 +451,7 @@ class AttestationModule : AttestationSpec {
             BiometricPrompt.ERROR_USER_CANCELED,
             BiometricPrompt.ERROR_NEGATIVE_BUTTON,
             BiometricPrompt.ERROR_CANCELED -> {
-              Log.i(TAG, "✗ Biometric cancelled")
+              Log.i(TAG, "✗ Authentication cancelled")
               promise.reject("error", "Biometric authentication cancelled: $errString")
             }
             BiometricPrompt.ERROR_LOCKOUT -> {
@@ -436,7 +459,7 @@ class AttestationModule : AttestationSpec {
               promise.reject("error", "Biometric locked out — try again shortly: $errString")
             }
             else -> {
-              Log.w(TAG, "✗ Biometric error [$errorCode]: $errString")
+              Log.w(TAG, "✗ Authentication error [$errorCode]: $errString")
               promise.reject("error", "Biometric authentication failed: $errString")
             }
           }
@@ -447,12 +470,24 @@ class AttestationModule : AttestationSpec {
         }
       }
 
-      val promptInfo = BiometricPrompt.PromptInfo.Builder()
+      val allowedAuthenticators = if (passcodeOnly) {
+        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      } else {
+        BiometricManager.Authenticators.BIOMETRIC_STRONG or
+          BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      }
+
+      val promptBuilder = BiometricPrompt.PromptInfo.Builder()
         .setTitle("Confirm Relationship")
-        .setSubtitle("Authenticate to sign this relationship credential")
-        .setNegativeButtonText("Cancel")
-        .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-        .build()
+        .setAllowedAuthenticators(allowedAuthenticators)
+
+      if (passcodeOnly) {
+        promptBuilder.setSubtitle("Enter your device passcode to sign this relationship credential")
+      } else {
+        promptBuilder.setSubtitle("Authenticate to sign this relationship credential")
+      }
+
+      val promptInfo = promptBuilder.build()
 
       activity.runOnUiThread {
         try {
@@ -504,10 +539,31 @@ class AttestationModule : AttestationSpec {
       result.putString("storage", getKeySecurityLevel())
       result.putBoolean("biometricBound", true)
       result.putString("algorithm", "ECDSA-SHA256")
+      result.putBoolean("supportsDeviceCredential", keySupportsDeviceCredential())
 
       promise.resolve(result)
     } catch (e: Exception) {
       promise.reject("error", "Failed to get key info: ${e.message}", e)
+    }
+  }
+
+  /**
+   * Check if the existing hardware key supports DEVICE_CREDENTIAL authentication.
+   * Keys created before the passcode-fallback feature only support BIOMETRIC_STRONG.
+   */
+  private fun keySupportsDeviceCredential(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+    try {
+      val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE)
+      keyStore.load(null)
+      val privateKey = keyStore.getKey(HARDWARE_SIGNING_KEY_ALIAS, null) as? PrivateKey ?: return false
+      val factory = KeyFactory.getInstance(privateKey.algorithm, ANDROID_KEYSTORE)
+      val keyInfo = factory.getKeySpec(privateKey, KeyInfo::class.java)
+      val authType = keyInfo.userAuthenticationType
+      return (authType and KeyProperties.AUTH_DEVICE_CREDENTIAL) != 0
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not check key auth type: ${e.message}")
+      return false
     }
   }
 

@@ -22,7 +22,7 @@ abstract class AttestationSpec internal constructor(context: ReactApplicationCon
   abstract fun createSecureEnclaveKey(promise: Promise)
   abstract fun hasHardwareSigningKey(promise: Promise)
   abstract fun getHardwarePublicKey(promise: Promise)
-  abstract fun signWithHardwareBiometricAuth(dataToSign: ReadableArray, promise: Promise)
+  abstract fun signWithHardwareBiometricAuth(dataToSign: ReadableArray, authMode: String?, promise: Promise)
   abstract fun deleteHardwareSigningKey(promise: Promise)
   abstract fun getHardwareKeyInfo(promise: Promise)
   abstract fun getKeyAttestation(promise: Promise)

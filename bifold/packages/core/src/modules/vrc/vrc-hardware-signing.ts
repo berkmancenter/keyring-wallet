@@ -1,14 +1,14 @@
 /**
  * VRC Hardware Signing Service
- * 
+ *
  * Creates and uses hardware-backed keys for VRC signing with biometric authentication.
- * 
+ *
  * PLATFORMS:
  * - iOS: Secure Enclave with Face ID / Touch ID
  * - Android: StrongBox or TEE with Fingerprint
- * 
+ *
  * ALGORITHM: ECDSA-SHA256 with P-256 curve
- * 
+ *
  * SIGNING FLOW:
  * 1. Ensure hardware key exists (create if needed)
  * 2. Pre-warm attestation on fresh install (iOS needs Apple server registration)
@@ -30,14 +30,16 @@ import {
   deleteHardwareSigningKey as nativeDeleteKey,
   getHardwareKeyAttestation,
   isHardwareAttestationAvailable,
+  type HardwareSigningAuthMode,
 } from '@bifold/react-native-attestation'
 
 export type {
   HardwareKeyGenerationResult,
   HardwareSignatureResult,
   HardwareKeyInfo,
+  AuthenticationMethod,
+  HardwareSigningAuthMode,
 } from '@bifold/react-native-attestation'
-
 
 const LOG_PREFIX = '[VRC:Sign]'
 
@@ -46,22 +48,27 @@ const GOOGLE_ROOT_CA_EXPIRY = new Date('2026-05-24T16:45:52Z')
 function checkGoogleRootCaExpiry(logger: any): void {
   const daysUntilExpiry = Math.floor((GOOGLE_ROOT_CA_EXPIRY.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
   if (daysUntilExpiry < 180 && daysUntilExpiry > 0) {
-    logger.warn(`${LOG_PREFIX} ⚠ Embedded Google root CA expires in ${daysUntilExpiry} days (2026-05-24) — update required`)
+    logger.warn(
+      `${LOG_PREFIX} ⚠ Embedded Google root CA expires in ${daysUntilExpiry} days (2026-05-24) — update required`
+    )
   } else if (daysUntilExpiry <= 0) {
     logger.error(`${LOG_PREFIX} ⚠ Embedded Google root CA has EXPIRED — Android cross-device verification will fail`)
   }
 }
 
+export type AuthenticationMethodType = 'FaceID' | 'TouchID' | 'Fingerprint' | 'DevicePasscode'
+
 /** Hardware signature to include in VRC evidence block */
 export interface VrcHardwareSignature {
   type: 'HardwareBackedBiometric'
-  publicKey: string        // Base64-encoded EC P-256 public key
-  signature: string        // Base64-encoded ECDSA signature
+  publicKey: string // Base64-encoded EC P-256 public key
+  signature: string // Base64-encoded ECDSA signature
   algorithm: 'ECDSA-SHA256'
-  timestamp: string        // ISO timestamp of signing
+  timestamp: string // ISO timestamp of signing
   keyStorage: 'SecureEnclave' | 'StrongBox' | 'TEE' | 'Software' | 'Unknown'
   platform: 'ios' | 'android'
-  clientDataHash?: string  // Base64-encoded SHA256 of the signed content
+  clientDataHash?: string // Base64-encoded SHA256 of the signed content
+  authenticationMethod?: AuthenticationMethodType
 }
 
 export interface HardwareSigningResult {
@@ -78,9 +85,7 @@ export interface HardwareSigningResult {
  * @param agent - Credo agent for logging
  * @returns Public key (base64) and storage type
  */
-export async function ensureHardwareSigningKey(
-  agent: Agent
-): Promise<{ publicKey: string; storage: string }> {
+export async function ensureHardwareSigningKey(agent: Agent): Promise<{ publicKey: string; storage: string }> {
   const logger = agent.config.logger
   checkGoogleRootCaExpiry(logger)
 
@@ -90,9 +95,25 @@ export async function ensureHardwareSigningKey(
       try {
         const publicKeyBuffer = await nativeGetPublicKey()
         const keyInfo = await nativeGetKeyInfo()
-        return {
-          publicKey: publicKeyBuffer.toString('base64'),
-          storage: keyInfo.storage || 'Unknown',
+
+        // Android key migration: recreate biometric-only keys to support passcode fallback
+        if (Platform.OS === 'android' && keyInfo.supportsDeviceCredential === false) {
+          logger.warn(`${LOG_PREFIX} Existing key only supports biometric — migrating to support device credential`)
+          try {
+            await nativeDeleteKey()
+          } catch (deleteErr) {
+            logger.warn(
+              `${LOG_PREFIX} Failed to delete old key: ${
+                deleteErr instanceof Error ? deleteErr.message : String(deleteErr)
+              }`
+            )
+          }
+          // Fall through to create a new key with updated auth flags
+        } else {
+          return {
+            publicKey: publicKeyBuffer.toString('base64'),
+            storage: keyInfo.storage || 'Unknown',
+          }
         }
       } catch {
         // Key exists but public key cache is missing (attestation didn't complete).
@@ -109,8 +130,14 @@ export async function ensureHardwareSigningKey(
         } catch (attestError) {
           // Attestation also failed — delete the orphaned key and recreate from scratch
           logger.warn(`${LOG_PREFIX} Recovery attestation failed — deleting key and recreating...`)
-          try { await nativeDeleteKey() } catch (deleteErr) {
-            logger.warn(`${LOG_PREFIX} Failed to delete orphaned key: ${deleteErr instanceof Error ? deleteErr.message : String(deleteErr)}`)
+          try {
+            await nativeDeleteKey()
+          } catch (deleteErr) {
+            logger.warn(
+              `${LOG_PREFIX} Failed to delete orphaned key: ${
+                deleteErr instanceof Error ? deleteErr.message : String(deleteErr)
+              }`
+            )
           }
         }
       }
@@ -139,19 +166,17 @@ export async function ensureHardwareSigningKey(
 
 /**
  * Pre-prepare hardware key and attestation cache so signing is fast.
- * 
+ *
  * Call this early (e.g. at connection time) to front-load heavy work:
  * - Key creation + Apple server registration (5-10s on fresh install)
  * - Attestation certificate chain caching
- * 
+ *
  * After this completes, signVrcWithHardwareKey() will only need to show
  * the biometric prompt (~2-5s) instead of doing all attestation inline.
- * 
+ *
  * This is fire-and-forget safe — failures are logged but don't throw.
  */
-export async function prepareHardwareKeyForSigning(
-  agent: Agent
-): Promise<{ ready: boolean; publicKey?: string }> {
+export async function prepareHardwareKeyForSigning(agent: Agent): Promise<{ ready: boolean; publicKey?: string }> {
   const logger = agent.config.logger
 
   try {
@@ -172,7 +197,11 @@ export async function prepareHardwareKeyForSigning(
       }
     } catch (prefetchError) {
       // Non-fatal — EvidenceBuilder will fetch on demand if needed
-      logger.warn(`${LOG_PREFIX} Attestation prefetch failed (non-blocking): ${prefetchError instanceof Error ? prefetchError.message : String(prefetchError)}`)
+      logger.warn(
+        `${LOG_PREFIX} Attestation prefetch failed (non-blocking): ${
+          prefetchError instanceof Error ? prefetchError.message : String(prefetchError)
+        }`
+      )
     }
 
     return { ready: true, publicKey: keyInfo.publicKey }
@@ -199,12 +228,16 @@ async function preWarmAttestation(logger: any): Promise<void> {
           return
         }
         if (attempt < 3) {
-          await new Promise(resolve => setTimeout(resolve, attempt * 3000))
+          await new Promise((resolve) => setTimeout(resolve, attempt * 3000))
         }
       } catch (attestErr) {
-        logger.warn(`${LOG_PREFIX} Attestation pre-warm attempt ${attempt}/3 failed: ${attestErr instanceof Error ? attestErr.message : String(attestErr)}`)
+        logger.warn(
+          `${LOG_PREFIX} Attestation pre-warm attempt ${attempt}/3 failed: ${
+            attestErr instanceof Error ? attestErr.message : String(attestErr)
+          }`
+        )
         if (attempt < 3) {
-          await new Promise(resolve => setTimeout(resolve, attempt * 3000))
+          await new Promise((resolve) => setTimeout(resolve, attempt * 3000))
         }
       }
     }
@@ -215,16 +248,18 @@ async function preWarmAttestation(logger: any): Promise<void> {
 
 /**
  * Sign VRC content with hardware-backed key.
- * Triggers biometric authentication (Face ID / Touch ID / Fingerprint).
+ * Triggers OS authentication (biometric or passcode depending on authMode).
  * @param agent - Credo agent for logging
  * @param vrcContent - JSON string of VRC to sign (without evidence/proof blocks)
+ * @param authMode - App auth preference: biometric prompt or passcode-only (Android)
  */
 export async function signVrcWithHardwareKey(
   agent: Agent,
-  vrcContent: string
+  vrcContent: string,
+  authMode: HardwareSigningAuthMode = 'biometric'
 ): Promise<HardwareSigningResult> {
   const logger = agent.config.logger
-  logger.info(`${LOG_PREFIX} ▶ Starting hardware signing [${Platform.OS}]`)
+  logger.info(`${LOG_PREFIX} ▶ Starting hardware signing [${Platform.OS}, authMode=${authMode}]`)
 
   try {
     // Step 1: Ensure key exists
@@ -233,14 +268,18 @@ export async function signVrcWithHardwareKey(
     // Step 2: Sign (triggers biometric prompt)
     logger.info(`${LOG_PREFIX} VRC to sign (${vrcContent.length} chars): ${vrcContent.substring(0, 120)}...`)
     const contentBuffer = Buffer.from(vrcContent, 'utf8')
-    const signResult = await nativeSign(contentBuffer)
+    const signResult = await nativeSign(contentBuffer, authMode)
 
     if (!signResult.success) {
       logger.warn(`${LOG_PREFIX} ✗ Signing failed`)
       return { success: false, reason: 'error', error: 'Signing operation failed' }
     }
 
-    logger.info(`${LOG_PREFIX} ✓ Signature created [${signResult.signature.length} bytes]`)
+    logger.info(
+      `${LOG_PREFIX} ✓ Signature created [${signResult.signature.length} bytes, auth=${
+        signResult.authenticationMethod || 'unknown'
+      }]`
+    )
 
     return {
       success: true,
@@ -254,6 +293,7 @@ export async function signVrcWithHardwareKey(
         keyStorage: keyInfo.storage as VrcHardwareSignature['keyStorage'],
         platform: Platform.OS as 'ios' | 'android',
         clientDataHash: signResult.clientDataHash,
+        authenticationMethod: signResult.authenticationMethod as AuthenticationMethodType | undefined,
       },
     }
   } catch (error) {
@@ -267,11 +307,13 @@ export async function signVrcWithHardwareKey(
 
     // iOS: generateAssertion fails when app loses foreground (status bar pull, notification, etc.)
     // Match broadly — any assertion-related error on iOS is worth retrying once the app returns to foreground
-    const isRetryable = Platform.OS === 'ios' && (
-      errorMessage.match(/generate\s*assertion|assertion.*fail|assertion.*error/i) ||
-      errorMessage.match(/error.*(-25299|-25300|-25308)/i) // common App Attest OSStatus errors
+    const isRetryable =
+      Platform.OS === 'ios' &&
+      (errorMessage.match(/generate\s*assertion|assertion.*fail|assertion.*error/i) ||
+        errorMessage.match(/error.*(-25299|-25300|-25308)/i)) // common App Attest OSStatus errors
+    logger.error(
+      `${LOG_PREFIX} ✗ Error: ${errorMessage}${isRetryable ? ' (retryable — app likely lost foreground)' : ''}`
     )
-    logger.error(`${LOG_PREFIX} ✗ Error: ${errorMessage}${isRetryable ? ' (retryable — app likely lost foreground)' : ''}`)
     return { success: false, reason: 'error', error: errorMessage, retryable: !!isRetryable }
   }
 }
@@ -282,7 +324,12 @@ export async function isHardwareSigningAvailable(): Promise<boolean> {
     if (await nativeHasKey()) return true
     return await isHardwareAttestationAvailable()
   } catch (error) {
-    console.warn(`${LOG_PREFIX} Hardware signing availability check failed: ${error instanceof Error ? error.message : String(error)}`)
+    // eslint-disable-next-line no-console
+    console.warn(
+      `${LOG_PREFIX} Hardware signing availability check failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
     return false
   }
 }
