@@ -359,6 +359,7 @@ RCT_EXPORT_METHOD(getHardwarePublicKey:(RCTPromiseResolveBlock)resolve
 }
 
 RCT_EXPORT_METHOD(signWithHardwareBiometricAuth:(NSArray<NSNumber *> *)dataToSign
+                  authMode:(NSString *)authMode
                   resolve:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
@@ -397,12 +398,13 @@ RCT_EXPORT_METHOD(signWithHardwareBiometricAuth:(NSArray<NSNumber *> *)dataToSig
     }
     
     // Authenticate user before signing — allows biometric OR device passcode fallback.
-    // LAPolicyDeviceOwnerAuthentication: prefers biometric when enrolled, falls back to passcode.
+    // When authMode is "passcode" (user opted out of biometrics in app), evidence records DevicePasscode.
+    // iOS may still show Face ID first when enrolled; user can tap "Enter Passcode".
     LAContext *laContext = [[LAContext alloc] init];
-    
-    // Detect which authentication method will be used (for evidence metadata)
+    BOOL passcodeMode = authMode != nil && [authMode isEqualToString:@"passcode"];
+
     NSString *authMethod = @"DevicePasscode";
-    if ([laContext canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics error:nil]) {
+    if (!passcodeMode && [laContext canEvaluatePolicy:LAPolicyDeviceOwnerAuthenticationWithBiometrics error:nil]) {
         if (@available(iOS 11.0, *)) {
             switch (laContext.biometryType) {
                 case LABiometryTypeFaceID:   authMethod = @"FaceID"; break;
@@ -413,7 +415,7 @@ RCT_EXPORT_METHOD(signWithHardwareBiometricAuth:(NSArray<NSNumber *> *)dataToSig
             authMethod = @"TouchID";
         }
     }
-    NSLog(@"[VRC:iOS] Authentication method: %@", authMethod);
+    NSLog(@"[VRC:iOS] Auth mode: %@, evidence method: %@", passcodeMode ? @"passcode" : @"biometric", authMethod);
     
     [laContext evaluatePolicy:LAPolicyDeviceOwnerAuthentication
               localizedReason:@"Confirm your identity to sign this relationship credential"

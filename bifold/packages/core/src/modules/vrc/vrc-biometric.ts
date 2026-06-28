@@ -18,17 +18,39 @@
 import { Agent } from '@credo-ts/core'
 import { AppState, AppStateStatus } from 'react-native'
 
-import { isBiometricsActive } from '../../services/keychain'
+import { LocalStorageKeys } from '../../constants'
 import {
   requestBiometricConfirmationUI,
   BiometricConfirmationResponse,
   type AuthMode,
 } from '../../contexts/biometric-confirmation'
+import { isBiometricsActive } from '../../services/keychain'
+import { PersistentStorage } from '../../services/storage'
+import { Preferences } from '../../types/state'
 import { signVrcWithHardwareKey, isHardwareSigningAvailable, VrcHardwareSignature } from './vrc-hardware-signing'
 
 const LOG_PREFIX = '[VRC:Biometric]'
 const MAX_SIGNING_RETRIES = 2
 const FOREGROUND_WAIT_TIMEOUT_MS = 15000
+
+/**
+ * Resolve whether VRC hardware signing should use biometric or passcode UI.
+ * Requires both system biometrics enrolled AND the user's app preference (useBiometry) enabled.
+ *
+ * Platform parity note (passcode mode):
+ * - Android: native signing uses DEVICE_CREDENTIAL only — passcode prompt, no fingerprint.
+ * - iOS: Apple does not allow passcode-only when Face ID/Touch ID is enrolled. The OS may
+ *   show biometrics first; the user can tap "Enter Passcode". Evidence records DevicePasscode
+ *   to reflect app policy (user opted out of biometrics), not necessarily what the OS showed first.
+ */
+export async function resolveHardwareSigningAuthMode(): Promise<AuthMode> {
+  const [biometricsAvailable, preferences] = await Promise.all([
+    isBiometricsActive(),
+    PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences),
+  ])
+  const useBiometry = preferences?.useBiometry ?? false
+  return biometricsAvailable && useBiometry ? 'biometric' : 'passcode'
+}
 
 /**
  * Wait for the app to return to active foreground state.
@@ -187,12 +209,9 @@ export async function requestBiometricWithHardwareSigning(
       return requestBiometricConfirmationWithUI(agent, counterpartyName, connectionId)
     }
 
-    // Determine auth mode: biometric if available, passcode otherwise
-    const biometricsAvailable = await isBiometricsActive()
-    const authMode: AuthMode = biometricsAvailable ? 'biometric' : 'passcode'
-    logger.info(
-      `${LOG_PREFIX} Auth mode: ${authMode} (biometrics ${biometricsAvailable ? 'available' : 'unavailable'})`
-    )
+    // Biometric UI only when device biometrics are enrolled AND user opted in during onboarding
+    const authMode = await resolveHardwareSigningAuthMode()
+    logger.info(`${LOG_PREFIX} Auth mode: ${authMode}`)
 
     // Show modal (skip wallet biometric - hardware signing will prompt its own auth)
     const uiResponse: BiometricConfirmationResponse = await requestBiometricConfirmationUI(
@@ -221,7 +240,7 @@ export async function requestBiometricWithHardwareSigning(
     }
 
     // Perform hardware signing (triggers biometric prompt) with retry for transient iOS failures
-    let signingResult = await signVrcWithHardwareKey(agent, vrcContent)
+    let signingResult = await signVrcWithHardwareKey(agent, vrcContent, authMode)
     let retryCount = 0
 
     while (!signingResult.success && signingResult.retryable && retryCount < MAX_SIGNING_RETRIES) {
@@ -239,7 +258,7 @@ export async function requestBiometricWithHardwareSigning(
       // Small delay after foreground to let the system settle
       await new Promise((resolve) => setTimeout(resolve, 500))
       logger.info(`${LOG_PREFIX} App is active — retrying hardware signing`)
-      signingResult = await signVrcWithHardwareKey(agent, vrcContent)
+      signingResult = await signVrcWithHardwareKey(agent, vrcContent, authMode)
     }
 
     if (!signingResult.success) {

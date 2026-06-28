@@ -113,6 +113,9 @@ export type AuthenticationMethod =
   | 'Fingerprint'
   | 'DevicePasscode';
 
+/** App-level auth preference passed to native signing (biometric vs passcode-only prompt). */
+export type HardwareSigningAuthMode = 'biometric' | 'passcode';
+
 export interface HardwareSignatureResult {
   success: boolean;
   signature: Buffer; // DER-encoded ECDSA signature
@@ -154,14 +157,19 @@ export const getHardwarePublicKey = async (): Promise<Buffer> => {
 };
 
 /**
- * Sign data with hardware key (triggers biometric authentication).
+ * Sign data with hardware key (triggers OS authentication).
  * @param data - Data to sign (VRC content as UTF-8 bytes)
+ * @param authMode - 'biometric' allows biometrics + passcode fallback; 'passcode' requests passcode-only on Android
  */
 export const signWithHardwareBiometricAuth = async (
-  data: Buffer
+  data: Buffer,
+  authMode: HardwareSigningAuthMode = 'biometric'
 ): Promise<HardwareSignatureResult> => {
   const dataArray: number[] = Array.from(data);
-  const result = await Attestation.signWithHardwareBiometricAuth(dataArray);
+  const result = await Attestation.signWithHardwareBiometricAuth(
+    dataArray,
+    authMode
+  );
   return {
     success: result.success,
     signature: Buffer.from(result.signature as number[]),

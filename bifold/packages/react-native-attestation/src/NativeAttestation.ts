@@ -26,7 +26,10 @@ export interface Spec extends TurboModule {
   createSecureEnclaveKey(): Promise<Object>;
   hasHardwareSigningKey(): Promise<boolean>;
   getHardwarePublicKey(): Promise<number[]>;
-  signWithHardwareBiometricAuth(dataToSign: number[]): Promise<Object>;
+  signWithHardwareBiometricAuth(
+    dataToSign: number[],
+    authMode: string
+  ): Promise<Object>;
   deleteHardwareSigningKey(): Promise<boolean>;
   getHardwareKeyInfo(): Promise<Object>;
   isHardwareAttestationAvailable(): Promise<boolean>;

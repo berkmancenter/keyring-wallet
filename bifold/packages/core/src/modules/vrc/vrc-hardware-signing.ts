@@ -30,6 +30,7 @@ import {
   deleteHardwareSigningKey as nativeDeleteKey,
   getHardwareKeyAttestation,
   isHardwareAttestationAvailable,
+  type HardwareSigningAuthMode,
 } from '@bifold/react-native-attestation'
 
 export type {
@@ -37,6 +38,7 @@ export type {
   HardwareSignatureResult,
   HardwareKeyInfo,
   AuthenticationMethod,
+  HardwareSigningAuthMode,
 } from '@bifold/react-native-attestation'
 
 const LOG_PREFIX = '[VRC:Sign]'
@@ -246,13 +248,18 @@ async function preWarmAttestation(logger: any): Promise<void> {
 
 /**
  * Sign VRC content with hardware-backed key.
- * Triggers biometric authentication (Face ID / Touch ID / Fingerprint).
+ * Triggers OS authentication (biometric or passcode depending on authMode).
  * @param agent - Credo agent for logging
  * @param vrcContent - JSON string of VRC to sign (without evidence/proof blocks)
+ * @param authMode - App auth preference: biometric prompt or passcode-only (Android)
  */
-export async function signVrcWithHardwareKey(agent: Agent, vrcContent: string): Promise<HardwareSigningResult> {
+export async function signVrcWithHardwareKey(
+  agent: Agent,
+  vrcContent: string,
+  authMode: HardwareSigningAuthMode = 'biometric'
+): Promise<HardwareSigningResult> {
   const logger = agent.config.logger
-  logger.info(`${LOG_PREFIX} ▶ Starting hardware signing [${Platform.OS}]`)
+  logger.info(`${LOG_PREFIX} ▶ Starting hardware signing [${Platform.OS}, authMode=${authMode}]`)
 
   try {
     // Step 1: Ensure key exists
@@ -261,7 +268,7 @@ export async function signVrcWithHardwareKey(agent: Agent, vrcContent: string): 
     // Step 2: Sign (triggers biometric prompt)
     logger.info(`${LOG_PREFIX} VRC to sign (${vrcContent.length} chars): ${vrcContent.substring(0, 120)}...`)
     const contentBuffer = Buffer.from(vrcContent, 'utf8')
-    const signResult = await nativeSign(contentBuffer)
+    const signResult = await nativeSign(contentBuffer, authMode)
 
     if (!signResult.success) {
       logger.warn(`${LOG_PREFIX} ✗ Signing failed`)

@@ -9,10 +9,21 @@
 
 const mockIsBiometricsActive = jest.fn()
 const mockLoadWalletKey = jest.fn()
+const mockFetchPreferences = jest.fn()
 
 jest.mock('../../../src/services/keychain', () => ({
   isBiometricsActive: (...args: unknown[]) => mockIsBiometricsActive(...args),
   loadWalletKey: (...args: unknown[]) => mockLoadWalletKey(...args),
+}))
+
+jest.mock('../../../src/services/storage', () => ({
+  PersistentStorage: {
+    fetchValueForKey: (...args: unknown[]) => mockFetchPreferences(...args),
+  },
+}))
+
+jest.mock('../../../src/constants', () => ({
+  LocalStorageKeys: { Preferences: 'PreferencesState' },
 }))
 
 const mockRequestBiometricConfirmationUI = jest.fn()
@@ -82,6 +93,7 @@ describe('VRC Biometric Confirmation', () => {
     jest.clearAllMocks()
     mockAgent = createMockAgent()
     mockAppStateCurrentState = 'active'
+    mockFetchPreferences.mockResolvedValue({ useBiometry: true })
   })
 
   describe('requestBiometricWithHardwareSigning', () => {
@@ -133,6 +145,7 @@ describe('VRC Biometric Confirmation', () => {
     it('should proceed with passcode auth mode when biometrics not active', async () => {
       mockIsHardwareSigningAvailable.mockResolvedValue(true)
       mockIsBiometricsActive.mockResolvedValue(false)
+      mockFetchPreferences.mockResolvedValue({ useBiometry: true })
       mockRequestBiometricConfirmationUI.mockResolvedValue({
         status: 'confirmed',
         timestamp: '2025-01-24T12:00:00.000Z',
@@ -158,11 +171,13 @@ describe('VRC Biometric Confirmation', () => {
       expect(result.reason).toBe('confirmed')
       expect(result.hardwareSignature).toBeDefined()
       expect(mockRequestBiometricConfirmationUI).toHaveBeenCalledWith(counterpartyName, connectionId, true, 'passcode')
+      expect(mockSignVrcWithHardwareKey).toHaveBeenCalledWith(mockAgent, vrcContent, 'passcode')
     })
 
     it('should pass authMode "biometric" to UI when biometrics available', async () => {
       mockIsHardwareSigningAvailable.mockResolvedValue(true)
       mockIsBiometricsActive.mockResolvedValue(true)
+      mockFetchPreferences.mockResolvedValue({ useBiometry: true })
       mockRequestBiometricConfirmationUI.mockResolvedValue({
         status: 'confirmed',
         timestamp: '2025-01-24T12:00:00.000Z',
@@ -185,6 +200,36 @@ describe('VRC Biometric Confirmation', () => {
       await requestBiometricWithHardwareSigning(mockAgent, counterpartyName, connectionId, vrcContent)
 
       expect(mockRequestBiometricConfirmationUI).toHaveBeenCalledWith(counterpartyName, connectionId, true, 'biometric')
+      expect(mockSignVrcWithHardwareKey).toHaveBeenCalledWith(mockAgent, vrcContent, 'biometric')
+    })
+
+    it('should use passcode auth mode when user disabled biometrics in app settings', async () => {
+      mockIsHardwareSigningAvailable.mockResolvedValue(true)
+      mockIsBiometricsActive.mockResolvedValue(true)
+      mockFetchPreferences.mockResolvedValue({ useBiometry: false })
+      mockRequestBiometricConfirmationUI.mockResolvedValue({
+        status: 'confirmed',
+        timestamp: '2025-01-24T12:00:00.000Z',
+      })
+      mockSignVrcWithHardwareKey.mockResolvedValue({
+        success: true,
+        reason: 'signed',
+        signature: {
+          type: 'HardwareBackedBiometric',
+          publicKey: 'dGVzdFB1YktleQ==',
+          signature: 'c2lnbmF0dXJl',
+          algorithm: 'ECDSA-SHA256',
+          timestamp: '2025-01-24T12:00:00.000Z',
+          keyStorage: 'SecureEnclave',
+          platform: 'ios',
+          authenticationMethod: 'DevicePasscode',
+        },
+      })
+
+      await requestBiometricWithHardwareSigning(mockAgent, counterpartyName, connectionId, vrcContent)
+
+      expect(mockRequestBiometricConfirmationUI).toHaveBeenCalledWith(counterpartyName, connectionId, true, 'passcode')
+      expect(mockSignVrcWithHardwareKey).toHaveBeenCalledWith(mockAgent, vrcContent, 'passcode')
     })
 
     it('should include authenticationMethod from hardware signature in result', async () => {

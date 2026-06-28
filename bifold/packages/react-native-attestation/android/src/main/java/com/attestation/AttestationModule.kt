@@ -358,8 +358,9 @@ class AttestationModule : AttestationSpec {
   }
 
   @ReactMethod
-  override fun signWithHardwareBiometricAuth(dataToSign: ReadableArray, promise: Promise) {
-    Log.i(TAG, "▶ Signing with biometric [${dataToSign.size()} bytes]")
+  override fun signWithHardwareBiometricAuth(dataToSign: ReadableArray, authMode: String?, promise: Promise) {
+    val passcodeOnly = authMode == "passcode"
+    Log.i(TAG, "▶ Signing with ${if (passcodeOnly) "passcode" else "biometric"} auth [${dataToSign.size()} bytes]")
 
     try {
       val activity = currentActivity as? FragmentActivity
@@ -401,10 +402,14 @@ class AttestationModule : AttestationSpec {
 
       val executor = ContextCompat.getMainExecutor(reactContext)
 
-      // Detect available authentication method for evidence metadata
+      // Detect available authentication method for evidence metadata (biometric mode only)
       val biometricManager = BiometricManager.from(reactContext)
-      val hasBiometric = biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-        BiometricManager.BIOMETRIC_SUCCESS
+      val hasBiometric = if (passcodeOnly) {
+        false
+      } else {
+        biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+          BiometricManager.BIOMETRIC_SUCCESS
+      }
 
       val callback = object : BiometricPrompt.AuthenticationCallback() {
         override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -417,7 +422,7 @@ class AttestationModule : AttestationSpec {
               val authMethod = when (result.authenticationType) {
                 BiometricPrompt.AUTHENTICATION_RESULT_TYPE_BIOMETRIC -> "Fingerprint"
                 BiometricPrompt.AUTHENTICATION_RESULT_TYPE_DEVICE_CREDENTIAL -> "DevicePasscode"
-                else -> if (hasBiometric) "Fingerprint" else "DevicePasscode"
+                else -> if (passcodeOnly || !hasBiometric) "DevicePasscode" else "Fingerprint"
               }
 
               Log.i(TAG, "✓ Signature created [${signatureBytes.size} bytes, auth=$authMethod]")
@@ -465,14 +470,24 @@ class AttestationModule : AttestationSpec {
         }
       }
 
-      val allowedAuthenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+      val allowedAuthenticators = if (passcodeOnly) {
         BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      } else {
+        BiometricManager.Authenticators.BIOMETRIC_STRONG or
+          BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      }
 
-      val promptInfo = BiometricPrompt.PromptInfo.Builder()
+      val promptBuilder = BiometricPrompt.PromptInfo.Builder()
         .setTitle("Confirm Relationship")
-        .setSubtitle("Authenticate to sign this relationship credential")
         .setAllowedAuthenticators(allowedAuthenticators)
-        .build()
+
+      if (passcodeOnly) {
+        promptBuilder.setSubtitle("Enter your device passcode to sign this relationship credential")
+      } else {
+        promptBuilder.setSubtitle("Authenticate to sign this relationship credential")
+      }
+
+      val promptInfo = promptBuilder.build()
 
       activity.runOnUiThread {
         try {
