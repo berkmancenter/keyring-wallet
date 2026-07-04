@@ -142,6 +142,35 @@ describe('BiometricSignatureVerifier', () => {
 
       expect(result.valid).toBe(false)
       expect(result.details.certificateChainValid).toBe(false)
+      expect(result.details.verificationLevel).toBe('none')
+      expect(result.error).toContain('Certificate chain validation failed')
+    })
+
+    it('should reject Android evidence when chain is not rooted in a published Google CA', async () => {
+      mockVerifyHardwareEvidence.mockResolvedValue({
+        valid: false,
+        certificateChainValid: false,
+        publicKeyMatchesLeafCert: false,
+        signatureValid: false,
+        errors: ['Certificate chain validation failed: untrusted attestation root'],
+      })
+
+      const androidEvidence: HardwareAttestationEvidence = {
+        ...testEvidence,
+        hardwareBinding: { ...testEvidence.hardwareBinding, platform: 'android', keyStorage: 'TEE' },
+        attestation: {
+          format: 'android-key-attestation-v3',
+          certificateChain: ['attacker-leaf', 'attacker-self-signed-root'],
+        },
+      }
+
+      const verifier = new HardwareSignatureVerifier()
+      const result = await verifier.verifyEvidence(androidEvidence, 'test-content')
+
+      expect(result.valid).toBe(false)
+      expect(result.details.certificateChainValid).toBe(false)
+      expect(result.details.signatureValid).toBe(false)
+      expect(result.error).toContain('untrusted attestation root')
     })
 
     it('should handle native module throwing an error', async () => {

@@ -82,6 +82,10 @@ android {
     targetCompatibility JavaVersion.VERSION_1_8
   }
 
+  testOptions {
+    unitTests.returnDefaultValues = true
+  }
+
   sourceSets {
     main {
       if (isNewArchitectureEnabled()) {
@@ -115,6 +119,8 @@ dependencies {
   
   // Biometric authentication for hardware-backed signing
   implementation "androidx.biometric:biometric:1.1.0"
+
+  testImplementation "junit:junit:4.13.2"
 }
 
 if (isNewArchitectureEnabled()) {
