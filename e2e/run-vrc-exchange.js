@@ -1,0 +1,89 @@
+/**
+ * Two-wallet VRC exchange E2E:
+ *   fresh install (uninstall first) → onboarding on both devices →
+ *   wallet A generates a relationship invitation → wallet B pastes the URL →
+ *   both wallets end up holding a Verifiable Relationship Credential.
+ *
+ * Usage:
+ *   node run-vrc-exchange.js                 # android emulator + iOS simulator
+ *   PLATFORMS=android,ios node run-vrc-exchange.js
+ *   PLATFORMS=android,android node run-vrc-exchange.js   # needs two AVDs (set ANDROID_AVD2)
+ *
+ * Requires: hosted mediator/witness reachable (baked into the app via app/.env),
+ * appium with uiautomator2 + xcuitest drivers, built .apk/.app (see lib/config.js).
+ */
+import {
+  createSession,
+  ensureAppium,
+  stopAppium,
+  screenshot,
+  dumpSource,
+} from "./lib/driver.js";
+import {
+  acceptCredentialOfferFromChat,
+  acceptInvitationViaPaste,
+  assertVrcReceived,
+  completeOnboarding,
+  showRelationshipInvitation,
+} from "./lib/flows.js";
+
+const platforms = (process.env.PLATFORMS || "android,ios")
+  .split(",")
+  .map((s) => s.trim());
+if (platforms.length !== 2) {
+  console.error("PLATFORMS must list exactly two entries, e.g. android,ios");
+  process.exit(1);
+}
+
+let a, b;
+try {
+  await ensureAppium();
+
+  console.log(`[e2e] wallet A = ${platforms[0]}, wallet B = ${platforms[1]}`);
+  // Sessions created sequentially: simulator + emulator booting in parallel can starve CPU.
+  a = await createSession(platforms[0]);
+  b = await createSession(platforms[1]);
+
+  await Promise.all([
+    completeOnboarding(a, { firstName: "Alice", lastName: "Anderson" }),
+    completeOnboarding(b, { firstName: "Bob", lastName: "Baker" }),
+  ]);
+
+  const invitationUrl = await showRelationshipInvitation(a);
+  await acceptInvitationViaPaste(b, invitationUrl);
+
+  // Bidirectional VRC: each wallet issues to the other, so BOTH get a credential
+  // offer in the contact chat that must be accepted manually.
+  await Promise.all([
+    acceptCredentialOfferFromChat(a),
+    acceptCredentialOfferFromChat(b),
+  ]);
+
+  await Promise.all([
+    assertVrcReceived(a, "Bob Baker"),
+    assertVrcReceived(b, "Alice Anderson"),
+  ]);
+
+  console.log("\n[e2e] ✅ VRC exchange succeeded on both wallets");
+  process.exitCode = 0;
+} catch (err) {
+  console.error("\n[e2e] ❌ FAILED:", err.message);
+  for (const d of [a, b].filter(Boolean)) {
+    try {
+      await screenshot(d, "failure");
+      await dumpSource(d, "failure");
+    } catch {
+      /* session may be dead */
+    }
+  }
+  process.exitCode = 1;
+} finally {
+  for (const d of [a, b].filter(Boolean)) {
+    try {
+      await d.deleteSession();
+    } catch {
+      /* ignore */
+    }
+  }
+  stopAppium();
+}

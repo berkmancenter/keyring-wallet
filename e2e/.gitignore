@@ -1,0 +1,5 @@
+# root .gitignore ignores "lib" (build output); e2e/lib is source — re-include it
+!lib/
+!lib/**
+node_modules/
+artifacts/

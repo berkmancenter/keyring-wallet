@@ -1,0 +1,14 @@
+{
+  "name": "keyring-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Appium E2E harness: fresh install, onboarding, and a two-device VRC exchange",
+  "scripts": {
+    "vrc-exchange": "node run-vrc-exchange.js",
+    "vrc-exchange:android-only": "PLATFORMS=android,android node run-vrc-exchange.js"
+  },
+  "dependencies": {
+    "webdriverio": "^9.12.0"
+  }
+}
