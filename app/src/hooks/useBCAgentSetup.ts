@@ -34,10 +34,9 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
   }
 }
 
-const checkMediatorType = async (agent: Agent, mediatorUrl: string): Promise<void> => {
-  if (mediatorUrl.startsWith('https://mediator-credo-dev.apps.silver.devops.gov.bc.ca/')) {
+const configureMessagePickup = async (agent: Agent): Promise<void> => {
+  if (Config.MEDIATOR_USE_V2_BATCH_PICKUP === 'true') {
     await agent.mediationRecipient.initiateMessagePickup(undefined, MediatorPickupStrategy.PickUpV2LiveMode)
-  } else {
     batchPickup(agent)
   }
 }
@@ -198,7 +197,7 @@ const useBCAgentSetup = () => {
         const restartedAgent = await restartExistingAgent(agentInstanceRef.current, walletSecret)
         if (restartedAgent) {
           logger.info('Successfully restarted existing agent...')
-          await checkMediatorType(restartedAgent, mediatorUrl)
+          await configureMessagePickup(restartedAgent)
           periodicPickupCleanupRef.current?.()
           periodicPickupCleanupRef.current = startPeriodicTrustPing(restartedAgent, PERIODIC_PICKUP_INTERVAL_MS)
           refreshAttestationMonitor(restartedAgent)
@@ -221,8 +220,8 @@ const useBCAgentSetup = () => {
       logger.info('Initializing agent...')
       await newAgent.initialize()
 
-      logger.info(`checking mediator type for ${mediatorUrl}`)
-      await checkMediatorType(newAgent, mediatorUrl)
+      logger.info(`configuring message pickup for ${mediatorUrl}`)
+      await configureMessagePickup(newAgent)
       periodicPickupCleanupRef.current?.()
       periodicPickupCleanupRef.current = startPeriodicTrustPing(newAgent, PERIODIC_PICKUP_INTERVAL_MS)
 
