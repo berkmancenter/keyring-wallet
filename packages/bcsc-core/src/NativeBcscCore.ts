@@ -1,5 +1,6 @@
 import type { TurboModule } from 'react-native';
 import { TurboModuleRegistry } from 'react-native';
+import type { UnsafeObject } from 'react-native/Libraries/Types/CodegenTypes';
 
 // Re-declaring PrivateKeyInfo and KeyPair here to avoid import issues from index.ts
 // Ideally, these would be in a shared types file if not for TurboModule limitations.
@@ -35,14 +36,9 @@ export type JWK = {
   n: string;
 };
 
-export type JWTClaims = {
-  iss: string;
-  aud: string;
-  sub: string;
-  iat: number;
-  exp: number;
-  [key: string]: any;
-};
+// RN 0.77 codegen can't express arbitrary claim maps (no indexers/any);
+// the native side receives the claims as an opaque map.
+export type JWTClaims = UnsafeObject;
 
 export enum AccountSecurityMethod {
   PinNoDeviceAuth = 'app_pin_no_device_authn',
@@ -69,7 +65,8 @@ export interface Spec extends TurboModule {
   getKeyPair(label: string): Promise<KeyPair>;
   getToken(tokenType: number): Promise<NativeToken | null>;
   getAccount(): Promise<NativeAccount | null>;
-  setAccount(account: Omit<NativeAccount, 'id'>): Promise<void>;
+  // RN 0.77 codegen can't parse Omit<> generics; NativeAccount.id is ignored on set
+  setAccount(account: NativeAccount): Promise<void>;
   getRefreshTokenRequestBody(issuer: string, clientID: string, refreshToken: string): Promise<string | null>;
   signPairingCode(
     code: string,

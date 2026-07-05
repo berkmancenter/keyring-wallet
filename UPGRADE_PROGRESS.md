@@ -23,29 +23,29 @@ openwallet-foundation/credo-ts#2704 still open as of 2026-06).
 
 ## 2. Decisions already made (by Alberto, 2026-07-04)
 
-| Topic | Decision |
-|---|---|
-| App upstream reference | `bcgov/bc-wallet-mobile` (NOT BC-Wallet-Demo, that's a web demo) |
-| BCSC (BC Services Card) code | **Drop it** (`react-native-bcsc-core` pkg, bcsc API code) — but **keep the Keyring theme** (`app/src/keyring-theme/`, which lives alongside the bcsc-theme scaffolding it was derived from) |
-| Storybook | Drop it (Storybook 5.3 won't survive React 19; user doesn't care) |
-| VC 2.0 old-credential migration | Not needed (~0 users). Bump RCE protocol version so old/new wallets fail cleanly |
-| E2E devices | Emulators/simulators first; fall back to real devices (user has both) if attestation/biometrics block simulators |
-| Mediator + witness-server for E2E | Already hosted; endpoints configured in `app/.env` |
-| Bifold sync strategy | "Branch swap": new branch in `berkmancenter/keyring-bifold` starting from upstream 3.0.16 content, port Keyring delta onto it. Same repo, no new repo. Gives shared git history with upstream going forward |
-| RN upgrade path | Two hops: 0.73→0.77 (last React-18 RN) first, then 0.81+React 19 together with bifold 3.x/credo 0.6 |
+| Topic                             | Decision                                                                                                                                                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App upstream reference            | `bcgov/bc-wallet-mobile` (NOT BC-Wallet-Demo, that's a web demo)                                                                                                                                            |
+| BCSC (BC Services Card) code      | **Drop it** (`react-native-bcsc-core` pkg, bcsc API code) — but **keep the Keyring theme** (`app/src/keyring-theme/`, which lives alongside the bcsc-theme scaffolding it was derived from)                 |
+| Storybook                         | Drop it (Storybook 5.3 won't survive React 19; user doesn't care)                                                                                                                                           |
+| VC 2.0 old-credential migration   | Not needed (~0 users). Bump RCE protocol version so old/new wallets fail cleanly                                                                                                                            |
+| E2E devices                       | Emulators/simulators first; fall back to real devices (user has both) if attestation/biometrics block simulators                                                                                            |
+| Mediator + witness-server for E2E | Already hosted; endpoints configured in `app/.env`                                                                                                                                                          |
+| Bifold sync strategy              | "Branch swap": new branch in `berkmancenter/keyring-bifold` starting from upstream 3.0.16 content, port Keyring delta onto it. Same repo, no new repo. Gives shared git history with upstream going forward |
+| RN upgrade path                   | Two hops: 0.73→0.77 (last React-18 RN) first, then 0.81+React 19 together with bifold 3.x/credo 0.6                                                                                                         |
 
 ## 3. Current versions vs upstream targets
 
-| Component | Current | Target (upstream, 2026-07) |
-|---|---|---|
-| `@bifold/*` | 2.7.4 (fork, portal: to `bifold/packages/*`) | 3.0.16 |
-| credo-ts | 0.5.17 (+ yarn patches) | 0.6.3 (DIDComm split into `@credo-ts/didcomm`; agent API moves to `agent.modules.*` / `agent.didcomm.*`) |
-| React Native | 0.73.11 | 0.81.5 |
-| React | 18.3.1 | 19.1.0 |
-| askar | `@hyperledger/aries-askar-react-native` 0.2.3 | renamed `@openwallet-foundation/askar-*` 0.6.0 |
-| anoncreds RN | 0.2.4 | check upstream bifold 3.0.16 resolutions |
-| indy-vdr RN | 0.2.2 (patched) | 0.2.4 (upstream carries its own patch) |
-| VRC signature suite | Ed25519Signature2018 (VCDM 1.1) | Phase 5: DataIntegrityProof / eddsa-rdfc-2022 (VCDM 2.0) — verify credo JSON-LD VCDM 2.0 support first |
+| Component           | Current                                       | Target (upstream, 2026-07)                                                                               |
+| ------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `@bifold/*`         | 2.7.4 (fork, portal: to `bifold/packages/*`)  | 3.0.16                                                                                                   |
+| credo-ts            | 0.5.17 (+ yarn patches)                       | 0.6.3 (DIDComm split into `@credo-ts/didcomm`; agent API moves to `agent.modules.*` / `agent.didcomm.*`) |
+| React Native        | 0.73.11                                       | 0.81.5                                                                                                   |
+| React               | 18.3.1                                        | 19.1.0                                                                                                   |
+| askar               | `@hyperledger/aries-askar-react-native` 0.2.3 | renamed `@openwallet-foundation/askar-*` 0.6.0                                                           |
+| anoncreds RN        | 0.2.4                                         | check upstream bifold 3.0.16 resolutions                                                                 |
+| indy-vdr RN         | 0.2.2 (patched)                               | 0.2.4 (upstream carries its own patch)                                                                   |
+| VRC signature suite | Ed25519Signature2018 (VCDM 1.1)               | Phase 5: DataIntegrityProof / eddsa-rdfc-2022 (VCDM 2.0) — verify credo JSON-LD VCDM 2.0 support first   |
 
 Upstream bifold 3.0.16 root resolutions worth copying: react 19.1.0, react-native 0.81.5,
 react-native-vision-camera 4.7.3, expo ~54 (they added expo modules!), plus their patch set
@@ -73,6 +73,7 @@ Fork point is exact: upstream tag `v2.7.4`. 457 files changed (excl. lockfiles):
 290 added / 158 modified / 9 deleted.
 
 **Added (the Keyring contribution — ports cleanly, upstream never touches these paths):**
+
 - `packages/core/src/modules/vrc/` — 67 files, the VRC module (managers, protocol, types, tests)
 - `packages/witness-server/` — 66 files (server component; not an RN package)
 - `packages/vrc-reference/` — 46 files (reference implementation + conformance)
@@ -86,6 +87,7 @@ Fork point is exact: upstream tag `v2.7.4`. 457 files changed (excl. lockfiles):
 - Docs: `docs/VRC_*.md`, `docs/WITNESSED_EXCHANGE_FLOW.md`, etc.
 
 **Modified (158 files — must be re-applied by hand onto 3.0.16 where upstream moved):**
+
 - Heaviest churn (ins/del): `hooks/chat-messages.tsx` (803/84), `screens/CredentialOffer.tsx`
   (476/61), `screens/Settings.tsx` (351/78), `components/chat/ChatMessage.tsx` (258/82),
   `navigators/SettingStack.tsx` (216/133), `navigators/TabStack.tsx` (133/132),
@@ -110,6 +112,7 @@ Fork point: bc-wallet-mobile commit **`f628bb23`** (2025-09-17, "feat: update ad
 bifold 2.7.4 / credo 0.5.17 era; `e12ca6d1` scores identically — either works as reference).
 
 **Keyring-only (added) in `app/`:**
+
 - `src/keyring-theme/` — THE KEEPER (user decision)
 - `src/types/`, `src/components/SetupCard.tsx`, `src/screens/Biometry.tsx`
 - Keyring branding assets (fonts GT-America/SourceSans3, Keyring/ASML logos, onboarding/tab SVGs)
@@ -144,10 +147,10 @@ babel/metro/jest configs, `.env.sample`.
   - [x] Delta app vs bc-wallet-mobile f628bb23
   - [x] Baseline test run recorded (§7 — all green)
 - [x] **Phase 1 — Appium E2E harness on CURRENT app** — COMPLETE 2026-07-04.
-  **Green run**: `node e2e/run-vrc-exchange.js` → full two-wallet exchange
-  (Android emulator Pixel_6_API_33 ↔ iOS simulator iPhone 17) in ~7 min:
-  both onboardings → invitation → paste → connection → bidirectional VRC offers →
-  manual accepts → "added to your wallet" ×2 → peer R-card names visible in Contacts ×2.
+      **Green run**: `node e2e/run-vrc-exchange.js` → full two-wallet exchange
+      (Android emulator Pixel_6_API_33 ↔ iOS simulator iPhone 17) in ~7 min:
+      both onboardings → invitation → paste → connection → bidirectional VRC offers →
+      manual accepts → "added to your wallet" ×2 → peer R-card names visible in Contacts ×2.
   - Environment verified 2026-07-04: Appium 3.5.0 with xcuitest 11.10.0 + uiautomator2 7.6.1
     installed; iOS 26.3 simulators (iPhone 17 etc.); AVDs `Pixel_6_API_31`, `Pixel_6_API_33`.
   - Harness lives in `e2e/` (plain node + webdriverio, no test-runner framework):
@@ -155,16 +158,16 @@ babel/metro/jest configs, `.env.sample`.
     Artifacts (screenshots + page-source XML) land in `e2e/artifacts/`.
   - [x] Android debug APK builds (`cd app/android && ./gradlew assembleDebug`)
   - [x] iOS simulator app builds (`cd app/ios && xcodebuild -workspace AriesBifold.xcworkspace
-    -scheme AriesBifold -configuration Debug -sdk iphonesimulator -derivedDataPath build/e2e-dd build`)
-    → product is `KeyRing.app`. DO NOT pass CODE_SIGNING_ALLOWED=NO: it strips the keychain
-    entitlements and the app fails onboarding with "Error code 1001 … required entitlement".
+-scheme AriesBifold -configuration Debug -sdk iphonesimulator -derivedDataPath build/e2e-dd build`)
+        → product is `KeyRing.app`. DO NOT pass CODE_SIGNING_ALLOWED=NO: it strips the keychain
+        entitlements and the app fails onboarding with "Error code 1001 … required entitlement".
   - [x] **Android onboarding smoke passes** (fresh install → GetStarted → PIN explainer →
-    PIN → biometry Continue → wallet naming → R-Card form → main tabs).
+        PIN → biometry Continue → wallet naming → R-Card form → main tabs).
   - [x] iOS onboarding smoke passes (rebuilt without CODE_SIGNING_ALLOWED=NO; numeric-keypad
-    dismissal = tap neutral content area x:235,y:240; `appium:platformVersion` must match an
-    installed simctl SDK, currently 26.3).
+        dismissal = tap neutral content area x:235,y:240; `appium:platformVersion` must match an
+        installed simctl SDK, currently 26.3).
   - [x] Two-device VRC exchange (Android emulator ↔ iOS simulator) PASSES.
-    Flow facts the harness encodes (don't rediscover):
+        Flow facts the harness encodes (don't rediscover):
     - VRC offers are NOT auto-accepted. Each wallet gets a chat message "Credential offer
       received — Would you like to accept it? YES/NO" (`ChatMessage.tsx`
       CredentialOfferActions; YES has NO testID → find by text) → CredentialOffer screen →
@@ -184,7 +187,7 @@ babel/metro/jest configs, `.env.sample`.
     back to software keys): iOS sim "App Attest not supported"; Android emulator "Secure lock
     screen must be enabled" (no lock screen configured on AVD); embedded Google root CA expired.
   - Known red-box noise on both devices: unhandled rejection `IndyVdrError … did
-    'TeT8SJGHruVL9up3Erp4o' … Pool timeout` (indy ledger DID lookup from container-imp.ts
+'TeT8SJGHruVL9up3Erp4o' … Pool timeout` (indy ledger DID lookup from container-imp.ts
     OCA/ledger config; unrelated to VRC, but it paints a dev-mode toast over the UI).
   - IMPORTANT (harness ops): metro must NOT be piped through `tail`/`grep` when started — it
     swallows all RN JS console logs. Start plainly: `cd app && npx react-native start`.
@@ -214,13 +217,33 @@ babel/metro/jest configs, `.env.sample`.
     `e2e/` at repo root.
   - Check first: does hardware attestation/biometry block simulators? If yes, add dev bypass
     flag or use real devices.
-- [ ] **Phase 2 — RN 0.73.11 → 0.77.x, React 18 kept, credo/bifold untouched**
-  - Use React Native Upgrade Helper diffs 0.73.8→0.77.x for the app template.
-  - Gradle/AGP/Kotlin + Xcode/CocoaPods bumps; compatible bumps of RN ecosystem libs
-    (screens, gesture-handler, safe-area-context, vision-camera, firebase ≥ v18 needed later).
-  - Also do the BCSC removal here (drop `packages/bcsc-core`, bcsc API surface in app;
-    KEEP `keyring-theme`) — shrinks the Phase 3 surface.
-  - Gate: jest green (app+bifold), both platforms bundle, E2E green.
+- [~] **Phase 2 — RN 0.73.11 → 0.77.x, React 18 kept, credo/bifold untouched** — IN PROGRESS.
+  Branch: `upgrade/phase2-rn77` (root repo). DONE so far (2026-07-04):
+  - RN 0.77.3 template applied (Upgrade Helper diff): Gradle 8.10.2, AGP 8.7.3,
+    Kotlin 2.0.21, buildTools 35, NDK 27.1.12297006, iOS deployment target 15.1,
+    settings.gradle plugin-based autolinking, `MainApplication.kt` OpenSourceMergedSoMapping,
+    `AppDelegate.mm` -bundleURL, Podfile Flipper removal + `$VCEnableLocation=false`.
+  - Ecosystem bumps: gesture-handler 2.22, safe-area-context 5.1, screens 4.6, svg 15.11,
+    vision-camera 4.7.3, webview 13.13 (13.10 fails Kotlin 2.0 compile). bifold core
+    peerDeps loosened to `>=`.
+  - `dependenciesMeta.built=false` for @2060.io/ffi-napi+ref-napi (node-gyp/distutils breakage,
+    not needed at runtime). Jest mock path: `react-native/src/private/animated/NativeAnimatedHelper`.
+  - RN 0.77 BackHandler API: `subscription.remove()` in bifold Onboarding/ProofDetails/
+    ProofRequesting. Kotlin 2.0 null-safety fix in react-native-attestation.
+  - **RN 0.76+ prefab breakage (KEY LEARNING)**: @hyperledger/{anoncreds,aries-askar,indy-vdr}
+    -react-native CMakeLists link `ReactAndroid::reactnativejni`, which no longer exists
+    (merged into `ReactAndroid::reactnative` = single libreactnative.so). Fixed via yarn
+    patches (indy-vdr patch REPLACES the pre-existing 627d424b96 patch — same filename, now
+    also carries the CMake fix). Plus app/build.gradle `packagingOptions.jniLibs.pickFirsts`
+    for libreactnative/jsi/fbjni/c++\_shared (libraries copy prefab .so into their AARs).
+  - RN 0.77 codegen is stricter: bcsc-core spec couldn't use `Omit<>`, indexer+named props,
+    or `any` → replaced JWTClaims with `UnsafeObject` (react-native/Libraries/Types/CodegenTypes).
+    Moot once bcsc-core is dropped, but unblocked pod install.
+  - iOS pods: full `rm -rf Pods Podfile.lock` needed (boost snapshot conflict from 0.73 lock).
+  - GATE STATUS: app jest 23/88 PASS, bifold core jest 134/1242 PASS,
+    `assembleDebug` BUILD SUCCESSFUL, iOS simulator `xcodebuild` BUILD SUCCEEDED.
+  - REMAINING: BCSC removal (drop `packages/bcsc-core`, bcsc API surface in app;
+    KEEP `keyring-theme`), typecheck, E2E VRC exchange rerun.
 - [ ] **Phase 3 — Big hop: bifold 3.0.16 + credo 0.6.3 + React 19 + RN 0.81**
   - In `bifold/`: new branch `upgrade/bifold-3.x` = upstream v3.0.16 content; port §5.1 delta
     onto it. Mechanical credo API rewrite everywhere: `agent.credentials` →
@@ -232,7 +255,7 @@ babel/metro/jest configs, `.env.sample`.
   - Adopt upstream patch set; wallet-open/migration smoke test (askar store compat).
   - Gate: VRC conformance tests green, jest green, both bundle, E2E green.
 - [ ] **Phase 4 — App-layer upstream sync** (port wanted bc-wallet-mobile improvements;
-  containers/DI, screens). Gate: full suite + E2E.
+      containers/DI, screens). Gate: full suite + E2E.
 - [ ] **Phase 5 — VC 2.0 for VRC** (secondary goal)
   - FIRST verify credo 0.6.3 supports issuing/verifying JSON-LD Data Integrity VCDM 2.0
     (its VCDM 2.0 support is documented for vc+jwt / dc+sd-jwt; LDP 2.0 unverified).

@@ -121,7 +121,8 @@ export const getToken = async (tokenType: TokenType): Promise<TokenInfo | null> 
  * @returns A promise that resolves when the account has been successfully set.
  */
 export const setAccount = async (account: Omit<NativeAccount, 'id'>): Promise<void> => {
-  return BcscCore.setAccount(account);
+  // the native spec takes a full NativeAccount (codegen can't express Omit); id is generated natively
+  return BcscCore.setAccount(account as NativeAccount);
 };
 
 /**

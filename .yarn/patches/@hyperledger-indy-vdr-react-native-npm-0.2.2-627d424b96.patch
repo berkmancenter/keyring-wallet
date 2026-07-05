@@ -1,3 +1,24 @@
+diff --git a/android/CMakeLists.txt b/android/CMakeLists.txt
+index c84556e989cd95a18c5a8296931c8d97671a3c5c..47ef06ff796d4ce0ca0ffd1338dc5dc7965834a9 100644
+--- a/android/CMakeLists.txt
++++ b/android/CMakeLists.txt
+@@ -87,7 +87,15 @@ if(${REACT_NATIVE_VERSION} LESS 71)
+   )
+ endif()
+ 
+-if(${REACT_NATIVE_VERSION} GREATER_EQUAL 71)
++if(${REACT_NATIVE_VERSION} GREATER_EQUAL 76)
++  # RN 0.76 merged libreactnativejni into a single libreactnative.so prefab target
++  target_link_libraries(
++    ${PACKAGE_NAME}
++    ReactAndroid::jsi
++    ReactAndroid::reactnative
++    fbjni::fbjni
++  )
++elseif(${REACT_NATIVE_VERSION} GREATER_EQUAL 71)
+   target_link_libraries(
+     ${PACKAGE_NAME}
+     ReactAndroid::jsi
 diff --git a/android/build.gradle b/android/build.gradle
 index 9017d77eb32573415c7922cd83dae5cd792a885f..083320b13d82925625e57b929387a20a6d42c841 100644
 --- a/android/build.gradle

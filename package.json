@@ -50,7 +50,7 @@
     "tsyringe": "4.8.0",
     "nanoid": "3.3.7",
     "react": "18.3.1",
-    "react-native": "0.73.11",
+    "react-native": "0.77.3",
     "@types/react": "18.2.79",
     "@credo-ts/anoncreds@npm:0.5.15": "patch:@credo-ts/anoncreds@npm%3A0.5.17#~/.yarn/patches/@credo-ts-anoncreds-npm-0.5.17-9f101d8e96.patch",
     "@credo-ts/anoncreds@npm:0.5.17": "patch:@credo-ts/anoncreds@npm%3A0.5.17#~/.yarn/patches/@credo-ts-anoncreds-npm-0.5.17-9f101d8e96.patch",
@@ -70,5 +70,13 @@
   },
   "dependencies": {
     "react-native-bcsc-core": "workspace:*"
+  },
+  "dependenciesMeta": {
+    "@2060.io/ffi-napi": {
+      "built": false
+    },
+    "@2060.io/ref-napi": {
+      "built": false
+    }
   }
 }

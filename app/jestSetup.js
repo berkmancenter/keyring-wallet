@@ -14,7 +14,8 @@ mockRNDeviceInfo.getBuildNumber = jest.fn(() => '1')
 jest.mock('react-native-safe-area-context', () => mockSafeAreaContext)
 jest.mock('@react-native-community/netinfo', () => mockRNCNetInfo)
 jest.mock('react-native-device-info', () => mockRNDeviceInfo)
-jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper')
+// moved in RN 0.76: Libraries/Animated/NativeAnimatedHelper → src/private/animated/
+jest.mock('react-native/src/private/animated/NativeAnimatedHelper')
 jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter')
 jest.mock('react-native-localize', () => mockRNLocalize)
 jest.mock('react-native-vision-camera', () => {
