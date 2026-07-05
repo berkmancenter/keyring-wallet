@@ -12,8 +12,7 @@
   "packageManager": "yarn@4.9.2",
   "workspaces": {
     "packages": [
-      "app",
-      "packages/*"
+      "app"
     ]
   },
   "repository": {
@@ -67,9 +66,6 @@
     "@bifold/remote-logs": "portal:bifold/packages/remote-logs",
     "@bifold/verifier": "portal:bifold/packages/verifier",
     "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts"
-  },
-  "dependencies": {
-    "react-native-bcsc-core": "workspace:*"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {

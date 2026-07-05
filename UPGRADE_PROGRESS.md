@@ -242,8 +242,17 @@ babel/metro/jest configs, `.env.sample`.
   - iOS pods: full `rm -rf Pods Podfile.lock` needed (boost snapshot conflict from 0.73 lock).
   - GATE STATUS: app jest 23/88 PASS, bifold core jest 134/1242 PASS,
     `assembleDebug` BUILD SUCCESSFUL, iOS simulator `xcodebuild` BUILD SUCCEEDED.
-  - REMAINING: BCSC removal (drop `packages/bcsc-core`, bcsc API surface in app;
-    KEEP `keyring-theme`), typecheck, E2E VRC exchange rerun.
+  - BCSC removal DONE (2026-07-04): deleted `packages/bcsc-core` workspace,
+    `app/src/bcsc-theme/`, `useSetupSteps`, bcsc tests. `store.tsx` stripped of
+    BCSCState/BCSCDispatchAction/Mode (KeyRing is the only mode now; Root always renders
+    KeyRingRootStack). Removed `BCSCApiClientProvider` from App, BCSC/KeyRingSC theme
+    names + Developer screen theme/mode toggles, `@bcsc-theme` aliases
+    (babel/tsconfig/metro), bcsc-core refs in package.jsons. keyring-theme KEPT.
+    Unused BCSC localization strings left in place (inert; prune later).
+    Post-removal gate: typecheck PASS, eslint PASS, app jest 14 suites/27 tests PASS
+    (Developer snapshot updated), Android assembleDebug PASS (gradle locks regenerated),
+    iOS pod install + simulator build PASS (RNBcscCore pod gone).
+  - REMAINING: E2E VRC exchange rerun on both platforms (gate for Phase 2 completion).
 - [ ] **Phase 3 — Big hop: bifold 3.0.16 + credo 0.6.3 + React 19 + RN 0.81**
   - In `bifold/`: new branch `upgrade/bifold-3.x` = upstream v3.0.16 content; port §5.1 delta
     onto it. Mechanical credo API rewrite everywhere: `agent.credentials` →

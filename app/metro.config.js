@@ -12,7 +12,6 @@ const packageDirs = [
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', 'react-native-bcsc-core')),
 ]
 
 // In development, resolve these to source for hot reload; CI/production uses built output.

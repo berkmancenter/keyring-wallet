@@ -7,16 +7,6 @@ import {
   ReducerAction,
 } from '@bifold/core'
 
-import { BCSCCardType } from '@bcsc-theme/types/cards'
-import {
-  EvidenceType,
-  VerificationPhotoUploadPayload,
-  VerificationPrompt,
-  VerificationVideoUploadPayload,
-} from './bcsc-theme/api/hooks/useEvidenceApi'
-import { ProvinceCode } from './bcsc-theme/utils/address-utils'
-import { PhotoMetadata } from './bcsc-theme/utils/file-info'
-
 export interface IASEnvironment {
   name: string
   iasAgentInviteUrl: string
@@ -41,71 +31,9 @@ export interface DismissPersonCredentialOffer {
   personCredentialOfferDismissed: boolean
 }
 
-/**
- * Collection of metadata needed when a user is registering for the application
- * using non-bcsc identification cards. ie: drivers license + birth certificate etc...
- * These properties are then sent to IAS to authorize the user's device.
- */
-export interface NonBCSCUserMetadata {
-  name?: {
-    first: string
-    last: string
-    middle?: string
-  }
-  address?: {
-    streetAddress: string
-    postalCode: string
-    city: string
-    province: ProvinceCode
-    country: 'CA' // currently we only support Canada
-  }
-}
-
-export interface BCSCState {
-  verified: boolean
-  cardType: BCSCCardType
-  serial: string
-  birthdate?: Date
-  email?: string
-  emailConfirmed?: boolean
-  deviceCode?: string
-  userCode?: string
-  // only needed for non-bcsc cards and deleted after verification
-  userMetadata?: NonBCSCUserMetadata
-  deviceCodeExpiresAt?: Date
-  pendingVerification?: boolean
-  prompts?: VerificationPrompt[]
-  videoMetadata?: VerificationVideoUploadPayload
-  photoMetadata?: VerificationPhotoUploadPayload
-  refreshToken?: string
-  photoPath?: string
-  videoPath?: string
-  videoThumbnailPath?: string
-  bookmarks: string[]
-  verificationRequestId?: string
-  verificationRequestSha?: string
-  additionalEvidenceData: AdditionalEvidenceData[]
-  bcscDevicesCount?: number
-  registrationAccessToken?: string
-}
-
-export interface AdditionalEvidenceData {
-  evidenceType: EvidenceType
-  metadata: PhotoMetadata[]
-  documentNumber: string
-}
-
-export enum Mode {
-  KeyRing = 'keyring',
-  BCSC = 'bcsc',
-  KeyRingSC = 'keyringsc',
-}
-
 export interface BCState extends BifoldState {
   developer: Developer
   dismissPersonCredentialOffer: DismissPersonCredentialOffer
-  bcsc: BCSCState
-  mode: Mode
 }
 
 enum DeveloperDispatchAction {
@@ -122,53 +50,15 @@ enum RemoteDebuggingDispatchAction {
   REMOTE_DEBUGGING_STATUS_UPDATE = 'remoteDebugging/enable',
 }
 
-enum BCSCDispatchAction {
-  UPDATE_VERIFIED = 'bcsc/updateVerified',
-  UPDATE_CARD_TYPE = 'bcsc/updateCardType',
-  UPDATE_SERIAL = 'bcsc/updateSerial',
-  UPDATE_BIRTHDATE = 'bcsc/updateBirthdate',
-  UPDATE_EMAIL = 'bcsc/updateEmail',
-  UPDATE_DEVICE_CODE = 'bcsc/updateDeviceCode',
-  UPDATE_USER_CODE = 'bcsc/updateUserCode',
-  UPDATE_DEVICE_CODE_EXPIRES_AT = 'bcsc/updateDeviceCodeExpiresAt',
-  UPDATE_PENDING_VERIFICATION = 'bcsc/updatePendingVerification',
-  UPDATE_REFRESH_TOKEN = 'bcsc/updateRefreshToken',
-  UPDATE_VIDEO_PROMPTS = 'bcsc/updateVideoPrompts',
-  SAVE_PHOTO = 'bcsc/savePhoto',
-  SAVE_VIDEO = 'bcsc/saveVideo',
-  SAVE_VIDEO_THUMBNAIL = 'bcsc/saveVideoThumbnail',
-  ADD_BOOKMARK = 'bcsc/addBookmark',
-  REMOVE_BOOKMARK = 'bcsc/removeBookmark',
-  UPDATE_VERIFICATION_REQUEST = 'bcsc/updateVerificationRequest',
-  ADD_EVIDENCE_TYPE = 'bcsc/addEvidenceType',
-  UPDATE_EVIDENCE_METADATA = 'bcsc/updateEvidenceMetadata',
-  UPDATE_USER_NAME_METADATA = 'bcsc/updateUserMetadataName',
-  UPDATE_USER_ADDRESS_METADATA = 'bcsc/updateUserMetadataAddress',
-  CLEAR_USER_METADATA = 'bcsc/clearUserMetadata',
-  UPDATE_EVIDENCE_DOCUMENT_NUMBER = 'bcsc/updateEvidenceDocumentNumber',
-  CLEAR_ADDITIONAL_EVIDENCE = 'bcsc/clearAdditionalEvidence',
-  CLEAR_BCSC = 'bcsc/clearBCSC',
-  UPDATE_DEVICE_COUNT = 'bcsc/updateDeviceCount',
-  UPDATE_REGISTRATION_ACCESS_TOKEN = 'bcsc/updateRegistrationAccessToken',
-}
-
-enum ModeDispatchAction {
-  UPDATE_MODE = 'mode/updateMode',
-}
-
 export type BCDispatchAction =
   | DeveloperDispatchAction
   | DismissPersonCredentialOfferDispatchAction
   | RemoteDebuggingDispatchAction
-  | BCSCDispatchAction
-  | ModeDispatchAction
 
 export const BCDispatchAction = {
   ...DeveloperDispatchAction,
   ...DismissPersonCredentialOfferDispatchAction,
   ...RemoteDebuggingDispatchAction,
-  ...BCSCDispatchAction,
-  ...ModeDispatchAction,
 }
 
 export const iasEnvironments: Array<IASEnvironment> = [
@@ -214,23 +104,6 @@ const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
   personCredentialOfferDismissed: false,
 }
 
-const bcscState: BCSCState = {
-  verified: false,
-  cardType: BCSCCardType.None,
-  serial: '',
-  birthdate: undefined,
-  bookmarks: [],
-  email: undefined,
-  userCode: undefined,
-  userMetadata: undefined,
-  deviceCode: undefined,
-  deviceCodeExpiresAt: undefined,
-  refreshToken: undefined,
-  verificationRequestId: undefined,
-  verificationRequestSha: undefined,
-  additionalEvidenceData: [],
-}
-
 export enum BCLocalStorageKeys {
   PersonCredentialOfferDismissed = 'PersonCredentialOfferDismissed',
   Environment = 'Environment',
@@ -240,8 +113,6 @@ export enum BCLocalStorageKeys {
   EnableAppToAppPersonFlow = 'EnableAppToAppPersonFlow',
   UserDeniedPushNotifications = 'userDeniedPushNotifications',
   DeviceToken = 'deviceToken',
-  BCSC = 'BCSC',
-  Mode = 'Mode',
 }
 
 export const initialState: BCState = {
@@ -249,20 +120,10 @@ export const initialState: BCState = {
   preferences: { ...defaultState.preferences, useDataRetention: false, disableDataRetentionOption: true },
   developer: developerState,
   dismissPersonCredentialOffer: dismissPersonCredentialOfferState,
-  bcsc: bcscState,
-  mode: Mode.KeyRing,
 }
 
 const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCState => {
   switch (action.type) {
-    case ModeDispatchAction.UPDATE_MODE: {
-      const mode: Mode = (action?.payload || []).pop() || Mode.KeyRing
-      // If the mode isn't actually changing, do nothing
-      if (state.mode === mode) return state
-      const newState = { ...state, mode }
-      PersistentStorage.storeValueForKey<Mode>(BCLocalStorageKeys.Mode, mode)
-      return newState
-    }
     case RemoteDebuggingDispatchAction.REMOTE_DEBUGGING_STATUS_UPDATE: {
       const { enabledAt, sessionId } = (action.payload || []).pop()
       const developer = { ...state.developer, remoteDebugging: { enabledAt, sessionId } }
@@ -318,234 +179,6 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
         newState.dismissPersonCredentialOffer
       )
 
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_VERIFIED: {
-      const verified = (action?.payload || []).pop() ?? false
-      const bcsc = { ...state.bcsc, verified }
-      const newState = { ...state, bcsc }
-      // don't persist, should be checked on every app start
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_CARD_TYPE: {
-      const cardType = (action?.payload ?? []).pop() ?? BCSCCardType.None
-      const bcsc = { ...state.bcsc, cardType }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_SERIAL: {
-      const serial = (action?.payload || []).pop() ?? ''
-      const bcsc = { ...state.bcsc, serial }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_EMAIL: {
-      const { email, emailConfirmed } = (action?.payload || []).pop() ?? {}
-      const bcsc = { ...state.bcsc, email, emailConfirmed }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_BIRTHDATE: {
-      const birthdate = (action?.payload || []).pop() ?? undefined
-      const bcsc = { ...state.bcsc, birthdate }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_USER_CODE: {
-      const userCode = (action?.payload || []).pop() ?? ''
-      const bcsc = { ...state.bcsc, userCode }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_DEVICE_CODE: {
-      const deviceCode = (action?.payload || []).pop() ?? ''
-      const bcsc = { ...state.bcsc, deviceCode }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_PENDING_VERIFICATION: {
-      const pendingVerification = (action?.payload || []).pop() ?? false
-      const bcsc = { ...state.bcsc, pendingVerification }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_VIDEO_PROMPTS: {
-      const prompts: VerificationPrompt[] = (action?.payload || []).pop()
-      const bcsc = { ...state.bcsc, prompts }
-      const newState = { ...state, bcsc }
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_DEVICE_CODE_EXPIRES_AT: {
-      const deviceCodeExpiresAt = (action?.payload || []).pop() ?? undefined
-      const bcsc = { ...state.bcsc, deviceCodeExpiresAt }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_REFRESH_TOKEN: {
-      const refreshToken = (action?.payload || []).pop() ?? undefined
-      const bcsc = { ...state.bcsc, refreshToken }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_DEVICE_COUNT: {
-      const bcscDevicesCount = (action?.payload || []).pop()
-      const bcsc = { ...state.bcsc, bcscDevicesCount }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.SAVE_PHOTO: {
-      const { photoPath, photoMetadata } = (action.payload ?? []).pop()
-      const bcsc = { ...state.bcsc, photoPath, photoMetadata }
-      const newState = { ...state, bcsc }
-      return newState
-    }
-    case BCSCDispatchAction.SAVE_VIDEO: {
-      const { videoPath, videoMetadata } = (action.payload ?? []).pop()
-      const bcsc = { ...state.bcsc, videoPath, videoMetadata }
-      const newState = { ...state, bcsc }
-      return newState
-    }
-    case BCSCDispatchAction.SAVE_VIDEO_THUMBNAIL: {
-      const videoThumbnailPath = (action.payload ?? []).pop()
-      const bcsc = { ...state.bcsc, videoThumbnailPath }
-      const newState = { ...state, bcsc }
-      return newState
-    }
-    case BCSCDispatchAction.ADD_BOOKMARK: {
-      const bookmark = (action.payload ?? []).pop()
-      const bcsc = { ...state.bcsc, bookmarks: [...new Set([...state.bcsc.bookmarks, bookmark])] }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-
-      return newState
-    }
-    case BCSCDispatchAction.REMOVE_BOOKMARK: {
-      const bookmark = (action.payload ?? []).pop()
-      const bookmarks = state.bcsc.bookmarks.filter((b) => b !== bookmark)
-      const bcsc = { ...state.bcsc, bookmarks }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_VERIFICATION_REQUEST: {
-      const evidence = (action?.payload || []).pop() ?? undefined
-      const bcsc = { ...state.bcsc, verificationRequestId: evidence?.id, verificationRequestSha: evidence?.sha256 }
-      const newState = { ...state, bcsc }
-
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-
-      return newState
-    }
-    case BCSCDispatchAction.ADD_EVIDENCE_TYPE: {
-      const evidenceType: EvidenceType = (action?.payload || []).pop()
-      const newEvidenceData: AdditionalEvidenceData = {
-        evidenceType,
-        metadata: [],
-        documentNumber: '',
-      }
-      const bcsc = {
-        ...state.bcsc,
-        additionalEvidenceData: [...state.bcsc.additionalEvidenceData, newEvidenceData],
-      }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-
-    case BCSCDispatchAction.UPDATE_EVIDENCE_METADATA: {
-      const { evidenceType, metadata }: { evidenceType: EvidenceType; metadata: PhotoMetadata[] } =
-        (action?.payload || []).pop() ?? {}
-
-      const updatedEvidenceData = state.bcsc.additionalEvidenceData.map((item) =>
-        item.evidenceType.evidence_type === evidenceType.evidence_type ? { ...item, metadata } : item
-      )
-
-      const bcsc = { ...state.bcsc, additionalEvidenceData: updatedEvidenceData }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-
-    case BCSCDispatchAction.UPDATE_EVIDENCE_DOCUMENT_NUMBER: {
-      const { evidenceType, documentNumber }: { evidenceType: EvidenceType; documentNumber: string } =
-        (action?.payload || []).pop() ?? {}
-
-      const updatedEvidenceData = state.bcsc.additionalEvidenceData.map((item) =>
-        item.evidenceType.evidence_type === evidenceType.evidence_type ? { ...item, documentNumber } : item
-      )
-
-      const bcsc = { ...state.bcsc, additionalEvidenceData: updatedEvidenceData }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-
-    case BCSCDispatchAction.UPDATE_USER_NAME_METADATA: {
-      const userName: NonBCSCUserMetadata['name'] = (action?.payload || []).pop()
-
-      const bcsc = {
-        ...state.bcsc,
-        userMetadata: {
-          name: userName,
-          address: state.bcsc.userMetadata?.address,
-        },
-      }
-
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-
-    case BCSCDispatchAction.UPDATE_USER_ADDRESS_METADATA: {
-      const userAddress: NonBCSCUserMetadata['address'] = (action?.payload || []).pop()
-
-      const bcsc = {
-        ...state.bcsc,
-        userMetadata: {
-          name: state.bcsc.userMetadata?.name,
-          address: userAddress,
-        },
-      }
-
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-
-    case BCSCDispatchAction.CLEAR_USER_METADATA: {
-      const bcsc = { ...state.bcsc, userMetadata: undefined }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-
-    case BCSCDispatchAction.CLEAR_ADDITIONAL_EVIDENCE: {
-      const bcsc = { ...state.bcsc, additionalEvidenceData: [] }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.CLEAR_BCSC: {
-      const bcsc = { ...bcscState }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
-      return newState
-    }
-    case BCSCDispatchAction.UPDATE_REGISTRATION_ACCESS_TOKEN: {
-      const { registrationAccessToken } = (action?.payload || []).pop() ?? {}
-      const bcsc = { ...state.bcsc, registrationAccessToken }
-      const newState = { ...state, bcsc }
-      PersistentStorage.storeValueForKey<BCSCState>(BCLocalStorageKeys.BCSC, bcsc)
       return newState
     }
     default:

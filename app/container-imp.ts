@@ -28,7 +28,6 @@ import { BrandingOverlayType, RemoteOCABundleResolver } from '@bifold/oca/build/
 import { getProofRequestTemplates } from '@bifold/verifier'
 // import { Agent } from '@credo-ts/core' // DISABLED: Only used by push notifications
 import { NavigationProp } from '@react-navigation/native'
-import moment from 'moment'
 import { TFunction } from 'react-i18next'
 // import { Linking } from 'react-native'
 import { Config } from 'react-native-config'
@@ -68,11 +67,9 @@ import { VersionCheckService } from './src/services/version'
 import {
   BCDispatchAction,
   BCLocalStorageKeys,
-  BCSCState,
   BCState,
   DismissPersonCredentialOffer,
   IASEnvironment,
-  Mode,
   RemoteDebuggingState,
   initialState,
 } from './src/store'
@@ -341,8 +338,6 @@ export class AppContainer implements Container {
       let onboarding = initialState.onboarding
       let personCredOfferDissmissed = initialState.dismissPersonCredentialOffer
       let { environment, remoteDebugging, enableProxy, enableAppToAppPersonFlow } = initialState.developer
-      let bcsc = initialState.bcsc
-      let mode = initialState.mode
       let witness = initialState.witness
 
       await Promise.all([
@@ -363,35 +358,11 @@ export class AppContainer implements Container {
         loadState<RemoteDebuggingState>(BCLocalStorageKeys.RemoteDebugging, (val) => (remoteDebugging = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableProxy, (val) => (enableProxy = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableAppToAppPersonFlow, (val) => (enableAppToAppPersonFlow = val)),
-        loadState<BCSCState>(BCLocalStorageKeys.BCSC, (val) => (bcsc = val)),
-        loadState<Mode>(BCLocalStorageKeys.Mode, (val) => (mode = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
         }),
       ])
-
-      // Convert date string to Date object (async-storage converts Dates to strings)
-      // timezone-safe parsing to prevent off-by-one date errors (consistent with date picker)
-      if (typeof bcsc.birthdate === 'string') {
-        const momentDate = moment(bcsc.birthdate)
-        const year = momentDate.year()
-        const month = momentDate.month()
-        const day = momentDate.date()
-        bcsc.birthdate = new Date(year, month, day, 12, 0, 0, 0)
-      }
-
-      if (typeof bcsc.deviceCodeExpiresAt === 'string') {
-        bcsc.deviceCodeExpiresAt = new Date(Date.parse(bcsc.deviceCodeExpiresAt))
-      }
-
-      // Reset paths and prompts on load as they should not be persisted
-      bcsc.photoPath = undefined
-      bcsc.videoPath = undefined
-      bcsc.videoThumbnailPath = undefined
-      bcsc.prompts = undefined
-      bcsc.photoMetadata = undefined
-      bcsc.videoMetadata = undefined
 
       const state = {
         loginAttempt: { ...initialState.loginAttempt, ...loginAttempt },
@@ -410,8 +381,6 @@ export class AppContainer implements Container {
           enableProxy,
           enableAppToAppPersonFlow,
         },
-        bcsc: { ...initialState.bcsc, ...bcsc },
-        mode,
         witness: { ...initialState.witness, ...witness },
       } as BCState
 

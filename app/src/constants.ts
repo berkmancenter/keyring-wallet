@@ -31,19 +31,4 @@ export const appHelpUrl = 'https://keyring.app/help'
 
 export const KeyRingThemeNames = {
   KeyRing: 'keyring',
-  KeyRingSC: 'keyringsc',
-  BCSC: 'bcsc',
 } as const
-
-export const BCThemeNames = {
-  BCWallet: 'keyring',
-  BCSC: 'bcsc',
-} as const
-
-export enum HelpCentreUrl {
-  HOME = 'https://id.gov.bc.ca/static/help/topics.html',
-  HOW_TO_SETUP = 'https://id.gov.bc.ca/static/help/setup_app.html',
-  ACCEPTED_IDENTITY_DOCUMENTS = 'https://id.gov.bc.ca/static/help/accepted-id.html',
-  VERIFICATION_METHODS = 'https://id.gov.bc.ca/static/help/verify_why.html#section-options-app',
-  VERIFY_IN_PERSON = 'https://id.gov.bc.ca/static/help/verify_why.html#section-inperson',
-}

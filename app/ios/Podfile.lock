@@ -7,27 +7,6 @@ PODS:
     - React
     - React-callinvoker
     - React-Core
-  - BcscCore (0.1.0-alpha.1):
-    - DoubleConversion
-    - glog
-    - hermes-engine
-    - RCT-Folly (= 2024.11.18.00)
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - Yoga
   - boost (1.84.0)
   - BVLinearGradient (2.8.3):
     - React-Core
@@ -2157,7 +2136,6 @@ PODS:
 DEPENDENCIES:
   - "anoncreds (from `../node_modules/@hyperledger/anoncreds-react-native`)"
   - "aries-askar (from `../node_modules/@hyperledger/aries-askar-react-native`)"
-  - BcscCore (from `../node_modules/react-native-bcsc-core`)
   - boost (from `../node_modules/react-native/third-party-podspecs/boost.podspec`)
   - BVLinearGradient (from `../node_modules/react-native-linear-gradient`)
   - DoubleConversion (from `../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec`)
@@ -2293,8 +2271,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@hyperledger/anoncreds-react-native"
   aries-askar:
     :path: "../node_modules/@hyperledger/aries-askar-react-native"
-  BcscCore:
-    :path: "../node_modules/react-native-bcsc-core"
   boost:
     :podspec: "../node_modules/react-native/third-party-podspecs/boost.podspec"
   BVLinearGradient:
@@ -2504,7 +2480,6 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   anoncreds: 4b29b0ef841fc1a96910aab8f047c090ee6acb89
   aries-askar: 6fce8d0405b8c84e654a694be1954649cf7955a3
-  BcscCore: 7ee41c1711fe6bed16db8017876fc963b5cf6b99
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
   BVLinearGradient: cb006ba232a1f3e4f341bb62c42d1098c284da70
   CatCrypto: a477899b6be4954e75be4897e732da098cc0a5a8

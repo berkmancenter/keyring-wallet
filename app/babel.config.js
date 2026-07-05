@@ -9,7 +9,6 @@ const plugins = [
         '@': './src',
         '@assets': './src/assets',
         '@keyring-theme': './src/keyring-theme',
-        '@bcsc-theme': './src/bcsc-theme',
         '@components': './src/components',
         '@events': './src/events',
         '@hooks': './src/hooks',
