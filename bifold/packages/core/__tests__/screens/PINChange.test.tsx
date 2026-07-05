@@ -46,7 +46,7 @@ describe('PINChange Screen', () => {
     expect(tree).toMatchSnapshot()
     const oldPinInput = tree.getByTestId(testIdWithKey('EnterOldPIN'))
     const newPinInput1 = tree.getByTestId(testIdWithKey('EnterPIN'))
-    const newPinInput2 = tree.getByTestId(testIdWithKey('ConfirmPIN'))
+    const newPinInput2 = tree.getByTestId(testIdWithKey('ReenterPIN'))
     const submitButton = tree.getByTestId(testIdWithKey('ChangePIN'))
 
     expect(oldPinInput).not.toBe(null)
@@ -75,7 +75,7 @@ describe('PINChange Screen', () => {
 
     const oldPinInput = tree.getByTestId(testIdWithKey('EnterOldPIN'))
     const newPinInput1 = tree.getByTestId(testIdWithKey('EnterPIN'))
-    const newPinInput2 = tree.getByTestId(testIdWithKey('ConfirmPIN'))
+    const newPinInput2 = tree.getByTestId(testIdWithKey('ReenterPIN'))
 
     await act(async () => {
       fireEvent.changeText(oldPinInput, '123456')
@@ -112,7 +112,7 @@ describe('PINChange Screen', () => {
 
     const oldPinInput = tree.getByTestId(testIdWithKey('EnterOldPIN'))
     const newPinInput1 = tree.getByTestId(testIdWithKey('EnterPIN'))
-    const newPinInput2 = tree.getByTestId(testIdWithKey('ConfirmPIN'))
+    const newPinInput2 = tree.getByTestId(testIdWithKey('ReenterPIN'))
     const submitButton = tree.getByTestId(testIdWithKey('ChangePIN'))
 
     await act(async () => {

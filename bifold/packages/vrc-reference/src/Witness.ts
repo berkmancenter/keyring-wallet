@@ -1,16 +1,7 @@
 import type BottomBar from 'inquirer/lib/ui/bottom-bar'
 
-import {
-  KeyType,
-  PeerDidNumAlgo,
-  utils,
-  type ConnectionRecord,
-  JsonTransformer,
-  AutoAcceptCredential,
-  BasicMessageEventTypes,
-  type BasicMessageStateChangedEvent,
-  W3cJsonLdVerifiableCredential,
-} from '@credo-ts/core'
+import { PeerDidNumAlgo, utils, JsonTransformer, W3cJsonLdVerifiableCredential } from '@credo-ts/core'
+import { DidCommAutoAcceptCredential, DidCommBasicMessageEventTypes, DidCommBasicMessageStateChangedEvent, DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { ui } from 'inquirer'
 import { createHash } from 'crypto'
 
@@ -56,8 +47,8 @@ export class Witness extends BaseAgent {
   }
 
   private registerBasicMessageHandler() {
-    this.agent.events.on<BasicMessageStateChangedEvent>(
-      BasicMessageEventTypes.BasicMessageStateChanged,
+    this.agent.events.on<DidCommBasicMessageStateChangedEvent>(
+      DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged,
       async ({ payload }) => {
         const { basicMessageRecord, message } = payload
 
@@ -99,7 +90,7 @@ export class Witness extends BaseAgent {
           } else {
             console.log(purpleText(`[${this.name}] Message type: ${parsedMessage.type || 'unknown'}`))
           }
-        } catch (error) {
+        } catch (_error) {
           // Not a JSON message or not a presentation, ignore
           console.log(purpleText(`[${this.name}] Non-JSON or non-presentation message`))
         }
@@ -114,7 +105,7 @@ export class Witness extends BaseAgent {
       method: 'peer',
       options: {
         numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
-        keyType: KeyType.Ed25519,
+        createKey: { type: { kty: 'OKP', crv: 'Ed25519' } },
       },
     })
 
@@ -139,7 +130,7 @@ export class Witness extends BaseAgent {
   }
 
   public async createConnectionInvitation(): Promise<string> {
-    const outOfBand = await this.agent.oob.createInvitation()
+    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation()
     const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
       domain: `http://localhost:${this.port}`,
     })
@@ -184,8 +175,8 @@ export class Witness extends BaseAgent {
       domain,
     })
 
-    await this.agent.basicMessages.sendMessage(aliceConnectionId, challengeMessage)
-    await this.agent.basicMessages.sendMessage(bobConnectionId, challengeMessage)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(aliceConnectionId, challengeMessage)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(bobConnectionId, challengeMessage)
 
     console.log(greenText(`[${this.name}] Sent session challenge to Alice and Bob\n`))
 
@@ -340,10 +331,10 @@ export class Witness extends BaseAgent {
       // Extract VRC issuer for logging
       const vrcIssuer = presentation.verifiableCredential?.[0]?.issuer || 'unknown'
 
-      await this.agent.credentials.offerCredential({
+      await this.agent.modules.didcomm.credentials.offerCredential({
         connectionId: recipientConnectionId, // Send to the OTHER participant
         protocolVersion: 'v2',
-        autoAcceptCredential: AutoAcceptCredential.Always,
+        autoAcceptCredential: DidCommAutoAcceptCredential.Always,
         credentialFormats: {
           jsonld: {
             credential: witnessCredential,
@@ -429,8 +420,8 @@ export class Witness extends BaseAgent {
     }
   }
 
-  public async getConnectionByOutOfBandId(outOfBandId: string): Promise<ConnectionRecord | undefined> {
-    const connections = await this.agent.connections.findAllByOutOfBandId(outOfBandId)
+  public async getConnectionByOutOfBandId(outOfBandId: string): Promise<DidCommConnectionRecord | undefined> {
+    const connections = await this.agent.modules.didcomm.connections.findAllByOutOfBandId(outOfBandId)
     return connections[0]
   }
 
@@ -476,7 +467,7 @@ export class Witness extends BaseAgent {
   }
 
   public async sendMessage(connectionId: string, message: string): Promise<void> {
-    await this.agent.basicMessages.sendMessage(connectionId, message)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(connectionId, message)
   }
 
   public async exit(): Promise<void> {

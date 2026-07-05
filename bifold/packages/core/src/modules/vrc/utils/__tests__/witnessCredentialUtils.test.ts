@@ -14,7 +14,7 @@ describe('witnessCredentialUtils', () => {
       it('should extract witnessContext from credentialSubject.claims', () => {
         const mockCredential = {
           id: 'credential-claims-001',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
             issuer: {
               id: 'did:example:witness123',
@@ -59,7 +59,7 @@ describe('witnessCredentialUtils', () => {
       it('should prioritize direct witnessContext over claims.witnessContext', () => {
         const mockCredential = {
           id: 'credential-priority-001',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -90,7 +90,7 @@ describe('witnessCredentialUtils', () => {
       it('should fall back to claims.witnessContext when direct witnessContext is missing', () => {
         const mockCredential = {
           id: 'credential-fallback-001',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -116,7 +116,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle claims object without witnessContext', () => {
         const mockCredential = {
           id: 'credential-no-witness-context',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -142,7 +142,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle missing witnessContext gracefully', () => {
         const mockCredential = {
           id: 'credential-no-context',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: {
               id: 'did:example:witness',
@@ -169,7 +169,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle null witnessContext', () => {
         const mockCredential = {
           id: 'credential-null-context',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -188,7 +188,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle empty witnessContext object', () => {
         const mockCredential = {
           id: 'credential-empty-context',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -209,7 +209,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle witnessContext as non-object type', () => {
         const mockCredential = {
           id: 'credential-string-context',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -230,7 +230,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle missing credentialSubject', () => {
         const mockCredential = {
           id: 'credential-no-subject',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             // No credentialSubject
@@ -249,7 +249,7 @@ describe('witnessCredentialUtils', () => {
       it('should extract issuer name from object issuer', () => {
         const mockCredential = {
           id: 'credential-issuer-object',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: {
               id: 'did:example:witness-server',
@@ -271,7 +271,7 @@ describe('witnessCredentialUtils', () => {
       it('should use default "Witness" name when issuer is a string', () => {
         const mockCredential = {
           id: 'credential-issuer-string',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:simple-witness',
             credentialSubject: {
@@ -290,7 +290,7 @@ describe('witnessCredentialUtils', () => {
       it('should use default "Witness" name when issuer object has no name', () => {
         const mockCredential = {
           id: 'credential-issuer-no-name',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: {
               id: 'did:example:nameless-witness',
@@ -312,7 +312,7 @@ describe('witnessCredentialUtils', () => {
       it('should return null when issuer is missing entirely', () => {
         const mockCredential = {
           id: 'credential-no-issuer',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             // No issuer
             credentialSubject: {
@@ -329,7 +329,7 @@ describe('witnessCredentialUtils', () => {
       it('should return null when issuer object has no id', () => {
         const mockCredential = {
           id: 'credential-issuer-no-id',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: {
               name: 'Witness With No ID',
@@ -351,7 +351,7 @@ describe('witnessCredentialUtils', () => {
       it('should extract complete localityVerification from witnessContext', () => {
         const mockCredential = {
           id: 'credential-locality-full',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -380,7 +380,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle partial localityVerification', () => {
         const mockCredential = {
           id: 'credential-locality-partial',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -407,7 +407,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle missing localityVerification', () => {
         const mockCredential = {
           id: 'credential-no-locality',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -431,7 +431,7 @@ describe('witnessCredentialUtils', () => {
       it('should prefer validFrom over issuanceDate', () => {
         const mockCredential = {
           id: 'credential-dates',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             validFrom: '2026-02-13T12:00:00Z',
@@ -451,7 +451,7 @@ describe('witnessCredentialUtils', () => {
       it('should fall back to issuanceDate when validFrom is missing', () => {
         const mockCredential = {
           id: 'credential-issuance-date',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             issuanceDate: '2026-01-15T08:00:00Z',
@@ -472,7 +472,7 @@ describe('witnessCredentialUtils', () => {
       it('should handle credentialSubject as array and use first element', () => {
         const mockCredential = {
           id: 'credential-array-subject',
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: [
@@ -505,7 +505,7 @@ describe('witnessCredentialUtils', () => {
       it('should return null for null credential', () => {
         const mockCredential = {
           id: 'credential-null',
-          credential: null,
+          encoded: null,
         } as unknown as W3cCredentialRecord
 
         const result = extractWitnessInfo(mockCredential)
@@ -516,7 +516,7 @@ describe('witnessCredentialUtils', () => {
       it('should return null for array credential', () => {
         const mockCredential = {
           id: 'credential-array',
-          credential: [],
+          encoded: [],
         } as unknown as W3cCredentialRecord
 
         const result = extractWitnessInfo(mockCredential)
@@ -527,7 +527,7 @@ describe('witnessCredentialUtils', () => {
       it('should return null for non-object credential', () => {
         const mockCredential = {
           id: 'credential-string',
-          credential: 'not-an-object',
+          encoded: 'not-an-object',
         } as unknown as W3cCredentialRecord
 
         const result = extractWitnessInfo(mockCredential)
@@ -556,7 +556,7 @@ describe('witnessCredentialUtils', () => {
 
         const mockCredential = {
           id: 'credential-tojson',
-          credential: {
+          encoded: {
             ...rawData,
             toJSON: () => rawData,
           },

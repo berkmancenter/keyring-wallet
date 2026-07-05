@@ -234,7 +234,6 @@
     "react-native-uuid": "~2.0.3",
     "react-native-vector-icons": "~10.3.0",
     "react-native-vision-camera": "*",
-    "react-native-zeroconf": "~0.14.0",
     "tsyringe": "~4.8.0",
     "uuid": "~9.0.1"
   },

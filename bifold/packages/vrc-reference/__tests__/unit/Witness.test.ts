@@ -65,6 +65,16 @@ describe('Witness', () => {
       shutdown: jest.fn(),
     }
 
+    // credo 0.6: didcomm APIs live under agent.modules.didcomm - alias the same mocks there
+    mockAgent.modules = {
+      didcomm: {
+        connections: mockAgent.connections,
+        oob: mockAgent.oob,
+        credentials: mockAgent.credentials,
+        basicMessages: mockAgent.basicMessages,
+      },
+    }
+
     // Create Witness and assign mock agent
     witness = new Witness(9002, 'test-witness')
     witness.agent = mockAgent

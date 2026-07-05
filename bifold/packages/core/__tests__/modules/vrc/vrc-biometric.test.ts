@@ -49,14 +49,15 @@ jest.mock('@bifold/react-native-attestation', () => ({
 let mockAppStateCurrentState = 'active'
 const mockAddEventListener = jest.fn()
 
-jest.mock('react-native', () => ({
-  AppState: {
-    get currentState() {
-      return mockAppStateCurrentState
-    },
-    addEventListener: (...args: unknown[]) => mockAddEventListener(...args),
-  },
-}))
+// jestSetup.js maps 'react-native' to the actual module, so a jest.mock() here is
+// overridden. Patch the real AppState instance instead.
+// eslint-disable-next-line import/order
+import { AppState } from 'react-native'
+Object.defineProperty(AppState, 'currentState', {
+  configurable: true,
+  get: () => mockAppStateCurrentState,
+})
+AppState.addEventListener = ((...args: unknown[]) => mockAddEventListener(...args)) as typeof AppState.addEventListener
 
 import {
   requestBiometricWithHardwareSigning,
@@ -74,8 +75,12 @@ const createMockAgent = () =>
       },
     },
     context: { contextCorrelationId: 'test-context' },
-    basicMessages: {
-      sendMessage: jest.fn(),
+    modules: {
+      didcomm: {
+        basicMessages: {
+          sendMessage: jest.fn(),
+        },
+      },
     },
   } as any)
 
@@ -389,20 +394,20 @@ describe('VRC Biometric Confirmation', () => {
 
   describe('sendBiometricStatusNotification', () => {
     it('should send notification without throwing', async () => {
-      mockAgent.basicMessages.sendMessage.mockResolvedValue(undefined)
+      mockAgent.modules.didcomm.basicMessages.sendMessage.mockResolvedValue(undefined)
 
       await expect(
         sendBiometricStatusNotification(mockAgent, connectionId, 'not-verified', 'cancelled')
       ).resolves.not.toThrow()
 
-      expect(mockAgent.basicMessages.sendMessage).toHaveBeenCalledWith(
+      expect(mockAgent.modules.didcomm.basicMessages.sendMessage).toHaveBeenCalledWith(
         connectionId,
         expect.stringContaining('vrc:biometric-status:not-verified:')
       )
     })
 
     it('should not propagate error when sendMessage fails', async () => {
-      mockAgent.basicMessages.sendMessage.mockRejectedValue(new Error('Connection lost'))
+      mockAgent.modules.didcomm.basicMessages.sendMessage.mockRejectedValue(new Error('Connection lost'))
 
       await expect(
         sendBiometricStatusNotification(mockAgent, connectionId, 'error', 'something broke')
@@ -434,7 +439,7 @@ describe('VRC Biometric Confirmation', () => {
       expect(result.success).toBe(false)
       expect(result.reason).toBe('error')
       expect(result.error?.message).toBe('Biometric hardware failed')
-      expect(mockAgent.basicMessages.sendMessage).not.toHaveBeenCalled()
+      expect(mockAgent.modules.didcomm.basicMessages.sendMessage).not.toHaveBeenCalled()
     })
   })
 })

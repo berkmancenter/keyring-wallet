@@ -7,7 +7,8 @@
  * - When disabled: skips biometric flow and issues credential without evidence
  */
 
-import { Agent, ConnectionRecord, DidExchangeState, CredentialRole } from '@credo-ts/core'
+import { Agent } from '@credo-ts/core'
+import { DidCommConnectionRecord, DidCommCredentialRole, DidCommDidExchangeState } from '@credo-ts/didcomm'
 
 import { LocalStorageKeys } from '../../../src/constants'
 import { Preferences } from '../../../src/types/state'
@@ -58,12 +59,12 @@ const mockLogger = {
 }
 
 // Mock connection record
-const createMockConnectionRecord = (): ConnectionRecord => ({
+const createMockConnectionRecord = (): DidCommConnectionRecord => ({
   id: 'connection-123',
   theirDid: testDids.counterpartyConnectionDid,
   theirLabel: 'Test Contact',
-  state: DidExchangeState.Completed,
-  role: CredentialRole.Holder,
+  state: DidCommDidExchangeState.Completed,
+  role: DidCommCredentialRole.Holder,
   outOfBandId: 'oob-123',
   metadata: {
     get: jest.fn(),
@@ -71,8 +72,8 @@ const createMockConnectionRecord = (): ConnectionRecord => ({
   },
   createdAt: new Date(),
   tags: {},
-  type: 'ConnectionRecord',
-} as unknown as ConnectionRecord)
+  type: 'DidCommConnectionRecord',
+} as unknown as DidCommConnectionRecord)
 
 // Mock agent
 const createMockAgent = () => ({
@@ -86,22 +87,26 @@ const createMockAgent = () => ({
     create: jest.fn(),
     resolve: jest.fn(),
   },
-  connections: {
-    getById: jest.fn().mockResolvedValue(createMockConnectionRecord()),
-  },
-  oob: {
-    createInvitation: jest.fn(),
-    findById: jest.fn(),
+  modules: {
+    didcomm: {
+      connections: {
+        getById: jest.fn().mockResolvedValue(createMockConnectionRecord()),
+      },
+      oob: {
+        createInvitation: jest.fn(),
+        findById: jest.fn(),
+      },
+      basicMessages: {
+        sendMessage: jest.fn(),
+      },
+      credentials: {
+        offerCredential: jest.fn().mockResolvedValue({ id: 'cred-exchange-123' }),
+      },
+    },
   },
   events: {
     on: jest.fn(),
     off: jest.fn(),
-  },
-  basicMessages: {
-    sendMessage: jest.fn(),
-  },
-  credentials: {
-    offerCredential: jest.fn().mockResolvedValue({ id: 'cred-exchange-123' }),
   },
   context: {},
 })
@@ -376,7 +381,7 @@ describe('VRC Manager Settings - useHardwareAttestation', () => {
       expect(credentialWithoutEvidence).not.toHaveProperty('evidence')
       
       // Credential offer should still be callable
-      await mockAgent.credentials.offerCredential({
+      await mockAgent.modules.didcomm.credentials.offerCredential({
         connectionId: 'connection-123',
         protocolVersion: 'v2',
         credentialFormats: {
@@ -390,7 +395,7 @@ describe('VRC Manager Settings - useHardwareAttestation', () => {
         },
       })
       
-      expect(mockAgent.credentials.offerCredential).toHaveBeenCalledTimes(1)
+      expect(mockAgent.modules.didcomm.credentials.offerCredential).toHaveBeenCalledTimes(1)
     })
 
     it('should log that attestation is disabled', async () => {
@@ -468,7 +473,7 @@ describe('VRC Manager Settings - useHardwareAttestation', () => {
       try {
         const preferences = await mockFetchValueForKey(LocalStorageKeys.Preferences)
         useHardwareAttestation = preferences?.useHardwareAttestation ?? true
-      } catch (error) {
+      } catch (_error) {
         // On error, should default to true (more secure default)
         useHardwareAttestation = true
       }
@@ -514,13 +519,13 @@ describe('VRC Manager Settings - useHardwareAttestation', () => {
         evidence: [evidenceResult.evidence],
       }
       
-      await mockAgent.credentials.offerCredential({
+      await mockAgent.modules.didcomm.credentials.offerCredential({
         connectionId: 'connection-123',
         protocolVersion: 'v2',
         credentialFormats: { jsonld: { credential } },
       })
       
-      expect(mockAgent.credentials.offerCredential).toHaveBeenCalledWith(
+      expect(mockAgent.modules.didcomm.credentials.offerCredential).toHaveBeenCalledWith(
         expect.objectContaining({
           credentialFormats: expect.objectContaining({
             jsonld: expect.objectContaining({
@@ -554,7 +559,7 @@ describe('VRC Manager Settings - useHardwareAttestation', () => {
         // No evidence field
       }
       
-      await mockAgent.credentials.offerCredential({
+      await mockAgent.modules.didcomm.credentials.offerCredential({
         connectionId: 'connection-123',
         protocolVersion: 'v2',
         credentialFormats: { jsonld: { credential } },
@@ -567,7 +572,7 @@ describe('VRC Manager Settings - useHardwareAttestation', () => {
       expect(mockCreateEvidenceBuilder).not.toHaveBeenCalled()
       
       // Verify credential was offered without evidence
-      expect(mockAgent.credentials.offerCredential).toHaveBeenCalledWith(
+      expect(mockAgent.modules.didcomm.credentials.offerCredential).toHaveBeenCalledWith(
         expect.objectContaining({
           credentialFormats: expect.objectContaining({
             jsonld: expect.objectContaining({

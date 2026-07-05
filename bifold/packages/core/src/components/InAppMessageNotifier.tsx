@@ -1,5 +1,5 @@
-import { BasicMessageRecord, BasicMessageRole } from '@credo-ts/core'
-import { useAgent } from '@credo-ts/react-hooks'
+import { DidCommBasicMessageRecord, DidCommBasicMessageRole } from '@credo-ts/didcomm'
+import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useEffect } from 'react'
 import Toast from 'react-native-toast-message'
@@ -27,7 +27,7 @@ const isVrcProtocolMessage = (content: string): boolean => {
  */
 const resolveContactName = async (agent: any, connectionId: string): Promise<string> => {
   try {
-    const connection = await agent.connections.findById(connectionId)
+    const connection = await agent.modules.didcomm.connections.findById(connectionId)
     if (!connection) return 'Contact'
 
     // Priority 1: User-set alternate name
@@ -38,7 +38,7 @@ const resolveContactName = async (agent: any, connectionId: string): Promise<str
 
     // Priority 2: VRC issuer name (real contact name after credential exchange)
     try {
-      const w3cRecords = await agent.w3cCredentials.getAllCredentialRecords()
+      const w3cRecords = await agent.w3cCredentials.getAll()
       const vrcName = await getVrcNameForConnection(agent, connectionId, w3cRecords)
       if (vrcName) return vrcName
     } catch {
@@ -64,8 +64,8 @@ const InAppMessageNotifier: React.FC = () => {
     if (!agent) return
 
     const handleMessage = async ({ payload }: any) => {
-      const record = payload.basicMessageRecord as BasicMessageRecord
-      if (record.role !== BasicMessageRole.Receiver) return
+      const record = payload.basicMessageRecord as DidCommBasicMessageRecord
+      if (record.role !== DidCommBasicMessageRole.Receiver) return
       if (isVrcProtocolMessage(record.content)) return
       if (isConnectionExcludedFromNotifications(record.connectionId)) return
       if (getActiveChatConnectionId() === record.connectionId) return

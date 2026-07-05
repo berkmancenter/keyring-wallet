@@ -127,7 +127,7 @@ describe('QRScanner Component', () => {
 
   test('Renders correctly on first tab', async () => {
     // @ts-expect-error useAgent will be replaced with a mock which will have this method
-    useAgent().agent?.oob.createInvitation.mockReturnValue({
+    useAgent().agent?.modules.didcomm.oob.createInvitation.mockReturnValue({
       outOfBandInvitation: {
         toUrl: () => {
           return ''
@@ -165,7 +165,7 @@ describe('QRScanner Component', () => {
 
   test('Renders correctly on second tab', async () => {
     // @ts-expect-error useAgent will be replaced with a mock which will have this method
-    useAgent().agent?.oob.createInvitation.mockReturnValue({
+    useAgent().agent?.modules.didcomm.oob.createInvitation.mockReturnValue({
       outOfBandInvitation: {
         toUrl: () => {
           return ''
@@ -203,7 +203,7 @@ describe('QRScanner Component', () => {
 
   test('Renders QR code view when defaultToConnect is true and showTabs is false', async () => {
     // @ts-expect-error useAgent will be replaced with a mock which will have this method
-    useAgent().agent?.oob.createInvitation.mockReturnValue({
+    useAgent().agent?.modules.didcomm.oob.createInvitation.mockReturnValue({
       outOfBandInvitation: {
         toUrl: () => {
           return 'https://example.com/invitation'
@@ -241,7 +241,7 @@ describe('QRScanner Component', () => {
 
   test('Does not show wallet name edit in QR code view mode when defaultToConnect is true', async () => {
     // @ts-expect-error useAgent will be replaced with a mock which will have this method
-    useAgent().agent?.oob.createInvitation.mockReturnValue({
+    useAgent().agent?.modules.didcomm.oob.createInvitation.mockReturnValue({
       outOfBandInvitation: {
         toUrl: () => {
           return 'https://example.com/invitation'

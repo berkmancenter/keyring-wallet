@@ -1,24 +1,16 @@
 import type { Participant } from './Participant'
+import type { Agent } from '@credo-ts/core'
 import type {
-  Agent,
-  BasicMessageStateChangedEvent,
-  CredentialExchangeRecord,
-  CredentialStateChangedEvent,
-  ProofExchangeRecord,
-  ProofStateChangedEvent,
-} from '@credo-ts/core'
+  DidCommBasicMessageStateChangedEvent,
+  DidCommCredentialExchangeRecord,
+  DidCommCredentialStateChangedEvent,
+  DidCommProofExchangeRecord,
+  DidCommProofStateChangedEvent,
+} from '@credo-ts/didcomm'
 import type BottomBar from 'inquirer/lib/ui/bottom-bar'
 
-import {
-  BasicMessageEventTypes,
-  BasicMessageRole,
-  CredentialEventTypes,
-  CredentialState,
-  JsonTransformer,
-  ProofEventTypes,
-  ProofState,
-  W3cCredentialRecord,
-} from '@credo-ts/core'
+import { W3cCredentialRecord } from '@credo-ts/core'
+import { DidCommBasicMessageEventTypes, DidCommBasicMessageRole, DidCommCredentialEventTypes, DidCommCredentialState, DidCommProofEventTypes, DidCommProofState } from '@credo-ts/didcomm'
 import { ui } from 'inquirer'
 
 import { Color, greenText, purpleText } from './OutputClass'
@@ -27,7 +19,7 @@ import { Color, greenText, purpleText } from './OutputClass'
  * Common interface for inquirers that can accept credential offers
  */
 export interface CredentialOfferHandler {
-  acceptCredentialOffer(credentialRecord: CredentialExchangeRecord): Promise<void>
+  acceptCredentialOffer(credentialRecord: DidCommCredentialExchangeRecord): Promise<void>
   processAnswer(): Promise<void>
 }
 
@@ -35,7 +27,7 @@ export interface CredentialOfferHandler {
  * Common interface for inquirers that can accept proof requests
  */
 export interface ProofRequestHandler {
-  acceptProofRequest(proofRecord: ProofExchangeRecord): Promise<void>
+  acceptProofRequest(proofRecord: DidCommProofExchangeRecord): Promise<void>
   processAnswer(): Promise<void>
 }
 
@@ -64,7 +56,7 @@ export class Listener {
     this.on = false
   }
 
-  private printCredentialAttributes(credentialRecord: CredentialExchangeRecord) {
+  private printCredentialAttributes(credentialRecord: DidCommCredentialExchangeRecord) {
     if (credentialRecord.credentialAttributes) {
       const attribute = credentialRecord.credentialAttributes
       console.log('\n\nCredential preview:')
@@ -74,7 +66,7 @@ export class Listener {
     }
   }
 
-  private async newCredentialPrompt(credentialRecord: CredentialExchangeRecord, inquirer: CredentialOfferHandler) {
+  private async newCredentialPrompt(credentialRecord: DidCommCredentialExchangeRecord, inquirer: CredentialOfferHandler) {
     this.printCredentialAttributes(credentialRecord)
     this.turnListenerOn()
     await inquirer.acceptCredentialOffer(credentialRecord)
@@ -82,14 +74,14 @@ export class Listener {
     await inquirer.processAnswer()
   }
 
-  private async logCredentialStored(record: CredentialExchangeRecord, participant: Participant) {
+  private async logCredentialStored(record: DidCommCredentialExchangeRecord, participant: Participant) {
     for (const credentialBinding of record.credentials) {
       if (credentialBinding.credentialRecordType !== W3cCredentialRecord.type) continue
 
-      const storedCredential = await participant.agent.w3cCredentials.getCredentialRecordById(
+      const storedCredential = await participant.agent.w3cCredentials.getById(
         credentialBinding.credentialRecordId
       )
-      const credentialJson = JsonTransformer.toJSON(storedCredential.credential)
+      const credentialJson = storedCredential.encoded as Record<string, any>
 
       // Log credential stored - R-DID is now exchanged directly via basic message
       const issuerDid = typeof credentialJson.issuer === 'string' ? credentialJson.issuer : credentialJson.issuer?.id
@@ -103,21 +95,21 @@ export class Listener {
 
   public credentialOfferListener(participant: Participant, inquirer: CredentialOfferHandler) {
     participant.agent.events.on(
-      CredentialEventTypes.CredentialStateChanged,
-      async ({ payload }: CredentialStateChangedEvent) => {
-        const { credentialRecord } = payload
-        if (credentialRecord.state === CredentialState.OfferReceived) {
+      DidCommCredentialEventTypes.DidCommCredentialStateChanged,
+      async ({ payload }: DidCommCredentialStateChangedEvent) => {
+        const { credentialExchangeRecord: credentialRecord } = payload
+        if (credentialRecord.state === DidCommCredentialState.OfferReceived) {
           await this.newCredentialPrompt(credentialRecord, inquirer)
           return
         }
 
         // After holder receives the issued credential, acknowledge and store it
-        if (credentialRecord.state === CredentialState.CredentialReceived) {
-          await participant.agent.credentials.acceptCredential({ credentialRecordId: credentialRecord.id })
+        if (credentialRecord.state === DidCommCredentialState.CredentialReceived) {
+          await participant.agent.modules.didcomm.credentials.acceptCredential({ credentialExchangeRecordId: credentialRecord.id })
           return
         }
 
-        if (credentialRecord.state === CredentialState.Done) {
+        if (credentialRecord.state === DidCommCredentialState.Done) {
           await this.logCredentialStored(credentialRecord, participant)
         }
       }
@@ -125,8 +117,8 @@ export class Listener {
   }
 
   public registerCredentialStateLogger(agent: Agent, name: string) {
-    agent.events.on(CredentialEventTypes.CredentialStateChanged, ({ payload }: CredentialStateChangedEvent) => {
-      const record = payload.credentialRecord
+    agent.events.on(DidCommCredentialEventTypes.DidCommCredentialStateChanged, ({ payload }: DidCommCredentialStateChangedEvent) => {
+      const record = payload.credentialExchangeRecord
       console.log(purpleText(`[${name}] credential exchange ${record.id} -> ${record.state}`))
 
       if (record.errorMessage) {
@@ -136,14 +128,14 @@ export class Listener {
   }
 
   public messageListener(agent: Agent, name: string) {
-    agent.events.on(BasicMessageEventTypes.BasicMessageStateChanged, async (event: BasicMessageStateChangedEvent) => {
-      if (event.payload.basicMessageRecord.role === BasicMessageRole.Receiver) {
+    agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, async (event: DidCommBasicMessageStateChangedEvent) => {
+      if (event.payload.basicMessageRecord.role === DidCommBasicMessageRole.Receiver) {
         this.ui.updateBottomBar(purpleText(`\n${name} received a message: ${event.payload.message.content}\n`))
       }
     })
   }
 
-  private async newProofRequestPrompt(proofRecord: ProofExchangeRecord, inquirer: ProofRequestHandler) {
+  private async newProofRequestPrompt(proofRecord: DidCommProofExchangeRecord, inquirer: ProofRequestHandler) {
     this.turnListenerOn()
     await inquirer.acceptProofRequest(proofRecord)
     this.turnListenerOff()
@@ -151,16 +143,16 @@ export class Listener {
   }
 
   public proofRequestListener(participant: Participant, inquirer: ProofRequestHandler) {
-    participant.agent.events.on(ProofEventTypes.ProofStateChanged, async ({ payload }: ProofStateChangedEvent) => {
-      if (payload.proofRecord.state === ProofState.RequestReceived) {
+    participant.agent.events.on(DidCommProofEventTypes.ProofStateChanged, async ({ payload }: DidCommProofStateChangedEvent) => {
+      if (payload.proofRecord.state === DidCommProofState.RequestReceived) {
         await this.newProofRequestPrompt(payload.proofRecord, inquirer)
       }
     })
   }
 
   public proofAcceptedListener(participant: Participant, inquirer: ParticipantInquirerInterface) {
-    participant.agent.events.on(ProofEventTypes.ProofStateChanged, async ({ payload }: ProofStateChangedEvent) => {
-      if (payload.proofRecord.state === ProofState.Done) {
+    participant.agent.events.on(DidCommProofEventTypes.ProofStateChanged, async ({ payload }: DidCommProofStateChangedEvent) => {
+      if (payload.proofRecord.state === DidCommProofState.Done) {
         await inquirer.processAnswer()
       }
     })

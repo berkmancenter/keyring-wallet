@@ -10,7 +10,6 @@
  * 6. Immediate witness failure (.catch path → VRC issued directly)
  */
 
-import { Agent } from '@credo-ts/core'
 
 // Import stores
 import { vrcFlowStore, witnessStatusStore } from '../../../src/modules/vrc/witnessStatusStore'

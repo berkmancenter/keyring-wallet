@@ -7,13 +7,7 @@ import {
   AnonCredsRequestedPredicate,
   getAnonCredsTagsFromRecord,
 } from '@credo-ts/anoncreds'
-import {
-  ClaimFormat,
-  DifPexCredentialsForRequest,
-  DifPresentationExchangeDefinition,
-  DifPresentationExchangeDefinitionV2,
-  W3cCredentialRecord,
-} from '@credo-ts/core'
+import { ClaimFormat, DifPexCredentialsForRequest, DifPresentationExchangeDefinition, DifPresentationExchangeDefinitionV2, W3cCredentialRecord } from '@credo-ts/core'
 
 import { ProofCredentialAttributes, ProofCredentialPredicates } from '../types/proof-items'
 

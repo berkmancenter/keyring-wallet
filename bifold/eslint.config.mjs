@@ -72,6 +72,7 @@ export default [
       'no-console': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-var-requires': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
       'no-case-declarations': 'off',
     },
   },
@@ -126,10 +127,12 @@ export default [
       'jest/prefer-to-have-length': 'warn',
       'jest/valid-expect': 'error',
       '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      'react/display-name': 'off',
     },
   },
   {
-    files: ['**/app.config.js', '**/cli.js', '**/jestSetup.js'],
+    files: ['**/app.config.js', '**/cli.js', '**/jestSetup.js', '**/jestSetupAfterEnv.js'],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
     },

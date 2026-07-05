@@ -3,7 +3,6 @@ import React, { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, TouchableOpacity, View } from 'react-native'
 
-import { useTheme } from '../../../contexts/theme'
 import { Screens, Stacks, TabStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -21,7 +20,6 @@ interface QRCodeExchangeSliderProps {
 
 const QRCodeExchangeSlider: React.FC<QRCodeExchangeSliderProps> = ({ visible, onDismiss, navigation }) => {
   const { t } = useTranslation()
-  const { TextTheme } = useTheme()
 
   const goToScanScreen = useCallback(() => {
     navigation.navigate(Stacks.ConnectStack as any, { screen: Screens.Scan })

@@ -61,7 +61,7 @@ const RCardOnboarding: React.FC<RCardOnboardingProps> = ({ agent }) => {
 
   const bgColor = OnboardingTheme?.container?.backgroundColor || ColorPalette.brand.primaryBackground
 
-  const scrollToInput = useCallback((ref: React.RefObject<TextInput>) => {
+  const scrollToInput = useCallback((ref: React.RefObject<TextInput | null>) => {
     if (!ref.current || !scrollRef.current) return
     setTimeout(() => {
       ref.current?.measureLayout(

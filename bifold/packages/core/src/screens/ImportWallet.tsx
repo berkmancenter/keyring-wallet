@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons'
 import { pick, types } from 'react-native-document-picker'
 import RNFS from 'react-native-fs'
 
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { useTheme } from '../contexts/theme'
 import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
@@ -164,6 +164,7 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
       }
     } catch (err: any) {
       if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
+        // eslint-disable-next-line no-console
         console.error('Document picker error:', err)
         Alert.alert('Error', 'Failed to select file. Please try again.', [{ text: 'OK' }])
       }
@@ -210,19 +211,24 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
     setIsImporting(true)
 
     try {
-      if (!agent.config.walletConfig) {
-        throw new Error('Wallet configuration not found. Please restart the app.')
+      // Close the current store, delete it, then import from the backup file (credo 0.6 askar API)
+      if (agent.modules.askar.isStoreOpen) {
+        await agent.modules.askar.closeStore()
       }
 
-      await agent.shutdown()
-
-      if (agent.wallet.isProvisioned) {
-        await agent.wallet.delete()
+      try {
+        await agent.modules.askar.deleteStore()
+      } catch (deleteError) {
+        // Store may not exist yet; import can proceed
+        agent.config.logger.warn(`ImportWallet: deleteStore failed: ${(deleteError as Error).message}`)
       }
 
-      await agent.wallet.import(agent.config.walletConfig, {
-        path: selectedFile,
-        key: password,
+      await agent.modules.askar.importStore({
+        importFromStore: {
+          id: `import-${Date.now()}`,
+          key: password,
+          database: { type: 'sqlite', config: { path: selectedFile } },
+        },
       })
 
       const successMsg = Platform.OS === 'ios'
@@ -240,6 +246,7 @@ const ImportWallet: React.FC<ImportWalletProps> = () => {
         ]
       )
     } catch (error: any) {
+      // eslint-disable-next-line no-console
       console.error('Import wallet error:', error)
 
       let errorMessage = error?.message || String(t('Settings.ImportWalletError'))

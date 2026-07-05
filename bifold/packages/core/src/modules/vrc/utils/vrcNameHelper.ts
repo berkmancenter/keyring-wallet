@@ -1,4 +1,5 @@
-import { Agent, ConnectionRecord, W3cCredentialRecord } from '@credo-ts/core'
+import { Agent, W3cCredentialRecord } from '@credo-ts/core'
+import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
 
 /**
@@ -9,7 +10,7 @@ import { RelationshipDidRepository } from '../repositories/RelationshipDidReposi
  */
 export function extractIssuerFromCredential(credential: W3cCredentialRecord): { id: string; name?: string } | null {
   try {
-    const credentialData = credential.credential
+    const credentialData = credential.encoded
 
     if (
       credentialData &&
@@ -32,7 +33,7 @@ export function extractIssuerFromCredential(credential: W3cCredentialRecord): { 
         }
       }
     }
-  } catch (error) {
+  } catch (_error) {
     // Silently fail - caller will handle missing data
   }
 
@@ -47,7 +48,7 @@ export function extractIssuerFromCredential(credential: W3cCredentialRecord): { 
  */
 export function isVrcCredential(credential: W3cCredentialRecord): boolean {
   try {
-    const credentialData = credential.credential
+    const credentialData = credential.encoded
 
     if (
       credentialData &&
@@ -64,7 +65,7 @@ export function isVrcCredential(credential: W3cCredentialRecord): boolean {
         (type.includes('RelationshipCredential') || type.includes('DTGCredential'))
       )
     }
-  } catch (error) {
+  } catch (_error) {
     // Silently fail
   }
 
@@ -118,7 +119,7 @@ export async function getVrcNameForConnection(
       const issuer = extractIssuerFromCredential(matchingCredential)
       return issuer?.name || null
     }
-  } catch (error) {
+  } catch (_error) {
     // Silently fail - caller will use fallback name
   }
 
@@ -132,7 +133,7 @@ export async function getVrcNameForConnection(
  * @param connection - The connection record
  * @returns The cached VRC name, or null if not available
  */
-export function getVrcNameFromConnectionMetadata(connection: ConnectionRecord | undefined): string | null {
+export function getVrcNameFromConnectionMetadata(connection: DidCommConnectionRecord | undefined): string | null {
   if (!connection) {
     return null
   }
@@ -140,7 +141,7 @@ export function getVrcNameFromConnectionMetadata(connection: ConnectionRecord | 
   try {
     const vrcMetadata = connection.metadata.get('vrcName') as { name?: string } | undefined
     return vrcMetadata?.name || null
-  } catch (error) {
+  } catch (_error) {
     // Silently fail
   }
 
@@ -161,10 +162,10 @@ export async function cacheVrcNameInConnection(
   vrcName: string
 ): Promise<void> {
   try {
-    const connection = await agent.connections.getById(connectionId)
+    const connection = await agent.modules.didcomm.connections.getById(connectionId)
     await connection.metadata.set('vrcName', { name: vrcName })
     // Credo auto-persists metadata changes
-  } catch (error) {
+  } catch (_error) {
     // Silently fail - caching is optional optimization
   }
 }

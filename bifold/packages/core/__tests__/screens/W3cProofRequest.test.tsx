@@ -139,12 +139,12 @@ describe('displays a proof request screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue({
         request: { presentationExchange: { presentation_definition: testPresentationDefinition1 } },
       })
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue({
         proofFormats: { presentationExchange: difPexCredentialsForRequest },
       })
 
@@ -287,12 +287,12 @@ describe('displays a proof request screen', () => {
       }
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue({
         request: { presentationExchange: { presentation_definition: testPresentationDefinition1 } },
       })
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue({
         proofFormats: { presentationExchange: difPexCredentialsForRequest2 },
       })
 
@@ -342,12 +342,12 @@ describe('displays a proof request screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue({
         request: { presentationExchange: { presentation_definition: testPresentationDefinition1 } },
       })
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue({
         proofFormats: { presentationExchange: difPexCredentialsForRequest },
       })
 
@@ -386,12 +386,12 @@ describe('displays a proof request screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue({
         request: { presentationExchange: { presentation_definition: testPresentationDefinition1 } },
       })
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue({
         proofFormats: {
           presentationExchange: {
             requirements: [

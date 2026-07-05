@@ -53,7 +53,7 @@ export interface WitnessRecord {
  */
 export function hasHardwareAttestationEvidence(credential: W3cCredentialRecord): boolean {
   try {
-    const credentialData = credential.credential
+    const credentialData = credential.encoded
     if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
       return false
     }
@@ -94,7 +94,7 @@ export function hasVrcHardwareAttestation(
 ): boolean {
   return credentials.some((credential) => {
     try {
-      const credentialData = credential.credential
+      const credentialData = credential.encoded
       if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
         return false
       }
@@ -134,7 +134,7 @@ export function getVrcCredentialJsonForSubject(
 ): Record<string, unknown> | null {
   for (const credential of credentials) {
     try {
-      const credentialData = credential.credential
+      const credentialData = credential.encoded
       if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
         continue
       }
@@ -174,7 +174,7 @@ export function getVrcCredentialJsonForSubject(
  */
 export function hasWitnessCredentialType(credential: W3cCredentialRecord): boolean {
   try {
-    const credentialData = credential.credential
+    const credentialData = credential.encoded
 
     if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
       return false
@@ -188,7 +188,7 @@ export function hasWitnessCredentialType(credential: W3cCredentialRecord): boole
     const types = Array.isArray(typeValue) ? typeValue : [typeValue]
 
     return types.some((type) => typeof type === 'string' && type === 'WitnessCredential')
-  } catch (error) {
+  } catch (_error) {
     return false
   }
 }
@@ -216,7 +216,7 @@ export function getWitnessCredentialsForSubject(
 
     // Check if credentialSubject.id matches the subjectDid
     try {
-      const credentialData = credential.credential
+      const credentialData = credential.encoded
       if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
         return false
       }
@@ -232,7 +232,7 @@ export function getWitnessCredentialsForSubject(
 
       const subjectId = credentialSubject.id
       return subjectId === subjectDid
-    } catch (error) {
+    } catch (_error) {
       return false
     }
   })
@@ -246,7 +246,7 @@ export function getWitnessCredentialsForSubject(
  */
 export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | null {
   try {
-    const credentialData = vwc.credential
+    const credentialData = vwc.encoded
 
     if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
       return null
@@ -358,6 +358,7 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
       hardwareAttestationIncluded,
     }
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error('[WitnessUtils] Error extracting witness info:', error)
     return null
   }

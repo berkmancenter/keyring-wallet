@@ -1,14 +1,4 @@
-import {
-  Agent,
-  ClaimFormat,
-  CredentialMultiInstanceUseMode,
-  type DcqlCredentialsForRequest,
-  type DcqlQueryResult,
-  type DcqlValidCredential,
-  type DifPexCredentialsForRequest,
-  type JsonObject,
-  type MdocNameSpaces,
-} from '@credo-ts/core'
+import { Agent, ClaimFormat, CredentialMultiInstanceUseMode, type DcqlCredentialsForRequest, type DcqlQueryResult, type DcqlValidCredential, type DifPexCredentialsForRequest, type JsonObject, type MdocNameSpaces } from '@credo-ts/core'
 import { ParseInvitationResult } from '../../utils/parsers'
 import { OpenId4VPRequestRecord } from './types'
 import { getHostNameFromUrl } from './utils/utils'

@@ -10,17 +10,7 @@ import {
 } from '@credo-ts/anoncreds'
 
 import { AskarKeyManagementService, AskarModule } from '@credo-ts/askar'
-import {
-  Agent,
-  DcqlModule,
-  DidsModule,
-  JwkDidResolver,
-  KeyDidResolver,
-  Kms,
-  PeerDidResolver,
-  WebDidResolver,
-  X509Module,
-} from '@credo-ts/core'
+import { Agent, DcqlModule, DidsModule, JwkDidResolver, KeyDidResolver, Kms, PeerDidResolver, WebDidResolver, X509Module } from '@credo-ts/core'
 
 import {
   DidCommAutoAcceptCredential,

@@ -97,9 +97,7 @@ exports[`JSONDetails Screen JSONDetails Screen render render matches snapshot 1`
         accessible={true}
         collapsable={false}
         focusable={true}
-        onBlur={[Function]}
         onClick={[Function]}
-        onFocus={[Function]}
         onResponderGrant={[Function]}
         onResponderMove={[Function]}
         onResponderRelease={[Function]}
@@ -107,19 +105,12 @@ exports[`JSONDetails Screen JSONDetails Screen render render matches snapshot 1`
         onResponderTerminationRequest={[Function]}
         onStartShouldSetResponder={[Function]}
         style={
-          Array [
-            Object {
-              "overflow": "hidden",
-            },
-            Object {
-              "backgroundColor": "#42803E",
-              "borderRadius": 4,
-              "padding": 16,
-            },
-            false,
-            false,
-            false,
-          ]
+          Object {
+            "backgroundColor": "#42803E",
+            "borderRadius": 4,
+            "opacity": 1,
+            "padding": 16,
+          }
         }
         testID="com.ariesbifold:id/Share"
       >
@@ -190,9 +181,7 @@ exports[`JSONDetails Screen JSONDetails Screen render render matches snapshot 1`
         accessible={true}
         collapsable={false}
         focusable={true}
-        onBlur={[Function]}
         onClick={[Function]}
-        onFocus={[Function]}
         onResponderGrant={[Function]}
         onResponderMove={[Function]}
         onResponderRelease={[Function]}
@@ -200,20 +189,13 @@ exports[`JSONDetails Screen JSONDetails Screen render render matches snapshot 1`
         onResponderTerminationRequest={[Function]}
         onStartShouldSetResponder={[Function]}
         style={
-          Array [
-            Object {
-              "overflow": "hidden",
-            },
-            Object {
-              "borderColor": "#42803E",
-              "borderRadius": 4,
-              "borderWidth": 2,
-              "padding": 16,
-            },
-            false,
-            false,
-            false,
-          ]
+          Object {
+            "borderColor": "#42803E",
+            "borderRadius": 4,
+            "borderWidth": 2,
+            "opacity": 1,
+            "padding": 16,
+          }
         }
         testID="com.ariesbifold:id/CopyToClipboard"
       >

@@ -1,6 +1,6 @@
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
-import { CredentialPreviewAttribute } from '@credo-ts/core'
-import { useCredentialById } from '@credo-ts/react-hooks'
+import { DidCommCredentialPreviewAttribute } from '@credo-ts/didcomm'
+import { useCredentialById } from '@bifold/react-hooks'
 import { BrandingOverlay, MetaOverlay } from '@bifold/oca'
 import { Attribute, CredentialOverlay, Field } from '@bifold/oca/build/legacy'
 import { useIsFocused } from '@react-navigation/native'
@@ -12,7 +12,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../components/buttons/Button'
 import ConnectionImage from '../components/misc/ConnectionImage'
-import CredentialCard from '../components/misc/CredentialCard'
+import CredentialCard from '../components/misc/CredentialCardGen'
 import CommonRemoveModal from '../components/modals/CommonRemoveModal'
 import Record from '../components/record/Record'
 import { EventTypes } from '../constants'
@@ -203,7 +203,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
 
       try {
         // Get format data to determine credential type
-        const formatData = await agent.credentials.getFormatData(credential.id)
+        const formatData = await agent.modules.didcomm.credentials.getFormatData(credential.id)
         logger?.info(`[CredentialOffer] Format data: ${JSON.stringify(formatData, null, 2)}`)
 
         // Check if this is a JSON-LD credential (data integrity format)
@@ -395,7 +395,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
           }
 
           if (offerAttributes) {
-            credential.credentialAttributes = [...offerAttributes.map((item) => new CredentialPreviewAttribute(item))]
+            credential.credentialAttributes = [...offerAttributes.map((item) => new DidCommCredentialPreviewAttribute(item))]
           }
 
           // Resolve presentation fields for AnonCreds
@@ -446,7 +446,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
         }
         const ids = getCredentialIdentifiers(credential)
         const name =
-          overlay.metaOverlay?.name ?? (await getCredentialName(ids.credentialDefinitionId, ids.schemaId, agent))
+          overlay.metaOverlay?.name ?? (await getCredentialName(ids.credentialDefinitionId, ids.schemaId))
 
         /** Save history record for card accepted */
         const recordData: HistoryRecord = {
@@ -473,7 +473,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
       setButtonsVisible(false)
       setAcceptModalVisible(true)
 
-      await agent.credentials.acceptOffer({ credentialRecordId: credential.id })
+      await agent.modules.didcomm.credentials.acceptOffer({ credentialExchangeRecordId: credential.id })
       if (historyEventsLogger.logAttestationAccepted) {
         const type = HistoryCardType.CardAccepted
         await logHistoryRecord(type)
@@ -489,13 +489,13 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
     try {
       if (agent && credential) {
         const connectionId = credential.connectionId ?? ''
-        const connection = await agent.connections.findById(connectionId)
+        const connection = await agent.modules.didcomm.connections.findById(connectionId)
 
-        await agent.credentials.declineOffer(credential.id)
+        await agent.modules.didcomm.credentials.declineOffer({ credentialExchangeRecordId: credential.id })
 
         if (connection) {
-          await agent.credentials.sendProblemReport({
-            credentialRecordId: credential.id,
+          await agent.modules.didcomm.credentials.sendProblemReport({
+            credentialExchangeRecordId: credential.id,
             description: t('CredentialOffer.Declined'),
           })
         }

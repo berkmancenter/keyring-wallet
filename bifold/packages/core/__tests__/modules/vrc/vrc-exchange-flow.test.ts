@@ -7,15 +7,8 @@
  * The tests use mocked agents and simulate events to verify the orchestration logic.
  */
 
-import { 
-  DidExchangeState, 
-  CredentialState, 
-  CredentialRole,
-  OutOfBandRole,
-  CredentialEventTypes,
-  ConnectionEventTypes,
-} from '@credo-ts/core'
-import { BasicMessageRole } from '@credo-ts/core/build/modules/basic-messages/BasicMessageRole'
+import { DidCommConnectionEventTypes, DidCommCredentialEventTypes, DidCommCredentialRole, DidCommCredentialState, DidCommDidExchangeState, DidCommOutOfBandRole } from '@credo-ts/didcomm'
+import { DidCommBasicMessageRole as BasicMessageRole } from '@credo-ts/didcomm'
 
 describe('VRC Exchange Flow Simulation', () => {
   // Test DIDs
@@ -118,7 +111,7 @@ describe('VRC Exchange Flow Simulation', () => {
       oob: {
         findById: jest.fn().mockResolvedValue({
           id: 'oob-123',
-          role: OutOfBandRole.Sender,
+          role: DidCommOutOfBandRole.Sender,
           outOfBandInvitation: {
             goalCode: 'relationship.credential.bidirectional',
           },
@@ -158,20 +151,20 @@ describe('VRC Exchange Flow Simulation', () => {
   describe('Handler Registration', () => {
     it('should register connection state change handler', () => {
       // Simulate what setupVrcConnectionHandler does
-      mockAgent.events.on(ConnectionEventTypes.ConnectionStateChanged, async () => {
+      mockAgent.events.on(DidCommConnectionEventTypes.ConnectionStateChanged, async () => {
         handlerInvocations.connectionHandler++
       })
 
-      expect(registeredHandlers.has(ConnectionEventTypes.ConnectionStateChanged)).toBe(true)
-      expect(registeredHandlers.get(ConnectionEventTypes.ConnectionStateChanged)?.length).toBe(1)
+      expect(registeredHandlers.has(DidCommConnectionEventTypes.ConnectionStateChanged)).toBe(true)
+      expect(registeredHandlers.get(DidCommConnectionEventTypes.ConnectionStateChanged)?.length).toBe(1)
     })
 
     it('should register credential state change handler', () => {
-      mockAgent.events.on(CredentialEventTypes.CredentialStateChanged, async () => {
+      mockAgent.events.on(DidCommCredentialEventTypes.CredentialStateChanged, async () => {
         handlerInvocations.credentialRequestHandler++
       })
 
-      expect(registeredHandlers.has(CredentialEventTypes.CredentialStateChanged)).toBe(true)
+      expect(registeredHandlers.has(DidCommCredentialEventTypes.CredentialStateChanged)).toBe(true)
     })
 
     it('should register basic message handler', () => {
@@ -191,16 +184,16 @@ describe('VRC Exchange Flow Simulation', () => {
 
     it('should detect when multiple credential handlers are registered', () => {
       // First handler (from setupVrcConnectionHandler)
-      mockAgent.events.on(CredentialEventTypes.CredentialStateChanged, async () => {
+      mockAgent.events.on(DidCommCredentialEventTypes.CredentialStateChanged, async () => {
         handlerInvocations.credentialRequestHandler++
       })
 
       // Second handler (from setupAutoIssueRelationshipCredential) - BUG!
-      mockAgent.events.on(CredentialEventTypes.CredentialStateChanged, async () => {
+      mockAgent.events.on(DidCommCredentialEventTypes.CredentialStateChanged, async () => {
         handlerInvocations.credentialRequestHandler++
       })
 
-      const handlers = registeredHandlers.get(CredentialEventTypes.CredentialStateChanged)
+      const handlers = registeredHandlers.get(DidCommCredentialEventTypes.CredentialStateChanged)
       
       // This is the bug - 2 handlers for same event
       expect(handlers?.length).toBe(2)
@@ -208,19 +201,19 @@ describe('VRC Exchange Flow Simulation', () => {
 
     it('should show duplicate invocations when event fires with multiple handlers', async () => {
       // Register two handlers (simulating the bug)
-      mockAgent.events.on(CredentialEventTypes.CredentialStateChanged, async () => {
+      mockAgent.events.on(DidCommCredentialEventTypes.CredentialStateChanged, async () => {
         handlerInvocations.credentialRequestHandler++
       })
-      mockAgent.events.on(CredentialEventTypes.CredentialStateChanged, async () => {
+      mockAgent.events.on(DidCommCredentialEventTypes.CredentialStateChanged, async () => {
         handlerInvocations.credentialRequestHandler++
       })
 
       // Emit one event
-      await emitEvent(CredentialEventTypes.CredentialStateChanged, {
+      await emitEvent(DidCommCredentialEventTypes.CredentialStateChanged, {
         credentialRecord: {
           id: 'cred-123',
-          state: CredentialState.RequestReceived,
-          role: CredentialRole.Issuer,
+          state: DidCommCredentialState.RequestReceived,
+          role: DidCommCredentialRole.Issuer,
           connectionId: 'connection-123',
         },
       })
@@ -258,21 +251,21 @@ describe('VRC Exchange Flow Simulation', () => {
       // Handler that tracks credential offers
       const credentialHandler = async ({ payload }: any) => {
         const record = payload.credentialRecord
-        if (record?.state === CredentialState.RequestReceived && record?.role === CredentialRole.Issuer) {
+        if (record?.state === DidCommCredentialState.RequestReceived && record?.role === DidCommCredentialRole.Issuer) {
           credentialOfferCount++
         }
       }
 
       // Register handler twice (simulating the bug)
-      registerHandler(CredentialEventTypes.CredentialStateChanged, credentialHandler)
-      registerHandler(CredentialEventTypes.CredentialStateChanged, credentialHandler)
+      registerHandler(DidCommCredentialEventTypes.CredentialStateChanged, credentialHandler)
+      registerHandler(DidCommCredentialEventTypes.CredentialStateChanged, credentialHandler)
 
       // Simulate credential request received
-      await emitToHandlers(CredentialEventTypes.CredentialStateChanged, {
+      await emitToHandlers(DidCommCredentialEventTypes.CredentialStateChanged, {
         credentialRecord: {
           id: 'cred-exchange-123',
-          state: CredentialState.RequestReceived,
-          role: CredentialRole.Issuer,
+          state: DidCommCredentialState.RequestReceived,
+          role: DidCommCredentialRole.Issuer,
           connectionId: 'connection-123',
         },
       })
@@ -308,20 +301,20 @@ describe('VRC Exchange Flow Simulation', () => {
       // Connection handler also triggers issuance setup
       const connectionHandler = async ({ payload }: any) => {
         const state = payload.connectionRecord?.state
-        if (state === DidExchangeState.Completed) {
+        if (state === DidCommDidExchangeState.Completed) {
           issuanceAttempts++
         }
       }
 
       registerHandler('BasicMessageStateChanged', messageHandler)
-      registerHandler(ConnectionEventTypes.ConnectionStateChanged, connectionHandler)
+      registerHandler(DidCommConnectionEventTypes.ConnectionStateChanged, connectionHandler)
 
       // Simulate both events firing close together (race condition)
       await Promise.all([
-        emitToHandlers(ConnectionEventTypes.ConnectionStateChanged, {
+        emitToHandlers(DidCommConnectionEventTypes.ConnectionStateChanged, {
           connectionRecord: {
             id: 'connection-123',
-            state: DidExchangeState.Completed,
+            state: DidCommDidExchangeState.Completed,
             outOfBandId: 'oob-123',
             theirDid: walletB.connectionDid,
           },
@@ -350,15 +343,15 @@ describe('VRC Exchange Flow Simulation', () => {
       let invocationCount = 0
 
       // Single handler (correct behavior)
-      mockAgent.events.on(CredentialEventTypes.CredentialStateChanged, async () => {
+      mockAgent.events.on(DidCommCredentialEventTypes.CredentialStateChanged, async () => {
         invocationCount++
       })
 
-      await emitEvent(CredentialEventTypes.CredentialStateChanged, {
+      await emitEvent(DidCommCredentialEventTypes.CredentialStateChanged, {
         credentialRecord: {
           id: 'cred-123',
-          state: CredentialState.RequestReceived,
-          role: CredentialRole.Issuer,
+          state: DidCommCredentialState.RequestReceived,
+          role: DidCommCredentialRole.Issuer,
           connectionId: 'connection-123',
         },
       })
@@ -394,15 +387,15 @@ describe('VRC Exchange Flow Simulation', () => {
       }
 
       // Register twice (simulating bug)
-      registerHandler(CredentialEventTypes.CredentialStateChanged, deduplicatedHandler)
-      registerHandler(CredentialEventTypes.CredentialStateChanged, deduplicatedHandler)
+      registerHandler(DidCommCredentialEventTypes.CredentialStateChanged, deduplicatedHandler)
+      registerHandler(DidCommCredentialEventTypes.CredentialStateChanged, deduplicatedHandler)
 
       // Emit event
-      await emitToHandlers(CredentialEventTypes.CredentialStateChanged, {
+      await emitToHandlers(DidCommCredentialEventTypes.CredentialStateChanged, {
         credentialRecord: {
           id: 'cred-123',
-          state: CredentialState.RequestReceived,
-          role: CredentialRole.Issuer,
+          state: DidCommCredentialState.RequestReceived,
+          role: DidCommCredentialRole.Issuer,
           connectionId: 'connection-123',
         },
       })
@@ -443,7 +436,7 @@ describe('VRC Exchange Flow Simulation', () => {
         if (!connId || processedConnections.has(connId)) return
         processedConnections.add(connId)
         
-        if (payload.connectionRecord?.state === DidExchangeState.Completed) {
+        if (payload.connectionRecord?.state === DidCommDidExchangeState.Completed) {
           flowLog.push(`1. Connection completed: ${connId}`)
           flowLog.push(`2. Creating relationship DID`)
           flowLog.push(`3. Sending relationshipDid message`)
@@ -469,26 +462,26 @@ describe('VRC Exchange Flow Simulation', () => {
         if (processedCredentials.has(key)) return
         processedCredentials.add(key)
 
-        if (state === CredentialState.OfferSent) {
+        if (state === DidCommCredentialState.OfferSent) {
           flowLog.push(`6. Credential offer sent`)
-        } else if (state === CredentialState.RequestReceived) {
+        } else if (state === DidCommCredentialState.RequestReceived) {
           flowLog.push(`7. Credential request received`)
           flowLog.push(`8. Auto-accepting request`)
-        } else if (state === CredentialState.Done) {
+        } else if (state === DidCommCredentialState.Done) {
           flowLog.push(`9. Credential exchange complete`)
         }
       }
 
       // Register handlers
-      registerHandler(ConnectionEventTypes.ConnectionStateChanged, connectionHandler)
+      registerHandler(DidCommConnectionEventTypes.ConnectionStateChanged, connectionHandler)
       registerHandler('BasicMessageStateChanged', messageHandler)
-      registerHandler(CredentialEventTypes.CredentialStateChanged, credentialHandler)
+      registerHandler(DidCommCredentialEventTypes.CredentialStateChanged, credentialHandler)
 
       // Simulate the flow
-      await emitToHandlers(ConnectionEventTypes.ConnectionStateChanged, {
+      await emitToHandlers(DidCommConnectionEventTypes.ConnectionStateChanged, {
         connectionRecord: {
           id: 'connection-123',
-          state: DidExchangeState.Completed,
+          state: DidCommDidExchangeState.Completed,
           outOfBandId: 'oob-123',
           theirDid: walletB.connectionDid,
         },
@@ -503,29 +496,29 @@ describe('VRC Exchange Flow Simulation', () => {
         },
       })
 
-      await emitToHandlers(CredentialEventTypes.CredentialStateChanged, {
+      await emitToHandlers(DidCommCredentialEventTypes.CredentialStateChanged, {
         credentialRecord: {
           id: 'cred-123',
-          state: CredentialState.OfferSent,
-          role: CredentialRole.Issuer,
+          state: DidCommCredentialState.OfferSent,
+          role: DidCommCredentialRole.Issuer,
           connectionId: 'connection-123',
         },
       })
 
-      await emitToHandlers(CredentialEventTypes.CredentialStateChanged, {
+      await emitToHandlers(DidCommCredentialEventTypes.CredentialStateChanged, {
         credentialRecord: {
           id: 'cred-123',
-          state: CredentialState.RequestReceived,
-          role: CredentialRole.Issuer,
+          state: DidCommCredentialState.RequestReceived,
+          role: DidCommCredentialRole.Issuer,
           connectionId: 'connection-123',
         },
       })
 
-      await emitToHandlers(CredentialEventTypes.CredentialStateChanged, {
+      await emitToHandlers(DidCommCredentialEventTypes.CredentialStateChanged, {
         credentialRecord: {
           id: 'cred-123',
-          state: CredentialState.Done,
-          role: CredentialRole.Issuer,
+          state: DidCommCredentialState.Done,
+          role: DidCommCredentialRole.Issuer,
           connectionId: 'connection-123',
         },
       })

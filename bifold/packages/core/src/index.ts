@@ -294,7 +294,6 @@ export {
   ContentGradient,
   contexts,
   createApp,
-  CredentialCard,
   contactOfferTourSteps,
   contactsTourSteps,
   credentialOfferTourSteps,

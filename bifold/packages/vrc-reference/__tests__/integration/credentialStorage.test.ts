@@ -25,7 +25,7 @@ describe('Credential Storage Integration', () => {
       // List stored credentials (should not throw)
       await alice.listStoredCredentials()
 
-      const storedCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const storedCredentials = await alice.agent.w3cCredentials.getAll()
       expect(storedCredentials.length).toBeGreaterThan(0)
     }, 45000)
   })

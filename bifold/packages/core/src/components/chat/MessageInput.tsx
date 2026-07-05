@@ -29,7 +29,7 @@ export const renderInputToolbar = (props: any, _theme: any) => (
   />
 )
 
-export const renderComposer = (props: any, theme: any, placeholder: string) => (
+export const renderComposer = (props: any, theme: any, placeholder: string, disabled?: boolean) => (
   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
     <Icon 
       name="message-text-outline" 
@@ -51,7 +51,7 @@ export const renderComposer = (props: any, theme: any, placeholder: string) => (
     }}
     placeholder={placeholder}
       placeholderTextColor="#888888"
-    textInputProps={{ accessibilityLabel: '', maxFontSizeMultiplier: 1.2 }}
+    textInputProps={{ accessibilityLabel: '', maxFontSizeMultiplier: 1.2, editable: !disabled }}
   />
   </View>
 )

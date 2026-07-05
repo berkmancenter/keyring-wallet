@@ -1,7 +1,7 @@
 import { Bob } from '../../src/Bob'
 import { RELATIONSHIP_CONTEXT_URL } from '../../src/relationshipContext'
 import { createMockConnectionRecord, generateTestDid, cleanupAgent } from '../helpers/testUtils'
-import { AutoAcceptCredential } from '@credo-ts/core'
+import { DidCommAutoAcceptCredential as AutoAcceptCredential } from '@credo-ts/didcomm'
 
 // Mock the BaseAgent to prevent real initialization
 jest.mock('../../src/BaseAgent', () => {
@@ -68,7 +68,7 @@ describe('Bob (Participant)', () => {
         sendMessage: jest.fn(),
       },
       w3cCredentials: {
-        getAllCredentialRecords: jest.fn(),
+        getAll: jest.fn(),
       },
       events: {
         on: jest.fn(),
@@ -78,6 +78,16 @@ describe('Bob (Participant)', () => {
 
     // Create Bob (which is now Participant) and assign mock agent
     bob = new Bob(9001, 'test-bob')
+    // credo 0.6: didcomm APIs live under agent.modules.didcomm - alias the same mocks there
+    mockAgent.modules = {
+      didcomm: {
+        connections: mockAgent.connections,
+        oob: mockAgent.oob,
+        credentials: mockAgent.credentials,
+        proofs: mockAgent.proofs,
+        basicMessages: mockAgent.basicMessages,
+      },
+    }
     bob.agent = mockAgent
   })
 

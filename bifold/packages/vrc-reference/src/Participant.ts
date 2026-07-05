@@ -1,28 +1,8 @@
 import type BottomBar from 'inquirer/lib/ui/bottom-bar'
 
-import {
-  AutoAcceptCredential,
-  BasicMessageEventTypes,
-  ClaimFormat,
-  ConnectionEventTypes,
-  CredentialEventTypes,
-  CredentialRole,
-  CredentialState,
-  JsonTransformer,
-  KeyType,
-  PeerDidNumAlgo,
-  utils,
-  W3cCredential,
-  W3cCredentialRecord,
-  W3cPresentation,
-  type BasicMessageStateChangedEvent,
-  type ConnectionRecord,
-  type ConnectionStateChangedEvent,
-  type CredentialExchangeRecord,
-  type CredentialStateChangedEvent,
-  type ProofExchangeRecord,
-} from '@credo-ts/core'
-import { BasicMessageRole } from '@credo-ts/core/build/modules/basic-messages/BasicMessageRole'
+import { ClaimFormat, JsonTransformer, PeerDidNumAlgo, utils, W3cCredential, W3cCredentialRecord, W3cPresentation } from '@credo-ts/core'
+import { DidCommAutoAcceptCredential, DidCommBasicMessageEventTypes, DidCommBasicMessageStateChangedEvent, DidCommConnectionEventTypes, DidCommConnectionRecord, DidCommConnectionStateChangedEvent, DidCommCredentialEventTypes, DidCommCredentialExchangeRecord, DidCommCredentialRole, DidCommCredentialState, DidCommCredentialStateChangedEvent, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
+import { DidCommBasicMessageRole as BasicMessageRole } from '@credo-ts/didcomm'
 import { ui } from 'inquirer'
 
 import { BaseAgent } from './BaseAgent'
@@ -129,10 +109,12 @@ export class Participant extends BaseAgent {
    * Internal method that performs the actual DID creation
    */
   private async _createDIDForConnectionInternal(connectionId: string): Promise<ConnectionDIDData> {
-    const key = await this.agent.wallet.createKey({ keyType: KeyType.Ed25519 })
     const didResult = await this.agent.dids.create({
       method: 'peer',
-      options: { numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc, key },
+      options: {
+        numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
+        createKey: { type: { kty: 'OKP', crv: 'Ed25519' } },
+      },
     })
 
     if (didResult.didState?.state !== 'finished' || !didResult.didState.did || !didResult.didState.didDocument) {
@@ -209,7 +191,7 @@ export class Participant extends BaseAgent {
    * Create an out-of-band connection invitation
    */
   public async createConnectionInvitation(): Promise<string> {
-    const outOfBand = await this.agent.oob.createInvitation()
+    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation()
     this.outOfBandId = outOfBand.id
 
     const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
@@ -226,12 +208,12 @@ export class Participant extends BaseAgent {
    * Accept an incoming connection invitation and create an R-DID for this relationship
    */
   public async acceptConnection(invitationUrl: string): Promise<string> {
-    const { connectionRecord } = await this.agent.oob.receiveInvitationFromUrl(invitationUrl)
+    const { connectionRecord } = await this.agent.modules.didcomm.oob.receiveInvitationFromUrl(invitationUrl, { label: this.name })
     if (!connectionRecord) {
       throw new Error(redText(Output.NoConnectionRecordFromOutOfBand))
     }
 
-    const connectedRecord = await this.agent.connections.returnWhenIsConnected(connectionRecord.id)
+    const connectedRecord = await this.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
     this.connected = true
     this.connectionRecordId = connectionRecord.id
 
@@ -254,7 +236,7 @@ export class Participant extends BaseAgent {
     const isWitnessAgent = peerNameLower === 'witness' || peerNameLower.startsWith('witness-')
     if (!isWitnessAgent) {
       try {
-        await this.agent.basicMessages.sendMessage(connectionRecord.id, JSON.stringify({ rDid: didData.did }))
+        await this.agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, JSON.stringify({ rDid: didData.did }))
         console.log(greenText(`[${this.name}] ✓ Shared R-DID with ${peerName}`))
         console.log(purpleText(`    ${didData.did}`))
       } catch (error) {
@@ -289,17 +271,17 @@ export class Participant extends BaseAgent {
     console.log(`[${this.name}] Waiting for peer to connect...`)
 
     const getConnectionRecord = (outOfBandId: string) =>
-      new Promise<ConnectionRecord>((resolve, reject) => {
+      new Promise<DidCommConnectionRecord>((resolve, reject) => {
         const timeoutId = setTimeout(() => reject(new Error(redText(Output.MissingConnectionRecord))), 60000)
 
-        this.agent.events.on<ConnectionStateChangedEvent>(ConnectionEventTypes.ConnectionStateChanged, (e) => {
+        this.agent.events.on<DidCommConnectionStateChangedEvent>(DidCommConnectionEventTypes.DidCommConnectionStateChanged, (e) => {
           if (e.payload.connectionRecord.outOfBandId !== outOfBandId) return
 
           clearTimeout(timeoutId)
           resolve(e.payload.connectionRecord)
         })
 
-        void this.agent.connections.findAllByOutOfBandId(outOfBandId).then(([connectionRecord]) => {
+        void this.agent.modules.didcomm.connections.findAllByOutOfBandId(outOfBandId).then(([connectionRecord]) => {
           if (connectionRecord) {
             clearTimeout(timeoutId)
             resolve(connectionRecord)
@@ -310,7 +292,7 @@ export class Participant extends BaseAgent {
     const connectionRecord = await getConnectionRecord(this.outOfBandId)
 
     try {
-      const connectedRecord = await this.agent.connections.returnWhenIsConnected(connectionRecord.id)
+      const connectedRecord = await this.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
       this.connected = true
       this.connectionRecordId = connectionRecord.id
 
@@ -329,7 +311,7 @@ export class Participant extends BaseAgent {
       const peerName = connectedRecord.theirLabel?.toLowerCase() || ''
       if (!peerName.includes('witness')) {
         try {
-          await this.agent.basicMessages.sendMessage(connectionRecord.id, JSON.stringify({ rDid: didData.did }))
+          await this.agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, JSON.stringify({ rDid: didData.did }))
           console.log(greenText(`[${this.name}] ✓ Shared R-DID with ${connectedRecord.theirLabel || 'peer'}`))
         } catch {
           // Message sending might fail, continue anyway
@@ -345,10 +327,10 @@ export class Participant extends BaseAgent {
   /**
    * Get the current connection record
    */
-  private async getConnectionRecord(): Promise<ConnectionRecord> {
+  private async getConnectionRecord(): Promise<DidCommConnectionRecord> {
     // First try by connectionRecordId
     if (this.connectionRecordId) {
-      return await this.agent.connections.getById(this.connectionRecordId)
+      return await this.agent.modules.didcomm.connections.getById(this.connectionRecordId)
     }
 
     // Fall back to outOfBandId
@@ -356,7 +338,7 @@ export class Participant extends BaseAgent {
       throw Error(redText(Output.MissingConnectionRecord))
     }
 
-    const [connection] = await this.agent.connections.findAllByOutOfBandId(this.outOfBandId)
+    const [connection] = await this.agent.modules.didcomm.connections.findAllByOutOfBandId(this.outOfBandId)
     if (!connection) {
       throw Error(redText(Output.MissingConnectionRecord))
     }
@@ -372,8 +354,8 @@ export class Participant extends BaseAgent {
    * or through other means (e.g., tests manually waiting for connections).
    */
   private registerConnectionCompleteHandler() {
-    this.agent.events.on<ConnectionStateChangedEvent>(
-      ConnectionEventTypes.ConnectionStateChanged,
+    this.agent.events.on<DidCommConnectionStateChangedEvent>(
+      DidCommConnectionEventTypes.DidCommConnectionStateChanged,
       async ({ payload }) => {
         const record = payload.connectionRecord
         
@@ -396,7 +378,7 @@ export class Participant extends BaseAgent {
             const isWitnessAgent = peerName === 'witness' || peerName.startsWith('witness-')
             if (!isWitnessAgent) {
               try {
-                await this.agent.basicMessages.sendMessage(record.id, JSON.stringify({ rDid: didData.did }))
+                await this.agent.modules.didcomm.basicMessages.sendMessage(record.id, JSON.stringify({ rDid: didData.did }))
                 console.log(greenText(`[${this.name}] ✓ Shared R-DID with ${record.theirLabel || 'peer'}`))
               } catch (error) {
                 console.log(redText(`[${this.name}] Failed to share R-DID: ${(error as Error).message}`))
@@ -418,8 +400,8 @@ export class Participant extends BaseAgent {
    * Register handler to receive counterparty DIDs and session challenges via basic messages
    */
   private registerBasicMessageHandler() {
-    this.agent.events.on<BasicMessageStateChangedEvent>(
-      BasicMessageEventTypes.BasicMessageStateChanged,
+    this.agent.events.on<DidCommBasicMessageStateChangedEvent>(
+      DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged,
       async ({ payload }) => {
         const record = payload.basicMessageRecord
 
@@ -432,7 +414,7 @@ export class Participant extends BaseAgent {
           // Handle counterparty's R-DID
           if (parsed.rDid && record.connectionId) {
             this.counterpartyRDidByConnection.set(record.connectionId, parsed.rDid)
-            const connection = await this.agent.connections.findById(record.connectionId)
+            const connection = await this.agent.modules.didcomm.connections.findById(record.connectionId)
             const peerName = connection?.theirLabel || 'peer'
             console.log(greenText(`[${this.name}] ✓ Received R-DID from ${peerName}`))
             console.log(purpleText(`    ${parsed.rDid}`))
@@ -564,10 +546,10 @@ export class Participant extends BaseAgent {
     this.printCredentialPreview(credential)
     this.ui.updateBottomBar('\nSending credential offer...\n')
 
-    await this.agent.credentials.offerCredential({
+    await this.agent.modules.didcomm.credentials.offerCredential({
       connectionId: connectionRecord.id,
       protocolVersion: 'v2',
-      autoAcceptCredential: AutoAcceptCredential.Never,
+      autoAcceptCredential: DidCommAutoAcceptCredential.Never,
       credentialFormats: {
         jsonld: {
           credential,
@@ -593,14 +575,14 @@ export class Participant extends BaseAgent {
    * Auto-issue credentials when we receive a request (as issuer)
    */
   private registerCredentialAutoIssuance() {
-    this.agent.events.on<CredentialStateChangedEvent>(
-      CredentialEventTypes.CredentialStateChanged,
+    this.agent.events.on<DidCommCredentialStateChangedEvent>(
+      DidCommCredentialEventTypes.DidCommCredentialStateChanged,
       async ({ payload }) => {
-        const record = payload.credentialRecord as CredentialExchangeRecord
+        const record = payload.credentialExchangeRecord as DidCommCredentialExchangeRecord
 
         // Auto-issue when we receive a credential request (as issuer)
-        if (record.state !== CredentialState.RequestReceived) return
-        if (record.role !== CredentialRole.Issuer) return
+        if (record.state !== DidCommCredentialState.RequestReceived) return
+        if (record.role !== DidCommCredentialRole.Issuer) return
 
         try {
           // Get DID for this connection
@@ -614,8 +596,8 @@ export class Participant extends BaseAgent {
             didData = await this.createDIDForConnection(connectionId)
           }
 
-          await this.agent.credentials.acceptRequest({
-            credentialRecordId: record.id,
+          await this.agent.modules.didcomm.credentials.acceptRequest({
+            credentialExchangeRecordId: record.id,
             credentialFormats: {
               jsonld: {
                 verificationMethod: didData.verificationMethodId,
@@ -639,9 +621,9 @@ export class Participant extends BaseAgent {
   /**
    * Accept a specific credential offer
    */
-  public async acceptCredentialOffer(credentialRecord: CredentialExchangeRecord): Promise<void> {
-    await this.agent.credentials.acceptOffer({
-      credentialRecordId: credentialRecord.id,
+  public async acceptCredentialOffer(credentialRecord: DidCommCredentialExchangeRecord): Promise<void> {
+    await this.agent.modules.didcomm.credentials.acceptOffer({
+      credentialExchangeRecordId: credentialRecord.id,
     })
     console.log(greenText(`[${this.name}] ✓ Credential offer accepted`))
   }
@@ -651,8 +633,8 @@ export class Participant extends BaseAgent {
    * Returns the number of credentials accepted
    */
   public async acceptPendingCredentialOffers(): Promise<number> {
-    const allCredentials = await this.agent.credentials.getAll()
-    const pendingOffers = allCredentials.filter((record) => record.state === CredentialState.OfferReceived)
+    const allCredentials = await this.agent.modules.didcomm.credentials.getAll()
+    const pendingOffers = allCredentials.filter((record) => record.state === DidCommCredentialState.OfferReceived)
 
     if (pendingOffers.length === 0) {
       console.log(greenText(`[${this.name}] No pending credential offers to accept`))
@@ -663,8 +645,8 @@ export class Participant extends BaseAgent {
 
     for (const offer of pendingOffers) {
       try {
-        await this.agent.credentials.acceptOffer({
-          credentialRecordId: offer.id,
+        await this.agent.modules.didcomm.credentials.acceptOffer({
+          credentialExchangeRecordId: offer.id,
         })
         console.log(greenText(`[${this.name}] ✓ Accepted credential offer ${offer.id}`))
       } catch (error) {
@@ -713,7 +695,7 @@ export class Participant extends BaseAgent {
     const connectionRecord = await this.getConnectionRecord()
     this.ui.updateBottomBar('\nRequesting proof...\n')
 
-    await this.agent.proofs.requestProof({
+    await this.agent.modules.didcomm.proofs.requestProof({
       protocolVersion: 'v2',
       connectionId: connectionRecord.id,
       proofFormats: {
@@ -730,13 +712,13 @@ export class Participant extends BaseAgent {
   /**
    * Accept a proof request
    */
-  public async acceptProofRequest(proofRecord: ProofExchangeRecord): Promise<void> {
-    const requestedCredentials = await this.agent.proofs.selectCredentialsForRequest({
-      proofRecordId: proofRecord.id,
+  public async acceptProofRequest(proofRecord: DidCommProofExchangeRecord): Promise<void> {
+    const requestedCredentials = await this.agent.modules.didcomm.proofs.selectCredentialsForRequest({
+      proofExchangeRecordId: proofRecord.id,
     })
 
-    await this.agent.proofs.acceptRequest({
-      proofRecordId: proofRecord.id,
+    await this.agent.modules.didcomm.proofs.acceptRequest({
+      proofExchangeRecordId: proofRecord.id,
       proofFormats: requestedCredentials.proofFormats,
     })
     console.log(greenText('\nProof request accepted!\n'))
@@ -818,7 +800,7 @@ export class Participant extends BaseAgent {
       presentation: vpJson,
     })
 
-    await this.agent.basicMessages.sendMessage(witnessConnectionId, submissionMessage)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(witnessConnectionId, submissionMessage)
     console.log(greenText(`\n[${this.name}] ✓ Submitted VP to Witness\n`))
 
     return { vrc: vrcJson, vp: vpJson }
@@ -854,17 +836,17 @@ export class Participant extends BaseAgent {
    */
   public async sendMessage(message: string): Promise<void> {
     const connectionRecord = await this.getConnectionRecord()
-    await this.agent.basicMessages.sendMessage(connectionRecord.id, message)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, message)
   }
 
   /**
    * List all stored credentials
    */
   public async listStoredCredentials(): Promise<void> {
-    const allRecords = await this.agent.w3cCredentials.getAllCredentialRecords()
+    const allRecords = await this.agent.w3cCredentials.getAll()
 
     // Filter out records that don't contain an in-memory credential
-    const credentialRecords = allRecords.filter((record) => Boolean(record.credential))
+    const credentialRecords = allRecords.filter((record) => Boolean(record.encoded))
 
     if (credentialRecords.length === 0) {
       console.log(redText('\nNo stored JSON-LD credentials yet.\n'))
@@ -880,9 +862,9 @@ export class Participant extends BaseAgent {
     console.log(greenText(`\nStored credentials (${sortedRecords.length}):\n`))
 
     sortedRecords.forEach((record: W3cCredentialRecord, index: number) => {
-      if (!record.credential) return
+      if (!record.encoded) return
 
-      const credentialJson = JsonTransformer.toJSON(record.credential) as Record<string, unknown>
+      const credentialJson = record.encoded as Record<string, unknown>
       const summary = buildCredentialSummaryFromCredential(credentialJson)
 
       const details = [

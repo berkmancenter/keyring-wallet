@@ -193,87 +193,19 @@ exports[`Onboarding Screen Renders correctly 1`] = `
   </RCTScrollView>
   <View
     style={
-      Object {
-        "alignItems": "center",
-        "flexDirection": "row",
-        "flexShrink": 1,
-        "marginBottom": 30,
-      }
+      Array [
+        Object {
+          "alignItems": "center",
+          "flexDirection": "row",
+          "flexShrink": 1,
+          "marginBottom": 12,
+        },
+        Object {
+          "justifyContent": "center",
+        },
+      ]
     }
   >
-    <View
-      accessibilityElementsHidden={true}
-      accessibilityLabel="Global.Back"
-      accessibilityRole="button"
-      accessibilityState={
-        Object {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        Object {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      hitSlop={
-        Object {
-          "bottom": 44,
-          "left": 44,
-          "right": 44,
-          "top": 44,
-        }
-      }
-      importantForAccessibility="no-hide-descendants"
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
-      style={
-        Object {
-          "opacity": 1,
-        }
-      }
-      testID="com.ariesbifold:id/Back"
-    >
-      <Text
-        maxFontSizeMultiplier={2}
-        style={
-          Array [
-            Object {
-              "color": "#FFFFFF",
-              "fontSize": 18,
-              "fontWeight": "normal",
-            },
-            Array [
-              Object {
-                "color": "#42803E",
-                "fontSize": 18,
-                "fontWeight": "bold",
-              },
-              Object {
-                "color": "transparent",
-                "paddingRight": 20,
-              },
-            ],
-          ]
-        }
-      >
-        Back
-      </Text>
-    </View>
     <View
       style={
         Array [
@@ -297,8 +229,6 @@ exports[`Onboarding Screen Renders correctly 1`] = `
             "backgroundColor": "rgba(66, 128, 62, 1)",
             "borderColor": "#42803E",
             "borderRadius": 5,
-            "borderStyle": "solid",
-            "borderWidth": 1,
             "height": 10,
             "marginHorizontal": 5,
             "opacity": 1,
@@ -318,8 +248,6 @@ exports[`Onboarding Screen Renders correctly 1`] = `
             "backgroundColor": "rgba(255, 255, 255, 1)",
             "borderColor": "#42803E",
             "borderRadius": 5,
-            "borderStyle": "solid",
-            "borderWidth": 1,
             "height": 10,
             "marginHorizontal": 5,
             "opacity": 1,
@@ -332,79 +260,6 @@ exports[`Onboarding Screen Renders correctly 1`] = `
           }
         }
       />
-    </View>
-    <View
-      accessibilityElementsHidden={false}
-      accessibilityLabel="Global.Next"
-      accessibilityRole="button"
-      accessibilityState={
-        Object {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        Object {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      hitSlop={
-        Object {
-          "bottom": 44,
-          "left": 44,
-          "right": 44,
-          "top": 44,
-        }
-      }
-      importantForAccessibility="auto"
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
-      style={
-        Object {
-          "opacity": 1,
-        }
-      }
-      testID="com.ariesbifold:id/Next"
-    >
-      <Text
-        maxFontSizeMultiplier={2}
-        style={
-          Array [
-            Object {
-              "color": "#FFFFFF",
-              "fontSize": 18,
-              "fontWeight": "normal",
-            },
-            Array [
-              Object {
-                "color": "#42803E",
-                "fontSize": 18,
-                "fontWeight": "bold",
-              },
-              Object {
-                "color": "#42803E",
-                "paddingLeft": 20,
-              },
-            ],
-          ]
-        }
-      >
-        Next
-      </Text>
     </View>
   </View>
 </RNCSafeAreaView>

@@ -135,14 +135,14 @@ const WitnessChoiceModal: React.FC<WitnessChoiceModalProps> = ({
 
               {/* Message */}
               <ThemedText style={styles.message}>
-                The witness <ThemedText style={styles.witnessNameHighlight}>"{witnessName}"</ThemedText> is no longer discoverable on the local network.
+                The witness <ThemedText style={styles.witnessNameHighlight}>&quot;{witnessName}&quot;</ThemedText> is no longer discoverable on the local network.
               </ThemedText>
 
               {/* Info note */}
               <View style={styles.infoNote}>
                 <Icon name="info-outline" size={20} color={ColorPalette.notification.infoIcon || '#1976D2'} />
                 <ThemedText style={styles.infoNoteText}>
-                  This may mean you've moved away from the witness location, or the witness has gone offline.
+                  This may mean you&apos;ve moved away from the witness location, or the witness has gone offline.
                 </ThemedText>
               </View>
             </View>

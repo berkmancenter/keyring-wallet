@@ -241,10 +241,10 @@ describe('displays a proof request screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue(testProofFormatData)
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue(testProofFormatData)
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials)
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials)
 
       const { getByText, getByTestId, queryByText } = render(
         <BasicAppContext>
@@ -379,10 +379,10 @@ describe('displays a proof request screen', () => {
       }
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue(testProofFormatData)
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue(testProofFormatData)
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials2)
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials2)
 
       const navigation = useNavigation()
 
@@ -426,10 +426,10 @@ describe('displays a proof request screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue(testProofFormatData)
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue(testProofFormatData)
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue({
         proofFormats: {
           indy: {
             attributes: {
@@ -460,10 +460,10 @@ describe('displays a proof request screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue(testProofFormatData)
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue(testProofFormatData)
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue({
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue({
         proofFormats: {
           indy: {
             attributes: testRetrievedCredentials.proofFormats.indy.attributes,
@@ -505,10 +505,10 @@ describe('displays a proof request screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue(testProofFormatData)
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue(testProofFormatData)
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials)
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials)
 
       const customState = {
         ...testDefaultState,
@@ -570,10 +570,10 @@ describe('displays a proof request screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue(testProofFormatData)
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue(testProofFormatData)
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials)
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials)
 
       const customState = {
         ...testDefaultState,

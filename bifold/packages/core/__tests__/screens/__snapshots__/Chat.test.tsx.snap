@@ -18,6 +18,7 @@ exports[`Chat Screen Renders correctly 1`] = `
   }
 >
   <View
+    onLayout={[Function]}
     style={
       Object {
         "backgroundColor": "#F5F5F5",
@@ -33,40 +34,48 @@ exports[`Chat Screen Renders correctly 1`] = `
       }
     >
       <View
-        onLayout={[Function]}
         style={
-          Array [
-            Object {
-              "flex": 1,
-            },
-            Object {
-              "overflow": "hidden",
-            },
-          ]
+          Object {
+            "flex": 1,
+          }
         }
-        testID="GC_WRAPPER"
       >
         <View
-          behavior="translate-with-padding"
-          keyboardVerticalOffset={100}
+          onLayout={[Function]}
           style={
-            Object {
-              "flex": 1,
-            }
+            Array [
+              Object {
+                "flex": 1,
+              },
+              Object {
+                "overflow": "hidden",
+              },
+            ]
           }
+          testID="GC_WRAPPER"
         >
           <View
+            behavior="translate-with-padding"
+            keyboardVerticalOffset={0}
             style={
-              Array [
-                Object {
-                  "flex": 1,
-                },
-                Object {
-                  "opacity": 0,
-                },
-              ]
+              Object {
+                "flex": 1,
+              }
             }
-          />
+          >
+            <View
+              style={
+                Array [
+                  Object {
+                    "flex": 1,
+                  },
+                  Object {
+                    "opacity": 0,
+                  },
+                ]
+              }
+            />
+          </View>
         </View>
       </View>
     </View>

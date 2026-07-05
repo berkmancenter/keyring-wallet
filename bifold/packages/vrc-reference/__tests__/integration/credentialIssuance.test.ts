@@ -39,12 +39,12 @@ describe('Credential Issuance Integration', () => {
       // Wait for credential to be issued and stored
       // This can take longer due to cryptographic signing and storage operations
       await waitForCondition(async () => {
-        const records = await alice.agent.w3cCredentials.getAllCredentialRecords()
+        const records = await alice.agent.w3cCredentials.getAll()
         return records.some((r) => r.credential !== null)
       }, 15000)
 
       // Verify credential is stored
-      const storedCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const storedCredentials = await alice.agent.w3cCredentials.getAll()
       const storedCredential = storedCredentials.find((r) => r.credential !== null)
 
       expect(storedCredential).toBeDefined()
@@ -82,7 +82,7 @@ describe('Credential Issuance Integration', () => {
       }
 
       // Verify no W3C credential was stored
-      const storedCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const storedCredentials = await alice.agent.w3cCredentials.getAll()
       const credentialFromThisOffer = storedCredentials.find(
         (c) => c.createdAt && c.createdAt >= offerRecord!.createdAt
       )

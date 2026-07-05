@@ -2,7 +2,7 @@ import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState, useMemo } from 'react'
 import { StyleSheet, View, TouchableOpacity, ScrollView } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { useTranslation } from 'react-i18next'
 
@@ -56,20 +56,25 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     let cancelled = false
     const verify = async () => {
       try {
+        // eslint-disable-next-line no-console
         console.log(`[VRC:Badge] ContactDetails: verifying HW attestation for issuer=${contact.issuer.id}`)
         const rawCred = getVrcCredentialJsonForSubject(w3cCredentialRecords, contact.issuer.id)
         if (!rawCred) {
+          // eslint-disable-next-line no-console
           console.log(`[VRC:Badge] ContactDetails: no raw credential found for issuer`)
           if (!cancelled) setHwVerified(false)
           return
         }
+        // eslint-disable-next-line no-console
         console.log(`[VRC:Badge] ContactDetails: raw credential keys: ${Object.keys(rawCred).sort().join(', ')}`)
         const result = await verifyVrcHardwareEvidence(rawCred as any)
+        // eslint-disable-next-line no-console
         console.log(`[VRC:Badge] ContactDetails: verification result valid=${result?.valid}, error=${result?.error ?? 'none'}`)
         if (!cancelled) {
           setHwVerified(result?.valid === true)
         }
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.log(`[VRC:Badge] ContactDetails: verification exception: ${e}`)
         if (!cancelled) setHwVerified(false)
       }
@@ -90,6 +95,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           setConnectionId(record.connectionId)
         }
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.warn('[VRC:ContactDetails] Connection lookup error:', error instanceof Error ? error.message : String(error))
       }
     }

@@ -222,7 +222,7 @@ export class TlsManager {
     try {
       const fs = require('fs')
       fs.chmodSync(this.keyPath, 0o600)
-    } catch (error) {
+    } catch (_error) {
       // Ignore on Windows or if chmod fails
     }
 

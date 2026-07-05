@@ -134,8 +134,9 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
 
   const navigateToContactDetails = () => {
     if (credential?.connectionId) {
+      // Keyring's ContactDetails expects a full contact object, so route to Chat by connection id instead
       navigation.navigate(Stacks.ContactStack, {
-        screen: Screens.ContactDetails,
+        screen: Screens.Chat,
         params: { connectionId: credential.connectionId },
       })
     }

@@ -1,11 +1,6 @@
 import React, { PropsWithChildren } from 'react'
 import { renderHook, waitFor } from '@testing-library/react-native'
-import {
-  ClaimFormat,
-  MdocRecord,
-  SdJwtVcRecord,
-  W3cCredentialRecord,
-} from '@credo-ts/core'
+import { ClaimFormat, MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
 
 import {
   OpenIDCredentialRecordProvider,
@@ -155,7 +150,8 @@ describe('OpenIDCredentialRecordProvider', () => {
 
     await waitFor(() => {
       expect(result.current.openIdState.isLoading).toBe(false)
-      expect(result.current.openIdState.w3cCredentialRecords.map((record) => record.id)).toEqual(['w3c-jwt'])
+      // Keyring accepts both OpenID4VC JwtVc and DIDComm JSON-LD (LdpVc) credentials
+      expect(result.current.openIdState.w3cCredentialRecords.map((record) => record.id)).toEqual(['w3c-jwt', 'w3c-ldp'])
       expect(result.current.openIdState.sdJwtVcRecords.map((record) => record.id)).toEqual(['sd-jwt'])
     })
 

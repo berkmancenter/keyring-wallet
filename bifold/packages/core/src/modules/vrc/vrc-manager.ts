@@ -1,18 +1,19 @@
+import { Agent, PeerDidNumAlgo } from '@credo-ts/core'
 import {
-  Agent,
-  ConnectionRecord,
-  KeyType,
-  PeerDidNumAlgo,
-  CredentialEventTypes,
-  CredentialRole,
-  ConnectionEventTypes,
-  DidExchangeState,
-  OutOfBandRole,
-  BasicMessageRecord,
-  CredentialState,
-} from '@credo-ts/core'
-import type { ConnectionStateChangedEvent, CredentialStateChangedEvent } from '@credo-ts/core'
-import { BasicMessageRole } from '@credo-ts/core/build/modules/basic-messages/BasicMessageRole'
+  DidCommBasicMessageRecord,
+  DidCommBasicMessageRole,
+  DidCommConnectionEventTypes,
+  DidCommConnectionRecord,
+  DidCommCredentialEventTypes,
+  DidCommCredentialRole,
+  DidCommCredentialState,
+  DidCommDidExchangeState,
+  DidCommOutOfBandRole,
+} from '@credo-ts/didcomm'
+import type {
+  DidCommConnectionStateChangedEvent as ConnectionStateChangedEvent,
+  DidCommCredentialStateChangedEvent as CredentialStateChangedEvent,
+} from '@credo-ts/didcomm'
 
 import { domain, LocalStorageKeys } from '../../constants'
 import { PersistentStorage } from '../../services/storage'
@@ -98,7 +99,7 @@ export async function validateRelationshipCredential(
 
   try {
     // Get the connection to find theirDid
-    const connection = await agent.connections.getById(connectionId)
+    const connection = await agent.modules.didcomm.connections.getById(connectionId)
     if (!connection.theirDid) {
       return {
         isValid: false,
@@ -299,7 +300,7 @@ export async function getOrCreateRelationshipDid(
     method: 'peer',
     options: {
       numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
-      keyType: KeyType.Ed25519,
+      createKey: { type: { kty: 'OKP', crv: 'Ed25519' } },
     },
   })
 
@@ -329,7 +330,7 @@ export async function setRelationshipDidOnConnection(
   connectionId: string,
   relationshipDid: string
 ): Promise<void> {
-  const connection = await agent.connections.getById(connectionId)
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
   await connection.metadata.set('relationshipDid', { did: relationshipDid })
   // Note: Credo auto-persists metadata changes, no explicit update needed
 }
@@ -345,7 +346,7 @@ export async function setRelationshipDidOnConnection(
  */
 async function issueVrcCredential(
   agent: Agent,
-  connectionRecord: ConnectionRecord,
+  connectionRecord: DidCommConnectionRecord,
   myRelationshipDid: string,
   counterpartyRelationshipDid: string,
   preparedCredential?: any,
@@ -451,7 +452,7 @@ async function issueVrcCredential(
   logger.info(`Step 4: Offering credential [connection=${connectionRecord.id}]`)
 
   try {
-    await agent.credentials.offerCredential({
+    await agent.modules.didcomm.credentials.offerCredential({
       connectionId: connectionRecord.id,
       protocolVersion: 'v2',
       credentialFormats: {
@@ -864,7 +865,7 @@ async function handleSessionChallenge(
             logger.info(`User chose to proceed without witness for ${vrcData.connectionId}`)
             
             try {
-              const connection = await agent.connections.getById(vrcData.connectionId)
+              const connection = await agent.modules.didcomm.connections.getById(vrcData.connectionId)
               const pendingIssuance = pendingVrcIssuanceAfterWitness.get(vrcData.connectionId)
               pendingVrcIssuanceAfterWitness.delete(vrcData.connectionId)
               
@@ -912,10 +913,10 @@ export function setupVrcConnectionHandler(agent: Agent) {
 
   // Set up basic message handler to receive relationshipDid from counterparty AND witness protocol messages
   agent.events.on('BasicMessageStateChanged' as any, async ({ payload }: any) => {
-    const record = payload.basicMessageRecord as BasicMessageRecord
+    const record = payload.basicMessageRecord as DidCommBasicMessageRecord
 
     // Only process received messages
-    if (record.role !== BasicMessageRole.Receiver) return
+    if (record.role !== DidCommBasicMessageRole.Receiver) return
 
     const content = record.content
 
@@ -1059,7 +1060,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
                   pendingVrcIssuanceAfterWitness.delete(pendingVrc.connectionId)
                   witnessLogger.info(`User chose to proceed without witness (${errorCode}) for ${pendingVrc.connectionId}`)
                   try {
-                    const connection = await agent.connections.getById(pendingVrc.connectionId)
+                    const connection = await agent.modules.didcomm.connections.getById(pendingVrc.connectionId)
                     vrcFlowStore.setStatus(pendingVrc.connectionId, 'preparing-offer', false)
                     await issueVrcCredential(
                       agent,
@@ -1116,7 +1117,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
 
             vrcFlowStore.setStatus(connId, 'preparing-offer', false)
             try {
-              const connection = await agent.connections.getById(connId)
+              const connection = await agent.modules.didcomm.connections.getById(connId)
               await issueVrcCredential(
                 agent, connection,
                 pendingIssuance.myRelationshipDid,
@@ -1165,7 +1166,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
         // Unknown witness message type - log and continue to normal processing
         witnessLogger.debug(`Unknown witness message type: ${parsed.type} - allowing normal processing`)
       }
-    } catch (error) {
+    } catch (_error) {
       // Not a JSON message, continue to VRC relationshipDid handling
     }
 
@@ -1188,7 +1189,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
     // Store in persistent repository using counterpartyConnectionDid as key
     if (record.connectionId) {
       try {
-        const connection = await agent.connections.getById(record.connectionId)
+        const connection = await agent.modules.didcomm.connections.getById(record.connectionId)
         const counterpartyConnectionDid = connection.theirDid
 
         if (!counterpartyConnectionDid) {
@@ -1211,13 +1212,13 @@ export function setupVrcConnectionHandler(agent: Agent) {
         // This handles the case where the message arrives after the connection handler has already timed out
         const outOfBandId = connection.outOfBandId
         if (outOfBandId) {
-          const outOfBandRecord = await agent.oob.findById(outOfBandId)
+          const outOfBandRecord = await agent.modules.didcomm.oob.findById(outOfBandId)
           if (!outOfBandRecord) return
 
           const goalCode = outOfBandRecord.outOfBandInvitation?.goalCode
           const isBidirectional = goalCode === 'relationship.credential.bidirectional'
           const isUnidirectional = goalCode === 'relationship.credential'
-          const side = outOfBandRecord.role === OutOfBandRole.Sender ? 'INVITER' : 'RECEIVER'
+          const side = outOfBandRecord.role === DidCommOutOfBandRole.Sender ? 'INVITER' : 'RECEIVER'
 
           // Respect mode flag:
           // - Bidirectional: Both sides issue in parallel
@@ -1562,16 +1563,16 @@ export function setupVrcConnectionHandler(agent: Agent) {
   })
 
   // Set up global credential state change listener for both logging and request handling
-  agent.events.on(CredentialEventTypes.CredentialStateChanged, async ({ payload }: CredentialStateChangedEvent) => {
-    const record = payload.credentialRecord
+  agent.events.on(DidCommCredentialEventTypes.DidCommCredentialStateChanged, async ({ payload }: CredentialStateChangedEvent) => {
+    const record = payload.credentialExchangeRecord
 
     // Auto-accept WitnessCredentials (user already initiated witness flow)
     // RelationshipCredentials remain manual (user should consciously accept contact)
-    if (record.state === CredentialState.OfferReceived && record.role === CredentialRole.Holder) {
+    if (record.state === DidCommCredentialState.OfferReceived && record.role === DidCommCredentialRole.Holder) {
       try {
         const vwcAutoLogger = createVrcLogger(agent, { module: 'vrc', component: 'VWCAutoAccept' })
 
-        const formatData = await agent.credentials.getFormatData(record.id)
+        const formatData = await agent.modules.didcomm.credentials.getFormatData(record.id)
 
         // Check for JSON-LD credential (includes WitnessCredentials)
         const offer = formatData?.offer as any
@@ -1587,8 +1588,8 @@ export function setupVrcConnectionHandler(agent: Agent) {
             if (types.includes('WitnessCredential')) {
               vwcAutoLogger.info(`✓ Auto-accepting WitnessCredential offer: ${record.id}`)
 
-              await agent.credentials.acceptOffer({
-                credentialRecordId: record.id,
+              await agent.modules.didcomm.credentials.acceptOffer({
+                credentialExchangeRecordId: record.id,
               })
 
               vwcAutoLogger.info(`✓ WitnessCredential offer accepted automatically`)
@@ -1603,13 +1604,13 @@ export function setupVrcConnectionHandler(agent: Agent) {
     }
 
     // Route WitnessCredentials to display in counterparty's chat
-    if (record.state === CredentialState.Done && record.role === CredentialRole.Holder) {
+    if (record.state === DidCommCredentialState.Done && record.role === DidCommCredentialRole.Holder) {
       try {
         const vwcLogger = createVrcLogger(agent, { module: 'vrc', component: 'VWCRouting' })
         vwcLogger.debug(`Credential done | Exchange: ${record.id} | Credentials: ${record.credentials.length}`)
 
         // Find the W3C credential reference in the exchange record
-        const w3cCredRef = record.credentials.find((c) => c.credentialRecordType === 'w3c')
+        const w3cCredRef = record.credentials.find((c: { credentialRecordType: string; credentialRecordId: string }) => c.credentialRecordType === 'w3c')
 
         if (!w3cCredRef) {
           vwcLogger.debug(`Not a W3C credential, skipping routing check`)
@@ -1619,15 +1620,15 @@ export function setupVrcConnectionHandler(agent: Agent) {
         vwcLogger.debug(`Found W3C credential reference: ${w3cCredRef.credentialRecordId}`)
 
         // Get the actual W3C credential record using the credentialRecordId
-        const w3cRecords = await agent.w3cCredentials.getAllCredentialRecords()
+        const w3cRecords = await agent.w3cCredentials.getAll()
         const w3cRecord = w3cRecords.find((r) => r.id === w3cCredRef.credentialRecordId)
 
-        if (!w3cRecord?.credential) {
+        if (!w3cRecord?.encoded) {
           vwcLogger.warn(`W3C credential record not found: ${w3cCredRef.credentialRecordId}`)
           return
         }
 
-        const credential = w3cRecord.credential as any
+        const credential = w3cRecord.encoded as any
         const types = credential.type || []
         vwcLogger.debug(`Credential types: ${types.join(', ')}`)
 
@@ -1690,7 +1691,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
                 vwcLogger.info(`  Has prepared credential: ${!!pendingIssuance.credential}`)
                 try {
                   // Get the connection record
-                  const connection = await agent.connections.getById(relationshipRecord.connectionId)
+                  const connection = await agent.modules.didcomm.connections.getById(relationshipRecord.connectionId)
                   
                   // Issue the VRC now that witness is complete
                   // Pass the prepared credential (with evidence) to avoid asking for biometrics twice
@@ -1731,10 +1732,10 @@ export function setupVrcConnectionHandler(agent: Agent) {
     if (!record.connectionId) return
 
     try {
-      const connection = await agent.connections.getById(record.connectionId)
+      const connection = await agent.modules.didcomm.connections.getById(record.connectionId)
       if (!connection.outOfBandId) return
 
-      const outOfBandRecord = await agent.oob.findById(connection.outOfBandId)
+      const outOfBandRecord = await agent.modules.didcomm.oob.findById(connection.outOfBandId)
       if (!outOfBandRecord) return
 
       const goalCode = outOfBandRecord.outOfBandInvitation?.goalCode
@@ -1744,7 +1745,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
       if (!isVrcConnection) return
 
       // Determine side based on role
-      const side = record.role === CredentialRole.Holder ? 'RECEIVER' : 'INVITER'
+      const side = record.role === DidCommCredentialRole.Holder ? 'RECEIVER' : 'INVITER'
       const credLogger = createVrcLogger(agent, { module: 'vrc', side, component: 'CredentialStateHandler' })
 
       credLogger.info(
@@ -1756,7 +1757,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
       // Manual acceptance would cause duplicate issue-credential messages.
 
       // Log specific state transitions and track exchange progress for overlay
-      if (record.state === CredentialState.OfferReceived && record.role === CredentialRole.Holder) {
+      if (record.state === DidCommCredentialState.OfferReceived && record.role === DidCommCredentialRole.Holder) {
         credLogger.info(`Credential offer received for connection ${record.connectionId}`)
         credLogger.debug(`Credential exchange record ID: ${record.id}`)
         if (record.connectionId) {
@@ -1774,7 +1775,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
             vrcFlowStore.setStatus(record.connectionId, 'offer-received', vrcFlowStore.isWitnessedFlow(record.connectionId))
           }
         }
-      } else if (record.state === CredentialState.OfferSent && record.role === CredentialRole.Issuer) {
+      } else if (record.state === DidCommCredentialState.OfferSent && record.role === DidCommCredentialRole.Issuer) {
         credLogger.info(`Credential offer sent for connection ${record.connectionId}`)
         credLogger.debug(`Credential exchange record ID: ${record.id}`)
         if (record.connectionId) {
@@ -1782,36 +1783,36 @@ export function setupVrcConnectionHandler(agent: Agent) {
           credLogger.info(`[VRC Flow] Setting 'offer-sent' | Previous status: ${currentStatus}`)
           vrcFlowStore.setStatus(record.connectionId, 'offer-sent', vrcFlowStore.isWitnessedFlow(record.connectionId))
         }
-      } else if (record.state === CredentialState.RequestSent && record.role === CredentialRole.Holder) {
+      } else if (record.state === DidCommCredentialState.RequestSent && record.role === DidCommCredentialRole.Holder) {
         credLogger.info(`Credential request sent for exchange ${record.id}`)
-      } else if (record.state === CredentialState.CredentialReceived && record.role === CredentialRole.Holder) {
+      } else if (record.state === DidCommCredentialState.CredentialReceived && record.role === DidCommCredentialRole.Holder) {
         credLogger.info(`Credential received for exchange ${record.id}`)
-      } else if (record.state === CredentialState.Done && record.role === CredentialRole.Holder) {
+      } else if (record.state === DidCommCredentialState.Done && record.role === DidCommCredentialRole.Holder) {
         credLogger.info(`✓ Credential exchange completed successfully for exchange ${record.id}`)
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently ignore - this is just logging
     }
   })
 
-  agent.events.on(ConnectionEventTypes.ConnectionStateChanged, async ({ payload }: ConnectionStateChangedEvent) => {
+  agent.events.on(DidCommConnectionEventTypes.DidCommConnectionStateChanged, async ({ payload }: ConnectionStateChangedEvent) => {
     const { connectionRecord } = payload
 
     // Set 'connecting' status at early DID exchange states for VRC connections
     // This enables the overlay to show "Establishing connection..." from the very beginning
     const earlyStates = [
-      DidExchangeState.InvitationReceived,
-      DidExchangeState.RequestSent,
-      DidExchangeState.RequestReceived,
-      DidExchangeState.ResponseSent,
-      DidExchangeState.ResponseReceived,
+      DidCommDidExchangeState.InvitationReceived,
+      DidCommDidExchangeState.RequestSent,
+      DidCommDidExchangeState.RequestReceived,
+      DidCommDidExchangeState.ResponseSent,
+      DidCommDidExchangeState.ResponseReceived,
     ]
     
-    if (earlyStates.includes(connectionRecord.state as DidExchangeState)) {
+    if (earlyStates.includes(connectionRecord.state as DidCommDidExchangeState)) {
       // Check if this is a VRC connection (not a witness connection)
       if (connectionRecord.outOfBandId) {
         try {
-          const outOfBandRecord = await agent.oob.findById(connectionRecord.outOfBandId)
+          const outOfBandRecord = await agent.modules.didcomm.oob.findById(connectionRecord.outOfBandId)
           if (outOfBandRecord) {
             const goalCode = outOfBandRecord.outOfBandInvitation?.goalCode
             const isVrcConnection =
@@ -1837,14 +1838,14 @@ export function setupVrcConnectionHandler(agent: Agent) {
     }
 
     // Only handle completed connections for the main VRC flow
-    const isCompleted = connectionRecord.state === DidExchangeState.Completed
+    const isCompleted = connectionRecord.state === DidCommDidExchangeState.Completed
     if (!isCompleted) return
 
     // Check if this is a VRC connection by fetching the OOB record
     if (!connectionRecord.outOfBandId) return
 
     try {
-      const outOfBandRecord = await agent.oob.findById(connectionRecord.outOfBandId)
+      const outOfBandRecord = await agent.modules.didcomm.oob.findById(connectionRecord.outOfBandId)
       if (!outOfBandRecord) return
 
       const goalCode = outOfBandRecord.outOfBandInvitation?.goalCode
@@ -1854,7 +1855,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
       if (!isVrcConnection) return
 
       // Determine side: If we created the OOB invitation, we're INVITER; otherwise RECEIVER
-      const side = outOfBandRecord.role === OutOfBandRole.Sender ? 'INVITER' : 'RECEIVER'
+      const side = outOfBandRecord.role === DidCommOutOfBandRole.Sender ? 'INVITER' : 'RECEIVER'
       const logger = createVrcLogger(agent, { module: 'vrc', side, component: 'ConnectionHandler' })
 
       logger.info(`Connection completed: ${connectionRecord.id}`)
@@ -1905,7 +1906,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          await agent.basicMessages.sendMessage(connectionRecord.id, message)
+          await agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, message)
           sent = true
           break
         } catch (sendError) {
@@ -1960,7 +1961,7 @@ export const createRelationshipInvitation = async (
   const goalCode = mode === 'bidirectional' ? 'relationship.credential.bidirectional' : 'relationship.credential'
   agent.config.logger.info(`[VRC] Creating out-of-band invitation with goalCode: ${goalCode}`)
 
-  const record = await agent.oob.createInvitation({
+  const record = await agent.modules.didcomm.oob.createInvitation({
     label: walletName,
     goalCode,
     goal:

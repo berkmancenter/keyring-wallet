@@ -1,11 +1,11 @@
-import { BasicMessageRepository, ConnectionRecord } from '@credo-ts/core'
-import { useAgent, useBasicMessagesByConnectionId, useConnectionById } from '@credo-ts/react-hooks'
+import { DidCommBasicMessageRepository, DidCommConnectionRecord } from '@credo-ts/didcomm'
+import { useAgent, useBasicMessagesByConnectionId, useConnectionById } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { useHeaderHeight } from '@react-navigation/elements'
 import { StackNavigationProp, StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GiftedChat, IMessage, Message } from 'react-native-gifted-chat'
+import { GiftedChat, IMessage, MessageProps } from 'react-native-gifted-chat'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import InfoIcon from '../modules/vrc/components/InfoIcon'
@@ -14,7 +14,7 @@ import InfoIcon from '../modules/vrc/components/InfoIcon'
 import { renderComposer, renderInputToolbar, renderSend } from '../components/chat'
 import ActionSlider from '../components/chat/ActionSlider'
 import { renderActions } from '../components/chat/ChatActions'
-import { ChatMessage } from '../components/chat/ChatMessage'
+import { ChatMessage, ExtendedChatMessage } from '../components/chat/ChatMessage'
 import { useNetwork } from '../contexts/network'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
@@ -92,7 +92,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation<StackNavigationProp<RootStackParams | ContactStackParams>>()
-  const connection = useConnectionById(connectionId) as ConnectionRecord
+  const connection = useConnectionById(connectionId) as DidCommConnectionRecord
   const basicMessages = useBasicMessagesByConnectionId(connectionId)
   const chatMessages = useChatMessagesByConnection(connection)
   const _isFocused = useIsFocused()
@@ -131,7 +131,8 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
       const meta = msg.metadata.get(BasicMessageMetadata.customMetadata) as basicMessageCustomMetadata
       if (agent && !meta?.seen) {
         msg.metadata.set(BasicMessageMetadata.customMetadata, { ...meta, seen: true })
-        const basicMessageRepository = agent.context.dependencyManager.resolve(BasicMessageRepository)
+        const basicMessageRepository: DidCommBasicMessageRepository =
+          agent.context.dependencyManager.resolve(DidCommBasicMessageRepository)
         basicMessageRepository.update(agent.context, msg)
       }
     })
@@ -139,7 +140,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
 
   const onSend = useCallback(
     async (messages: IMessage[]) => {
-      await agent?.basicMessages.sendMessage(connectionId, messages[0].text)
+      await agent?.modules.didcomm.basicMessages.sendMessage(connectionId, messages[0].text)
     },
     [agent, connectionId]
   )
@@ -170,7 +171,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     setShowActionSlider(false)
   }, [])
 
-  const renderMessage = useCallback((props: React.ComponentProps<typeof Message>) => {
+  const renderMessage = useCallback((props: MessageProps<ExtendedChatMessage>) => {
     return <ChatMessage messageProps={props} />
   }, [])
 
@@ -183,25 +184,25 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         behavior={Platform.OS === 'ios' ? undefined : 'padding'}
         keyboardVerticalOffset={headerHeight}
       >
-        <GiftedChat
-          keyboardShouldPersistTaps={'handled'}
+        <GiftedChat<ExtendedChatMessage>
           messages={chatMessages}
-          showAvatarForEveryMessage={true}
-          alignTop
+          isAvatarVisibleForEveryMessage={true}
           renderAvatar={() => null}
           messageIdGenerator={(msg) => msg?._id.toString() || '0'}
           renderMessage={renderMessage}
           renderInputToolbar={(props) => renderInputToolbar(props, theme)}
           renderSend={(props) => renderSend(props, theme)}
-          renderComposer={(props) => renderComposer(props, theme, t('Contacts.TypeHere'))}
-          disableComposer={!silentAssertConnectedNetwork() || vrcFlowInProgress}
+          renderComposer={(props) =>
+            renderComposer(props, theme, t('Contacts.TypeHere'), !silentAssertConnectedNetwork() || vrcFlowInProgress)
+          }
           onSend={onSend}
           user={{
             _id: Role.me,
           }}
           renderActions={(props) => renderActions(props, theme, actions)}
           onPressActionButton={actions ? () => setShowActionSlider(true) : undefined}
-          listViewProps={{
+          listProps={{
+            keyboardShouldPersistTaps: 'handled',
             style: { backgroundColor: '#F5F5F5' },
           }}
         />

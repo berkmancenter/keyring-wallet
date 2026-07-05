@@ -25,16 +25,28 @@ export const buildRCardTemplateW3cCredentialRecord = (rCardTemplate: RCardTempla
       label: rCardTemplate.label,
       jcard: rCardTemplate.jcard,
     },
+    // Placeholder proof: credo 0.6 validates stored credentials as W3cJsonLdVerifiableCredential,
+    // which requires a proof. The template is unsigned; a real proof is created when the
+    // credential is signed at exchange time.
+    proof: {
+      type: 'Ed25519Signature2018',
+      created: rCardTemplate.issuanceDate || new Date().toISOString(),
+      proofPurpose: 'assertionMethod',
+      verificationMethod: 'urn:aries:bifold:r-card#template',
+      jws: 'template-placeholder',
+    },
   }
 
   const w3cCredential = JsonTransformer.fromJSON(w3cCredentialJson, W3cCredential)
   const record = new W3cCredentialRecord({
-    credential: w3cCredential as any,
-    tags: {
-      type: 'RCardTemplate',
-      isSelfIssued: 'true',
-      templateId: rCardTemplate.templateId,
-    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    credentialInstances: [{ credential: w3cCredential as any }],
+  })
+  // Custom tags (credo 0.6 restricts the typed constructor tags to expandedTypes)
+  record.setTags({
+    type: 'RCardTemplate',
+    isSelfIssued: 'true',
+    templateId: rCardTemplate.templateId,
   })
 
   return record
@@ -44,7 +56,8 @@ export const buildRCardTemplateW3cCredentialRecord = (rCardTemplate: RCardTempla
  * Converts W3cCredentialRecord back to RCardTemplate format (with jCard)
  */
 export const extractRCardTemplateFromW3cRecord = (record: W3cCredentialRecord): RCardTemplate => {
-  const w3cCred = record.credential as W3cCredential | any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w3cCred = record.encoded as W3cCredential | any
 
   const contexts = w3cCred.contexts || w3cCred.context || w3cCred['@context'] || []
   const rawSubject = w3cCred.credentialSubject
@@ -148,7 +161,7 @@ export const deleteRCardTemplate = async (agent: Agent): Promise<void> => {
     })
 
     for (const record of records) {
-      await agent.w3cCredentials.removeCredentialRecord(record.id)
+      await agent.w3cCredentials.deleteById(record.id)
     }
     logger.info('deleteRCardTemplate: Successfully completed deletion', { recordCount: records.length })
   } catch (error) {

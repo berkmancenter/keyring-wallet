@@ -20,6 +20,7 @@ const FauxHeader: React.FC<FauxHeaderProps> = ({ title, onBackPressed = () => {}
   const GradientBg = GradientTheme?.HeaderBackground
   const styles = StyleSheet.create({
     header: {
+      ...NavigationTheme.header,
       backgroundColor: GradientBg ? 'transparent' : NavigationTheme.colors.primary,
       elevation: 0,
       shadowOffset: { width: 0, height: 6 },
@@ -31,7 +32,6 @@ const FauxHeader: React.FC<FauxHeaderProps> = ({ title, onBackPressed = () => {}
       flexDirection: 'row',
       alignItems: 'stretch',
       minHeight: Platform.OS === 'ios' ? 44 : 56,
-      ...NavigationTheme.header
     },
     gradientBg: {
       ...StyleSheet.absoluteFillObject,

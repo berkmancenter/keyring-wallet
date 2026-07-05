@@ -353,7 +353,7 @@ const WitnessConnections: React.FC = () => {
       <ThemedText style={styles.emptyTitle}>No Witness Connections</ThemedText>
       <ThemedText style={styles.emptySubtext}>
         To connect to a witness, scan their QR code or tap their invitation link. Witness connections work
-        just like regular contacts — you'll be added here automatically.
+        just like regular contacts — you&apos;ll be added here automatically.
       </ThemedText>
     </View>
   )

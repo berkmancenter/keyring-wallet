@@ -209,6 +209,7 @@ export class MainContainer implements Container {
       let onboarding = defaultState.onboarding
       let witness = defaultState.witness
 
+      // eslint-disable-next-line no-console
       console.log('[DEBUG] Loading state - defaultState.witness:', JSON.stringify(defaultState.witness))
 
       await Promise.all([
@@ -222,11 +223,13 @@ export class MainContainer implements Container {
         loadState<ToursState>(LocalStorageKeys.Tours, (val) => (tours = val)),
         loadState<StoreOnboardingState>(LocalStorageKeys.Onboarding, (val) => (onboarding = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
+          // eslint-disable-next-line no-console
           console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
         }),
       ])
 
+      // eslint-disable-next-line no-console
       console.log('[DEBUG] Final witness value before dispatch:', JSON.stringify(witness))
 
       const state = {
@@ -239,6 +242,7 @@ export class MainContainer implements Container {
         witness: { ...defaultState.witness, ...witness },
       } as State
 
+      // eslint-disable-next-line no-console
       console.log('[DEBUG] State being dispatched - witness:', JSON.stringify(state.witness))
 
       dispatch({ type: DispatchAction.STATE_DISPATCH, payload: [state] })

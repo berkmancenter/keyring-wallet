@@ -61,7 +61,7 @@ const PINCreate: React.FC<PINCreateProps> = ({ setAuthenticated, explainedStatus
 
   const [explained, setExplained] = useState(explainedStatus || showPINExplainer === false)
   const { PINValidations, validatePINEntry, inlineMessageField1, inlineMessageField2, modalState, PINSecurity } =
-    usePINValidation(PIN, PINTwo)
+    usePINValidation(PIN)
   usePreventScreenCapture(preventScreenCapture)
 
   const bgColor = OnboardingTheme?.container?.backgroundColor || ColorPalette.brand.primaryBackground

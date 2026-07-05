@@ -200,7 +200,7 @@ const QRScanner: React.FC<Props> = ({
     if (!defaultToConnect || showTabs) return
 
     const connected =
-      record?.state === DidExchangeState.Completed || record?.state === DidExchangeState.ResponseSent
+      record?.state === DidCommDidExchangeState.Completed || record?.state === DidCommDidExchangeState.ResponseSent
 
     if (connected && record?.id) {
       navigation.getParent()?.navigate(Stacks.ContactStack, {

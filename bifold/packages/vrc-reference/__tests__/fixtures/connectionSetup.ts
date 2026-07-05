@@ -116,7 +116,7 @@ export async function issueAndReceiveCredential(alice: Alice, bob: Bob): Promise
   // Wait for credential to be issued and stored
   // This can take longer due to cryptographic signing and storage operations
   await waitForCondition(async () => {
-    const records = await alice.agent.w3cCredentials.getAllCredentialRecords()
+    const records = await alice.agent.w3cCredentials.getAll()
     return records.some((r) => r.credential !== null)
   }, 20000)
 }

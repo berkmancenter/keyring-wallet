@@ -56,7 +56,7 @@ describe('Proof Exchange Integration', () => {
       const bobProofRecords = await bob.agent.proofs.getAll()
       const receivedPresentation = bobProofRecords.find((r) => r.state === 'presentation-received')
       expect(receivedPresentation).toBeDefined()
-      await bob.agent.proofs.acceptPresentation({ proofRecordId: receivedPresentation!.id })
+      await bob.agent.proofs.acceptPresentation({ proofExchangeRecordId: receivedPresentation!.id })
 
       // Wait for proof exchange to complete (state='done' on Alice's side)
       await waitForCondition(async () => {
@@ -99,7 +99,7 @@ describe('Proof Exchange Integration', () => {
 
       // Select credentials
       const selectedCredentials = await alice.agent.proofs.selectCredentialsForRequest({
-        proofRecordId: proofRequest!.id,
+        proofExchangeRecordId: proofRequest!.id,
       })
 
       expect(selectedCredentials).toBeDefined()
@@ -129,7 +129,7 @@ describe('Proof Exchange Integration', () => {
       const bobProofRecords = await bob.agent.proofs.getAll()
       const receivedPresentation = bobProofRecords.find((r) => r.state === 'presentation-received')
       expect(receivedPresentation).toBeDefined()
-      await bob.agent.proofs.acceptPresentation({ proofRecordId: receivedPresentation!.id })
+      await bob.agent.proofs.acceptPresentation({ proofExchangeRecordId: receivedPresentation!.id })
 
       // Wait for proof exchange to complete
       await waitForCondition(async () => {
@@ -220,7 +220,7 @@ describe('Proof Exchange Integration', () => {
   describe('Error Handling', () => {
     it('should handle proof request without credentials', async () => {
       // Remove all credentials from Alice
-      const allCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const allCredentials = await alice.agent.w3cCredentials.getAll()
       for (const cred of allCredentials) {
         await alice.agent.w3cCredentials.removeCredentialRecord(cred.id)
       }
@@ -238,7 +238,7 @@ describe('Proof Exchange Integration', () => {
       // Try to select credentials - should throw an error when no credentials match
       await expect(
         alice.agent.proofs.selectCredentialsForRequest({
-          proofRecordId: proofRequest!.id,
+          proofExchangeRecordId: proofRequest!.id,
         })
       ).rejects.toThrow()
 

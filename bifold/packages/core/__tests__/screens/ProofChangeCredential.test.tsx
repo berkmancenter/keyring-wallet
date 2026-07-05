@@ -251,10 +251,10 @@ describe('ProofChangeCredential Screen', () => {
       const { agent } = useAgent()
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getFormatData.mockResolvedValue(testProofFormatData)
+      agent?.modules.didcomm.proofs.getFormatData.mockResolvedValue(testProofFormatData)
 
       // @ts-expect-error this method will be replaced with a mock which does have this method
-      agent?.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials2)
+      agent?.modules.didcomm.proofs.getCredentialsForRequest.mockResolvedValue(testRetrievedCredentials2)
 
       const navigation = useNavigation()
 

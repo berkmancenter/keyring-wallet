@@ -8,7 +8,8 @@
  * for more reliable and maintainable reconnection logic.
  */
 
-import { Agent, ConnectionRecord, DidExchangeState, OutOfBandRecord, OutOfBandRole } from '@credo-ts/core'
+import { Agent } from '@credo-ts/core'
+import { DidCommConnectionRecord, DidCommDidExchangeState, DidCommOutOfBandRecord, DidCommOutOfBandRole } from '@credo-ts/didcomm'
 
 import { createVrcLogger } from '../vrc-logging'
 
@@ -18,8 +19,8 @@ import { createVrcLogger } from '../vrc-logging'
 export interface ConnectionStatus {
   exists: boolean
   isActive: boolean
-  connectionRecord?: ConnectionRecord
-  oobRecord?: OutOfBandRecord
+  connectionRecord?: DidCommConnectionRecord
+  oobRecord?: DidCommOutOfBandRecord
 }
 
 /**
@@ -30,16 +31,16 @@ export async function checkExistingConnectionStatus(agent: Agent, invitationUrl:
 
   try {
     // Parse the invitation to get the invitation ID
-    const invitation = await agent.oob.parseInvitation(invitationUrl)
+    const invitation = await agent.modules.didcomm.oob.parseInvitation(invitationUrl)
 
     if (!invitation) {
       return { exists: false, isActive: false }
     }
 
     // Find existing OOB records with this invitation ID
-    const oobRecords = await agent.oob.findAllByQuery({
+    const oobRecords = await agent.modules.didcomm.oob.findAllByQuery({
       invitationId: invitation.id,
-      role: OutOfBandRole.Receiver,
+      role: DidCommOutOfBandRole.Receiver,
     })
 
     if (!oobRecords || oobRecords.length === 0) {
@@ -49,7 +50,7 @@ export async function checkExistingConnectionStatus(agent: Agent, invitationUrl:
     // Check each OOB record for associated connections
     for (const oobRecord of oobRecords) {
       // Try to find a connection associated with this OOB record
-      const connections = await agent.connections.findAllByQuery({
+      const connections = await agent.modules.didcomm.connections.findAllByQuery({
         outOfBandId: oobRecord.id,
       })
 
@@ -57,7 +58,7 @@ export async function checkExistingConnectionStatus(agent: Agent, invitationUrl:
         const connection = connections[0]
 
         // Check if connection is in a completed/active state
-        const isActive = connection.state === DidExchangeState.Completed
+        const isActive = connection.state === DidCommDidExchangeState.Completed
 
         return {
           exists: true,
@@ -90,7 +91,7 @@ export async function cleanupStaleRecords(agent: Agent, invitationUrl: string): 
     logger.info('Cleaning up stale records...')
 
     // Parse the invitation to get the invitation ID
-    const invitation = await agent.oob.parseInvitation(invitationUrl)
+    const invitation = await agent.modules.didcomm.oob.parseInvitation(invitationUrl)
 
     if (!invitation) {
       logger.warn('Could not parse invitation for cleanup')
@@ -98,20 +99,20 @@ export async function cleanupStaleRecords(agent: Agent, invitationUrl: string): 
     }
 
     // Find all OOB records with this invitation ID
-    const oobRecords = await agent.oob.findAllByQuery({
+    const oobRecords = await agent.modules.didcomm.oob.findAllByQuery({
       invitationId: invitation.id,
-      role: OutOfBandRole.Receiver,
+      role: DidCommOutOfBandRole.Receiver,
     })
 
     for (const oobRecord of oobRecords) {
       // Find and delete associated connections
-      const connections = await agent.connections.findAllByQuery({
+      const connections = await agent.modules.didcomm.connections.findAllByQuery({
         outOfBandId: oobRecord.id,
       })
 
       for (const connection of connections) {
         try {
-          await agent.connections.deleteById(connection.id)
+          await agent.modules.didcomm.connections.deleteById(connection.id)
           logger.info('Deleted stale connection:', connection.id)
         } catch (error) {
           logger.warn('Failed to delete connection:', error)
@@ -120,7 +121,7 @@ export async function cleanupStaleRecords(agent: Agent, invitationUrl: string): 
 
       // Delete the OOB record
       try {
-        await agent.oob.deleteById(oobRecord.id)
+        await agent.modules.didcomm.oob.deleteById(oobRecord.id)
         logger.info('Deleted stale OOB record:', oobRecord.id)
       } catch (error) {
         logger.warn('Failed to delete OOB record:', error)
@@ -139,7 +140,7 @@ export async function cleanupStaleRecords(agent: Agent, invitationUrl: string): 
  */
 export interface ReconnectionResult {
   success: boolean
-  connectionRecord?: ConnectionRecord
+  connectionRecord?: DidCommConnectionRecord
   error?: string
   strategy: 'reused' | 'cleaned-retry' | 'failed'
 }
@@ -210,7 +211,7 @@ export async function handleWitnessReconnection(
       try {
         logger.info(`Connection attempt ${attempt}/${maxRetries + 1}`)
 
-        const { connectionRecord } = await agent.oob.receiveInvitationFromUrl(invitationUrl)
+        const { connectionRecord } = await agent.modules.didcomm.oob.receiveInvitationFromUrl(invitationUrl)
 
         if (!connectionRecord) {
           return {
@@ -222,7 +223,7 @@ export async function handleWitnessReconnection(
 
         // Wait for connection to complete
         logger.info('Waiting for connection to complete...')
-        const connection = await agent.connections.returnWhenIsConnected(connectionRecord.id)
+        const connection = await agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
 
         logger.info('Successfully connected')
         return {

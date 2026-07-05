@@ -7,7 +7,7 @@
  * 3. onDecline callback properly calls agent credential decline APIs
  */
 
-import { CredentialState } from '@credo-ts/core'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
 import { RelationshipDidRecord } from '../../src/modules/vrc/types/RelationshipDidRecord'
 
 describe('Chat Messages - RelationshipDid Lookup', () => {
@@ -492,12 +492,16 @@ describe('Chat Messages - onDecline credential logic', () => {
   const mockFindConnectionById = jest.fn()
 
   const createMockAgent = () => ({
-    credentials: {
-      declineOffer: mockDeclineOffer,
-      sendProblemReport: mockSendProblemReport,
-    },
-    connections: {
-      findById: mockFindConnectionById,
+    modules: {
+      didcomm: {
+        credentials: {
+          declineOffer: mockDeclineOffer,
+          sendProblemReport: mockSendProblemReport,
+        },
+        connections: {
+          findById: mockFindConnectionById,
+        },
+      },
     },
   })
 
@@ -518,11 +522,11 @@ describe('Chat Messages - onDecline credential logic', () => {
       try {
         if (agent) {
           const connectionId = record.connectionId ?? ''
-          const connection = await agent.connections.findById(connectionId)
-          await agent.credentials.declineOffer(record.id)
+          const connection = await agent.modules.didcomm.connections.findById(connectionId)
+          await agent.modules.didcomm.credentials.declineOffer({ credentialExchangeRecordId: record.id })
           if (connection) {
-            await agent.credentials.sendProblemReport({
-              credentialRecordId: record.id,
+            await agent.modules.didcomm.credentials.sendProblemReport({
+              credentialExchangeRecordId: record.id,
               description: t('CredentialOffer.Declined'),
             })
           }
@@ -541,7 +545,7 @@ describe('Chat Messages - onDecline credential logic', () => {
     const handler = createDeclineHandler(agent, { id: 'cred-123', connectionId: 'conn-1' }, (k: string) => k)
     await handler()
 
-    expect(mockDeclineOffer).toHaveBeenCalledWith('cred-123')
+    expect(mockDeclineOffer).toHaveBeenCalledWith({ credentialExchangeRecordId: 'cred-123' })
   })
 
   it('should send a problem report when the connection exists', async () => {
@@ -552,7 +556,7 @@ describe('Chat Messages - onDecline credential logic', () => {
     await handler()
 
     expect(mockSendProblemReport).toHaveBeenCalledWith({
-      credentialRecordId: 'cred-123',
+      credentialExchangeRecordId: 'cred-123',
       description: 'CredentialOffer.Declined',
     })
   })
@@ -564,7 +568,7 @@ describe('Chat Messages - onDecline credential logic', () => {
     const handler = createDeclineHandler(agent, { id: 'cred-456', connectionId: 'missing-conn' }, (k: string) => k)
     await handler()
 
-    expect(mockDeclineOffer).toHaveBeenCalledWith('cred-456')
+    expect(mockDeclineOffer).toHaveBeenCalledWith({ credentialExchangeRecordId: 'cred-456' })
     expect(mockSendProblemReport).not.toHaveBeenCalled()
   })
 
@@ -576,7 +580,7 @@ describe('Chat Messages - onDecline credential logic', () => {
     await handler()
 
     expect(mockFindConnectionById).toHaveBeenCalledWith('')
-    expect(mockDeclineOffer).toHaveBeenCalledWith('cred-789')
+    expect(mockDeclineOffer).toHaveBeenCalledWith({ credentialExchangeRecordId: 'cred-789' })
     expect(mockSendProblemReport).not.toHaveBeenCalled()
   })
 
@@ -604,15 +608,15 @@ describe('Chat Messages - onDecline credential logic', () => {
 
   it('should only set onDecline for OfferReceived state', () => {
     const states = [
-      { state: CredentialState.OfferReceived, shouldHaveDecline: true },
-      { state: CredentialState.Done, shouldHaveDecline: false },
-      { state: CredentialState.RequestSent, shouldHaveDecline: false },
-      { state: CredentialState.CredentialReceived, shouldHaveDecline: false },
-      { state: CredentialState.Declined, shouldHaveDecline: false },
+      { state: DidCommCredentialState.OfferReceived, shouldHaveDecline: true },
+      { state: DidCommCredentialState.Done, shouldHaveDecline: false },
+      { state: DidCommCredentialState.RequestSent, shouldHaveDecline: false },
+      { state: DidCommCredentialState.CredentialReceived, shouldHaveDecline: false },
+      { state: DidCommCredentialState.Declined, shouldHaveDecline: false },
     ]
 
     for (const { state, shouldHaveDecline } of states) {
-      const onDecline = state === CredentialState.OfferReceived ? () => {} : undefined
+      const onDecline = state === DidCommCredentialState.OfferReceived ? () => {} : undefined
       if (shouldHaveDecline) {
         expect(onDecline).toBeDefined()
       } else {

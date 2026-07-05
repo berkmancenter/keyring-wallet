@@ -1,14 +1,4 @@
-import {
-  W3cCredentialRecord,
-  SdJwtVcRecord,
-  MdocRecord,
-  W3cV2CredentialRecord,
-  AgentContext,
-  W3cCredentialRepository,
-  W3cV2CredentialRepository,
-  SdJwtVcRepository,
-  MdocRepository,
-} from '@credo-ts/core'
+import { W3cCredentialRecord, SdJwtVcRecord, MdocRecord, W3cV2CredentialRecord, AgentContext, W3cCredentialRepository, W3cV2CredentialRepository, SdJwtVcRepository, MdocRepository } from '@credo-ts/core'
 import type {
   OpenId4VciCredentialIssuerMetadataDisplay,
   OpenId4VciMetadata,

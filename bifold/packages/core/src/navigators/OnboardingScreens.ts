@@ -122,7 +122,7 @@ export const getOnboardingScreens = (
   },
   {
     name: Screens.RCardOnboarding,
-    children: components.RCardOnboarding,
+    component: components.RCardOnboarding,
     options: () => ({
       ...TransitionPresets.SlideFromRightIOS,
       title: t('Screens.RCardOnboarding'),

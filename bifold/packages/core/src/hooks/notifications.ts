@@ -1,9 +1,4 @@
-import {
-  MdocRecord,
-  SdJwtVcRecord,
-  W3cCredentialRecord,
-  W3cV2CredentialRecord,
-} from '@credo-ts/core'
+import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord, W3cV2CredentialRecord } from '@credo-ts/core'
 import { useBasicMessages, useCredentialByState, useProofByState } from '@bifold/react-hooks'
 import {
   DidCommBasicMessageRecord,

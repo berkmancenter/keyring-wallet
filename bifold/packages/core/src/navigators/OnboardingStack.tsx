@@ -122,8 +122,6 @@ const OnboardingStack: React.FC<OnboardingStackProps> = ({ initializeAgent, agen
         disableSkip={disableOnboardingSkip}
         pages={pages(onTutorialCompleted, OnboardingTheme)}
         style={carousel}
-        onComplete={onTutorialCompleted}
-        completeButtonText={t('Global.GetStarted')}
       />
     )
   }, [Onboarding, OnboardingTheme, carousel, disableOnboardingSkip, onTutorialCompleted, pages, t])

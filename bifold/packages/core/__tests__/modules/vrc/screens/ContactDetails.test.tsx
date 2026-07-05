@@ -1,6 +1,6 @@
 import { render, waitFor, fireEvent } from '@testing-library/react-native'
 import React from 'react'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 
 import ContactDetails from '../../../../src/modules/vrc/screens/ContactDetails'
 import { TEST_CONTACTS, generateTestDid } from '../fixtures/dtg-credentials'
@@ -8,7 +8,7 @@ import { ContactCredentialDetails } from '../../../../src/types/navigators'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
 
 // Mock dependencies
-jest.mock('@credo-ts/react-hooks')
+jest.mock('@bifold/react-hooks')
 jest.mock('react-native-vector-icons/MaterialCommunityIcons', () => 'Icon')
 jest.mock('../../../../src/modules/openid/context/OpenIDCredentialRecordProvider')
 

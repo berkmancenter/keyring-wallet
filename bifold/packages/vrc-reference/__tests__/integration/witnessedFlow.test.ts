@@ -469,8 +469,8 @@ describe('Witnessed Flow Integration', () => {
 
       // Verify that credentials were received
       // Note: In the current implementation, Alice and Bob auto-accept credentials
-      const aliceCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
-      const bobCredentials = await bob.agent.w3cCredentials.getAllCredentialRecords()
+      const aliceCredentials = await alice.agent.w3cCredentials.getAll()
+      const bobCredentials = await bob.agent.w3cCredentials.getAll()
 
       console.log('📊 CREDENTIAL COUNTS:')
       console.log('  Alice holds', aliceCredentials.length, 'credential(s)')

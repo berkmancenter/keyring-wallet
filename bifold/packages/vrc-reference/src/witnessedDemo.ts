@@ -15,7 +15,7 @@
  * Run with: yarn witnessed
  */
 
-import { JsonTransformer } from '@credo-ts/core'
+import { greenText, purpleText, redText } from './OutputClass'
 import { Alice } from './Alice'
 import { Bob } from './Bob'
 import { Witness } from './Witness'
@@ -77,11 +77,11 @@ async function run() {
     console.log(purpleText('Initializing agents...\n'))
 
     console.log('  Starting Alice agent on port 9000...')
-    alice = await Alice.build()
+    alice = await Alice.build(9000, 'alice')
     console.log(greenText('  ✓ Alice initialized\n'))
 
     console.log('  Starting Bob agent on port 9001...')
-    bob = await Bob.build()
+    bob = await Bob.build(9001, 'bob')
     console.log(greenText('  ✓ Bob initialized\n'))
 
     console.log('  Starting Witness agent on port 9002...')
@@ -97,7 +97,7 @@ async function run() {
 
     // 1. Connect Alice to Bob
     console.log('  Connecting Alice ↔ Bob...')
-    const bobOob = await bob.agent.oob.createInvitation()
+    const bobOob = await bob.agent.modules.didcomm.oob.createInvitation()
     bob.outOfBandId = bobOob.id
     const bobInviteUrl = bobOob.outOfBandInvitation.toUrl({ domain: 'http://localhost:9001' })
 
@@ -105,14 +105,14 @@ async function run() {
 
     // Wait for connection to be established from THIS specific OOB invitation
     await waitForCondition(async () => {
-      const bobConns = await bob!.agent.connections.findAllByOutOfBandId(bobOob.id)
+      const bobConns = await bob!.agent.modules.didcomm.connections.findAllByOutOfBandId(bobOob.id)
       return alice!.connectionRecordId !== undefined && bobConns.length > 0 && bobConns[0].state === 'completed'
     }, 15000)
 
     // Use Alice's stored connection ID (set during acceptConnection)
     const aliceBobConnectionId = alice.connectionRecordId!
     // Get Bob's connection from the specific OOB invitation (not getAll!)
-    const bobAliceConns = await bob.agent.connections.findAllByOutOfBandId(bobOob.id)
+    const bobAliceConns = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bobOob.id)
     const bobAliceConnectionId = bobAliceConns[0].id
 
     console.log(greenText('  ✓ Alice ↔ Bob connected'))
@@ -121,7 +121,7 @@ async function run() {
 
     // 2. Connect Alice to Witness
     console.log('  Connecting Alice ↔ Witness...')
-    const witnessAliceOob = await witness.agent.oob.createInvitation()
+    const witnessAliceOob = await witness.agent.modules.didcomm.oob.createInvitation()
     const witnessAliceInviteUrl = witnessAliceOob.outOfBandInvitation.toUrl({ domain: 'http://localhost:9002' })
     console.log(purpleText(`Invitation URL: ${witnessAliceInviteUrl}\n`))
 
@@ -132,12 +132,12 @@ async function run() {
 
     // Wait for Witness to get the connection from THIS specific OOB invitation
     await waitForCondition(async () => {
-      const conns = await witness!.agent.connections.findAllByOutOfBandId(witnessAliceOob.id)
+      const conns = await witness!.agent.modules.didcomm.connections.findAllByOutOfBandId(witnessAliceOob.id)
       return conns.length > 0 && conns[0].state === 'completed'
     }, 15000)
 
     // Get the Witness's connection ID from the specific OOB invitation (not getAll!)
-    const witnessAliceConns = await witness.agent.connections.findAllByOutOfBandId(witnessAliceOob.id)
+    const witnessAliceConns = await witness.agent.modules.didcomm.connections.findAllByOutOfBandId(witnessAliceOob.id)
     const aliceWitnessConnectionId = witnessAliceConns[0].id // Witness's connection to Alice from THIS invitation
 
     console.log(greenText('  ✓ Alice ↔ Witness connected'))
@@ -146,22 +146,22 @@ async function run() {
 
     // 3. Connect Bob to Witness
     console.log('  Connecting Bob ↔ Witness...')
-    const witnessBobOob = await witness.agent.oob.createInvitation()
+    const witnessBobOob = await witness.agent.modules.didcomm.oob.createInvitation()
     const witnessBobInviteUrl = witnessBobOob.outOfBandInvitation.toUrl({ domain: 'http://localhost:9002' })
     console.log(purpleText(`Invitation URL: ${witnessBobInviteUrl}\n`))
 
-    const { connectionRecord: bobWitnessConn } = await bob.agent.oob.receiveInvitationFromUrl(witnessBobInviteUrl)
-    await bob.agent.connections.returnWhenIsConnected(bobWitnessConn!.id)
+    const { connectionRecord: bobWitnessConn } = await bob.agent.modules.didcomm.oob.receiveInvitationFromUrl(witnessBobInviteUrl, { label: 'demo' })
+    await bob.agent.modules.didcomm.connections.returnWhenIsConnected(bobWitnessConn!.id)
     const bobConnectionToWitness = bobWitnessConn!.id
 
     // Wait for Witness to get the connection from THIS specific OOB invitation
     await waitForCondition(async () => {
-      const conns = await witness!.agent.connections.findAllByOutOfBandId(witnessBobOob.id)
+      const conns = await witness!.agent.modules.didcomm.connections.findAllByOutOfBandId(witnessBobOob.id)
       return conns.length > 0 && conns[0].state === 'completed'
     }, 15000)
 
     // Get the Witness's connection ID from the specific OOB invitation (not getAll!)
-    const witnessBobConns = await witness.agent.connections.findAllByOutOfBandId(witnessBobOob.id)
+    const witnessBobConns = await witness.agent.modules.didcomm.connections.findAllByOutOfBandId(witnessBobOob.id)
     const bobWitnessConnectionId = witnessBobConns[0].id // Witness's connection to Bob from THIS invitation
 
     console.log(greenText('  ✓ Bob ↔ Witness connected'))
@@ -189,20 +189,20 @@ async function run() {
 
     // Bob sends his DID to Alice via basic message
     console.log('  Bob → Alice: Sending DID via basic message...')
-    await bob.agent.basicMessages.sendMessage(
+    await bob.agent.modules.didcomm.basicMessages.sendMessage(
       bobAliceConnectionId,
       JSON.stringify({ holderSubjectDid: bobIssuerDid })
     )
 
     // Wait for Alice to receive Bob's DID (use simpler check - any counterparty DID)
     await waitForCondition(async () => {
-      return alice.hasCounterpartyDid()
+      return alice.hasCounterpartyRDid()
     }, 10000)
 
     console.log(greenText('  ✓ Bob → Alice: DID received'))
 
     // Get the DID Alice actually received (may be stored under different connection ID)
-    const aliceReceivedBobDid = alice.getAnyCounterpartyDid()
+    const aliceReceivedBobDid = alice.getAnyCounterpartyRDid()
 
     console.log(greenText('\n  DID Exchange Complete:'))
     console.log(purpleText(`    Alice knows Bob's DID: ${aliceReceivedBobDid}`))
@@ -239,9 +239,9 @@ async function run() {
 
     // Get the DIDs that were exchanged through the Alice-Bob connection
     // Bob uses Alice's DID that he received via basic message
-    const aliceDidReceivedByBob = bob.getHolderSubjectDid(bobAliceConnectionId)
+    const aliceDidReceivedByBob = bob.getCounterpartyRDid(bobAliceConnectionId)
     // Alice uses Bob's DID that she received via basic message (use any since connection ID may differ)
-    const bobDidReceivedByAlice = alice.getAnyCounterpartyDid()
+    const bobDidReceivedByAlice = alice.getAnyCounterpartyRDid()
 
     console.log(greenText('Using exchanged DIDs from Alice↔Bob connection:'))
     console.log(purpleText(`  Bob will target Alice at: ${aliceDidReceivedByBob}`))
@@ -350,16 +350,16 @@ async function run() {
     console.log(purpleText('─'.repeat(60)))
     console.log(purpleText('BOB\'s Credentials:'))
     console.log(purpleText('─'.repeat(60)))
-    const bobCredentials = await bob.agent.w3cCredentials.getAllCredentialRecords()
-    const bobValidCredentials = bobCredentials.filter((record) => Boolean(record.credential))
+    const bobCredentials = await bob.agent.w3cCredentials.getAll()
+    const bobValidCredentials = bobCredentials.filter((record) => Boolean(record.encoded))
     
     if (bobValidCredentials.length === 0) {
       console.log(greenText(`Bob has 0 credential(s) stored\n`))
     } else {
       console.log(greenText(`Bob has ${bobValidCredentials.length} credential(s) stored:\n`))
       bobValidCredentials.forEach((record, index) => {
-        if (!record.credential) return
-        const credentialJson = JsonTransformer.toJSON(record.credential)
+        if (!record.encoded) return
+        const credentialJson = record.encoded as Record<string, any>
         const types = (credentialJson as any).type?.join(', ') || 'Unknown'
         const issuer = (credentialJson as any).issuer || 'Unknown'
         console.log(purpleText(`[${index + 1}] recordId=${record.id} | types: ${types} | issuer: ${issuer}`))

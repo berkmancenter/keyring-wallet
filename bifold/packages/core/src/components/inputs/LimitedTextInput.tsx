@@ -71,4 +71,6 @@ const LimitedTextInput = forwardRef<TextInput, LimitedTextInputProps>(
   }
 )
 
+LimitedTextInput.displayName = 'LimitedTextInput'
+
 export default LimitedTextInput

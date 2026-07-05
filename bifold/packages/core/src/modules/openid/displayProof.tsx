@@ -1,9 +1,4 @@
-import {
-  ClaimFormat,
-  type DcqlQueryResult,
-  type DcqlValidCredential,
-  type DifPexCredentialsForRequest,
-} from '@credo-ts/core'
+import { ClaimFormat, type DcqlQueryResult, type DcqlValidCredential, type DifPexCredentialsForRequest } from '@credo-ts/core'
 
 import { filterAndMapSdJwtKeys, getCredentialForDisplay } from './display'
 import { OpenIDCredentialRecord } from './credentialRecord'

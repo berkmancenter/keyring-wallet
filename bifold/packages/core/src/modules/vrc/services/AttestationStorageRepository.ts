@@ -76,6 +76,7 @@ export class AttestationStorageRepository extends Repository<AttestationStorageR
     }
 
     const record = records[0]
+    // eslint-disable-next-line no-console
     console.log(`${LOG_PREFIX} Found attestation [platform=${record.platform}, certs=${record.certificateChain.length}]`)
     return record
   }
@@ -152,6 +153,7 @@ export class AttestationStorageRepository extends Repository<AttestationStorageR
 
     await this.save(agentContext, record)
 
+    // eslint-disable-next-line no-console
     console.log(`${LOG_PREFIX} Saved attestation [platform=${attestation.platform}, certs=${attestation.certificateChain.length}]`)
     return record
   }

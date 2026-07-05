@@ -173,6 +173,7 @@ describe('PINEnter Screen', () => {
           initialState={{
             ...defaultState,
           }}
+          reducer={stableReducer}
         >
           <AuthContext.Provider value={authContext}>
             <PINEnter setAuthenticated={jest.fn()} />

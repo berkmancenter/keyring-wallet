@@ -50,7 +50,7 @@ export class WitnessedVRCManager {
 
     try {
       // Get the peer connection to find their connection DID
-      const peerConnection = await agent.connections.getById(peerConnectionId)
+      const peerConnection = await agent.modules.didcomm.connections.getById(peerConnectionId)
       const peerConnectionDid = peerConnection.theirDid
 
       if (!peerConnectionDid) {
@@ -97,7 +97,7 @@ export class WitnessedVRCManager {
         witness: useWitnessing,
       }
 
-      await agent.basicMessages.sendMessage(witnessState.connectedWitness.connectionId, JSON.stringify(sessionRequest))
+      await agent.modules.didcomm.basicMessages.sendMessage(witnessState.connectedWitness.connectionId, JSON.stringify(sessionRequest))
 
       logger.info('✓ Session request sent to witness with both relationship DIDs')
       logger.debug('Waiting for session-challenge from witness (handled by BasicMessage listener)')
@@ -202,7 +202,7 @@ export class WitnessedVRCManager {
         logger.debug('No reportingDid — exchange will not be recorded by witness')
       }
 
-      await agent.basicMessages.sendMessage(witnessConnectionId, JSON.stringify(submitRequest))
+      await agent.modules.didcomm.basicMessages.sendMessage(witnessConnectionId, JSON.stringify(submitRequest))
 
       logger.info('✓ VP submitted to witness for verification')
       logger.debug('Waiting for witness to verify and issue VWC')

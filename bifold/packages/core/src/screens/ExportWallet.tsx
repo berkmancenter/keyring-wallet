@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons'
 import RNFS from 'react-native-fs'
 
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { useTheme } from '../contexts/theme'
 import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
@@ -108,9 +108,12 @@ const ExportWallet: React.FC<ExportWalletProps> = () => {
       const baseDir = Platform.OS === 'android' ? RNFS.DownloadDirectoryPath : RNFS.DocumentDirectoryPath
       const backupPath = `${baseDir}/${backupFileName}`
 
-      await agent.wallet.export({
-        path: backupPath,
-        key: password,
+      await agent.modules.askar.exportStore({
+        exportToStore: {
+          id: backupFileName,
+          key: password,
+          database: { type: 'sqlite', config: { path: backupPath } },
+        },
       })
 
       const shmPath = `${backupPath}-shm`
@@ -131,6 +134,7 @@ const ExportWallet: React.FC<ExportWalletProps> = () => {
       setPassword('')
       setConfirmPassword('')
     } catch (error: any) {
+      // eslint-disable-next-line no-console
       console.error('Export wallet error:', error)
       const errorMessage = error?.message || String(t('Settings.ExportWalletError'))
       Alert.alert(String(t('Error.Problem')), errorMessage)

@@ -3,7 +3,7 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { View, TouchableOpacity, StyleSheet, Modal, Pressable } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -43,7 +43,7 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
 
   const extractIssuer = (credential: W3cCredentialRecord): { id: string; name?: string; email?: string; organization?: string } | null => {
     try {
-      const credentialData = credential.credential
+      const credentialData = credential.encoded
 
       if (
         credentialData &&
@@ -66,7 +66,9 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
           }
         }
       }
-    } catch (error) {}
+    } catch (_error) {
+      /* ignore lookup failure */
+    }
 
     return null
   }
@@ -112,7 +114,9 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
             setIssuerName(formatIssuerName(counterpartyRelationshipDid))
           }
         }
-      } catch (error) {}
+      } catch (_error) {
+      /* ignore lookup failure */
+    }
     }
 
     lookupIssuer()

@@ -16,7 +16,7 @@ describe('TlsManager', () => {
         })
         rmdirSync(mockCertsDir)
       }
-    } catch (error) {
+    } catch (_error) {
       // Ignore cleanup errors
     }
   })
@@ -31,7 +31,7 @@ describe('TlsManager', () => {
         })
         rmdirSync(mockCertsDir)
       }
-    } catch (error) {
+    } catch (_error) {
       // Ignore cleanup errors
     }
   })

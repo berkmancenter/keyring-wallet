@@ -1,11 +1,4 @@
-import {
-  Agent,
-  ClaimFormat,
-  MdocRecord,
-  SdJwtVcRecord,
-  W3cCredentialRecord,
-  W3cV2CredentialRecord,
-} from '@credo-ts/core'
+import { Agent, ClaimFormat, MdocRecord, SdJwtVcRecord, W3cCredentialRecord, W3cV2CredentialRecord } from '@credo-ts/core'
 import { OpenId4VPRequestRecord, OpenIDCredentialType } from './types'
 import { OpenIDCredentialLite } from './refresh/registry'
 
