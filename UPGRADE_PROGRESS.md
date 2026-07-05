@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-04 (Phase 0 in progress)
+Last updated: 2026-07-04 (Phase 2 COMPLETE — RN 0.77.3, BCSC dropped, E2E green both platforms)
 
 ---
 
@@ -217,8 +217,8 @@ babel/metro/jest configs, `.env.sample`.
     `e2e/` at repo root.
   - Check first: does hardware attestation/biometry block simulators? If yes, add dev bypass
     flag or use real devices.
-- [~] **Phase 2 — RN 0.73.11 → 0.77.x, React 18 kept, credo/bifold untouched** — IN PROGRESS.
-  Branch: `upgrade/phase2-rn77` (root repo). DONE so far (2026-07-04):
+- [x] **Phase 2 — RN 0.73.11 → 0.77.x, React 18 kept, credo/bifold untouched** — COMPLETE.
+  Branch: `upgrade/phase2-rn77` (root repo). DONE (2026-07-04):
   - RN 0.77.3 template applied (Upgrade Helper diff): Gradle 8.10.2, AGP 8.7.3,
     Kotlin 2.0.21, buildTools 35, NDK 27.1.12297006, iOS deployment target 15.1,
     settings.gradle plugin-based autolinking, `MainApplication.kt` OpenSourceMergedSoMapping,
@@ -252,7 +252,20 @@ babel/metro/jest configs, `.env.sample`.
     Post-removal gate: typecheck PASS, eslint PASS, app jest 14 suites/27 tests PASS
     (Developer snapshot updated), Android assembleDebug PASS (gradle locks regenerated),
     iOS pod install + simulator build PASS (RNBcscCore pod gone).
-  - REMAINING: E2E VRC exchange rerun on both platforms (gate for Phase 2 completion).
+  - E2E VRC exchange rerun DONE (2026-07-04): green on BOTH platforms after two fixes:
+    1. `@react-native-firebase` 14.x is incompatible with RN 0.77 (iOS crashed at startup,
+       "No Firebase App '[DEFAULT]'"); bumped app+messaging to ~21.14.0, and added
+       `RCTAppDependencyProvider` to AppDelegate.mm (required by RN 0.77 for third-party
+       Fabric component/module resolution — its absence caused the
+       `setSheetLargestUndimmedDetent` unrecognized-selector crash).
+    2. **RN 0.77 / safe-area-context 5.x layout regression (KEY LEARNING)**: ScrollView
+       with `height:'100%'` inside a SafeAreaView that lacks `flex:1` pushes the
+       bottom controls (marginTop:'auto') off-screen. Fixed by `flex:1` on both the
+       SafeAreaView and the ScrollView in: CredentialOfferAccept, ProofRequestAccept,
+       CameraDisclosureModal, MobileVerifierLoading, CommonRemoveModal (bifold) and
+       PersonCredentialLoading (app keyring-theme). Snapshots updated.
+  - PHASE 2 GATE PASSED: app jest 14/27 PASS, bifold core jest 134 suites / 1242 PASS,
+    Android + iOS build PASS, two-device E2E VRC exchange PASS on Android and iOS.
 - [ ] **Phase 3 — Big hop: bifold 3.0.16 + credo 0.6.3 + React 19 + RN 0.81**
   - In `bifold/`: new branch `upgrade/bifold-3.x` = upstream v3.0.16 content; port §5.1 delta
     onto it. Mechanical credo API rewrite everywhere: `agent.credentials` →

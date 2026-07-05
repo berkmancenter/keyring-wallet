@@ -73,7 +73,9 @@ const PersonCredentialLoading: React.FC<PersonProps> = ({ navigation }) => {
 
   const styles = StyleSheet.create({
     container: {
-      height: '100%',
+      // flex (not height:'100%') so the controls below the ScrollView keep their space
+      // (safe-area-context 5.x sizes SafeAreaView differently than 4.x did)
+      flex: 1,
       backgroundColor: ColorPalette.brand.modalPrimaryBackground,
       padding: 20,
     },
