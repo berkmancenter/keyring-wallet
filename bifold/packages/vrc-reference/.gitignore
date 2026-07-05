@@ -1,0 +1,9 @@
+# Local environment files (do not commit)
+.env
+.env.local
+
+# Wallet data (stored in ~/.vrc-demo/wallets/ by default, but just in case)
+.wallets/
+
+# Witness server persisted invitation (stable QR code)
+.oob-invitation.json

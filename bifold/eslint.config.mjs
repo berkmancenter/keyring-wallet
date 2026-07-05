@@ -20,6 +20,15 @@ export default [
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
+    },
+  },
+  {
     plugins: {
       import: importPlugin,
     },
@@ -53,6 +62,30 @@ export default [
     },
   },
   {
+    // Allow console statements in vrc_reference / vrc-reference / witness-server (reference/example code)
+    files: [
+      'vrc_reference/**/*.{js,mjs,cjs,ts,jsx,tsx}',
+      'packages/vrc-reference/**/*.{js,mjs,cjs,ts,jsx,tsx}',
+      'packages/witness-server/**/*.{js,mjs,cjs,ts,jsx,tsx}',
+    ],
+    rules: {
+      'no-console': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-var-requires': 'off',
+      'no-case-declarations': 'off',
+    },
+  },
+  {
+    files: [
+      'scripts/**/*.{js,ts}',
+      '*.config.{js,mjs,cjs,ts}',
+      'commitlint.config.js',
+    ],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
     ignores: [
       'eslint.config.mjs',
       '.eslintrc-common.js',
@@ -66,10 +99,14 @@ export default [
       'packages/oca/build/',
       'packages/remote-logs/build/',
       'packages/react-native-attestation/build/',
+      'packages/vrc-shared/build/',
+      'packages/vrc-contexts/build/',
       'packages/core/lib/',
       'packages/legacy/core/lib',
       'packages/react-hooks/build/',
       'samples/app/lib/',
+      'vrc_reference/**/dist/',
+      'packages/witness-server/dist/',
     ],
   },
   {

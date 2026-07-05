@@ -7,6 +7,7 @@ import React from 'react'
 
 import RenameContact from '../../src/screens/RenameContact'
 import { testIdWithKey } from '../../src/utils/testable'
+import { BasicAppContext } from '../helpers/app'
 
 jest.mock('react-native-device-info', () => {
   return {
@@ -22,7 +23,9 @@ useConnectionById.mockReturnValue(connection)
 describe('RenameContact Screen', () => {
   test('LimitedInput, continue button, and cancel button are present', async () => {
     const tree = render(
+      <BasicAppContext>
       <RenameContact navigation={useNavigation()} route={{ params: { connectionId: connection.id } } as any} />
+      </BasicAppContext>
     )
 
     const ContactNameInput = await tree.getByTestId(testIdWithKey('NameInput'))

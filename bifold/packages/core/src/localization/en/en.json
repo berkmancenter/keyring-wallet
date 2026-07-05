@@ -30,7 +30,7 @@
     "Dismiss": "Dismiss",
     "ShowDetails": "Show Details",
     "TryAgain": "Try Again",
-    "Biometrics": "Biometrics",
+    "Biometrics": "Biometric Unlock",
     "On": "On",
     "Off": "Off",
     "History": "History",
@@ -45,20 +45,11 @@
     "Requested": "Requested",
     "Updated": "Updated",
     "Close": "Close",
-    "CloseNotification": "Close notification",
     "Remove": "Remove",
     "GotIt": "Got it",
     "Send": "Send",
     "Reset": "Reset",
-    "ViewJSON": "View JSON Details",
-    "RefreshCredentials": "Refresh Credentials",
-    "AppName": "Aries Bifold"
-  },
-  "Toast": {
-    "OpenIDCredRefreshing": {
-      "Title": "Refreshing credentials",
-      "Message": "Your OpenID credentials are being refreshed in the background."
-    }
+    "ViewJSON": "View JSON Details"
   },
   "Date": {
     "ShortFormat": "MMM D",
@@ -159,13 +150,7 @@
     "Title1048": "Proof request problems.",
     "Message1048": "There was a problem with the proof request.",
     "Title1049": "Unable to change PIN.",
-    "Message1049": "There was a problem while attempting to change your PIN.",
-    "Title1050": "Unable to access biometrics",
-    "Message1050": "There was a problem while attempting to access this device' biometrics",
-    "GenericError": {
-      "Title": "Something went wrong",
-      "Message": "There was an unexpected error, please try again later."
-    }
+    "Message1049": "There was a problem while attempting to change your PIN."
   },
   "SelectionAxs": {
     "RadioChecked": "checked",
@@ -186,8 +171,8 @@
     "Attestation": "I have read, understand and accept the terms and conditions."
   },
   "Tour": {
-    "GuideTitle": "Welcome to Aries Bifold",
-    "WouldYouLike": "Would you like some guidance on how to use Aries Bifold?",
+    "GuideTitle": "Welcome to Keyring",
+    "WouldYouLike": "Would you like some guidance on how to use Keyring?",
     "UseAppGuides": "Use app guides",
     "DoNotUseAppGuides": "Don't use app guides",
     "AddAndShare": "Add and share credentials",
@@ -202,6 +187,10 @@
     "CredentialOffersDescription": "An organization has offered you a credential. Review the credentials details and choose to accept or decline it. Accepted credentials will be added to your wallet.",
     "ProofRequests": "Proof requests",
     "ProofRequestsDescription": "An organization is asking you to prove your credentials. Review what they're asking for and choose to accept or decline it.",
+    "ContactOffers": "Contact requests",
+    "ContactOffersDescription": "Add contacts by scanning a QR code or sharing your own code. Contacts can send you credentials and messages.",
+    "WitnessIcon": "Witness verification",
+    "WitnessIconDescription": "Tap the shield icon here to view your witness connection. A witness verifies credential exchanges between contacts at events, adding an extra layer of trust.",
     "Skip": "Skip",
     "Next": "Next",
     "Back": "Back",
@@ -211,12 +200,10 @@
   "CameraDisclosure": {
     "AllowCameraUse": "Allow camera use",
     "CameraDisclosure": "The camera is used to scan QR codes that initiate a credential offer or credential request. No information about the images is stored, used for analytics, or shared.",
-    "ToContinueUsing": "To continue using the Aries Bifold scan feature, please allow camera permissions.",
+    "ToContinueUsing": "To continue using the Keyring scan feature, please allow camera permissions.",
     "OpenSettings": "Open settings"
   },
   "PINCreate": {
-    "Header": "Aries Bifold",
-    "Subheader": "Secure your Aries wallet",
     "Explainer": {
       "PrimaryHeading": "Secure your Wallet",
       "PINReminder": "On the following screen you will be asked to set up a strong <b>personal identification number</b> (PIN).",
@@ -226,10 +213,6 @@
         "ParagraphList1": "You can use your PIN instead of biometrics to open your wallet",
         "ParagraphList2": "Or use your biometrics to open your wallet, and if your biometrics change change on your device you will need to use the PIN to authenticate your wallet"
       }
-    },
-    "InfoBox": {
-      "title": "Remember your PIN",
-      "message": "Make sure you remember your PIN\nIf you forget it you will need to setup the wallet again and re-add your cards."
     },
     "Message": {
       "CrossPatternValidation": "A pattern of cross was detected in your PIN. Please try again.",
@@ -242,8 +225,7 @@
       "PINTooShortValidation": "Your PIN is too short. Please try again.",
       "PINTooLongValidation": "Your PIN is too long. Please try again.",
       "PINExpectedLengthValidation": "Your PIN must be {{num}} digits. Please try again.",
-      "OldPINIncorrect": "Your old pin is incorrect. Please try again.",
-      "PINCommonlyUsed": "Your PIN uses a commonly used pattern. Please try again."
+      "OldPINIncorrect": "Your old pin is incorrect. Please try again."
     },
     "Helper": {
       "CrossPatternValidation": "Does not contain a pattern of cross.",
@@ -256,7 +238,6 @@
       "PINTooShortValidation": "Your PIN must be more than {{num}} digits.",
       "PINTooLongValidation": "Your PIN must be less than {{num}} digits.",
       "PINExpectedLengthValidation": "Your PIN must be {{num}} digits.",
-      "PINCommonlyUsed": "Your PIN uses a commonly used pattern. Please try again.",
       "CheckIcon": "Criteria met",
       "ClearIcon": "Criteria not met"
     },
@@ -273,9 +254,6 @@
     "Hide": "Hide PIN",
     "Masked": "PIN Masked for privacy"
   },
-  "PINCreateConfirm": {
-    "PINInputLabel": "Re-enter your PIN to confirm it"
-  },
   "PINChange": {
     "PinChangeSuccessTitle": "Successfully changed your PIN",
     "PinChangeSuccessMessage": "Your PIN was successsfully changed. You can now log in with your new PIN.",
@@ -286,18 +264,10 @@
     "RememberChangePIN": "Change your PIN to secure your wallet.",
     "ChangePIN": "Change PIN"
   },
-  "PINChangeSuccess": {
-    "InfoBox": {
-      "Title": "Your PIN has been changed",
-      "Description": "You can now log-in with your new PIN"
-    },
-    "PrimaryButton": "Go back to settings"
-  },
   "PINEnter": {
-    "AppTitle": "Aries Bifold",
     "Title": "Welcome back",
     "SubText": "Sign-in to access your wallet.",
-    "EnterPIN": "Enter your wallet PIN to sign-in",
+    "EnterPIN": "Enter your wallet PIN",
     "Unlock": "Unlock",
     "Or": "Or",
     "BiometricsUnlock": "Unlock with biometrics",
@@ -318,15 +288,16 @@
     "AppSettingChangedEnterPIN": "Please confirm your change by entering your wallet PIN.",
     "AppSettingSave": "Save",
     "AppSettingCancel": "Cancel",
-    "ChangeBiometricsHeader": "Change in biometrics",
-    "ChangeBiometricsSubtext": "Please enter your PIN to confirm a change in biometrics",
+    "ChangeBiometricsHeader": "Change biometric unlock",
+    "ChangeBiometricsSubtext": "Please enter your PIN to confirm a change in biometric unlock",
     "ChangeBiometricsInputLabel": "Enter your wallet PIN",
     "ChangeBiometricsInputLabelParenthesis": "(Required)",
+    "ChangeHardwareAttestationHeader": "Change secure exchanges",
+    "ChangeHardwareAttestationSubtext": "Please enter your PIN to confirm a change in secure exchanges",
+    "ChangeHardwareAttestationInputLabel": "Enter your wallet PIN",
     "ForgotPINLink": "Forgot your PIN?",
     "ForgotPINModalTitle": "Forgot your PIN?",
-    "ForgotPINModalDescription": "Forgot your PIN? You'll need to reinstall and setup your wallet again.",
-    "Loading": "Logging in",
-    "DeveloperMenuTrigger": "App information"
+    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again."
   },
   "AttemptLockout": {
     "Title": "Your wallet is temporarily locked",
@@ -339,10 +310,10 @@
     "ForgotPINDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again."
   },
   "Biometry": {
-    "Toggle": "Toggle Biometrics",
-    "On": "Biomtrics On",
-    "Off": "Biometrics Off",
-    "EnabledText1": "Unlock the wallet with your phone's biometrics instead of your wallet PIN.",
+    "Toggle": "Toggle Biometric Unlock",
+    "On": "Biometric Unlock On",
+    "Off": "Biometric Unlock Off",
+    "EnabledText1": "Use Face ID or fingerprint to open your wallet instead of your PIN.",
     "EnabledText2": "Using biometrics means that all fingerprints or face ID added on this phone will have access to your wallet.",
     "NotEnabledText1": "Biometrics is not currently setup on this device and therefore cannot be enabled.",
     "NotEnabledText2": "If you wish to enable this feature turn biometrics on in the device settings and then return to this screen.",
@@ -351,10 +322,65 @@
     "UnlockPromptTitle": "Wallet Unlock",
     "UnlockPromptDescription": "Use biometrics to unlock your wallet",
     "AllowBiometricsTitle": "Enable biometrics",
-    "AllowBiometricsDesc": "To unlock BC Wallet with your biometrics, please allow biometrics use within your device's settings.",
+    "AllowBiometricsDesc": "To unlock Keyring with your biometrics, please allow biometrics use within your device's settings.",
     "SetupBiometricsTitle": "Biometrics is not enabled",
-    "SetupBiometricsDesc": "To unlock BC Wallet with your biometrics, please set up your biometrics in your device's settings.",
-    "OpenSettings": "Open settings"
+    "SetupBiometricsDesc": "To unlock Keyring with your biometrics, please set up your biometrics in your device's settings.",
+    "OpenSettings": "Open settings",
+    "ConfirmRelationship": "Confirm Relationship",
+    "SignCredentialWith": "Sign credential with {{name}}?",
+    "VrcConfirmationDescription": "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection.",
+    "SecurityNote": "Your biometric data never leaves your device. Only you can authorize this signature.",
+    "ConfirmWithBiometrics": "Confirm with Biometrics",
+    "Authenticating": "Authenticating..."
+  },
+  "VrcBiometric": {
+    "StatusNotVerified": "Contact did not complete identity verification for this relationship.",
+    "StatusError": "There was an issue verifying identity for this relationship.",
+    "StatusUnknown": "Relationship verification status is unknown."
+  },
+  "Attestation": {
+    "VerifiedByDevice": "Verified by {{name}}'s device",
+    "ConfirmedWithBiometrics": "Confirmed with {{biometricType}} on a secure device.",
+    "FaceIdTouchId": "Face ID / Touch ID",
+    "Biometrics": "biometrics",
+    "HideDetails": "Hide details",
+    "ShowDetails": "Show details",
+    "SignedFromSecureHardware": "Signed from secure hardware ({{hardware}})",
+    "SecureEnclave": "Secure Enclave",
+    "VerifiedByPlatform": "Verified by {{platform}}",
+    "Apple": "Apple",
+    "Google": "Google",
+    "SignatureCryptographic": "Cryptographically verified",
+    "SignatureCertChain": "Trusted via certificate chain",
+    "SignaturePlatformTrust": "Trusted via platform attestation",
+    "SignatureNotVerified": "Not verified",
+    "NoteCryptoUnavailable": "Note: Full crypto verification unavailable",
+    "CouldNotFullyVerify": "Could not fully verify",
+    "DeviceSecurityCheckIssue": "The device security check had an issue. Proceed with caution.",
+    "SecureHardwareVerified": "Secure hardware verified",
+    "SignedWithSecureHardware": "Signed with secure hardware",
+    "HardwareVerificationIssue": "Hardware verification issue",
+    "NoHardwareVerification": "No hardware verification",
+    "KeyMatchesCertificate": "Key matches certificate",
+    "SignatureValid": "Signature valid",
+    "VerificationLevel": "Verification level",
+    "CryptoLibraryAvailable": "Crypto library available",
+    "Issue": "Issue",
+    "DeviceVerificationUnavailable": "Device verification unavailable",
+    "CredentialSignedNoSecurity": "This credential was signed, but device security could not be confirmed.",
+    "Platform": "Platform",
+    "iOS": "iOS",
+    "Android": "Android",
+    "KeyStorage": "Key Storage",
+    "Unknown": "Unknown",
+    "CertificateChainNotProvided": "Certificate chain: Not provided",
+    "SecurityWarning": "Security Warning",
+    "DIDMismatchWarning": "The relationship DIDs in this credential do not match the expected values from the connection exchange. This could indicate a security issue.",
+    "IssuerDIDMismatch": "Issuer DID mismatch",
+    "YourRDIDMismatch": "Your R-DID mismatch",
+    "Expected": "Expected",
+    "Received": "Received",
+    "NotSet": "not set"
   },
   "ActivityHistory": {
     "Header": "Activity history",
@@ -468,8 +494,8 @@
       "InformationNotSent": "Information not sent to:",
       "Connection": "Connection",
       "ConnectionRemoved": "Connection removed",
-      "ActivateBiometry": "Biometrics activated",
-      "DeactivateBiometry": "Biometrics deactivated"
+      "ActivateBiometry": "Biometric unlock activated",
+      "DeactivateBiometry": "Biometric unlock deactivated"
     },
     "CardDescription": {
       "CardExpired": "{{cardName}} expired",
@@ -484,13 +510,26 @@
     "PeopleAndOrganizations": "People and organizations you've interacted with are listed here.",
     "WhatAreContacts": "What are Contacts?",
     "AddContact": "Add Contact",
-    "UnknownContact": "Unknown Contact"
+    "UnknownContact": "Unknown Contact",
+    "YouDoNotHaveAnyContacts": "You do not have any contacts",
+    "InviteContact": "Invite a contact",
+    "AcceptContact": "Accept Contact",
+    "DeclineContact": "Decline Contact",
+    "IssuanceDate": "Issuance Date",
+    "IssuerName": "Name",
+    "IssuerEmail": "Email",
+    "IssuerOrganization": "Organization",
+    "IssuerDID": "Issuer DID",
+    "RecipientDID": "Your DID"
   },
   "ContactDetails": {
     "Created": "Created",
     "ConnectionState": "Connection State",
     "AContact": "A Contact",
     "DateOfConnection": "Connected: {{ date }}",
+    "RelationshipDID": "Relationship DID",
+    "ViewMessages": "View Messages",
+    "ViewContact": "View Contact",
     "RemoveTitle": "Remove this Contact",
     "RemoveCaption": "To add credentials, the issuing organization needs to be a Contact.",
     "UnableToRemoveTitle": "Unable to remove Contact",
@@ -537,7 +576,7 @@
     "BulletThree": "updates to your credentials",
     "BulletTwo": "new proof requests",
     "NotificationsOffMessage": "Be notified when you receive new credential offers, proof requests, updates to your credentials, new messages and more.",
-    "NotificationsOffTitle": "Notifications for Bifold are turned off",
+    "NotificationsOffTitle": "Notifications for Keyring are turned off",
     "NotificationsInstructionTitle": "To enable notifications:",
     "InstructionsOne": "Open the app's settings",
     "InstructionsTwo": "Tap Notifications",
@@ -596,23 +635,28 @@
     "WillScanAutomatically": "A valid QR code will scan automatically.",
     "ScanQRCode": "Scan QR code",
     "MyQRCode": "My QR code",
+    "YourQRCodeInstruction": "Show this code to exchange contacts",
+    "PlaceQRCodeInsideFrame": "Place QR code inside the frame to scan please avoid shake to get results quickly",
     "UnableToHandleRedirection": "Unable to handle redirection",
     "Close": "Close",
+    "PasteUrl": "Paste a URL",
     "Torch": "Flash",
     "TorchOn": "Flash On",
     "TorchOff": "Flash Off",
     "ScanHelp": "Scan Help",
     "ScanNow": "Scan Now",
     "WhatToScan": "What QR Codes can be scanned?",
-    "ScanOnySpecial": "Only special QR codes can be scanned by Bifold Wallet.",
+    "ScanOnySpecial": "Only special QR codes can be scanned by Keyring.",
     "ScanOnlySpecial2": "These are presented by participating services or people to receive a credential offer, request for information or to connect.",
-    "ScanOnlySpecial3": "Bifold Wallet currently doesn't support adding digital credential by scanning or taking photos of physical ones.",
-    "WhereToUseLink": "See where you can use Bifold Wallet",
+    "ScanOnlySpecial3": "Keyring currently doesn't support adding digital credential by scanning or taking photos of physical ones.",
+    "WhereToUseLink": "See where you can use Keyring",
     "BadQRCode": "QR Code Not Recognized",
-    "BadQRCodeDescription": "Ths QR code scanned doesn't work with Bifold Wallet. Bifold Wallet only works with participating services.\n\nIt currently can't add digital credentials by taking photos of physical ones.",
+    "BadQRCodeDescription": "Ths QR code scanned doesn't work with Keyring. Keyring only works with participating services.\n\nIt currently can't add digital credentials by taking photos of physical ones.",
     "ErrorDetails": "Scan error details",
     "ShowDetails": "Show error details",
-    "NoDetails": "No error details available"
+    "NoDetails": "No error details available",
+    "CopyLink": "Copy link",
+    "LinkCopied": "Link copied to clipboard"
   },
   "PasteUrl": {
     "PasteUrl": "Paste a URL",
@@ -622,22 +666,22 @@
     "ErrorTextboxEmpty": "Textbox Empty",
     "ErrorTextboxEmptyDescription": "Please add a URL intended for digital wallets and try again.",
     "ErrorInvalidUrl": "URL not recognized",
-    "ErrorInvalidUrlDescription": "Check if the URL is intended for digital wallets and if it was copied correctly, then try again.",
-    "PasteUrlInput": "URL input",
-    "ScanDisabled": "Submit disabled, enter a URL first"
+    "ErrorInvalidUrlDescription": "Check if the URL is intended for digital wallets and if it was copied correctly, then try again."
   },
   "Connection": {
     "JustAMoment": "Just a moment while we make a secure connection...",
-    "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
+    "TakingTooLong": "This is taking longer than usual. You can return home or keep waiting.",
     "ConnectionInvitation": "Connection Invitation",
     "ScanQR": "Show this QR code to the other person",
-    "ScanQRComment": "After the QR code is scanned, a connection will be created.",
-    "ShareQR": "Sharing this QR code with someone will add them as a Contact.",
+    "ScanQRComment": "After a QR code is scanned, a connection will be created.",
+    "ShareQR": "Share this QR code with someone will add them as a Contact.",
     "MakingConnection": "Making connection...",
-    "ConnectionCompleted": "Connection completed!",
-    "Toggle": "Toggle Connection Inviter Capability",
+    "ConnectionCompleted": "Connection Completed!",
+    "Toggle": "Toggle connection inviter capability",
     "UseConnectionInviterCapability": "Use connection inviter capability?",
-    "OpenContact": "Open Contact"
+    "OpenContact": "Open Contact",
+    "RelationshipCredentialOffered": "Relationship credential offered",
+    "RelationshipCredentialOfferedBody": "A relationship credential has been sent to your contact"
   },
   "LoadingPlaceholder": {
     "Connecting": "Connecting...",
@@ -664,6 +708,7 @@
   },
   "CredentialOffer": {
     "CredentialOffer": "Credential Offer",
+    "AcceptContact": "Accept Contact",
     "ThisIsTakingLongerThanExpected": "This is taking Longer than expected. Check back later for your new credential.",
     "RejectThisCredential?": "Reject this Credential?",
     "AcceptingCredential": "Accepting Credential",
@@ -710,8 +755,6 @@
     "RequestProcessing": "Just a moment...",
     "OfferDelay": "Offer delay",
     "ChangeCredential": "Change credential",
-    "SelectCredential": "Select credential",
-    "PredicateInput": "Enter value for {{label}}",
     "GetThisCredential": "Get this credential",
     "RejectThisProof?": "Reject this Proof Request?",
     "DeclineThisProof?": "Decline this Proof Request?",
@@ -768,19 +811,7 @@
     "CredentialForProofIsRevoked": "revoked credential",
     "ProofRequestStateError": "The proof request received is in: {{state}}, decline this proof and try again.",
     "ProofRequestErrorMessage": "Something went wrong with the proof request.",
-    "PleaseAddress": " Please address them before continuing.",
-    "DetailsHeader": "Information Requested",
-    "OID4VCTitle": "Information Request",
-    "UseDifferentCard": "Use different card"
-  },
-  "UnsatisfiedProofRequest": {
-    "Title": "Information Request",
-    "InfoBox": {
-      "Title": "You do not have a card for this request",
-      "Subtitle": "Check with {{verifierName}} for accepted cards."
-    },
-    "VerifierDetail": "Received an information request from: ",
-    "RequestPurpose": " • {{requestPurpose}}"
+    "PleaseAddress": " Please address them before continuing."
   },
   "Settings": {
     "Version": "Version",
@@ -805,29 +836,76 @@
     "ConfigureMediator": "Configure Mediator",
     "ChangeMediator": "Change Mediator",
     "ChangeMediatorDescription": "Changing the mediator will restart the app. Do you want to continue?",
-    "GenericErrorMessages": "Generic error messages",
-    "VersionInfo": "Version information"
+    "BiometricUnlockSubtitle": "Use Face ID or fingerprint to open your wallet",
+    "SecureExchangesSubtitle": "Use secure hardware to verify your credential exchanges",
+    "HardwareAttestation": "Secure Exchanges",
+    "HardwareAttestationDescription": "Use biometrics to sign and verify credential exchanges for enhanced trust.",
+    "HardwareAttestationPINConfirmNotice": "You will need to enter your PIN to enable or disable this feature.",
+    "ToggleHardwareAttestation": "Toggle secure exchanges",
+    "WitnessReporting": "Reporting",
+    "WitnessReportingDescription": "When enabled, the app sends a stable, pseudonymous identifier to the witness server. This lets the witness record which connections were verified \u2014 helping build a trustworthy network.",
+    "WitnessReportingPrivacyNotice": "Your reporting identifier is unique per witness and never shared across witnesses, protecting your privacy while allowing opt-in accountability.",
+    "ToggleWitnessReporting": "Toggle witness reporting",
+    "Witnessing": "Witnessing",
+    "WitnessingDescription": "When enabled, the app can act as a witness for other wallets, helping to verify and record credential exchanges in the network.",
+    "ToggleWitnessing": "Toggle witnessing",
+    "WitnessingSubtitle": "Verify exchanges with a trusted witness",
+    "ReportingSubtitle": "Share pseudonymous exchange activity with the connected event",
+    "AboutThisApp": "About this App",
+    "ExportWallet": "Export Wallet",
+    "ExportWalletDescription": "Create a backup of your wallet data",
+    "ExportWalletConfirm": "Export",
+    "ExportWalletSuccess": "Wallet exported successfully",
+    "ExportWalletError": "Failed to export wallet",
+    "ExportWalletPasswordPlaceholder": "Enter backup password",
+    "ExportWalletPasswordLabel": "Backup Password",
+    "ExportWalletPasswordConfirmLabel": "Confirm Password",
+    "ImportWallet": "Import Wallet",
+    "ImportWalletDescription": "Restore wallet from a backup file",
+    "ImportWalletConfirm": "Import",
+    "ImportWalletSuccess": "Wallet imported successfully",
+    "ImportWalletError": "Failed to import wallet",
+    "ImportWalletPasswordPlaceholder": "Enter backup password",
+    "ImportWalletPasswordLabel": "Backup Password",
+    "ImportWalletSelectFile": "Select Backup File",
+    "ImportWalletNoFileSelected": "No file selected",
+    "WalletBackup": "Wallet Backup",
+    "ExportWalletWarning": "This will create an encrypted backup of your wallet. Store it safely.",
+    "ExportWalletInfo": "You will need this password to restore your wallet later.",
+    "ImportWalletWarning": "Importing a wallet backup will replace your current wallet data."
   },
   "AutoLockTimes": {
+    "OneHour": "One Hour",
     "FiveMinutes": "Five Minutes",
     "ThreeMinutes": "Three Minutes",
     "OneMinute": "One Minute",
-    "Never": "Never",
-    "Preview": "{{autoLockTime}} min"
+    "Never": "Never"
   },
   "TabStack": {
+    "Messages": "Message",
+    "Contacts": "Contacts",
     "Home": "Notifications",
     "Scan": "Scan",
-    "Credentials": "Credentials"
-  },
-  "TabStackAccessibility": {
-    "Home": "Notifications tab {{notifications}} notifications",
-    "Scan": "Scan tab",
-    "Credentials": "Credentials tab"
+    "QRCode": "QR Code",
+    "Credentials": "Credentials",
+    "Wallet": "Wallet"
   },
   "RootStack": {
     "Contacts": "Contacts",
     "Settings": "Settings"
+  },
+  "QRCodeExchange": {
+    "Title": "Connect",
+    "Description": "Scan or generate a QR code to connect",
+    "ScanQRCode": "Scan QR Code",
+    "GenerateQRCode": "Generate QR Code"
+  },
+  "VRCQRCodeExchange": {
+    "Title": "QR Code Exchange",
+    "Description": "Scan a trusted contact's QR code or offer your own to connect",
+    "ScanQRCode": "Scan QR Code",
+    "GenerateQRCode": "Share your QR Code",
+    "GenerateRelationshipInvitation": "Generate QR Code"
   },
   "QRScanner": {
     "PermissionToUseCamera": "Permission to use camera",
@@ -855,11 +933,11 @@
   "Screens": {
     "Splash": "Splash",
     "Onboarding": "Onboarding",
-    "Preface": "Aries Bifold",
+    "Preface": "Keyring",
     "Terms": "Terms & Conditions",
     "CreatePIN": "Create a PIN",
-    "ConfirmPIN": "Confirm PIN",
     "EnterPIN": "Enter PIN",
+    "Messages": "Messages",
     "Home": "Notifications",
     "Scan": "Scan",
     "ScanHelp": "Scan Help",
@@ -869,7 +947,6 @@
     "CredentialOffer": "Credential Offer",
     "ProofChangeCredential": "Choose a credential",
     "ProofRequest": "Proof Request",
-    "UnsatisfiedProofRequest": "Unsatisfied Proof Request",
     "ChangeCard": "Change Card",
     "ProofRequestDetails": "Proof Request Details",
     "ProofRequestAttributeDetails": "Proof Request Attribute Details",
@@ -881,7 +958,10 @@
     "Contacts": "Contacts",
     "Decline": "Decline",
     "ContactDetails": "Contact Details",
-    "Biometry": "Biometrics",
+    "WitnessConnections": "Witness Connections",
+    "WitnessDiscovery": "Witness Discovery",
+    "WitnessAutoScan": "Witness Auto-Scan",
+    "Biometry": "Biometric Unlock",
     "Developer": "Developer options",
     "ChangePIN": "Change PIN",
     "CommonDecline": "Decline",
@@ -895,6 +975,7 @@
     "Declined": "Declined",
     "UseBiometry": "Use Biometry",
     "PushNotifications": "Push notifications",
+    "RCardOnboarding": "R-card",
     "CustomNotification": "Custom Notification",
     "ProofRequesting": "Proof Requesting",
     "NameWallet": "Name your wallet",
@@ -920,6 +1001,24 @@
     "EmptyNameTitle": "Wallet name can't be empty",
     "EmptyNameDescription": "This is the name people see when connecting with you.\n\nPlease enter a wallet name."
   },
+  "RCardOnboarding": {
+    "Title": "Create Your Profile (R-Card)",
+    "Legend": "Your profile is like a digital business card you share when creating new connections. It helps others verify who you are. You control what you share and can update this anytime.",
+    "Fields": {
+      "FirstName": "First name",
+      "LastName": "Last name",
+      "Email": "Email",
+      "Organization": "Organization"
+    },
+    "Errors": {
+      "FirstNameRequired": "Enter your first name.",
+      "LastNameRequired": "Enter your last name.",
+      "EmailRequired": "Enter an email address.",
+      "EmailInvalid": "Enter a valid email address.",
+      "OrganizationRequired": "Enter your organization.",
+      "Generic": "We couldn\u2019t save your profile details. Please try again."
+    }
+  },
   "RenameContact": {
     "ThisContactName": "This contact name is only displayed in your Contacts List.",
     "ContactName": "Contact name",
@@ -930,14 +1029,14 @@
   },
   "NetInfo": {
     "NoInternetConnectionTitle": "No internet connection",
-    "NoInternetConnectionMessage": "You're unable to access services using Bifold or receive credentials until you're back online.\n\nPlease check your internet connection."
+    "NoInternetConnectionMessage": "You're unable to access services using Keyring or receive credentials until you're back online.\n\nPlease check your internet connection."
   },
   "Onboarding": {
-    "SkipA11y": "Skip introduction to Aries Bifold"
+    "SkipA11y": "Skip introduction to Keyring"
   },
   "Preface": {
     "PrimaryHeading": "Is this app for you?",
-    "Paragraph1": "Most people will not have a need for Aries Bifold because very few digital credentials are currently available.",
+    "Paragraph1": "Most people will not have a need for Keyring because very few digital credentials are currently available.",
     "Confirmed": "I have confirmed that this app is for me."
   },
   "Chat": {
@@ -946,7 +1045,7 @@
     "ViewOffer": "View offer",
     "OpenItem": "Open",
     "UserYou": "You",
-    "YouConnected": "You connected with",
+    "YouConnected": "You connected with:",
     "CredentialProposalSent": "sent a credential proposal",
     "CredentialOfferReceived": "sent a credential offer",
     "CredentialRequestSent": "sent a credential request",
@@ -958,6 +1057,27 @@
     "ProofRequestRejected": "rejected a proof request",
     "ProofRequestRejectReceived": "rejected a proof request",
     "ProofRequestSatisfied": "shared information",
+    "RelationshipDIDReceived": "Relationship DID received from {{name}}",
+    "RelationshipDIDShared": "Your Relationship DID shared with {{name}}",
+    "RelationshipDIDTitle": "Your Relationship DID",
+    "RelationshipDIDSharedSuffix": "shared with {{name}}",
+    "RelationshipDIDReceivedTitle": "Relationship DID received",
+    "RelationshipDIDFromSuffix": "from {{name}}",
+    "ReportingPseudonymTitle": "Your Reporting Pseudonym",
+    "ReportingPseudonymRegisteredSuffix": "registered with {{name}}",
+    "ReportingStatusOn": "Reporting: On",
+    "ReportingStatusOff": "Reporting: Off",
+    "ReportingDIDSettingsNote": "Adjust in Settings \u2192 Witness Reporting",
+    "CredentialReceivedTitle": "Credential received",
+    "CredentialOfferTitle": "Credential offer received",
+    "CredentialFromSuffix": "from {{name}}",
+    "ContactReceivedTitle": "Contact received",
+    "ContactOfferTitle": "Contact offer received",
+    "RelationshipDID": "Relationship DID",
+    "CopyDID": "Copy DID",
+    "DIDCopied": "Copied",
+    "DIDCopiedMessage": "The DID has been copied to your clipboard.",
+    "FullContactDetails": "Full Contact details",
     "Actions": "More",
     "Details": "Details"
   },
@@ -1001,26 +1121,13 @@
     "WaitingForResponse": "Waiting for response..."
   },
   "AppUpdate": {
-    "Heading": "Update Bifold to the latest version",
-    "Body": "Bifold was updated with new improvements. Update your app now to enjoy the latest features and enhancements.",
+    "Heading": "Update Keyring to the latest version",
+    "Body": "Keyring was updated with new improvements. Update your app now to enjoy the latest features and enhancements.",
     "LearnMore": "Learn what's New",
     "UpdateNow": "Update the app",
     "UpdateLater": "Do this later"
   },
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts"
-  },
-  "FullScreenErrorModal": {
-    "PrimaryCTA": "Go back to home"
-  },
-  "OpenIDNotification": {
-    "CredentialRefresh": {
-      "Title": "Update to {{cardName}} available",
-      "CTA": "View offer"
-    },
-    "CredentialExpired": {
-      "Title": "{{cardName}} has expired",
-      "CTA": "View offer"
-    }
   }
 }

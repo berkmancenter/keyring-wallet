@@ -21,6 +21,7 @@ interface ScreenComponents {
   NameWallet: React.FC
   Biometry: React.FC
   PushNotifications: React.FC
+  RCardOnboarding: React.FC
   AttemptLockout: React.FC
   OnboardingScreen: React.FC
   CreatePINScreen: React.FC
@@ -117,6 +118,16 @@ export const getOnboardingScreens = (
       title: t('Screens.PushNotifications'),
       headerLeft: () => false,
       ...ScreenOptionsDictionary[Screens.PushNotifications],
+    }),
+  },
+  {
+    name: Screens.RCardOnboarding,
+    children: components.RCardOnboarding,
+    options: () => ({
+      ...TransitionPresets.SlideFromRightIOS,
+      title: t('Screens.RCardOnboarding'),
+      headerLeft: () => false,
+      ...ScreenOptionsDictionary[Screens.RCardOnboarding],
     }),
   },
   {

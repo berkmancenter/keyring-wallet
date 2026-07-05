@@ -29,12 +29,10 @@ export const createCarouselStyle = (OnboardingTheme: any) => {
       flexShrink: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 30,
+      marginBottom: 12,
     },
     pagerDot: {
       ...OnboardingTheme.pagerDot,
-      borderWidth: 1,
-      borderStyle: 'solid',
     },
     pagerDotActive: {
       ...OnboardingTheme.pagerDotActive,

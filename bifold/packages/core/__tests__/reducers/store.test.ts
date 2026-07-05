@@ -102,4 +102,80 @@ describe('Store reducer', () => {
     })
     expect(returnedState.preferences.alternateContactNames).toEqual({ '123': 'My Alt Name' })
   })
+
+  test('UPDATE_SEEN_CONTACTS_TOUR sets to true', () => {
+    const returnedState = storeReducer(defaultState, {
+      type: DispatchAction.UPDATE_SEEN_CONTACTS_TOUR,
+      payload: [true],
+    })
+    expect(returnedState.tours.seenContactsTour).toBe(true)
+  })
+
+  test('UPDATE_SEEN_CONTACTS_TOUR sets to false', () => {
+    const returnedState = storeReducer(defaultState, {
+      type: DispatchAction.UPDATE_SEEN_CONTACTS_TOUR,
+      payload: [false],
+    })
+    expect(returnedState.tours.seenContactsTour).toBe(false)
+  })
+
+  test('UPDATE_SEEN_CONTACTS_TOUR defaults to false when no payload', () => {
+    const returnedState = storeReducer(defaultState, {
+      type: DispatchAction.UPDATE_SEEN_CONTACTS_TOUR,
+      payload: [],
+    })
+    expect(returnedState.tours.seenContactsTour).toBe(false)
+  })
+
+  test('UPDATE_SEEN_CONTACT_OFFER_TOUR sets to true', () => {
+    const returnedState = storeReducer(defaultState, {
+      type: DispatchAction.UPDATE_SEEN_CONTACT_OFFER_TOUR,
+      payload: [true],
+    })
+    expect(returnedState.tours.seenContactOfferTour).toBe(true)
+  })
+
+  test('UPDATE_SEEN_CONTACT_OFFER_TOUR sets to false', () => {
+    const returnedState = storeReducer(defaultState, {
+      type: DispatchAction.UPDATE_SEEN_CONTACT_OFFER_TOUR,
+      payload: [false],
+    })
+    expect(returnedState.tours.seenContactOfferTour).toBe(false)
+  })
+
+  test('UPDATE_SEEN_CONTACT_OFFER_TOUR defaults to false when no payload', () => {
+    const returnedState = storeReducer(defaultState, {
+      type: DispatchAction.UPDATE_SEEN_CONTACT_OFFER_TOUR,
+      payload: [],
+    })
+    expect(returnedState.tours.seenContactOfferTour).toBe(false)
+  })
+
+  describe('Witness settings', () => {
+    test('UPDATE_WITNESS_SETTINGS sets activeWitnessConnectionId', () => {
+      const returnedState = storeReducer(defaultState, {
+        type: DispatchAction.UPDATE_WITNESS_SETTINGS,
+        payload: [{ activeWitnessConnectionId: 'conn-abc-123' }],
+      })
+      expect((returnedState as any).witness.activeWitnessConnectionId).toBe('conn-abc-123')
+    })
+
+    test('UPDATE_WITNESS_SETTINGS clears activeWitnessConnectionId when set to undefined', () => {
+      // First set a value
+      const stateWithWitness = storeReducer(defaultState, {
+        type: DispatchAction.UPDATE_WITNESS_SETTINGS,
+        payload: [{ activeWitnessConnectionId: 'conn-abc-123' }],
+      })
+      // Then clear it
+      const returnedState = storeReducer(stateWithWitness, {
+        type: DispatchAction.UPDATE_WITNESS_SETTINGS,
+        payload: [{ activeWitnessConnectionId: undefined }],
+      })
+      expect((returnedState as any).witness.activeWitnessConnectionId).toBeUndefined()
+    })
+
+    test('defaultState has undefined activeWitnessConnectionId', () => {
+      expect((defaultState as any).witness?.activeWitnessConnectionId).toBeUndefined()
+    })
+  })
 })

@@ -1,40 +1,30 @@
-# Summary of Changes
+## What is in this PR?
 
-Replace this text with a high-level summary of the changes included in this PR.
+<!-- What is the goal of this PR? What steps are involved in achieving that goal? -->
 
-# Testing Instructions
+## Changes in the codebase
 
-Replace this text with detailed instructions on how to test the changes included in this PR.
+<!-- This is technical. Here is where you can be more focused on the engineering side of your solution. Include information about the functionality they are adding or modifying, as well as any refactoring or improvement of existing code. -->
 
-# Acceptance Criteria
+-
 
-Replace this text with the acceptance criteria that must be met for this PR to be approved.
+## Documentation and automated testing
 
-# Screenshots, videos, or gifs
+Confirm you did the following as appropriate:
+- [ ] document any breaking changes in your commit messages?
+- [ ] document your changes as comments in the code? Use TSDoc format where appropriate.
+- [ ] update the README and docs to be clear and easy to use for end users and developers?
+- [ ] add and/or update automated tests?
+- [ ] update team documentation of any new or changed environment variables?
 
-Replace this text with embedded media for UI changes if they are included in this PR. If there are none, simply enter N/A
+## Testing this PR
 
-# Breaking change guide
+<!-- Give your reviewer some context and specific recommendations with easy to follow steps how to test your work. -->
 
-Replace this text with any breaking changes included in this PR along with how to address them in downstream projects. If there are none, simply enter N/A
+- [ ]
 
-# Related Issues
 
-Replace this text with issue #'s that are relevant to this PR. If there are none, simply enter N/A
 
-# Pull Request Checklist
+## Additional information
 
-Tick all boxes below to demonstrate that you have completed the respective task. If the item does not apply to your this PR **check it anyway** to make it apparent that there's nothing to do.
-
-- [ ] All commits contain a DCO `Signed-off-by` line (we use the [DCO GitHub app](https://github.com/apps/dco) to enforce this)
-- [ ] If applicable, screenshots, gifs, or video are included for UI changes
-- [ ] If applicable, breaking changes are described above along with how to address them
-- [ ] If applicable, added [changeset(s)](https://github.com/changesets/changesets)
-- [ ] Added sufficient [tests](../packages/core/__tests__/) so that overall code coverage is not reduced
-
-If you have _any_ questions to _any_ of the points above, just **submit and ask**! This checklist is here to _help_ you, not to deter you from contributing!
-
-Pro Tip 🤓
-
-- Read our [contribution guide](../CONTRIBUTING.md) at least once; it will save you a few review cycles!
-- Your PR will likely not be reviewed until all the above boxes are checked and all automated checks have passed
+<!-- Provide any additional information that might be useful to the reviewer in evaluating this pull request. This could include performance considerations,design choices, etc. -->

@@ -1,13 +1,12 @@
-import { useAgent } from '@bifold/react-hooks'
+import { useAgent } from '@credo-ts/react-hooks'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Text, useWindowDimensions, View, StyleSheet, DeviceEventEmitter } from 'react-native'
-import { isTablet } from 'react-native-device-info'
-import { OrientationType, useOrientationChange } from 'react-native-orientation-locker'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { AttachTourStep } from '../components/tour/AttachTourStep'
 import { EventTypes } from '../constants'
@@ -17,73 +16,40 @@ import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
-import { Screens, Stacks, TabStackParams, TabStacks } from '../types/navigators'
+import { TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 
+import { useUnreadMessages } from '../hooks/useUnreadMessages'
+import InAppMessageNotifier from '../components/InAppMessageNotifier'
+import ContactStack from './ContactStack'
 import CredentialStack from './CredentialStack'
-import HomeStack from './HomeStack'
+import MessageStack from './MessageStack'
+import SettingStack from './SettingStack'
 import { BaseTourID } from '../types/tour'
-import { ThemedText } from '../components/texts/ThemedText'
+import QRCodeExchangeSlider from '../modules/vrc/components/QRCodeExchangeSlider'
 
 const TabStack: React.FC = () => {
-  const { fontScale } = useWindowDimensions()
-  const badgeFontSize = useMemo(() => {
-    if (fontScale >= 1.2 && fontScale < 1.5) {
-      return {
-        fontSize: 15,
-        lineHeight: 15,
-      }
-    } else if (fontScale >= 1.5 && fontScale < 1.7) {
-      return {
-        fontSize: 10,
-        lineHeight: 10,
-      }
-    } else if (fontScale >= 1.7 && fontScale < 3) {
-      return {
-        fontSize: 8,
-        lineHeight: 8,
-      }
-    } else if (fontScale >= 3 && fontScale < 4) {
-      return {
-        fontSize: 6,
-        lineHeight: 6,
-      }
-    }
-    return null
-  }, [fontScale])
-  const [{ useNotifications }, { enableImplicitInvitations, enableReuseConnections }, logger] = useServices([
-    TOKENS.NOTIFICATIONS,
+  const [{ enableImplicitInvitations, enableReuseConnections }, logger] = useServices([
     TOKENS.CONFIG,
     TOKENS.UTIL_LOGGER,
   ])
-  const notifications = useNotifications({})
   const { t } = useTranslation()
   const Tab = createBottomTabNavigator<TabStackParams>()
   const { assertNetworkConnected } = useNetwork()
-  const { ColorPalette, TabTheme, TextTheme, Assets, NavigationTheme } = useTheme()
-  const [orientation, setOrientation] = useState(OrientationType.PORTRAIT)
+  const { TabTheme, TextTheme, Assets, NavigationTheme, GradientTheme } = useTheme()
   const [store, dispatch] = useStore()
   const { agent } = useAgent()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
+  const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
+  const [showQRCodeBottomSheet, setShowQRCodeBottomSheet] = React.useState(false)
+  const { totalUnread } = useUnreadMessages()
   const styles = StyleSheet.create({
     tabBarIcon: {
       flex: 1,
     },
   })
-
-  useOrientationChange((orientationType) => {
-    setOrientation(orientationType)
-  })
-
-  const leftMarginForDevice = () => {
-    if (isTablet()) {
-      return orientation in [OrientationType.PORTRAIT, OrientationType['PORTRAIT-UPSIDEDOWN']] ? 130 : 170
-    }
-
-    return 0
-  }
 
   const handleDeepLink = useCallback(
     async (deepLink: string) => {
@@ -132,10 +98,13 @@ const TabStack: React.FC = () => {
     }
   }, [store.deepLink, agent, store.authentication.didAuthenticate, handleDeepLink])
 
+  const GradientBg = GradientTheme?.HeaderBackground
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: NavigationTheme.colors.primary }} edges={['left', 'right', 'top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: GradientBg ? 'transparent' : NavigationTheme.colors.primary }} edges={['left', 'right', 'top']}>
+      {GradientBg && <GradientBg style={StyleSheet.absoluteFillObject} />}
       <Tab.Navigator
-        initialRouteName={TabStacks.HomeStack}
+        initialRouteName={TabStacks.ContactStack}
         screenOptions={{
           unmountOnBlur: true,
           tabBarStyle: {
@@ -147,17 +116,58 @@ const TabStack: React.FC = () => {
         }}
       >
         <Tab.Screen
-          name={TabStacks.HomeStack}
-          component={HomeStack}
+          name={TabStacks.ContactStack}
+          component={ContactStack}
           options={{
             tabBarIconStyle: styles.tabBarIcon,
             tabBarIcon: ({ color, focused }) => (
-              <AttachTourStep tourID={BaseTourID.HomeTour} index={1}>
+              <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
+                {focused ? (
+                  <Assets.svg.contactsIconFocused height={20} width={20} fill={color} />
+                ) : (
+                  <Assets.svg.contactsIconOutline height={20} width={20} fill={color} />
+                )}
+                {showLabels && (
+                  <Text
+                    style={{
+                      ...TabTheme.tabBarTextStyle,
+                      color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
+                      fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
+                    }}
+                  >
+                    {t('TabStack.Contacts')}
+                  </Text>
+                )}
+              </View>
+            ),
+            tabBarShowLabel: false,
+            tabBarAccessibilityLabel: t('TabStack.Contacts'),
+            tabBarTestID: testIdWithKey('Contacts'),
+          }}
+        />
+        <Tab.Screen
+          name={TabStacks.MessageStack}
+          component={MessageStack}
+          options={{
+            tabBarIconStyle: styles.tabBarIcon,
+            tabBarBadge: totalUnread > 0 ? totalUnread : undefined,
+            tabBarBadgeStyle: {
+              backgroundColor: '#D21E30',
+              color: '#FFFFFF',
+              fontSize: 11,
+              fontWeight: '600',
+              minWidth: 18,
+              height: 18,
+              borderRadius: 9,
+              lineHeight: 17,
+            },
+            tabBarIcon: ({ color, focused }) => (
+              <AttachTourStep tourID={BaseTourID.HomeTour} index={0}>
                 <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
                   {focused ? (
-                    <Assets.svg.tabOneFocusedIcon height={30} width={30} fill={color} />
+                    <Assets.svg.tabFourFocusedIcon height={20} width={20} fill={color} />
                   ) : (
-                    <Assets.svg.tabOneIcon height={30} width={30} fill={color} />
+                    <Assets.svg.tabFourIcon height={20} width={20} fill={color} />
                   )}
                   {showLabels && (
                     <Text
@@ -167,97 +177,52 @@ const TabStack: React.FC = () => {
                         fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
                       }}
                     >
-                      {t('TabStack.Home')}
+                      {t('TabStack.Messages')}
                     </Text>
                   )}
                 </View>
               </AttachTourStep>
             ),
             tabBarShowLabel: false,
-            tabBarAccessibilityLabel: t('TabStackAccessibility.Home', { notifications: notifications?.length ?? 0 }),
-            tabBarTestID: testIdWithKey(t('TabStack.Home')),
-            tabBarBadge: notifications.length || undefined,
-            tabBarBadgeStyle: {
-              marginLeft: leftMarginForDevice(),
-              backgroundColor: ColorPalette.semantic.error,
-              ...badgeFontSize,
-            },
+            tabBarAccessibilityLabel: totalUnread > 0
+              ? `${t('TabStack.Messages')}, ${totalUnread} unread`
+              : t('TabStack.Messages'),
+            tabBarTestID: testIdWithKey(t('TabStack.Messages')),
           }}
         />
         <Tab.Screen
           name={TabStacks.ConnectStack}
           options={{
             tabBarIconStyle: styles.tabBarIcon,
-            tabBarIcon: ({ focused }) => (
-              <View
-                style={{
-                  position: 'relative',
-                  flex: 1,
-                  width: 90,
-                }}
-              >
-                <AttachTourStep tourID={BaseTourID.HomeTour} index={0} fill>
-                  <View
-                    style={{
-                      position: 'absolute',
-                      flexGrow: 1,
-                      width: 90,
-                      bottom: 0,
-                      minHeight: 90,
-                      margin: 'auto',
-                    }}
-                  >
-                    <AttachTourStep tourID={BaseTourID.CredentialsTour} index={0} fill>
-                      <View
-                        style={{
-                          flexGrow: 1,
-                          justifyContent: 'flex-end',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <View
-                          accessible={true}
-                          accessibilityRole={'button'}
-                          accessibilityLabel={t('TabStack.Scan')}
-                          style={{ ...TabTheme.focusTabIconStyle }}
-                        >
-                          <Assets.svg.tabTwoIcon
-                            height={30}
-                            width={30}
-                            fill={TabTheme.tabBarButtonIconStyle.color}
-                            style={{ paddingLeft: 0.5, paddingRight: 0.5 }}
-                          />
-                        </View>
-
-                        {showLabels && (
-                          <ThemedText
-                            maxFontSizeMultiplier={1.2}
-                            style={{
-                              ...TabTheme.tabBarTextStyle,
-                              color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
-                              marginTop: 5,
-                            }}
-                          >
-                            {t('TabStack.Scan')}
-                          </ThemedText>
-                        )}
-                      </View>
-                    </AttachTourStep>
-                  </View>
-                </AttachTourStep>
-              </View>
+            tabBarIcon: ({ color, focused }) => (
+              <AttachTourStep tourID={BaseTourID.HomeTour} index={2}>
+                <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
+                  <Assets.svg.tabTwoIcon height={20} width={20} fill={color} />
+                  {showLabels && (
+                    <Text
+                      style={{
+                        ...TabTheme.tabBarTextStyle,
+                        color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
+                        fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
+                      }}
+                    >
+                      {t('TabStack.QRCode')}
+                    </Text>
+                  )}
+                </View>
+              </AttachTourStep>
             ),
             tabBarShowLabel: false,
-            tabBarAccessibilityLabel: t('TabStackAccessibility.Scan'),
-            tabBarTestID: testIdWithKey(t('TabStack.Scan')),
+            tabBarAccessibilityLabel: t('TabStack.QRCode'),
+            tabBarTestID: testIdWithKey(t('TabStack.QRCode')),
           }}
-          listeners={({ navigation }) => ({
+          listeners={() => ({
             tabPress: (e) => {
               e.preventDefault()
               if (!assertNetworkConnected()) {
                 return
               }
-              navigation.navigate(Stacks.ConnectStack, { screen: Screens.Scan })
+              setShowQRCodeBottomSheet(true)
             },
           })}
         >
@@ -269,12 +234,12 @@ const TabStack: React.FC = () => {
           options={{
             tabBarIconStyle: styles.tabBarIcon,
             tabBarIcon: ({ color, focused }) => (
-              <AttachTourStep tourID={BaseTourID.HomeTour} index={2}>
+              <AttachTourStep tourID={BaseTourID.HomeTour} index={1}>
                 <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
                   {focused ? (
-                    <Assets.svg.tabThreeFocusedIcon height={30} width={30} fill={color} />
+                    <Assets.svg.tabThreeFocusedIcon height={20} width={20} fill={color} />
                   ) : (
-                    <Assets.svg.tabThreeIcon height={30} width={30} fill={color} />
+                    <Assets.svg.tabThreeIcon height={20} width={20} fill={color} />
                   )}
                   {showLabels && (
                     <Text
@@ -284,19 +249,55 @@ const TabStack: React.FC = () => {
                         fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
                       }}
                     >
-                      {t('TabStack.Credentials')}
+                      {t('TabStack.Wallet')}
                     </Text>
                   )}
                 </View>
               </AttachTourStep>
             ),
             tabBarShowLabel: false,
-            tabBarAccessibilityLabel: t('TabStackAccessibility.Credentials'),
-            tabBarTestID: testIdWithKey(t('TabStack.Credentials')),
+            tabBarAccessibilityLabel: t('TabStack.Wallet'),
+            tabBarTestID: testIdWithKey(t('TabStack.Wallet')),
+          }}
+        />
+        <Tab.Screen
+          name={TabStacks.SettingStack}
+          component={SettingStack}
+          options={{
+            tabBarIconStyle: styles.tabBarIcon,
+            tabBarIcon: ({ color, focused }) => (
+              <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
+                {Assets.svg.tabMenuIcon ? (
+                  <Assets.svg.tabMenuIcon height={26} width={26} fill={color} />
+                ) : (
+                  <Icon name="menu" size={26} color={color} />
+                )}
+                {showLabels && (
+                  <Text
+                    style={{
+                      ...TabTheme.tabBarTextStyle,
+                      color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
+                      fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
+                    }}
+                  >
+                    {t('Screens.Settings')}
+                  </Text>
+                )}
+              </View>
+            ),
+            tabBarShowLabel: false,
+            tabBarAccessibilityLabel: t('Screens.Settings'),
+            tabBarTestID: testIdWithKey('Settings'),
           }}
         />
       </Tab.Navigator>
       <SafeAreaView style={{ backgroundColor: TabTheme.tabBarSecondaryBackgroundColor }} edges={['bottom']} />
+      <QRCodeExchangeSlider
+        visible={showQRCodeBottomSheet}
+        onDismiss={() => setShowQRCodeBottomSheet(false)}
+        navigation={navigation}
+      />
+      <InAppMessageNotifier />
     </SafeAreaView>
   )
 }

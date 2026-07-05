@@ -1,5 +1,6 @@
 {
-  "name": "bifold-wallet-root",
+  "name": "keyring-bifold",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "license": "Apache-2.0",
   "workspaces": [
@@ -7,10 +8,10 @@
     "samples/*"
   ],
   "repository": {
-    "url": "https://github.com/openwallet-foundation/bifold-wallet/",
+    "url": "https://github.com/berkmancenter/keyring-bifold/",
     "type": "git"
   },
-  "homepage": "https://github.com/openwallet-foundation/bifold-wallet/",
+  "homepage": "https://github.com/berkmancenter/keyring-bifold/",
   "scripts": {
     "clean": "yarn workspaces foreach --all --topological-dev -p run clean && echo 'Cleaned all packages 🧹'",
     "build": "yarn workspaces foreach --all --topological-dev -p run build",

@@ -19,6 +19,7 @@ import { useAppAgent } from '../utils/agent'
 // a value of 0 will never trigger the lock out action and
 // an undefined value will default to 5 minutes
 export const AutoLockTime = {
+  OneHour: 60,
   OneMinute: 1,
   ThreeMinutes: 3,
   FiveMinutes: 5,

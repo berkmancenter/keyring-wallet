@@ -7,7 +7,7 @@ Object {
       "calls": Array [
         Array [
           Object {
-            "domain": "didcomm://invite",
+            "domain": "https://wallet.asml.berkmancenter.org/invite",
           },
         ],
       ],
@@ -36,7 +36,7 @@ Object {
         "calls": Array [
           Array [
             Object {
-              "domain": "didcomm://invite",
+              "domain": "https://wallet.asml.berkmancenter.org/invite",
             },
           ],
         ],

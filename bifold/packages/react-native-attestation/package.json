@@ -27,15 +27,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openwallet-foundation/bifold-wallet.git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
     "directory": "packages/react-native-attestation"
   },
   "author": "Jason C. Leach <jason.leach@fullboar.ca> (https://github.com/fullboar)",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/openwallet-foundation/bifold-wallet/issues"
+    "url": "https://github.com/berkmancenter/keyring-bifold/issues"
   },
-  "homepage": "https://github.com/openwallet-foundation/bifold-wallet",
+  "homepage": "https://github.com/berkmancenter/keyring-bifold",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
     "access": "public"

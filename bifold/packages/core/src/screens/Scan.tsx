@@ -31,8 +31,12 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
     TOKENS.UTIL_LOGGER,
   ])
   let defaultToConnect = false
+  let offerRelationshipCredential = false
   if (route?.params && route.params['defaultToConnect']) {
     defaultToConnect = route.params['defaultToConnect']
+  }
+  if (route?.params && route.params['offerRelationshipCredential']) {
+    offerRelationshipCredential = route.params['offerRelationshipCredential']
   }
 
   const handleInvitation = useCallback(
@@ -129,10 +133,15 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
     return <CameraDisclosureModal requestCameraUse={requestCameraUse} />
   }
 
+  // When defaultToConnect is true, show QR code view directly without tabs
+  // When useConnectionInviterCapability is enabled, show tabs for switching between scan and generate
+  const shouldShowTabs = store.preferences.useConnectionInviterCapability && !defaultToConnect
+
   return (
     <QRScanner
-      showTabs={store.preferences.useConnectionInviterCapability}
+      showTabs={shouldShowTabs}
       defaultToConnect={defaultToConnect}
+      offerRelationshipCredential={offerRelationshipCredential}
       handleCodeScan={handleCodeScan}
       error={qrCodeScanError}
       enableCameraOnError={true}

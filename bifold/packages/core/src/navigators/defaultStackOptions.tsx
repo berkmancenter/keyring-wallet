@@ -53,6 +53,16 @@ export const DefaultScreenOptionsDictionary: ScreenOptionsType = {
     headerTintColor: OnboardingTheme.headerTintColor,
     headerBackTestID: testIdWithKey('Back'),
   },
+  [Screens.ToggleWitnessReporting]: {
+    headerTintColor: OnboardingTheme.headerTintColor,
+  },
+  [Screens.ToggleWitnessing]: {
+    headerTintColor: OnboardingTheme.headerTintColor,
+  },
+  [Screens.ToggleHardwareAttestation]: {
+    headerTintColor: OnboardingTheme.headerTintColor,
+    headerBackTestID: testIdWithKey('Back'),
+  },
   [Screens.Developer]: {
     headerTintColor: OnboardingTheme.headerTintColor,
     headerBackTestID: testIdWithKey('Back'),
@@ -77,9 +87,11 @@ export const DefaultScreenOptionsDictionary: ScreenOptionsType = {
   },
 }
 
-export function useDefaultStackOptions({ ColorPalette }: ITheme): StackNavigationOptions {
+export function useDefaultStackOptions({ ColorPalette, GradientTheme }: ITheme): StackNavigationOptions {
   const { t } = useTranslation()
   const [{ globalScreenOptions }] = useServices([TOKENS.CONFIG])
+
+  const GradientBg = GradientTheme?.HeaderBackground
 
   return (
     {
@@ -98,7 +110,9 @@ export function useDefaultStackOptions({ ColorPalette }: ITheme): StackNavigatio
         shadowColor: ColorPalette.grayscale.black,
         shadowOpacity: 0.15,
         borderBottomWidth: 0,
+        ...(GradientBg ? { backgroundColor: 'transparent' } : {}),
       },
+      ...(GradientBg ? { headerBackground: () => <GradientBg style={{ flex: 1 }} /> } : {}),
       headerTitleAlign: 'center' as 'center' | 'left',
       headerTitle: (props: { children: React.ReactNode }) => <HeaderTitle {...props} />,
       header: (props) => <HeaderWithBanner {...props} />,

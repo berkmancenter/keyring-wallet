@@ -1,0 +1,498 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`RCardOnboarding Screen submits valid form with all fields and stores template 1`] = `
+<RNCSafeAreaView
+  edges={
+    Object {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "off",
+    }
+  }
+  style={
+    Object {
+      "backgroundColor": "#000000",
+      "flex": 1,
+    }
+  }
+>
+  <View
+    onLayout={[Function]}
+    style={
+      Array [
+        Object {
+          "flex": 1,
+        },
+        Object {
+          "paddingBottom": 0,
+        },
+      ]
+    }
+  >
+    <View
+      style={
+        Object {
+          "flex": 1,
+          "paddingBottom": 8,
+          "paddingHorizontal": 20,
+          "paddingTop": 16,
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "backgroundColor": "#FFFFFF",
+            "borderColor": "rgba(170,170,170,0.4)",
+            "borderRadius": 12,
+            "borderWidth": 1,
+            "elevation": 4,
+            "flex": 1,
+            "overflow": "hidden",
+            "shadowColor": "#000",
+            "shadowOffset": Object {
+              "height": 4,
+              "width": 0,
+            },
+            "shadowOpacity": 0.1,
+            "shadowRadius": 4,
+          }
+        }
+      >
+        <RCTScrollView
+          contentContainerStyle={
+            Object {
+              "flexGrow": 1,
+              "padding": 20,
+              "paddingBottom": 120,
+            }
+          }
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "fontSize": 20,
+                    "fontWeight": "600",
+                    "marginBottom": 4,
+                    "textAlign": "center",
+                  },
+                ]
+              }
+            >
+              RCardOnboarding.Title
+            </Text>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "fontSize": 17,
+                    "lineHeight": 23,
+                    "marginBottom": 16,
+                    "textAlign": "center",
+                  },
+                ]
+              }
+            >
+              RCardOnboarding.Legend
+            </Text>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#888",
+                    "fontSize": 13,
+                    "marginBottom": 8,
+                  },
+                ]
+              }
+            >
+              <Text
+                style={
+                  Object {
+                    "color": "#ff0000",
+                  }
+                }
+              >
+                *
+              </Text>
+               Required
+            </Text>
+            <View>
+              <View
+                style={
+                  Object {
+                    "marginVertical": 10,
+                    "width": "100%",
+                  }
+                }
+              >
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "marginBottom": 5,
+                      },
+                    ]
+                  }
+                >
+                  RCardOnboarding.Fields.FirstName
+                  <Text
+                    style={
+                      Object {
+                        "color": "#ff0000",
+                      }
+                    }
+                  >
+                     *
+                  </Text>
+                </Text>
+                <TextInput
+                  accessibilityLabel="RCardOnboarding.Fields.FirstName"
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  blurOnSubmit={false}
+                  defaultValue="John"
+                  maxFontSizeMultiplier={2}
+                  maxLength={64}
+                  onBlur={[Function]}
+                  onChangeText={[Function]}
+                  onFocus={[Function]}
+                  onSubmitEditing={[Function]}
+                  returnKeyType="next"
+                  selectionColor="#42803E"
+                  style={
+                    Array [
+                      Object {
+                        "backgroundColor": "#000000",
+                        "borderColor": "#FFFFFFFF",
+                        "borderRadius": 4,
+                        "borderWidth": 2,
+                        "color": "#FFFFFF",
+                        "fontSize": 16,
+                        "padding": 10,
+                      },
+                      false,
+                    ]
+                  }
+                  testID="com.ariesbifold:id/RCardFirstNameInput"
+                />
+              </View>
+              <View
+                style={
+                  Object {
+                    "marginVertical": 10,
+                    "width": "100%",
+                  }
+                }
+              >
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "marginBottom": 5,
+                      },
+                    ]
+                  }
+                >
+                  RCardOnboarding.Fields.LastName
+                  <Text
+                    style={
+                      Object {
+                        "color": "#ff0000",
+                      }
+                    }
+                  >
+                     *
+                  </Text>
+                </Text>
+                <TextInput
+                  accessibilityLabel="RCardOnboarding.Fields.LastName"
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  blurOnSubmit={false}
+                  defaultValue="Doe"
+                  maxFontSizeMultiplier={2}
+                  maxLength={64}
+                  onBlur={[Function]}
+                  onChangeText={[Function]}
+                  onFocus={[Function]}
+                  onSubmitEditing={[Function]}
+                  returnKeyType="next"
+                  selectionColor="#42803E"
+                  style={
+                    Array [
+                      Object {
+                        "backgroundColor": "#000000",
+                        "borderColor": "#FFFFFFFF",
+                        "borderRadius": 4,
+                        "borderWidth": 2,
+                        "color": "#FFFFFF",
+                        "fontSize": 16,
+                        "padding": 10,
+                      },
+                      false,
+                    ]
+                  }
+                  testID="com.ariesbifold:id/RCardLastNameInput"
+                />
+              </View>
+              <View
+                style={
+                  Object {
+                    "marginVertical": 10,
+                    "width": "100%",
+                  }
+                }
+              >
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "marginBottom": 5,
+                      },
+                    ]
+                  }
+                >
+                  RCardOnboarding.Fields.Email
+                </Text>
+                <TextInput
+                  accessibilityLabel="RCardOnboarding.Fields.Email"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  blurOnSubmit={false}
+                  defaultValue="john@example.com"
+                  keyboardType="email-address"
+                  maxFontSizeMultiplier={2}
+                  maxLength={120}
+                  onBlur={[Function]}
+                  onChangeText={[Function]}
+                  onFocus={[Function]}
+                  onSubmitEditing={[Function]}
+                  returnKeyType="next"
+                  selectionColor="#42803E"
+                  style={
+                    Array [
+                      Object {
+                        "backgroundColor": "#000000",
+                        "borderColor": "#FFFFFFFF",
+                        "borderRadius": 4,
+                        "borderWidth": 2,
+                        "color": "#FFFFFF",
+                        "fontSize": 16,
+                        "padding": 10,
+                      },
+                      false,
+                    ]
+                  }
+                  testID="com.ariesbifold:id/RCardEmailInput"
+                  textContentType="emailAddress"
+                />
+              </View>
+              <View
+                style={
+                  Object {
+                    "marginVertical": 10,
+                    "width": "100%",
+                  }
+                }
+              >
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "marginBottom": 5,
+                      },
+                    ]
+                  }
+                >
+                  RCardOnboarding.Fields.Organization
+                </Text>
+                <TextInput
+                  accessibilityLabel="RCardOnboarding.Fields.Organization"
+                  autoCapitalize="words"
+                  defaultValue="Example Org"
+                  maxFontSizeMultiplier={2}
+                  maxLength={120}
+                  onBlur={[Function]}
+                  onChangeText={[Function]}
+                  onFocus={[Function]}
+                  onSubmitEditing={[Function]}
+                  returnKeyType="done"
+                  selectionColor="#42803E"
+                  style={
+                    Array [
+                      Object {
+                        "backgroundColor": "#000000",
+                        "borderColor": "#FFFFFFFF",
+                        "borderRadius": 4,
+                        "borderWidth": 2,
+                        "color": "#FFFFFF",
+                        "fontSize": 16,
+                        "padding": 10,
+                      },
+                      false,
+                    ]
+                  }
+                  testID="com.ariesbifold:id/RCardOrganizationInput"
+                />
+              </View>
+            </View>
+          </View>
+        </RCTScrollView>
+      </View>
+    </View>
+    <View
+      style={
+        Object {
+          "alignItems": "center",
+          "paddingBottom": 16,
+          "paddingTop": 12,
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "minWidth": 148,
+            "width": "42%",
+          }
+        }
+      >
+        <View
+          accessibilityLabel="Global.Continue"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "overflow": "hidden",
+              },
+              Object {
+                "backgroundColor": "#42803E",
+                "borderRadius": 4,
+                "padding": 16,
+              },
+              false,
+              false,
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/RCardSubmit"
+        >
+          <View
+            style={
+              Object {
+                "alignItems": "center",
+                "flexDirection": "row",
+                "justifyContent": "center",
+              }
+            }
+          >
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "bold",
+                      "textAlign": "center",
+                    },
+                    false,
+                    false,
+                    false,
+                  ],
+                ]
+              }
+            >
+              Global.Continue
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+</RNCSafeAreaView>
+`;

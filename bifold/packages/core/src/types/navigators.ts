@@ -35,8 +35,11 @@ export enum Screens {
   DataRetention = 'Data Retention',
   Tours = 'Tours',
   Contacts = 'Contacts',
+  Messages = 'Messages',
   ContactDetails = 'Contact Details',
   WhatAreContacts = 'What Are Contacts',
+  WhatAreConnections = 'What Are Connections',
+  WitnessConnections = 'Witness Connections',
   Chat = 'Chat',
   Connection = 'Connection',
   MobileVerifierLoading = 'Mobile Verifier Loading',
@@ -45,6 +48,7 @@ export enum Screens {
   Biometry = 'Biometry',
   ToggleBiometry = 'Toggle Biometry',
   PushNotifications = 'Push Notifications',
+  RCardOnboarding = 'R-Card',
   TogglePushNotifications = 'Toggle Push Notifications',
   Developer = 'Developer',
   CustomNotification = 'Custom Notification',
@@ -63,6 +67,12 @@ export enum Screens {
   AutoLock = 'AutoLock',
   UpdateAvailable = 'Update Available',
   ConfigureMediator = 'Configure Mediator',
+  ToggleHardwareAttestation = 'Toggle Hardware Attestation',
+  ToggleWitnessReporting = 'Toggle Witness Reporting',
+  ToggleWitnessing = 'Toggle Witnessing',
+  About = 'About',
+  ExportWallet = 'Export Wallet',
+  ImportWallet = 'Import Wallet',
 }
 
 export enum Stacks {
@@ -72,6 +82,7 @@ export enum Stacks {
   CredentialStack = 'Credentials Stack',
   SettingStack = 'Settings Stack',
   ContactStack = 'Contacts Stack',
+  MessageStack = 'Messages Stack',
   ProofRequestsStack = 'Proof Requests Stack',
   NotificationStack = 'Notifications Stack',
   ConnectionStack = 'Connection Stack',
@@ -80,9 +91,12 @@ export enum Stacks {
 }
 
 export enum TabStacks {
+  MessageStack = 'Tab Message Stack',
+  ContactStack = 'Tab Contact Stack',
   HomeStack = 'Tab Home Stack',
   ConnectStack = 'Tab Connect Stack',
   CredentialStack = 'Tab Credential Stack',
+  SettingStack = 'Tab Setting Stack',
 }
 
 export type RootStackParams = {
@@ -93,6 +107,7 @@ export type RootStackParams = {
   [Stacks.ConnectionStack]: NavigatorScreenParams<DeliveryStackParams>
   [Stacks.SettingStack]: NavigatorScreenParams<SettingStackParams>
   [Stacks.ContactStack]: NavigatorScreenParams<ContactStackParams>
+  [Stacks.MessageStack]: NavigatorScreenParams<MessageStackParams>
   [Stacks.ProofRequestsStack]: NavigatorScreenParams<ProofRequestsStackParams>
   [Stacks.NotificationStack]: NavigatorScreenParams<NotificationStackParams>
   [Stacks.HistoryStack]: NavigatorScreenParams<HistoryStackParams>
@@ -102,9 +117,12 @@ export type RootStackParams = {
 }
 
 export type TabStackParams = {
+  [TabStacks.MessageStack]: NavigatorScreenParams<MessageStackParams>
+  [TabStacks.ContactStack]: NavigatorScreenParams<ContactStackParams>
   [TabStacks.HomeStack]: NavigatorScreenParams<HomeStackParams>
   [TabStacks.ConnectStack]: NavigatorScreenParams<ConnectStackParams>
   [TabStacks.CredentialStack]: NavigatorScreenParams<CredentialStackParams>
+  [TabStacks.SettingStack]: NavigatorScreenParams<SettingStackParams>
 }
 
 export type OnboardingStackParams = {
@@ -117,14 +135,43 @@ export type OnboardingStackParams = {
   [Screens.Biometry]: undefined
   [Screens.NameWallet]: undefined
   [Screens.PushNotifications]: undefined
+  [Screens.RCardOnboarding]: undefined
+}
+
+export interface ContactCredentialDetails {
+  issuer: {
+    id: string
+    name: string
+    email?: string
+    organization?: string
+  }
+  hasWitnessCredentials?: boolean
+  hasHardwareAttestation?: boolean
 }
 
 export type ContactStackParams = {
   [Screens.Contacts]: undefined
   [Screens.Chat]: { connectionId: string }
-  [Screens.ContactDetails]: { connectionId: string }
+  [Screens.ContactDetails]: { contact: ContactCredentialDetails }
   [Screens.RenameContact]: { connectionId: string }
   [Screens.WhatAreContacts]: undefined
+  [Screens.WhatAreConnections]: undefined
+  [Screens.WitnessConnections]: undefined
+  [Screens.CredentialDetails]: { credentialId: string }
+  [Screens.OpenIDCredentialDetails]: { credentialId: string; type: OpenIDCredentialType }
+  [Screens.CredentialOffer]: { credentialId: string }
+  [Screens.ProofDetails]: { recordId: string; isHistory?: boolean }
+  [Screens.ProofRequest]: { proofId: string }
+  [Screens.JSONDetails]: { jsonBlob: any }
+}
+
+export type MessageStackParams = {
+  [Screens.Messages]: undefined
+  [Screens.Chat]: { connectionId: string }
+  [Screens.ContactDetails]: { contact: ContactCredentialDetails }
+  [Screens.RenameContact]: { connectionId: string }
+  [Screens.WhatAreContacts]: undefined
+  [Screens.WhatAreConnections]: undefined
   [Screens.CredentialDetails]: { credentialId: string }
   [Screens.CredentialOffer]: { credentialId: string }
   [Screens.ProofDetails]: { recordId: string; isHistory?: boolean }
@@ -179,9 +226,16 @@ export type SettingStackParams = {
   [Screens.HistorySettings]: undefined
   [Screens.AutoLock]: undefined
   [Screens.ConfigureMediator]: { scannedMediatorUri: string } | undefined
+  [Screens.ToggleHardwareAttestation]: undefined
+  [Screens.ToggleWitnessReporting]: undefined
+  [Screens.ToggleWitnessing]: undefined
+  [Screens.About]: undefined
+  [Screens.ExportWallet]: undefined
+  [Screens.ImportWallet]: undefined
 }
 
 export type NotificationStackParams = {
+  [Screens.Home]: undefined
   [Screens.CredentialDetails]: { credentialId: string }
   [Screens.OpenIDCredentialDetails]: {
     credential: SdJwtVcRecord | W3cCredentialRecord

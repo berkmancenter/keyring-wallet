@@ -3,7 +3,7 @@ import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pressable, ScrollView, Share, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -13,14 +13,13 @@ import { useTheme } from '../../contexts/theme'
 import { useConnectionByOutOfBandId } from '../../hooks/connections'
 import { QrCodeScanError } from '../../types/error'
 import { ConnectStackParams, Screens, Stacks } from '../../types/navigators'
-import { createConnectionInvitation } from '../../utils/helpers'
+import { createConnectionInvitation, createRelationshipInvitation } from '../../utils/helpers'
 import { testIdWithKey } from '../../utils/testable'
 import LoadingIndicator from '../animated/LoadingIndicator'
 import IconButton, { ButtonLocation } from '../buttons/IconButton'
 import DismissiblePopupModal from '../modals/DismissiblePopupModal'
 import SafeAreaModal from '../modals/SafeAreaModal'
 import InfoBox, { InfoBoxType } from './InfoBox'
-
 import { TOKENS, useServices } from '../../container-api'
 import { ThemedText } from '../texts/ThemedText'
 import QRRenderer from './QRRenderer'
@@ -33,6 +32,7 @@ type ConnectProps = StackScreenProps<ConnectStackParams>
 interface Props extends ConnectProps {
   showTabs?: boolean
   defaultToConnect: boolean
+  offerRelationshipCredential?: boolean
   handleCodeScan: (value: string) => Promise<void>
   error?: QrCodeScanError | null
   enableCameraOnError?: boolean
@@ -41,6 +41,7 @@ interface Props extends ConnectProps {
 const QRScanner: React.FC<Props> = ({
   showTabs = false,
   defaultToConnect,
+  offerRelationshipCredential = false,
   handleCodeScan,
   error,
   enableCameraOnError,
@@ -49,16 +50,17 @@ const QRScanner: React.FC<Props> = ({
   const { agent } = useAgent()
   const { width } = useWindowDimensions()
   const { t } = useTranslation()
-  const { ColorPalette, TextTheme, TabTheme } = useTheme()
+  const { ColorPalette, TabTheme } = useTheme()
   const [store] = useStore()
   const [{ showScanHelp, showScanButton, showScanErrorButton = true }] = useServices([TOKENS.CONFIG])
-  const [firstTabActive, setFirstTabActive] = useState(!defaultToConnect)
+  const [firstTabActive, setFirstTabActive] = useState(!defaultToConnect && !showTabs)
   const [invitation, setInvitation] = useState<string | undefined>(undefined)
   const [recordId, setRecordId] = useState<string | undefined>(undefined)
   const record = useConnectionByOutOfBandId(recordId || '')
   const [torchActive, setTorchActive] = useState(false)
   const [showInfoBox, setShowInfoBox] = useState(false)
   const [showErrorDetailsModal, setShowErrorDetailsModal] = useState(false)
+  const [showingQRCodeView, _setShowingQRCodeView] = useState(defaultToConnect && !showTabs)
 
   const qrSize = width - 40
 
@@ -85,7 +87,6 @@ const QRScanner: React.FC<Props> = ({
       alignSelf: 'center',
       paddingTop: 30,
     },
-    // no properties needed, this is just a helpful label
     bottomButtonsContainer: {},
     icon: {
       color: ColorPalette.grayscale.white,
@@ -96,82 +97,94 @@ const QRScanner: React.FC<Props> = ({
       marginHorizontal: 10,
       textAlign: 'center',
     },
-    // all styles below are only used when tabs are enabled
     tabContainer: {
       flexDirection: 'row',
       ...TabTheme.tabBarStyle,
     },
     qrContainer: {
-      marginTop: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: '100%',
+    },
+    qrCodeViewContainer: {
       flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 20,
     },
-    walletName: {
+    instruction: {
+      fontSize: 14,
+      color: ColorPalette.grayscale.mediumGrey,
       textAlign: 'center',
-    },
-    secondaryText: {
-      marginTop: 20,
-      textAlign: 'center',
+      marginTop: 16,
     },
   })
 
   const createInvitation = useCallback(async () => {
     setInvitation(undefined)
-    const result = await createConnectionInvitation(agent)
-    if (result) {
-      setRecordId(result.record.id)
-      setInvitation(result.invitationUrl)
+    if (offerRelationshipCredential) {
+      const result = await createRelationshipInvitation(agent, store.preferences.walletName)
+      if (result) {
+        setRecordId(result.record.id)
+        setInvitation(result.invitationUrl)
+      }
+    } else {
+      const result = await createConnectionInvitation(agent)
+      if (result) {
+        setRecordId(result.record.id)
+        setInvitation(result.invitationUrl)
+      }
     }
-  }, [agent])
-
-  const handleEdit = useCallback(() => {
-    navigation.navigate(Screens.RenameWallet)
-  }, [navigation])
+  }, [agent, offerRelationshipCredential, store.preferences.walletName])
 
   useEffect(() => {
-    // Effect not required if tabs are not enabled
-    if (!showTabs) return
+    if (!showTabs && defaultToConnect && showingQRCodeView) {
+      navigation.setOptions({ title: t('Scan.ScanQRCode'), headerRight: () => undefined })
+    } else if (!showTabs) {
+      // Camera scan without tabs: still offer the paste-URL fallback (also used by E2E
+      // to feed an invitation link without scanning a QR code with the camera).
+      navigation.setOptions({
+        title: t('Scan.ScanQRCode'),
+        headerRight: () => (
+          <IconButton
+            buttonLocation={ButtonLocation.Right}
+            accessibilityLabel={t('Scan.PasteUrl')}
+            testID={testIdWithKey('PasteUrlButton')}
+            onPress={() => {
+              navigation.navigate(Screens.PasteUrl)
+            }}
+            icon="link"
+          />
+        ),
+      })
+    } else if (showTabs) {
+      let headerRight: React.ReactElement | undefined = undefined
+      let title = t('Scan.MyQRCode')
 
-    let headerRight = invitation ? (
-      <IconButton
-        buttonLocation={ButtonLocation.Right}
-        accessibilityLabel={t('Global.Share')}
-        testID={testIdWithKey('ShareButton')}
-        onPress={() => {
-          Share.share({ message: invitation ?? '' })
-        }}
-        icon="share-variant"
-      />
-    ) : undefined
-    let title = t('Scan.MyQRCode')
+      if (firstTabActive) {
+        headerRight = (
+          <IconButton
+            buttonLocation={ButtonLocation.Right}
+            accessibilityLabel={t('Scan.PasteUrl')}
+            testID={testIdWithKey('PasteUrlButton')}
+            onPress={() => {
+              navigation.navigate(Screens.PasteUrl)
+            }}
+            icon="link"
+          />
+        )
+        title = t('Scan.ScanQRCode')
+      }
 
-    if (firstTabActive) {
-      headerRight = (
-        <IconButton
-          buttonLocation={ButtonLocation.Right}
-          accessibilityLabel={t('Global.Share')}
-          testID={testIdWithKey('ShareButton')}
-          onPress={() => {
-            navigation.navigate(Screens.PasteUrl)
-          }}
-          icon="link"
-        />
-      )
-      title = t('Scan.ScanQRCode')
+      navigation.setOptions({ title, headerRight: () => headerRight })
     }
-
-    if (!store.preferences.enableShareableLink) {
-      headerRight = undefined
-    }
-
-    navigation.setOptions({ title, headerRight: () => headerRight })
-  }, [showTabs, invitation, t, firstTabActive, navigation, store.preferences.enableShareableLink])
+  }, [showTabs, defaultToConnect, showingQRCodeView, t, firstTabActive, navigation])
 
   useEffect(() => {
-    // Effect not required if tabs are not enabled
-    if (showTabs && !firstTabActive) {
+    if ((showTabs && !firstTabActive) || (defaultToConnect && !showTabs)) {
       createInvitation()
     }
-  }, [showTabs, firstTabActive, createInvitation, store.preferences.walletName])
+  }, [showTabs, firstTabActive, defaultToConnect, createInvitation, store.preferences.walletName])
 
   useEffect(() => {
     // Effect not required if tabs are not enabled
@@ -183,6 +196,20 @@ const QRScanner: React.FC<Props> = ({
     }
   }, [showTabs, record, navigation, recordId])
 
+  useEffect(() => {
+    if (!defaultToConnect || showTabs) return
+
+    const connected =
+      record?.state === DidExchangeState.Completed || record?.state === DidExchangeState.ResponseSent
+
+    if (connected && record?.id) {
+      navigation.getParent()?.navigate(Stacks.ContactStack, {
+        screen: Screens.Chat,
+        params: { connectionId: record.id },
+      })
+    }
+  }, [defaultToConnect, showTabs, record, navigation])
+
   const styleForState = ({ pressed }: { pressed: boolean }) => [{ opacity: pressed ? 0.2 : 1 }]
 
   const toggleShowInfoBox = () => setShowInfoBox(!showInfoBox)
@@ -191,7 +218,7 @@ const QRScanner: React.FC<Props> = ({
     <View style={styles.container}>
       <SafeAreaView edges={['left', 'right']} style={styles.mainSafeArea} testID={testIdWithKey('QRScanner')}>
         {/* Decide to show camera content or connection invitation content */}
-        {!showTabs || firstTabActive ? (
+        {(!showTabs && !showingQRCodeView) || (showTabs && firstTabActive) ? (
           <>
             <ScanCamera
               handleCodeScan={handleCodeScan}
@@ -296,41 +323,27 @@ const QRScanner: React.FC<Props> = ({
             )}
           </>
         ) : (
-          <ScrollView>
-            <View style={{ alignItems: 'center' }}>
-              <View style={styles.qrContainer}>
-                {!invitation && <LoadingIndicator />}
-                {invitation && <QRRenderer value={invitation} size={qrSize} />}
-              </View>
-              <View style={{ paddingHorizontal: 20, flex: 1 }}>
-                <View
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <ThemedText
-                    variant="headingTwo"
-                    testID={testIdWithKey('WalletName')}
-                    style={[styles.walletName, { paddingHorizontal: 20 }]}
-                  >
-                    {store.preferences.walletName}
-                  </ThemedText>
-                  <IconButton
-                    buttonLocation={ButtonLocation.Right}
-                    accessibilityLabel={t('NameWallet.EditWalletName')}
-                    testID={testIdWithKey('EditWalletName')}
-                    onPress={handleEdit}
-                    icon={'pencil'}
-                    iconTintColor={TextTheme.headingTwo.color}
-                  />
-                </View>
-                <ThemedText style={styles.secondaryText}>{t('Connection.ShareQR')}</ThemedText>
-              </View>
+          <View style={styles.qrCodeViewContainer}>
+            <View style={styles.qrContainer}>
+              {!invitation && <LoadingIndicator />}
+              {invitation && <QRRenderer value={invitation} size={qrSize} />}
             </View>
-          </ScrollView>
+            {/* E2E-only: expose invitation URL to the accessibility tree so Appium can
+                read it and paste it into the peer wallet (avoids camera-based QR scan). */}
+            {__DEV__ && invitation && (
+              <ThemedText
+                testID={testIdWithKey('InvitationUrl')}
+                accessibilityLabel={invitation}
+                style={{ height: 1, opacity: 0.01 }}
+                numberOfLines={1}
+              >
+                {invitation}
+              </ThemedText>
+            )}
+            <ThemedText style={styles.instruction}>
+              {t('Scan.YourQRCodeInstruction')}
+            </ThemedText>
+          </View>
         )}
         {showTabs ? (
           <View accessible={true} style={styles.tabContainer} accessibilityRole="tablist">

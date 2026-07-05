@@ -33,6 +33,7 @@ import { OnboardingStackParams, OnboardingTask, ScreenLayoutConfig, ScreenOption
 import { CustomNotification } from './types/notification'
 import { State } from './types/state'
 import { IVersionCheckService } from './types/version-check'
+import { ICredentialDisplayRegistry } from './types/credential-display'
 
 export type FN_ONBOARDING_DONE = (
   dispatch: React.Dispatch<ReducerAction<unknown>>,
@@ -145,6 +146,7 @@ export const UTILITY_TOKENS = {
   UTIL_APP_VERSION_MONITOR: 'utility.app-version-monitor',
   UTIL_AGENT_BRIDGE: 'utility.agent-bridge',
   UTIL_REFRESH_ORCHESTRATOR: 'utility.refresh-orchestrator',
+  UTIL_CREDENTIAL_DISPLAY_REGISTRY: 'utility.credential-display-registry',
 } as const
 
 export const CONFIG_TOKENS = {
@@ -257,6 +259,7 @@ export type TokenMapping = {
   [TOKENS.FN_PIN_HASH_ALGORITHM]: FN_PIN_HASH_ALGORITHM
   [TOKENS.FN_ATTESTATION_GET_CHALLENGE]: FN_ATTESTATION_GET_CHALLENGE
   [TOKENS.FN_ATTESTATION_GET_JWT]: FN_ATTESTATION_GET_JWT
+  [TOKENS.UTIL_CREDENTIAL_DISPLAY_REGISTRY]: ICredentialDisplayRegistry | undefined
 }
 
 export interface Container {

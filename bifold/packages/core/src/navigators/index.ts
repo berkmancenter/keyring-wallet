@@ -1,6 +1,7 @@
 import ConnectStack from './ConnectStack'
 import ContactStack from './ContactStack'
 import CredentialStack from './CredentialStack'
+import MessageStack from './MessageStack'
 import DeliveryStack from './DeliveryStack'
 import HomeStack from './HomeStack'
 import NotificationStack from './NotificationStack'
@@ -17,6 +18,7 @@ export {
   CredentialStack,
   DeliveryStack,
   HomeStack,
+  MessageStack,
   NotificationStack,
   OnboardingStack,
   ProofRequestStack,

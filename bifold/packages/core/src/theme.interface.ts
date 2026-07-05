@@ -606,3 +606,13 @@ export interface IInlineInputMessage {
   inlineWarningText: TextStyle & ITextThemeStyle
   InlineWarningIcon: React.FC<SvgProps>
 }
+
+export interface IGradientTheme {
+  headerGradient: {
+    colors: string[]
+    locations?: number[]
+    start: { x: number; y: number }
+    end: { x: number; y: number }
+  }
+  HeaderBackground?: React.ComponentType<{ style?: any }>
+}

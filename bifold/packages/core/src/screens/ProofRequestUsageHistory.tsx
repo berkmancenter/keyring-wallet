@@ -11,8 +11,9 @@ import Icon from 'react-native-vector-icons/MaterialIcons'
 import EmptyList from '../components/misc/EmptyList'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
+import { useConnectionDisplayName } from '../hooks/connections'
 import { ProofRequestsStackParams, Screens } from '../types/navigators'
-import { formatTime, getConnectionName } from '../utils/helpers'
+import { formatTime } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
 
@@ -42,12 +43,9 @@ const getPresentationStateLabel = (record: DidCommProofExchangeRecord) => {
 const ProofRequestUsageHistoryRecord: React.FC<ProofRequestUsageHistoryRecordProps> = ({ record, navigation }) => {
   const { t } = useTranslation()
   const { ListItems, ColorPalette } = useTheme()
-  const [store] = useStore()
-  const connection = useConnectionById(record.connectionId ?? '')
-  const theirLabel = useMemo(
-    () => getConnectionName(connection, store.preferences.alternateContactNames),
-    [connection, store.preferences.alternateContactNames]
-  )
+  const [_store] = useStore()
+  const _connection = useConnectionById(record.connectionId ?? '')
+  const theirLabel = useConnectionDisplayName(record.connectionId)
 
   const style = StyleSheet.create({
     card: {

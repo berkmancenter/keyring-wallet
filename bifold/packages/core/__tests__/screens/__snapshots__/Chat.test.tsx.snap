@@ -12,6 +12,7 @@ exports[`Chat Screen Renders correctly 1`] = `
   }
   style={
     Object {
+      "backgroundColor": "#F5F5F5",
       "flex": 1,
     }
   }
@@ -19,6 +20,7 @@ exports[`Chat Screen Renders correctly 1`] = `
   <View
     style={
       Object {
+        "backgroundColor": "#F5F5F5",
         "flex": 1,
       }
     }

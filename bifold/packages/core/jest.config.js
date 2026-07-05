@@ -1,9 +1,15 @@
+process.env.TZ = 'UTC'
+
 module.exports = {
   preset: 'react-native',
   testTimeout: 12000,
   extensionsToTreatAsEsm: ['.ts', '.tsx'],
   setupFiles: [],
-  setupFilesAfterEnv: ['<rootDir>/jestSetup.js', '@testing-library/jest-native/extend-expect'],
+  setupFilesAfterEnv: [
+    '<rootDir>/jestSetup.js',
+    '@testing-library/jest-native/extend-expect',
+    '<rootDir>/jestSetupAfterEnv.js',
+  ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node', 'mjs'],
   moduleNameMapper: {
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
@@ -29,6 +35,7 @@ module.exports = {
     '<rootDir>/__tests__/contexts/',
     '<rootDir>/__tests__/helpers/',
     '<rootDir>/__tests__/screens/fixtures',
+    '<rootDir>/__tests__/modules/vrc/fixtures',
   ],
   coveragePathIgnorePatterns: [
     '/node_modules/',

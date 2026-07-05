@@ -186,8 +186,8 @@
     "Attestation": "J'ai lu, je comprends et j'accepte les conditions."
   },
   "Tour": {
-    "GuideTitle": "Bienvenue sur Aries Bifold",
-    "WouldYouLike": "Souhaitez-vous des conseils sur la façon d'utiliser Aries Bifold?",
+    "GuideTitle": "Bienvenue sur Keyring",
+    "WouldYouLike": "Souhaitez-vous des conseils sur la façon d'utiliser Keyring?",
     "UseAppGuides": "Utiliser les conseils",
     "DoNotUseAppGuides": "Ne pas utiliser les conseils",
     "AddAndShare": "Ajouter et partager des attestations d'identité",
@@ -332,6 +332,9 @@
     "ChangeBiometricsSubtext": "Please enter your PIN to confirm a change in biometrics (FR)",
     "ChangeBiometricsInputLabel": "Enter your wallet PIN (FR)",
     "ChangeBiometricsInputLabelParenthesis": "(Required) (FR)",
+    "ChangeHardwareAttestationHeader": "Change in hardware attestation (FR)",
+    "ChangeHardwareAttestationSubtext": "Please enter your PIN to confirm a change in hardware attestation (FR)",
+    "ChangeHardwareAttestationInputLabel": "Enter your wallet PIN (FR)",
     "ForgotPINLink": "Forgot your PIN? (FR)",
     "ForgotPINModalTitle": "Forgot your PIN? (FR)",
     "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (FR)",
@@ -361,9 +364,9 @@
     "UnlockPromptTitle": "Déverrouillage du portefeuille",
     "UnlockPromptDescription": "Utilisez la biométrie pour déverrouiller votre portefeuille",
     "AllowBiometricsTitle": "Activer la biométrie",
-    "AllowBiometricsDesc": "Pour déverrouiller BC Wallet avec votre biométrie, permettrez la biométrie dans les paramètres de votre appareil.",
+    "AllowBiometricsDesc": "Pour déverrouiller Keyring avec votre biométrie, permettrez la biométrie dans les paramètres de votre appareil.",
     "SetupBiometricsTitle": "La biométrie n'est pas activée",
-    "SetupBiometricsDesc": "Pour déverrouiller BC Wallet avec votre biométrie, configurez votre biométrie dans les paramètres de votre appareil.",
+    "SetupBiometricsDesc": "Pour déverrouiller Keyring avec votre biométrie, configurez votre biométrie dans les paramètres de votre appareil.",
     "OpenSettings": "Ouvrir les paramètres"
   },
   "ActivityHistory": {
@@ -547,7 +550,7 @@
     "BulletThree": "mettre à jour vos attestations",
     "BulletTwo": "nouvelles demandes de preuve",
     "NotificationsOffMessage": "Soyez averti lorsque vous recevez de nouvelles offres d'attestations, des demandes de preuve, des mises à jour de vos attestations, de nouveaux messages et plus encore.",
-    "NotificationsOffTitle": "Les notifications pour Bifold sont désactivées",
+    "NotificationsOffTitle": "Les notifications pour Keyring sont désactivées",
     "NotificationsInstructionTitle": "Pour activer les notifications :",
     "InstructionsOne": "Ouvrez les paramètres de l'application",
     "InstructionsTwo": "Pressez Notifications",
@@ -606,6 +609,9 @@
     "WillScanAutomatically": "Un code QR valide sera scanné automatiquement.",
     "ScanQRCode": "Scanner le code QR",
     "MyQRCode": "Mon code QR",
+    "YourQRCodeTitle": "Votre code QR",
+    "YourQRCodeInstruction": "Montrez ce code pour échanger des attestations",
+    "PlaceQRCodeInsideFrame": "Placez le code QR dans le cadre pour le scanner, évitez les tremblements pour obtenir des résultats rapidement",
     "UnableToHandleRedirection": "Impossible de traiter la redirection",
     "Close": "Fermer",
     "Torch": "Flash",
@@ -613,12 +619,17 @@
     "TorchOff": "Flash désactivé",
     "ScanHelp": "Aide à la numérisation",
     "ScanNow": "Numériser maintenant",
-    "ScanOnySpecial": "Seuls les codes QR spéciaux peuvent être scannés par Bifold Wallet.",
+    "ScanOnySpecial": "Seuls les codes QR spéciaux peuvent être scannés par Keyring.",
     "ScanOnlySpecial2": "Ceux-ci sont présentés par des services ou des personnes participantes pour recevoir une offre d'attestation, une demande d'information ou pour se connecter.",
-    "ScanOnlySpecial3": "Bifold Wallet ne prend actuellement pas en charge l'ajout d'attestations numériques en scannant ou en prenant des photos d'attestations physiques.",
-    "WhereToUseLink": "Voir où vous pouvez utiliser Bifold Wallet",
+    "ScanOnlySpecial3": "Keyring ne prend actuellement pas en charge l'ajout d'attestations numériques en scannant ou en prenant des photos d'attestations physiques.",
+    "WhereToUseLink": "Voir où vous pouvez utiliser Keyring",
     "BadQRCode": "Le code QR n'est pas reconnu",
-    "BadQRCodeDescription": "Ce code QR scanné ne fonctionne pas avec Bifold Wallet. Bifold Wallet ne fonctionne qu'avec les services participants.\n\nIl ne peut actuellement pas ajouter d'attestations numériques en prenant des photos d'attestations physiques."
+    "BadQRCodeDescription": "Ce code QR scanné ne fonctionne pas avec Keyring. Keyring ne fonctionne qu'avec les services participants.\n\nIl ne peut actuellement pas ajouter d'attestations numériques en prenant des photos d'attestations physiques.",
+    "ErrorDetails": "Détails de l'erreur de scan",
+    "ShowDetails": "Afficher les détails de l'erreur",
+    "NoDetails": "Aucun détail d'erreur disponible",
+    "CopyLink": "Copier le lien",
+    "LinkCopied": "Lien copié dans le presse-papiers"
   },
   "PasteUrl": {
     "PasteUrl": "Coller une URL",
@@ -633,17 +644,19 @@
     "ScanDisabled": "Submit disabled, enter a URL first (FR)"
   },
   "Connection": {
-    "JustAMoment": "Veuillez patienter pendant que nous établissons une connexion sécurisée...",
-    "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
+    "JustAMoment": "Un instant pendant que nous établissons une connexion sécurisée...",
+    "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez revenir à l'accueil ou continuer d'attendre.",
     "ConnectionInvitation": "Invitation de connexion",
-    "ScanQR": "Afficher ce code QR à l'autre personne",
-    "ScanQRComment": "Après le scan du code QR, une connexion sera établie.",
-    "ShareQR": "Partager ce code QR avec quelqu'un ajoutera cette personne en tant que Contact.",
-    "MakingConnection": "Faire le lien...",
-    "ConnectionCompleted": "Connexion terminée !",
-    "Toggle": "Basculer la capacité d'invitation à la connexion",
-    "UseConnectionInviterCapability": "Utiliser la fonction d'invitation à la connexion ?",
-    "OpenContact": "Contact ouvert"
+    "ScanQR": "Montrez ce code QR à l'autre personne",
+    "ScanQRComment": "Une fois le code QR scanné, une connexion sera créée.",
+    "ShareQR": "Partager ce code QR avec quelqu'un l'ajoutera comme contact.",
+    "MakingConnection": "Établissement de la connexion...",
+    "ConnectionCompleted": "Connexion terminée !",
+    "Toggle": "Basculer la capacité d'inviter à la connexion",
+    "UseConnectionInviterCapability": "Utiliser la capacité d'inviter à la connexion?",
+    "OpenContact": "Ouvrir le contact",
+    "RelationshipCredentialOffered": "Attestation de relation offerte",
+    "RelationshipCredentialOfferedBody": "Une attestation de relation a été envoyée à votre contact"
   },
   "LoadingPlaceholder": {
     "Connecting": "Connecting...",
@@ -670,6 +683,7 @@
   },
   "CredentialOffer": {
     "CredentialOffer": "Offre d'attestation",
+    "AcceptContact": "Accepter le contact",
     "ThisIsTakingLongerThanExpected": "Cela prend plus de temps que prévu. Revenez plus tard pour votre nouvelle attestation.",
     "RejectThisCredential?": "Rejeter cette attestation?",
     "AcceptingCredential": "Acceptation de l'attestation",
@@ -802,6 +816,7 @@
     "VersionInfo": "Version information (FR)"
   },
   "AutoLockTimes": {
+    "OneHour": "One Hour (FR)",
     "FiveMinutes": "Five Minutes (FR)",
     "ThreeMinutes": "Three Minutes (FR)",
     "OneMinute": "One Minute (FR)",
@@ -809,9 +824,12 @@
     "Preview": "{{autoLockTime}} min (FR)"
   },
   "TabStack": {
+    "Messages": "Messages",
     "Home": "Notifications",
     "Scan": "Numériser",
-    "Credentials": "Justificatifs"
+    "QRCode": "Code QR",
+    "Credentials": "Justificatifs",
+    "Wallet": "Portefeuille"
   },
   "TabStackAccessibility": {
     "Home": "Notifications tab {{notifications}} notifications (FR)",
@@ -821,6 +839,20 @@
   "RootStack": {
     "Contacts": "Contacts",
     "Settings": "Paramètres"
+  },
+  "QRCodeExchange": {
+    "Title": "Échange de code QR",
+    "Description": "Générez ou scannez le code QR d'un contact de confiance pour commencer à échanger des messages",
+    "ScanQRCode": "Scanner le code QR",
+    "GenerateQRCode": "Générer un code QR",
+    "GenerateRelationshipInvitation": "Générer une invitation et offrir des attestations de relation"
+  },
+  "VRCQRCodeExchange": {
+    "Title": "Échange de code QR",
+    "Description": "Scannez le code QR d'un contact de confiance ou partagez le vôtre pour vous connecter",
+    "ScanQRCode": "Scanner le code QR",
+    "GenerateQRCode": "Partagez votre code QR",
+    "GenerateRelationshipInvitation": "Créer une connexion"
   },
   "QRScanner": {
     "PermissionToUseCamera": "Permission d'utiliser l'appareil photo",
@@ -848,10 +880,11 @@
   "Screens": {
     "Splash": "Page de garde",
     "Onboarding": "Inscription",
-    "Preface": "Aries Bifold",
+    "Preface": "Keyring",
     "Terms": "Conditions d'utilisation",
     "CreatePIN": "Créer un NIP à 6 chiffres",
     "EnterPIN": "Saisir le NIP",
+    "Messages": "Messages",
     "Home": "Notifications",
     "Scan": "Numériser",
     "ScanHelp": "Aide à la numérisation",
@@ -886,6 +919,7 @@
     "Declined": "Refusé",
     "UseBiometry": "Utiliser la biométrie",
     "CustomNotification": "Notification personnalisée",
+    "RCardOnboarding": "R-card",
     "ProofRequesting": "Demande de preuve",
     "NameWallet": "Nommer le portefeuille",
     "RenameContact": "Modifier le nom du contact",
@@ -910,20 +944,38 @@
     "EmptyNameTitle": "Le portefeuille doit avoir un nom",
     "EmptyNameDescription": "C'est le nom que les gens voient lorsqu'ils se connectent avec vous.\n\nVeuillez entrer un nom de portefeuille."
   },
+  "RCardOnboarding": {
+    "Title": "Créez votre profil (R-Card)",
+    "Legend": "Votre profil est comme une carte de visite numérique que vous pouvez partager lors de la création de nouvelles connexions. Cela aide les autres à vérifier qui vous êtes.\n\nVous contrôlez ce que vous partagez et pouvez mettre à jour ces informations à tout moment.",
+    "Fields": {
+      "FirstName": "Prénom",
+      "LastName": "Nom",
+      "Email": "Courriel",
+      "Organization": "Organisation"
+    },
+    "Errors": {
+      "FirstNameRequired": "Veuillez entrer votre prénom.",
+      "LastNameRequired": "Veuillez entrer votre nom.",
+      "EmailRequired": "Veuillez entrer une adresse courriel.",
+      "EmailInvalid": "Veuillez entrer une adresse courriel valide.",
+      "OrganizationRequired": "Veuillez entrer votre organisation.",
+      "Generic": "Nous n'avons pas pu enregistrer vos renseignements de profil. Veuillez réessayer."
+    }
+  },
   "RenameContact": {
     "ThisContactName": "Ce nom de contact n'est affiché que dans votre Liste de Contacts.",
     "ContactName": "Nom du contact"
   },
   "NetInfo": {
     "NoInternetConnectionTitle": "Aucune connexion Internet",
-    "NoInternetConnectionMessage": "Vous ne pouvez pas accéder aux services à l'aide de Bifold ou recevoir des informations d'identification tant que vous n'êtes pas de nouveau en ligne.\n\nS'il vous plait, vérifiez votre connexion internet."
+    "NoInternetConnectionMessage": "Vous ne pouvez pas accéder aux services à l'aide de Keyring ou recevoir des informations d'identification tant que vous n'êtes pas de nouveau en ligne.\n\nS'il vous plait, vérifiez votre connexion internet."
   },
   "Onboarding": {
-    "SkipA11y": "Passer l'introduction à Aries Bifold"
+    "SkipA11y": "Passer l'introduction à Keyring"
   },
   "Preface": {
     "PrimaryHeading": "Cette application est-elle pour vous?",
-    "Paragraph1": "La plupart des gens n'auront pas besoin d'Aries Bifold car très peu d'informations d'identification numériques sont actuellement disponibles.",
+    "Paragraph1": "La plupart des gens n'auront pas besoin d'Keyring car très peu d'informations d'identification numériques sont actuellement disponibles.",
     "Confirmed": "Je confirme que cette application est faite pour moi."
   },
   "Chat": {
@@ -932,7 +984,7 @@
     "ViewOffer": "Voir l'offre",
     "OpenItem": "Ouvrir",
     "UserYou": "Vous avez",
-    "YouConnected": "Vous avez connecté avec",
+    "YouConnected": "Vous avez connecté avec:",
     "CredentialProposalSent": "envoyé une proposition d'accréditation",
     "CredentialOfferReceived": "a envoyé une offre d'accréditation",
     "CredentialRequestSent": "envoyé une demande d'informations d'identification",
@@ -944,6 +996,27 @@
     "ProofRequestRejected": "rejeté une demande d'attestation",
     "ProofRequestRejectReceived": "a rejeté une demande d'attestation",
     "ProofRequestSatisfied": "informations partagées",
+    "RelationshipDIDReceived": "DID de relation reçu de {{name}}",
+    "RelationshipDIDShared": "Votre DID de relation partagé avec {{name}}",
+    "RelationshipDIDTitle": "Votre DID de relation",
+    "RelationshipDIDSharedSuffix": "partagé avec {{name}}",
+    "RelationshipDIDReceivedTitle": "DID de relation reçu",
+    "RelationshipDIDFromSuffix": "de {{name}}",
+    "ReportingDIDTitle": "Votre DID de signalement",
+    "ReportingDIDRegisteredSuffix": "enregistré avec {{name}}",
+    "ReportingStatusOn": "Signalement : Activé",
+    "ReportingStatusOff": "Signalement : Désactivé",
+    "ReportingDIDSettingsNote": "Modifier dans Paramètres → Signalement du témoin",
+    "CredentialReceivedTitle": "Justificatif reçu",
+    "CredentialOfferTitle": "Offre de justificatif reçue",
+    "CredentialFromSuffix": "de {{name}}",
+    "ContactReceivedTitle": "Contact reçu",
+    "ContactOfferTitle": "Offre de contact reçue",
+    "RelationshipDID": "DID de relation",
+    "CopyDID": "Copier le DID",
+    "DIDCopied": "Copié",
+    "DIDCopiedMessage": "Le DID a été copié dans votre presse-papiers.",
+    "FullContactDetails": "Détails complets du contact",
     "Actions": "More (FR)",
     "Details": "Détails"
   },
@@ -987,8 +1060,8 @@
     "WaitingForResponse": "Waiting for response... (FR)"
   },
   "AppUpdate": {
-    "Heading": "Update Bifold to the latest version (FR)",
-    "Body": "Bifold was updated with new improvements. Update your app now to enjoy the latest features and enhancements. (FR)",
+    "Heading": "Update Keyring to the latest version (FR)",
+    "Body": "Keyring was updated with new improvements. Update your app now to enjoy the latest features and enhancements. (FR)",
     "LearnMore": "Learn what's New (FR)",
     "UpdateNow": "Update the app (FR)",
     "UpdateLater": "Do this later (FR)"

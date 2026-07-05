@@ -4,9 +4,12 @@ import { useTranslation } from 'react-i18next'
 import { DeviceEventEmitter } from 'react-native'
 
 import { OpenIDCredentialRecordProvider } from '../modules/openid/context/OpenIDCredentialRecordProvider'
+import { VrcNameCacheProvider } from '../modules/vrc/context/VrcNameCacheProvider'
+import { WitnessConnectionProvider } from '../modules/vrc/context/WitnessConnectionProvider'
 import { EventTypes } from '../constants'
 import { TOKENS, useServices } from '../container-api'
 import { ActivityProvider } from '../contexts/activity'
+import { BiometricConfirmationProvider } from '../contexts/biometric-confirmation'
 import { useStore } from '../contexts/store'
 import { BifoldError } from '../types/error'
 import MainStack from './MainStack'
@@ -56,11 +59,17 @@ const RootStack: React.FC = () => {
   if (shouldRenderMainStack && agent) {
     return (
       <AgentProvider agent={agent}>
-        <OpenIDCredentialRecordProvider>
-          <ActivityProvider>
-            <MainStack />
-          </ActivityProvider>
-        </OpenIDCredentialRecordProvider>
+        <BiometricConfirmationProvider>
+          <OpenIDCredentialRecordProvider>
+            <VrcNameCacheProvider>
+              <WitnessConnectionProvider agent={agent}>
+                <ActivityProvider>
+                  <MainStack />
+                </ActivityProvider>
+              </WitnessConnectionProvider>
+            </VrcNameCacheProvider>
+          </OpenIDCredentialRecordProvider>
+        </BiometricConfirmationProvider>
       </AgentProvider>
     )
   }

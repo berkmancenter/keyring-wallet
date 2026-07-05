@@ -124,7 +124,9 @@ interface OpenIDCredentialProviderProps {
 const OpenIDCredentialRecordContext = createContext<OpenIDCredentialContext>(null as unknown as OpenIDCredentialContext)
 
 const isW3CCredentialRecord = (record: W3cCredentialRecord) => {
-  return record.getTags()?.claimFormat === ClaimFormat.JwtVc
+  const claimFormat = record.getTags()?.claimFormat
+  // Accept both OpenID4VC JwtVc credentials AND DIDComm JSON-LD (LdpVc) credentials
+  return claimFormat === ClaimFormat.JwtVc || claimFormat === ClaimFormat.LdpVc
 }
 
 const isSdJwtCredentialRecord = (record: SdJwtVcRecord) => {

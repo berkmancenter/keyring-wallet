@@ -1,4 +1,5 @@
 import { BannerMessage } from '../components/views/Banner'
+import { RCardTemplate } from '../modules/vrc/types/rcard'
 
 export interface Onboarding {
   didSeePreface: boolean
@@ -8,6 +9,7 @@ export interface Onboarding {
   didConsiderBiometry: boolean
   didConsiderPushNotifications: boolean
   didNameWallet: boolean
+  didSetupRCard: boolean
   onboardingVersion: number
   didCompleteOnboarding: boolean
 }
@@ -28,6 +30,7 @@ export interface Preferences {
   walletName: string
   acceptDevCredentials: boolean
   useDataRetention: boolean
+  useHardwareAttestation: boolean
   disableDataRetentionOption?: boolean
   preventAutoLock: boolean
   enableShareableLink: boolean
@@ -38,6 +41,7 @@ export interface Preferences {
   availableMediators: string[]
   bannerMessages: BannerMessage[]
   genericErrorMessages: boolean
+  useWitnessing: boolean
 }
 
 export interface Tours {
@@ -46,7 +50,9 @@ export interface Tours {
   seenHomeTour: boolean
   seenCredentialsTour: boolean
   seenCredentialOfferTour: boolean
+  seenContactOfferTour: boolean
   seenProofRequestTour: boolean
+  seenContactsTour: boolean
   [key: `seen${string}Tour`]: boolean
 }
 
@@ -91,6 +97,30 @@ export interface State {
   migration: Migration
   versionInfo: VersionInfo
   attestation: Attestation
+  rCard: RCardState
+  witness: WitnessSettings
+}
+
+export interface RCardState {
+  template?: RCardTemplate
+  lastSyncedAt?: string
+}
+
+export interface WitnessSettings {
+  activeWitnessConnectionId?: string
+  /**
+   * Whether the user has opted in to reporting witnessed exchange activity.
+   * When true, the app sends a stable per-witness reportingDid to the witness
+   * server, and includes it in VP submissions. Defaults to true.
+   */
+  enableReporting: boolean
+  /**
+   * Map of witnessConnectionId → reportingDid.
+   * One unique did:peer is generated per witness to limit cross-witness
+   * correlation (privacy-by-design). Persisted so that reconnecting to the
+   * same witness reuses the same reportingDid.
+   */
+  reportingDids: Record<string, string>
 }
 
 export type PersistentState = {

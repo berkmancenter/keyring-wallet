@@ -1,8 +1,8 @@
 // Global test setup for React Native testing environment
 
 // Mock React Native batched bridge for native module compatibility
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(global as any).__fbBatchedBridgeConfig = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, no-extra-semi
+;(global as any).__fbBatchedBridgeConfig = {
   remoteModuleConfig: [],
   localModulesConfig: [],
 }

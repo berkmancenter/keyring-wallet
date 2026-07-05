@@ -31,7 +31,9 @@ const MobileVerifierLoading: React.FC<MobileVerifierLoadingProps> = ({ navigatio
 
   const styles = StyleSheet.create({
     container: {
-      height: '100%',
+      // flex (not height:'100%') so the controls below the ScrollView keep their space
+      // (safe-area-context 5.x sizes SafeAreaView differently than 4.x did)
+      flex: 1,
       backgroundColor: ColorPalette.brand.modalPrimaryBackground,
       padding: 20,
     },
@@ -74,7 +76,7 @@ const MobileVerifierLoading: React.FC<MobileVerifierLoadingProps> = ({ navigatio
 
   return (
     <SafeAreaModal transparent animationType={'slide'}>
-      <SafeAreaView style={{ backgroundColor: ColorPalette.brand.modalPrimaryBackground }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: ColorPalette.brand.modalPrimaryBackground }}>
         <ScrollView style={styles.container}>
           <View style={styles.messageContainer}>
             <ThemedText

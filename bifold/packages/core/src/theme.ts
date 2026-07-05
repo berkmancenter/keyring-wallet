@@ -8,6 +8,7 @@ import IconCode from './assets/icons/code.svg'
 import ActivityIndicator from './assets/img/activity-indicator-circle.svg'
 import AppLockout from './assets/img/app-lockout.svg'
 import Biometrics from './assets/img/biometrics.svg'
+import HardwareAttestation from './assets/img/hardware-attestation.svg'
 import ContactBook from './assets/img/contact-book.svg'
 import CredentialDeclined from './assets/img/credential-declined.svg'
 import DeleteNotification from './assets/img/delete-notification.svg'
@@ -55,6 +56,23 @@ import TabThreeFocusedIcon from './assets/img/wallet-icon.svg'
 import TabThreeIcon from './assets/img/wallet-icon-outline.svg'
 import CredentialRevoked from './assets/img/credential-revoked.svg'
 import CredentialNotAvailable from './assets/img/credential-not-available.svg'
+import TabFourFocusedIcon from './assets/img/chat-processing.svg'
+import TabFourIcon from './assets/img/chat-processing-outline.svg'
+import IconCircleDotsWhite from './assets/img/circle-dots-white.svg'
+import IconCircleDotsBlack from './assets/img/circle-dots-black.svg'
+import WalletExport from './assets/img/wallet-export.svg'
+import WalletImport from './assets/img/wallet-import.svg'
+import IconShieldSettingsWhite from './assets/img/shield-settings-white.svg'
+import IconShieldSettingsBlack from './assets/img/shield-settings-black.svg'
+import IconMessageChatBubbleWhite from './assets/img/message-chat_bubble-white.svg'
+import IconMessageChatBubbleBlack from './assets/img/message-chat_bubble-black.svg'
+import IconSearchDataWhite from './assets/img/search-data-white.svg'
+import IconSearchDataBlack from './assets/img/search-data-black.svg'
+import IconReportDidWhite from './assets/img/report-did-white.svg'
+import IconReportDidBlack from './assets/img/report-did-black.svg'
+import ContactsIcon from './assets/img/contacts-icon.svg'
+import ContactsIconOutline from './assets/img/contacts-icon-outline.svg'
+import ContactsIconFocused from './assets/img/contacts-icon-filled.svg'
 import React from 'react'
 import {
   IChatTheme,
@@ -71,12 +89,14 @@ import {
   IInlineInputMessage,
   IButtons,
   IListItems,
+  IGradientTheme,
 } from './theme.interface'
 
 export interface ISVGAssets {
   activityIndicator: React.FC<SvgProps>
   appLockout: React.FC<SvgProps>
   biometrics: React.FC<SvgProps>
+  hardwareAttestation: React.FC<SvgProps>
   contactBook: React.FC<SvgProps>
   credentialDeclined: React.FC<SvgProps>
   deleteNotification: React.FC<SvgProps>
@@ -122,6 +142,8 @@ export interface ISVGAssets {
   historyConnectionRemovedIcon: React.FC<SvgProps>
   historyActivateBiometryIcon: React.FC<SvgProps>
   historyDeactivateBiometryIcon: React.FC<SvgProps>
+  walletExport: React.FC<SvgProps>
+  walletImport: React.FC<SvgProps>
   iconChevronRight: React.FC<SvgProps>
   homeCenterImg: React.FC<SvgProps>
   iconDelete: React.FC<SvgProps>
@@ -136,6 +158,23 @@ export interface ISVGAssets {
   tabThreeFocusedIcon: React.FC<SvgProps>
   credentialRevoked: React.FC<SvgProps>
   credentialNotAvailable: React.FC<SvgProps>
+  tabFourIcon: React.FC<SvgProps>
+  tabFourFocusedIcon: React.FC<SvgProps>
+  tabMenuIcon?: React.FC<SvgProps>
+  // Chat message icons (white for dark bubbles, black for light bubbles)
+  iconCircleDotsWhite: React.FC<SvgProps>
+  iconCircleDotsBlack: React.FC<SvgProps>
+  iconShieldSettingsWhite: React.FC<SvgProps>
+  iconShieldSettingsBlack: React.FC<SvgProps>
+  iconMessageChatBubbleWhite: React.FC<SvgProps>
+  iconMessageChatBubbleBlack: React.FC<SvgProps>
+  iconSearchDataWhite: React.FC<SvgProps>
+  iconSearchDataBlack: React.FC<SvgProps>
+  iconReportDidWhite: React.FC<SvgProps>
+  iconReportDidBlack: React.FC<SvgProps>
+  contactsIcon: React.FC<SvgProps>
+  contactsIconOutline: React.FC<SvgProps>
+  contactsIconFocused: React.FC<SvgProps>
 }
 
 export interface ISpacing {
@@ -1251,6 +1290,7 @@ export const Assets = {
     activityIndicator: ActivityIndicator,
     appLockout: AppLockout,
     biometrics: Biometrics,
+    hardwareAttestation: HardwareAttestation,
     credentialDeclined: CredentialDeclined,
     deleteNotification: DeleteNotification,
     emptyWallet: EmptyWallet,
@@ -1296,6 +1336,8 @@ export const Assets = {
     historyConnectionRemovedIcon: HistoryCardRevokedIcon,
     historyActivateBiometryIcon: HistoryCardAcceptedIcon,
     historyDeactivateBiometryIcon: HistoryCardRevokedIcon,
+    walletExport: WalletExport,
+    walletImport: WalletImport,
     iconChevronRight: IconChevronRight,
     homeCenterImg: HomeCenterImg,
     iconDelete: IconDelete,
@@ -1310,6 +1352,22 @@ export const Assets = {
     tabThreeFocusedIcon: TabThreeFocusedIcon,
     credentialRevoked: CredentialRevoked,
     credentialNotAvailable: CredentialNotAvailable,
+    tabFourIcon: TabFourIcon,
+    tabFourFocusedIcon: TabFourFocusedIcon,
+    // Chat message icons (white for dark bubbles, black for light bubbles)
+    iconCircleDotsWhite: IconCircleDotsWhite,
+    iconCircleDotsBlack: IconCircleDotsBlack,
+    iconShieldSettingsWhite: IconShieldSettingsWhite,
+    iconShieldSettingsBlack: IconShieldSettingsBlack,
+    iconMessageChatBubbleWhite: IconMessageChatBubbleWhite,
+    iconMessageChatBubbleBlack: IconMessageChatBubbleBlack,
+    iconSearchDataWhite: IconSearchDataWhite,
+    iconSearchDataBlack: IconSearchDataBlack,
+    iconReportDidWhite: IconReportDidWhite,
+    iconReportDidBlack: IconReportDidBlack,
+    contactsIcon: ContactsIcon,
+    contactsIconOutline: ContactsIconOutline,
+    contactsIconFocused: ContactsIconFocused,
   },
   img: {
     logoPrimary: {
@@ -1372,6 +1430,7 @@ export interface ITheme {
   borderWidth: typeof borderWidth
   maxFontSizeMultiplier: number
   Assets: IAssets
+  GradientTheme?: IGradientTheme
 }
 
 export const bifoldTheme: ITheme = {
@@ -1401,6 +1460,14 @@ export const bifoldTheme: ITheme = {
   borderWidth,
   maxFontSizeMultiplier,
   Assets,
+  GradientTheme: {
+    headerGradient: {
+      colors: [BrandColors.primary, BrandColors.primary],
+      locations: [0, 1],
+      start: { x: 0, y: 0 },
+      end: { x: 1, y: 0 },
+    },
+  },
 }
 
 export const themes: ITheme[] = [bifoldTheme]
@@ -1421,4 +1488,5 @@ export type {
   ILoadingTheme,
   IPINInputTheme,
   ISeparatedPINInputTheme,
+  IGradientTheme,
 } from './theme.interface'

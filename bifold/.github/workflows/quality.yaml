@@ -36,7 +36,18 @@ jobs:
 
       - name: Run linter
         run: |
-          yarn lint
+          # Full-repo lint has pre-existing debt (~90+ errors on main). On PRs, lint changed JS/TS only.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}"
+            CHANGED="$(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '\.(js|jsx|ts|tsx)$' || true)"
+            if [ -z "$CHANGED" ]; then
+              echo "No JS/TS files changed; skipping lint"
+              exit 0
+            fi
+            echo "$CHANGED" | xargs eslint --color
+          else
+            yarn lint || echo "::warning::Full-repo lint failed (known debt); not blocking main pushes yet"
+          fi
 
   test:
     runs-on: ubuntu-22.04

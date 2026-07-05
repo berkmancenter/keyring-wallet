@@ -32,10 +32,12 @@ import { ThemedText } from './components/texts/ThemedText'
 import { ToastType } from './components/toast/BaseToast'
 import toastConfig from './components/toast/ToastConfig'
 import { AttachTourStep } from './components/tour/AttachTourStep'
+import { contactOfferTourSteps } from './components/tour/ContactOfferTourSteps'
 import { credentialOfferTourSteps } from './components/tour/CredentialOfferTourSteps'
 import { credentialsTourSteps } from './components/tour/CredentialsTourSteps'
 import { homeTourSteps } from './components/tour/HomeTourSteps'
 import { proofRequestTourSteps } from './components/tour/ProofRequestTourSteps'
+import { contactsTourSteps } from './modules/vrc/components/ContactsTourSteps'
 import { TourBox } from './components/tour/TourBox'
 import { Banner, BannerMessage, BannerSection } from './components/views/Banner'
 import HomeFooterView from './components/views/HomeFooterView'
@@ -68,6 +70,8 @@ import Scan from './screens/Scan'
 import Splash from './screens/Splash'
 import Terms from './screens/Terms'
 import UpdateAvailable from './screens/UpdateAvailable'
+import ExportWallet from './screens/ExportWallet'
+import ImportWallet from './screens/ImportWallet'
 import { AbstractBifoldLogger } from './services/AbstractBifoldLogger'
 import { AgentBridge } from './services/AgentBridge'
 import { bifoldLoggerInstance } from './services/bifoldLogger'
@@ -88,6 +92,9 @@ export { DispatchAction, reducer, default as Store } from './contexts/reducers/s
 export { defaultState, mergeReducers, StoreContext, StoreProvider, useStore } from './contexts/store'
 export { ThemeProvider, useTheme } from './contexts/theme'
 export { useDeepLinks } from './hooks/deep-links'
+export { useConnectionDisplayName } from './hooks/connections'
+export { useRCardCredential } from './modules/vrc/hooks/useRCardCredential'
+export { VrcNameCacheProvider, useVrcNameCache } from './modules/vrc/context/VrcNameCacheProvider'
 export { initLanguages, initStoredLanguage, Locales, translationResources } from './localization'
 export * from './navigators'
 export { createStyles } from './screens/OnboardingPages'
@@ -110,6 +117,15 @@ export {
 } from './utils/helpers'
 export { FileCache } from './utils/fileCache'
 export type { CacheDataFile } from './utils/fileCache'
+export { seedTestContacts, clearTestContacts } from './utils/seedTestCredentials'
+export {
+  DTG_CONTEXT,
+  RELATIONSHIP_CONTEXT,
+  CUSTOM_CONTEXTS,
+  DTG_CONTEXT_URL,
+  RELATIONSHIP_CONTEXT_URL,
+} from './modules/vrc'
+export { DTG_CONTEXT_DOCUMENT, RELATIONSHIP_CONTEXT_DOCUMENT } from './modules/vrc'
 export { getIndyLedgers, IndyLedger, readIndyLedgersFromFile, writeIndyLedgersToFile } from './utils/ledger'
 export { statusBarStyleForColor, StatusBarStyles } from './utils/luminance'
 export { migrateToAskar } from './utils/migration'
@@ -140,6 +156,7 @@ export type {
   ITabTheme,
   ITextTheme,
   ITheme,
+  IGradientTheme,
 } from './theme'
 export type { GenericFn } from './types/fn'
 export { BasicMessageMetadata, CredentialMetadata } from './types/metadata'
@@ -155,6 +172,7 @@ export type {
   State,
   Tours as ToursState,
   VersionInfo,
+  WitnessSettings,
 } from './types/state'
 export type { BifoldAgent } from './utils/agent'
 export type { IndyLedgerConfig, IndyLedgerFileSystem, IndyLedgerJSON, IndyLedgersRecord } from './utils/ledger'
@@ -163,6 +181,75 @@ export type { OnboardingStyleSheet }
 export type { InlineMessageProps } from './components/inputs/InlineErrorText'
 
 export { InlineErrorPosition } from './types/error'
+
+export {
+  RelationshipDidModule,
+  AttestationStorageModule,
+  RelationshipDidRepository,
+  RelationshipDidRecord,
+  getOrCreateRelationshipDid,
+  setRelationshipDidOnConnection,
+  setupVrcConnectionHandler,
+  createRelationshipInvitation,
+  createVrcDocumentLoader,
+  initializeVrcModule,
+  registerVrcDisplayHandlers,
+  registerVrcWithContainer,
+  loadVrcLocalization,
+  getCredentialDisplayRegistry,
+} from './modules/vrc'
+export type {
+  RelationshipDidRecordProps,
+  CustomTags,
+  DefaultRelationshipDidRecordTags,
+  VrcRegistrationOptions,
+} from './modules/vrc'
+
+// VRC Biometric confirmation
+export {
+  requestBiometricConfirmationWithUI,
+  requestBiometricWithHardwareSigning,
+  sendBiometricStatusNotification,
+  BIOMETRIC_STATUS_MESSAGE_PREFIX,
+} from './modules/vrc/vrc-biometric'
+export type { BiometricConfirmationResult } from './modules/vrc/vrc-biometric'
+
+// VRC Hardware-Backed Signing
+export {
+  signVrcWithHardwareKey,
+  ensureHardwareSigningKey,
+  isHardwareSigningAvailable,
+  prepareHardwareKeyForSigning,
+} from './modules/vrc/vrc-hardware-signing'
+export type { 
+  VrcHardwareSignature,
+  HardwareKeyGenerationResult,
+  HardwareSignatureResult,
+  HardwareKeyInfo,
+  HardwareSigningResult,
+} from './modules/vrc/vrc-hardware-signing'
+
+// Biometric Confirmation UI Context and Modal
+export {
+  BiometricConfirmationProvider,
+  BiometricConfirmationContext,
+  useBiometricConfirmation,
+  requestBiometricConfirmationUI,
+} from './contexts/biometric-confirmation'
+export type {
+  BiometricConfirmationContextType,
+  BiometricConfirmationRequest,
+  BiometricConfirmationResponse,
+  BiometricConfirmationStatus,
+} from './contexts/biometric-confirmation'
+export { default as BiometricConfirmationModal } from './components/modals/BiometricConfirmationModal'
+
+// Witness Error Dialog (global component for handling VRC flow errors)
+export { default as WitnessErrorDialogContainer } from './modules/vrc/components/WitnessErrorDialogContainer'
+export { default as WitnessErrorDialog } from './modules/vrc/components/WitnessErrorDialog'
+export type { WitnessErrorDialogProps, WitnessErrorType } from './modules/vrc/components/WitnessErrorDialog'
+export { useWitnessErrorDialog } from './modules/vrc/hooks/useWitnessErrorDialog'
+export type { UseWitnessErrorDialogResult } from './modules/vrc/hooks/useWitnessErrorDialog'
 
 export * from './container-api'
 export { MainContainer } from './container-impl'
@@ -207,6 +294,9 @@ export {
   ContentGradient,
   contexts,
   createApp,
+  CredentialCard,
+  contactOfferTourSteps,
+  contactsTourSteps,
   credentialOfferTourSteps,
   credentialsTourSteps,
   defaultConfig,
@@ -218,7 +308,9 @@ export {
   DismissiblePopupModal,
   ErrorBoundaryWrapper,
   ErrorModal,
+  ExportWallet,
   FauxHeader,
+  ImportWallet,
   HomeFooterView as HomeContentView,
   homeTourSteps,
   IconButton,

@@ -11,11 +11,12 @@ import { TOKENS, useServices } from '../container-api'
 import { useTheme } from '../contexts/theme'
 import HistoryStack from '../modules/history/navigation/HistoryStack'
 import Chat from '../screens/Chat'
-import { RootStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
+import { RootStackParams, Screens, Stacks } from '../types/navigators'
 import { testIdWithKey } from '../utils/testable'
 import { useStore } from '../contexts/store'
 import { useTour } from '../contexts/tour/tour-context'
 import { useDeepLinks } from '../hooks/deep-links'
+import { useRCardCredential } from '../modules/vrc/hooks/useRCardCredential'
 import CredentialDetails from '../screens/CredentialDetails'
 import OpenIDCredentialDetails from '../modules/openid/screens/OpenIDCredentialDetails'
 
@@ -41,6 +42,9 @@ const MainStack: React.FC = () => {
   ])
   const declinedProofs = useProofByState([DidCommProofState.Declined, DidCommProofState.Abandoned])
   useDeepLinks()
+
+  // Initialize R-card credential hook to handle migration from state to Credo
+  useRCardCredential()
 
   // remove connection on mobile verifier proofs if proof is rejected
   useEffect(() => {
@@ -103,7 +107,7 @@ const MainStack: React.FC = () => {
                 accessibilityLabel={t('Global.Back')}
                 testID={testIdWithKey('BackButton')}
                 onPress={() => {
-                  navigation.navigate(TabStacks.HomeStack, { screen: Screens.Home })
+                  navigation.navigate(Stacks.TabStack)
                 }}
                 icon="arrow-left"
               />

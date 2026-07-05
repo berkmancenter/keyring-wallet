@@ -126,16 +126,34 @@ describe('QRScanner Component', () => {
   })
 
   test('Renders correctly on first tab', async () => {
+    // @ts-expect-error useAgent will be replaced with a mock which will have this method
+    useAgent().agent?.oob.createInvitation.mockReturnValue({
+      outOfBandInvitation: {
+        toUrl: () => {
+          return ''
+        },
+      },
+    })
     const tree = render(
-      <BasicAppContext>
-        <QRScanner
-          showTabs={true}
-          defaultToConnect={false}
-          handleCodeScan={() => Promise.resolve()}
-          navigation={navigation as any}
-          route={{} as any}
-        />
-      </BasicAppContext>
+      <StoreProvider
+        initialState={{
+          ...defaultState,
+          preferences: {
+            ...defaultState.preferences,
+            walletName: 'Test Wallet',
+          },
+        }}
+      >
+        <BasicAppContext>
+          <QRScanner
+            showTabs={true}
+            defaultToConnect={false}
+            handleCodeScan={() => Promise.resolve()}
+            navigation={navigation as any}
+            route={{} as any}
+          />
+        </BasicAppContext>
+      </StoreProvider>
     )
 
     await act(() => {
@@ -183,28 +201,28 @@ describe('QRScanner Component', () => {
     expect(tree).toMatchSnapshot()
   })
 
-  test('Contains test IDs', async () => {
+  test('Renders QR code view when defaultToConnect is true and showTabs is false', async () => {
     // @ts-expect-error useAgent will be replaced with a mock which will have this method
     useAgent().agent?.oob.createInvitation.mockReturnValue({
       outOfBandInvitation: {
         toUrl: () => {
-          return ''
+          return 'https://example.com/invitation'
         },
       },
     })
-    const { getByTestId } = render(
+    const tree = render(
       <StoreProvider
         initialState={{
           ...defaultState,
           preferences: {
             ...defaultState.preferences,
-            walletName: 'My Wallet - 1234',
+            walletName: 'My Wallet',
           },
         }}
       >
         <BasicAppContext>
           <QRScanner
-            showTabs={true}
+            showTabs={false}
             defaultToConnect={true}
             handleCodeScan={() => Promise.resolve()}
             navigation={navigation as any}
@@ -218,8 +236,46 @@ describe('QRScanner Component', () => {
       jest.runAllTimers()
     })
 
-    const editButtonByTestId = getByTestId(testIdWithKey('EditWalletName'))
-
-    expect(editButtonByTestId).not.toBeNull()
+    expect(tree).toMatchSnapshot()
   })
+
+  test('Does not show wallet name edit in QR code view mode when defaultToConnect is true', async () => {
+    // @ts-expect-error useAgent will be replaced with a mock which will have this method
+    useAgent().agent?.oob.createInvitation.mockReturnValue({
+      outOfBandInvitation: {
+        toUrl: () => {
+          return 'https://example.com/invitation'
+        },
+      },
+    })
+    const { queryByTestId } = render(
+      <StoreProvider
+        initialState={{
+          ...defaultState,
+          preferences: {
+            ...defaultState.preferences,
+            walletName: 'My Wallet',
+          },
+        }}
+      >
+        <BasicAppContext>
+          <QRScanner
+            showTabs={false}
+            defaultToConnect={true}
+            handleCodeScan={() => Promise.resolve()}
+            navigation={navigation as any}
+            route={{} as any}
+          />
+        </BasicAppContext>
+      </StoreProvider>
+    )
+
+    await act(() => {
+      jest.runAllTimers()
+    })
+
+    const editButton = queryByTestId(testIdWithKey('EditWalletName'))
+    expect(editButton).toBeNull()
+  })
+
 })

@@ -53,7 +53,7 @@ describe('Connection Screen', () => {
     fireEvent(dismissButton, 'press')
 
     expect(navigation.navigate).toBeCalledTimes(1)
-    expect(navigation.navigate).toBeCalledWith('Tab Home Stack', { screen: 'Home' })
+    expect(navigation.navigate).toBeCalledWith('Tab Stack')
     // @ts-expect-error This is a mock object and the fn exists
     expect(navigation.replace).toBeCalledTimes(0)
     expect(navigation.getParent()?.dispatch).toBeCalledTimes(0)

@@ -14,8 +14,8 @@ import ScreenWrapper from '../components/views/ScreenWrapper'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
+import { useConnectionDisplayName } from '../hooks/connections'
 import { ContactStackParams, Screens } from '../types/navigators'
-import { getConnectionName } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
 
@@ -29,12 +29,13 @@ type RenameContactProps = StackScreenProps<ContactStackParams, Screens.RenameCon
 
 const RenameContact: React.FC<RenameContactProps> = ({ route }) => {
   const { connectionId } = route.params
-  const connection = useConnectionById(connectionId)
+  const _connection = useConnectionById(connectionId)
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
   const navigation = useNavigation()
-  const [store, dispatch] = useStore()
-  const [contactName, setContactName] = useState(getConnectionName(connection, store.preferences.alternateContactNames))
+  const [_store, dispatch] = useStore()
+  const displayName = useConnectionDisplayName(connectionId)
+  const [contactName, setContactName] = useState(displayName)
   const [loading, setLoading] = useState(false)
   const [errorState, setErrorState] = useState<ErrorState>({
     visible: false,

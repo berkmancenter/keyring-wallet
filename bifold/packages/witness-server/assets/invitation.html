@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{EVENT_NAME}}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #09465B;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #FFFFFF;
+      border-radius: 24px;
+      padding: 4vh 5vw;
+      width: 92vw;
+      max-width: 680px;
+      max-height: calc(100vh - 48px);
+      text-align: center;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo {
+      width: 70%;
+      max-width: 420px;
+      height: auto;
+      margin-bottom: 3vh;
+      flex-shrink: 0;
+    }
+
+    .qr-section {
+      flex-shrink: 1;
+      margin-bottom: 3vh;
+    }
+
+    .qr-code {
+      width: 100%;
+      max-width: min(50vh, 480px);
+      height: auto;
+    }
+
+    .subtitle {
+      color: #4A4A4A;
+      font-size: clamp(14px, 2.4vw, 20px);
+      line-height: 1.5;
+      padding: 0 4%;
+      flex-shrink: 0;
+    }
+
+    .mobile-connect {
+      display: none;
+      margin-bottom: 2vh;
+    }
+
+    .connect-btn {
+      display: inline-block;
+      background: #6E121D;
+      color: #fff;
+      text-decoration: none;
+      font-size: 18px;
+      font-weight: 600;
+      padding: 16px 48px;
+      border-radius: 14px;
+      transition: background 0.2s;
+    }
+
+    .connect-btn:hover, .connect-btn:active {
+      background: #8a1a28;
+    }
+
+    .share-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 2vh;
+      flex-shrink: 0;
+    }
+
+    .copy-btn {
+      background: none;
+      border: 1.5px solid #6E121D;
+      color: #6E121D;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 8px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: #6E121D;
+      color: #fff;
+    }
+
+    .copy-btn.copied {
+      background: #28a745;
+      border-color: #28a745;
+      color: #fff;
+    }
+
+    .accent-bar {
+      width: 56px;
+      height: 3px;
+      background: #6E121D;
+      border-radius: 2px;
+      margin-top: 2vh;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 600px), (pointer: coarse) {
+      .qr-section { display: none; }
+      .mobile-connect { display: block; }
+      .share-actions { display: none; }
+      .subtitle { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="/logo.png" alt="Applied Social Media Lab" class="logo" />
+
+    <div class="mobile-connect">
+      <a href="{{UNIVERSAL_LINK_URL}}" class="connect-btn">Connect to Witness</a>
+    </div>
+
+    <div class="qr-section">
+      <img src="{{QR_CODE_DATA_URL}}" alt="Scan to connect" class="qr-code" />
+    </div>
+    <p class="subtitle">Scan with the Keyring to connect to the witness</p>
+
+    <div class="share-actions">
+      <button class="copy-btn" onclick="copyLink()">Copy Link</button>
+    </div>
+
+    <div class="share-actions">
+      <a href="/log" class="copy-btn" style="text-decoration:none;">📊 Activity Log</a>
+      <a href="/dashboard" class="copy-btn" style="text-decoration:none;background:#1a1a2e;border-color:#667eea;color:#667eea;">🌐 Dashboard</a>
+    </div>
+  </div>
+  <script>
+    function copyLink() {
+      navigator.clipboard.writeText('{{UNIVERSAL_LINK_URL}}').then(function() {
+        var btn = document.querySelector('.copy-btn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function() { btn.textContent = 'Copy Link'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

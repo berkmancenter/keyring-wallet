@@ -44,20 +44,11 @@
     "Requested": "Requested",
     "Updated": "Updated",
     "Close": "Fechar",
-    "CloseNotification": "Close notification (PT-BR)",
     "Remove": "Remover",
     "GotIt": "Got it (PT-BR)",
     "Send": "Enviar",
     "Reset": "Reset (PT-BR)",
-    "ViewJSON": "View JSON Details (PT-BR)",
-    "RefreshCredentials": "Refresh Credentials (PT-BR)",
-    "AppName": "Aries Bifold (PT-BR)"
-  },
-  "Toast": {
-    "OpenIDCredRefreshing": {
-      "Title": "Refreshing credentials (PT-BR)",
-      "Message": "Your OpenID credentials are being refreshed in the background. (PT-BR)"
-    }
+    "ViewJSON": "View JSON Details (PT-BR)"
   },
   "Date": {
     "ShortFormat": "D MMM",
@@ -158,13 +149,7 @@
     "Title1048": "Proof request problems. (PT-BR)",
     "Message1048": "There was a problem with the proof request. (PT-BR)",
     "Title1049": "Unable to change PIN. (PT-BR)",
-    "Message1049": "There was a problem while attempting to change your PIN. (PT-BR)",
-    "Title1050": "Unable to access biometrics (PR-BR)",
-    "Message1050": "There was a problem while attempting to access this device' biometrics (PT-BR)",
-    "GenericError": {
-      "Title": "Something went wrong (PT-BR)",
-      "Message": "There was an unexpected error, please try again later. (PT-BR)"
-    }
+    "Message1049": "There was a problem while attempting to change your PIN. (PT-BR)"
   },
   "SelectionAxs": {
     "RadioChecked": "checked",
@@ -180,8 +165,8 @@
     "Attestation": "Eu li, entendo e aceito os termos e condições."
   },
   "Tour": {
-    "GuideTitle": "Bem-vindo a Aries Bifold",
-    "WouldYouLike": "Gostaria de ver algumas instruções sobre como usar a Aries Bifold?",
+    "GuideTitle": "Bem-vindo a Keyring",
+    "WouldYouLike": "Gostaria de ver algumas instruções sobre como usar a Keyring?",
     "UseAppGuides": "Usar o guia do app",
     "DoNotUseAppGuides": "Não usar o guia do app",
     "AddAndShare": "Adicionar e compartilhar credenciais",
@@ -205,12 +190,10 @@
   "CameraDisclosure": {
     "AllowCameraUse": "Permitir uso da câmera",
     "CameraDisclosure": "A câmera é usada para escanear QR Codes para processamento imediato no dispositivo. Nenhuma informação sobre as imagens é armazenada, usada para análise, ou compartilhada.",
-    "ToContinueUsing": "Para continuar usando a funcionalidade de scan da Aries Bifold, favor permitir o uso da câmera.",
+    "ToContinueUsing": "Para continuar usando a funcionalidade de scan da Keyring, favor permitir o uso da câmera.",
     "OpenSettings": "Abrir as configurações"
   },
   "PINCreate": {
-    "Header": "Aries Bifold (PT-BR)",
-    "Subheader": "Secure your Aries wallet (PT-BR)",
     "Explainer": {
       "PrimaryHeading": "Secure your Wallet (PT-BR)",
       "PINReminder": "On the following screen you will be asked to set up a strong <b>personal identification number</b> (PIN). (PT-BR)",
@@ -221,10 +204,6 @@
         "ParagraphList2": "Or use your biometrics to open your wallet, and if your biometrics change change on your device you will need to use the PIN to authenticate your wallet (PT-BR)"
       }
     },
-    "InfoBox": {
-      "title": "Remember your PIN (PT-BR)",
-      "message": "Make sure you remember your PIN\n- If you forget it you will need to setup the wallet again and re-add your cards (PT-BR)"
-    },
     "Message": {
       "CrossPatternValidation": "Um padrão de X foi detectado no seu PIN. Favor tentar novamente.",
       "OddOrEvenSequenceValidation": "Uma sequencia de números pares ou ímpares foi detectada em seu PIN. Favor tentar novamente.",
@@ -234,8 +213,7 @@
       "NoSeriesOfNumbersValidation": "Uma sequência foi detectada em seu PIN. Favor tentar novamente.",
       "PINOnlyContainDigitsValidation": "Seu PIN deve conter apenas números. Favor tentar novamente.",
       "PINTooShortValidation": "Seu PIN é muito curto. Favor tentar novamente.",
-      "PINTooLongValidation": "Seu PIN é muito longo. Favor tentar novamente.",
-      "PINCommonlyUsed": "Your PIN uses a commonly used pattern. Please try again. (PT-BR)"
+      "PINTooLongValidation": "Seu PIN é muito longo. Favor tentar novamente."
     },
     "Helper": {
       "CrossPatternValidation": "Não contém um padrão de X.",
@@ -274,15 +252,7 @@
     "RememberChangePIN": "Altere seu PIN para assegurar sua carteira.",
     "ChangePIN": "Alterar PIN"
   },
-  "PINChangeSuccess": {
-    "InfoBox": {
-      "Title": "Your PIN has been changed",
-      "Description": "You can now log-in with your new PIN"
-    },
-    "PrimaryButton": "Go back to settings"
-  },
   "PINEnter": {
-    "AppTitle": "Aries Bifold",
     "EnterPIN": "Digitar PIN",
     "SubText": "Faça login para acessar sua carteira.",
     "Unlock": "Destravar",
@@ -304,11 +274,12 @@
     "ChangeBiometricsSubtext": "Please enter your PIN to confirm a change in biometrics (PT-BR)",
     "ChangeBiometricsInputLabel": "Enter your wallet PIN (PT-BR)",
     "ChangeBiometricsInputLabelParenthesis": "(Required) (PT-BR)",
+    "ChangeHardwareAttestationHeader": "Change in hardware attestation (PT-BR)",
+    "ChangeHardwareAttestationSubtext": "Please enter your PIN to confirm a change in hardware attestation (PT-BR)",
+    "ChangeHardwareAttestationInputLabel": "Enter your wallet PIN (PT-BR)",
     "ForgotPINLink": "Forgot your PIN? (PT-BR)",
     "ForgotPINModalTitle": "Forgot your PIN? (PT-BR)",
-    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (PT-BR)",
-    "Loading": "Logging in (PT-BR)",
-    "DeveloperMenuTrigger": "App information (PT-BR)"
+    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (PT-BR)"
   },
   "AttemptLockout": {
     "Title": "Your wallet is temporarily locked (PT-BR)",
@@ -517,7 +488,7 @@
     "BulletThree": "updates to your credentials (PT-BR)",
     "BulletTwo": "new proof requests (PT-BR)",
     "NotificationsOffMessage": "Be notified when you receive new credential offers, proof requests, updates to your credentials, new messages and more. (PT-BR)",
-    "NotificationsOffTitle": "Notifications for Bifold are turned off (PT-BR)",
+    "NotificationsOffTitle": "Notifications for Keyring are turned off (PT-BR)",
     "NotificationsInstructionTitle": "To enable notifications: (PT-BR)",
     "InstructionsOne": "Open the app's settings (PT-BR)",
     "InstructionsTwo": "Tap Notifications (PT-BR)",
@@ -575,6 +546,9 @@
     "WillScanAutomatically": "Um QR code válido será escaneado automaticamente.",
     "ScanQRCode": "Scanear QR code",
     "MyQRCode": "Meu QR code",
+    "YourQRCodeTitle": "Seu código QR",
+    "YourQRCodeInstruction": "Mostre este código para trocar credenciais",
+    "PlaceQRCodeInsideFrame": "Coloque o código QR dentro da moldura para escanear, evite tremer para obter resultados rapidamente",
     "UnableToHandleRedirection": "Não foi possível tratar redirecionamento",
     "Close": "Fechar",
     "Torch": "Flash",
@@ -582,15 +556,17 @@
     "TorchOff": "Flash desligado",
     "ScanHelp": "Ajuda do Scan",
     "ScanNow": "Scaneie Agora",
-    "ScanOnySpecial": "Apenas QR codes especiais podem ser escaneados pela Bifold Wallet.",
+    "ScanOnySpecial": "Apenas QR codes especiais podem ser escaneados pela Keyring.",
     "ScanOnlySpecial2": "Estes são apresentados pelos serviços ou pessoas participantes para receber uma oferta de credenciais, solicitar informações ou para se conectar.",
-    "ScanOnlySpecial3": "No momento a Bifold Wallet não suporta a adição de credenciais digitais escaneando ou tirando fotos de credenciais físicas.",
-    "WhereToUseLink": "Veja onde você pode usar a Bifold Wallet",
+    "ScanOnlySpecial3": "No momento a Keyring não suporta a adição de credenciais digitais escaneando ou tirando fotos de credenciais físicas.",
+    "WhereToUseLink": "Veja onde você pode usar a Keyring",
     "BadQRCode": "QR Code não reconhecido",
-    "BadQRCodeDescription": "O QR code escaneado não funciona com a Bifold Wallet. A Bifold Wallet só funciona com serviços participantes.\n\nEla não pode adicionar credenciais digitais tirando fotos de credenciais físicas no momento.",
-    "ErrorDetails": "Scan error details (PT-BR)",
-    "ShowDetails": "Show error details (PT-BR)",
-    "NoDetails": "No error details available (PT-BR)"
+    "BadQRCodeDescription": "O QR code escaneado não funciona com a Keyring. A Keyring só funciona com serviços participantes.\n\nEla não pode adicionar credenciais digitais tirando fotos de credenciais físicas no momento.",
+    "ErrorDetails": "Detalhes do erro de escaneamento",
+    "ShowDetails": "Mostrar detalhes do erro",
+    "NoDetails": "Nenhum detalhe de erro disponível",
+    "CopyLink": "Copiar link",
+    "LinkCopied": "Link copiado para a área de transferência"
   },
   "PasteUrl": {
     "PasteUrl": "Paste a URL (PT-BR)",
@@ -600,9 +576,7 @@
     "ErrorTextboxEmpty": "Textbox Empty (PT-BR)",
     "ErrorTextboxEmptyDescription": "Please add a URL intended for digital wallets and try again. (PT-BR)",
     "ErrorInvalidUrl": "URL not recognized (PT-BR)",
-    "ErrorInvalidUrlDescription": "Check if the URL is intended for digital wallets and if it was copied correctly, then try again. (PT-BR)",
-    "PasteUrlInput": "URL input (PT-BR)",
-    "ScanDisabled": "Submit disabled, enter a URL first (PT-BR)"
+    "ErrorInvalidUrlDescription": "Check if the URL is intended for digital wallets and if it was copied correctly, then try again. (PT-BR)"
   },
   "Connection": {
     "JustAMoment": "Aguarde um momento enquanto fazemos uma conexão segura...",
@@ -615,7 +589,9 @@
     "ConnectionCompleted": "Conexão concluída!",
     "Toggle": "Alternar capacidade de convite de conexão",
     "UseConnectionInviterCapability": "Usar o recurso de convite de conexão?",
-    "OpenContact": "Contato aberto"
+    "OpenContact": "Contato aberto",
+    "RelationshipCredentialOffered": "Credencial de relacionamento oferecida",
+    "RelationshipCredentialOfferedBody": "Uma credencial de relacionamento foi enviada ao seu contato"
   },
   "LoadingPlaceholder": {
     "Connecting": "Connecting...",
@@ -642,6 +618,7 @@
   },
   "CredentialOffer": {
     "CredentialOffer": "Oferta de Credencial",
+    "AcceptContact": "Aceitar Contato",
     "ThisIsTakingLongerThanExpected": "Isso está demorando mais que o normal. Verifique novamente mais tarde sua nova credencial.",
     "RejectThisCredential?": "Rejeitar esta credencial?",
     "AcceptingCredential": "Aceitando Credencial",
@@ -689,8 +666,6 @@
     "RequestProcessing": "Só um momento...",
     "OfferDelay": "Atrasar oferta",
     "ChangeCredential": "Escolher credencial",
-    "SelectCredential": "Select credential (PT-BR)",
-    "PredicateInput": "Enter value for {{label}} (PT-BR)",
     "GetThisCredential": "Obter esta credencial",
     "RejectThisProof?": "Rejeitar esta Requisição de Prova?",
     "DeclineThisProof?": "Recusar esta Requisição de Prova?",
@@ -741,19 +716,7 @@
     "CredentialForProofIsRevoked": "revoked credential (PT-BR)",
     "ProofRequestStateError": "The proof request received is in: {{state}}, decline this proof and try again. (PT-BR)",
     "ProofRequestErrorMessage": "Something went wrong with the proof request. (PT-BR)",
-    "PleaseAddress": " Please address them before continuing. (PT-BR)",
-    "DetailsHeader": "Information Requested (PT-BR)",
-    "OID4VCTitle": "Information Request (PT-BR)",
-    "UseDifferentCard": "Use different card (PT-BR)"
-  },
-  "UnsatisfiedProofRequest": {
-    "Title": "Information Request (PT-BR)",
-    "InfoBox": {
-      "Title": "You do not have a card for this request (PT-BR)",
-      "Subtitle": "Check with {{verifierName}} for accepted cards. (PT-BR)"
-    },
-    "VerifierDetail": "Received an information request from: (PT-BR)",
-    "RequestPurpose": " • {{requestPurpose}} (PT-BR)"
+    "PleaseAddress": " Please address them before continuing. (PT-BR)"
   },
   "Settings": {
     "Version": "Versão",
@@ -774,29 +737,42 @@
     "ConfigureMediator": "Configurar Mediator",
     "ChangeMediator": "Change mediator (PT-BR)",
     "ChangeMediatorDescription": "Changing the mediator will restart the app. Do you want to continue? (PT-BR)",
-    "GenericErrorMessages": "Generic error messages (PT-BR)",
-    "VersionInfo": "Version information (PT-BR)"
+    "Witnessing": "Testemunho",
+    "WitnessingDescription": "Quando ativado, o app pode agir como testemunha para outras carteiras, ajudando a verificar e registrar trocas de credenciais na rede.",
+    "ToggleWitnessing": "Alternar testemunho"
   },
   "AutoLockTimes": {
+    "OneHour": "One Hour (PT-BR)",
     "FiveMinutes": "Five Minutes (PT-BR)",
     "ThreeMinutes": "Three Minutes (PT-BR)",
     "OneMinute": "One Minute (PT-BR)",
-    "Never": "Never (PT-BR)",
-    "Preview": "{{autoLockTime}} min (PT-BR)"
+    "Never": "Never (PT-BR)"
   },
   "TabStack": {
+    "Messages": "Mensagens",
     "Home": "Notificações",
     "Scan": "Scanear",
-    "Credentials": "Credenciais"
-  },
-  "TabStackAccessibility": {
-    "Home": "Notifications tab {{notifications}} notifications (PT-BR)",
-    "Scan": "Scan tab (PT-BR)",
-    "Credentials": "Credentials tab (PT-BR)"
+    "QRCode": "Código QR",
+    "Credentials": "Credenciais",
+    "Wallet": "Carteira"
   },
   "RootStack": {
     "Contacts": "Contatos",
     "Settings": "Configurações"
+  },
+  "QRCodeExchange": {
+    "Title": "Troca de Código QR",
+    "Description": "Gere ou escaneie o código QR de um contato confiável para começar a trocar mensagens",
+    "ScanQRCode": "Escanear Código QR",
+    "GenerateQRCode": "Gerar um Código QR",
+    "GenerateRelationshipInvitation": "Gerar convite e oferecer credencial de relacionamento"
+  },
+  "VRCQRCodeExchange": {
+    "Title": "Troca de Código QR",
+    "Description": "Digitalize o código QR de um contato confiável ou compartilhe o seu para se conectar",
+    "ScanQRCode": "Escanear Código QR",
+    "GenerateQRCode": "Compartilhe seu código QR",
+    "GenerateRelationshipInvitation": "Criar uma conexão"
   },
   "QRScanner": {
     "PermissionToUseCamera": "Permissão para usar a câmera",
@@ -823,10 +799,11 @@
   "Screens": {
     "Splash": "Splash",
     "Onboarding": "Onboarding",
-    "Preface": "Aries Bifold",
+    "Preface": "Keyring",
     "Terms": "Termos & Condições",
     "CreatePIN": "Criar um PIN",
     "EnterPIN": "Digitar o PIN",
+    "Messages": "Mensagens",
     "Home": "Notificações",
     "Scan": "Scanear",
     "Credentials": "Credenciais",
@@ -850,6 +827,7 @@
     "Developer": "Developer options",
     "ChangePIN": "Alterar PIN",
     "ProofRequests": "Solicitações de prova",
+    "RCardOnboarding": "R-card",
     "SendProofRequest": "Envie um pedido de prova",
     "ChooseProofRequest": "Escolha um pedido de prova",
     "ProofRequestUsageHistory": "Histórico de uso",
@@ -878,20 +856,38 @@
     "EmptyNameTitle": "O nome de sua carteira não pode ser vazio",
     "EmptyNameDescription": "Este é o nome que as pessoas verão quando se conerctar a você. Por favor, digite o nome da carteira."
   },
+  "RCardOnboarding": {
+    "Title": "Crie seu perfil (R-Card)",
+    "Legend": "Seu perfil é como um cartão de visita digital que você pode compartilhar ao criar novas conexões. Isso ajuda outros a verificar quem você é.\n\nVocê controla o que compartilha e pode atualizar isso a qualquer momento.",
+    "Fields": {
+      "FirstName": "Nome",
+      "LastName": "Sobrenome",
+      "Email": "Email",
+      "Organization": "Organização"
+    },
+    "Errors": {
+      "FirstNameRequired": "Informe seu nome.",
+      "LastNameRequired": "Informe seu sobrenome.",
+      "EmailRequired": "Informe um endereço de email.",
+      "EmailInvalid": "Informe um endereço de email válido.",
+      "OrganizationRequired": "Informe sua organização.",
+      "Generic": "Não foi possível salvar seus dados de perfil. Tente novamente."
+    }
+  },
   "RenameContact": {
     "ThisContactName": "Este nome de contato só é visualizado em sua Lista de Contatos.",
     "ContactName": "Nome do contato"
   },
   "NetInfo": {
     "NoInternetConnectionTitle": "Sem conexão com a internet",
-    "NoInternetConnectionMessage": "Não é possivel acessar serviços utilizando a Bifold ou receber credenciais até você voltar a estar online.\n\nFavor checkar sua conexão com a internet."
+    "NoInternetConnectionMessage": "Não é possivel acessar serviços utilizando a Keyring ou receber credenciais até você voltar a estar online.\n\nFavor checkar sua conexão com a internet."
   },
   "Onboarding": {
-    "SkipA11y": "Pular introdução a Aries Bifold"
+    "SkipA11y": "Pular introdução a Keyring"
   },
   "Preface": {
     "PrimaryHeading": "Esse app é para você?",
-    "Paragraph1": "Muitas pessoas não precisarão da Aries Bifold pois pouquíssimas credenciais digitais estão disponíveis nesse momento.",
+    "Paragraph1": "Muitas pessoas não precisarão da Keyring pois pouquíssimas credenciais digitais estão disponíveis nesse momento.",
     "Confirmed": "Eu confirmo que este app é para mim."
   },
   "Chat": {
@@ -900,7 +896,7 @@
     "ViewOffer": "Ver oferta",
     "OpenItem": "Abrir",
     "UserYou": "Você",
-    "YouConnected": "Você se conectou com",
+    "YouConnected": "Você se conectou com:",
     "CredentialProposalSent": "enviou uma proposta de credencial",
     "CredentialOfferReceived": "enviou uma oferta de credencial",
     "CredentialRequestSent": "enviou uma solicitação de credencial",
@@ -912,6 +908,27 @@
     "ProofRequestRejected": "rejeitou uma solicitação de prova",
     "ProofRequestRejectReceived": "rejeitou um pedido de prova",
     "ProofRequestSatisfied": "informações compartilhadas",
+    "RelationshipDIDReceived": "DID de relacionamento recebido de {{name}}",
+    "RelationshipDIDShared": "Seu DID de relacionamento compartilhado com {{name}}",
+    "RelationshipDIDTitle": "Seu DID de relacionamento",
+    "RelationshipDIDSharedSuffix": "compartilhado com {{name}}",
+    "RelationshipDIDReceivedTitle": "DID de relacionamento recebido",
+    "RelationshipDIDFromSuffix": "de {{name}}",
+    "ReportingPseudonymTitle": "Seu pseudônimo de relatório",
+    "ReportingPseudonymRegisteredSuffix": "registrado com {{name}}",
+    "ReportingStatusOn": "Relatório: Ativado",
+    "ReportingStatusOff": "Relatório: Desativado",
+    "ReportingDIDSettingsNote": "Ajuste em Configurações → Relatório de Testemunha",
+    "CredentialReceivedTitle": "Credencial recebida",
+    "CredentialOfferTitle": "Oferta de credencial recebida",
+    "CredentialFromSuffix": "de {{name}}",
+    "ContactReceivedTitle": "Contato recebido",
+    "ContactOfferTitle": "Oferta de contato recebida",
+    "RelationshipDID": "DID de relacionamento",
+    "CopyDID": "Copiar DID",
+    "DIDCopied": "Copiado",
+    "DIDCopiedMessage": "O DID foi copiado para sua área de transferência.",
+    "FullContactDetails": "Detalhes completos do contato",
     "Actions": "More (PT-BR)",
     "Details": "Details (PT-BR)"
   },
@@ -955,26 +972,13 @@
     "WaitingForResponse": "Waiting for response... (PT-BR)"
   },
   "AppUpdate": {
-    "Heading": "Update Bifold to the latest version (PT-BR)",
-    "Body": "Bifold was updated with new improvements. Update your app now to enjoy the latest features and enhancements. (PT-BR)",
+    "Heading": "Update Keyring to the latest version (PT-BR)",
+    "Body": "Keyring was updated with new improvements. Update your app now to enjoy the latest features and enhancements. (PT-BR)",
     "LearnMore": "Learn what's New (PT-BR)",
     "UpdateNow": "Update the app (PT-BR)",
     "UpdateLater": "Do this later (PT-BR)"
   },
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts (PT-BR)"
-  },
-  "FullScreenErrorModal": {
-    "PrimaryCTA": "Go back to home (PT-BR)"
-  },
-  "OpenIDNotification": {
-    "CredentialRefresh": {
-      "Title": "Update to {{cardName}} available (PT-BR)",
-      "CTA": "View offer (PT-BR)"
-    },
-    "CredentialExpired": {
-      "Title": "{{cardName}} has expired (PT-BR)",
-      "CTA": "View offer (PT-BR)"
-    }
   }
 }

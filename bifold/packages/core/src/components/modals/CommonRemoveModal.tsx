@@ -81,12 +81,15 @@ const CommonRemoveModal: React.FC<CommonRemoveModalProps> = ({ usage, visible, o
 
   const styles = StyleSheet.create({
     safeAreaView: {
+      flex: 1,
       backgroundColor: ColorPalette.brand.modalPrimaryBackground,
       borderTopRightRadius: 10,
       borderTopLeftRadius: 10,
-      flex: 1,
     },
     container: {
+      // flex (not height:'100%') so the controls below the ScrollView keep their space
+      // (safe-area-context 5.x sizes SafeAreaView differently than 4.x did)
+      flex: 1,
       paddingTop: 10,
       paddingHorizontal: 20,
     },

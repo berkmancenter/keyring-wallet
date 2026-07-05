@@ -1,4 +1,5 @@
 import React, { PropsWithChildren, useMemo } from 'react'
+import { Agent } from '@credo-ts/core'
 import { NetworkContext } from '../../src/contexts/network'
 
 import networkContext from '../contexts/network'
@@ -7,6 +8,8 @@ import { MainContainer } from '../../src/container-impl'
 import { container } from 'tsyringe'
 import { OpenIDCredentialRecordProvider } from '../../src/modules/openid/context/OpenIDCredentialRecordProvider'
 import { MockLogger } from '../../src/testing/MockLogger'
+import { VrcNameCacheProvider } from '../../src/modules/vrc/context/VrcNameCacheProvider'
+import { WitnessConnectionProvider } from '../../src/modules/vrc/context/WitnessConnectionProvider'
 import startCase from 'lodash.startcase'
 import { BrandingOverlayType } from '@bifold/oca/build/legacy'
 
@@ -100,6 +103,30 @@ const createMockOCABundleResolver = () => ({
   }),
 })
 
+// Create a minimal mock agent for testing WitnessConnectionProvider
+const createMockAgent = (): Agent => {
+  return {
+    oob: {
+      parseInvitation: jest.fn(),
+      receiveInvitationFromUrl: jest.fn(),
+    },
+    connections: {
+      getById: jest.fn(),
+      getAll: jest.fn().mockResolvedValue([]), // Return empty array to avoid restoring witness connections in tests
+      findAllByQuery: jest.fn().mockResolvedValue([]),
+    },
+    dependencyManager: {
+      resolve: jest.fn().mockReturnValue({
+        update: jest.fn().mockResolvedValue(undefined),
+      }),
+    },
+    context: {},
+    events: {
+      observable: jest.fn().mockReturnValue({ subscribe: jest.fn() }),
+    },
+  } as unknown as Agent
+}
+
 export const BasicAppContext: React.FC<PropsWithChildren> = ({ children }) => {
   const context = useMemo(() => {
     const c = new MainContainer(container.createChildContainer()).init()
@@ -110,10 +137,16 @@ export const BasicAppContext: React.FC<PropsWithChildren> = ({ children }) => {
     return c
   }, [])
 
+  const mockAgent = useMemo(() => createMockAgent(), [])
+
   return (
     <ContainerProvider value={context}>
       <OpenIDCredentialRecordProvider>
-        <NetworkContext.Provider value={networkContext}>{children}</NetworkContext.Provider>
+        <VrcNameCacheProvider>
+          <WitnessConnectionProvider agent={mockAgent}>
+            <NetworkContext.Provider value={networkContext}>{children}</NetworkContext.Provider>
+          </WitnessConnectionProvider>
+        </VrcNameCacheProvider>
       </OpenIDCredentialRecordProvider>
     </ContainerProvider>
   )

@@ -4,13 +4,14 @@ import { DeviceEventEmitter } from 'react-native'
 import { Agent, ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/react-native'
 import { askar } from '@openwallet-foundation/askar-react-native'
-import React, { createContext, useCallback, useContext, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DispatchAction } from './reducers/store'
 import { useStore } from './store'
 import {
   isBiometricsActive,
+  loadWalletKey,
   loadWalletSalt,
   loadWalletSecret,
   secretForPIN,
@@ -82,14 +83,17 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       })
       if (useBiometry) {
         await storeWalletSecret(secret, useBiometry)
-      } else {
-        // erase wallet key if biometrics is disabled
+      } else if (store.onboarding.didCompleteOnboarding) {
+        // Only wipe the key after onboarding is complete (wallet exists).
+        // During initial onboarding the Askar wallet hasn't been created yet,
+        // so we keep the key in the keychain to allow PIN verification if the
+        // app is force-closed before the wallet is created.
         await wipeWalletKey(useBiometry)
       }
 
       return true
     },
-    [dispatch, getWalletSecret]
+    [dispatch, getWalletSecret, store.onboarding.didCompleteOnboarding]
   )
 
   const checkWalletPIN = useCallback(
@@ -126,7 +130,27 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         const storeManager = validationAgent.dependencyManager.resolve(AskarStoreManager)
 
         try {
-          await storeManager.openStore(validationAgent.context)
+          try {
+            await storeManager.openStore(validationAgent.context)
+          } catch (openError) {
+            // The Askar store is only created during agent initialization (Splash).
+            // If the user force-closed the app during onboarding before Splash ran,
+            // the store doesn't exist yet and openStore() will fail for any PIN.
+            // Verify the PIN against the stored key in the keychain instead.
+            if (!store.onboarding.didCompleteOnboarding) {
+              const storedKey = await loadWalletKey()
+              if (!storedKey || storedKey.key !== hash) {
+                return false
+              }
+              setWalletSecret({ id: secret.id, key: hash, salt: secret.salt })
+              // Now that we've verified, wipe the key (biometrics-disabled behavior)
+              if (!store.preferences.useBiometry) {
+                await wipeWalletKey(false)
+              }
+              return true
+            }
+            throw openError
+          }
         } finally {
           if (storeManager.isStoreOpen(validationAgent.context)) {
             await storeManager.closeStore(validationAgent.context)
@@ -139,7 +163,13 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         return false
       }
     },
-    [dispatch, store.migration.didMigrateToAskar, hashPIN]
+    [
+      dispatch,
+      store.migration.didMigrateToAskar,
+      hashPIN,
+      store.onboarding.didCompleteOnboarding,
+      store.preferences.useBiometry,
+    ]
   )
 
   const removeSavedWalletSecret = useCallback(() => {
@@ -236,6 +266,18 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     },
     [getWalletSecret, t, hashPIN]
   )
+
+  // During initial onboarding we keep the wallet key in the keychain so that
+  // PIN verification still works if the app is force-closed before the wallet
+  // is created.  Once onboarding completes (wallet exists) and biometrics is
+  // disabled, wipe the key so that only the salt remains (normal behavior).
+  const prevOnboardingComplete = useRef(store.onboarding.didCompleteOnboarding)
+  useEffect(() => {
+    if (!prevOnboardingComplete.current && store.onboarding.didCompleteOnboarding && !store.preferences.useBiometry) {
+      wipeWalletKey(false)
+    }
+    prevOnboardingComplete.current = store.onboarding.didCompleteOnboarding
+  }, [store.onboarding.didCompleteOnboarding, store.preferences.useBiometry])
 
   return (
     <AuthContext.Provider

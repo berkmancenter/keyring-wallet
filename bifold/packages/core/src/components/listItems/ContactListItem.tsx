@@ -7,8 +7,10 @@ import { View, StyleSheet, TouchableOpacity, Image } from 'react-native'
 import { useStore } from '../../contexts/store'
 import { useTheme } from '../../contexts/theme'
 import { useChatMessagesByConnection } from '../../hooks/chat-messages'
+import { useConnectionDisplayName } from '../../hooks/connections'
+import { useUnreadMessages } from '../../hooks/useUnreadMessages'
 import { ContactStackParams, Screens, Stacks } from '../../types/navigators'
-import { formatTime, getConnectionName } from '../../utils/helpers'
+import { formatTime } from '../../utils/helpers'
 import { testIdWithKey } from '../../utils/testable'
 import { TOKENS, useServices } from '../../container-api'
 import { ThemedText } from '../texts/ThemedText'
@@ -23,8 +25,10 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
   const messages = useChatMessagesByConnection(contact)
   const message = messages[0]
   const hasOnlyInitialMessage = messages.length < 2
-  const [store] = useStore()
+  const [_store] = useStore()
   const [{ enableChat }] = useServices([TOKENS.CONFIG])
+  const { unreadByConnection } = useUnreadMessages()
+  const unreadCount = unreadByConnection[contact.id] ?? 0
 
   const styles = StyleSheet.create({
     container: {
@@ -62,6 +66,22 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
       paddingVertical: 4,
       alignSelf: 'center',
     },
+    unreadBadge: {
+      backgroundColor: '#D21E30',
+      borderRadius: 10,
+      minWidth: 20,
+      height: 20,
+      paddingHorizontal: 6,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      marginLeft: 8,
+    },
+    unreadBadgeText: {
+      color: '#FFFFFF',
+      fontSize: 11,
+      fontWeight: '600' as const,
+      lineHeight: 14,
+    },
   })
 
   const navigateToContact = useCallback(() => {
@@ -71,10 +91,7 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
     })
   }, [navigation, contact, enableChat])
 
-  const contactLabel = useMemo(
-    () => getConnectionName(contact, store.preferences.alternateContactNames),
-    [contact, store.preferences.alternateContactNames]
-  )
+  const contactLabel = useConnectionDisplayName(contact.id)
   const contactLabelAbbr = useMemo(() => contactLabel?.charAt(0).toUpperCase(), [contactLabel])
 
   return (
@@ -99,15 +116,31 @@ const ContactListItem: React.FC<ContactListItemProps> = ({ contact, navigation }
         <View style={{ flex: 1 }}>
           <View style={styles.nameAndTimeContainer}>
             <View style={styles.contactNameContainer}>
-              <ThemedText variant="labelTitle">{contactLabel}</ThemedText>
+              <ThemedText
+                variant="labelTitle"
+                style={unreadCount > 0 ? { fontWeight: '700' } : undefined}
+              >
+                {contactLabel}
+              </ThemedText>
             </View>
-            <View style={styles.timeContainer}>
-              {message && <ThemedText>{formatTime(message.createdAt, { shortMonth: true, trim: true })}</ThemedText>}
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={styles.timeContainer}>
+                {message && <ThemedText>{formatTime(message.createdAt, { shortMonth: true, trim: true })}</ThemedText>}
+              </View>
+              {unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <ThemedText style={styles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</ThemedText>
+                </View>
+              )}
             </View>
           </View>
           <View>
             {message && !hasOnlyInitialMessage && (
-              <ThemedText numberOfLines={1} ellipsizeMode={'tail'}>
+              <ThemedText
+                numberOfLines={1}
+                ellipsizeMode={'tail'}
+                style={unreadCount > 0 ? { fontWeight: '600' } : undefined}
+              >
                 {message.text}
               </ThemedText>
             )}

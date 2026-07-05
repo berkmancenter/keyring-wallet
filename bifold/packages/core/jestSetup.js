@@ -114,3 +114,26 @@ afterAll(() => {
   if (dateNowSpy) dateNowSpy.mockRestore()
   if (consoleDebugSpy) consoleDebugSpy.mockRestore()
 })
+
+// Mock @bifold/react-native-attestation native module
+jest.mock('@bifold/react-native-attestation', () => ({
+  isHardwareAttestationAvailable: jest.fn().mockResolvedValue(false),
+  hasHardwareSigningKey: jest.fn().mockResolvedValue(false),
+  createHardwareSigningKey: jest.fn().mockResolvedValue({
+    publicKey: 'mock-public-key-base64',
+    keyStorage: 'TEE',
+  }),
+  signWithHardwareKey: jest.fn().mockResolvedValue({
+    signature: 'mock-signature-base64',
+    publicKey: 'mock-public-key-base64',
+    keyStorage: 'TEE',
+    algorithm: 'ECDSA-SHA256',
+    platform: 'android',
+  }),
+  getHardwareKeyAttestation: jest.fn().mockResolvedValue({
+    success: true,
+    certificateChain: [],
+    format: 'android-key-attestation-v3',
+  }),
+  deleteHardwareSigningKey: jest.fn().mockResolvedValue(true),
+}))

@@ -15,6 +15,8 @@ export enum BaseTourID {
   CredentialsTour = 'credentialsTourSteps',
   CredentialOfferTour = 'credentialOfferTourSteps',
   ProofRequestTour = 'proofRequestTourSteps',
+  ContactsTour = 'contactsTourSteps',
+  ContactOfferTour = 'contactOfferTourSteps',
 }
 
 export type TourID = `${string}TourSteps`

@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { DeviceEventEmitter, EmitterSubscription, BackHandler, View, StyleSheet } from 'react-native'
 
 import { useConnectionByOutOfBandId, useOutOfBandById } from '../hooks/connections'
-import { DeliveryStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
+import { DeliveryStackParams, Screens, Stacks } from '../types/navigators'
 import LoadingPlaceholder, { LoadingPlaceholderWorkflowType } from '../components/views/LoadingPlaceholder'
 import ProofRequest from './ProofRequest'
 import CredentialOffer from './CredentialOffer'
@@ -136,7 +136,7 @@ const Connection: React.FC<ConnectionProps> = ({ navigation, route }) => {
           })
         )
       } else {
-        navigation.getParent()?.navigate(TabStacks.HomeStack, { screen: Screens.Home })
+        navigation.getParent()?.navigate(Stacks.TabStack)
         Toast.show({
           type: ToastType.Success,
           text1: t('Connection.ConnectionCompleted'),
@@ -148,7 +148,7 @@ const Connection: React.FC<ConnectionProps> = ({ navigation, route }) => {
 
   const onDismissModalTouched = useCallback(() => {
     dispatch({ inProgress: false })
-    navigation.getParent()?.navigate(TabStacks.HomeStack, { screen: Screens.Home })
+    navigation.getParent()?.navigate(Stacks.TabStack)
   }, [dispatch, navigation])
 
   useEffect(() => {
@@ -199,7 +199,7 @@ const Connection: React.FC<ConnectionProps> = ({ navigation, route }) => {
       dispatch({ inProgress: false, shouldShowOfferComponent: true })
       return
     }
-  }, [proofId, credentialId, navigation, t])
+  }, [proofId, credentialId, navigation, t, agent, logger])
 
   useEffect(() => {
     if (state.inProgress) {
@@ -228,16 +228,37 @@ const Connection: React.FC<ConnectionProps> = ({ navigation, route }) => {
     // Use queriedConnection as fallback if the hook hasn't found the connection yet
     const actualConnection = connection || state.queriedConnection
 
-    // If we have a connection, but no goal code, we should navigate
-    // to Chat
+    // If we have a connection, but no recognized goal code (not aries.vc.*)
+    // Check if there's a pending credential offer for this connection before
+    // falling through to Chat. Many issuers don't set goal codes but still
+    // send credential offers immediately after connection.
     if (
       actualConnection &&
       !(Object.values(GoalCodes) as [string]).includes(oobRecord?.outOfBandInvitation.goalCode ?? '')
     ) {
-      logger?.info('Connection: Handling connection without goal code, navigate to Chat')
+      const goalCode = oobRecord?.outOfBandInvitation.goalCode ?? ''
+      const isVrcConnection = goalCode.includes('relationship.credential')
 
+      if (isVrcConnection) {
+        logger?.info('Connection: VRC goal code detected, navigate to Chat for VRC flow')
+        handleNavigation(actualConnection.id)
+        return
+      }
+
+      // For non-VRC connections without a recognized goal code, check if a
+      // credential notification has arrived for this connection
+      if (state.notificationRecord) {
+        const notification = state.notificationRecord as DidCommCredentialExchangeRecord
+        if (notification.connectionId === actualConnection.id && notification.type === 'CredentialRecord') {
+          logger?.info('Connection: Credential offer detected on connection without goal code, showing offer UI')
+          navigation.setOptions({ title: t('Screens.CredentialOffer') })
+          dispatch({ inProgress: false, shouldShowProofComponent: false, shouldShowOfferComponent: true })
+          return
+        }
+      }
+
+      logger?.info('Connection: Handling connection without recognized goal code, navigate to Chat')
       handleNavigation(actualConnection.id)
-
       return
     }
 
@@ -424,7 +445,21 @@ const Connection: React.FC<ConnectionProps> = ({ navigation, route }) => {
     }
 
     if (state.shouldShowOfferComponent) {
-      return <CredentialOffer credentialId={credentialId ?? state.notificationRecord.id} navigation={navigation} />
+      // Check if this is a W3C credential (including DIDComm-issued JSON-LD VRCs)
+      // If so, route to OpenIDCredentialOffer instead of CredentialOffer (AnonCreds only)
+      const notificationId = credentialId ?? state.notificationRecord?.id
+
+      if (state.notificationRecord && state.notificationRecord.type === 'W3cCredentialRecord') {
+        // This is a W3C credential (could be OpenID4VCI JwtVc or DIDComm JSON-LD)
+        logger?.info('Connection: Routing W3C credential to OpenIDCredentialOffer')
+        navigation.replace(Screens.OpenIDCredentialOffer, {
+          credential: state.notificationRecord,
+        })
+        return null
+      }
+
+      // Default to AnonCreds credential offer
+      return <CredentialOffer credentialId={notificationId} navigation={navigation} />
     }
   }
 

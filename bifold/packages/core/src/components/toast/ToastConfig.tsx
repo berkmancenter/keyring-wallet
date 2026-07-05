@@ -2,6 +2,7 @@ import React from 'react'
 import { ToastShowParams } from 'react-native-toast-message'
 
 import BaseToast, { ToastType } from './BaseToast'
+import MessageNotificationToast from './MessageNotificationToast'
 
 export const Config = {
   success: (props: ToastShowParams) => (
@@ -15,6 +16,14 @@ export const Config = {
   ),
   info: (props: ToastShowParams) => (
     <BaseToast title={props?.text1} body={props?.text2} toastType={ToastType.Info} onPress={props?.onPress} />
+  ),
+  message: (params: any) => (
+    <MessageNotificationToast
+      text1={params?.text1}
+      text2={params?.text2}
+      onPress={params?.onPress}
+      props={params?.props}
+    />
   ),
 }
 

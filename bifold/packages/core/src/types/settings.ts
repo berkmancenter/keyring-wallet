@@ -2,10 +2,17 @@ import { GenericFn } from './fn'
 
 export interface Setting {
   title: string
+  subtitle?: string
   value?: string
   onPress?: GenericFn
   accessibilityLabel?: string
   testID?: string
+  badge?: number
+  toggle?: {
+    value: boolean
+    onValueChange: (newValue: boolean) => void
+    activeColor?: string
+  }
 }
 
 export interface SettingIcon {

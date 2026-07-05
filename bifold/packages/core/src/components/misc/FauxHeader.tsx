@@ -15,17 +15,26 @@ interface FauxHeaderProps {
 
 // Used for modals that we want to look like regular screens
 const FauxHeader: React.FC<FauxHeaderProps> = ({ title, onBackPressed = () => {}, showBackButton = true }) => {
-  const { Spacing, NavigationTheme } = useTheme()
+  const { ColorPalette, Spacing, NavigationTheme, GradientTheme } = useTheme()
   const { t } = useTranslation()
+  const GradientBg = GradientTheme?.HeaderBackground
   const styles = StyleSheet.create({
     header: {
-      backgroundColor: NavigationTheme.colors.primary,
+      backgroundColor: GradientBg ? 'transparent' : NavigationTheme.colors.primary,
+      elevation: 0,
+      shadowOffset: { width: 0, height: 6 },
+      shadowRadius: 6,
+      shadowColor: ColorPalette.grayscale.black,
+      shadowOpacity: 0.15,
       zIndex: 2,
       borderWidth: 0,
       flexDirection: 'row',
       alignItems: 'stretch',
       minHeight: Platform.OS === 'ios' ? 44 : 56,
       ...NavigationTheme.header
+    },
+    gradientBg: {
+      ...StyleSheet.absoluteFillObject,
     },
     left: {
       justifyContent: 'center',
@@ -50,6 +59,7 @@ const FauxHeader: React.FC<FauxHeaderProps> = ({ title, onBackPressed = () => {}
 
   return (
     <View style={styles.header}>
+      {GradientBg && <GradientBg style={styles.gradientBg} />}
       <View style={styles.left}>
         {showBackButton && (
           <IconButton

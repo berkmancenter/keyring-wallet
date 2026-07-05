@@ -3,7 +3,9 @@ import { PINValidationRules } from './types/security'
 import { homeTourSteps } from './components/tour/HomeTourSteps'
 import { credentialsTourSteps } from './components/tour/CredentialsTourSteps'
 import { credentialOfferTourSteps } from './components/tour/CredentialOfferTourSteps'
+import { contactOfferTourSteps } from './components/tour/ContactOfferTourSteps'
 import { proofRequestTourSteps } from './components/tour/ProofRequestTourSteps'
+import { contactsTourSteps } from './modules/vrc/components/ContactsTourSteps'
 import { AttemptLockoutConfig } from './types/attempt-lockout-config'
 
 const lengthOfHiddenAttributes = 10
@@ -27,7 +29,8 @@ export enum LocalStorageKeys {
   HistorySettingsOption = 'historySettingsOption',
   Language = 'language',
   AttestationKey = 'AttestationKey',
-  AttestationConfigured = 'AttestationConfigured'
+  AttestationConfigured = 'AttestationConfigured',
+  WitnessSettings = 'WitnessSettings',
 }
 
 export enum KeychainServices {
@@ -80,7 +83,9 @@ export const tours: Tours = {
   homeTourSteps,
   credentialsTourSteps,
   credentialOfferTourSteps,
+  contactOfferTourSteps,
   proofRequestTourSteps,
+  contactsTourSteps,
 }
 
 export const walletId = 'walletId'
@@ -108,7 +113,7 @@ export const PINRules: PINValidationRules = {
   ]
 }
 
-export const domain = 'didcomm://invite'
+export const domain = 'https://wallet.asml.berkmancenter.org/invite'
 
 export const tourMargin = 25
 

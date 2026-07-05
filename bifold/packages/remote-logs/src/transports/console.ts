@@ -30,6 +30,8 @@ export interface ConsoleLoggerOptions {
   colors?: Record<string, Color>
   extensionColors?: Record<string, Color>
   consoleFunc?: (msg: string) => void
+  /** Patterns to suppress from console output (for noisy logs like ledger resolution) */
+  suppressPatterns?: RegExp[]
 }
 
 export type ConsoleTransportProps = {

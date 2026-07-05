@@ -1,6 +1,6 @@
 import { useCredentialById, useAgent } from '@bifold/react-hooks'
 import { DidCommCredentialState } from '@credo-ts/didcomm'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, CommonActions } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AccessibilityInfo, StyleSheet, View } from 'react-native'
@@ -9,7 +9,7 @@ import Button, { ButtonType } from '../components/buttons/Button'
 import SafeAreaModal from '../components/modals/SafeAreaModal'
 import { useAnimatedComponents } from '../contexts/animated-components'
 import { useTheme } from '../contexts/theme'
-import { Screens, TabStacks } from '../types/navigators'
+import { Screens, Stacks, TabStacks } from '../types/navigators'
 import { testIdWithKey } from '../utils/testable'
 import { TOKENS, useServices } from '../container-api'
 import { ThemedText } from '../components/texts/ThemedText'
@@ -26,9 +26,19 @@ export interface CredentialOfferAcceptProps {
   visible: boolean
   credentialId: string
   confirmationOnly?: boolean
+  /**
+   * If true, navigate to Contacts screen instead of Credentials screen after accepting.
+   * Used for relationship credentials (VRC) that should show in Contacts, not Wallet.
+   */
+  navigateToContacts?: boolean
 }
 
-const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({ visible, credentialId, confirmationOnly }) => {
+const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
+  visible,
+  credentialId,
+  confirmationOnly,
+  navigateToContacts,
+}) => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const [shouldShowDelayMessage, setShouldShowDelayMessage] = useState<boolean>(false)
@@ -67,8 +77,26 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({ visible, 
   }, [navigation])
 
   const onDoneTouched = useCallback(() => {
-    navigation.getParent()?.navigate(TabStacks.CredentialStack, { screen: Screens.Credentials })
-  }, [navigation])
+    if (navigateToContacts) {
+      // Navigate to Contacts tab for relationship credentials (VRC)
+      // Use TabStacks.ContactStack to navigate within the TabStack, preserving bottom tabs
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [
+            {
+              name: Stacks.TabStack,
+              state: {
+                routes: [{ name: TabStacks.ContactStack }],
+              },
+            },
+          ],
+        })
+      )
+    } else {
+      navigation.getParent()?.navigate(TabStacks.CredentialStack, { screen: Screens.Credentials })
+    }
+  }, [navigation, navigateToContacts])
 
   useEffect(() => {
     if (!credential) {
@@ -152,18 +180,24 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({ visible, 
           {credentialDeliveryStatus === DeliveryStatus.Pending && (
             <ThemedText
               style={[ListItems.credentialOfferTitle, styles.messageText]}
-              testID={testIdWithKey('CredentialOnTheWay')}
+              testID={testIdWithKey(navigateToContacts ? 'ContactOnTheWay' : 'CredentialOnTheWay')}
             >
-              {t('CredentialOffer.CredentialOnTheWay')}
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {t((navigateToContacts ? 'Contacts.ContactOnTheWay' : 'CredentialOffer.CredentialOnTheWay') as any)}
             </ThemedText>
           )}
 
           {credentialDeliveryStatus === DeliveryStatus.Completed && (
             <ThemedText
               style={[ListItems.credentialOfferTitle, styles.messageText]}
-              testID={testIdWithKey('CredentialAddedToYourWallet')}
+              testID={testIdWithKey(navigateToContacts ? 'ContactAddedToYourWallet' : 'CredentialAddedToYourWallet')}
             >
-              {t('CredentialOffer.CredentialAddedToYourWallet')}
+              {t(
+                (navigateToContacts
+                  ? 'Contacts.ContactAddedToYourWallet'
+                  : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    'CredentialOffer.CredentialAddedToYourWallet') as any
+              )}
             </ThemedText>
           )}
         </View>

@@ -58,6 +58,7 @@ import {
   State,
   Onboarding as StoreOnboardingState,
   Tours as ToursState,
+  WitnessSettings,
 } from './types/state'
 import { hashPIN } from './utils/crypto'
 
@@ -206,6 +207,9 @@ export class MainContainer implements Container {
       let migration = defaultState.migration
       let tours = defaultState.tours
       let onboarding = defaultState.onboarding
+      let witness = defaultState.witness
+
+      console.log('[DEBUG] Loading state - defaultState.witness:', JSON.stringify(defaultState.witness))
 
       await Promise.all([
         loadLoginAttempt().then((data) => {
@@ -217,7 +221,13 @@ export class MainContainer implements Container {
         loadState<MigrationState>(LocalStorageKeys.Migration, (val) => (migration = val)),
         loadState<ToursState>(LocalStorageKeys.Tours, (val) => (tours = val)),
         loadState<StoreOnboardingState>(LocalStorageKeys.Onboarding, (val) => (onboarding = val)),
+        loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
+          console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
+          witness = val
+        }),
       ])
+
+      console.log('[DEBUG] Final witness value before dispatch:', JSON.stringify(witness))
 
       const state = {
         loginAttempt: { ...defaultState.loginAttempt, ...loginAttempt },
@@ -225,7 +235,11 @@ export class MainContainer implements Container {
         migration: { ...defaultState.migration, ...migration },
         tours: { ...defaultState.tours, ...tours },
         onboarding: { ...defaultState.onboarding, ...onboarding },
+        rCard: defaultState.rCard, // Will be loaded when agent is available
+        witness: { ...defaultState.witness, ...witness },
       } as State
+
+      console.log('[DEBUG] State being dispatched - witness:', JSON.stringify(state.witness))
 
       dispatch({ type: DispatchAction.STATE_DISPATCH, payload: [state] })
     })

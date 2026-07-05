@@ -1165,6 +1165,50 @@ const processBetaUrlIfRequired = (uri: string): string => {
 }
 
 /**
+ * Wait for the mediator's outbound transport to become active.
+ * During cold start or background-to-foreground transitions, the WebSocket
+ * connection to the mediator may still be establishing even though the agent
+ * is initialized. Polls until a trust ping succeeds, confirming end-to-end
+ * transport readiness.
+ */
+const waitForMediatorTransport = async (agent: BifoldAgent, logger: BifoldLogger, timeoutMs = 12000): Promise<void> => {
+  let mediator
+  try {
+    mediator = await agent.modules.didcomm.mediationRecipient.findDefaultMediator()
+  } catch {
+    return
+  }
+
+  if (!mediator) {
+    return
+  }
+
+  logger.info('Waiting for mediator transport...')
+  const startTime = Date.now()
+  const pollInterval = 750
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const connection = await agent.modules.didcomm.connections.getById(mediator.connectionId)
+      if (connection?.isReady) {
+        await agent.modules.didcomm.connections.sendPing(mediator.connectionId, {
+          responseRequested: false,
+          withReturnRouting: true,
+        })
+        logger.info(`Mediator transport active (${Date.now() - startTime}ms)`)
+        return
+      }
+    } catch {
+      // Transport not ready yet, will retry
+    }
+
+    await new Promise<void>((r) => setTimeout(r, pollInterval))
+  }
+
+  logger.warn(`Mediator transport readiness timed out after ${timeoutMs}ms`)
+}
+
+/**
  * Receive a message from a scan or deeplink and navigate accordingly
  * @param uri a URI either containing a base64 encoded connection invite in the query parameters or a redirect URL itself
  * @param agent an Agent instance
@@ -1189,6 +1233,11 @@ export const connectFromScanOrDeepLink = async (
   }
 
   logger.info(`Attempting to connect from ${isDeepLink ? 'deeplink' : 'qr scan'}`)
+
+  if (isDeepLink) {
+    await waitForMediatorTransport(agent, logger)
+  }
+
   try {
     if (isOpenIdCredentialOffer(uri)) {
       navigation.navigate(Stacks.ConnectionStack as any, {
@@ -1406,3 +1455,11 @@ export function getSecondaryBackgroundColor(
       : overlay.brandingOverlay?.secondaryBackgroundColor
   }
 }
+
+// Re-export VRC module functions (Keyring)
+export {
+  getOrCreateRelationshipDid,
+  setRelationshipDidOnConnection,
+  setupVrcConnectionHandler,
+  createRelationshipInvitation,
+} from '../modules/vrc'

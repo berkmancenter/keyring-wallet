@@ -22,6 +22,7 @@ export const defaultState: State = {
     didConsiderPushNotifications: false,
     didConsiderBiometry: false,
     didNameWallet: false,
+    didSetupRCard: false,
     onboardingVersion: 0,
     didCompleteOnboarding: false,
   },
@@ -50,7 +51,8 @@ export const defaultState: State = {
     useDevVerifierTemplates: false,
     acceptDevCredentials: false,
     useDataRetention: true,
-    enableWalletNaming: false,
+    useHardwareAttestation: false,
+    enableWalletNaming: true,
     walletName: generateRandomWalletName(),
     preventAutoLock: false,
     enableShareableLink: false,
@@ -60,6 +62,7 @@ export const defaultState: State = {
     selectedMediator: Config.MEDIATOR_URL ?? '',
     bannerMessages: [],
     genericErrorMessages: true,
+    useWitnessing: true,
   },
   tours: {
     seenToursPrompt: false,
@@ -67,10 +70,21 @@ export const defaultState: State = {
     seenHomeTour: false,
     seenCredentialsTour: false,
     seenCredentialOfferTour: false,
+    seenContactOfferTour: false,
     seenProofRequestTour: false,
+    seenContactsTour: false,
   },
   stateLoaded: false,
   versionInfo: { needsUpdate: false, lastChecked: undefined, version: undefined },
+  rCard: {
+    template: undefined,
+    lastSyncedAt: undefined,
+  },
+  witness: {
+    activeWitnessConnectionId: undefined,
+    enableReporting: true,
+    reportingDids: {},
+  },
   attestation: {
     isAttestationComplete: false
   },

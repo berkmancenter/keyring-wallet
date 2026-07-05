@@ -28,6 +28,7 @@ export enum PINEntryUsage {
   PINCheck,
   ChangeBiometrics,
   ChangePIN,
+  ChangeHardwareAttestation,
 }
 
 const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntryUsage.PINCheck, onCancelAuth }) => {
@@ -72,30 +73,35 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
 
   const inputLabelText = {
     [PINEntryUsage.ChangeBiometrics]: t('PINEnter.ChangeBiometricsInputLabel'),
+    [PINEntryUsage.ChangeHardwareAttestation]: t('PINEnter.ChangeHardwareAttestationInputLabel'),
     [PINEntryUsage.PINCheck]: t('PINEnter.AppSettingChangedEnterPIN'),
     [PINEntryUsage.ChangePIN]: t('PINChange.EnterOldPIN'),
   }
 
   const inputTestId = {
     [PINEntryUsage.ChangeBiometrics]: 'BiometricChangedEnterPIN',
+    [PINEntryUsage.ChangeHardwareAttestation]: 'HardwareAttestationChangedEnterPIN',
     [PINEntryUsage.PINCheck]: 'AppSettingChangedEnterPIN',
     [PINEntryUsage.ChangePIN]: 'EnterOldPIN',
   }
 
   const primaryButtonText = {
     [PINEntryUsage.ChangeBiometrics]: t('Global.Continue'),
+    [PINEntryUsage.ChangeHardwareAttestation]: t('Global.Continue'),
     [PINEntryUsage.PINCheck]: t('PINEnter.AppSettingSave'),
     [PINEntryUsage.ChangePIN]: t('Global.Continue'),
   }
 
   const primaryButtonTestId = {
     [PINEntryUsage.ChangeBiometrics]: 'Continue',
+    [PINEntryUsage.ChangeHardwareAttestation]: 'Continue',
     [PINEntryUsage.PINCheck]: 'AppSettingSave',
     [PINEntryUsage.ChangePIN]: 'Continue',
   }
 
   const helpText = {
     [PINEntryUsage.ChangeBiometrics]: t('PINEnter.ChangeBiometricsSubtext'),
+    [PINEntryUsage.ChangeHardwareAttestation]: t('PINEnter.ChangeHardwareAttestationSubtext'),
     [PINEntryUsage.PINCheck]: t('PINEnter.AppSettingChanged'),
     [PINEntryUsage.ChangePIN]: '',
   }
@@ -145,10 +151,15 @@ const PINVerify: React.FC<PINVerifyProps> = ({ setAuthenticated, usage = PINEntr
               {t('PINEnter.ChangeBiometricsHeader')}
             </ThemedText>
           )}
+          {usage === PINEntryUsage.ChangeHardwareAttestation && (
+            <ThemedText variant="headingTwo" style={style.changeBiometricsHeader}>
+              {t('PINEnter.ChangeHardwareAttestationHeader')}
+            </ThemedText>
+          )}
           {usage !== PINEntryUsage.ChangePIN && <ThemedText style={style.helpText}>{helpText[usage]}</ThemedText>}
           <ThemedText variant="bold" style={style.inputLabelText}>
             {inputLabelText[usage]}
-            {usage === PINEntryUsage.ChangeBiometrics && (
+            {(usage === PINEntryUsage.ChangeBiometrics || usage === PINEntryUsage.ChangeHardwareAttestation) && (
               <ThemedText variant="caption">
                 {` `}
                 {t('PINEnter.ChangeBiometricsInputLabelParenthesis')}

@@ -46,6 +46,159 @@ exports[`Developer Screen acceptDevCredentials can be toggled 1`] = `
       <View
         style={
           Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/SeedTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Seed Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              Object {
+                "backgroundColor": "#606060",
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ClearTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Clear Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
             "alignItems": "center",
             "flexDirection": "row",
             "justifyContent": "space-between",
@@ -537,9 +690,9 @@ exports[`Developer Screen acceptDevCredentials can be toggled 1`] = `
               ]
             }
             testID="com.ariesbifold:id/EnableWalletNamingSwitchElement"
-            thumbTintColor="#606060"
+            thumbTintColor="#42803E"
             tintColor="#D3D3D3"
-            value={false}
+            value={true}
           />
         </View>
       </View>
@@ -989,6 +1142,159 @@ exports[`Developer Screen enableWalletNaming can be toggled 1`] = `
       <View
         style={
           Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/SeedTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Seed Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              Object {
+                "backgroundColor": "#606060",
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ClearTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Clear Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
             "alignItems": "center",
             "flexDirection": "row",
             "justifyContent": "space-between",
@@ -1480,9 +1786,9 @@ exports[`Developer Screen enableWalletNaming can be toggled 1`] = `
               ]
             }
             testID="com.ariesbifold:id/EnableWalletNamingSwitchElement"
-            thumbTintColor="#42803E"
+            thumbTintColor="#606060"
             tintColor="#D3D3D3"
-            value={true}
+            value={false}
           />
         </View>
       </View>
@@ -1932,6 +2238,159 @@ exports[`Developer Screen preventAutoLock can be toggled 1`] = `
       <View
         style={
           Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/SeedTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Seed Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              Object {
+                "backgroundColor": "#606060",
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ClearTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Clear Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
             "alignItems": "center",
             "flexDirection": "row",
             "justifyContent": "space-between",
@@ -2423,9 +2882,9 @@ exports[`Developer Screen preventAutoLock can be toggled 1`] = `
               ]
             }
             testID="com.ariesbifold:id/EnableWalletNamingSwitchElement"
-            thumbTintColor="#606060"
+            thumbTintColor="#42803E"
             tintColor="#D3D3D3"
-            value={false}
+            value={true}
           />
         </View>
       </View>
@@ -2875,6 +3334,159 @@ exports[`Developer Screen screen renders correctly 1`] = `
       <View
         style={
           Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/SeedTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Seed Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              Object {
+                "backgroundColor": "#606060",
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ClearTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Clear Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
             "alignItems": "center",
             "flexDirection": "row",
             "justifyContent": "space-between",
@@ -3366,9 +3978,9 @@ exports[`Developer Screen screen renders correctly 1`] = `
               ]
             }
             testID="com.ariesbifold:id/EnableWalletNamingSwitchElement"
-            thumbTintColor="#606060"
+            thumbTintColor="#42803E"
             tintColor="#D3D3D3"
-            value={false}
+            value={true}
           />
         </View>
       </View>
@@ -3818,6 +4430,159 @@ exports[`Developer Screen useConnectionInviterCapability can be toggled 1`] = `
       <View
         style={
           Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/SeedTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Seed Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              Object {
+                "backgroundColor": "#606060",
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ClearTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Clear Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
             "alignItems": "center",
             "flexDirection": "row",
             "justifyContent": "space-between",
@@ -4309,9 +5074,9 @@ exports[`Developer Screen useConnectionInviterCapability can be toggled 1`] = `
               ]
             }
             testID="com.ariesbifold:id/EnableWalletNamingSwitchElement"
-            thumbTintColor="#606060"
+            thumbTintColor="#42803E"
             tintColor="#D3D3D3"
-            value={false}
+            value={true}
           />
         </View>
       </View>
@@ -4761,6 +5526,159 @@ exports[`Developer Screen useDevVerifierTemplates can be toggled 1`] = `
       <View
         style={
           Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/SeedTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Seed Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              Object {
+                "backgroundColor": "#606060",
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ClearTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Clear Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
             "alignItems": "center",
             "flexDirection": "row",
             "justifyContent": "space-between",
@@ -5252,9 +6170,9 @@ exports[`Developer Screen useDevVerifierTemplates can be toggled 1`] = `
               ]
             }
             testID="com.ariesbifold:id/EnableWalletNamingSwitchElement"
-            thumbTintColor="#606060"
+            thumbTintColor="#42803E"
             tintColor="#D3D3D3"
-            value={false}
+            value={true}
           />
         </View>
       </View>
@@ -5704,6 +6622,159 @@ exports[`Developer Screen useVerifierCapability can be toggled 1`] = `
       <View
         style={
           Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/SeedTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Seed Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
+            "marginHorizontal": 10,
+            "marginVertical": 10,
+          }
+        }
+      >
+        <View
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": false,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Array [
+              Object {
+                "alignItems": "center",
+                "backgroundColor": "#42803E",
+                "borderRadius": 8,
+                "flexDirection": "row",
+                "justifyContent": "center",
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+              Object {
+                "backgroundColor": "#606060",
+              },
+              false,
+            ]
+          }
+          testID="com.ariesbifold:id/ClearTestContactsButton"
+        >
+          <Text
+            maxFontSizeMultiplier={2}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 18,
+                  "fontWeight": "normal",
+                },
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 16,
+                  "fontWeight": "600",
+                },
+              ]
+            }
+          >
+            Clear Test Contacts
+          </Text>
+        </View>
+      </View>
+      <View
+        style={
+          Object {
             "alignItems": "center",
             "flexDirection": "row",
             "justifyContent": "space-between",
@@ -6195,9 +7266,9 @@ exports[`Developer Screen useVerifierCapability can be toggled 1`] = `
               ]
             }
             testID="com.ariesbifold:id/EnableWalletNamingSwitchElement"
-            thumbTintColor="#606060"
+            thumbTintColor="#42803E"
             tintColor="#D3D3D3"
-            value={false}
+            value={true}
           />
         </View>
       </View>

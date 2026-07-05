@@ -1,0 +1,34 @@
+{
+  "name": "@bifold/vrc-contexts",
+  "version": "0.1.0-alpha.1",
+  "description": "JSON-LD context definitions for VRC/VWC credentials - single source of truth for mobile and server",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build"
+  ],
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "echo 'building vrc-contexts 🏗️' && yarn run clean && yarn run compile && echo 'vrc-contexts built ✅'",
+    "clean": "rimraf ./build",
+    "compile": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
+    "directory": "packages/vrc-contexts"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "bugs": {
+    "url": "https://github.com/berkmancenter/keyring-bifold/issues"
+  },
+  "homepage": "https://github.com/berkmancenter/keyring-bifold/",
+  "devDependencies": {
+    "rimraf": "~5.0.10",
+    "typescript": "~5.5.4"
+  }
+}

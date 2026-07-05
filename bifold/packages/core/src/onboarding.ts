@@ -38,6 +38,10 @@ export const isPushNotificationComplete = (
   }
 }
 
+export const isRCardSetupComplete = (didSetupRCard: boolean, hasCredential: boolean): OnboardingTask => {
+  return { name: Screens.RCardOnboarding, completed: didSetupRCard || hasCredential }
+}
+
 export const isNameWalletComplete = (didNameWallet: boolean, enableWalletNaming: boolean): OnboardingTask => {
   return { name: Screens.NameWallet, completed: didNameWallet || !enableWalletNaming }
 }
@@ -68,14 +72,17 @@ export const generateOnboardingWorkflowSteps = (
     didConsiderBiometry,
     didConsiderPushNotifications,
     didNameWallet,
+    didSetupRCard,
   } = state.onboarding
   const { servedPenalty } = state.loginAttempt
   const { didAuthenticate } = state.authentication
   const { enableWalletNaming } = state.preferences
   const { isAttestationComplete } = state.attestation
   const { showPreface, enablePushNotifications } = config
+  const hasRCardTemplate = Boolean(state.rCard?.template)
+  const rCardTask = isRCardSetupComplete(didSetupRCard, hasRCardTemplate)
 
-  return [
+  const tasks = [
     isPrefaceComplete(didSeePreface, showPreface ?? false),
     isUpdateCheckComplete(),
     isOnboardingTutorialComplete(didCompleteTutorial),
@@ -84,8 +91,11 @@ export const generateOnboardingWorkflowSteps = (
     isBiometryComplete(didConsiderBiometry),
     isPushNotificationComplete(didConsiderPushNotifications, enablePushNotifications),
     isNameWalletComplete(didNameWallet, enableWalletNaming),
+    rCardTask,
     isAttemptLockoutComplete(servedPenalty),
     isAuthenticationComplete(didCreatePIN, didAuthenticate),
     isAgentInitializationComplete(agent, isAttestationComplete),
   ]
+  
+  return tasks
 }

@@ -29,6 +29,105 @@ import { useExpiredNotifications } from '../modules/openid/hooks/useExpiredNotif
 import { useReplacementNotifications } from '../modules/openid/hooks/useReplacementNotifications'
 import { OpenIDCredentialRecord } from '../modules/openid/credentialRecord'
 
+/**
+ * Module-level store for connection IDs to exclude from notifications.
+ * Used to filter out witness connection notifications.
+ */
+const excludedConnectionIds = new Set<string>()
+
+/**
+ * Subscribers that get notified when exclusions change.
+ * Each subscriber is a callback that will be called when the exclusion list changes.
+ */
+const exclusionChangeSubscribers = new Set<() => void>()
+
+/**
+ * Notify all subscribers that the exclusion list has changed
+ */
+function notifyExclusionChange(): void {
+  exclusionChangeSubscribers.forEach((callback) => callback())
+}
+
+/**
+ * Subscribe to exclusion list changes
+ * @param callback - Function to call when exclusions change
+ * @returns Unsubscribe function
+ */
+export function subscribeToExclusionChanges(callback: () => void): () => void {
+  exclusionChangeSubscribers.add(callback)
+  return () => {
+    exclusionChangeSubscribers.delete(callback)
+  }
+}
+
+/**
+ * Add a connection ID to be excluded from notifications
+ * @param connectionId - The connection ID to exclude (e.g., witness connection)
+ */
+export function addExcludedNotificationConnectionId(connectionId: string): void {
+  const hadId = excludedConnectionIds.has(connectionId)
+  excludedConnectionIds.add(connectionId)
+  // Only notify if we actually added a new ID
+  if (!hadId) {
+    notifyExclusionChange()
+  }
+}
+
+/**
+ * Remove a connection ID from the exclusion list
+ * @param connectionId - The connection ID to stop excluding
+ */
+export function removeExcludedNotificationConnectionId(connectionId: string): void {
+  const hadId = excludedConnectionIds.has(connectionId)
+  excludedConnectionIds.delete(connectionId)
+  // Only notify if we actually removed an ID
+  if (hadId) {
+    notifyExclusionChange()
+  }
+}
+
+/**
+ * Check if a connection ID is excluded from notifications
+ * @param connectionId - The connection ID to check
+ */
+export function isConnectionExcludedFromNotifications(connectionId: string): boolean {
+  return excludedConnectionIds.has(connectionId)
+}
+
+/**
+ * Get all excluded connection IDs
+ */
+export function getExcludedNotificationConnectionIds(): string[] {
+  return Array.from(excludedConnectionIds)
+}
+
+/**
+ * Clear all excluded connection IDs (for testing purposes)
+ * @internal This should only be used in tests
+ */
+export function clearExcludedNotificationConnectionIds(): void {
+  excludedConnectionIds.clear()
+  notifyExclusionChange()
+}
+
+/**
+ * Hook to subscribe to exclusion list changes.
+ * Returns a version number that increments when exclusions change,
+ * causing the component to re-render.
+ */
+export function useExclusionVersion(): number {
+  const [version, setVersion] = useState(0)
+
+  useEffect(() => {
+    const unsubscribe = subscribeToExclusionChanges(() => {
+      setVersion((v) => v + 1)
+    })
+    return unsubscribe
+  }, [])
+
+  return version
+}
+
 export type NotificationsInputProps = {
   openIDUri?: string
   openIDPresentationUri?: string
@@ -64,9 +163,22 @@ export const useNotifications = ({
   const openIDCredRecieved = useOpenID({ openIDUri: openIDUri, openIDPresentationUri: openIDPresentationUri })
   const openIDExpiredNotifs = useExpiredNotifications()
   const openIDReplacementNotifs = useReplacementNotifications()
+
+  // Subscribe to exclusion changes so notifications re-filter when witness connections are excluded
+  const exclusionVersion = useExclusionVersion()
+
   useEffect(() => {
+    // Helper to check if a notification should be excluded based on connectionId
+    const isExcluded = (connectionId?: string): boolean => {
+      if (!connectionId) return false
+      return excludedConnectionIds.has(connectionId)
+    }
+
     // get all unseen messages
     const unseenMessages: DidCommBasicMessageRecord[] = basicMessages.filter((msg) => {
+      if (isExcluded(msg.connectionId)) {
+        return false
+      }
       const meta = msg.metadata.get(BasicMessageMetadata.customMetadata) as basicMessageCustomMetadata
       return !meta?.seen
     })
@@ -82,7 +194,17 @@ export const useNotifications = ({
       }
     })
 
+    // Filter offers from excluded connections
+    const filteredOffers = offers.filter((offer) => !isExcluded(offer.connectionId))
+
+    // Filter proofs from excluded connections
+    const filteredProofsRequested = proofsRequested.filter((proof) => !isExcluded(proof.connectionId))
+
     const validProofsDone = proofsDone.filter((proof: DidCommProofExchangeRecord) => {
+      // Filter out excluded connections
+      if (isExcluded(proof.connectionId)) {
+        return false
+      }
       if (proof.isVerified === undefined) {
         return false
       }
@@ -93,6 +215,10 @@ export const useNotifications = ({
     })
 
     const revoked = credsDone.filter((cred: CredentialRecord) => {
+      // Filter out excluded connections
+      if (isExcluded(cred.connectionId)) {
+        return false
+      }
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const metadata = cred!.metadata.get(CredentialMetadata.customMetadata) as credentialCustomMetadata
       if (cred?.revocationNotification && metadata?.revoked_seen == undefined) {
@@ -107,8 +233,8 @@ export const useNotifications = ({
 
     const notif = [
       ...messagesToShow,
-      ...offers,
-      ...proofsRequested,
+      ...filteredOffers,
+      ...filteredProofsRequested,
       ...validProofsDone,
       ...revoked,
       ...openIDCreds,
@@ -127,6 +253,7 @@ export const useNotifications = ({
     openIDCredRecieved,
     openIDReplacementNotifs,
     openIDExpiredNotifs,
+    exclusionVersion,
   ])
 
   return notifications

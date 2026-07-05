@@ -18,6 +18,7 @@ import { createCarouselStyle } from '../screens/OnboardingPages'
 import PINCreate from '../screens/PINCreate'
 import PINEnter from '../screens/PINEnter'
 import PushNotifications from '../screens/PushNotifications'
+import RCardOnboarding from '../modules/vrc/screens/RCardOnboarding'
 import { Config } from '../types/config'
 import { OnboardingStackParams } from '../types/navigators'
 import { WalletSecret } from '../types/security'
@@ -121,13 +122,12 @@ const OnboardingStack: React.FC<OnboardingStackProps> = ({ initializeAgent, agen
         disableSkip={disableOnboardingSkip}
         pages={pages(onTutorialCompleted, OnboardingTheme)}
         style={carousel}
+        onComplete={onTutorialCompleted}
+        completeButtonText={t('Global.GetStarted')}
       />
     )
   }, [Onboarding, OnboardingTheme, carousel, disableOnboardingSkip, onTutorialCompleted, pages, t])
 
-  // These need to be in the children of the stack screen otherwise they
-  // will unmount/remount which resets the component state in memory and causes
-  // issues
   const CreatePINScreen = useCallback(
     (props: any) => {
       return <PINCreate setAuthenticated={onAuthenticated} {...props} />
@@ -142,52 +142,54 @@ const OnboardingStack: React.FC<OnboardingStackProps> = ({ initializeAgent, agen
     [onAuthenticated]
   )
 
+  const RCardOnboardingScreen = useCallback(
+    (props: any) => {
+      return <RCardOnboarding agent={agent} {...props} />
+    },
+    [agent]
+  )
+
   useEffect(() => {
-    // If the active screen is the same as the current route, then we don't
-    // need to do anything.
     if (activeScreen && activeScreen === currentRoute?.name) {
       return
     }
 
-    // If the active screen is different from the current route, then we need
-    // to navigate to the active screen.
     if (activeScreen) {
       navigation.dispatch(StackActions.replace(activeScreen))
       return
     }
 
-    // Nothing to do here, we are done with onboarding.
     DeviceEventEmitter.emit(EventTypes.DID_COMPLETE_ONBOARDING)
   }, [activeScreen, currentRoute, onboardingState, navigation])
 
-  const screens = useMemo(
-    () =>
-      getOnboardingScreens(t, ScreenOptionsDictionary, {
-        SplashScreen,
-        Preface,
-        UpdateAvailableScreen,
-        Terms,
-        NameWallet,
-        Biometry,
-        PushNotifications,
-        AttemptLockout,
-        OnboardingScreen,
-        CreatePINScreen,
-        EnterPINScreen,
-      }),
-    [
+  const screens = useMemo(() => {
+    return getOnboardingScreens(t, ScreenOptionsDictionary, {
       SplashScreen,
+      Preface,
+      UpdateAvailableScreen,
+      Terms,
+      NameWallet,
+      Biometry,
+      PushNotifications,
+      RCardOnboarding: RCardOnboardingScreen,
+      AttemptLockout,
+      OnboardingScreen,
       CreatePINScreen,
       EnterPINScreen,
-      OnboardingScreen,
-      Preface,
-      Terms,
-      Biometry,
-      t,
-      ScreenOptionsDictionary,
-      UpdateAvailableScreen,
-    ]
-  )
+    })
+  }, [
+    SplashScreen,
+    CreatePINScreen,
+    EnterPINScreen,
+    OnboardingScreen,
+    Preface,
+    Terms,
+    Biometry,
+    RCardOnboardingScreen,
+    t,
+    ScreenOptionsDictionary,
+    UpdateAvailableScreen,
+  ])
   return (
     <Stack.Navigator
       initialRouteName={activeScreen}

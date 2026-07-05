@@ -29,6 +29,7 @@ enum OnboardingDispatchAction {
   DID_CREATE_PIN = 'onboarding/didCreatePIN',
   DID_CONFIRM_PIN = 'onboarding.didConfirmPIN',
   DID_NAME_WALLET = 'onboarding/didNameWallet',
+  DID_SETUP_R_CARD = 'onboarding/didSetupRCard',
   DID_COMPLETE_ONBOARDING = 'onboarding/didCompleteOnboarding',
   ONBOARDING_VERSION = 'onboarding/onboardingVersion',
 }
@@ -58,6 +59,7 @@ enum PreferencesDispatchAction {
   UPDATE_WALLET_NAME = 'preferences/updateWalletName',
   ACCEPT_DEV_CREDENTIALS = 'preferences/acceptDevCredentials',
   USE_DATA_RETENTION = 'preferences/useDataRetention',
+  USE_HARDWARE_ATTESTATION = 'preferences/useHardwareAttestation',
   PREVENT_AUTO_LOCK = 'preferences/preventAutoLock',
   USE_SHAREABLE_LINK = 'preferences/useShareableLink',
   UPDATE_ALTERNATE_CONTACT_NAMES = 'preferences/updateAlternateContactNames',
@@ -69,6 +71,7 @@ enum PreferencesDispatchAction {
   BANNER_MESSAGES = 'preferences/bannerMessages',
   GENERIC_ERROR_MESSAGES = 'preferences/genericErrorMessages',
   REMOVE_BANNER_MESSAGE = 'REMOVE_BANNER_MESSAGE',
+  USE_WITNESSING = 'preferences/useWitnessing',
 }
 
 enum ToursDispatchAction {
@@ -78,7 +81,9 @@ enum ToursDispatchAction {
   UPDATE_SEEN_HOME_TOUR = 'tours/seenHomeTour',
   UPDATE_SEEN_CREDENTIALS_TOUR = 'tours/seenCredentialsTour',
   UPDATE_SEEN_CREDENTIAL_OFFER_TOUR = 'tours/seenCredentialOfferTour',
+  UPDATE_SEEN_CONTACT_OFFER_TOUR = 'tours/seenContactOfferTour',
   UPDATE_SEEN_PROOF_REQUEST_TOUR = 'tours/seenProofRequestTour',
+  UPDATE_SEEN_CONTACTS_TOUR = 'tours/seenContactsTour',
 }
 
 enum AuthenticationDispatchAction {
@@ -94,7 +99,17 @@ enum AppStatusDispatchAction {
 }
 
 enum AttestationDispatchAction {
-  SET_ATTESTATION_COMPLETED = 'attestation/setAttestationCompleted'
+  SET_ATTESTATION_COMPLETED = 'attestation/setAttestationCompleted',
+}
+
+enum RCardDispatchAction {
+  R_CARD_TEMPLATE_STAGED = 'rCard/templateStaged',
+  R_CARD_CREDENTIAL_SYNCED = 'rCard/credentialSynced',
+  R_CARD_CREDENTIAL_CLEARED = 'rCard/credentialCleared',
+}
+
+enum WitnessDispatchAction {
+  UPDATE_WITNESS_SETTINGS = 'witness/updateSettings',
 }
 
 export type DispatchAction =
@@ -109,6 +124,8 @@ export type DispatchAction =
   | MigrationDispatchAction
   | AppStatusDispatchAction
   | AttestationDispatchAction
+  | RCardDispatchAction
+  | WitnessDispatchAction
 
 export const DispatchAction = {
   ...StateDispatchAction,
@@ -122,6 +139,8 @@ export const DispatchAction = {
   ...MigrationDispatchAction,
   ...AppStatusDispatchAction,
   ...AttestationDispatchAction,
+  ...RCardDispatchAction,
+  ...WitnessDispatchAction,
 }
 
 export interface ReducerAction<R> {
@@ -140,6 +159,41 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
     case StateDispatchAction.STATE_DISPATCH: {
       const newState: State = (action?.payload || []).pop()
       return { ...state, ...newState, stateLoaded: true }
+    }
+    case RCardDispatchAction.R_CARD_TEMPLATE_STAGED: {
+      // Stores RCard template in Redux state only (not yet persisted to Credo)
+      // Does NOT set lastSyncedAt, allowing migration hook to detect and persist to Credo later
+      const template = (action?.payload || []).pop()
+      const rCard = {
+        template,
+        lastSyncedAt: state.rCard?.lastSyncedAt, // Preserve existing value if any
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_CREDENTIAL_SYNCED: {
+      // RCard template is confirmed persisted to Credo - set lastSyncedAt
+      const template = (action?.payload || []).pop()
+      const rCard = {
+        template,
+        lastSyncedAt: new Date().toISOString(),
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_CREDENTIAL_CLEARED: {
+      const rCard = {
+        template: undefined,
+        lastSyncedAt: new Date().toISOString(),
+      }
+      return {
+        ...state,
+        rCard,
+      }
     }
     case PreferencesDispatchAction.ENABLE_DEVELOPER_MODE: {
       const choice = (action?.payload ?? []).pop() ?? false
@@ -274,6 +328,36 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       const preferences = {
         ...state.preferences,
         useDataRetention: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_HARDWARE_ATTESTATION: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useHardwareAttestation: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_WITNESSING: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useWitnessing: choice,
       }
       const newState = {
         ...state,
@@ -419,6 +503,8 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
         tours.seenCredentialsTour = false
         tours.seenCredentialOfferTour = false
         tours.seenProofRequestTour = false
+        tours.seenContactsTour = false
+        tours.seenContactOfferTour = false
       } else {
         tours.enableTours = enableTours
       }
@@ -500,6 +586,40 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
 
       if (seenProofRequestTour && tours.seenHomeTour && tours.seenCredentialOfferTour && tours.seenCredentialsTour) {
         tours.enableTours = false
+      }
+
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+    case ToursDispatchAction.UPDATE_SEEN_CONTACTS_TOUR: {
+      const seenContactsTour = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenContactsTour,
+        ...(seenContactsTour ? { seenContactOfferTour: true } : {}),
+      }
+
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+    case ToursDispatchAction.UPDATE_SEEN_CONTACT_OFFER_TOUR: {
+      const seenContactOfferTour = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenContactOfferTour,
+        ...(seenContactOfferTour ? { seenContactsTour: true } : {}),
       }
 
       const newState = {
@@ -744,6 +864,20 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
 
       return newState
     }
+    case OnboardingDispatchAction.DID_SETUP_R_CARD: {
+      const onboarding = {
+        ...state.onboarding,
+        didSetupRCard: true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, onboarding)
+
+      return newState
+    }
     case MigrationDispatchAction.DID_MIGRATE_TO_ASKAR: {
       const migration: MigrationState = {
         ...state.migration,
@@ -785,9 +919,23 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       return {
         ...state,
         attestation: {
-          isAttestationComplete
-        }
+          isAttestationComplete,
+        },
       }
+    }
+    case WitnessDispatchAction.UPDATE_WITNESS_SETTINGS: {
+      const incoming = (action?.payload || []).pop()
+      // Merge with existing to preserve any fields not included in the update
+      const witness = {
+        // Provide defaults for fields that may be absent in older persisted state
+        // (must come first so ...state.witness can override them if already set)
+        ...{ enableReporting: true, reportingDids: {} as Record<string, string> },
+        ...state.witness,
+        ...incoming,
+      }
+      const newState = { ...state, witness }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.WitnessSettings, witness)
+      return newState
     }
     default:
       return state

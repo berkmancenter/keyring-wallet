@@ -7,9 +7,13 @@ import { ContainerProvider } from '../../src/container-api'
 import { MainContainer } from '../../src/container-impl'
 import { AuthContext } from '../../src/contexts/auth'
 import { StoreProvider, defaultState } from '../../src/contexts/store'
+import reducer from '../../src/contexts/reducers/store'
 import PINEnter from '../../src/screens/PINEnter'
 import { testIdWithKey } from '../../src/utils/testable'
 import authContext from '../contexts/auth'
+
+// Create a stable reducer reference for testing
+const stableReducer = reducer
 
 describe('PINEnter Screen', () => {
   test('PIN Enter renders correctly', () => {
@@ -197,6 +201,7 @@ describe('PINEnter Screen', () => {
           initialState={{
             ...defaultState,
           }}
+          reducer={stableReducer}
         >
           <AuthContext.Provider value={mockAuthContext}>
             <PINEnter setAuthenticated={mockAuthContext.setAuthenticated} />
@@ -208,7 +213,9 @@ describe('PINEnter Screen', () => {
     await act(async () => {
       fireEvent.changeText(pinInput, '123456') // minpinlength is 6
     })
-    expect(setAuthenticatedMock).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(setAuthenticatedMock).toHaveBeenCalled()
+    })
   })
 
   test('Keyboard enter button submits PIN', async () => {

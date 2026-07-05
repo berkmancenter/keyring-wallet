@@ -312,7 +312,9 @@ exports[`DismissiblePopupModal Component Renders correctly with call to action 1
               accessible={true}
               collapsable={false}
               focusable={true}
+              onBlur={[Function]}
               onClick={[Function]}
+              onFocus={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
               onResponderRelease={[Function]}
@@ -320,12 +322,19 @@ exports[`DismissiblePopupModal Component Renders correctly with call to action 1
               onResponderTerminationRequest={[Function]}
               onStartShouldSetResponder={[Function]}
               style={
-                Object {
-                  "backgroundColor": "#42803E",
-                  "borderRadius": 4,
-                  "opacity": 1,
-                  "padding": 16,
-                }
+                Array [
+                  Object {
+                    "overflow": "hidden",
+                  },
+                  Object {
+                    "backgroundColor": "#42803E",
+                    "borderRadius": 4,
+                    "padding": 16,
+                  },
+                  false,
+                  false,
+                  false,
+                ]
               }
               testID="com.ariesbifold:id/Okay"
             >

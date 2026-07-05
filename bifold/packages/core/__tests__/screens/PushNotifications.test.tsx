@@ -1,22 +1,43 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native'
+import { fireEvent, render, waitFor, act } from '@testing-library/react-native'
 import React from 'react'
 
 import { container } from 'tsyringe'
 import { TOKENS } from '../../src/container-api'
-import { MainContainer } from '../../src/container-impl'
+import { MainContainer, defaultConfig } from '../../src/container-impl'
 import { StoreProvider, defaultState } from '../../src/contexts/store'
+import reducer from '../../src/contexts/reducers/store'
 import PushNotifications from '../../src/screens/PushNotifications'
-import { Config } from '../../src/types/config'
 import { testIdWithKey } from '../../src/utils/testable'
 import { CustomBasicAppContext } from '../helpers/app'
 
+// Create a stable reducer reference for testing
+const stableReducer = reducer
+
 describe('PushNotifications Screen', () => {
-  const setup = jest.fn()
-  const toggle = jest.fn()
-  const status = async () => await Promise.resolve('denied')
-  const context = new MainContainer(container.createChildContainer()).init()
-  const config: Config = context.container.resolve(TOKENS.CONFIG)
-  context.container.registerInstance(TOKENS.CONFIG, { ...config, enablePushNotifications: { status, setup, toggle } })
+  let setup: jest.Mock
+  let toggle: jest.Mock
+  let status: jest.Mock
+  let testContainer: ReturnType<typeof MainContainer.prototype.init>
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    setup = jest.fn().mockResolvedValue('granted')
+    toggle = jest.fn()
+    status = jest.fn().mockResolvedValue('denied')
+    
+    // Create a fresh child container for each test
+    const childContainer = container.createChildContainer()
+    
+    // Init the container first
+    testContainer = new MainContainer(childContainer).init()
+    
+    // Override CONFIG AFTER init (like BasicAppContext does with UTIL_LOGGER)
+    const configWithMock = {
+      ...defaultConfig,
+      enablePushNotifications: { status, setup, toggle }
+    }
+    childContainer.registerInstance(TOKENS.CONFIG, configWithMock)
+  })
 
   test('Push notification screen renders correctly in onboarding', async () => {
     const tree = render(
@@ -24,8 +45,9 @@ describe('PushNotifications Screen', () => {
         initialState={{
           ...defaultState,
         }}
+        reducer={stableReducer}
       >
-        <CustomBasicAppContext container={context}>
+        <CustomBasicAppContext container={testContainer}>
           <PushNotifications />
         </CustomBasicAppContext>
       </StoreProvider>
@@ -34,9 +56,13 @@ describe('PushNotifications Screen', () => {
     expect(tree).toMatchSnapshot()
     const continueButton = tree.getByTestId(testIdWithKey('PushNotificationContinue'))
     expect(continueButton).not.toBe(null)
-    await waitFor(() => {
-      fireEvent(continueButton, 'press')
+    
+    await act(async () => {
+      fireEvent.press(continueButton)
     })
-    expect(setup).toHaveBeenCalledTimes(1)
+    
+    await waitFor(() => {
+      expect(setup).toHaveBeenCalledTimes(1)
+    })
   })
 })

@@ -3,7 +3,7 @@ import { useAgent, useConnectionById, useProofById } from '@bifold/react-hooks'
 import { DidCommProofExchangeRecord, DidCommProofState } from '@credo-ts/didcomm'
 import { GroupedSharedProofDataItem, ProofCustomMetadata, ProofMetadata, markProofAsViewed } from '@bifold/verifier'
 import { useFocusEffect } from '@react-navigation/native'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BackHandler, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -14,9 +14,8 @@ import { useStore } from '../contexts/store'
 import { TOKENS, useServices } from '../container-api'
 import { useTheme } from '../contexts/theme'
 import { ProofRequestsStackParams, Screens } from '../types/navigators'
-import { getConnectionName } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
-import { useOutOfBandByConnectionId } from '../hooks/connections'
+import { useConnectionDisplayName, useOutOfBandByConnectionId } from '../hooks/connections'
 import { ThemedText } from '../components/texts/ThemedText'
 import usePreventScreenCapture from '../hooks/screen-capture'
 
@@ -243,13 +242,8 @@ const ProofDetails: React.FC<ProofDetailsProps> = ({ route, navigation }) => {
   const [logger, { preventScreenCapture }] = useServices([TOKENS.UTIL_LOGGER, TOKENS.CONFIG])
   usePreventScreenCapture(preventScreenCapture)
 
-  const connectionLabel = useMemo(
-    () =>
-      connection
-        ? getConnectionName(connection, store.preferences.alternateContactNames)
-        : t('Verifier.ConnectionLessLabel'),
-    [connection, store.preferences.alternateContactNames, t]
-  )
+  const displayName = useConnectionDisplayName(record?.connectionId)
+  const connectionLabel = connection ? displayName : t('Verifier.ConnectionLessLabel')
 
   const cleanup = useCallback((): Promise<PromiseSettledResult<void>[]> | undefined => {
     if (!agent) {

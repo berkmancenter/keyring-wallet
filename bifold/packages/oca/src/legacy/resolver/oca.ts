@@ -249,7 +249,7 @@ export class DefaultOCABundleResolver implements OCABundleResolverType {
         params.meta?.credName ??
           parseCredDefFromId(params.identifiers?.credentialDefinitionId, params.identifiers?.schemaId)
       ),
-      issuer: params.meta?.alias || params.meta?.credConnectionId || 'Unknown Contact',
+      issuer: params.meta?.alias || params.meta?.credConnectionId || 'Unknown',
       language: params.language ?? this.options?.language,
       description: '',
       credential_help_text: '',

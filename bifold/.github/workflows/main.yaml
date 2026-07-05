@@ -1,200 +1,161 @@
+# Native iOS/Android sample-app builds are disabled below (no CI credentials in this repo).
+# Code quality CI runs in quality.yaml. KeyRing native builds run in keyring-wallet staging.yaml.
 name: Native Build
 
 env:
   cacheId: '11' # increment to expire the cache
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/main.yaml'
-      - '.github/workflows/publish.yaml'
-      - '.github/actions/setup-node/action.yaml'
-      - 'packages/**'
-      - 'samples/**'
-      - 'package.json'
-      - 'yarn.lock'
-    types: [opened, synchronize, reopened, labeled]
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  build-ios:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+  # build-ios: # DISABLED - needs correct context and credentials
+  #   runs-on: macos-14
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.11'
+  #
+  #     - name: Setup NodeJS
+  #       uses: ./.github/actions/setup-node
+  #
+  #     - name: Configure ruby
+  #       uses: ruby/setup-ruby@v1
+  #       with:
+  #         working-directory: ./samples/app
+  #
+  #     - name: What XCode are we using?
+  #       run: |
+  #         find /Applications -type d -maxdepth 1 -iname 'xcode*.app'
+  #         sudo xcode-select --switch /Applications/Xcode_16.2.app
+  #         sudo xcode-select -p
+  #
+  #     - name: Cache pod dependencies
+  #       id: pod-cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: samples/app/ios/Pods
+  #         key: ${{ runner.os }}-pods-${{ env.cacheId }}-${{ hashFiles('**/Podfile.lock ') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-pods-${{ env.cacheId }}-
+  #
+  #     # Watch for changes to the `src` and `iOS` paths, use
+  #     # git for cache keys.
+  #     - name: Generate cache key
+  #       run: |
+  #         echo $(git rev-parse HEAD:packages/core/src) > ./dd-cache-key.txt
+  #         echo $(git rev-parse HEAD:samples/app/ios) >> ./dd-cache-key.txt
+  #
+  #     - name: Cache derived data
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: samples/app/ios/xbuild/Build
+  #         key: ${{ runner.os }}-dd-xcode-${{ env.cacheId }}-${{ hashFiles('**/dd-cache-key.txt') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-dd-xcode-${{ env.cacheId }}-
+  #
+  #     - name: Install React Native Dependencies
+  #       run: |
+  #         yarn install --immutable && \
+  #         git status
+  #
+  #     - name: Build Workspace
+  #       run: |
+  #         yarn build
+  #
+  #     - name: Create .xcode.env.local file
+  #       working-directory: ./samples/app/ios
+  #       run: |
+  #         echo "export NODE_BINARY=$(which node)" > .xcode.env.local
+  #         cat .xcode.env.local
+  #
+  #     - name: Install iOS dependencies
+  #       # if: steps.pod-cache.outputs.cache-hit != 'true' || steps.npm-cache.outputs.cache-hit != 'true'
+  #       working-directory: ./samples/app
+  #       run: |
+  #         yarn run ios:setup && \
+  #         git status && \
+  #         git diff ios/Podfile.lock
+  #
+  #     - name: Run release build
+  #       # if: steps.pod-cache.outputs.cache-hit != 'true' || steps.npm-cache.outputs.cache-hit != 'true'
+  #       working-directory: ./samples/app/ios
+  #       run: |
+  #         xcodebuild \
+  #         -workspace AriesBifold.xcworkspace \
+  #         -scheme AriesBifold \
+  #         -configuration Release \
+  #         -derivedDataPath xbuild \
+  #         build \
+  #         CODE_SIGNING_ALLOWED=NO \
+  #         CODE_SIGNING_REQUIRED=NO
+  #
+  #     # This is a 1G file that adds little to speeding up
+  #     # the build but does impact cache size.
+  #     - name: Cleanup large artifacts
+  #       working-directory: ./samples/app/ios
+  #       run: |
+  #         rm -rf build/Build/Products/Debug-iphoneos/AriesBifold.app
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: '3.11'
-
-      - name: Setup NodeJS
-        uses: ./.github/actions/setup-node
-
-      - name: Configure ruby
-        uses: ruby/setup-ruby@8aeb6ff8030dd539317f8e1769a044873b56ea71 # v1.268.0
-        with:
-          ruby-version: 3.3.6
-          working-directory: ./samples/app
-          bundler-cache: true
-
-      - name: What XCode are we using?
-        run: |
-          find /Applications -type d -maxdepth 1 -iname 'xcode*.app'
-          sudo xcode-select --switch /Applications/Xcode_16.2.app
-          sudo xcode-select -p
-
-      - name: Cache pod dependencies
-        id: pod-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: samples/app/ios/Pods
-          key: ${{ runner.os }}-pods-${{ env.cacheId }}-${{ hashFiles('samples/app/ios/Podfile.lock') }}
-
-      # Watch for changes to the `src` and `iOS` paths, use
-      # git for cache keys.
-      - name: Generate cache key
-        run: |
-          echo $(git rev-parse HEAD:packages/core/src) > ./dd-cache-key.txt
-          echo $(git rev-parse HEAD:samples/app/ios) >> ./dd-cache-key.txt
-
-      - name: Cache derived data
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: samples/app/ios/xbuild/Build
-          key: ${{ runner.os }}-dd-xcode-${{ env.cacheId }}-${{ hashFiles('**/dd-cache-key.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-dd-xcode-${{ env.cacheId }}-
-
-      - name: Install React Native Dependencies
-        run: |
-          yarn install --immutable && \
-          git status
-
-      - name: Build Workspace
-        run: |
-          yarn build
-
-      - name: Create .xcode.env.local file
-        working-directory: ./samples/app/ios
-        run: |
-          echo "export NODE_BINARY=$(which node)" > .xcode.env.local
-          cat .xcode.env.local
-
-      - name: Install iOS dependencies
-        # if: steps.pod-cache.outputs.cache-hit != 'true' || steps.npm-cache.outputs.cache-hit != 'true'
-        working-directory: ./samples/app
-        run: |
-          yarn run ios:setup && \
-          git status && \
-          git diff ios/Podfile.lock
-
-      - name: Run release build
-        # if: steps.pod-cache.outputs.cache-hit != 'true' || steps.npm-cache.outputs.cache-hit != 'true'
-        working-directory: ./samples/app/ios
-        run: |
-          xcodebuild \
-          -workspace AriesBifold.xcworkspace \
-          -scheme AriesBifold \
-          -configuration Release \
-          -derivedDataPath xbuild \
-          build \
-          CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO
-
-      # This is a 1G file that adds little to speeding up
-      # the build but does impact cache size.
-      - name: Cleanup large artifacts
-        working-directory: ./samples/app/ios
-        run: |
-          rm -rf build/Build/Products/Debug-iphoneos/AriesBifold.app
-
-  build-android:
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        compile-sdk: [36]
-        build-tools: [36.0.0]
-        sdk-tools: [4333796]
-    env:
-      GRADLE_USER_HOME: /mnt/gradle-cache
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: '3.11'
-
-      - name: Setup NodeJS
-        uses: ./.github/actions/setup-node
-
-      - name: Setup JDK
-        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
-        with:
-          distribution: 'zulu'
-          java-version: 17
-          cache: 'gradle'
-
-      - name: Setup Android SDK
-        working-directory: ./samples/app/android
-        run: |
-          set -x
-          sudo mkdir -p /root/.android
-          sudo touch /root/.android/repositories.cfg
-          export ANDROID_HOME=$PWD/android-sdk
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          wget --quiet --output-document=commandlinetools-linux.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -d $ANDROID_HOME/cmdline-tools commandlinetools-linux.zip
-          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-          find $ANDROID_HOME -name sdkmanager
-
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
-          echo y | sdkmanager "platforms;android-${{ matrix.compile-sdk }}" >/dev/null
-          echo y | sdkmanager "platform-tools" >/dev/null
-          echo y | sdkmanager "build-tools;${{ matrix.build-tools }}" >/dev/null
-          echo y | sdkmanager "ndk;27.1.12297006" >/dev/null
-          echo y | sdkmanager "cmake;3.22.1" >/dev/null
-          find $ANDROID_HOME -type f -executable -print
-
-          chmod +x ./gradlew
-          set +o pipefail
-          yes | sdkmanager --licenses
-          set -o pipefail
-
-      - name: Install React Native Dependencies
-        run: |
-          node -v && yarn -v && yarn install --immutable && \
-          git status
-
-      - name: Free up disk space
-        run: |
-          echo "=== Disk space before cleanup ==="
-          df -h
-          echo "Removing unnecessary system files to free disk space..."
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo rm -rf /opt/microsoft
-          sudo rm -rf /opt/google
-          sudo rm -rf /opt/az
-          sudo rm -rf /usr/local/julia*
-          sudo docker image prune --all --force || true
-          sudo docker system prune -af || true
-          sudo docker builder prune -af || true
-          sudo apt-get clean
-          echo "=== Disk space after cleanup ==="
-          df -h
-
-      - name: Build Workspace
-        run: |
-          yarn build
-
-      - name: Android Release Build
-        working-directory: ./samples/app/android
-        run: |
-          # Fix permissions for gradle cache
-          sudo mkdir -p /mnt/gradle-cache
-          sudo chown -R $USER:$USER /mnt/gradle-cache
-
-          # Run the release build
-          ./gradlew --no-daemon bundleRelease
+  # build-android: # DISABLED - needs correct context and credentials
+  #   runs-on: ubuntu-22.04
+  #   strategy:
+  #     matrix:
+  #       compile-sdk: [33]
+  #       build-tools: [33.0.2]
+  #       sdk-tools: [4333796]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.11'
+  #
+  #     - name: Setup NodeJS
+  #       uses: ./.github/actions/setup-node
+  #
+  #     - name: Setup JDK
+  #       uses: actions/setup-java@v4
+  #       with:
+  #         distribution: 'zulu'
+  #         java-version: 17
+  #         cache: 'gradle'
+  #
+  #     - name: Setup Android SDK
+  #       working-directory: ./samples/app/android
+  #       run: |
+  #         set -x
+  #         sudo mkdir -p /root/.android
+  #         sudo touch /root/.android/repositories.cfg
+  #         export ANDROID_HOME=$PWD/android-sdk
+  #         mkdir -p $ANDROID_HOME/cmdline-tools
+  #         wget --quiet --output-document=commandlinetools-linux.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+  #         unzip -d $ANDROID_HOME/cmdline-tools commandlinetools-linux.zip
+  #         mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+  #         find $ANDROID_HOME -name sdkmanager
+  #
+  #         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+  #         echo y | sdkmanager "platforms;android-${{ matrix.compile-sdk }}" >/dev/null
+  #         echo y | sdkmanager "platform-tools" >/dev/null
+  #         echo y | sdkmanager "build-tools;${{ matrix.build-tools }}" >/dev/null
+  #         find $ANDROID_HOME -type f -executable -print
+  #
+  #         chmod +x ./gradlew
+  #         set +o pipefail
+  #         yes | sdkmanager --licenses
+  #         set -o pipefail
+  #
+  #     - name: Install React Native Dependencies
+  #       run: |
+  #         node -v && yarn -v && yarn install --immutable && \
+  #         git status
+  #
+  #     - name: Build Workspace
+  #       run: |
+  #         yarn build
+  #
+  #     - name: Android Release Build
+  #       working-directory: ./samples/app/android
+  #       run: ./gradlew --no-daemon bundleRelease

@@ -1,0 +1,21 @@
+services:
+  witness-server:
+    build:
+      context: ../..
+      dockerfile: packages/witness-server/Dockerfile
+    restart: always
+    ports:
+      - "${DOCKER_PORT:-9003}:9003"
+    env_file:
+      - .env
+    environment:
+      # Redirect all runtime data to the persistent /data volume.
+      # This keeps wallet, seed, invitation, and reporting files separate from the compiled image.
+      VRC_WALLET_PATH: /data/.wallets
+      WITNESS_INVITATION_FILE: /data/.oob-invitation.json
+      WITNESS_REPORTING_DIR: /data/.reporting
+    volumes:
+      - witness-data:/data
+
+volumes:
+  witness-data:

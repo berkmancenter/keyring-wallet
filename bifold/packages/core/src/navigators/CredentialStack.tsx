@@ -2,7 +2,6 @@ import { createStackNavigator } from '@react-navigation/stack'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import SettingsMenu from '../components/buttons/SettingsMenu'
 import { useTheme } from '../contexts/theme'
 import ListCredentials from '../screens/ListCredentials'
 import { CredentialStackParams, Screens } from '../types/navigators'
@@ -29,7 +28,6 @@ const CredentialStack: React.FC = () => {
         options={() => ({
           title: t('Screens.Credentials'),
           headerRight: () => <CredentialListHeaderRight />,
-          headerLeft: () => <SettingsMenu />,
           ...ScreenOptionsDictionary[Screens.Credentials],
         })}
       />

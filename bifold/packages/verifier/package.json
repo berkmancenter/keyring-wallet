@@ -11,10 +11,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openwallet-foundation/bifold-wallet.git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
     "directory": "packages/verifier"
   },
-  "homepage": "https://github.com/openwallet-foundation/bifold-wallet",
+  "homepage": "https://github.com/berkmancenter/keyring-bifold",
   "scripts": {
     "build": "echo 'building verifier 🏗️' && yarn run clean && yarn run bob build && echo 'verifier built ✅'",
     "clean": "rimraf ./build",

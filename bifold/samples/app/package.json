@@ -5,10 +5,10 @@
   "description": "Bifold Wallet App",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/openwallet-foundation/bifold-wallet.git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
     "directory": "samples/app"
   },
-  "homepage": "https://github.com/openwallet-foundation/bifold-wallet/",
+  "homepage": "https://github.com/berkmancenter/keyring-bifold/",
   "scripts": {
     "android": "react-native run-android --active-arch-only",
     "gradle": "./android/gradlew --project-dir=./android --no-daemon",

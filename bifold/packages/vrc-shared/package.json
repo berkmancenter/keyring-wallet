@@ -1,0 +1,39 @@
+{
+  "name": "@bifold/vrc-shared",
+  "version": "0.1.0-alpha.1",
+  "description": "Shared utilities for VRC/VWC - wallet config, document loader, and helpers",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build"
+  ],
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "echo 'building vrc-shared 🏗️' && yarn run clean && yarn run compile && echo 'vrc-shared built ✅'",
+    "clean": "rimraf ./build",
+    "compile": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
+    "directory": "packages/vrc-shared"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "bugs": {
+    "url": "https://github.com/berkmancenter/keyring-bifold/issues"
+  },
+  "homepage": "https://github.com/berkmancenter/keyring-bifold/",
+  "dependencies": {
+    "@bifold/vrc-contexts": "workspace:*",
+    "@credo-ts/core": "0.5.17"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "rimraf": "~5.0.10",
+    "typescript": "~5.5.4"
+  }
+}

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { TOKENS, useServices } from '../container-api'
 import { useTheme } from '../contexts/theme'
 import CredentialDetails from '../screens/CredentialDetails'
+import Home from '../screens/Home'
 import { NotificationStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
@@ -21,6 +22,14 @@ const NotificationStack: React.FC = () => {
 
   return (
     <Stack.Navigator screenOptions={{ ...defaultStackOptions }}>
+      <Stack.Screen
+        name={Screens.Home}
+        component={Home}
+        options={{
+          title: t('Screens.Notifications'),
+          ...ScreenOptionsDictionary[Screens.Home],
+        }}
+      />
       <Stack.Screen
         name={Screens.CredentialDetails}
         component={CredentialDetails}
