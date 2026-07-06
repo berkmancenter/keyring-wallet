@@ -4,7 +4,7 @@ import {
   AnonCredsRequestedAttributeMatch,
   AnonCredsRequestedPredicateMatch,
 } from '@credo-ts/anoncreds'
-import { CredentialExchangeRecord, ProofExchangeRecord, GetCredentialsForProofRequestReturn } from '@credo-ts/core'
+import { DidCommCredentialExchangeRecord, DidCommProofExchangeRecord, GetCredentialsForProofRequestReturn } from '@credo-ts/didcomm'
 import { BifoldAgent } from '@bifold/core'
 import { Attribute, Predicate } from '@bifold/oca/build/legacy'
 
@@ -14,7 +14,7 @@ export type ProofCredentialItems = ProofCredentialAttributes & ProofCredentialPr
 
 export type ProofCredentialAttributes = {
   altCredentials?: string[]
-  credExchangeRecord?: CredentialExchangeRecord
+  credExchangeRecord?: DidCommCredentialExchangeRecord
   credId: string
   credDefId?: string
   proofCredDefId?: string
@@ -26,7 +26,7 @@ export type ProofCredentialAttributes = {
 
 export type ProofCredentialPredicates = {
   altCredentials?: string[]
-  credExchangeRecord?: CredentialExchangeRecord
+  credExchangeRecord?: DidCommCredentialExchangeRecord
   credId: string
   credDefId?: string
   proofCredDefId?: string
@@ -124,7 +124,7 @@ export const evaluatePredicates =
  * @returns The Anoncreds or Indy proof format object
  */
 const formatForProofWithId = async (agent: BifoldAgent, proofId: string, filterByNonRevocationRequirements = false) => {
-  const format = await agent.proofs.getFormatData(proofId)
+  const format = await agent.modules.didcomm.proofs.getFormatData(proofId)
   const proofIsAnoncredsFormat = format.request?.anoncreds !== undefined
   const proofIsIndycredsFormat = format.request?.indy !== undefined
   const proofFormats = {
@@ -168,12 +168,12 @@ const formatForProofWithId = async (agent: BifoldAgent, proofId: string, filterB
  */
 export const credentialsMatchForProof = async (
   agent: BifoldAgent,
-  proof: ProofExchangeRecord,
+  proof: DidCommProofExchangeRecord,
   filterByNonRevocationRequirements = true
 ): Promise<GetCredentialsForProofRequestReturn> => {
   const proofFormats = await formatForProofWithId(agent, proof.id, filterByNonRevocationRequirements)
-  const credentials = await agent.proofs.getCredentialsForRequest({
-    proofRecordId: proof.id,
+  const credentials = await agent.modules.didcomm.proofs.getCredentialsForRequest({
+    proofExchangeRecordId: proof.id,
     proofFormats,
   })
 

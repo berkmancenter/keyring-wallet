@@ -11,7 +11,7 @@ import {
   clearTestContacts,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -106,7 +106,7 @@ const Developer: React.FC = () => {
     setEnvironmentModalVisible(false)
   }
 
-  const SectionHeader = ({ icon, title }: { icon: string; title: string }): JSX.Element => (
+  const SectionHeader = ({ icon, title }: { icon: string; title: string }): React.JSX.Element => (
     <View style={[styles.section, styles.sectionHeader]}>
       <Icon name={icon} size={24} style={{ marginRight: 10, color: TextTheme.normal.color }} />
       <Text style={[TextTheme.headingThree, { flexShrink: 1 }]}>{title}</Text>
@@ -117,9 +117,9 @@ const Developer: React.FC = () => {
     title: string
     accessibilityLabel?: string
     testID?: string
-    children: JSX.Element
+    children: React.JSX.Element
     showRowSeparator?: boolean
-    subContent?: JSX.Element
+    subContent?: React.JSX.Element
     onPress?: () => void
   }
   const SectionRow = ({

@@ -158,6 +158,13 @@ export const BrandColors: IBrandColors = {
   tabBarInactive: MEDIUM_GRAY, // #666666
   inlineError: SemanticColors.error,
   inlineWarning: NotificationColors.warnText,
+  // New in bifold 3.x IBrandColors
+  credentialCardPlaceholderBackground: GrayscaleColors.veryLightGrey,
+  credentialCardStatusBadgeErrorBackground: '#FDECEA',
+  credentialCardStatusBadgeErrorIcon: BKC_BLACK,
+  credentialCardStatusBadgeWarningBackground: '#FFF8E1',
+  credentialCardStatusBadgeWarningIcon: BKC_BLACK,
+  loadingIcon: GrayscaleColors.white,
 }
 
 export const ColorPalette: IColorPalette = {

@@ -412,7 +412,6 @@ exports[`RemoteLogWarning Screen screen renders correctly 1`] = `
               style={
                 {
                   "alignItems": "center",
-                  "flex": 1,
                   "flexDirection": "row-reverse",
                   "margin": 10,
                 }
@@ -544,10 +543,8 @@ exports[`RemoteLogWarning Screen screen renders correctly 1`] = `
                 }
                 accessible={true}
                 collapsable={false}
-                focusable={true}
-                onBlur={[Function]}
+                focusable={false}
                 onClick={[Function]}
-                onFocus={[Function]}
                 onResponderGrant={[Function]}
                 onResponderMove={[Function]}
                 onResponderRelease={[Function]}
@@ -555,35 +552,22 @@ exports[`RemoteLogWarning Screen screen renders correctly 1`] = `
                 onResponderTerminationRequest={[Function]}
                 onStartShouldSetResponder={[Function]}
                 style={
-                  [
-                    {
-                      "overflow": "hidden",
+                  {
+                    "backgroundColor": "rgba(98, 44, 98, 0.7)",
+                    "borderRadius": 10,
+                    "elevation": 4,
+                    "opacity": 1,
+                    "padding": 16,
+                    "paddingHorizontal": 16,
+                    "paddingVertical": 12,
+                    "shadowColor": "#000000",
+                    "shadowOffset": {
+                      "height": 4,
+                      "width": 0,
                     },
-                    {
-                      "backgroundColor": "#622C62",
-                      "borderRadius": 10,
-                      "elevation": 4,
-                      "padding": 16,
-                      "paddingHorizontal": 16,
-                      "paddingVertical": 12,
-                      "shadowColor": "#000000",
-                      "shadowOffset": {
-                        "height": 4,
-                        "width": 0,
-                      },
-                      "shadowOpacity": 0.15,
-                      "shadowRadius": 4,
-                    },
-                    {
-                      "backgroundColor": "rgba(98, 44, 98, 0.7)",
-                      "borderRadius": 10,
-                      "padding": 16,
-                      "paddingHorizontal": 16,
-                      "paddingVertical": 12,
-                    },
-                    false,
-                    false,
-                  ]
+                    "shadowOpacity": 0.15,
+                    "shadowRadius": 4,
+                  }
                 }
                 testID="com.ariesbifold:id/TurnOn"
               >
@@ -623,7 +607,6 @@ exports[`RemoteLogWarning Screen screen renders correctly 1`] = `
                             "lineHeight": 24,
                             "textAlign": "center",
                           },
-                          false,
                           false,
                         ],
                       ]

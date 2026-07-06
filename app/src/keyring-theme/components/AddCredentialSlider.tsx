@@ -1,7 +1,7 @@
 import { SafeAreaModal, Screens, Stacks, testIdForAccessabilityLabel, testIdWithKey } from '@bifold/core'
-import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds/build/utils/metadata'
-import { CredentialState } from '@credo-ts/core'
-import { useCredentialByState } from '@credo-ts/react-hooks'
+import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
+import { useCredentialByState } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -21,8 +21,8 @@ export default function AddCredentialSlider() {
   const [addCredentialPressed, setAddCredentialPressed] = useState<boolean>(false)
   const [showGetPersonCredential, setShowGetPersonCredential] = useState<boolean>(false)
 
-  const credentialsReceived = useCredentialByState(CredentialState.CredentialReceived)
-  const credentialsDone = useCredentialByState(CredentialState.Done)
+  const credentialsReceived = useCredentialByState(DidCommCredentialState.CredentialReceived)
+  const credentialsDone = useCredentialByState(DidCommCredentialState.Done)
 
   const deactivateSlider = useCallback(() => {
     DeviceEventEmitter.emit(KeyRingEventTypes.ADD_CREDENTIAL_PRESSED, false)

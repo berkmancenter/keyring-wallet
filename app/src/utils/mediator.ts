@@ -1,10 +1,11 @@
-import { Agent, MediatorPickupStrategy } from '@credo-ts/core'
+import { Agent } from '@credo-ts/core'
+import { DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
 
 export const batchPickup = async (agent: Agent): Promise<void> => {
   try {
     for (let i = 0; i < 2; i++) {
       agent.config.logger.debug(`Batch pickup attempt ${i + 1}`)
-      agent.mediationRecipient.initiateMessagePickup(undefined, MediatorPickupStrategy.Implicit)
+      agent.modules.didcomm.mediationRecipient.initiateMessagePickup(undefined, DidCommMediatorPickupStrategy.Implicit)
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
   } catch (error) {
@@ -15,10 +16,10 @@ export const batchPickup = async (agent: Agent): Promise<void> => {
 export const startPeriodicTrustPing = (agent: Agent, intervalMs: number): (() => void) => {
   const id = setInterval(async () => {
     try {
-      const mediator = await agent.mediationRecipient.findDefaultMediator()
+      const mediator = await agent.modules.didcomm.mediationRecipient.findDefaultMediator()
       if (!mediator) return
 
-      await agent.connections.sendPing(mediator.connectionId, {
+      await agent.modules.didcomm.connections.sendPing(mediator.connectionId, {
         responseRequested: false,
         withReturnRouting: true,
       })

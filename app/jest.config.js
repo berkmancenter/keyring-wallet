@@ -16,9 +16,16 @@ module.exports = {
     '^uuid$': require.resolve('uuid'),
     '@credo-ts/core': require.resolve('@credo-ts/core'),
     '@credo-ts/anoncreds': require.resolve('@credo-ts/anoncreds'),
-    '@bifold/core': require.resolve('@bifold/core'),
+    '@credo-ts/didcomm': require.resolve('@credo-ts/didcomm'),
+    // Use bifold sources directly (like bifold's own jest configs) to avoid
+    // circular-require issues in the lib/commonjs build under jest
+    '^@bifold/core$': '<rootDir>/../bifold/packages/core/src/index.ts',
+    '^@bifold/verifier$': '<rootDir>/../bifold/packages/verifier/src/index.ts',
+    '^@bifold/oca/build/legacy$': '<rootDir>/../bifold/packages/oca/src/legacy/index.ts',
+    '^@bifold/oca$': '<rootDir>/../bifold/packages/oca/src/index.ts',
+    '^@bifold/react-hooks$': '<rootDir>/../bifold/packages/react-hooks/src/index.ts',
     '@bifold/remote-logs': '<rootDir>/__mocks__/@bifold/remote-logs.ts',
-    '@hyperledger/aries-askar-react-native': require.resolve('@hyperledger/aries-askar-react-native'),
+    '@openwallet-foundation/askar-react-native': require.resolve('@openwallet-foundation/askar-react-native'),
     // CRITICAL: Force Jest to use app's React instead of bifold's
     // Multiple copies of React cause "Invalid hook call" errors
     '^react$': require.resolve('react'),
@@ -27,6 +34,11 @@ module.exports = {
     // When portal: follows symlink to bifold, it can resolve packages from bifold's node_modules
     // This ensures tests use app's versions with proper mocks from jestSetup.js
     '^react-native$': require.resolve('react-native'),
+    // Also map react-native subpath imports (e.g. react-native/Libraries/...)
+    // so bifold sources can't drag in bifold/node_modules' second RN copy
+    '^react-native/(.*)$': `${require('path').dirname(require.resolve('react-native/package.json'))}/$1`,
+    '^react-native-reanimated$': require.resolve('react-native-reanimated'),
+    '^react-native-keyboard-controller$': require.resolve('react-native-keyboard-controller'),
     '^react-native-splash-screen$': require.resolve('react-native-splash-screen'),
     '^react-native-toast-message$': require.resolve('react-native-toast-message'),
     '^react-native-device-info$': require.resolve('react-native-device-info'),
@@ -53,12 +65,15 @@ module.exports = {
     '^react-native-screenguard$': require.resolve('react-native-screenguard'),
     '^react-native-tcp-socket$': require.resolve('react-native-tcp-socket'),
     '^react-native-vector-icons$': require.resolve('react-native-vector-icons'),
+    // Expo modules used by bifold core - reuse bifold's jest mocks
+    'expo-crypto': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-crypto.js',
+    '@expo/app-integrity': '<rootDir>/../bifold/packages/core/__mocks__/@expo/app-integrity.js',
   },
   transform: {
-    '^.+\\.(js|jsx|ts|tsx)$': 'babel-jest',
+    '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules\\/(?!(.*react-native.*)|(uuid)|(@aries-framework\\/core)|(@aries-framework\\/anoncreds)|(@hyperledger\\/aries-bifold-core))',
+    'node_modules/(?!(.*react-native.*|@credo-ts|@openwallet-foundation|@openid4vc|@noble|@stablelib|@digitalcredentials|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|expo(nent)?|@expo(nent)?/.*)/)',
   ],
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]sx?$',
   testPathIgnorePatterns: ['\\.snap$', '<rootDir>/node_modules/', '<rootDir>/lib', '<rootDir>/__tests__/contexts/'],

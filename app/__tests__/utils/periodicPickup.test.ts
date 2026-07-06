@@ -1,15 +1,21 @@
-import { Agent } from '@credo-ts/core'
 import { startPeriodicTrustPing } from '@utils/mediator'
 
 jest.useFakeTimers({ legacyFakeTimers: true })
 
-const createMockAgent = () =>
-  ({
-    mediationRecipient: {
-      findDefaultMediator: jest.fn().mockResolvedValue({ connectionId: 'mock-mediator-conn-id' }),
-    },
-    connections: {
-      sendPing: jest.fn().mockResolvedValue(undefined),
+const createMockAgent = () => {
+  const mediationRecipient = {
+    findDefaultMediator: jest.fn().mockResolvedValue({ connectionId: 'mock-mediator-conn-id' }),
+  }
+  const connections = {
+    sendPing: jest.fn().mockResolvedValue(undefined),
+  }
+  return {
+    // credo 0.6: didcomm APIs live under agent.modules.didcomm; keep the
+    // top-level aliases so test assertions can reference the same mocks
+    mediationRecipient,
+    connections,
+    modules: {
+      didcomm: { mediationRecipient, connections },
     },
     config: {
       logger: {
@@ -17,10 +23,11 @@ const createMockAgent = () =>
         error: jest.fn(),
       },
     },
-  } as unknown as Agent)
+  } as any
+}
 
 describe('startPeriodicTrustPing', () => {
-  let mockAgent: Agent
+  let mockAgent: any
 
   beforeEach(() => {
     jest.clearAllTimers()

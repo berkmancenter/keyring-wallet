@@ -3,7 +3,6 @@
 exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in AdvancedIdentity context 1`] = `
 <Modal
   animationType="slide"
-  hardwareAccelerated={false}
   onRequestClose={[MockFunction]}
   transparent={true}
   visible={true}
@@ -126,7 +125,7 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
                 "fontSize": 35,
               },
               {
-                "color": "#000000",
+                "color": "#010B13",
               },
               {
                 "fontFamily": "Material Design Icons",
@@ -145,12 +144,14 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
         style={
           [
             {
-              "color": "#FFFFFF",
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
               "fontSize": 18,
               "fontWeight": "bold",
             },
             {
-              "color": "#42803E",
+              "color": "#622C62",
+              "fontFamily": "SourceSans3-Regular",
               "fontSize": 18,
               "fontWeight": "bold",
               "marginVertical": 10,
@@ -167,12 +168,14 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
         style={
           [
             {
-              "color": "#FFFFFF",
+              "color": "#4A4A4A",
+              "fontFamily": "SourceSans3-Regular",
               "fontSize": 18,
               "fontWeight": "normal",
             },
             {
-              "color": "#000000",
+              "color": "#010B13",
+              "fontFamily": "SourceSans3-Regular",
               "fontSize": 18,
               "fontWeight": "normal",
               "lineHeight": 22,
@@ -215,9 +218,7 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
           accessible={true}
           collapsable={false}
           focusable={true}
-          onBlur={[Function]}
           onClick={[Function]}
-          onFocus={[Function]}
           onResponderGrant={[Function]}
           onResponderMove={[Function]}
           onResponderRelease={[Function]}
@@ -225,19 +226,20 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
           onResponderTerminationRequest={[Function]}
           onStartShouldSetResponder={[Function]}
           style={
-            [
-              {
-                "overflow": "hidden",
+            {
+              "backgroundColor": "#622C62",
+              "borderRadius": 10,
+              "elevation": 4,
+              "opacity": 1,
+              "padding": 16,
+              "shadowColor": "#000000",
+              "shadowOffset": {
+                "height": 4,
+                "width": 0,
               },
-              {
-                "backgroundColor": "#42803E",
-                "borderRadius": 4,
-                "padding": 16,
-              },
-              false,
-              false,
-              false,
-            ]
+              "shadowOpacity": 0.15,
+              "shadowRadius": 4,
+            }
           }
           testID="com.ariesbifold:id/ScanQRCode"
         >
@@ -255,18 +257,20 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
               style={
                 [
                   {
-                    "color": "#FFFFFF",
+                    "color": "#4A4A4A",
+                    "fontFamily": "SourceSans3-Regular",
                     "fontSize": 18,
                     "fontWeight": "normal",
                   },
                   [
                     {
                       "color": "#FFFFFF",
+                      "fontFamily": "SourceSans3-Regular",
                       "fontSize": 18,
                       "fontWeight": "bold",
+                      "lineHeight": 24,
                       "textAlign": "center",
                     },
-                    false,
                     false,
                     false,
                   ],
@@ -308,9 +312,7 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
           accessible={true}
           collapsable={false}
           focusable={true}
-          onBlur={[Function]}
           onClick={[Function]}
-          onFocus={[Function]}
           onResponderGrant={[Function]}
           onResponderMove={[Function]}
           onResponderRelease={[Function]}
@@ -318,19 +320,20 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
           onResponderTerminationRequest={[Function]}
           onStartShouldSetResponder={[Function]}
           style={
-            [
-              {
-                "overflow": "hidden",
+            {
+              "backgroundColor": "#622C62",
+              "borderRadius": 10,
+              "elevation": 4,
+              "opacity": 1,
+              "padding": 16,
+              "shadowColor": "#000000",
+              "shadowOffset": {
+                "height": 4,
+                "width": 0,
               },
-              {
-                "backgroundColor": "#42803E",
-                "borderRadius": 4,
-                "padding": 16,
-              },
-              false,
-              false,
-              false,
-            ]
+              "shadowOpacity": 0.15,
+              "shadowRadius": 4,
+            }
           }
           testID="com.ariesbifold:id/GenerateQRCode"
         >
@@ -348,18 +351,20 @@ exports[`QR Code Flow Integration QRCodeExchangeSlider renders correctly in Adva
               style={
                 [
                   {
-                    "color": "#FFFFFF",
+                    "color": "#4A4A4A",
+                    "fontFamily": "SourceSans3-Regular",
                     "fontSize": 18,
                     "fontWeight": "normal",
                   },
                   [
                     {
                       "color": "#FFFFFF",
+                      "fontFamily": "SourceSans3-Regular",
                       "fontSize": 18,
                       "fontWeight": "bold",
+                      "lineHeight": 24,
                       "textAlign": "center",
                     },
-                    false,
                     false,
                     false,
                   ],

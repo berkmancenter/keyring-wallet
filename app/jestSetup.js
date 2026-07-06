@@ -25,5 +25,56 @@ jest.mock('react-native-permissions', () => require('react-native-permissions/mo
 jest.mock('react-native-splash-screen', () => ({}))
 jest.mock('@bifold/react-native-attestation', () => ({}))
 jest.mock('@hyperledger/anoncreds-react-native', () => ({}))
-jest.mock('@hyperledger/aries-askar-react-native', () => ({}))
+jest.mock('@openwallet-foundation/askar-react-native', () => ({}))
 jest.mock('@hyperledger/indy-vdr-react-native', () => ({}))
+
+// React 18+/19: enable proper act() behavior in tests
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
+
+jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'))
+
+// Mirror bifold's jestSetup: keep RefreshOrchestrator from spinning timers/logs
+jest.mock('../bifold/packages/core/src/modules/openid/refresh/RefreshOrchestrator', () => ({
+  RefreshOrchestrator: jest.fn().mockImplementation(() => ({
+    configure: jest.fn(),
+    start: jest.fn(),
+    stop: jest.fn(),
+    runOnce: jest.fn(),
+  })),
+}))
+
+jest.mock('react-native-keyboard-controller', () => {
+  const { ScrollView, View } = jest.requireActual('react-native')
+  return {
+    KeyboardProvider: ({ children }) => children,
+    KeyboardAwareScrollView: ScrollView,
+    KeyboardAvoidingView: View,
+  }
+})
+
+// Mock Keyboard to fix KeyboardAvoidingView cleanup issues in tests
+// React Native 0.81+ exports Keyboard as .default
+const mockKeyboard = {
+  addListener: jest.fn(() => ({ remove: jest.fn() })),
+  removeListener: jest.fn(),
+  dismiss: jest.fn(),
+  scheduleLayoutAnimation: jest.fn(),
+  isVisible: jest.fn(() => false),
+  metrics: jest.fn(() => null),
+}
+jest.mock('react-native/Libraries/Components/Keyboard/Keyboard', () => ({
+  default: mockKeyboard,
+  ...mockKeyboard,
+}))
+
+// Mock BackHandler to return subscription with remove() method
+// This covers the new subscription-based API used in React Native 0.81+
+const mockBackHandler = {
+  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  removeEventListener: jest.fn(),
+  exitApp: jest.fn(),
+}
+jest.mock('react-native/Libraries/Utilities/BackHandler', () => ({
+  default: mockBackHandler,
+  ...mockBackHandler,
+}))

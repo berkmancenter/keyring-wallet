@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-04 (Phase 2 COMPLETE — RN 0.77.3, BCSC dropped, E2E green both platforms)
+Last updated: 2026-07-06 (Phase 3 app JS layer GREEN — RN 0.81.5/React 19.1/credo 0.6.3 typecheck+lint+jest pass on `upgrade/phase3-bifold3`; native Android/iOS builds next)
 
 ---
 
@@ -267,15 +267,60 @@ babel/metro/jest configs, `.env.sample`.
   - PHASE 2 GATE PASSED: app jest 14/27 PASS, bifold core jest 134 suites / 1242 PASS,
     Android + iOS build PASS, two-device E2E VRC exchange PASS on Android and iOS.
 - [ ] **Phase 3 — Big hop: bifold 3.0.16 + credo 0.6.3 + React 19 + RN 0.81**
-  - In `bifold/`: new branch `upgrade/bifold-3.x` = upstream v3.0.16 content; port §5.1 delta
-    onto it. Mechanical credo API rewrite everywhere: `agent.credentials` →
-    `agent.modules.credentials`, explicit DIDComm module registration, askar rename.
-  - Attestation package: start from upstream 3.0.16 version, re-apply Keyring crypto/signing.
-  - App: RN 0.81 + React 19 (reference: bc-wallet-mobile main), drop Storybook.
-  - New Architecture: try `newArchEnabled=true` (upstream default); custom native modules
-    (attestation) must be audited; fall back to false if needed, but record it.
-  - Adopt upstream patch set; wallet-open/migration smoke test (askar store compat).
-  - Gate: VRC conformance tests green, jest green, both bundle, E2E green.
+  - [x] In `bifold/`: branch `upgrade/bifold-3.x` = upstream v3.0.16 content; §5.1 delta ported
+        (commit `68d9da80`). Credo 0.6.3 migration done (commit `cdb9289c`): DIDComm APIs under
+        `agent.modules.didcomm`, `DidCommModule` carries connections/credentials/proofs/oob/
+        mediation config, renamed types/events (`DidCommConnectionRecord` etc.),
+        `kms.importKey` + `dids.create createKey` (JWK types) replace `wallet.createKey`,
+        askar renamed to `@openwallet-foundation/askar-*`, `W3cCredentialRecord.encoded`
+        replaces private `.credential`. witness-server + vrc-reference fully migrated
+        (sources AND unit tests — mock agents alias didcomm APIs under `modules.didcomm`;
+        jest needs babel-jest ESM transform for credo 0.6 `.mjs` builds, see the two
+        jest.config.js files). `receiveInvitationFromUrl` now REQUIRES a `label` in its
+        2nd config arg (credo 0.6 moved agent label out of InitConfig).
+  - [x] bifold gate: `yarn build` 0 TS errors, lint + prettier clean,
+        `yarn coverage` 155 suites / 1398 tests PASS (core 1400 incl. 2 skipped,
+        vrc-reference 105, witness-server, vrc-shared). One flaky suite noted:
+        CredentialDetails.test.tsx can fail under full-run load (act() timing), passes
+        isolated and on rerun.
+  - [x] Pushed + PR opened: berkmancenter/keyring-bifold#26 (upgrade/bifold-3.x → main).
+        NOTE: branch-swap made history disjoint from fork main; fixed with a signed
+        tie-merge commit (`git commit-tree -S` with two parents, tree = Phase 3 tree).
+        DO NOT merge without Alberto's approval.
+  - [x] Attestation package: rebuilt from upstream 3.0.16 base, Keyring crypto re-applied.
+  - [x] App JS layer: RN 0.81.5 + React 19.1.0 wired, bifold 3.0.16 portals (incl. new
+        `@bifold/react-hooks` — `@credo-ts/react-hooks` is gone), credo 0.6.3 deps,
+        askar → `@openwallet-foundation/askar-react-native` 0.6.0, Storybook dropped
+        (dir + AppStorybook.tsx removed), branch `upgrade/phase3-bifold3`. Highlights:
+    - `bc-agent-modules.ts` rewritten for credo 0.6 (`DidCommModule` config,
+      `Kms.KeyManagementModule` with askar + expo secure-environment services,
+      explicit JSON-LD/AnonCreds DIDComm format services, VRC document loader).
+    - `useBCAgentSetup.ts`: wallet id/key now live in `AskarModule` store config —
+      no more `agent.wallet.open()`; transports register via
+      `agent.modules.didcomm.registerOutboundTransport`; indy-vdr pool warm-up
+      guards the BC-patch-only methods (`refreshPoolConnections`).
+    - DRPC-based BC attestation flow REMOVED (`@credo-ts/drpc` has no stable 0.6.x;
+      Keyring doesn't run BC's attestation service). `AttestationMonitor` keeps the
+      bifold interface; `requestAttestationCredential` now emits FailedRequestCredential.
+      `app/src/utils/drpc.ts` deleted.
+    - proofs/credentials API options renamed: `proofRecordId`→`proofExchangeRecordId`,
+      `credentialRecordId`→`credentialExchangeRecordId`.
+    - jest: transformIgnorePatterns synced with bifold core (credo .mjs, @noble,
+      @stablelib, expo...); `@bifold/*` mapped to bifold SOURCES (lib/commonjs build
+      has a circular-require bug under jest); reanimated mocked via official mock;
+      RN 0.81 Keyboard/BackHandler mocks ported from bifold jestSetup.
+    - babel: module-resolver `root: ['.']` REMOVED (it rewrote `from '.'` imports
+      inside node_modules to app root index.js under jest); added
+      `@babel/plugin-transform-export-namespace-from` + reanimated plugin.
+    - Fixed upstream bug in bifold `store.ts` (absolute `components/views/Banner`
+      import breaks consumers compiling core from source).
+  - [x] App gate (JS): typecheck 0 errors, eslint clean, jest 14 suites / 27 tests PASS
+        (6 snapshots updated for RN 0.81 Pressable/style flattening).
+  - [ ] Android + iOS native builds: NOT STARTED (Gradle/Podfile still on RN 0.72 —
+        native project upgrade is next). New Architecture: try `newArchEnabled=true`
+        (upstream default); audit attestation native module; fall back if needed.
+  - [ ] Wallet-open/migration smoke test (askar store compat 0.2→0.6).
+  - [ ] Gate: VRC conformance tests green, jest green, both platforms bundle, E2E green.
 - [ ] **Phase 4 — App-layer upstream sync** (port wanted bc-wallet-mobile improvements;
       containers/DI, screens). Gate: full suite + E2E.
 - [ ] **Phase 5 — VC 2.0 for VRC** (secondary goal)

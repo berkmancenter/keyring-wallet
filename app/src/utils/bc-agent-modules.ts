@@ -1,72 +1,61 @@
 import {
-  AnonCredsCredentialFormatService,
+  AnonCredsDidCommCredentialFormatService,
+  AnonCredsDidCommProofFormatService,
   AnonCredsModule,
-  AnonCredsProofFormatService,
-  DataIntegrityCredentialFormatService,
-  LegacyIndyCredentialFormatService,
-  LegacyIndyProofFormatService,
-  V1CredentialProtocol,
-  V1ProofProtocol,
+  DataIntegrityDidCommCredentialFormatService,
+  DidCommCredentialV1Protocol,
+  DidCommProofV1Protocol,
+  LegacyIndyDidCommCredentialFormatService,
+  LegacyIndyDidCommProofFormatService,
 } from '@credo-ts/anoncreds'
-import { AskarModule } from '@credo-ts/askar'
+import { AskarKeyManagementService, AskarModule } from '@credo-ts/askar'
 import {
   Agent,
-  AutoAcceptCredential,
-  AutoAcceptProof,
-  ConnectionsModule,
-  CredentialsModule,
   DidsModule,
-  DifPresentationExchangeProofFormatService,
-  JsonLdCredentialFormatService,
-  MediationRecipientModule,
-  MediatorPickupStrategy,
-  ProofsModule,
-  V2CredentialProtocol,
-  V2ProofProtocol,
+  JwkDidResolver,
+  KeyDidResolver,
+  Kms,
+  PeerDidResolver,
   W3cCredentialsModule,
+  WebDidResolver,
 } from '@credo-ts/core'
-import { DrpcModule } from '@credo-ts/drpc'
+import {
+  DidCommAutoAcceptCredential,
+  DidCommAutoAcceptProof,
+  DidCommCredentialV2Protocol,
+  DidCommDifPresentationExchangeProofFormatService,
+  DidCommJsonLdCredentialFormatService,
+  DidCommMediatorPickupStrategy,
+  DidCommModule,
+  DidCommProofV2Protocol,
+} from '@credo-ts/didcomm'
 import { IndyVdrAnonCredsRegistry, IndyVdrModule, IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
-// DISABLED: Push notifications disabled — no server backend yet
-// import { PushNotificationsApnsModule, PushNotificationsFcmModule } from '@credo-ts/push-notifications'
-import { WebVhAnonCredsRegistry, WebvhDidResolver } from '@credo-ts/webvh'
+import { SecureEnvironmentKeyManagementService } from '@credo-ts/react-native'
+import { WebVhAnonCredsRegistry, WebVhDidResolver } from '@credo-ts/webvh'
 import { anoncreds } from '@hyperledger/anoncreds-react-native'
-import { ariesAskar } from '@hyperledger/aries-askar-react-native'
 import { indyVdr } from '@hyperledger/indy-vdr-react-native'
-import { CacheSettings, IndyVdrProxyAnonCredsRegistry, IndyVdrProxyDidResolver } from 'credo-ts-indy-vdr-proxy-client'
+import { askar } from '@openwallet-foundation/askar-react-native'
 import * as BifoldCore from '@bifold/core'
 
 export type BCAgent = Agent<ReturnType<typeof getBCAgentModules>>
 
 interface GetBCAgentModulesOptions {
+  walletSecret: { id: string; key: string }
   indyNetworks: IndyVdrPoolConfig[]
   mediatorInvitationUrl?: string
   txnCache?: { capacity: number; expiryOffsetMs: number; path?: string }
-  enableProxy?: boolean
-  proxyBaseUrl?: string
-  proxyCacheSettings?: CacheSettings
 }
 
 /**
- * Constructs the modules to be used in the agent setup
- * @param indyNetworks
- * @param mediatorInvitationUrl determine which mediator to use
- * @param txnCache optional local cache config for indyvdr
- * @param enableProxy boolean from the store to determine if proxy should be used
- * @param proxyBaseUrl URL of indy vdr proxy
- * @param proxyCacheSettings settings for above mentioned proxy client caching
+ * Constructs the modules to be used in the agent setup (credo 0.6).
+ * Mirrors @bifold/core getAgentModules, plus the Keyring additions:
+ * JSON-LD credential format (VRC), VRC document loader, RelationshipDidModule
+ * and AttestationStorageModule.
  * @returns modules to be used in agent setup
  */
-export function getBCAgentModules({
-  indyNetworks,
-  mediatorInvitationUrl,
-  txnCache,
-  enableProxy,
-  proxyBaseUrl,
-  proxyCacheSettings,
-}: GetBCAgentModulesOptions) {
-  const indyCredentialFormat = new LegacyIndyCredentialFormatService()
-  const indyProofFormat = new LegacyIndyProofFormatService()
+export function getBCAgentModules({ walletSecret, indyNetworks, mediatorInvitationUrl, txnCache }: GetBCAgentModulesOptions) {
+  const indyCredentialFormat = new LegacyIndyDidCommCredentialFormatService()
+  const indyProofFormat = new LegacyIndyDidCommProofFormatService()
 
   if (txnCache) {
     indyVdr.setLedgerTxnCache({
@@ -80,7 +69,16 @@ export function getBCAgentModules({
 
   const modules = {
     askar: new AskarModule({
-      ariesAskar,
+      enableKms: false,
+      askar,
+      store: { id: walletSecret.id, key: walletSecret.key },
+    }),
+    kms: new Kms.KeyManagementModule({
+      backends: [
+        new AskarKeyManagementService(),
+        new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
+      ],
+      defaultBackend: 'askar',
     }),
     anoncreds: new AnonCredsModule({
       anoncreds,
@@ -90,65 +88,57 @@ export function getBCAgentModules({
       indyVdr,
       networks: indyNetworks as [IndyVdrPoolConfig],
     }),
-    connections: new ConnectionsModule({
-      autoAcceptConnections: true,
+    didcomm: new DidCommModule({
+      useDidSovPrefixWhereAllowed: true,
+      connections: {
+        autoAcceptConnections: true,
+      },
+      credentials: {
+        autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
+        credentialProtocols: [
+          new DidCommCredentialV1Protocol({ indyCredentialFormat }),
+          new DidCommCredentialV2Protocol({
+            credentialFormats: [
+              indyCredentialFormat,
+              new AnonCredsDidCommCredentialFormatService(),
+              new DataIntegrityDidCommCredentialFormatService(),
+              new DidCommJsonLdCredentialFormatService(),
+            ],
+          }),
+        ],
+      },
+      proofs: {
+        autoAcceptProofs: DidCommAutoAcceptProof.ContentApproved,
+        proofProtocols: [
+          new DidCommProofV1Protocol({ indyProofFormat }),
+          new DidCommProofV2Protocol({
+            proofFormats: [
+              indyProofFormat,
+              new AnonCredsDidCommProofFormatService(),
+              new DidCommDifPresentationExchangeProofFormatService(),
+            ],
+          }),
+        ],
+      },
+      mediationRecipient: {
+        mediatorInvitationUrl: mediatorInvitationUrl,
+        mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+      },
     }),
-    credentials: new CredentialsModule({
-      autoAcceptCredentials: AutoAcceptCredential.ContentApproved,
-      credentialProtocols: [
-        new V1CredentialProtocol({ indyCredentialFormat }),
-        new V2CredentialProtocol({
-          credentialFormats: [
-            indyCredentialFormat,
-            new AnonCredsCredentialFormatService(),
-            new DataIntegrityCredentialFormatService(),
-            new JsonLdCredentialFormatService(),
-          ],
-        }),
-      ],
-    }),
-    proofs: new ProofsModule({
-      autoAcceptProofs: AutoAcceptProof.ContentApproved,
-      proofProtocols: [
-        new V1ProofProtocol({ indyProofFormat }),
-        new V2ProofProtocol({
-          proofFormats: [
-            indyProofFormat,
-            new AnonCredsProofFormatService(),
-            new DifPresentationExchangeProofFormatService(),
-          ],
-        }),
-      ],
-    }),
-    mediationRecipient: new MediationRecipientModule({
-      mediatorInvitationUrl: mediatorInvitationUrl,
-      mediatorPickupStrategy: MediatorPickupStrategy.Implicit,
-    }),
-    // DISABLED: Push notifications disabled — no server backend yet
-    // pushNotificationsFcm: new PushNotificationsFcmModule(),
-    // pushNotificationsApns: new PushNotificationsApnsModule(),
     dids: new DidsModule({
-      resolvers: [new WebvhDidResolver()],
+      resolvers: [
+        new WebVhDidResolver(),
+        new WebDidResolver(),
+        new JwkDidResolver(),
+        new KeyDidResolver(),
+        new PeerDidResolver(),
+      ],
     }),
     w3cCredentials: new W3cCredentialsModule({
       documentLoader: (BifoldCore as any).createVrcDocumentLoader,
     }),
-    drpc: new DrpcModule(),
     relationshipDid: new RelationshipDidModule(),
     attestationStorage: new AttestationStorageModule(),
-  }
-
-  if (enableProxy && proxyBaseUrl) {
-    modules.anoncreds = new AnonCredsModule({
-      anoncreds,
-      registries: [
-        new IndyVdrProxyAnonCredsRegistry({ proxyBaseUrl, cacheOptions: proxyCacheSettings }),
-        new WebVhAnonCredsRegistry(),
-      ],
-    })
-    modules.dids = new DidsModule({
-      resolvers: [new IndyVdrProxyDidResolver({ proxyBaseUrl }), new WebvhDidResolver()],
-    })
   }
 
   return modules

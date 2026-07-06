@@ -1,4 +1,5 @@
-import { Agent, ConnectionRecord, ConnectionType } from '@credo-ts/core'
+import { Agent } from '@credo-ts/core'
+import { DidCommConnectionRecord, DidCommConnectionType } from '@credo-ts/didcomm'
 import { PersistentStorage } from '@bifold/core'
 import messaging, { FirebaseMessagingTypes } from '@react-native-firebase/messaging'
 import { Platform } from 'react-native'
@@ -68,9 +69,9 @@ const requestPermission = async (): Promise<NotificationPermissionStatus> => {
  * Helper Functions Section
  */
 
-const getMediatorConnection = async (agent: Agent): Promise<ConnectionRecord | undefined> => {
-  const connections: ConnectionRecord[] = await agent.connections.getAll()
-  const mediators = connections.filter((r) => r.connectionTypes.includes(ConnectionType.Mediator))
+const getMediatorConnection = async (agent: Agent): Promise<DidCommConnectionRecord | undefined> => {
+  const connections: DidCommConnectionRecord[] = await agent.modules.didcomm.connections.getAll()
+  const mediators = connections.filter((r) => r.connectionTypes.includes(DidCommConnectionType.Mediator))
   if (mediators.length < 1) {
     agent.config.logger.warn(`Mediator connection not found`)
     return undefined
@@ -117,7 +118,7 @@ const isMediatorCapable = async (agent: Agent): Promise<boolean | undefined> => 
   const mediator = await getMediatorConnection(agent)
   if (!mediator) return
 
-  const response = await agent.discovery.queryFeatures({
+  const response = await agent.modules.didcomm.discovery.queryFeatures({
     awaitDisclosures: true,
     connectionId: mediator.id,
     protocolVersion: 'v1',
