@@ -15,7 +15,7 @@ import {
 } from '../../types/state'
 import { generateRandomWalletName } from '../../utils/helpers'
 import lodash from 'lodash'
-import { BannerMessage } from 'components/views/Banner'
+import { BannerMessage } from '../../components/views/Banner'
 
 enum StateDispatchAction {
   STATE_DISPATCH = 'state/stateDispatch',
