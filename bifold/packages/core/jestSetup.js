@@ -35,12 +35,12 @@ jest.mock('@react-native-community/netinfo', () => mockRNCNetInfo)
 jest.mock('react-native-localize', () => mockRNLocalize)
 jest.mock('react-native-fs', () => ({}))
 jest.mock('@hyperledger/anoncreds-react-native', () => ({}))
-jest.mock('@openwallet-foundation/askar-react-native', () => ({}))
-jest.mock('@hyperledger/indy-vdr-react-native', () => ({}))
-jest.mock('react-native-argon2', () => ({
-  __esModule: true,
-  default: jest.fn().mockResolvedValue({ rawHash: '00'.repeat(32), encodedHash: 'mock-encoded-hash' }),
+jest.mock('@openwallet-foundation/askar-react-native', () => ({
+  Argon2: { derivePassword: jest.fn(() => new Uint8Array(32)) },
+  Argon2Algorithm: { Argon2id: 'Argon2id' },
+  Argon2Version: { V0x13: 'V0x13' },
 }))
+jest.mock('@hyperledger/indy-vdr-react-native', () => ({}))
 jest.mock('react-native-permissions', () => require('react-native-permissions/mock'))
 jest.mock('react-native-orientation-locker', () => require('./__mocks__/custom/react-native-orientation-locker'))
 jest.mock('react-native-vision-camera', () => {
