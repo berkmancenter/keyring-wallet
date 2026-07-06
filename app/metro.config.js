@@ -23,6 +23,7 @@ const BIFOLD_SOURCE_PACKAGES = [
   '@bifold/verifier',
   '@bifold/vrc-contexts',
   '@bifold/react-native-attestation',
+  '@bifold/react-hooks',
 ]
 const bifoldSourceDirByPackage = {}
 for (const dir of packageDirs) {
@@ -119,6 +120,20 @@ module.exports = (async () => {
       nodeModulesPaths: [path.join(__dirname, 'node_modules'), bifoldNodeModules],
       // Force specific module imports to use our polyfilled/patched versions
       resolveRequest: (context, moduleName, platform) => {
+        // Singleton packages: always resolve from the app's node_modules so
+        // bifold sources never load a second copy (bifold/node_modules is on
+        // nodeModulesPaths, which would otherwise win for react etc.)
+        const singletonPrefixes = ['react', 'react-native', 'react-dom', '@credo-ts/core', '@credo-ts/didcomm', '@credo-ts/anoncreds']
+        const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
+        if (isSingleton && !context.originModulePath.startsWith(__dirname)) {
+          // Re-resolve as if requested from the app root (keeps package
+          // "exports" handling intact, unlike remapping to an absolute path)
+          return context.resolveRequest(
+            { ...context, originModulePath: path.join(__dirname, 'index.js') },
+            moduleName,
+            platform
+          )
+        }
         // Ensure js-sha256 is resolved from app's node_modules
         // This is needed by patched @digitalcredentials/jsonld-signatures and rdf-canonize
         if (moduleName === 'js-sha256') {

@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-06 (Phase 3 native builds GREEN — Android (New Arch ON) + iOS compile on RN 0.81.5, both release bundles build; E2E next)
+Last updated: 2026-07-06 (Phase 3 runtime GREEN — app boots on Android emulator + iOS simulator on RN 0.81.5/New Arch; two-device E2E next)
 
 ---
 
@@ -341,8 +341,21 @@ babel/metro/jest configs, `.env.sample`.
         only as devDep), @expo/app-integrity ^55.0.9.
         PATCH: react-native-document-picker 9.3.1 uses GuardedResultAsyncTask
         (removed in RN 0.81) — yarn patch swaps it to GuardedAsyncTask.
-  - [ ] Wallet-open/migration smoke test (askar store compat 0.2→0.6) — needs device/em.
-  - [ ] Gate: VRC conformance tests green (bifold side done), E2E green.
+  - [x] Runtime smoke test GREEN on both platforms: Android emulator (Pixel 6 API 33)
+        boots to onboarding, iOS simulator (iPhone 17) boots to PIN unlock (existing
+        wallet opened — askar 0.6 store loads). Runtime fixes:
+    - metro resolveRequest singleton guard: imports of react/react-native/react-dom/
+      @credo-ts/{core,didcomm,anoncreds} from OUTSIDE app/ re-resolve from the app
+      root, otherwise bifold/node_modules' second react copy loads in dev bundles
+      and hooks crash ("dispatcher.useContext of null" in bifold Button).
+    - '@bifold/react-hooks' added to BIFOLD_SOURCE_PACKAGES (verifier src imports it).
+    - react-native-date-picker REMOVED (unused; 5.0.13 breaks RN 0.81 iOS:
+      "RNDatePickerManager does not conform to RCTModuleProvider").
+    - GOTCHA: killing the `yarn start` wrapper leaves the node metro child alive
+      holding :8081 — a stale metro served the old config for a while. pkill
+      'cli.js start' or kill the listener pid from lsof.
+  - [ ] Askar 0.2→0.6 store migration check on a wallet with real credentials.
+  - [ ] Gate: VRC conformance tests green (bifold side done), two-device E2E green.
 - [ ] **Phase 4 — App-layer upstream sync** (port wanted bc-wallet-mobile improvements;
       containers/DI, screens). Gate: full suite + E2E.
 - [ ] **Phase 5 — VC 2.0 for VRC** (secondary goal)

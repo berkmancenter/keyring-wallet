@@ -14199,7 +14199,6 @@ __metadata:
     react-native-collapsible: "npm:~1.6.2"
     react-native-config: "npm:~1.5.5"
     react-native-confirmation-code-field: "npm:~7.3.2"
-    react-native-date-picker: "npm:~5.0.13"
     react-native-device-info: "npm:~8.7.1"
     react-native-document-picker: "patch:react-native-document-picker@npm%3A9.3.1#~/.yarn/patches/react-native-document-picker-npm-9.3.1-ce22d39a18.patch"
     react-native-encrypted-storage: "npm:~4.0.3"
@@ -17221,16 +17220,6 @@ __metadata:
     react-native:
       optional: true
   checksum: 10c0/c6da7aeb7802c993960d88471a8519aa4deb2b8d3d6e61d97b223282913768d3d64d6d4369d317efbb5e9133567140f5822ad8e25de447c52ab0497ac5959f2c
-  languageName: node
-  linkType: hard
-
-"react-native-date-picker@npm:~5.0.13":
-  version: 5.0.13
-  resolution: "react-native-date-picker@npm:5.0.13"
-  peerDependencies:
-    react: ">= 17.0.1"
-    react-native: ">= 0.64.3"
-  checksum: 10c0/197c807ecbf06c0c5366f79daf5d0d1d580e7a4f8b673fe4fb1d5bcc2993ff0147b823082cdb82f526bb43174dc1c6c6d041d032dada770e92ec2e614d4a8655
   languageName: node
   linkType: hard
 

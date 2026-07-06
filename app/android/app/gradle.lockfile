@@ -208,7 +208,6 @@ io.reactivex.rxjava2:rxjava:2.2.21=debugCompileClasspath,debugRuntimeClasspath
 javax.inject:javax.inject:1=debugCompileClasspath,debugRuntimeClasspath
 jp.wasabeef:blurry:4.0.1=debugRuntimeClasspath
 net.java.dev.jna:jna:5.14.0=debugCompileClasspath,debugRuntimeClasspath
-net.time4j:time4j-android:4.8-2021a=debugRuntimeClasspath
 org.apache.commons:commons-lang3:3.11=debugCompileClasspath,debugRuntimeClasspath
 org.greenrobot:eventbus:3.1.0=debugRuntimeClasspath
 org.jetbrains.intellij.deps:trove4j:1.0.20200330=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath
