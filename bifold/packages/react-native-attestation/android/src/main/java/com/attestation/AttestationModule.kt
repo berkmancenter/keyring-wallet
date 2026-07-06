@@ -160,6 +160,37 @@ class AttestationModule : AttestationSpec {
 
   private var keySecurityLevel: String = "Software"
 
+  // --- iOS-only spec methods -------------------------------------------------
+  // With the New Architecture, codegen makes every spec method abstract on both
+  // platforms, so the iOS-only ones need explicit Android stubs.
+
+  @ReactMethod
+  override fun generateKey(cache: Boolean, promise: Promise) {
+    promise.reject("UNSUPPORTED", "generateKey is only available on iOS")
+  }
+
+  @ReactMethod
+  override fun sha256(stringToHash: String, promise: Promise) {
+    promise.reject("UNSUPPORTED", "sha256 is only available on iOS")
+  }
+
+  @ReactMethod
+  override fun appleKeyAttestation(keyId: String, challenge: String, promise: Promise) {
+    promise.reject("UNSUPPORTED", "appleKeyAttestation is only available on iOS")
+  }
+
+  @ReactMethod
+  override fun getAppStoreReceipt(promise: Promise) {
+    promise.reject("UNSUPPORTED", "getAppStoreReceipt is only available on iOS")
+  }
+
+  @ReactMethod
+  override fun attestHardwareSigningKey(challenge: String, promise: Promise) {
+    promise.reject("UNSUPPORTED", "attestHardwareSigningKey is only available on iOS")
+  }
+
+  // ---------------------------------------------------------------------------
+
   @ReactMethod
   override fun isPlayIntegrityAvailable(promise: Promise) {
     try {
