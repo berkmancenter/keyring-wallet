@@ -2,7 +2,9 @@ const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config')
 const fs = require('fs')
 const path = require('path')
 const escape = require('escape-string-regexp')
-const exclusionList = require('metro-config/src/defaults/exclusionList')
+// metro 0.83+ moved internal files under exports "./private/*"
+const exclusionListModule = require('metro-config/private/defaults/exclusionList')
+const exclusionList = exclusionListModule.default ?? exclusionListModule
 require('dotenv').config()
 
 const packageDirs = [
@@ -12,6 +14,7 @@ const packageDirs = [
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-hooks')),
 ]
 
 // In development, resolve these to source for hot reload; CI/production uses built output.
@@ -33,7 +36,11 @@ for (const dir of packageDirs) {
   }
 }
 
-const watchFolders = [...packageDirs]
+// bifold workspace deps hoist to bifold/node_modules; metro must watch it to
+// resolve them from bifold's built lib output (production bundles)
+const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', 'node_modules'))
+
+const watchFolders = [...packageDirs, bifoldNodeModules]
 
 const extraExclusionlist = []
 const extraNodeModules = {}
@@ -47,6 +54,9 @@ const polyfillModules = {
   buffer: path.join(__dirname, 'node_modules', 'buffer'),
   // Force rdf-canonize to use our patched version from app's node_modules
   'rdf-canonize': path.join(__dirname, 'node_modules', 'rdf-canonize'),
+  // bifold workspace cross-deps hoist to bifold/node_modules, which metro
+  // doesn't watch; resolve them through the app's portals instead
+  '@bifold/react-hooks': path.join(__dirname, 'node_modules', '@bifold/react-hooks'),
 }
 
 for (const packageDir of packageDirs) {
@@ -102,6 +112,11 @@ module.exports = (async () => {
       },
       assetExts: assetExts.filter((ext) => ext !== 'svg'),
       sourceExts: [...sourceExts, 'svg', 'cjs'],
+      // Prefer browser builds (e.g. nanoid) over node builds that require('crypto').
+      // Same setup as bifold samples/app.
+      unstable_enablePackageExports: true,
+      unstable_conditionNames: ['react-native', 'browser', 'require'],
+      nodeModulesPaths: [path.join(__dirname, 'node_modules'), bifoldNodeModules],
       // Force specific module imports to use our polyfilled/patched versions
       resolveRequest: (context, moduleName, platform) => {
         // Ensure js-sha256 is resolved from app's node_modules

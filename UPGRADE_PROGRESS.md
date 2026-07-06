@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-06 (Phase 3 app JS layer GREEN — RN 0.81.5/React 19.1/credo 0.6.3 typecheck+lint+jest pass on `upgrade/phase3-bifold3`; native Android/iOS builds next)
+Last updated: 2026-07-06 (Phase 3 native builds GREEN — Android (New Arch ON) + iOS compile on RN 0.81.5, both release bundles build; E2E next)
 
 ---
 
@@ -316,11 +316,33 @@ babel/metro/jest configs, `.env.sample`.
       import breaks consumers compiling core from source).
   - [x] App gate (JS): typecheck 0 errors, eslint clean, jest 14 suites / 27 tests PASS
         (6 snapshots updated for RN 0.81 Pressable/style flattening).
-  - [ ] Android + iOS native builds: NOT STARTED (Gradle/Podfile still on RN 0.72 —
-        native project upgrade is next). New Architecture: try `newArchEnabled=true`
-        (upstream default); audit attestation native module; fall back if needed.
-  - [ ] Wallet-open/migration smoke test (askar store compat 0.2→0.6).
-  - [ ] Gate: VRC conformance tests green, jest green, both platforms bundle, E2E green.
+  - [x] Android native build GREEN with **New Architecture enabled** (`newArchEnabled=true`),
+        `assembleDebug` passes. Changes: compileSdk/targetSdk 36, buildTools 36.0.0,
+        kotlin 2.1.20, gradle 8.14.3, AGP version now supplied by RN gradle plugin;
+        expo autolinking added to settings.gradle (`useExpoModules()`) and
+        MainApplication wrapped in `ReactNativeHostWrapper` + `loadReactNative(this)`;
+        `react.internal.disableJavaVersionAlignment=true` + subprojects Java-17
+        compileOptions block (both from bifold samples/app — RN plugin vs expo
+        toolchain conflict); kotlin-stdlib force-resolutions and app java toolchain
+        block REMOVED (broke under AGP 8.12); gradle lockfiles regenerated
+        (`--write-locks`). Attestation module: Android now implements the 5 iOS-only
+        spec methods as UNSUPPORTED-reject stubs (New-Arch codegen makes them
+        abstract on both platforms) — bifold commit.
+  - [x] iOS native build GREEN (`xcodebuild` Debug, simulator). Podfile gained expo
+        autolinking (`use_expo_modules!` + `expo_patch_react_imports!`), pods
+        reinstalled (RN 0.81.5, hermes, 140 pods). AppDelegate.mm (RCTAppDelegate)
+        still compiles on 0.81 — migration to RCTReactNativeFactory deferred.
+  - [x] Release JS bundles green for BOTH platforms. metro.config fixes:
+        exclusionList import moved to `metro-config/private/...` (metro 0.83 exports),
+        `unstable_enablePackageExports` + conditions `['react-native','browser','require']`
+        (nanoid etc. need browser builds), bifold/node_modules added to
+        watchFolders/nodeModulesPaths, react-native-svg-transformer 0.14→1.5.1.
+        New app deps surfaced by bifold 3.x code paths: zustand ~4.5.4 (core has it
+        only as devDep), @expo/app-integrity ^55.0.9.
+        PATCH: react-native-document-picker 9.3.1 uses GuardedResultAsyncTask
+        (removed in RN 0.81) — yarn patch swaps it to GuardedAsyncTask.
+  - [ ] Wallet-open/migration smoke test (askar store compat 0.2→0.6) — needs device/em.
+  - [ ] Gate: VRC conformance tests green (bifold side done), E2E green.
 - [ ] **Phase 4 — App-layer upstream sync** (port wanted bc-wallet-mobile improvements;
       containers/DI, screens). Gate: full suite + E2E.
 - [ ] **Phase 5 — VC 2.0 for VRC** (secondary goal)

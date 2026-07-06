@@ -12,7 +12,9 @@
 		1A157F462BACCDEA00E30CDB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1A157F452BACCDEA00E30CDB /* PrivacyInfo.xcprivacy */; };
 		1A762CD62D87E24100455F4C /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 1A762CD52D87E24100455F4C /* AppDelegate.mm */; };
 		2F9994AE2A8D83CB004E773E /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 2F9994AD2A8D83CB004E773E /* GoogleService-Info.plist */; };
+		460C62056C817F32DD50B03E /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8695E760B846E4F378AB5655 /* ExpoModulesProvider.swift */; };
 		4AA41CC1208649828A6C7F7F /* GT-America-Mono-Regular.OTF in Resources */ = {isa = PBXBuildFile; fileRef = 791DE193A8F54ABDB4C0A6E7 /* GT-America-Mono-Regular.OTF */; };
+		50FEB047FBD813EA82B0B9E8 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB705808CC6C27175E93BD23 /* ExpoModulesProvider.swift */; };
 		51DF9B21480F42A9BD3A92CC /* SourceSans3-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1518883F928D41DF9687C602 /* SourceSans3-Light.ttf */; };
 		566FB1F2273B158E003E9BEE /* Media.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 566FB1F1273B158E003E9BEE /* Media.xcassets */; };
 		5F13137F43F5857730628E88 /* libPods-AriesBifold-AriesBifoldTests.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D2FEEE17975EE5C7D138D250 /* libPods-AriesBifold-AriesBifoldTests.a */; };
@@ -70,6 +72,7 @@
 		7AF003B82E01D25300389FF2 /* GT-America-Regular.OTF */ = {isa = PBXFileReference; lastKnownFileType = file; path = "GT-America-Regular.OTF"; sourceTree = "<group>"; };
 		7D2E34625C1340E6979A7172 /* SourceSans3-It.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "SourceSans3-It.ttf"; path = "../src/assets/fonts/SourceSans3-It.ttf"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = AriesBifold/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		8695E760B846E4F378AB5655 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-AriesBifold-AriesBifoldTests/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		99A1BC81F291BF040E41B70D /* libPods-AriesBifold.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-AriesBifold.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A68707143FAC4C9A8B391935 /* GT-America-Mono-Bold.OTF */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "GT-America-Mono-Bold.OTF"; path = "../src/assets/fonts/GT-America-Mono-Bold.OTF"; sourceTree = "<group>"; };
 		CA217BD1171D444992207F53 /* GT-America-Bold.OTF */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "GT-America-Bold.OTF"; path = "../src/assets/fonts/GT-America-Bold.OTF"; sourceTree = "<group>"; };
@@ -79,6 +82,7 @@
 		E5D436714AEB456F859D1A6A /* MaterialIcons.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = MaterialIcons.ttf; path = ../src/assets/fonts/MaterialIcons.ttf; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		FAE9144464984615A799B578 /* GT-America-Regular.OTF */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "GT-America-Regular.OTF"; path = "../src/assets/fonts/GT-America-Regular.OTF"; sourceTree = "<group>"; };
+		FB705808CC6C27175E93BD23 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-AriesBifold/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +145,14 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		53C76CBB26DD45D2AF027D8F /* AriesBifold */ = {
+			isa = PBXGroup;
+			children = (
+				FB705808CC6C27175E93BD23 /* ExpoModulesProvider.swift */,
+			);
+			name = AriesBifold;
+			sourceTree = "<group>";
+		};
 		56A83D5927D95BBF002FE8FE /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -166,6 +178,15 @@
 			name = Resources;
 			sourceTree = "<group>";
 		};
+		7B61326B67920F8F6A63C808 /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				53C76CBB26DD45D2AF027D8F /* AriesBifold */,
+				F5DF803F29736DDAA342CFF2 /* AriesBifoldTests */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
 			isa = PBXGroup;
 			children = (
@@ -187,6 +208,7 @@
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				56A83D5927D95BBF002FE8FE /* Resources */,
 				8ACF6F3B2962FE31C0EE5408 /* Pods */,
+				7B61326B67920F8F6A63C808 /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -213,6 +235,14 @@
 			path = Pods;
 			sourceTree = "<group>";
 		};
+		F5DF803F29736DDAA342CFF2 /* AriesBifoldTests */ = {
+			isa = PBXGroup;
+			children = (
+				8695E760B846E4F378AB5655 /* ExpoModulesProvider.swift */,
+			);
+			name = AriesBifoldTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -221,6 +251,7 @@
 			buildConfigurationList = 00E357021AD99517003FC87E /* Build configuration list for PBXNativeTarget "AriesBifoldTests" */;
 			buildPhases = (
 				8E2BB1F0C19AA17EB70A2E46 /* [CP] Check Pods Manifest.lock */,
+				79AC122EB8FB7BB97DCFBE03 /* [Expo] Configure project */,
 				00E356EA1AD99517003FC87E /* Sources */,
 				00E356EB1AD99517003FC87E /* Frameworks */,
 				00E356EC1AD99517003FC87E /* Resources */,
@@ -243,6 +274,7 @@
 			buildPhases = (
 				D19D45CA82EB16EA5021312D /* [CP] Check Pods Manifest.lock */,
 				FD10A7F022414F080027D42C /* Start Packager */,
+				1BC411DB87B5A949793F4FC1 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
@@ -343,6 +375,30 @@
 			shellPath = /bin/zsh;
 			shellScript = "set -e\n\n../node_modules/react-native/scripts/react-native-xcode.sh\n";
 		};
+		1BC411DB87B5A949793F4FC1 /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/AriesBifold/AriesBifold.entitlements",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-AriesBifold/expo-configure-project.sh",
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Pods/Target Support Files/Pods-AriesBifold/ExpoModulesProvider.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-AriesBifold/expo-configure-project.sh\"\n";
+		};
 		2971F0F156B890557487DDEB /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -376,6 +432,29 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-AriesBifold-AriesBifoldTests/Pods-AriesBifold-AriesBifoldTests-resources.sh\"\n";
 			showEnvVarsInLog = 0;
+		};
+		79AC122EB8FB7BB97DCFBE03 /* [Expo] Configure project */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.xcode.env",
+				"$(SRCROOT)/.xcode.env.local",
+				"$(SRCROOT)/Pods/Target Support Files/Pods-AriesBifold-AriesBifoldTests/expo-configure-project.sh",
+			);
+			name = "[Expo] Configure project";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Pods/Target Support Files/Pods-AriesBifold-AriesBifoldTests/ExpoModulesProvider.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-AriesBifold-AriesBifoldTests/expo-configure-project.sh\"\n";
 		};
 		889B52BA36E6E01B35CF05F4 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -495,6 +574,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				00E356F31AD99517003FC87E /* AriesBifoldTests.m in Sources */,
+				460C62056C817F32DD50B03E /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -504,6 +584,7 @@
 			files = (
 				1A762CD62D87E24100455F4C /* AppDelegate.mm in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
+				50FEB047FBD813EA82B0B9E8 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -540,6 +621,7 @@
 					"-lc++",
 					"$(inherited)",
 				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AriesBifold.app/AriesBifold";
@@ -565,6 +647,7 @@
 					"-lc++",
 					"$(inherited)",
 				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AriesBifold.app/AriesBifold";
@@ -600,6 +683,7 @@
 					"-ObjC",
 					"-lc++",
 				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = asml.bkc.harvard.wallet;
 				PRODUCT_NAME = KeyRing;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -642,6 +726,7 @@
 					"-ObjC",
 					"-lc++",
 				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = asml.bkc.harvard.wallet;
 				PRODUCT_NAME = KeyRing;
 				PROVISIONING_PROFILE_SPECIFIER = "";

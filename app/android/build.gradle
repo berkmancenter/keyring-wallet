@@ -2,12 +2,12 @@
 
 buildscript {
     ext {
-        buildToolsVersion = "35.0.0"
+        buildToolsVersion = "36.0.0"
         minSdkVersion = 24
-        compileSdkVersion = 35
-        targetSdkVersion = 35
+        compileSdkVersion = 36
+        targetSdkVersion = 36
         ndkVersion = "27.1.12297006"
-        kotlinVersion = "2.0.21"
+        kotlinVersion = "2.1.20"
         androidXBrowser = "1.5.0"
         javaVersion = JavaVersion.VERSION_17
     }
@@ -16,7 +16,8 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle:8.7.3")
+        // AGP version comes from @react-native/gradle-plugin (RN 0.81 -> AGP 8.12)
+        classpath("com.android.tools.build:gradle")
         classpath('com.google.gms:google-services:4.4.2')
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
@@ -41,19 +42,27 @@ allprojects {
         google()
         maven { url 'https://www.jitpack.io' }
     }
-    
-    configurations.all {
-        resolutionStrategy {
-            force "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
-            force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlinVersion"
-            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion"
-        }
-    }
 }
 
 subprojects {
     configurations.all {
        it.resolutionStrategy.activateDependencyLocking()
+    }
+
+    // Align every Android subproject on Java 17 (expo-modules-core otherwise
+    // compiles Java at 1.8 while Kotlin targets 17 and the build fails).
+    // Same approach as bifold samples/app.
+    afterEvaluate { project ->
+        ["com.android.application", "com.android.library"].each { pluginId ->
+            project.plugins.withId(pluginId) {
+                project.android {
+                    compileOptions {
+                        sourceCompatibility JavaVersion.VERSION_17
+                        targetCompatibility JavaVersion.VERSION_17
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -1,0 +1,44 @@
+diff --git a/android/src/main/java/com/reactnativedocumentpicker/RNDocumentPickerModule.java b/android/src/main/java/com/reactnativedocumentpicker/RNDocumentPickerModule.java
+index 5001525e27475858fe60cbdf77c5c62ff52a92ae..fe1412a869b85446b48f7a40d8c1fc7bee99d2a0 100644
+--- a/android/src/main/java/com/reactnativedocumentpicker/RNDocumentPickerModule.java
++++ b/android/src/main/java/com/reactnativedocumentpicker/RNDocumentPickerModule.java
+@@ -18,7 +18,7 @@ import androidx.annotation.NonNull;
+ import com.facebook.react.bridge.ActivityEventListener;
+ import com.facebook.react.bridge.Arguments;
+ import com.facebook.react.bridge.BaseActivityEventListener;
+-import com.facebook.react.bridge.GuardedResultAsyncTask;
++import com.facebook.react.bridge.GuardedAsyncTask;
+ import com.facebook.react.bridge.Promise;
+ import com.facebook.react.bridge.ReactApplicationContext;
+ import com.facebook.react.bridge.ReactContext;
+@@ -229,7 +229,9 @@ public class RNDocumentPickerModule extends NativeDocumentPickerSpec {
+     }
+   }
+ 
+-  private static class ProcessDataTask extends GuardedResultAsyncTask<ReadableArray> {
++  // GuardedResultAsyncTask was removed in React Native 0.81; use GuardedAsyncTask
++  // and resolve the promise from the background thread (Promise is thread-safe).
++  private static class ProcessDataTask extends GuardedAsyncTask<Void, Void> {
+     private final WeakReference<Context> weakContext;
+     private final List<Uri> uris;
+     private final String copyTo;
+@@ -244,17 +246,12 @@ public class RNDocumentPickerModule extends NativeDocumentPickerSpec {
+     }
+ 
+     @Override
+-    protected ReadableArray doInBackgroundGuarded() {
++    protected void doInBackgroundGuarded(Void... params) {
+       WritableArray results = Arguments.createArray();
+       for (Uri uri : uris) {
+         results.pushMap(getMetadata(uri));
+       }
+-      return results;
+-    }
+-
+-    @Override
+-    protected void onPostExecuteGuarded(ReadableArray readableArray) {
+-      promise.resolve(readableArray);
++      promise.resolve(results);
+     }
+ 
+     private WritableMap getMetadata(Uri uri) {
