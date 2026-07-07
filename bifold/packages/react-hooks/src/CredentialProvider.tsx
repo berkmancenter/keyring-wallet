@@ -38,7 +38,10 @@ export const useCredentialById = (id: string): DidCommCredentialExchangeRecord |
 }
 
 export const useCredentialByState = (state: DidCommCredentialState | DidCommCredentialState[]): DidCommCredentialExchangeRecord[] => {
-  const states = useMemo(() => (typeof state === 'string' ? [state] : state), [state])
+  // key on contents, not array identity — callers often pass fresh array literals
+  const stateKey = typeof state === 'string' ? state : state.join(',')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const states = useMemo(() => (typeof state === 'string' ? [state] : state), [stateKey])
 
   const { records: credentials } = useCredentials()
 
@@ -50,7 +53,10 @@ export const useCredentialByState = (state: DidCommCredentialState | DidCommCred
 }
 
 export const useCredentialNotInState = (state: DidCommCredentialState | DidCommCredentialState[]) => {
-  const states = useMemo(() => (typeof state === 'string' ? [state] : state), [state])
+  // key on contents, not array identity — callers often pass fresh array literals
+  const stateKey = typeof state === 'string' ? state : state.join(',')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const states = useMemo(() => (typeof state === 'string' ? [state] : state), [stateKey])
 
   const { records: credentials } = useCredentials()
 

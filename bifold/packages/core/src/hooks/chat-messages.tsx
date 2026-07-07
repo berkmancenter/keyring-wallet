@@ -7,7 +7,10 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Linking, View, TouchableOpacity, Text } from 'react-native'
+import { Linking, View, Text } from 'react-native'
+// gesture-handler touchable: RN's own touchables miss taps inside GiftedChat's
+// inverted list + GestureHandlerRootView on Android with the new architecture
+import { TouchableOpacity } from 'react-native-gesture-handler'
 
 import { ChatEvent } from '../components/chat/ChatEvent'
 import { ExtendedChatMessage, CallbackType, MessageIconType } from '../components/chat/ChatMessage'

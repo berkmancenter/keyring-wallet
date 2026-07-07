@@ -1,6 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TouchableOpacity, View, Text } from 'react-native'
+import { View, Text } from 'react-native'
+// gesture-handler touchables: RN's own touchables miss taps inside GiftedChat's
+// inverted list + GestureHandlerRootView on Android with the new architecture
+import { TouchableOpacity } from 'react-native-gesture-handler'
 import { Bubble, IMessage, MessageProps } from 'react-native-gifted-chat'
 import moment from 'moment'
 

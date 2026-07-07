@@ -1,4 +1,4 @@
-import { DidCommBasicMessageRecord, DidCommBasicMessageRole } from '@credo-ts/didcomm'
+import { DidCommBasicMessageEventTypes, DidCommBasicMessageRecord, DidCommBasicMessageRole } from '@credo-ts/didcomm'
 import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useEffect } from 'react'
@@ -95,10 +95,10 @@ const InAppMessageNotifier: React.FC = () => {
       })
     }
 
-    agent.events.on('BasicMessageStateChanged' as any, handleMessage)
+    agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, handleMessage)
 
     return () => {
-      agent.events.off('BasicMessageStateChanged' as any, handleMessage)
+      agent.events.off(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, handleMessage)
     }
   }, [agent, navigation])
 

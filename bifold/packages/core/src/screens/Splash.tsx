@@ -66,7 +66,13 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
         )
 
         DeviceEventEmitter.emit(EventTypes.ERROR_ADDED, error)
-        logger.error((err as Error)?.message ?? err)
+        // Log the full error chain: credo wraps module init failures and the
+        // useful message is usually in `cause`, not the top-level error.
+        logger.error(
+          `Agent init failed: ${(err as Error)?.message ?? err}` +
+            ((err as { cause?: Error })?.cause ? ` | cause: ${(err as { cause?: Error }).cause?.message}` : '') +
+            ((err as Error)?.stack ? `\n${(err as Error).stack}` : '')
+        )
       }
     }
 

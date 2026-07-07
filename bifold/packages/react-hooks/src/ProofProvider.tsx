@@ -38,7 +38,10 @@ export const useProofById = (id: string): DidCommProofExchangeRecord | undefined
 }
 
 export const useProofByState = (state: DidCommProofState | DidCommProofState[]): DidCommProofExchangeRecord[] => {
-  const states = useMemo(() => (typeof state === 'string' ? [state] : state), [state])
+  // key on contents, not array identity — callers often pass fresh array literals
+  const stateKey = typeof state === 'string' ? state : state.join(',')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const states = useMemo(() => (typeof state === 'string' ? [state] : state), [stateKey])
 
   const { records: proofs } = useProofs()
 
@@ -54,7 +57,10 @@ export const useProofByState = (state: DidCommProofState | DidCommProofState[]):
 }
 
 export const useProofNotInState = (state: DidCommProofState | DidCommProofState[]): DidCommProofExchangeRecord[] => {
-  const states = useMemo(() => (typeof state === 'string' ? [state] : state), [state])
+  // key on contents, not array identity — callers often pass fresh array literals
+  const stateKey = typeof state === 'string' ? state : state.join(',')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const states = useMemo(() => (typeof state === 'string' ? [state] : state), [stateKey])
 
   const { records: proofs } = useProofs()
 

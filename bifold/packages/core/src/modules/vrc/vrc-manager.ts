@@ -1,5 +1,6 @@
 import { Agent, PeerDidNumAlgo } from '@credo-ts/core'
 import {
+  DidCommBasicMessageEventTypes,
   DidCommBasicMessageRecord,
   DidCommBasicMessageRole,
   DidCommConnectionEventTypes,
@@ -244,14 +245,19 @@ async function buildVrcCredential(
     issuer.organization = issuerInfo.organization
   }
 
+  // Backdate issuance to tolerate clock skew between issuer and holder devices —
+  // the holder rejects credentials whose issuanceDate is in its future.
+  const CLOCK_SKEW_ALLOWANCE_MS = 5 * 60 * 1000
+  const issuanceTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
+
   const credential: any = {
     // W3cCredential validator requires the first context to be the VC v1 URL
     '@context': ['https://www.w3.org/2018/credentials/v1', DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL],
     type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
     issuer,
     // Use issuanceDate (RFC3339) to satisfy W3C VC 2.0 validation. validFrom is optional.
-    issuanceDate: new Date().toISOString(),
-    validFrom: new Date().toISOString(),
+    issuanceDate: issuanceTimestamp,
+    validFrom: issuanceTimestamp,
     // W3C VC v1 expirationDate and validUntil - set to current time + 7 days
     expirationDate: new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString(),
     validUntil: new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString(),
@@ -912,7 +918,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
   agent.config.logger.info('[VRC] Setting up automatic VRC connection handler')
 
   // Set up basic message handler to receive relationshipDid from counterparty AND witness protocol messages
-  agent.events.on('BasicMessageStateChanged' as any, async ({ payload }: any) => {
+  agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, async ({ payload }: any) => {
     const record = payload.basicMessageRecord as DidCommBasicMessageRecord
 
     // Only process received messages
