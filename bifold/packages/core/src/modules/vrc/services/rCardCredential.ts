@@ -53,6 +53,47 @@ export const buildRCardTemplateW3cCredentialRecord = (rCardTemplate: RCardTempla
 }
 
 /**
+ * One-time fixup for R-Card template records created by pre-credo-0.6 app
+ * versions: those were stored WITHOUT a proof, but credo 0.6 parses stored
+ * credentials as W3cJsonLdVerifiableCredential whose class validation requires
+ * one — `record.getTags()` throws and crashes any consumer that touches the
+ * record (e.g. the OpenID credential provider). Add the same placeholder proof
+ * that buildRCardTemplateW3cCredentialRecord uses for new templates.
+ */
+export const migrateRCardTemplateProofs = async (agent: Agent): Promise<void> => {
+  const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
+
+  try {
+    const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
+    const records = await repository.findByQuery(agent.context, { type: 'RCardTemplate' })
+
+    for (const record of records) {
+      // credo 0.5 records stored `credential`; the 0.6 class-transform setter
+      // moves it into `credentialInstances`, but access both shapes to be safe
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyRecord = record as any
+      const credential = anyRecord.credentialInstances?.[0]?.credential ?? anyRecord.credential
+      if (!credential || typeof credential === 'string' || credential.proof) {
+        continue
+      }
+      credential.proof = {
+        type: 'Ed25519Signature2018',
+        created: credential.issuanceDate || new Date().toISOString(),
+        proofPurpose: 'assertionMethod',
+        verificationMethod: 'urn:aries:bifold:r-card#template',
+        jws: 'template-placeholder',
+      }
+      await repository.update(agent.context, record)
+      logger.info('Added placeholder proof to legacy R-Card template record', { id: record.id })
+    }
+  } catch (error) {
+    logger.error('Failed to migrate legacy R-Card template records', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+/**
  * Converts W3cCredentialRecord back to RCardTemplate format (with jCard)
  */
 export const extractRCardTemplateFromW3cRecord = (record: W3cCredentialRecord): RCardTemplate => {

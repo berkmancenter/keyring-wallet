@@ -156,6 +156,7 @@ export {
   extractFormInputFromJCard,
   buildRCardTemplate,
 } from './types/rcard'
+export { migrateRCardTemplateProofs } from './services/rCardCredential'
 
 // =============================================================================
 // Attestation and Evidence Services

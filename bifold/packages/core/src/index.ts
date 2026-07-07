@@ -190,6 +190,7 @@ export {
   getOrCreateRelationshipDid,
   setRelationshipDidOnConnection,
   setupVrcConnectionHandler,
+  migrateRCardTemplateProofs,
   createRelationshipInvitation,
   createVrcDocumentLoader,
   initializeVrcModule,
