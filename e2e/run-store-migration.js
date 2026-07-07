@@ -17,18 +17,18 @@
  * Metro for the NEW build must be running on :8081 (the baseline apk doesn't
  * need it — its JS is bundled).
  *
- * Building the baseline apk (worktrees are throwaway — recreate as needed):
- *   git -C app worktree add /tmp/kw-baseline/app upgrade-baseline-p0
- *   git -C bifold worktree add /tmp/kw-baseline/bifold upgrade-baseline-p0
+ * Building the baseline apk (the /tmp worktree is throwaway — recreate from
+ * the `upgrade-baseline-p0` tag as needed):
+ *   git worktree add /tmp/kw-baseline upgrade-baseline-p0
+ *   git -C /tmp/kw-baseline submodule update --init bifold
  *   cp app/.env /tmp/kw-baseline/app/.env
- *   (cd /tmp/kw-baseline/app && yarn install)   # ffi-napi/ref-napi build
- *                                               # failures are fine (Node-only)
+ *   (cd /tmp/kw-baseline && yarn install)   # ffi-napi/ref-napi build failures
+ *                                           # are fine (Node-only packages)
  *   (cd /tmp/kw-baseline/app/android && ./gradlew assembleRelease)
- * MUST be a RELEASE build (debug signing is already configured for release in
+ * MUST be a RELEASE build (release already uses the debug keystore locally in
  * the baseline build.gradle): a debug baseline apk connects to metro and loads
  * the NEW JS bundle → askar 0.2-native vs 0.6-JS mismatch crash on launch.
- * Cleanup afterwards: git -C app worktree remove --force /tmp/kw-baseline/app
- *                     git -C bifold worktree remove --force /tmp/kw-baseline/bifold
+ * Cleanup afterwards: git worktree remove --force /tmp/kw-baseline
  */
 import { execSync } from "node:child_process";
 import { remote } from "webdriverio";
