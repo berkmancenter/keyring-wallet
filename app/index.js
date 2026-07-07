@@ -129,12 +129,12 @@ if (!global.atob) {
   global.atob = decode
 }
 
-// Dev-only: silence the LogBox toast for known-noisy warnings (indy ledger DID
-// cache warm-up times out on test networks; the toast overlays the UI and breaks
-// E2E taps). Errors still land in the metro console.
+// Dev-only: disable LogBox notification banners entirely. The banners overlay
+// the bottom of the screen (where primary buttons live) and repeatedly break
+// E2E taps. All warnings/errors still land in Metro/logcat/syslog.
 const { AppRegistry, LogBox } = require('react-native')
 if (global.__DEV__) {
-  LogBox.ignoreLogs([/IndyVdrError/, /Possible unhandled promise rejection/])
+  LogBox.ignoreAllLogs()
 }
 const App = require('./App').default
 const { name: appName } = require('./app.json')

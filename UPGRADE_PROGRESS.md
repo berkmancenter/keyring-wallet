@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-06 (Phase 3 runtime GREEN — app boots on Android emulator + iOS simulator on RN 0.81.5/New Arch; two-device E2E next)
+Last updated: 2026-07-06 (Phase 3 two-device E2E VRC exchange GREEN on RN 0.81.5/New Arch — Android emulator ↔ iOS simulator; askar store-migration check remains)
 
 ---
 
@@ -354,8 +354,36 @@ babel/metro/jest configs, `.env.sample`.
     - GOTCHA: killing the `yarn start` wrapper leaves the node metro child alive
       holding :8081 — a stale metro served the old config for a while. pkill
       'cli.js start' or kill the listener pid from lsof.
+  - [x] Two-device E2E VRC exchange GREEN (2026-07-06): Android emulator ↔ iOS simulator,
+        full flow (onboarding → invitation → chat → bidirectional VRC issuance → contact
+        visible on both). Five fixes to get there:
+    - credo 0.6 event payload rename: `payload.credentialRecord` →
+      `payload.credentialExchangeRecord` in `app/src/services/attestation.ts`
+      (threw "Cannot read property 'id' of undefined" on every credential event;
+      proof events still use `payload.proofRecord`).
+    - Credo 0.6 event NAME rename (earlier fix, same class of bug): vrc-manager +
+      InAppMessageNotifier listen on `DidCommBasicMessageEventTypes.…` not the old
+      0.5 string.
+    - Chat YES/NO + details links: RN's TouchableOpacity misses taps inside
+      GiftedChat's inverted list on Android with New Architecture — swapped to
+      `react-native-gesture-handler` touchables (gifted-chat already wraps in
+      GestureHandlerRootView). E2E also retries the YES tap.
+    - INFINITE RENDER LOOP ("Maximum update depth exceeded", both platforms, fired
+      after accepting an offer): `useCredentialByState`/`useProofByState` in
+      @bifold/react-hooks memoized `states` on ARRAY IDENTITY; app's
+      `useNotifications` passes fresh array literals each render → new array each
+      render → downstream effect loop (Connection screen via useNotifications).
+      React 19 surfaces this hard. Fixed by keying the memo on `state.join(',')`.
+    - Clock skew: holder rejected issued VC ("current date time is before
+      issuanceDate") because emulator/simulator clocks differ by a few seconds —
+      vrc-manager now backdates issuanceDate/validFrom by 5 min.
+    - LogBox: dev banners cover bottom-of-screen buttons (Done) and eat E2E taps —
+      `LogBox.ignoreAllLogs()` in dev (app/index.js).
+    - E2E harness gotchas: stale `IOS_APP`/`ANDROID_APK` env vars make Appium
+      install OLD builds (RN version-mismatch redbox); `enforceAppInstall: true`
+      added for iOS; unset the env vars before runs.
   - [ ] Askar 0.2→0.6 store migration check on a wallet with real credentials.
-  - [ ] Gate: VRC conformance tests green (bifold side done), two-device E2E green.
+  - [x] Gate: VRC conformance tests green (bifold side done), two-device E2E green.
 - [ ] **Phase 4 — App-layer upstream sync** (port wanted bc-wallet-mobile improvements;
       containers/DI, screens). Gate: full suite + E2E.
 - [ ] **Phase 5 — VC 2.0 for VRC** (secondary goal)

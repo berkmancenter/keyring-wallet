@@ -17,7 +17,9 @@ export const ANDROID_APK =
   path.join(repoRoot, "app/android/app/build/outputs/apk/debug/app-debug.apk");
 
 // Built by: xcodebuild -workspace AriesBifold.xcworkspace -scheme AriesBifold -configuration Debug
-//   -sdk iphonesimulator -derivedDataPath build/e2e-dd CODE_SIGNING_ALLOWED=NO build
+//   -sdk iphonesimulator -derivedDataPath build/e2e-dd CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES build
+// Ad-hoc signing is REQUIRED: CODE_SIGNING_ALLOWED=NO strips the keychain entitlements
+// and react-native-keychain fails with "required entitlement isn't present" (error 1001).
 export const IOS_APP =
   process.env.IOS_APP ||
   path.join(
@@ -58,6 +60,9 @@ export function iosCaps() {
     "appium:app": IOS_APP,
     "appium:bundleId": APP_ID,
     "appium:fullReset": true,
+    // bundle version rarely changes between local builds; force reinstall so a
+    // freshly built .app always replaces whatever is on the simulator
+    "appium:enforceAppInstall": true,
     "appium:newCommandTimeout": 300,
     "appium:autoAcceptAlerts": true,
     "appium:wdaLaunchTimeout": 180000,

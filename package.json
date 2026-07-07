@@ -53,6 +53,7 @@
     "react-test-renderer": "19.1.0",
     "@types/react": "19.1.0",
     "@openwallet-foundation/askar-shared": "0.6.0",
+    "@hyperledger/indy-vdr-shared": "0.2.4",
     "@credo-ts/core": "0.6.3",
     "@credo-ts/anoncreds": "0.6.3",
     "@credo-ts/didcomm": "0.6.3",

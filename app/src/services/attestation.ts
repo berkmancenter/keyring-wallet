@@ -242,8 +242,8 @@ export class AttestationMonitor implements AttestationMonitorI {
       )
     }
 
-    const { credentialRecord } = event.payload
-    const credential = credentialRecord as DidCommCredentialExchangeRecord
+    const { credentialExchangeRecord } = event.payload
+    const credential = credentialExchangeRecord as DidCommCredentialExchangeRecord
 
     this.log?.info('Handling credential offer')
 

@@ -216,8 +216,7 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
  */
 export async function acceptCredentialOfferFromChat(driver, timeout = 300000) {
   const yesDeadline = Date.now() + timeout;
-  const yes = byText(driver, "YES");
-  while (!(await yes.isExisting())) {
+  while (!(await byText(driver, "YES").isExisting())) {
     if (Date.now() > yesDeadline) {
       throw new Error(
         `${driver.e2ePlatform}: credential offer YES button not found in chat within ${timeout}ms`
@@ -226,7 +225,22 @@ export async function acceptCredentialOfferFromChat(driver, timeout = 300000) {
     await unlockIfLocked(driver);
     await sleep(2000);
   }
-  await yes.click();
+
+  // Incoming chat messages re-render the inverted list and can shift YES between
+  // find and click, so the tap may land on nothing. Re-tap until the offer screen opens.
+  let opened = false;
+  for (let attempt = 0; attempt < 10 && !opened; attempt++) {
+    const yes = byText(driver, "YES");
+    if (await yes.isExisting()) {
+      await yes.click().catch(() => {});
+    }
+    opened = await existsTestId(driver, "AcceptCredentialOffer", 5000);
+  }
+  if (!opened) {
+    throw new Error(
+      `${driver.e2ePlatform}: offer screen did not open after tapping YES 10 times`
+    );
+  }
   console.log(`[e2e] ${driver.e2ePlatform}: credential offer opened from chat`);
 
   const accept = await scrollToTestId(driver, "AcceptCredentialOffer");
