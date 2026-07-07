@@ -188,13 +188,27 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
       break;
     }
   }
-  // Bottom sheet → "Scan QR code" → Scan screen (camera) → header "paste URL" button
+  // Bottom sheet → "Scan QR code" → Scan screen (camera) → header "paste URL" button.
+  // First visit shows a camera-use disclosure modal; accept it (OS permission dialog
+  // is auto-granted/accepted by the session caps). On iOS the RN Modal occasionally
+  // fails to present when it mounts mid push-animation (blank Scan screen, disclosure
+  // window empty) — back out and re-enter the screen to re-present it.
   await tapTestId(driver, "ScanQRCode", 15000);
-  // First visit shows a camera-use disclosure; accept it (OS permission dialog is
-  // auto-granted/accepted by the session caps).
-  if (!(await existsTestId(driver, "PasteUrlButton", 8000))) {
+  let pasteReady = false;
+  for (let attempt = 0; attempt < 4 && !pasteReady; attempt++) {
+    if (await existsTestId(driver, "PasteUrlButton", 8000)) {
+      pasteReady = true;
+      break;
+    }
     if (await existsTestId(driver, "Continue", 5000)) {
       await tapTestId(driver, "Continue");
+      pasteReady = await existsTestId(driver, "PasteUrlButton", 10000);
+      if (pasteReady) break;
+    }
+    // blank Scan screen (modal never presented): back out and re-enter
+    if (await existsTestId(driver, "Back", 3000)) {
+      await tapTestId(driver, "Back");
+      await tapTestId(driver, "ScanQRCode", 15000);
     }
   }
   await tapTestId(driver, "PasteUrlButton", 30000);
