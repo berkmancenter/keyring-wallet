@@ -1,6 +1,7 @@
 import {
   createLinkSecretIfRequired,
   DispatchAction,
+  migrateRCardTemplateProofs,
   migrateToAskar,
   PersistentStorage,
   TOKENS,
@@ -10,7 +11,11 @@ import {
   setupVrcConnectionHandler,
 } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
-import { DidCommHttpOutboundTransport, DidCommMediatorPickupStrategy, DidCommWsOutboundTransport } from '@credo-ts/didcomm'
+import {
+  DidCommHttpOutboundTransport,
+  DidCommMediatorPickupStrategy,
+  DidCommWsOutboundTransport,
+} from '@credo-ts/didcomm'
 import { IndyVdrPoolConfig, IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/react-native'
 import { GetCredentialDefinitionRequest, GetSchemaRequest } from '@hyperledger/indy-vdr-shared'
@@ -37,7 +42,10 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
 
 const configureMessagePickup = async (agent: Agent): Promise<void> => {
   if (Config.MEDIATOR_USE_V2_BATCH_PICKUP === 'true') {
-    await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(undefined, DidCommMediatorPickupStrategy.PickUpV2LiveMode)
+    await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
+      undefined,
+      DidCommMediatorPickupStrategy.PickUpV2LiveMode
+    )
     batchPickup(agent)
   }
 }
@@ -209,6 +217,10 @@ const useBCAgentSetup = () => {
 
       logger.info('Initializing agent...')
       await newAgent.initialize()
+
+      // Fix up R-Card template records stored by pre-credo-0.6 versions (no
+      // proof) before any UI provider reads W3C credential records
+      await migrateRCardTemplateProofs(newAgent)
 
       logger.info(`configuring message pickup for ${mediatorUrl}`)
       await configureMessagePickup(newAgent)

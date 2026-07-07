@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-06 (Phase 3 two-device E2E VRC exchange GREEN on RN 0.81.5/New Arch — Android emulator ↔ iOS simulator; askar store-migration check remains)
+Last updated: 2026-07-07 (Phase 3 COMPLETE: two-device E2E VRC exchange GREEN + askar 0.2→0.6 store-migration verified end-to-end with a legacy-record fixup — `migrateRCardTemplateProofs`)
 
 ---
 
@@ -266,7 +266,7 @@ babel/metro/jest configs, `.env.sample`.
        PersonCredentialLoading (app keyring-theme). Snapshots updated.
   - PHASE 2 GATE PASSED: app jest 14/27 PASS, bifold core jest 134 suites / 1242 PASS,
     Android + iOS build PASS, two-device E2E VRC exchange PASS on Android and iOS.
-- [ ] **Phase 3 — Big hop: bifold 3.0.16 + credo 0.6.3 + React 19 + RN 0.81**
+- [x] **Phase 3 — Big hop: bifold 3.0.16 + credo 0.6.3 + React 19 + RN 0.81**
   - [x] In `bifold/`: branch `upgrade/bifold-3.x` = upstream v3.0.16 content; §5.1 delta ported
         (commit `68d9da80`). Credo 0.6.3 migration done (commit `cdb9289c`): DIDComm APIs under
         `agent.modules.didcomm`, `DidCommModule` carries connections/credentials/proofs/oob/
@@ -382,7 +382,24 @@ babel/metro/jest configs, `.env.sample`.
     - E2E harness gotchas: stale `IOS_APP`/`ANDROID_APK` env vars make Appium
       install OLD builds (RN version-mismatch redbox); `enforceAppInstall: true`
       added for iOS; unset the env vars before runs.
-  - [ ] Askar 0.2→0.6 store migration check on a wallet with real credentials.
+  - [x] Askar 0.2→0.6 store migration check GREEN (2026-07-07): `e2e/run-store-migration.js`
+        installs the baseline apk (credo 0.5.17/askar 0.2.3, built from `upgrade-baseline-p0`
+        worktree as a RELEASE build with debug signing — a debug build would load the NEW
+        JS from metro and crash on the askar native mismatch), populates the old-format
+        store with a real VRC exchange against the new iOS build, then `adb install -r`
+        the new apk over it. Wallet opens with the same PIN, contact + VRC survive.
+    - MIGRATION BUG found+fixed: R-Card template records stored by credo-0.5 builds
+      have NO `proof`; credo 0.6 parses stored credentials as
+      W3cJsonLdVerifiableCredential (proof required), so `record.getTags()` threw and
+      OpenIDCredentialRecordProvider crashed with a render error on first launch after
+      upgrade. `migrateRCardTemplateProofs()` (vrc/services/rCardCredential.ts) adds the
+      same placeholder proof new templates get; runs in `useBCAgentSetup.ts` right after
+      `agent.initialize()`, before any provider reads W3C records.
+    - E2E harness: old release build's QR bottom-sheet ignores appium synthetic taps —
+      invitation delivered via deep link (`adb shell am start -a VIEW -d <url>`), which
+      is also the real-user path. iOS `simctl privacy grant camera` kills the app;
+      terminate + sleep + activate avoids a black-screen race. Runtime permissions
+      granted via `adb shell pm grant` (manual installs skip autoGrantPermissions).
   - [x] Gate: VRC conformance tests green (bifold side done), two-device E2E green.
 - [ ] **Phase 4 — App-layer upstream sync** (port wanted bc-wallet-mobile improvements;
       containers/DI, screens). Gate: full suite + E2E.

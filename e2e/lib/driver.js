@@ -65,6 +65,24 @@ export async function createSession(platform) {
     await driver.activateApp(APP_ID);
     console.log("[e2e] app launched");
   }
+  if (platform === "ios") {
+    // Pre-grant camera so the Scan screen skips the camera-disclosure Modal:
+    // presenting that Modal right as the QR bottom-sheet dismisses intermittently
+    // fails on the iOS simulator, leaving a blank Scan screen.
+    try {
+      const { execSync } = await import("node:child_process");
+      const { APP_ID } = await import("./config.js");
+      execSync(`xcrun simctl privacy booted grant camera ${APP_ID}`);
+      // granting TCC permission kills the app; relaunch it cleanly (immediate
+      // activate can race the teardown and leave a black screen)
+      await driver.terminateApp(APP_ID).catch(() => {});
+      await sleep(3000);
+      await driver.activateApp(APP_ID);
+      await sleep(3000);
+    } catch {
+      /* non-fatal — flow falls back to the disclosure modal */
+    }
+  }
   return driver;
 }
 

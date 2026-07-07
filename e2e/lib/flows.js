@@ -140,27 +140,59 @@ export async function dismissTourIfPresent(driver) {
   }
 }
 
-/** Open the QR bottom sheet from the center tab and show "my QR" for a relationship exchange. */
-export async function showRelationshipInvitation(driver) {
-  await dismissTourIfPresent(driver);
-  // The QR tab's testID is derived from the translated label; try common variants.
+/**
+ * Open the QR exchange bottom sheet. Preferred path: the "Invite Contact"
+ * button on the empty Contacts list (a plain Button — reliable across app
+ * versions; the center QR tab's custom tabBarButton misses synthetic taps on
+ * some builds). Fallback: the QR tab (testID derived from translated label).
+ */
+async function openQrSheet(driver) {
+  if (await existsTestId(driver, "InviteContact", 3000)) {
+    await tapTestId(driver, "InviteContact");
+    return;
+  }
   const qrTabCandidates = ["QRCode", "QR Code", "Connect"];
-  let opened = false;
   for (const key of qrTabCandidates) {
     if (await existsTestId(driver, key, 3000)) {
       await tapTestId(driver, key);
-      opened = true;
-      break;
+      return;
     }
   }
-  if (!opened) {
-    // fallback: accessibility label from TabStack.QRCode translation
-    await byText(driver, "QR Code").click();
-  }
+  // fallback: accessibility label from TabStack.QRCode translation
+  await byText(driver, "QR Code").click();
+}
 
+/** Open the QR bottom sheet from the center tab and show "my QR" for a relationship exchange. */
+export async function showRelationshipInvitation(driver) {
+  await dismissTourIfPresent(driver);
+  // A lingering tour overlay can swallow the first tab tap (older builds attach
+  // tour steps to the tab bar) — retry until the bottom sheet actually shows.
+  let sheetOpen = false;
+  for (let attempt = 0; attempt < 3 && !sheetOpen; attempt++) {
+    await dismissTourIfPresent(driver);
+    await openQrSheet(driver);
+    sheetOpen = await existsTestId(driver, "GenerateRelationshipQRCode", 8000);
+  }
   await tapTestId(driver, "GenerateRelationshipQRCode", 15000);
 
   // QR view renders; the invitation URL is exposed via the __DEV__-only hidden text.
+  // The Scan screen occasionally comes up blank on iOS (camera-disclosure Modal
+  // fails to present when mounted mid animation) — back out and re-enter.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (await existsTestId(driver, "InvitationUrl", 20000)) break;
+    if (await existsTestId(driver, "Continue", 3000)) {
+      await tapTestId(driver, "Continue");
+      continue;
+    }
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: QR view blank — re-entering Scan screen`
+    );
+    if (await existsTestId(driver, "Back", 3000)) {
+      await tapTestId(driver, "Back");
+    }
+    await openQrSheet();
+    await tapTestId(driver, "GenerateRelationshipQRCode", 15000);
+  }
   const el = await waitForTestId(driver, "InvitationUrl", 60000);
   const url =
     driver.e2ePlatform === "android"
@@ -181,12 +213,12 @@ export async function showRelationshipInvitation(driver) {
 /** On the receiving wallet: open scan → paste URL → connect. */
 export async function acceptInvitationViaPaste(driver, invitationUrl) {
   await dismissTourIfPresent(driver);
-  const qrTabCandidates = ["QRCode", "QR Code", "Connect"];
-  for (const key of qrTabCandidates) {
-    if (await existsTestId(driver, key, 3000)) {
-      await tapTestId(driver, key);
-      break;
-    }
+  // A lingering tour overlay can swallow the first tab tap — retry until the
+  // bottom sheet actually shows.
+  let sheetOpen = false;
+  for (let attempt = 0; attempt < 3 && !sheetOpen; attempt++) {
+    await openQrSheet(driver);
+    sheetOpen = await existsTestId(driver, "ScanQRCode", 8000);
   }
   // Bottom sheet → "Scan QR code" → Scan screen (camera) → header "paste URL" button.
   // First visit shows a camera-use disclosure modal; accept it (OS permission dialog
