@@ -28,6 +28,20 @@ mockRNDeviceInfo.getBuildNumber = jest.fn(() => '1')
 
 jest.mock('react-native', () => jest.requireActual('react-native'))
 
+// RNGH's own jest mocks render buttons without children (RawButton discards
+// them), which blanks out labels of gesture-handler touchables under test.
+// Map the touchables to their RN equivalents so children render normally.
+jest.mock('react-native-gesture-handler', () => {
+  const RN = jest.requireActual('react-native')
+  const actual = jest.requireActual('react-native-gesture-handler')
+  return {
+    ...actual,
+    TouchableOpacity: RN.TouchableOpacity,
+    TouchableHighlight: RN.TouchableHighlight,
+    TouchableWithoutFeedback: RN.TouchableWithoutFeedback,
+  }
+})
+
 jest.mock('react-native-safe-area-context', () => mockSafeAreaContext)
 jest.mock('react-native-device-info', () => mockRNDeviceInfo)
 jest.mock('@react-native-community/netinfo', () => mockRNCNetInfo)
