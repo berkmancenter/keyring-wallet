@@ -46,6 +46,8 @@ import {
 } from '../modules/vrc/services/BiometricSignatureVerifier'
 import type { HardwareAttestationEvidence } from '../modules/vrc/types/evidence'
 import WitnessVerifiedBanner from '../modules/vrc/components/WitnessVerifiedBanner'
+import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
+import { resolveContactDisplayInfo } from '../modules/vrc/utils/rcardDisplayUtils'
 
 type CredentialOfferProps = {
   navigation: any
@@ -97,6 +99,9 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
   const [attestationValidation, setAttestationValidation] = useState<SignatureVerificationResult | null>(null)
   const credential = useCredentialById(credentialId)
   const credentialConnectionLabel = useCredentialConnectionLabel(credential)
+  const {
+    openIdState: { w3cCredentialRecords },
+  } = useOpenIDCredentials()
   const [store, dispatch] = useStore()
   const { start } = useTour()
   const screenIsFocused = useIsFocused()
@@ -522,10 +527,13 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
     historyEventsLogger.logAttestationRefused,
   ])
 
-  // Get issuer name for JSON-LD credentials
-  const jsonLdIssuerName =
-    jsonLdCredentialData?.issuer?.name ||
-    (typeof jsonLdCredentialData?.issuer === 'string' ? jsonLdCredentialData.issuer : null)
+  // Get issuer name for JSON-LD credentials. Post-RCard-separation the VRC
+  // issuer is a bare DID, so try the received RCard (auto-accepted alongside
+  // the offer) before falling back to the legacy issuer.name / raw DID.
+  const jsonLdIssuerDid =
+    typeof jsonLdCredentialData?.issuer === 'string' ? jsonLdCredentialData.issuer : jsonLdCredentialData?.issuer?.id
+  const rcardDisplayInfo = jsonLdIssuerDid ? resolveContactDisplayInfo(w3cCredentialRecords, jsonLdIssuerDid) : {}
+  const jsonLdIssuerName = rcardDisplayInfo.name || jsonLdCredentialData?.issuer?.name || jsonLdIssuerDid || null
 
   // Display fields - use custom fields for DTG credentials, overlay fields for AnonCreds
   const displayFields = customDisplayFields.length > 0 ? customDisplayFields : overlay.presentationFields || []

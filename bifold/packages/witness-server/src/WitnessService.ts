@@ -79,7 +79,12 @@ import { LocalityService, LocalityEvidence } from './LocalityService'
 import { LLMService, createLLMService } from './LLMService'
 
 // Import shared modules from @bifold/vrc-contexts and @bifold/vrc-shared
-import { WITNESSED_EXCHANGE_CONTEXT_URL } from '@bifold/vrc-contexts'
+import {
+  WITNESSED_EXCHANGE_CONTEXT_URL,
+  CREDENTIALS_V2_CONTEXT_URL,
+  ED25519_2018_SUITE_CONTEXT_URL,
+  jcsCanonicalize,
+} from '@bifold/vrc-contexts'
 import { demoDocumentLoader } from '@bifold/vrc-shared'
 
 // Import vcLibraries for debugging JSON-LD canonicalization
@@ -1073,8 +1078,10 @@ export class WitnessService {
                 eventName: this.config.eventName || null,
                 eventStartTime: this.config.eventStartTime?.toISOString() || null,
                 eventEndTime: this.config.eventEndTime?.toISOString() || null,
-                capabilities: ['witnessed-vrc-exchange'],
-                version: '1.0',
+                // vc-2.0: this witness verifies VCDM 2.0 VRCs and mirrors the
+                // VRC's data model version when issuing the VWC
+                capabilities: ['witnessed-vrc-exchange', 'vc-2.0'],
+                version: '2.0',
               },
               timestamp: new Date().toISOString(),
             }
@@ -2177,13 +2184,22 @@ export class WitnessService {
       // ========================================
       // Step 5: FRESHNESS CHECK - Verify timestamp is recent
       // ========================================
-      const issuanceDate = new Date(vrcJson.issuanceDate)
+      // VCDM 2.0 VRCs carry validFrom; 1.1 VRCs carry issuanceDate
+      const issuanceDate = new Date(vrcJson.validFrom || vrcJson.issuanceDate)
+      if (Number.isNaN(issuanceDate.getTime())) {
+        return { verified: false, error: 'Credential has no parseable validFrom/issuanceDate' }
+      }
       const now = new Date()
-      const fiveMinutesInMs = 5 * 60 * 1000
+      // Wallets backdate issuance by up to 5 minutes to tolerate clock skew
+      // between devices, so the freshness window must be that allowance plus
+      // a real freshness margin.
+      const CLOCK_SKEW_ALLOWANCE_MS = 5 * 60 * 1000
+      const FRESHNESS_MARGIN_MS = 5 * 60 * 1000
+      const freshnessWindowMs = CLOCK_SKEW_ALLOWANCE_MS + FRESHNESS_MARGIN_MS
       const timeDiff = Math.abs(now.getTime() - issuanceDate.getTime())
 
-      if (timeDiff > fiveMinutesInMs) {
-        return { verified: false, error: 'Credential issuance date is not fresh (>5 minutes old)' }
+      if (timeDiff > freshnessWindowMs) {
+        return { verified: false, error: 'Credential issuance date is not fresh (>10 minutes old)' }
       }
 
       console.log(`[${this.name}]   ✓ Freshness check passed (issued ${Math.round(timeDiff / 1000)}s ago)`)
@@ -2390,8 +2406,10 @@ export class WitnessService {
       throw new Error('No VRC found in presentation')
     }
 
-    // Compute SHA-256 digest of the VRC
-    const vrcCanonical = JSON.stringify(vrcJson, Object.keys(vrcJson).sort())
+    // Compute SHA-256 digest of the VRC over its JCS (RFC 8785) canonical
+    // form, so any implementation can recompute the same digest from the
+    // same JSON data regardless of key order or serializer.
+    const vrcCanonical = jcsCanonicalize(vrcJson)
     const digest = 'sha256:' + createHash('sha256').update(vrcCanonical).digest('hex')
 
     const vrcIssuer = typeof vrcJson.issuer === 'string' ? vrcJson.issuer : vrcJson.issuer?.id || 'unknown'
@@ -2428,6 +2446,36 @@ export class WitnessService {
       witnessContext.localityVerification = localityEvidence
     }
 
+    // Mirror the observed VRC's data model: a VC 2.0 VRC gets a VC 2.0 VWC,
+    // a legacy 1.1 VRC gets a 1.1 VWC — so the holder's wallet can always
+    // validate the pair with the same code path it used for the VRC.
+    const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
+    const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
+    const issuedTimestamp = new Date().toISOString()
+    const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
+
+    if (vrcIsVc20) {
+      // The Ed25519 suite context must be present at build time (the v2 base
+      // context doesn't define the suite terms), or the signed VWC won't match
+      // the offer/request in credo's holder-side equality check.
+      return {
+        '@context': [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+        id: vwcId,
+        type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
+        issuer: {
+          id: this.issuerDid,
+          name: this.name,
+        },
+        validFrom: issuedTimestamp,
+        validUntil: expirationTimestamp,
+        credentialSubject: {
+          id: vrcIssuer,
+          digest: digest,
+          witnessContext,
+        },
+      }
+    }
+
     return {
       '@context': ['https://www.w3.org/2018/credentials/v1', WITNESSED_EXCHANGE_CONTEXT_URL],
       id: vwcId,
@@ -2436,10 +2484,10 @@ export class WitnessService {
         id: this.issuerDid,
         name: this.name,
       },
-      issuanceDate: new Date().toISOString(),
+      issuanceDate: issuedTimestamp,
       // W3C VC v1 expirationDate and validUntil - set to current time + 7 days
-      expirationDate: new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString(),
-      validUntil: new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString(),
+      expirationDate: expirationTimestamp,
+      validUntil: expirationTimestamp,
       credentialSubject: {
         id: vrcIssuer,
         digest: digest,

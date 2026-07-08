@@ -1,6 +1,7 @@
 import { Agent, W3cCredentialRecord } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
+import { resolveContactDisplayInfo } from './rcardDisplayUtils'
 
 /**
  * Extract issuer information from a W3C credential
@@ -104,20 +105,11 @@ export async function getVrcNameForConnection(
 
     const counterpartyRelationshipDid = relationshipRecord.counterpartyRelationshipDid
 
-    // Find the W3C credential issued by the counterparty's relationship DID
-    const matchingCredential = w3cCredentialRecords.find((cred) => {
-      // Only check VRC credentials
-      if (!isVrcCredential(cred)) {
-        return false
-      }
-
-      const issuer = extractIssuerFromCredential(cred)
-      return issuer?.id === counterpartyRelationshipDid
-    })
-
-    if (matchingCredential) {
-      const issuer = extractIssuerFromCredential(matchingCredential)
-      return issuer?.name || null
+    // Resolve display name: received RCard first, then the legacy VRC
+    // issuer.name (pre-RCard-separation exchanges)
+    const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, counterpartyRelationshipDid)
+    if (displayInfo.name) {
+      return displayInfo.name
     }
   } catch (_error) {
     // Silently fail - caller will use fallback name

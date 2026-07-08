@@ -40,3 +40,30 @@ export const RELATIONSHIP_CONTEXT_DOCUMENT = {
     // All information is encoded in the issuer and credentialSubject DIDs
   },
 }
+
+// RelationshipCard (RCard) context — the exchanged contact-card credential
+// defined by the DTG spec (type: ["VerifiableCredential", "RelationshipCard"]).
+//
+// `card` carries a jCard (RFC 7095) — a deeply nested JSON array. It is
+// declared as a JSON literal (`@type: @json`, JSON-LD 1.1) so the exact
+// structure and ordering survive RDF canonicalization; JSON literals are
+// canonicalized with JCS (RFC 8785) by the JSON-LD processor.
+export const RCARD_CONTEXT_URL = 'https://www.firstperson.network/rcard/v1'
+
+export const RCARD_CONTEXT_DOCUMENT = {
+  '@context': {
+    '@version': 1.1,
+    '@protected': true,
+    RelationshipCard: {
+      '@id': 'https://www.firstperson.network/rcard#RelationshipCard',
+      '@context': {
+        '@version': 1.1,
+        '@protected': true,
+        card: {
+          '@id': 'https://www.firstperson.network/rcard#card',
+          '@type': '@json',
+        },
+      },
+    },
+  },
+}

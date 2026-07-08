@@ -15,8 +15,10 @@ export type {
 export {
   DTG_CONTEXT_URL,
   RELATIONSHIP_CONTEXT_URL,
+  RCARD_CONTEXT_URL,
   DTG_CONTEXT_DOCUMENT,
   RELATIONSHIP_CONTEXT_DOCUMENT,
+  RCARD_CONTEXT_DOCUMENT,
 } from './types/relationshipContext'
 export { WITNESSED_EXCHANGE_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_DOCUMENT } from './types/witnessedExchangeContext'
 
@@ -64,7 +66,13 @@ export {
 export { createVrcDocumentLoader } from './createVrcDocumentLoader'
 
 // Export JSON-LD context data (convenience exports for document loading)
-export { DTG_CONTEXT, RELATIONSHIP_CONTEXT, WITNESSED_EXCHANGE_CONTEXT, CUSTOM_CONTEXTS } from './jsonLdDocumentLoader'
+export {
+  DTG_CONTEXT,
+  RELATIONSHIP_CONTEXT,
+  WITNESSED_EXCHANGE_CONTEXT,
+  RCARD_CONTEXT,
+  CUSTOM_CONTEXTS,
+} from './jsonLdDocumentLoader'
 
 // Export logging utilities
 export { createVrcLogger, VrcLogger } from './vrc-logging'
@@ -156,7 +164,16 @@ export {
   extractFormInputFromJCard,
   buildRCardTemplate,
 } from './types/rcard'
-export { migrateRCardTemplateProofs } from './services/rCardCredential'
+export { migrateRCardTemplateProofs, buildRCardCredential } from './services/rCardCredential'
+
+// Export RCard display resolution utilities (received RCard → contact info)
+export {
+  isReceivedRCard,
+  getReceivedRCardForIssuer,
+  extractContactInfoFromRCard,
+  resolveContactDisplayInfo,
+} from './utils/rcardDisplayUtils'
+export type { ContactDisplayInfo } from './utils/rcardDisplayUtils'
 
 // =============================================================================
 // Attestation and Evidence Services

@@ -22,6 +22,7 @@ import {
   hasVrcHardwareAttestation,
   getVrcCredentialJsonForSubject,
 } from '../utils/witnessCredentialUtils'
+import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 
 const ListContacts: React.FC = () => {
@@ -264,12 +265,15 @@ const ListContacts: React.FC = () => {
 
       if (issuerData) {
         const { id, name, email, organization } = issuerData
+        // Contact info source: received RCard first (post-separation exchanges),
+        // then the legacy VRC issuer object fields (pre-separation exchanges).
+        const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, id)
         contactDetails.push({
           issuer: {
             id,
-            name: formatIssuerName(id, name),
-            email,
-            organization,
+            name: formatIssuerName(id, displayInfo.name || name),
+            email: displayInfo.email || email,
+            organization: displayInfo.organization || organization,
           },
           hasWitnessCredentials: hasWitnessCredential(id),
           hasHardwareAttestation: hasHardwareAttestationCredential(id),

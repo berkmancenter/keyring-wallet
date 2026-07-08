@@ -1,4 +1,3 @@
-import { W3cCredentialRecord } from '@credo-ts/core'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
@@ -16,6 +15,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import CommonRemoveModal from '../../../components/modals/CommonRemoveModal'
 import { ModalUsage } from '../../../types/remove'
 import { useDeleteContact } from '../hooks/useDeleteContact'
+import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 
 import IconButton, { ButtonLocation } from '../../../components/buttons/IconButton'
 
@@ -40,38 +40,6 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
   const {
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
-
-  const extractIssuer = (credential: W3cCredentialRecord): { id: string; name?: string; email?: string; organization?: string } | null => {
-    try {
-      const credentialData = credential.encoded
-
-      if (
-        credentialData &&
-        typeof credentialData === 'object' &&
-        !Array.isArray(credentialData) &&
-        'issuer' in credentialData
-      ) {
-        const issuerValue = (credentialData as any).issuer
-
-        if (typeof issuerValue === 'string') {
-          return { id: issuerValue }
-        }
-
-        if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
-          return {
-            id: issuerValue.id,
-            name: issuerValue.name || undefined,
-            email: issuerValue.email || undefined,
-            organization: issuerValue.organization || undefined,
-          }
-        }
-      }
-    } catch (_error) {
-      /* ignore lookup failure */
-    }
-
-    return null
-  }
 
   // Helper function to format issuer name with fallback
   const formatIssuerName = (issuerId: string, issuerName?: string): string => {
@@ -99,20 +67,13 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
           const counterpartyRelationshipDid = record.counterpartyRelationshipDid
           setIssuerDid(counterpartyRelationshipDid)
 
-          // Look up the issuer name from W3C credentials
-          const matchingCredential = w3cCredentialRecords.find((cred) => {
-            const issuer = extractIssuer(cred)
-            return issuer?.id === counterpartyRelationshipDid
-          })
+          // Contact info source: received RCard first, then legacy VRC issuer
+          // object fields (pre-RCard-separation exchanges)
+          const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, counterpartyRelationshipDid)
 
-          if (matchingCredential) {
-            const issuer = extractIssuer(matchingCredential)
-            setIssuerName(formatIssuerName(counterpartyRelationshipDid, issuer?.name))
-            setIssuerEmail(issuer?.email)
-            setIssuerOrganization(issuer?.organization)
-          } else {
-            setIssuerName(formatIssuerName(counterpartyRelationshipDid))
-          }
+          setIssuerName(formatIssuerName(counterpartyRelationshipDid, displayInfo.name))
+          setIssuerEmail(displayInfo.email)
+          setIssuerOrganization(displayInfo.organization)
         }
       } catch (_error) {
       /* ignore lookup failure */

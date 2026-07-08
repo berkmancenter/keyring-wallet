@@ -124,8 +124,9 @@ export {
   CUSTOM_CONTEXTS,
   DTG_CONTEXT_URL,
   RELATIONSHIP_CONTEXT_URL,
+  RCARD_CONTEXT_URL,
 } from './modules/vrc'
-export { DTG_CONTEXT_DOCUMENT, RELATIONSHIP_CONTEXT_DOCUMENT } from './modules/vrc'
+export { DTG_CONTEXT_DOCUMENT, RELATIONSHIP_CONTEXT_DOCUMENT, RCARD_CONTEXT_DOCUMENT } from './modules/vrc'
 export { getIndyLedgers, IndyLedger, readIndyLedgersFromFile, writeIndyLedgersToFile } from './utils/ledger'
 export { statusBarStyleForColor, StatusBarStyles } from './utils/luminance'
 export { migrateToAskar } from './utils/migration'
@@ -191,6 +192,9 @@ export {
   setRelationshipDidOnConnection,
   setupVrcConnectionHandler,
   migrateRCardTemplateProofs,
+  buildRCardCredential,
+  resolveContactDisplayInfo,
+  isReceivedRCard,
   createRelationshipInvitation,
   createVrcDocumentLoader,
   initializeVrcModule,

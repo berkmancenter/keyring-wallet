@@ -2,6 +2,7 @@ import { Witness } from '../../src/Witness'
 import { generateTestDid } from '../helpers/testUtils'
 import { RELATIONSHIP_CONTEXT_URL } from '../../src/relationshipContext'
 import { createHash } from 'crypto'
+import { jcsCanonicalize } from '@bifold/vrc-contexts'
 
 // Mock the BaseAgent to prevent real initialization
 jest.mock('../../src/BaseAgent', () => {
@@ -569,11 +570,35 @@ describe('Witness', () => {
       const firstCall = mockAgent.credentials.offerCredential.mock.calls[0][0]
       const witnessCredential = firstCall.credentialFormats.jsonld.credential
 
-      // Compute expected digest
-      const vrcCanonical = JSON.stringify(vrc, Object.keys(vrc).sort())
+      // Compute expected digest over the JCS (RFC 8785) canonical form
+      const vrcCanonical = jcsCanonicalize(vrc)
       const expectedDigest = 'sha256:' + createHash('sha256').update(vrcCanonical).digest('hex')
 
       expect(witnessCredential.credentialSubject.digest).toBe(expectedDigest)
+    })
+
+    it('digest is stable across key ordering (JCS canonicalization)', async () => {
+      const did = generateTestDid()
+      const subjectDid = generateTestDid()
+      const issued = new Date().toISOString()
+
+      // Same VRC data, different key insertion order (including nested keys)
+      const vrcA = {
+        '@context': ['https://www.w3.org/2018/credentials/v1', RELATIONSHIP_CONTEXT_URL],
+        type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+        issuer: did,
+        issuanceDate: issued,
+        credentialSubject: { id: subjectDid },
+      }
+      const vrcB = {
+        credentialSubject: { id: subjectDid },
+        issuanceDate: issued,
+        issuer: did,
+        type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+        '@context': ['https://www.w3.org/2018/credentials/v1', RELATIONSHIP_CONTEXT_URL],
+      }
+
+      expect(jcsCanonicalize(vrcA)).toBe(jcsCanonicalize(vrcB))
     })
 
     it('should clean up session after issuing credentials', async () => {

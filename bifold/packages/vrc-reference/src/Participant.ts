@@ -8,6 +8,8 @@ import { ui } from 'inquirer'
 import { BaseAgent } from './BaseAgent'
 import { buildCredentialSummaryFromCredential } from './credentialSummary'
 import { Color, greenText, Output, purpleText, redText } from './OutputClass'
+import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
+
 import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from './relationshipContext'
 
 // Session challenge data received from Witness
@@ -506,13 +508,19 @@ export class Participant extends BaseAgent {
    * - type: MUST include "RelationshipCredential"
    * - issuer: The R-DID of the issuer
    * - credentialSubject.id: The R-DID of the subject
+   *
+   * VCDM 2.0 shape (v2 context, validFrom) — the reference implementation
+   * tracks the current spec, which says issuers SHOULD issue 2.0.
    */
   private buildRelationshipCredential(issuerDid: string, subjectDid: string) {
+    // The Ed25519 suite context must be present at build time (the v2 base
+    // context doesn't define the suite terms), or the signed credential won't
+    // match the offer/request in credo's holder-side equality check.
     return {
-      '@context': ['https://www.w3.org/2018/credentials/v1', DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL],
+      '@context': [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
       type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
       issuer: issuerDid,
-      issuanceDate: new Date().toISOString(),
+      validFrom: new Date().toISOString(),
       credentialSubject: {
         id: subjectDid,
       },
@@ -552,7 +560,10 @@ export class Participant extends BaseAgent {
       autoAcceptCredential: DidCommAutoAcceptCredential.Never,
       credentialFormats: {
         jsonld: {
-          credential,
+          // Cast: credo's JsonCredential type still requires the v1.1
+          // issuanceDate; the patched runtime accepts VCDM 2.0 validFrom
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          credential: credential as any,
           options: {
             proofType: 'Ed25519Signature2018',
             proofPurpose: 'assertionMethod',
@@ -771,7 +782,9 @@ export class Participant extends BaseAgent {
     const vrcJson = JsonTransformer.toJSON(signedVrc)
     console.log(greenText(`[${this.name}] ✓ VRC signed`))
 
-    // Step 3: Build the VP wrapper containing the VRC
+    // Step 3: Build the VP wrapper containing the VRC.
+    // The wrapper stays on the v1.1 context: credo's W3cPresentation model is
+    // v1-wired, and the enclosed VC keeps its own (2.0) context regardless.
     const vpUnsignedJson = {
       '@context': ['https://www.w3.org/2018/credentials/v1'],
       type: ['VerifiablePresentation'],

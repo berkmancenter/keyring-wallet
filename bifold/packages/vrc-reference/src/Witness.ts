@@ -4,6 +4,7 @@ import { PeerDidNumAlgo, utils, JsonTransformer, W3cJsonLdVerifiableCredential }
 import { DidCommAutoAcceptCredential, DidCommBasicMessageEventTypes, DidCommBasicMessageStateChangedEvent, DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { ui } from 'inquirer'
 import { createHash } from 'crypto'
+import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL, jcsCanonicalize } from '@bifold/vrc-contexts'
 
 import { BaseAgent } from './BaseAgent'
 import { greenText, Output, purpleText, redText } from './OutputClass'
@@ -273,7 +274,11 @@ export class Witness extends BaseAgent {
       // ========================================
       // Step 4: FRESHNESS CHECK - Verify timestamp is recent
       // ========================================
-      const issuanceDate = new Date(vrcJson.issuanceDate)
+      // VCDM 2.0 VRCs carry validFrom; 1.1 VRCs carry issuanceDate
+      const issuanceDate = new Date(vrcJson.validFrom || vrcJson.issuanceDate)
+      if (Number.isNaN(issuanceDate.getTime())) {
+        return { verified: false, error: 'Credential has no parseable validFrom/issuanceDate' }
+      }
       const now = new Date()
       const fiveMinutesInMs = 5 * 60 * 1000
       const timeDiff = Math.abs(now.getTime() - issuanceDate.getTime())
@@ -337,7 +342,10 @@ export class Witness extends BaseAgent {
         autoAcceptCredential: DidCommAutoAcceptCredential.Always,
         credentialFormats: {
           jsonld: {
-            credential: witnessCredential,
+            // Cast: credo's JsonCredential type still requires the v1.1
+            // issuanceDate; the patched runtime accepts VCDM 2.0 validFrom
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            credential: witnessCredential as any,
             options: {
               proofType: 'Ed25519Signature2018',
               proofPurpose: 'assertionMethod',
@@ -381,8 +389,10 @@ export class Witness extends BaseAgent {
       throw new Error('No VRC found in presentation')
     }
 
-    // Compute SHA-256 digest of the VRC for cryptographic binding
-    const vrcCanonical = JSON.stringify(vrcJson, Object.keys(vrcJson).sort())
+    // Compute SHA-256 digest of the VRC for cryptographic binding.
+    // JCS (RFC 8785) canonicalization makes the digest reproducible from the
+    // same JSON data regardless of key order or serializer.
+    const vrcCanonical = jcsCanonicalize(vrcJson)
     const digest = 'sha256:' + createHash('sha256').update(vrcCanonical).digest('hex')
 
     // Extract VRC issuer (who created the VRC - this is the R-DID of the credential issuer)
@@ -397,15 +407,17 @@ export class Witness extends BaseAgent {
 
     // Build the VWC according to the DTG spec structure
     // The credentialSubject.id MUST match the Subject of the witnessed VRC (i.e., the VRC issuer's R-DID)
+    // VCDM 2.0 shape (v2 context, validFrom) — reference tracks the current spec
     return {
       '@context': [
-        'https://www.w3.org/2018/credentials/v1', // W3C VC Data Model v1 (Credo compatible)
+        CREDENTIALS_V2_CONTEXT_URL, // W3C VC Data Model 2.0 (locally resolved)
         WITNESSED_EXCHANGE_CONTEXT_URL, // DTG witnessed-exchange context (locally resolved)
+        ED25519_2018_SUITE_CONTEXT_URL, // suite terms (the v2 base context doesn't define them)
       ],
       id: vwcId,
       type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
       issuer: this.issuerDid,
-      issuanceDate: new Date().toISOString(),
+      validFrom: new Date().toISOString(),
       credentialSubject: {
         // Per spec: id MUST match the Subject of the witnessed VRC
         // The VRC issuer's R-DID represents the subject of the witness attestation

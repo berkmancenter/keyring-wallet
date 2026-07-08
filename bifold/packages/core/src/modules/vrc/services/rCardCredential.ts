@@ -1,7 +1,71 @@
 import { Agent, JsonTransformer, W3cCredential, W3cCredentialRecord, W3cCredentialRepository } from '@credo-ts/core'
 
 import { RCardTemplate, JCard } from '../types/rcard'
+import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../types/relationshipContext'
+import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
 import { createVrcLogger } from '../vrc-logging'
+
+/**
+ * Build an exchanged RelationshipCard (RCard) credential from the local
+ * R-Card template, per the DTG spec:
+ *
+ * - `type`: ["VerifiableCredential", "RelationshipCard"]
+ * - `issuer`: my relationship DID (bare string)
+ * - `credentialSubject.id`: the counterparty's relationship DID
+ * - `credentialSubject.card`: the jCard (RFC 7095) from the local template
+ *
+ * The RCard is a separate VDS exchanged alongside the VRC — it carries the
+ * human-readable contact info (name/email/org) that used to be embedded in
+ * the VRC's issuer object.
+ *
+ * @returns the unsigned credential JSON, or undefined when no template exists
+ */
+export const buildRCardCredential = async (
+  agent: Agent,
+  myRelationshipDid: string,
+  counterpartyRelationshipDid: string,
+  options?: { useVc20?: boolean }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any | undefined> => {
+  const template = await loadRCardTemplate(agent)
+  if (!template?.jcard) {
+    return undefined
+  }
+
+  // Backdate issuance to tolerate clock skew between devices (same allowance
+  // as the VRC builder — the holder rejects credentials dated in its future).
+  const CLOCK_SKEW_ALLOWANCE_MS = 5 * 60 * 1000
+  const issuanceTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
+
+  if (options?.useVc20) {
+    // VCDM 2.0 shape — the peer announced RCE protocol v2.
+    // The Ed25519 suite context must be present at build time (the v2 base
+    // context doesn't define the suite terms), or the signed credential won't
+    // match the offer/request in credo's holder-side equality check.
+    return {
+      '@context': [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RCARD_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+      type: ['VerifiableCredential', 'RelationshipCard'],
+      issuer: myRelationshipDid,
+      validFrom: issuanceTimestamp,
+      credentialSubject: {
+        id: counterpartyRelationshipDid,
+        card: template.jcard,
+      },
+    }
+  }
+
+  // Legacy VCDM 1.1 shape for pre-VC-2.0 peers
+  return {
+    '@context': ['https://www.w3.org/2018/credentials/v1', DTG_CONTEXT_URL, RCARD_CONTEXT_URL],
+    type: ['VerifiableCredential', 'RelationshipCard'],
+    issuer: myRelationshipDid,
+    issuanceDate: issuanceTimestamp,
+    credentialSubject: {
+      id: counterpartyRelationshipDid,
+      card: template.jcard,
+    },
+  }
+}
 
 /**
  * Converts RCardTemplate (with jCard) to W3cCredentialRecord for storage in Credo/Askar

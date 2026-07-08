@@ -16,6 +16,7 @@ import { useDeleteContact } from '../hooks/useDeleteContact'
 import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
 import { getWitnessCredentialsForSubject, extractWitnessInfo, getVrcCredentialJsonForSubject, WitnessRecord } from '../utils/witnessCredentialUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
+import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 
 const AVATAR_BG = '#E8E0E8'
 const NAME_COLOR = '#010B13'
@@ -41,6 +42,16 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   const {
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
+
+  // Live-resolve contact info from stored credentials (received RCard first,
+  // legacy VRC issuer object second) so the screen self-heals if the RCard
+  // arrives after navigation. Route params act as the final fallback.
+  const displayInfo = useMemo(() => {
+    return resolveContactDisplayInfo(w3cCredentialRecords, contact.issuer.id)
+  }, [w3cCredentialRecords, contact.issuer.id])
+  const displayName = displayInfo.name || contact.issuer.name
+  const displayEmail = displayInfo.email || contact.issuer.email
+  const displayOrganization = displayInfo.organization || contact.issuer.organization
 
   const witnessCredentials = useMemo(() => {
     return getWitnessCredentialsForSubject(w3cCredentialRecords, contact.issuer.id)
@@ -305,7 +316,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           <View style={styles.avatarCircle}>
             <Icon name="account-outline" size={32} color="#666666" />
           </View>
-          <ThemedText style={styles.contactName}>{contact.issuer.name}</ThemedText>
+          <ThemedText style={styles.contactName}>{displayName}</ThemedText>
           {(witnessRecords.length > 0 || hwVerified) && (
             <View style={styles.badgesContainer}>
               {hwVerified && (
@@ -328,20 +339,20 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
 
         {/* Detail Fields */}
         <View style={styles.detailsSection}>
-          {contact.issuer.email && (
+          {displayEmail && (
             <View style={styles.fieldGroup}>
               <ThemedText style={styles.fieldLabel}>Email</ThemedText>
               <ThemedText style={styles.fieldValue} selectable={true}>
-                {contact.issuer.email}
+                {displayEmail}
               </ThemedText>
             </View>
           )}
 
-          {contact.issuer.organization && (
+          {displayOrganization && (
             <View style={styles.fieldGroup}>
               <ThemedText style={styles.fieldLabel}>Organisation</ThemedText>
               <ThemedText style={styles.fieldValue} selectable={true}>
-                {contact.issuer.organization}
+                {displayOrganization}
               </ThemedText>
             </View>
           )}

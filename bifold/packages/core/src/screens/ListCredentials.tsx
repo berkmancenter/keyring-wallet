@@ -103,13 +103,15 @@ const ListCredentials: React.FC = () => {
           // - DTGCredential: Relationship credentials (shown in Contacts)
           // - RelationshipCredential: Peer VRC exchanges (shown in Contacts)
           // - RCardTemplate: Self-issued business card (internal use only)
+          // - RelationshipCard: Exchanged contact card (feeds Contacts display)
           if (
             types.some(
               (type: unknown) =>
                 typeof type === 'string' &&
                 (type.includes('DTGCredential') ||
                   type.includes('RelationshipCredential') ||
-                  type.includes('RCardTemplate'))
+                  type.includes('RCardTemplate') ||
+                  type.includes('RelationshipCard'))
             )
           ) {
             return true
@@ -165,7 +167,8 @@ const ListCredentials: React.FC = () => {
                 typeof type === 'string' &&
                 (type.includes('DTGCredential') ||
                   type.includes('RelationshipCredential') ||
-                  type.includes('RCardTemplate'))
+                  type.includes('RCardTemplate') ||
+                  type.includes('RelationshipCard'))
             )
           ) {
             return true
@@ -184,7 +187,8 @@ const ListCredentials: React.FC = () => {
           typeof typeAttribute.value === 'string' &&
           (typeAttribute.value.includes('DTGCredential') ||
             typeAttribute.value.includes('RelationshipCredential') ||
-            typeAttribute.value.includes('RCardTemplate'))
+            typeAttribute.value.includes('RCardTemplate') ||
+            typeAttribute.value.includes('RelationshipCard'))
         ) {
           return true
         }

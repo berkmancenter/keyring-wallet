@@ -26,7 +26,7 @@
     "@bifold/react-hooks": "3.0.16",
     "@credo-ts/anoncreds": "0.6.3",
     "@credo-ts/askar": "0.6.3",
-    "@credo-ts/core": "0.6.3",
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
     "@credo-ts/indy-vdr": "0.6.3",
     "@credo-ts/openid4vc": "0.6.3",
     "@credo-ts/push-notifications": "0.7.1",

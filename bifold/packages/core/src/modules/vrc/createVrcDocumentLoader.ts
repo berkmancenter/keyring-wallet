@@ -12,12 +12,15 @@ import {
   DTG_CONTEXT_DOCUMENT,
   RELATIONSHIP_CONTEXT_URL,
   RELATIONSHIP_CONTEXT_DOCUMENT,
+  RCARD_CONTEXT_URL,
+  RCARD_CONTEXT_DOCUMENT,
 } from './types/relationshipContext'
 import {
   WITNESSED_EXCHANGE_CONTEXT_URL,
   WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
 } from './types/witnessedExchangeContext'
 import { CACHED_SECURITY_CONTEXTS } from './types/cachedSecurityContexts'
+import { CREDENTIALS_V2_CONTEXT_URL, CREDENTIALS_V2_CONTEXT_DOCUMENT } from '@bifold/vrc-contexts'
 
 /**
  * Maps verification method types to their required JSON-LD contexts
@@ -121,8 +124,16 @@ export function createVrcDocumentLoader(agentContext: AgentContext) {
     if (url === RELATIONSHIP_CONTEXT_URL) {
       return { contextUrl: null, documentUrl: url, document: RELATIONSHIP_CONTEXT_DOCUMENT }
     }
+    if (url === RCARD_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: RCARD_CONTEXT_DOCUMENT }
+    }
     if (url === WITNESSED_EXCHANGE_CONTEXT_URL) {
       return { contextUrl: null, documentUrl: url, document: WITNESSED_EXCHANGE_CONTEXT_DOCUMENT }
+    }
+
+    // W3C VCDM 2.0 base context (credo's offline cache only bundles v1.1)
+    if (url === CREDENTIALS_V2_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: CREDENTIALS_V2_CONTEXT_DOCUMENT }
     }
 
     // Handle well-known W3C/DID/security contexts locally to avoid

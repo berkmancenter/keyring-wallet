@@ -20,6 +20,7 @@ import { useProofsByConnectionId } from './proofs'
 import { useConnectionDisplayName } from './connections'
 import { OpenIDCredentialType } from '../modules/openid/types'
 import { credentialDisplayRegistry } from '../modules/vrc/display/displayRegistry'
+import { resolveContactDisplayInfo } from '../modules/vrc/utils/rcardDisplayUtils'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
 import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore } from '../modules/vrc/witnessStatusStore'
 import { useStore } from '../contexts/store'
@@ -648,7 +649,25 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
         if (!isActionableState || !isHolder) {
           return false
         }
-        
+
+        // Hide RelationshipCard (contact card) exchanges — they are auto-accepted
+        // protocol plumbing alongside the VRC, not user-facing chat events.
+        // Detected via the metadata tag set by the auto-accept handler, or via
+        // the bound W3C credential's type once the exchange is Done.
+        if (record.metadata.get('rcardExchange')) {
+          return false
+        }
+        const w3cBinding = record.credentials.find((cred) => cred.credentialRecordType === 'w3c')
+        if (w3cBinding) {
+          const w3cRecord = w3cCredentialRecords.find((cred) => cred.id === w3cBinding.credentialRecordId)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const typeValue = (w3cRecord as any)?.credential?.type
+          const types = Array.isArray(typeValue) ? typeValue : typeValue ? [typeValue] : []
+          if (types.some((t: unknown) => t === 'RelationshipCard')) {
+            return false
+          }
+        }
+
         // All credentials pass through - witness connection credentials get special handling below
         return true
       }
@@ -701,25 +720,21 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
           if (isVrcCredential && resolvedW3cCred?.credential) {
             // VRC credentials navigate to contact details
             const cred = resolvedW3cCred.credential as any
-            const issuer = typeof cred.issuer === 'string' 
-              ? { id: cred.issuer, name: undefined, email: undefined, organization: undefined }
-              : { 
-                  id: cred.issuer?.id, 
-                  name: cred.issuer?.name,
-                  email: cred.issuer?.email,
-                  organization: cred.issuer?.organization,
-                }
-            
-            if (issuer.id) {
+            const issuerId = typeof cred.issuer === 'string' ? cred.issuer : cred.issuer?.id
+
+            if (issuerId) {
+              // Contact info source: received RCard first, then the legacy VRC
+              // issuer object fields (pre-RCard-separation exchanges)
+              const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, issuerId)
               navigation.navigate(Stacks.ContactStack as any, {
                 screen: Screens.ContactDetails,
                 params: {
                   contact: {
                     issuer: {
-                      id: issuer.id,
-                      name: issuer.name || `Unknown ...${issuer.id.slice(-8)}`,
-                      email: issuer.email,
-                      organization: issuer.organization,
+                      id: issuerId,
+                      name: displayInfo.name || `Unknown ...${issuerId.slice(-8)}`,
+                      email: displayInfo.email,
+                      organization: displayInfo.organization,
                     },
                   },
                 },

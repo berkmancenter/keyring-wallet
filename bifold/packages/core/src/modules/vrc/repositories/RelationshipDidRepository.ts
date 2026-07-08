@@ -85,7 +85,8 @@ export class RelationshipDidRepository extends Repository<RelationshipDidRecord>
   async updateCounterpartyRelationshipDid(
     agentContext: AgentContext,
     counterpartyConnectionDid: string,
-    counterpartyRelationshipDid: string
+    counterpartyRelationshipDid: string,
+    counterpartyRceVersion?: number
   ): Promise<RelationshipDidRecord | null> {
     const record = await this.findByConnectionDid(agentContext, counterpartyConnectionDid)
 
@@ -94,6 +95,9 @@ export class RelationshipDidRepository extends Repository<RelationshipDidRecord>
     }
 
     record.counterpartyRelationshipDid = counterpartyRelationshipDid
+    if (counterpartyRceVersion !== undefined) {
+      record.counterpartyRceVersion = counterpartyRceVersion
+    }
     await this.update(agentContext, record)
     return record
   }

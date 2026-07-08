@@ -29,7 +29,7 @@
   "homepage": "https://github.com/berkmancenter/keyring-bifold/",
   "dependencies": {
     "@bifold/vrc-contexts": "workspace:*",
-    "@credo-ts/core": "0.6.3"
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
