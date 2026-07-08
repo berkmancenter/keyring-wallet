@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-07 (Phase 3 COMPLETE: two-device E2E VRC exchange GREEN + askar 0.2→0.6 store-migration verified end-to-end with a legacy-record fixup — `migrateRCardTemplateProofs`)
+Last updated: 2026-07-07 (Phase 4 lite COMPLETE: errors framework + PressableOpacity + hooks ported from bc-wallet-mobile, mediator pickup simplified to PickUpV2LiveMode-only and verified via two-device E2E; all jest suites + E2E green)
 
 ---
 
@@ -401,8 +401,40 @@ babel/metro/jest configs, `.env.sample`.
       terminate + sleep + activate avoids a black-screen race. Runtime permissions
       granted via `adb shell pm grant` (manual installs skip autoGrantPermissions).
   - [x] Gate: VRC conformance tests green (bifold side done), two-device E2E green.
-- [ ] **Phase 4 — App-layer upstream sync** (port wanted bc-wallet-mobile improvements;
-      containers/DI, screens). Gate: full suite + E2E.
+- [x] **Phase 4 (lite) — App-layer upstream sync** (2026-07-07). Analysis first: most
+      upstream churn since the fork is BCSC product work (bcsc-theme/, variants build
+      system, dual-mode store) that Keyring does NOT adopt. Ported the generic pieces:
+  - [x] Error-handling framework (`app/src/errors/`): AppError + ErrorRegistry
+        (registry trimmed to Keyring-relevant codes, ranges kept aligned with upstream
+        so support references stay comparable) + errorHandler utils + ErrorInfoCard/
+        AppErrorModal/ErrorBoundary components + `ErrorAlertProvider`/`useErrorAlert`
+        context. Upstream's Snowplow analytics coupling DROPPED — errors report to
+        Loki via the remote logger instead (`reportProblem()` in utils/logger.ts
+        returns a human-readable reference code, shown+copyable in the modal).
+        App.tsx now uses OUR ErrorBoundaryWrapper (was bifold's) and mounts
+        ErrorAlertProvider inside TourProvider. AppEventCode enum in
+        `app/src/events/appEventCode.ts` (trimmed from upstream's ~200 codes).
+        Ported jest suites: appError/errorRegistry/errorHandler (49 tests).
+  - [x] `PressableOpacity` (`app/src/components/`): Pressable-based TouchableOpacity
+        replacement (New-Arch touch reliability); used by ErrorInfoCard.
+  - [x] Small hooks: `usePreventGestureBack`, `useDeclineCredentialOffer`,
+        `useDeclineProofRequest` (adapted to `useAgent` from @bifold/react-hooks —
+        upstream uses their BCSC agent context), `useAutoRequestPermission`.
+        `useAlerts` NOT ported (hard-wired to BCSC stacks/screens/factory-reset).
+  - [x] Mediator pickup simplified to upstream's approach: unconditional
+        `PickUpV2LiveMode` (WebSocket push) in useBCAgentSetup; REMOVED the legacy
+        batch-pickup double-tap + 5s trust-ping polling loop (utils/mediator.ts
+        deleted, `MEDIATOR_USE_V2_BATCH_PICKUP` env flag retired). Verified against
+        our hosted mediator (credo-mediator.aaleon.com advertises wss) by the
+        two-device E2E — message delivery works on socket push alone.
+  - [x] Test-harness fix (bifold core jestSetup): RNGH's own jest mocks render
+        buttons without children, blanking gesture-handler touchable labels —
+        ChatMessage YES/NO tests failed. jestSetup now maps RNGH touchables to RN
+        equivalents (4 previously-failing tests green).
+  - [x] Gate GREEN (2026-07-07): app jest 16 suites/70 tests PASS; bifold core
+        155 suites/1398 tests PASS; app+bifold typecheck PASS; two-device VRC
+        exchange E2E (Android emulator ↔ iOS simulator) PASS on live-mode-only
+        pickup — full flow inc. bidirectional VRC + contacts.
 - [ ] **Phase 5 — VC 2.0 for VRC** (secondary goal)
   - FIRST verify credo 0.6.3 supports issuing/verifying JSON-LD Data Integrity VCDM 2.0
     (its VCDM 2.0 support is documented for vc+jwt / dc+sd-jwt; LDP 2.0 unverified).

@@ -28,6 +28,15 @@ const translation = {
     "Title2032": "Unable to open app-to-app URL",
     "Message2032": "There was a problem while opening the app-to-app URL.",
     "NoMessage": "No Message",
+    "ReferenceCode": "Reference code",
+    "CopyCode": "Copy",
+    "CodeCopied": "Copied",
+    "ShareCodeWithSupport": "Share this code with support when you contact us.",
+    "Problem": "Something went wrong",
+    "ProblemDescription": "An unexpected error occurred. Please report this error and try again.",
+  },
+  "Global": {
+    "HideDetails": "Hide Details",
   },
   "CameraDisclosure": {
     "AllowCameraUse": "Allow camera use",

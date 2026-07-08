@@ -1,0 +1,118 @@
+import { reportProblem } from '@/utils/logger'
+import { BifoldError, useTheme } from '@bifold/core'
+import React, { useCallback, useMemo } from 'react'
+import { Modal, Pressable, StyleSheet } from 'react-native'
+import { ErrorInfoCard } from './ErrorInfoCard'
+
+export interface ErrorModalAction {
+  text: string
+  onPress: () => void
+  style?: 'default' | 'destructive'
+}
+
+export interface ErrorModalPayload {
+  title: string
+  description: string
+  message: string
+  code: number
+  appEvent: string
+  cause?: unknown
+  stack?: string
+  screen?: string
+  url?: string
+  method?: string
+}
+
+export interface AppErrorModalProps {
+  error: ErrorModalPayload | null
+  errorKey: number
+  onDismiss: () => void
+  action?: ErrorModalAction
+  enableReport?: boolean
+}
+
+/**
+ * Custom error modal replacing Bifold's ErrorModal for full control over
+ * styling and the "Report this problem" behavior.
+ *
+ * Rendered by ErrorAlertProvider and driven by its state — no event
+ * emitters or listeners involved.
+ */
+export const AppErrorModal: React.FC<AppErrorModalProps> = ({
+  error,
+  errorKey,
+  onDismiss,
+  action,
+  enableReport = true,
+}) => {
+  const { ColorPalette } = useTheme()
+
+  /**
+   * Handler for "Report this problem" action in the error modal.
+   * Sends a report to the remote logger (Loki) with error details.
+   *
+   * @returns the reference code the user can share with support, or undefined if there is no error
+   */
+  const handleReport = useCallback((): string | undefined => {
+    if (!error) {
+      return
+    }
+
+    // error.message is AppError.fullMessage — the user-facing details string, which
+    // deliberately omits the screen name and request URL so we don't surface infra
+    // details to the user. Append them here so they still ride along in the report.
+    let reportMessage = error.message
+    if (error.screen) {
+      reportMessage += `\nScreen: ${error.screen}`
+    }
+    if (error.url) {
+      const request = error.method ? `${error.method} ${error.url}` : error.url
+      reportMessage += `\nRequest: ${request}`
+    }
+
+    const reportError = new BifoldError(error.title, error.description, reportMessage, error.code)
+    reportError.cause = error.cause
+    reportError.stack = error.stack
+
+    return reportProblem(reportError)
+  }, [error])
+
+  const overlayStyle = useMemo(
+    () =>
+      StyleSheet.create({
+        overlay: {
+          flex: 1,
+          backgroundColor: ColorPalette.notification.popupOverlay,
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+      }),
+    [ColorPalette]
+  )
+
+  if (!error) {
+    return null
+  }
+
+  return (
+    <Modal visible={Boolean(error)} transparent animationType="fade" onRequestClose={onDismiss}>
+      {/* Allow presses outside of the modal to dismiss it */}
+      <Pressable onPress={onDismiss} style={overlayStyle.overlay} accessible={false} importantForAccessibility="no">
+        {/* Prevent presses inside the modal from propagating to the overlay */}
+        <Pressable onPress={(e) => e.stopPropagation()} accessible={false} importantForAccessibility="no">
+          <ErrorInfoCard
+            key={errorKey}
+            title={error.title}
+            description={error.description}
+            message={error.message}
+            code={error.code}
+            onDismiss={onDismiss}
+            onReport={handleReport}
+            action={action}
+            enableReport={enableReport}
+          />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+}

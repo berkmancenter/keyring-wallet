@@ -21,15 +21,11 @@ import { agentDependencies } from '@credo-ts/react-native'
 import { GetCredentialDefinitionRequest, GetSchemaRequest } from '@hyperledger/indy-vdr-shared'
 import moment from 'moment'
 import { useCallback, useRef, useState } from 'react'
-import { Config } from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 // DISABLED: Push notifications disabled — no server backend yet
 // import { activate } from '@/utils/PushNotificationsHelper'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
 import { BCState, BCLocalStorageKeys } from '@/store'
-import { batchPickup, startPeriodicTrustPing } from '@/utils/mediator'
-
-const PERIODIC_PICKUP_INTERVAL_MS = 5000
 
 const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,20 +36,20 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
   }
 }
 
+// Live mode holds a WebSocket open to the mediator, which pushes messages as
+// they arrive (upstream bc-wallet-mobile approach). This replaced the previous
+// batch-pickup + 5s trust-ping polling loop; our hosted mediator advertises a
+// wss endpoint so the socket-based delivery works without polling.
 const configureMessagePickup = async (agent: Agent): Promise<void> => {
-  if (Config.MEDIATOR_USE_V2_BATCH_PICKUP === 'true') {
-    await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
-      undefined,
-      DidCommMediatorPickupStrategy.PickUpV2LiveMode
-    )
-    batchPickup(agent)
-  }
+  await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
+    undefined,
+    DidCommMediatorPickupStrategy.PickUpV2LiveMode
+  )
 }
 
 const useBCAgentSetup = () => {
   const [agent, setAgent] = useState<Agent | null>(null)
   const agentInstanceRef = useRef<Agent | null>(null)
-  const periodicPickupCleanupRef = useRef<(() => void) | null>(null)
   const [store, dispatch] = useStore<BCState>()
   const [logger, indyLedgers, attestationMonitor, credDefs, schemas] = useServices([
     TOKENS.UTIL_LOGGER,
@@ -196,8 +192,6 @@ const useBCAgentSetup = () => {
         if (restartedAgent) {
           logger.info('Successfully restarted existing agent...')
           await configureMessagePickup(restartedAgent)
-          periodicPickupCleanupRef.current?.()
-          periodicPickupCleanupRef.current = startPeriodicTrustPing(restartedAgent, PERIODIC_PICKUP_INTERVAL_MS)
           refreshAttestationMonitor(restartedAgent)
           agentInstanceRef.current = restartedAgent
           setAgent(restartedAgent)
@@ -224,8 +218,6 @@ const useBCAgentSetup = () => {
 
       logger.info(`configuring message pickup for ${mediatorUrl}`)
       await configureMessagePickup(newAgent)
-      periodicPickupCleanupRef.current?.()
-      periodicPickupCleanupRef.current = startPeriodicTrustPing(newAgent, PERIODIC_PICKUP_INTERVAL_MS)
 
       logger.info('Warming up cache...')
       await warmUpCache(newAgent, cachedLedgers)
@@ -264,8 +256,6 @@ const useBCAgentSetup = () => {
   )
 
   const shutdownAndClearAgentIfExists = useCallback(async () => {
-    periodicPickupCleanupRef.current?.()
-    periodicPickupCleanupRef.current = null
     if (agent) {
       try {
         await agent.shutdown()

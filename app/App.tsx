@@ -3,7 +3,6 @@ import {
   AnimatedComponentsProvider,
   AuthProvider,
   ContainerProvider,
-  ErrorBoundaryWrapper,
   ErrorModal,
   initLanguages,
   initStoredLanguage,
@@ -28,6 +27,8 @@ import { container } from 'tsyringe'
 
 import Root from '@/Root'
 import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/constants'
+import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
+import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
 import { initialState, reducer } from '@/store'
 import { themes } from '@/theme'
@@ -83,7 +84,9 @@ const App = () => {
                       onClose={() => setSurveyVisible(false)}
                     />
                     <TourProvider tours={tours} overlayColor={'black'} overlayOpacity={0.7}>
-                      <Root />
+                      <ErrorAlertProvider enableReport>
+                        <Root />
+                      </ErrorAlertProvider>
                     </TourProvider>
                     <Toast topOffset={15} config={toastConfig} />
                   </NetworkProvider>

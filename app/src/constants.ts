@@ -2,6 +2,10 @@ export const autoDisableRemoteLoggingIntervalInMinutes = 60
 export const surveyMonkeyUrl = 'https://www.surveymonkey.com/r/7BMHJL8'
 export const surveyMonkeyExitUrl = 'https://www.surveymonkey.com/survey-thanks'
 export const hitSlop = { top: 44, bottom: 44, left: 44, right: 44 }
+
+// Reserved AppError status codes (see src/errors/errorRegistry.ts)
+export const UNKNOWN_APP_ERROR_STATUS_CODE = 9999
+export const FATAL_UNRECOVERABLE_ERROR_STATUS_CODE = 9998
 interface AttestationRestrictionEnvironment {
   credDefIDs: readonly string[]
   invitationUrl: string
