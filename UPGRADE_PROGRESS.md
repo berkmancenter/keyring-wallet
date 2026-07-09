@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-08 (Phase 5 COMPLETE: DTG spec alignment + VC 2.0 — RCard separated from VRC, JCS digest, credo VCDM 2.0 patch, issuance flipped to VC 2.0 with RCE v2 negotiation; all gates green incl. two-device E2E and Phase-4-baseline backward-compat E2E; upstream credo issue filed)
+Last updated: 2026-07-09 (Phase 5 COMPLETE: DTG spec alignment + VC 2.0 — RCard separated from VRC, JCS digest, credo VCDM 2.0 patch, issuance flipped to VC 2.0 with RCE v2 negotiation; all gates green incl. two-device E2E and Phase-4-baseline backward-compat E2E. PR #23 Google attestation trust anchors cherry-picked onto the upgrade stack)
 
 ---
 
@@ -511,10 +511,16 @@ babel/metro/jest configs, `.env.sample`.
       before assembleRelease) ↔ NEW iOS build: old wallet receives a legacy 1.1 VRC with
       issuer object, no RCard offered, contact visible on both; then `adb install -r`
       the new apk over the old store → PIN unlock, agent init, contact + VRC survive.
-  - [x] **Task 6 — upstream credo contribution**: issue filed:
-        https://github.com/openwallet-foundation/credo-ts/issues/2864 (VCDM 2.0 in the
-        DIDComm JSON-LD credential format; offers our patch as a PR). When credo accepts,
-        our yarn patch dissolves at the next upgrade.
+  - [x] **Task 6 — upstream credo contribution**: on hold. A write-up of the VCDM 2.0
+        DIDComm JSON-LD gap and our yarn patch exists locally; any upstream issue/PR to
+        credo-ts happens only with explicit owner approval. If credo ever accepts the
+        change, our yarn patch dissolves at the next upgrade.
+  - [x] **Attestation hardening (2026-07-09)**: cherry-picked bifold PR #23
+        (`fix: align Google attestation trust anchors with published roots`, now `88f80fe8`
+        on `upgrade/bifold-3.x`) so real-device Android hardware attestation validates
+        against Google's published roots instead of self-as-anchor. Verified on the new
+        stack: 7/7 attestation JUnit tests, 29/29 BiometricSignatureVerifier TS tests,
+        app `assembleDebug` green. PR #23 superseded/closed.
   - **Deliberately deferred**: custom → official context URL switch (waiting on ToIP WG;
     draft in `dtg-context-v1.draft.jsonld`, git-excluded); DataIntegrityProof/
     eddsa-rdfc-2022 (when spec examples updated); BBS+/ZKP (separate future project);
