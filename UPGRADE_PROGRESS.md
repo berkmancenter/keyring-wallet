@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-07 (Phase 4 lite COMPLETE: errors framework + PressableOpacity + hooks ported from bc-wallet-mobile, mediator pickup simplified to PickUpV2LiveMode-only and verified via two-device E2E; all jest suites + E2E green)
+Last updated: 2026-07-08 (Phase 5 COMPLETE: DTG spec alignment + VC 2.0 — RCard separated from VRC, JCS digest, credo VCDM 2.0 patch, issuance flipped to VC 2.0 with RCE v2 negotiation; all gates green incl. two-device E2E and Phase-4-baseline backward-compat E2E; upstream credo issue filed)
 
 ---
 
@@ -435,11 +435,90 @@ babel/metro/jest configs, `.env.sample`.
         155 suites/1398 tests PASS; app+bifold typecheck PASS; two-device VRC
         exchange E2E (Android emulator ↔ iOS simulator) PASS on live-mode-only
         pickup — full flow inc. bidirectional VRC + contacts.
-- [ ] **Phase 5 — VC 2.0 for VRC** (secondary goal)
-  - FIRST verify credo 0.6.3 supports issuing/verifying JSON-LD Data Integrity VCDM 2.0
-    (its VCDM 2.0 support is documented for vc+jwt / dc+sd-jwt; LDP 2.0 unverified).
-  - contexts v2 in `vrc-contexts`, documentLoader in `vrc-shared`, witness-server verification,
-    conformance tests, RCE protocol version bump. No data migration (user decision).
+- [x] **Phase 5 — DTG spec alignment + VC 2.0 for VRC** — COMPLETE 2026-07-08.
+      Credo 0.6.3 verified (source-read): JSON-LD Data Integrity signing is **VCDM 1.1-only**.
+      The DIDComm jsonld format parses into `W3cCredential`, whose validators require
+      (a) first `@context` = the v1.1 URL and (b) a mandatory `issuanceDate`. The
+      `W3cV2CredentialService` (VCDM 2.0) only does vc+jwt / vc+sd-jwt (OpenID4VC stack,
+      not wired to DIDComm). DIDComm itself and Ed25519Signature2018 are version-agnostic.
+  - [x] **Task 1 — RCard/VRC separation**: VRC `issuer` is now a bare DID string for v2
+        peers (PII out of the pseudonymous edge credential). RCard is an exchanged VDS
+        (`type: ["VerifiableCredential","RelationshipCard"]`, subject = counterparty DID,
+        `credentialSubject.card` = jCard) built from the local template
+        (`services/rCardCredential.ts buildRCardCredential`) and offered right after the
+        VRC (`issueRCardCredential` in vrc-manager, best-effort/non-blocking, deduped per
+        connection). Receiver AUTO-ACCEPTS RelationshipCard offers (tagged
+        `rcardExchange` metadata); RCard exchanges are filtered from chat bubbles,
+        notifications, wallet list, and VRC-flow overlay state. Contact display resolves
+        via `utils/rcardDisplayUtils.ts resolveContactDisplayInfo`: newest received RCard
+        first, fallback to legacy VRC issuer objects (sorted most-recent-first). New
+        RCard JSON-LD context in vrc-contexts (`https://www.firstperson.network/rcard/v1`)
+        with `@type: @json` for the jCard (JCS-canonicalized as a JSON literal, structure
+        survives RDF canonicalization).
+  - [x] **Task 2 — VWC digest via JCS (RFC 8785)**: pure-TS `jcsCanonicalize` in
+        `@bifold/vrc-contexts/src/jcs.ts` (recursive UTF-16 key sort, ECMAScript number
+        serialization, undefined handling); witness-server + vrc-reference Witness now
+        hash `jcsCanonicalize(vrcJson)` (was top-level-only key sort). Encoding stays
+        `sha256:<hex>`. Wallet doesn't verify digests today; the helper is exported for
+        when it does.
+  - [x] **Task 3 — VC 2.0 verification (credo patch)**: yarn patch
+        `.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch` applied in BOTH trees
+        via the `resolutions` entry itself (GOTCHA: a second broader `"@credo-ts/core":
+        "0.6.3"` resolution silently wins over a `@credo-ts/core@npm:0.6.3: patch:...`
+        entry — put the `patch:` ref directly on the main resolution). Patch: (a)
+        `IsCredentialJsonLdContext` also accepts `https://www.w3.org/ns/credentials/v2`
+        first; (b) `W3cCredential.issuanceDate` optional. VCDM 2.0 context document
+        bundled (`vrc-contexts/src/credentialsV2Context.ts`) + served by all three
+        document loaders. `cachedStandardContexts.ts` pins credo's DEFAULT_CONTEXTS
+        (security/ed25519 suites etc.) into the vrc-shared loader so Node-side
+        sign/verify never fetches from w3.org. Conformance: `vc20Validation.test.ts`
+        (model-level) + `vrc-reference vc20Conformance.test.ts` (full sign/verify
+        round-trip on a bare credo agent, v2 and v1.1).
+  - [x] **Task 4 — VC 2.0 issuance flip + RCE v2 negotiation**: handshake message now
+        carries `vrc:rceVersion:2` (old parsers ignore the suffix); peer's version stored
+        on `RelationshipDidRecord.counterpartyRceVersion` (absent = 1). For v2 peers:
+        VRC/RCard/VWC are VCDM 2.0 (v2 context first, `validFrom`/`validUntil`, no
+        issuanceDate). Witness-server mirrors the observed VRC's data model for the VWC
+        and its freshness check reads `validFrom || issuanceDate` (window widened to
+        10 min = 5 min clock-skew backdate + 5 min margin); announcement now
+        `version: '2.0'`, capability `vc-2.0`.
+        **KEY LEARNING (cost a failed E2E)**: the v2 base context does NOT define the
+        Ed25519Signature2018 proof terms (v1.1 did), so jsonld-signatures APPENDS
+        `https://w3id.org/security/suites/ed25519-2018/v1` to `@context` during signing —
+        the signed credential then fails credo's holder-side deep-equality check against
+        the offer ("Received credential does not match credential request"). Fix: include
+        `ED25519_2018_SUITE_CONTEXT_URL` in `@context` at BUILD time in every v2 builder
+        (vrc-manager, rCardCredential, WitnessService, vrc-reference Participant/Witness).
+  - [x] **Backward compat with pre-Phase-5 peers (v1 path)** — found+fixed by the
+        backward-compat E2E: a v1 peer (no rceVersion announced) must get the FULL legacy
+        exchange, not just a 1.1-shaped VRC. Two fixes in vrc-manager:
+        (a) legacy VRCs embed the old issuer OBJECT `{id, name, email?, organization?}`
+        from the R-Card template (`buildLegacyIssuerObject`) — old apps read the contact
+        name from it; (b) RCard issuance is SKIPPED for v1 peers — they can't resolve the
+        RCard context (verification fails) and the unexpected offer surfaces as a second
+        actionable chat bubble that broke the old app's accept flow.
+  - [x] **Gates (all green 2026-07-08)**:
+    - bifold core jest 159 suites / 1434 passed (2 skipped); vrc-reference +
+      witness-server suites green; app jest/typecheck/lint green; core tsc + eslint clean
+      (witness-server has PRE-EXISTING `Timeout` tsc errors from baseline — not a regression).
+    - Two-device E2E VRC exchange (new↔new, Android emulator ↔ iOS simulator) PASS:
+      RCE v2 negotiated both ways, VC 2.0 VRCs verified, RCards auto-accepted, contact
+      names from RCards visible both sides.
+    - Backward-compat E2E PASS: Phase-4 baseline RELEASE apk (commit `dc944fd`, worktree
+      `/tmp/kw-p4-baseline` — build needs `yarn workspace @bifold/<pkg> build` for
+      app-consumed packages, skip witness-server which fails its build on baseline, plus
+      `./gradlew :bifold_react-native-attestation:generateCodegenArtifactsFromSchema`
+      before assembleRelease) ↔ NEW iOS build: old wallet receives a legacy 1.1 VRC with
+      issuer object, no RCard offered, contact visible on both; then `adb install -r`
+      the new apk over the old store → PIN unlock, agent init, contact + VRC survive.
+  - [x] **Task 6 — upstream credo contribution**: issue filed:
+        https://github.com/openwallet-foundation/credo-ts/issues/2864 (VCDM 2.0 in the
+        DIDComm JSON-LD credential format; offers our patch as a PR). When credo accepts,
+        our yarn patch dissolves at the next upgrade.
+  - **Deliberately deferred**: custom → official context URL switch (waiting on ToIP WG;
+    draft in `dtg-context-v1.draft.jsonld`, git-excluded); DataIntegrityProof/
+    eddsa-rdfc-2022 (when spec examples updated); BBS+/ZKP (separate future project);
+    wallet-side VWC digest verification (jcsCanonicalize exported and ready).
 
 ## 7. Baseline test results (Phase 0 gate — all green, recorded 2026-07-04)
 
