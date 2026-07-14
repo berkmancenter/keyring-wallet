@@ -39,6 +39,71 @@ import { witnessStatusStore, vrcFlowStore, type VrcFlowErrorType } from './witne
 const WITNESS_BACKGROUND_TIMEOUT_MS = 15000 // 15 seconds — if no session-challenge arrives, counterparty is not on the witness
 
 /**
+ * Replace bulky PEM / binary blobs so a full credential (incl. LD proof) fits
+ * in a single ReactNativeJS log line. Structure is preserved for debugging.
+ */
+function slimCredentialForLog(credential: unknown): unknown {
+  if (credential == null || typeof credential !== 'object') return credential
+  const walk = (value: any): any => {
+    if (Array.isArray(value)) return value.map(walk)
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(value)) {
+        if (k === 'certificateChain' && Array.isArray(v)) {
+          out[k] = v.map((c, i) =>
+            typeof c === 'string' ? `<PEM #${i + 1}: ${c.length} chars>` : walk(c)
+          )
+        } else if (
+          typeof v === 'string' &&
+          (v.includes('-----BEGIN CERTIFICATE-----') || v.length > 500)
+        ) {
+          out[k] = `<omitted ${v.length} chars>`
+        } else {
+          out[k] = walk(v)
+        }
+      }
+      return out
+    }
+    return value
+  }
+  return walk(credential)
+}
+
+async function logIssuedCredentialSnapshot(
+  agent: Agent,
+  record: { id: string; role: string; credentials?: Array<{ credentialRecordType: string; credentialRecordId: string }> },
+  side: 'INVITER' | 'RECEIVER'
+) {
+  try {
+    const w3cCredRef = record.credentials?.find((c) => c.credentialRecordType === 'w3c')
+    if (!w3cCredRef) return
+    const w3cRecords = await agent.w3cCredentials.getAll()
+    const w3cRecord = w3cRecords.find((r) => r.id === w3cCredRef.credentialRecordId)
+    if (!w3cRecord) return
+    const encoded = w3cRecord.encoded as any
+    const first = w3cRecord.firstCredential as any
+    const raw =
+      encoded && typeof encoded.toJSON === 'function'
+        ? encoded.toJSON()
+        : encoded && typeof encoded === 'object'
+          ? encoded
+          : first && typeof first.toJSON === 'function'
+            ? first.toJSON()
+            : first
+    if (!raw || typeof raw !== 'object') return
+    const slim = slimCredentialForLog(raw)
+    // Single-line marker so e2e/logcat can reassemble without Android's ~4KB
+    // truncation of multi-line pretty-prints of PEM-heavy credentials.
+    // eslint-disable-next-line no-console
+    console.log(
+      `[VRC:IssuedCredentialJSON] side=${side} exchange=${record.id} record=${w3cCredRef.credentialRecordId} ${JSON.stringify(slim)}`
+    )
+  } catch {
+    /* best-effort diagnostic dump */
+  }
+}
+
+/**
  * RCE (Relationship Credential Exchange) protocol version this app speaks.
  *
  * - v1: VCDM 1.1 credentials (issuanceDate/expirationDate, v1 context)
@@ -495,6 +560,10 @@ async function issueVrcCredential(
         jsonld: {
           credential,
           options: {
+            // INTENTIONAL: Ed25519Signature2018 until Data Integrity over DIDComm
+            // is designed (deferred — see docs/CRYPTO_SUITE_FOLLOWUP.md).
+            // Do NOT switch to Ed25519Signature2020; target later is
+            // DataIntegrityProof + cryptosuite eddsa-rdfc-2022.
             proofType: 'Ed25519Signature2018',
             proofPurpose: 'assertionMethod',
           },
@@ -591,6 +660,10 @@ async function issueRCardCredential(
         jsonld: {
           credential,
           options: {
+            // INTENTIONAL: Ed25519Signature2018 until Data Integrity over DIDComm
+            // is designed (deferred — see docs/CRYPTO_SUITE_FOLLOWUP.md).
+            // Do NOT switch to Ed25519Signature2020; target later is
+            // DataIntegrityProof + cryptosuite eddsa-rdfc-2022.
             proofType: 'Ed25519Signature2018',
             proofPurpose: 'assertionMethod',
           },
@@ -1943,8 +2016,9 @@ export function setupVrcConnectionHandler(agent: Agent) {
         credLogger.info(`Credential request sent for exchange ${record.id}`)
       } else if (record.state === DidCommCredentialState.CredentialReceived && record.role === DidCommCredentialRole.Holder) {
         credLogger.info(`Credential received for exchange ${record.id}`)
-      } else if (record.state === DidCommCredentialState.Done && record.role === DidCommCredentialRole.Holder) {
+      } else if (record.state === DidCommCredentialState.Done) {
         credLogger.info(`✓ Credential exchange completed successfully for exchange ${record.id}`)
+        await logIssuedCredentialSnapshot(agent, record as any, side)
       }
     } catch (_error) {
       // Silently ignore - this is just logging

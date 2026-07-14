@@ -485,9 +485,13 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
         accessible={true}
         accessibilityLabel={accessibilityLabel}
         accessibilityRole={toggle ? 'switch' : 'button'}
+        accessibilityState={toggle ? { checked: toggle.value } : undefined}
         testID={testID}
         style={styles.sectionRow}
-        onPress={toggle ? undefined : onPress}
+        // Toggle rows: the row itself triggers the switch. The parent is an
+        // accessibility group (accessible=true), which hides the inner
+        // GradientToggle from screen readers and UI automation on iOS.
+        onPress={toggle ? () => toggle.onValueChange(!toggle.value) : onPress}
         activeOpacity={toggle ? 1 : 0.2}
       >
         <View style={{ flexShrink: 1, flex: 1, marginRight: 14 }}>
