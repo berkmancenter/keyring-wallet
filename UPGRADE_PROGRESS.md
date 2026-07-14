@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-09 (Phase 5 COMPLETE: DTG spec alignment + VC 2.0 — RCard separated from VRC, JCS digest, credo VCDM 2.0 patch, issuance flipped to VC 2.0 with RCE v2 negotiation; all gates green incl. two-device E2E and Phase-4-baseline backward-compat E2E. PR #23 Google attestation trust anchors cherry-picked onto the upgrade stack)
+Last updated: 2026-07-13 (real-device attestation E2E green; HARDWARE_ATTESTATION_FLOW rewritten for native verify; DataIntegrityProof cryptosuite explicitly deferred — see docs/CRYPTO_SUITE_FOLLOWUP.md)
 
 ---
 
@@ -45,7 +45,7 @@ openwallet-foundation/credo-ts#2704 still open as of 2026-06).
 | askar               | `@hyperledger/aries-askar-react-native` 0.2.3 | renamed `@openwallet-foundation/askar-*` 0.6.0                                                           |
 | anoncreds RN        | 0.2.4                                         | check upstream bifold 3.0.16 resolutions                                                                 |
 | indy-vdr RN         | 0.2.2 (patched)                               | 0.2.4 (upstream carries its own patch)                                                                   |
-| VRC signature suite | Ed25519Signature2018 (VCDM 1.1)               | Phase 5: DataIntegrityProof / eddsa-rdfc-2022 (VCDM 2.0) — verify credo JSON-LD VCDM 2.0 support first   |
+| VRC signature suite | **Ed25519Signature2018** on VCDM 2.0 payloads (intentional) | **Deferred:** DataIntegrityProof / `eddsa-rdfc-2022` — see `docs/CRYPTO_SUITE_FOLLOWUP.md` |
 
 Upstream bifold 3.0.16 root resolutions worth copying: react 19.1.0, react-native 0.81.5,
 react-native-vision-camera 4.7.3, expo ~54 (they added expo modules!), plus their patch set
@@ -522,9 +522,14 @@ babel/metro/jest configs, `.env.sample`.
         stack: 7/7 attestation JUnit tests, 29/29 BiometricSignatureVerifier TS tests,
         app `assembleDebug` green. PR #23 superseded/closed.
   - **Deliberately deferred**: custom → official context URL switch (waiting on ToIP WG;
-    draft in `dtg-context-v1.draft.jsonld`, git-excluded); DataIntegrityProof/
-    eddsa-rdfc-2022 (when spec examples updated); BBS+/ZKP (separate future project);
-    wallet-side VWC digest verification (jcsCanonicalize exported and ready).
+    draft in `dtg-context-v1.draft.jsonld`, git-excluded); **DataIntegrityProof /
+    eddsa-rdfc-2022** (separate profound follow-up — parking lot:
+    `docs/CRYPTO_SUITE_FOLLOWUP.md`; keep issuing Ed25519Signature2018 until then);
+    BBS+/ZKP (separate future project); wallet-side VWC digest verification
+    (jcsCanonicalize exported and ready).
+  - [x] **Real-device hardware attestation E2E (2026-07-13)**: `yarn e2e:vrc:devices`
+        green — Secure Exchange both directions; native verify; Google multi-root
+        anchors. Docs: `docs/HARDWARE_ATTESTATION_FLOW.md` rewritten to match.
 
 ## 7. Baseline test results (Phase 0 gate — all green, recorded 2026-07-04)
 

@@ -1,0 +1,57 @@
+diff --git a/ReactCommon/react/renderer/components/textinput/BaseTextInputShadowNode.h b/ReactCommon/react/renderer/components/textinput/BaseTextInputShadowNode.h
+index 8c8a225eaa98ac3efe5f3194d53560c68c21a052..c553c1ab47244b4f13c5603546549f1e13d46160 100644
+--- a/ReactCommon/react/renderer/components/textinput/BaseTextInputShadowNode.h
++++ b/ReactCommon/react/renderer/components/textinput/BaseTextInputShadowNode.h
+@@ -25,6 +25,22 @@
+ 
+ namespace facebook::react {
+ 
++// KEYRING PATCH (react-native#55719, merged upstream as 5229e507e1a1):
++// building the fragment with a full ShadowView retains the node's `state`,
++// chaining every TextInputState revision to the previous one. The chain is
++// destroyed recursively on the Hermes GC thread ("hades"), whose small stack
++// overflows after enough keystrokes -> SIGBUS/EXC_BAD_ACCESS crash observed
++// on real iPhones during the VRC E2E flow.
++inline ShadowView textInputShadowViewFromShadowNode(
++    const ShadowNode& shadowNode) {
++  auto shadowView = ShadowView{shadowNode};
++  // Clearing `props` and `state` (which we don't use) allows avoiding retain
++  // cycles.
++  shadowView.props = nullptr;
++  shadowView.state = nullptr;
++  return shadowView;
++}
++
+ /*
+  * Base `ShadowNode` for <TextInput> component.
+  */
+@@ -186,7 +202,7 @@ class BaseTextInputShadowNode : public ConcreteViewShadowNode<
+     attributedString.appendFragment(AttributedString::Fragment{
+         .string = props.text,
+         .textAttributes = textAttributes,
+-        .parentShadowView = ShadowView(*this)});
++        .parentShadowView = textInputShadowViewFromShadowNode(*this)});
+ 
+     auto attachments = BaseTextShadowNode::Attachments{};
+     BaseTextShadowNode::buildAttributedString(
+diff --git a/ReactCommon/react/renderer/components/textinput/platform/android/react/renderer/components/androidtextinput/AndroidTextInputShadowNode.cpp b/ReactCommon/react/renderer/components/textinput/platform/android/react/renderer/components/androidtextinput/AndroidTextInputShadowNode.cpp
+index e9a546e0154f84a73278ae6c3c3bb2e26d640efa..0e9309fd84a6bc1c3d5d41aedc8482b1f2f45ecb 100644
+--- a/ReactCommon/react/renderer/components/textinput/platform/android/react/renderer/components/androidtextinput/AndroidTextInputShadowNode.cpp
++++ b/ReactCommon/react/renderer/components/textinput/platform/android/react/renderer/components/androidtextinput/AndroidTextInputShadowNode.cpp
+@@ -187,7 +187,15 @@ AttributedString AndroidTextInputShadowNode::getAttributedString(
+     // text value's background will stack. This is a hack/workaround to prevent
+     // that effect.
+     fragment.textAttributes.backgroundColor = clearColor();
+-    fragment.parentShadowView = ShadowView(*this);
++    // KEYRING PATCH (react-native#55719): same TextInputState retain-chain
++    // leak as BaseTextInputShadowNode — clear props/state on the ShadowView
++    // to avoid chaining every state revision to the previous one.
++    {
++      auto parentShadowView = ShadowView(*this);
++      parentShadowView.props = nullptr;
++      parentShadowView.state = nullptr;
++      fragment.parentShadowView = std::move(parentShadowView);
++    }
+     attributedString.prependFragment(std::move(fragment));
+   }
+ 

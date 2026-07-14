@@ -1,4 +1,5 @@
 import {
+  acceptSystemAlertIfPresent,
   byTestId,
   byText,
   byTextContains,
@@ -107,7 +108,10 @@ export async function completeOnboarding(driver, { firstName, lastName }) {
       }
     }
     if (!tapped) {
-      await sleep(2000); // unknown/transitional screen — wait and re-dispatch
+      // real devices: an OS permission dialog (notifications, local network…)
+      // may be blocking the screen underneath
+      const hadAlert = await acceptSystemAlertIfPresent(driver);
+      if (!hadAlert) await sleep(2000); // unknown/transitional screen — wait and re-dispatch
     }
   }
   throw new Error(
@@ -137,7 +141,83 @@ export async function dismissTourIfPresent(driver) {
   if (await existsTestId(driver, "Close", 5000)) {
     await tapTestId(driver, "Close");
     console.log(`[e2e] ${driver.e2ePlatform}: tour popup dismissed`);
+    // Let the tour modal's dismissal animation fully release the presentation
+    // slot: on real iPhones, presenting another RN Modal (the QR sheet) while
+    // the dismissal is in flight fails SILENTLY and leaves the app in a stuck
+    // state (visible=true but no window) that only an app restart clears.
+    await sleep(2500);
   }
+}
+
+/**
+ * Terminate + relaunch the app, then unlock and clear the tour. Recovery for
+ * the stuck-RN-Modal state above (restart remounts everything with modal
+ * state reset). Wallet data persists — only the session is lost.
+ */
+export async function restartApp(driver) {
+  const { APP_ID } = await import("./config.js");
+  console.log(
+    `[e2e] ${driver.e2ePlatform}: restarting app (stuck modal recovery)`
+  );
+  await driver.terminateApp(APP_ID).catch(() => {});
+  await sleep(2000);
+  await driver.activateApp(APP_ID);
+  await sleep(5000);
+  await unlockIfLocked(driver);
+  await dismissTourIfPresent(driver);
+}
+
+/**
+ * Enable the "Hardware Attestation" preference (OFF by default on fresh
+ * installs). Settings tab → Secure Exchanges toggle → confirm PIN on the
+ * dedicated screen. Without this, VRC issuance skips biometric/hardware
+ * evidence and the Secure Exchange banner can never appear.
+ *
+ * On iOS the Settings row uses accessible=true which sometimes hides the
+ * inner switch from automation; prefer the explicit `-toggle` testID when
+ * present, then fall back to the row itself.
+ */
+export async function enableHardwareAttestation(driver) {
+  await dismissTourIfPresent(driver); // tour popup shows right after onboarding
+  await tapTestId(driver, "Settings", 15000);
+
+  // Open the ToggleHardwareAttestation screen (PIN-gated preference change).
+  if (await existsTestId(driver, "HardwareAttestation-toggle", 5000)) {
+    await tapTestId(driver, "HardwareAttestation-toggle");
+  } else {
+    await tapTestId(driver, "HardwareAttestation", 15000);
+  }
+
+  // Screen with the in-page ToggleButton (testID ToggleHardwareAttestation).
+  // If we're already past it somehow, skip straight to the PIN field.
+  if (await existsTestId(driver, "ToggleHardwareAttestation", 15000)) {
+    await tapTestId(driver, "ToggleHardwareAttestation");
+  }
+
+  const pinInput = await waitForTestId(
+    driver,
+    "HardwareAttestationChangedEnterPIN",
+    20000
+  );
+  await pinInput.click();
+  await pinInput.setValue(PIN);
+  await hideKeyboard(driver);
+  await tapTestId(driver, "Continue", 15000);
+  await sleep(2000);
+  console.log(`[e2e] ${driver.e2ePlatform}: hardware attestation enabled`);
+  // back to the Contacts tab for the rest of the flow
+  if (await existsTestId(driver, "Back", 3000)) {
+    await tapTestId(driver, "Back");
+  }
+  await tapTestId(driver, "Contacts", 15000);
+}
+
+/** The QR exchange bottom sheet is open if any of its content is visible. */
+async function qrSheetIsOpen(driver, timeout = 4000) {
+  for (const key of ["ScanQRCode", "QRCodeExchangeTitle"]) {
+    if (await existsTestId(driver, key, timeout)) return true;
+  }
+  return false;
 }
 
 /**
@@ -145,8 +225,12 @@ export async function dismissTourIfPresent(driver) {
  * button on the empty Contacts list (a plain Button — reliable across app
  * versions; the center QR tab's custom tabBarButton misses synthetic taps on
  * some builds). Fallback: the QR tab (testID derived from translated label).
+ *
+ * IMPORTANT: never tap the opener while the sheet is already up — the tap
+ * lands on the sheet's dark overlay and CLOSES it (open/close toggle loop).
  */
 async function openQrSheet(driver) {
+  if (await qrSheetIsOpen(driver, 1500)) return;
   if (await existsTestId(driver, "InviteContact", 3000)) {
     await tapTestId(driver, "InviteContact");
     return;
@@ -168,7 +252,13 @@ export async function showRelationshipInvitation(driver) {
   // A lingering tour overlay can swallow the first tab tap (older builds attach
   // tour steps to the tab bar) — retry until the bottom sheet actually shows.
   let sheetOpen = false;
-  for (let attempt = 0; attempt < 3 && !sheetOpen; attempt++) {
+  for (let attempt = 0; attempt < 4 && !sheetOpen; attempt++) {
+    if (attempt > 0) {
+      // a failed attempt leaves the RN Modal state stuck (visible=true, never
+      // presented) — only an app restart resets it
+      await restartApp(driver);
+    }
+    await acceptSystemAlertIfPresent(driver);
     await dismissTourIfPresent(driver);
     await openQrSheet(driver);
     sheetOpen = await existsTestId(driver, "GenerateRelationshipQRCode", 8000);
@@ -190,7 +280,7 @@ export async function showRelationshipInvitation(driver) {
     if (await existsTestId(driver, "Back", 3000)) {
       await tapTestId(driver, "Back");
     }
-    await openQrSheet();
+    await openQrSheet(driver);
     await tapTestId(driver, "GenerateRelationshipQRCode", 15000);
   }
   const el = await waitForTestId(driver, "InvitationUrl", 60000);
@@ -216,7 +306,11 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
   // A lingering tour overlay can swallow the first tab tap — retry until the
   // bottom sheet actually shows.
   let sheetOpen = false;
-  for (let attempt = 0; attempt < 3 && !sheetOpen; attempt++) {
+  for (let attempt = 0; attempt < 4 && !sheetOpen; attempt++) {
+    if (attempt > 0) {
+      await restartApp(driver);
+    }
+    await acceptSystemAlertIfPresent(driver);
     await openQrSheet(driver);
     sheetOpen = await existsTestId(driver, "ScanQRCode", 8000);
   }
@@ -228,6 +322,8 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
   await tapTestId(driver, "ScanQRCode", 15000);
   let pasteReady = false;
   for (let attempt = 0; attempt < 4 && !pasteReady; attempt++) {
+    // real devices: camera mount fires the OS permission prompt here
+    await acceptSystemAlertIfPresent(driver);
     if (await existsTestId(driver, "PasteUrlButton", 8000)) {
       pasteReady = true;
       break;
@@ -237,11 +333,19 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
       pasteReady = await existsTestId(driver, "PasteUrlButton", 10000);
       if (pasteReady) break;
     }
-    // blank Scan screen (modal never presented): back out and re-enter
+    // blank Scan screen (disclosure modal never presented): back out — or
+    // restart if even Back is unreachable — then re-open the sheet and re-enter
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: Scan screen blank — backing out and re-entering`
+    );
     if (await existsTestId(driver, "Back", 3000)) {
       await tapTestId(driver, "Back");
-      await tapTestId(driver, "ScanQRCode", 15000);
+      await sleep(2000); // let the pop animation finish before re-presenting
+    } else {
+      await restartApp(driver);
     }
+    await openQrSheet(driver);
+    await tapTestId(driver, "ScanQRCode", 15000);
   }
   await tapTestId(driver, "PasteUrlButton", 30000);
   const input = await waitForTestId(driver, "PastedUrl", 15000);
@@ -255,12 +359,48 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
 }
 
 /**
+ * Real devices only: the issuer side shows the in-app biometric confirmation
+ * modal (hardware attestation) while the VRC is being issued in the background.
+ * Tap Confirm, then hand off to the human operator for the OS biometric prompt
+ * (fingerprint / Face ID / device PIN) — Appium cannot satisfy those.
+ * No-op on emulators/simulators: hardware signing is unavailable there, so the
+ * modal never appears.
+ */
+export async function handleBiometricConfirmIfPresent(driver) {
+  if (!(await existsTestId(driver, "ConfirmBiometric", 1500))) return false;
+  console.log(
+    `[e2e] ${driver.e2ePlatform}: biometric confirmation modal — tapping Confirm`
+  );
+  await tapTestId(driver, "ConfirmBiometric");
+  const deviceLabel =
+    driver.e2ePlatform === "android" ? "ANDROID PHONE" : "IPHONE";
+  console.log(
+    `\n[e2e] ${"█".repeat(60)}\n` +
+      `[e2e] █  OPERATOR: authenticate on the ${deviceLabel} NOW\n` +
+      `[e2e] █  (fingerprint / Face ID, or fall back to device PIN)\n` +
+      `[e2e] ${"█".repeat(60)}\n`
+  );
+  // give the OS prompt + human a moment before the caller's loop resumes
+  await sleep(5000);
+  return true;
+}
+
+/**
  * After the connection completes, the app opens the contact chat and a
  * "Credential offer received — Would you like to accept it? YES / NO" message
  * appears (both wallets: the VRC flow is bidirectional). Tap YES → CredentialOffer
  * screen → Accept → wait for "added to your wallet" → Done.
+ *
+ * options.expectAttestation (real-device runs): require the "Secure Exchange"
+ * banner (testID AttestationVerified) on the offer screen — i.e. the peer's
+ * hardware-attestation evidence chain-validated on THIS device — and fail if
+ * it's absent.
  */
-export async function acceptCredentialOfferFromChat(driver, timeout = 300000) {
+export async function acceptCredentialOfferFromChat(
+  driver,
+  timeout = 300000,
+  options = {}
+) {
   const yesDeadline = Date.now() + timeout;
   while (!(await byText(driver, "YES").isExisting())) {
     if (Date.now() > yesDeadline) {
@@ -268,6 +408,8 @@ export async function acceptCredentialOfferFromChat(driver, timeout = 300000) {
         `${driver.e2ePlatform}: credential offer YES button not found in chat within ${timeout}ms`
       );
     }
+    await acceptSystemAlertIfPresent(driver);
+    await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
     await sleep(2000);
   }
@@ -289,6 +431,23 @@ export async function acceptCredentialOfferFromChat(driver, timeout = 300000) {
   }
   console.log(`[e2e] ${driver.e2ePlatform}: credential offer opened from chat`);
 
+  if (options.expectAttestation) {
+    // Banner renders once BiometricSignatureVerifier finishes the native
+    // verification (cert chain to Apple/Google roots + signature) — proof the
+    // PEER's hardware evidence validated on this device.
+    if (await existsTestId(driver, "AttestationVerified", 60000)) {
+      console.log(
+        `[e2e] ${driver.e2ePlatform}: ✅ Secure Exchange banner — peer hardware attestation VERIFIED`
+      );
+      await screenshot(driver, "attestation-verified");
+    } else {
+      await screenshot(driver, "attestation-missing");
+      throw new Error(
+        `${driver.e2ePlatform}: AttestationVerified banner not shown — peer evidence missing or chain validation failed`
+      );
+    }
+  }
+
   const accept = await scrollToTestId(driver, "AcceptCredentialOffer");
   await accept.click();
   console.log(`[e2e] ${driver.e2ePlatform}: credential offer accepted`);
@@ -307,6 +466,8 @@ export async function acceptCredentialOfferFromChat(driver, timeout = 300000) {
         return;
       }
     }
+    // our own outbound issuance may request biometric signing while we wait
+    await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
   }
   throw new Error(

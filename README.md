@@ -177,6 +177,20 @@ yarn start
 
 Default ports: DIDComm on `9002`, web UI on `9003`.
 
+### End-to-end tests
+
+Appium-driven two-device tests (fresh install → onboarding → VRC exchange)
+live in [`e2e/`](e2e/README.md). From the repo root:
+
+```sh
+yarn e2e:vrc            # Android emulator + iOS simulator, unattended
+yarn e2e:vrc:devices    # physical phones — proves hardware attestation (attended)
+yarn e2e:migration      # Askar store-migration upgrade test
+yarn e2e:smoke          # single-device onboarding smoke test
+```
+
+Setup, app-build commands, and the real-device operator guide: [`e2e/README.md`](e2e/README.md).
+
 ## Developing in keyring-bifold
 
 The `keyring-bifold/` directory is a Git submodule pointing to our Bifold fork. To work on core changes:

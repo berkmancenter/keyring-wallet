@@ -15,7 +15,36 @@ function portInUse(port) {
 let appiumProc;
 
 export async function ensureAppium() {
-  if (await portInUse(APPIUM_PORT)) return;
+  if (await portInUse(APPIUM_PORT)) {
+    // A server from a previous run may still be tearing down (it responds to
+    // /status but dies seconds later, killing our sessions mid-run). Prefer
+    // waiting for it to exit and starting our own; only reuse if it sticks
+    // around, which means someone is running it deliberately.
+    console.log(
+      `[e2e] port :${APPIUM_PORT} in use — waiting for leftover appium to exit…`
+    );
+    for (let i = 0; i < 20 && (await portInUse(APPIUM_PORT)); i++) {
+      await sleep(1000);
+    }
+    if (await portInUse(APPIUM_PORT)) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${APPIUM_PORT}/status`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          console.log(
+            `[e2e] reusing externally-managed appium on :${APPIUM_PORT}`
+          );
+          return;
+        }
+      } catch {
+        /* unresponsive */
+      }
+      throw new Error(
+        `port ${APPIUM_PORT} occupied by an unresponsive server — kill it (pkill -f appium) and retry`
+      );
+    }
+  }
   console.log(`[e2e] starting appium on :${APPIUM_PORT}`);
   appiumProc = spawn(
     "appium",
@@ -36,9 +65,13 @@ export function stopAppium() {
   if (appiumProc) appiumProc.kill("SIGTERM");
 }
 
-export async function createSession(platform) {
-  const capabilities = platform === "android" ? androidCaps() : iosCaps();
-  console.log(`[e2e] creating ${platform} session…`);
+export async function createSession(platform, capsOverride) {
+  const capabilities =
+    capsOverride ?? (platform === "android" ? androidCaps() : iosCaps());
+  const realDevice = Boolean(capabilities["appium:udid"]);
+  console.log(
+    `[e2e] creating ${platform} session${realDevice ? " (real device)" : ""}…`
+  );
   const driver = await remote({
     hostname: "127.0.0.1",
     port: APPIUM_PORT,
@@ -65,10 +98,11 @@ export async function createSession(platform) {
     await driver.activateApp(APP_ID);
     console.log("[e2e] app launched");
   }
-  if (platform === "ios") {
+  if (platform === "ios" && !realDevice) {
     // Pre-grant camera so the Scan screen skips the camera-disclosure Modal:
     // presenting that Modal right as the QR bottom-sheet dismisses intermittently
-    // fails on the iOS simulator, leaving a blank Scan screen.
+    // fails on the iOS simulator, leaving a blank Scan screen. (Real devices have
+    // no simctl; the flow falls back to the in-app disclosure + autoAcceptAlerts.)
     try {
       const { execSync } = await import("node:child_process");
       const { APP_ID } = await import("./config.js");
@@ -87,6 +121,35 @@ export async function createSession(platform) {
 }
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Accept an OS-level dialog if one is showing (camera / local-network /
+ * notification permission…). Real devices surface these where simulators
+ * don't (no simctl pre-grant, Bonjour local-network prompt), and appium's
+ * autoAcceptAlerts intermittently misses them — a blocking system alert
+ * swallows every synthesized tap, so flows stall on taps that "do nothing".
+ */
+export async function acceptSystemAlertIfPresent(driver) {
+  try {
+    const text = await driver.getAlertText();
+    if (text == null) return false;
+    // NEVER touch the OS biometric/passcode prompt — that one is for the human
+    // operator (titles from AttestationModule.kt / Attestation.mm)
+    if (/confirm relationship|confirm your identity|fingerprint|face id|passcode|pin/i.test(text)) {
+      return false;
+    }
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: accepting system alert: "${String(text)
+        .replace(/\s+/g, " ")
+        .slice(0, 100)}"`
+    );
+    await driver.acceptAlert();
+    await sleep(1000);
+    return true;
+  } catch {
+    return false; // no alert showing
+  }
+}
 
 /**
  * Find an element by bifold testID (testIdWithKey key).

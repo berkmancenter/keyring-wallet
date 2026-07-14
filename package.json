@@ -34,7 +34,11 @@
     "test": "cd app && yarn test",
     "pre-commit-lint:app": "cd app && yarn pre-commit-lint",
     "pre-commit-lint": "yarn pre-commit-lint:app",
-    "typecheck": "cd app && yarn typecheck"
+    "typecheck": "cd app && yarn typecheck",
+    "e2e:vrc": "cd e2e && npm run vrc-exchange",
+    "e2e:vrc:devices": "cd e2e && npm run vrc-exchange:devices",
+    "e2e:migration": "cd e2e && npm run store-migration",
+    "e2e:smoke": "cd e2e && npm run onboarding-smoke"
   },
   "devDependencies": {
     "@commitlint/cli": "~19.8.1",
@@ -49,7 +53,7 @@
     "tsyringe": "4.8.0",
     "nanoid": "3.3.7",
     "react": "19.1.0",
-    "react-native": "0.81.5",
+    "react-native": "patch:react-native@npm%3A0.81.5#~/.yarn/patches/react-native-npm-0.81.5-d8232ef145.patch",
     "react-test-renderer": "19.1.0",
     "@types/react": "19.1.0",
     "@openwallet-foundation/askar-shared": "0.6.0",
