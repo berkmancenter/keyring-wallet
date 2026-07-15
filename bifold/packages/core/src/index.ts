@@ -197,6 +197,11 @@ export {
   isReceivedRCard,
   createRelationshipInvitation,
   createVrcDocumentLoader,
+  DATA_INTEGRITY_PROOF_TYPE,
+  EDDSA_RDFC_2022_CRYPTOSUITE_NAME,
+  EddsaRdfc2022DataIntegritySuite,
+  DataIntegritySuiteModule,
+  runDataIntegritySelfTest,
   initializeVrcModule,
   registerVrcDisplayHandlers,
   registerVrcWithContainer,
@@ -208,6 +213,7 @@ export type {
   CustomTags,
   DefaultRelationshipDidRecordTags,
   VrcRegistrationOptions,
+  DataIntegritySelfTestResult,
 } from './modules/vrc'
 
 // VRC Biometric confirmation

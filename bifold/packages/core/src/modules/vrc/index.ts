@@ -65,6 +65,16 @@ export {
 // Export document loader for W3C credentials
 export { createVrcDocumentLoader } from './createVrcDocumentLoader'
 
+// Export the Data Integrity (eddsa-rdfc-2022) signature suite
+export {
+  DATA_INTEGRITY_PROOF_TYPE,
+  EDDSA_RDFC_2022_CRYPTOSUITE_NAME,
+  EddsaRdfc2022DataIntegritySuite,
+} from './services/EddsaRdfc2022DataIntegritySuite'
+export { DataIntegritySuiteModule } from './module/DataIntegritySuiteModule'
+export { runDataIntegritySelfTest } from './services/dataIntegritySelfTest'
+export type { DataIntegritySelfTestResult } from './services/dataIntegritySelfTest'
+
 // Export JSON-LD context data (convenience exports for document loading)
 export {
   DTG_CONTEXT,

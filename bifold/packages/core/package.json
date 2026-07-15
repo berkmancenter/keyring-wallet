@@ -250,6 +250,8 @@
     ]
   },
   "dependencies": {
+    "@digitalcredentials/data-integrity": "^2.6.0",
+    "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "^1.3.0",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
     "@openwallet-foundation/askar-react-native": "0.6.0",
