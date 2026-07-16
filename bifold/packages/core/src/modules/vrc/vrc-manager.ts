@@ -26,6 +26,7 @@ import Toast from 'react-native-toast-message'
 import { ToastType } from '../../components/toast/BaseToast'
 import { createVrcLogger } from './vrc-logging'
 import { buildRCardCredential, loadRCardTemplate } from './services/rCardCredential'
+import { DATA_INTEGRITY_PROOF_TYPE, EDDSA_RDFC_2022_CRYPTOSUITE_NAME } from './services/EddsaRdfc2022DataIntegritySuite'
 import { extractFormInputFromJCard } from './types/rcard'
 import { 
   requestBiometricWithHardwareSigning,
@@ -108,13 +109,18 @@ async function logIssuedCredentialSnapshot(
  *
  * - v1: VCDM 1.1 credentials (issuanceDate/expirationDate, v1 context)
  * - v2: VCDM 2.0 credentials (validFrom/validUntil, v2 context)
+ * - v3: W3C Data Integrity proofs (DataIntegrityProof + eddsa-rdfc-2022)
+ *       for peer-to-peer VRC/RCard issuance. v3 implies v2 (DI is only ever
+ *       issued on VCDM 2.0 credentials). Verification is dual-stack forever:
+ *       a v3 peer still accepts Ed25519Signature2018 proofs silently
+ *       (docs/CRYPTO_SUITE_FOLLOWUP.md, Decisions 6 and 7).
  *
  * The version is announced in the relationshipDid handshake message
  * (`vrc:rceVersion:<n>`). A peer that doesn't announce one is treated as v1,
  * so exchanges with pre-VC-2.0 app versions still produce credentials the
  * old peer can validate.
  */
-export const RCE_PROTOCOL_VERSION = 2
+export const RCE_PROTOCOL_VERSION = 3
 
 /**
  * Default expiration time for VRC credentials (in days)
@@ -271,7 +277,7 @@ const connectionCredentialOffers = new Map<string, 'pending' | 'offered' | 'fail
  * @param counterpartyRelationshipDid counterparty's relationship DID to use as credentialSubject.id
  * @returns The credential object
  */
-async function buildVrcCredential(
+export async function buildVrcCredential(
   agent: Agent,
   myRelationshipDid: string,
   counterpartyRelationshipDid: string
@@ -283,15 +289,22 @@ async function buildVrcCredential(
   const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
 
   const useVc20 = await counterpartySpeaksVc20(agent, counterpartyRelationshipDid)
+  // DI (RCE v3) needs no suite context at all: credentials/v2 already defines
+  // the DataIntegrityProof terms, so nothing is appended during signing
+  // (docs/CRYPTO_SUITE_FOLLOWUP.md, Level 0 spike check 4).
+  const useDi = useVc20 && (await counterpartySpeaksDi(agent, counterpartyRelationshipDid))
 
   const credential: any = useVc20
     ? {
         // VCDM 2.0 shape per the DTG spec (SHOULD issue 2.0).
-        // The Ed25519 suite context must be present at build time: the v2 base
-        // context doesn't define the suite terms (v1.1 did), so jsonld-signatures
-        // would append it during signing and the signed credential would no
-        // longer match the offer/request in credo's holder-side equality check.
-        '@context': [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+        // On the 2018 path the Ed25519 suite context must be present at build
+        // time: the v2 base context doesn't define the suite terms (v1.1 did),
+        // so jsonld-signatures would append it during signing and the signed
+        // credential would no longer match the offer/request in credo's
+        // holder-side equality check.
+        '@context': useDi
+          ? [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL]
+          : [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
         type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
         // Bare DID string per DTG spec — contact info rides in the RCard instead
         issuer: myRelationshipDid,
@@ -367,6 +380,41 @@ async function counterpartySpeaksVc20(agent: Agent, counterpartyRelationshipDid:
   } catch {
     return false
   }
+}
+
+/**
+ * Whether the counterparty announced RCE protocol v3 (Data Integrity capable)
+ * in its relationshipDid handshake. Mirrors counterpartySpeaksVc20; older
+ * peers keep receiving Ed25519Signature2018 exactly as before.
+ */
+async function counterpartySpeaksDi(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
+  try {
+    const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
+    const record = await repository.findByCounterpartyRelationshipDid(agent.context, counterpartyRelationshipDid)
+    return (record?.counterpartyRceVersion ?? 1) >= 3
+  } catch {
+    return false
+  }
+}
+
+/**
+ * JSON-LD proof options for a peer-to-peer credential offer, selected by the
+ * counterparty's announced RCE capability: DI-capable peers (v3+) get
+ * DataIntegrityProof/eddsa-rdfc-2022, everyone else keeps
+ * Ed25519Signature2018 (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 6).
+ */
+export async function getVrcJsonLdProofOptions(
+  agent: Agent,
+  counterpartyRelationshipDid: string
+): Promise<{ proofType: string; cryptosuite?: string; proofPurpose: string }> {
+  const useDi = await counterpartySpeaksDi(agent, counterpartyRelationshipDid)
+  return useDi
+    ? {
+        proofType: DATA_INTEGRITY_PROOF_TYPE,
+        cryptosuite: EDDSA_RDFC_2022_CRYPTOSUITE_NAME,
+        proofPurpose: 'assertionMethod',
+      }
+    : { proofType: 'Ed25519Signature2018', proofPurpose: 'assertionMethod' }
 }
 
 /**
@@ -553,20 +601,18 @@ async function issueVrcCredential(
   logger.info(`Step 4: Offering credential [connection=${connectionRecord.id}]`)
 
   try {
+    // Capability-gated proof options: DI-capable peers (RCE v3) get
+    // DataIntegrityProof/eddsa-rdfc-2022, older peers keep Ed25519Signature2018
+    // (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 6).
+    const proofOptions = await getVrcJsonLdProofOptions(agent, counterpartyRelationshipDid)
+    logger.info(`Offering with proofType=${proofOptions.proofType}${proofOptions.cryptosuite ? `/${proofOptions.cryptosuite}` : ''}`)
     await agent.modules.didcomm.credentials.offerCredential({
       connectionId: connectionRecord.id,
       protocolVersion: 'v2',
       credentialFormats: {
         jsonld: {
           credential,
-          options: {
-            // INTENTIONAL: Ed25519Signature2018 until Data Integrity over DIDComm
-            // is designed (deferred — see docs/CRYPTO_SUITE_FOLLOWUP.md).
-            // Do NOT switch to Ed25519Signature2020; target later is
-            // DataIntegrityProof + cryptosuite eddsa-rdfc-2022.
-            proofType: 'Ed25519Signature2018',
-            proofPurpose: 'assertionMethod',
-          },
+          options: proofOptions,
         },
       },
     } as any)
@@ -645,7 +691,8 @@ async function issueRCardCredential(
     return
   }
 
-  const credential = await buildRCardCredential(agent, myRelationshipDid, counterpartyRelationshipDid, { useVc20 })
+  const useDi = await counterpartySpeaksDi(agent, counterpartyRelationshipDid)
+  const credential = await buildRCardCredential(agent, myRelationshipDid, counterpartyRelationshipDid, { useVc20, useDi })
   if (!credential) {
     logger.info(`No R-Card template available — skipping RCard issuance | Connection: ${connectionId}`)
     connectionRCardOffers.delete(connectionId)
@@ -653,20 +700,15 @@ async function issueRCardCredential(
   }
 
   try {
+    // Capability-gated proof options (same gate as the VRC offer, Decision 6)
+    const proofOptions = await getVrcJsonLdProofOptions(agent, counterpartyRelationshipDid)
     await agent.modules.didcomm.credentials.offerCredential({
       connectionId,
       protocolVersion: 'v2',
       credentialFormats: {
         jsonld: {
           credential,
-          options: {
-            // INTENTIONAL: Ed25519Signature2018 until Data Integrity over DIDComm
-            // is designed (deferred — see docs/CRYPTO_SUITE_FOLLOWUP.md).
-            // Do NOT switch to Ed25519Signature2020; target later is
-            // DataIntegrityProof + cryptosuite eddsa-rdfc-2022.
-            proofType: 'Ed25519Signature2018',
-            proofPurpose: 'assertionMethod',
-          },
+          options: proofOptions,
         },
       },
     } as any)

@@ -24,7 +24,7 @@ export const buildRCardCredential = async (
   agent: Agent,
   myRelationshipDid: string,
   counterpartyRelationshipDid: string,
-  options?: { useVc20?: boolean }
+  options?: { useVc20?: boolean; useDi?: boolean }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any | undefined> => {
   const template = await loadRCardTemplate(agent)
@@ -39,11 +39,15 @@ export const buildRCardCredential = async (
 
   if (options?.useVc20) {
     // VCDM 2.0 shape — the peer announced RCE protocol v2.
-    // The Ed25519 suite context must be present at build time (the v2 base
-    // context doesn't define the suite terms), or the signed credential won't
-    // match the offer/request in credo's holder-side equality check.
+    // On the 2018 path the Ed25519 suite context must be present at build time
+    // (the v2 base context doesn't define the suite terms), or the signed
+    // credential won't match the offer/request in credo's holder-side equality
+    // check. On the DI path (RCE v3) nothing is added: credentials/v2 already
+    // defines the DataIntegrityProof terms.
     return {
-      '@context': [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RCARD_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+      '@context': options?.useDi
+        ? [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RCARD_CONTEXT_URL]
+        : [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RCARD_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
       type: ['VerifiableCredential', 'RelationshipCard'],
       issuer: myRelationshipDid,
       validFrom: issuanceTimestamp,

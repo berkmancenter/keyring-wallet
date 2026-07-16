@@ -63,8 +63,8 @@ function buildAgentWithTemplate() {
 describe('RCE protocol version handshake', () => {
   const message = `This is my relationship DID: vrc:relationshipDid:${MY_DID} vrc:rceVersion:${RCE_PROTOCOL_VERSION}`
 
-  test('this app announces RCE v2', () => {
-    expect(RCE_PROTOCOL_VERSION).toBe(2)
+  test('this app announces RCE v3 (Data Integrity capable)', () => {
+    expect(RCE_PROTOCOL_VERSION).toBe(3)
   })
 
   test('the OLD (pre-flip) parser still extracts the DID from the new message', () => {
@@ -75,7 +75,7 @@ describe('RCE protocol version handshake', () => {
 
   test('the new parser extracts the announced version', () => {
     const versionMatch = message.match(/vrc:rceVersion:(\d+)/)
-    expect(versionMatch && parseInt(versionMatch[1], 10)).toBe(2)
+    expect(versionMatch && parseInt(versionMatch[1], 10)).toBe(RCE_PROTOCOL_VERSION)
   })
 
   test('a message without a version marker means a v1 (legacy) peer', () => {

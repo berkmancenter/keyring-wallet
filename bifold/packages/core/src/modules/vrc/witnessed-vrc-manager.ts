@@ -154,6 +154,10 @@ export class WitnessedVRCManager {
         format: ClaimFormat.LdpVc,
         credential: vrcUnsigned,
         verificationMethod: verificationMethodId,
+        // INTENTIONAL: stays Ed25519Signature2018 until the witness-server
+        // dual-verifies Data Integrity proofs — this signature is consumed by
+        // the witness Identity Check, not the peer (Decision 6 gates only the
+        // peer-to-peer offers; see docs/CRYPTO_SUITE_FOLLOWUP.md).
         proofType: 'Ed25519Signature2018',
       })
       const vrcJson = JsonTransformer.toJSON(signedVrc)
@@ -180,6 +184,9 @@ export class WitnessedVRCManager {
         format: ClaimFormat.LdpVp,
         presentation: vpUnsigned,
         verificationMethod: verificationMethodId,
+        // INTENTIONAL: stays Ed25519Signature2018 until the witness-server
+        // dual-verifies Data Integrity proofs (see note on the VRC signing
+        // above / docs/CRYPTO_SUITE_FOLLOWUP.md).
         proofType: 'Ed25519Signature2018',
         proofPurpose: 'authentication',
         challenge: sessionChallenge.challenge,
