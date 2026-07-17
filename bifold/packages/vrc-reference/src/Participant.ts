@@ -783,26 +783,40 @@ export class Participant extends BaseAgent {
     console.log(greenText(`[${this.name}] ✓ VRC signed`))
 
     // Step 3: Build the VP wrapper containing the VRC.
-    // The wrapper stays on the v1.1 context: credo's W3cPresentation model is
-    // v1-wired, and the enclosed VC keeps its own (2.0) context regardless.
+    // The VP @context must match the wrapped credential's data model: a v1 VP
+    // embedding a VCDM 2.0 credential fails JSON-LD expansion at signing
+    // ("tried to redefine a protected term" — v1 and v2 both @protect the
+    // core terms with different definitions).
+    const vrcContexts = Array.isArray(vrcUnsignedJson['@context']) ? vrcUnsignedJson['@context'] : []
+    const vpContext = vrcContexts.includes('https://www.w3.org/ns/credentials/v2')
+      ? 'https://www.w3.org/ns/credentials/v2'
+      : 'https://www.w3.org/2018/credentials/v1'
     const vpUnsignedJson = {
-      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      '@context': [vpContext],
       type: ['VerifiablePresentation'],
       holder: currentDid.did,
       verifiableCredential: [vrcJson],
     }
 
-    // Step 4: Convert to W3cPresentation instance and sign with challenge/domain
+    // Step 4: Convert to W3cPresentation instance and sign with challenge/domain.
+    // No explicit proofPurpose: credo/vc expects a ProofPurpose INSTANCE there
+    // (a string crashes with "purpose.update is not a function") and builds an
+    // AuthenticationProofPurpose from challenge + domain when omitted.
     const vpUnsigned = JsonTransformer.fromJSON(vpUnsignedJson, W3cPresentation)
+    // Cast: credo 0.6 TYPES proofPurpose as a required string, but the
+    // RUNTIME passes it straight to jsonld-signatures, which needs a
+    // ProofPurpose instance — a string crashes. Omitting it is the correct
+    // runtime behavior (vc builds AuthenticationProofPurpose from
+    // challenge + domain).
     const signedVp = await this.agent.w3cCredentials.signPresentation({
       format: ClaimFormat.LdpVp,
       presentation: vpUnsigned,
       verificationMethod: currentDid.verificationMethodId,
       proofType: 'Ed25519Signature2018',
-      proofPurpose: 'authentication',
       challenge: challenge,
       domain: domain,
-    })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
 
     const vpJson = JsonTransformer.toJSON(signedVp)
     console.log(greenText(`[${this.name}] ✓ VP signed with session challenge`))

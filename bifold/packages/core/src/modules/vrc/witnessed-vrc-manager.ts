@@ -165,13 +165,21 @@ export class WitnessedVRCManager {
 
       // 2. Create VP wrapping the signed VRC
       logger.debug('Creating Verifiable Presentation')
-      
+
       // Extract holder DID from verification method ID
       // Format: did:peer:0z6Mk...#z6Mk... → did:peer:0z6Mk...
       const holderDid = verificationMethodId.split('#')[0]
-      
+
+      // The VP @context must match the wrapped credential's data model: a v1
+      // VP embedding a VCDM 2.0 credential fails JSON-LD expansion at signing
+      // ("tried to redefine a protected term" — v1 and v2 both @protect the
+      // core terms with different definitions).
+      const vrcContexts: string[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
+      const vpContext = vrcContexts.includes('https://www.w3.org/ns/credentials/v2')
+        ? 'https://www.w3.org/ns/credentials/v2'
+        : 'https://www.w3.org/2018/credentials/v1'
       const vpUnsignedJson = {
-        '@context': ['https://www.w3.org/2018/credentials/v1'],
+        '@context': [vpContext],
         type: ['VerifiablePresentation'],
         holder: holderDid,
         verifiableCredential: [vrcJson],
@@ -180,6 +188,11 @@ export class WitnessedVRCManager {
 
       // 3. Sign VP with session challenge
       logger.debug('Signing VP with session challenge')
+      // Cast: credo 0.6 TYPES proofPurpose as a required string, but the
+      // RUNTIME passes it straight to jsonld-signatures, which needs a
+      // ProofPurpose instance — a string crashes with "purpose.update is not
+      // a function". Omitting it is the correct runtime behavior (vc builds
+      // an AuthenticationProofPurpose from challenge + domain).
       const signedVp = await agent.w3cCredentials.signPresentation({
         format: ClaimFormat.LdpVp,
         presentation: vpUnsigned,
@@ -188,10 +201,10 @@ export class WitnessedVRCManager {
         // dual-verifies Data Integrity proofs (see note on the VRC signing
         // above / docs/CRYPTO_SUITE_FOLLOWUP.md).
         proofType: 'Ed25519Signature2018',
-        proofPurpose: 'authentication',
         challenge: sessionChallenge.challenge,
         domain: sessionChallenge.domain,
-      })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
       const vpJson = JsonTransformer.toJSON(signedVp)
       logger.debug('✓ VP signed with session challenge')
 
