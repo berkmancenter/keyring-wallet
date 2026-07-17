@@ -24,12 +24,12 @@ describe('Credential Issuance Integration', () => {
 
       // Wait for Alice to receive offer
       await waitForCondition(async () => {
-        const records = await alice.agent.credentials.getAll()
+        const records = await alice.agent.modules.didcomm.credentials.getAll()
         return records.some((r) => r.state === 'offer-received')
       }, 8000)
 
       // Get credential offer
-      const credentialRecords = await alice.agent.credentials.getAll()
+      const credentialRecords = await alice.agent.modules.didcomm.credentials.getAll()
       const offerRecord = credentialRecords.find((r) => r.state === 'offer-received')
       expect(offerRecord).toBeDefined()
 
@@ -57,20 +57,20 @@ describe('Credential Issuance Integration', () => {
       await bob.issueCredential()
 
       await waitForCondition(async () => {
-        const records = await alice.agent.credentials.getAll()
+        const records = await alice.agent.modules.didcomm.credentials.getAll()
         return records.some((r) => r.state === 'offer-received')
       }, 8000)
 
       // Get the offer record
-      const credentialRecords = await alice.agent.credentials.getAll()
+      const credentialRecords = await alice.agent.modules.didcomm.credentials.getAll()
       const offerRecord = credentialRecords.find((r) => r.state === 'offer-received')
       expect(offerRecord).toBeDefined()
 
       // Alice declines the credential offer
-      await alice.agent.credentials.declineOffer(offerRecord!.id)
+      await alice.agent.modules.didcomm.credentials.declineOffer(offerRecord!.id)
 
       // Verify the offer was declined (state should change to 'abandoned' or record deleted)
-      const updatedRecords = await alice.agent.credentials.getAll()
+      const updatedRecords = await alice.agent.modules.didcomm.credentials.getAll()
       const declinedRecord = updatedRecords.find((r) => r.id === offerRecord!.id)
 
       // After declining, the record should either be declined or not exist

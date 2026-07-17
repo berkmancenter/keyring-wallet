@@ -22,8 +22,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:unit": "jest __tests__/unit",
-    "test:integration": "jest __tests__/integration",
-    "test:ci": "jest --ci --coverage --maxWorkers=2",
+    "test:integration": "node scripts/run-integration.mjs",
+    "test:ci": "jest __tests__/unit --ci --coverage && node scripts/run-integration.mjs --ci",
     "clean:wallets": "trash .wallets/* 2>/dev/null || true"
   },
   "dependencies": {

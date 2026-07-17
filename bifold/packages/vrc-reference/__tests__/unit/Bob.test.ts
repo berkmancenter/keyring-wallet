@@ -52,6 +52,7 @@ describe('Bob (Participant)', () => {
       dids: {
         create: jest.fn(),
         import: jest.fn(),
+        getCreatedDids: jest.fn().mockResolvedValue([]),
       },
       credentials: {
         offerCredential: jest.fn(),

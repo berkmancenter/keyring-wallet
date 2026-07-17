@@ -53,7 +53,7 @@ describe('Credential Structure Integration', () => {
       const credential = storedCredential?.credential as any
 
       // Get Alice's R-DID from connection metadata
-      const aliceConnection = await alice.agent.connections.getById(alice.connectionRecordId!)
+      const aliceConnection = await alice.agent.modules.didcomm.connections.getById(alice.connectionRecordId!)
       const holderSubjectMetadata = aliceConnection.metadata.get('holderSubjectDid') as { did?: string } | undefined
 
       const subject = credential.credentialSubject || credential.credentialSubjects?.[0]

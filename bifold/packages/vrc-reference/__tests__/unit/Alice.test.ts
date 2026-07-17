@@ -43,6 +43,7 @@ jest.mock('../../src/BaseAgent', () => {
           dids: {
             create: jest.fn(),
             import: jest.fn(),
+            getCreatedDids: jest.fn().mockResolvedValue([]),
           },
           basicMessages: {
             sendMessage: jest.fn(),
@@ -94,6 +95,7 @@ describe('Alice (Participant)', () => {
       dids: {
         create: jest.fn(),
         import: jest.fn(),
+        getCreatedDids: jest.fn().mockResolvedValue([]),
       },
       basicMessages: {
         sendMessage: jest.fn(),

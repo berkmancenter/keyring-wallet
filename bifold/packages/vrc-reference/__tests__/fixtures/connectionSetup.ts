@@ -15,7 +15,7 @@ export async function setupConnectedAgents(): Promise<{
   const bob = await buildBob()
 
   // Establish connection
-  const outOfBand = await bob.agent.oob.createInvitation()
+  const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation()
   bob.outOfBandId = outOfBand.id
 
   const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
@@ -27,7 +27,7 @@ export async function setupConnectedAgents(): Promise<{
   const bobConnectionPromise = (async () => {
     let connectionRecord
     for (let i = 0; i < 50; i++) {
-      const [record] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+      const [record] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
       if (record) {
         connectionRecord = record
         break
@@ -35,7 +35,7 @@ export async function setupConnectedAgents(): Promise<{
       await new Promise((resolve) => setTimeout(resolve, 100))
     }
     if (!connectionRecord) throw new Error('Bob connection record not found')
-    await bob.agent.connections.returnWhenIsConnected(connectionRecord.id)
+    await bob.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
   })()
 
   await Promise.race([
@@ -98,12 +98,12 @@ export async function issueAndReceiveCredential(alice: Alice, bob: Bob): Promise
 
   // Wait for Alice to receive offer
   await waitForCondition(async () => {
-    const records = await alice.agent.credentials.getAll()
+    const records = await alice.agent.modules.didcomm.credentials.getAll()
     return records.some((r) => r.state === 'offer-received')
   }, 10000)
 
   // Get credential offer
-  const credentialRecords = await alice.agent.credentials.getAll()
+  const credentialRecords = await alice.agent.modules.didcomm.credentials.getAll()
   const offerRecord = credentialRecords.find((r) => r.state === 'offer-received')
 
   if (!offerRecord) {

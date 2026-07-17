@@ -22,7 +22,7 @@ describe('Connection Flow Integration', () => {
   describe('Out-of-Band Connection', () => {
     it('should establish connection between Alice and Bob', async () => {
       // Bob creates invitation
-      const outOfBand = await bob.agent.oob.createInvitation()
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation()
       bob.outOfBandId = outOfBand.id
       expect(bob.outOfBandId).toBeDefined()
 
@@ -37,7 +37,7 @@ describe('Connection Flow Integration', () => {
       const bobConnectionPromise = (async () => {
         let connectionRecord
         for (let i = 0; i < 50; i++) {
-          const [record] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+          const [record] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
           if (record) {
             connectionRecord = record
             break
@@ -45,7 +45,7 @@ describe('Connection Flow Integration', () => {
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
         if (!connectionRecord) throw new Error('Bob connection record not found')
-        await bob.agent.connections.returnWhenIsConnected(connectionRecord.id)
+        await bob.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
       })()
 
       await Promise.race([
@@ -58,15 +58,15 @@ describe('Connection Flow Integration', () => {
       expect(alice.connectionRecordId).toBeDefined()
 
       // Verify connection records exist
-      const aliceConnection = await alice.agent.connections.getById(alice.connectionRecordId!)
+      const aliceConnection = await alice.agent.modules.didcomm.connections.getById(alice.connectionRecordId!)
       expect(aliceConnection.state).toBe('completed')
 
-      const [bobConnection] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+      const [bobConnection] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
       expect(bobConnection.state).toBe('completed')
     }, 30000)
 
     it('should exchange did:peer identifiers during connection', async () => {
-      const outOfBand = await bob.agent.oob.createInvitation()
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation()
       bob.outOfBandId = outOfBand.id
       const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
         domain: `http://localhost:${bob.port}`,
@@ -76,7 +76,7 @@ describe('Connection Flow Integration', () => {
       const bobConnectionPromise = (async () => {
         let connectionRecord
         for (let i = 0; i < 50; i++) {
-          const [record] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+          const [record] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
           if (record) {
             connectionRecord = record
             break
@@ -84,7 +84,7 @@ describe('Connection Flow Integration', () => {
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
         if (!connectionRecord) throw new Error('Bob connection record not found')
-        await bob.agent.connections.returnWhenIsConnected(connectionRecord.id)
+        await bob.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
       })()
 
       await Promise.race([
@@ -92,8 +92,8 @@ describe('Connection Flow Integration', () => {
         new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 20000)),
       ])
 
-      const aliceConnection = await alice.agent.connections.getById(alice.connectionRecordId!)
-      const [bobConnection] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+      const aliceConnection = await alice.agent.modules.didcomm.connections.getById(alice.connectionRecordId!)
+      const [bobConnection] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
 
       // Verify did:peer identifiers (typically did:peer:1 for DIDComm connections)
       expect(aliceConnection.did).toMatch(/^did:peer:/)
@@ -104,7 +104,7 @@ describe('Connection Flow Integration', () => {
 
     it('should handle connection timeout gracefully', async () => {
       // Create invitation but don't accept it
-      const outOfBand = await bob.agent.oob.createInvitation()
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation()
       bob.outOfBandId = outOfBand.id
 
       // Verify Bob's agent doesn't crash
@@ -121,7 +121,7 @@ describe('Connection Flow Integration', () => {
         stateChanges.push(event.payload.connectionRecord.state)
       })
 
-      const outOfBand = await bob.agent.oob.createInvitation()
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation()
       bob.outOfBandId = outOfBand.id
       const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
         domain: `http://localhost:${bob.port}`,
@@ -131,7 +131,7 @@ describe('Connection Flow Integration', () => {
       const bobConnectionPromise = (async () => {
         let connectionRecord
         for (let i = 0; i < 50; i++) {
-          const [record] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+          const [record] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
           if (record) {
             connectionRecord = record
             break
@@ -139,7 +139,7 @@ describe('Connection Flow Integration', () => {
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
         if (!connectionRecord) throw new Error('Bob connection record not found')
-        await bob.agent.connections.returnWhenIsConnected(connectionRecord.id)
+        await bob.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
       })()
 
       await Promise.race([

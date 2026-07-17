@@ -154,11 +154,19 @@ export class Participant extends BaseAgent {
     const { DidDocument } = await import('@credo-ts/core')
     const enrichedDidDocument = JsonTransformer.fromJSON(didDocumentJson, DidDocument)
 
+    // credo 0.6: the created DidRecord carries the keys[] mapping
+    // (didDocumentRelativeKeyId -> kmsKeyId). Re-importing WITHOUT it wipes
+    // the mapping, and signCredential then falls back to the legacy base58
+    // key id, which the 0.6 askar KMS does not know ("Key with key id '...'
+    // not found in backend 'askar'"). Carry the keys through the re-import.
+    const [createdDidRecord] = await this.agent.dids.getCreatedDids({ did })
+
     // Always re-import to ensure the DID document is stored (not just the DID)
     await this.agent.dids.import({
       did: did,
       didDocument: enrichedDidDocument,
       overwrite: true,
+      keys: createdDidRecord?.keys,
     })
 
     const didData: ConnectionDIDData = { did, verificationMethodId }
