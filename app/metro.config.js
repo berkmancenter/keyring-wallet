@@ -48,7 +48,9 @@ const extraNodeModules = {}
 
 // Module aliases for React Native compatibility
 const polyfillModules = {
-  // js-sha256 is used by patched packages (rdf-canonize, jsonld-signatures)
+  // js-sha256 is used by the patched rdf-canonize (RDFC SHA-256 on RN).
+  // (jsonld-signatures no longer needs a patch: v12 ships its own RN shim
+  // built on expo-crypto — see docs/CRYPTO_SUITE_FOLLOWUP.md.)
   'js-sha256': path.join(__dirname, 'node_modules', 'js-sha256', 'src', 'sha256.js'),
   // Stream and buffer polyfills
   stream: path.join(__dirname, 'node_modules', 'stream-browserify'),
@@ -123,7 +125,14 @@ module.exports = (async () => {
         // Singleton packages: always resolve from the app's node_modules so
         // bifold sources never load a second copy (bifold/node_modules is on
         // nodeModulesPaths, which would otherwise win for react etc.)
-        const singletonPrefixes = ['react', 'react-native', 'react-dom', '@credo-ts/core', '@credo-ts/didcomm', '@credo-ts/anoncreds']
+        const singletonPrefixes = [
+          'react',
+          'react-native',
+          'react-dom',
+          '@credo-ts/core',
+          '@credo-ts/didcomm',
+          '@credo-ts/anoncreds',
+        ]
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
         if (isSingleton && !context.originModulePath.startsWith(__dirname)) {
           // Re-resolve as if requested from the app root (keeps package
@@ -135,7 +144,8 @@ module.exports = (async () => {
           )
         }
         // Ensure js-sha256 is resolved from app's node_modules
-        // This is needed by patched @digitalcredentials/jsonld-signatures and rdf-canonize
+        // This is needed by the patched rdf-canonize (jsonld-signatures v12
+        // no longer needs it — its RN SHA-256 shim uses expo-crypto)
         if (moduleName === 'js-sha256') {
           return context.resolveRequest(context, path.join(__dirname, 'node_modules', 'js-sha256'), platform)
         }
