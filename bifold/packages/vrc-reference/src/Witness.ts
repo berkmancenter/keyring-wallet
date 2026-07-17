@@ -5,6 +5,7 @@ import { DidCommAutoAcceptCredential, DidCommBasicMessageEventTypes, DidCommBasi
 import { ui } from 'inquirer'
 import { createHash } from 'crypto'
 import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL, jcsCanonicalize } from '@bifold/vrc-contexts'
+import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
 import { BaseAgent } from './BaseAgent'
 import { greenText, Output, purpleText, redText } from './OutputClass'
@@ -336,6 +337,10 @@ export class Witness extends BaseAgent {
       // Extract VRC issuer for logging
       const vrcIssuer = presentation.verifiableCredential?.[0]?.issuer || 'unknown'
 
+      // Mirror the observed VRC's proof family: a DI-signed VRC implies its
+      // counterparty (this VWC's cross-distributed recipient) is DI-capable
+      const proofOptions = getMirroredJsonLdProofOptions(presentation.verifiableCredential?.[0]?.proof)
+
       await this.agent.modules.didcomm.credentials.offerCredential({
         connectionId: recipientConnectionId, // Send to the OTHER participant
         protocolVersion: 'v2',
@@ -346,10 +351,7 @@ export class Witness extends BaseAgent {
             // issuanceDate; the patched runtime accepts VCDM 2.0 validFrom
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             credential: witnessCredential as any,
-            options: {
-              proofType: 'Ed25519Signature2018',
-              proofPurpose: 'assertionMethod',
-            },
+            options: proofOptions,
           },
         },
       })
@@ -407,13 +409,18 @@ export class Witness extends BaseAgent {
 
     // Build the VWC according to the DTG spec structure
     // The credentialSubject.id MUST match the Subject of the witnessed VRC (i.e., the VRC issuer's R-DID)
-    // VCDM 2.0 shape (v2 context, validFrom) — reference tracks the current spec
+    // VCDM 2.0 shape (v2 context, validFrom) — reference tracks the current spec.
+    // Proof family mirrors the observed VRC (see the offer site): DI VWCs need
+    // no suite context URL, 2018 VWCs need the Ed25519 suite terms.
+    const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
     return {
-      '@context': [
-        CREDENTIALS_V2_CONTEXT_URL, // W3C VC Data Model 2.0 (locally resolved)
-        WITNESSED_EXCHANGE_CONTEXT_URL, // DTG witnessed-exchange context (locally resolved)
-        ED25519_2018_SUITE_CONTEXT_URL, // suite terms (the v2 base context doesn't define them)
-      ],
+      '@context': vrcUsesDi
+        ? [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL]
+        : [
+            CREDENTIALS_V2_CONTEXT_URL, // W3C VC Data Model 2.0 (locally resolved)
+            WITNESSED_EXCHANGE_CONTEXT_URL, // DTG witnessed-exchange context (locally resolved)
+            ED25519_2018_SUITE_CONTEXT_URL, // suite terms (the v2 base context doesn't define them)
+          ],
       id: vwcId,
       type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
       issuer: this.issuerDid,

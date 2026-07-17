@@ -10,6 +10,7 @@
 import type { Agent } from '@credo-ts/core'
 import type { WitnessConnectionState } from './context/WitnessConnectionProvider'
 import { RelationshipDidRepository } from './repositories/RelationshipDidRepository'
+import { getVrcJsonLdProofOptions } from './vrc-manager'
 import { createVrcLogger } from './vrc-logging'
 import { PersistentStorage } from '../../services/storage'
 import { LocalStorageKeys } from '../../constants'
@@ -147,18 +148,23 @@ export class WitnessedVRCManager {
       // Import W3C credential classes
       const { ClaimFormat, W3cCredential, W3cPresentation, JsonTransformer } = await import('@credo-ts/core')
 
-      // 1. Sign the VRC credential (required for witness Identity Check)
+      // 1. Sign the VRC credential (required for witness Identity Check).
+      // Capability-gated like the peer-to-peer offers: the VRC's subject IS
+      // the counterparty relationship DID, so the same RCE v3 gate applies —
+      // DI only when the counterparty announced it. The witness dual-verifies
+      // both families, and its VWC issuance mirrors the proof family it
+      // observes here (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 6 + witness
+      // mirroring).
       logger.debug('Signing VRC credential')
+      const counterpartyRelationshipDid = vrcCredential?.credentialSubject?.id as string
+      const proofOptions = await getVrcJsonLdProofOptions(agent, counterpartyRelationshipDid)
+      logger.info(`Signing witnessed VRC with proofType=${proofOptions.proofType}`)
       const vrcUnsigned = JsonTransformer.fromJSON(vrcCredential, W3cCredential)
       const signedVrc = await agent.w3cCredentials.signCredential({
         format: ClaimFormat.LdpVc,
         credential: vrcUnsigned,
         verificationMethod: verificationMethodId,
-        // INTENTIONAL: stays Ed25519Signature2018 until the witness-server
-        // dual-verifies Data Integrity proofs — this signature is consumed by
-        // the witness Identity Check, not the peer (Decision 6 gates only the
-        // peer-to-peer offers; see docs/CRYPTO_SUITE_FOLLOWUP.md).
-        proofType: 'Ed25519Signature2018',
+        proofType: proofOptions.proofType,
       })
       const vrcJson = JsonTransformer.toJSON(signedVrc)
       logger.debug('✓ VRC signed')

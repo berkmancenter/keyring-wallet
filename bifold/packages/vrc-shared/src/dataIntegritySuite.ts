@@ -72,6 +72,40 @@ export class EddsaRdfc2022DataIntegritySuite extends DataIntegrityProof {
   }
 }
 
+/**
+ * JSON-LD proof options for a credential the witness issues in response to
+ * an observed one: MIRROR the observed proof family. If the submitted VRC
+ * carries DataIntegrityProof/eddsa-rdfc-2022, the submitting app has proven
+ * it speaks DI — and because apps only sign DI VRCs for counterparties that
+ * announced RCE v3, the VWC's cross-distributed RECIPIENT (the VRC's
+ * counterparty) is DI-capable too. Anything else falls back to
+ * Ed25519Signature2018. No witness↔app version negotiation needed
+ * (docs/CRYPTO_SUITE_FOLLOWUP.md, witness issuance mirroring).
+ */
+export function getMirroredJsonLdProofOptions(observedProof: unknown): {
+  proofType: string
+  cryptosuite?: string
+  proofPurpose: string
+} {
+  // A credential can carry a proof set (array); mirror DI only if the
+  // eddsa-rdfc-2022 DI proof is present.
+  const proofs = Array.isArray(observedProof) ? observedProof : [observedProof]
+  const usesDi = proofs.some(
+    (proof) =>
+      typeof proof === 'object' &&
+      proof !== null &&
+      (proof as Record<string, unknown>).type === DATA_INTEGRITY_PROOF_TYPE &&
+      (proof as Record<string, unknown>).cryptosuite === EDDSA_RDFC_2022_CRYPTOSUITE_NAME
+  )
+  return usesDi
+    ? {
+        proofType: DATA_INTEGRITY_PROOF_TYPE,
+        cryptosuite: EDDSA_RDFC_2022_CRYPTOSUITE_NAME,
+        proofPurpose: 'assertionMethod',
+      }
+    : { proofType: 'Ed25519Signature2018', proofPurpose: 'assertionMethod' }
+}
+
 export class DataIntegritySuiteModule implements Module {
   public register(dependencyManager: DependencyManager) {
     dependencyManager.registerInstance(SignatureSuiteToken, {

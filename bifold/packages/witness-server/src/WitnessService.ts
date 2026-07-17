@@ -85,7 +85,7 @@ import {
   ED25519_2018_SUITE_CONTEXT_URL,
   jcsCanonicalize,
 } from '@bifold/vrc-contexts'
-import { DataIntegritySuiteModule, demoDocumentLoader } from '@bifold/vrc-shared'
+import { DataIntegritySuiteModule, demoDocumentLoader, getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
 // Import vcLibraries for debugging JSON-LD canonicalization
 import { vcLibraries } from '@credo-ts/core'
@@ -2281,6 +2281,12 @@ export class WitnessService {
         const rawIssuer = presentation.verifiableCredential?.[0]?.issuer
         const vrcIssuer = typeof rawIssuer === 'string' ? rawIssuer : (rawIssuer as any)?.id || 'unknown'
 
+        // Mirror the observed VRC's proof family: a DI-signed VRC implies its
+        // counterparty (this VWC's cross-distributed recipient) is DI-capable
+        // (docs/CRYPTO_SUITE_FOLLOWUP.md, witness issuance mirroring)
+        const proofOptions = getMirroredJsonLdProofOptions(presentation.verifiableCredential?.[0]?.proof)
+        console.log(`[${this.name}] Issuing VWC with proofType=${proofOptions.proofType}`)
+
         await this.agent.modules.didcomm.credentials.offerCredential({
           connectionId: recipientConnectionId,
           protocolVersion: 'v2',
@@ -2288,10 +2294,7 @@ export class WitnessService {
           credentialFormats: {
             jsonld: {
               credential: witnessCredential,
-              options: {
-                proofType: 'Ed25519Signature2018',
-                proofPurpose: 'assertionMethod',
-              },
+              options: proofOptions,
             },
           },
         })
@@ -2453,18 +2456,25 @@ export class WitnessService {
 
     // Mirror the observed VRC's data model: a VC 2.0 VRC gets a VC 2.0 VWC,
     // a legacy 1.1 VRC gets a 1.1 VWC — so the holder's wallet can always
-    // validate the pair with the same code path it used for the VRC.
+    // validate the pair with the same code path it used for the VRC. The
+    // PROOF FAMILY is mirrored the same way (see the offer site): a DI VRC
+    // gets a DI VWC, whose @context needs no suite URL at all (credentials/v2
+    // already defines the DataIntegrityProof terms).
     const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
     const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
+    const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
     const issuedTimestamp = new Date().toISOString()
     const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
 
     if (vrcIsVc20) {
-      // The Ed25519 suite context must be present at build time (the v2 base
-      // context doesn't define the suite terms), or the signed VWC won't match
-      // the offer/request in credo's holder-side equality check.
+      // On the 2018 path the Ed25519 suite context must be present at build
+      // time (the v2 base context doesn't define the suite terms), or the
+      // signed VWC won't match the offer/request in credo's holder-side
+      // equality check.
       return {
-        '@context': [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+        '@context': vrcUsesDi
+          ? [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL]
+          : [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
         id: vwcId,
         type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
         issuer: {

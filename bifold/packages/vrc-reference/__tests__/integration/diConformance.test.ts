@@ -43,6 +43,7 @@ import { DataIntegritySuiteModule, demoDocumentLoader, deleteWallet, walletExist
 import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
 
 import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from '../../src/relationshipContext'
+import { WITNESSED_EXCHANGE_CONTEXT_URL } from '../../src/witnessedExchangeContext'
 
 const CREDENTIALS_V1_CONTEXT_URL = 'https://www.w3.org/2018/credentials/v1'
 const WALLET_ID = `di-conformance-${process.env.JEST_WORKER_ID ?? '0'}`
@@ -250,6 +251,37 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
       challenge,
       domain,
     })
+    expect(verifyResult.isValid).toBe(true)
+  }, 30000)
+
+  test('DI VWC round-trip: witness-mirrored shape signs and verifies', async () => {
+    // The shape WitnessService/Witness build when mirroring a DI VRC:
+    // VC 2.0 + witnessed-exchange context, NO suite context URL, DI proof.
+    const vwcJson = {
+      '@context': [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL],
+      id: 'urn:uuid:di-conformance-vwc',
+      type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
+      issuer: issuerDid,
+      validFrom: new Date(Date.now() - 60_000).toISOString(),
+      validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      credentialSubject: {
+        id: 'did:example:vrc-issuer',
+        digest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+        witnessContext: {
+          event: 'di-conformance',
+          sessionId: 'session-123',
+          method: 'session-based-challenge',
+        },
+      },
+    }
+    const signed = await signDi(vwcJson)
+    const json = JsonTransformer.toJSON(signed) as Record<string, any>
+
+    expect(json.proof.type).toBe('DataIntegrityProof')
+    expect(json.proof.cryptosuite).toBe('eddsa-rdfc-2022')
+    expect(json['@context']).toEqual([CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL])
+
+    const verifyResult = await agent.w3cCredentials.verifyCredential({ credential: signed })
     expect(verifyResult.isValid).toBe(true)
   }, 30000)
 })
