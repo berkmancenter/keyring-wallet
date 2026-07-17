@@ -2130,6 +2130,8 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@bifold/core@portal:bifold/packages/core::locator=keyring-wallet%40workspace%3A."
   dependencies:
+    "@digitalcredentials/data-integrity": "npm:^2.6.0"
+    "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "npm:^1.3.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
     "@openwallet-foundation/askar-react-native": "npm:0.6.0"
@@ -2976,6 +2978,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@credo-ts/didcomm@patch:@credo-ts/didcomm@npm%3A0.6.3#~/.yarn/patches/@credo-ts-didcomm-npm-0.6.3-b3cbe5f2a8.patch":
+  version: 0.6.3
+  resolution: "@credo-ts/didcomm@patch:@credo-ts/didcomm@npm%3A0.6.3#~/.yarn/patches/@credo-ts-didcomm-npm-0.6.3-b3cbe5f2a8.patch::version=0.6.3&hash=7ab07b"
+  dependencies:
+    "@credo-ts/core": "npm:0.6.3"
+    class-transformer: "npm:0.5.1"
+    class-validator: "npm:^0.14.3"
+    luxon: "npm:^3.7.2"
+    query-string: "npm:^9.3.1"
+    rxjs: "npm:^7.8.2"
+  checksum: 10c0/ea84873c5c40cbd4dd71bccf6cc100c007451978a4a5e0d4c29432fae17c91bdd131edda41e54d837589f4fdf025890429bf5d031c40b4d0c78bf09cc4c2079c
+  languageName: node
+  linkType: hard
+
 "@credo-ts/indy-vdr@npm:0.6.3":
   version: 0.6.3
   resolution: "@credo-ts/indy-vdr@npm:0.6.3"
@@ -3092,6 +3108,41 @@ __metadata:
   version: 0.0.1-beta.0
   resolution: "@digitalcredentials/credentials-v2-context@npm:0.0.1-beta.0"
   checksum: 10c0/4e51299fda24c8433994a8fba2c8ce707fc96d57469e4e6a0577130c7ce39bca975b9c3dba4c9aecefbcc9d42c2b754ca6b4e5b46274d3c4d9e16d3c0e1fddad
+  languageName: node
+  linkType: hard
+
+"@digitalcredentials/data-integrity@npm:^2.6.0":
+  version: 2.6.0
+  resolution: "@digitalcredentials/data-integrity@npm:2.6.0"
+  dependencies:
+    "@digitalcredentials/jsonld-signatures": "npm:^12.0.1"
+    base58-universal: "npm:^2.0.0"
+    base64url-universal: "npm:^2.0.0"
+    fast-text-encoding: "npm:^1.0.6"
+  checksum: 10c0/da1c0657f5b84ee940b3e3a7f90bb0042b43d55bb7be3a182f2cb85e63f0292cd620953e0ee194b13cf26bdce180929c14e41f0e8f3c56cc8a7da4d1dafadf0c
+  languageName: node
+  linkType: hard
+
+"@digitalcredentials/ed25519-multikey@npm:^1.4.0":
+  version: 1.4.0
+  resolution: "@digitalcredentials/ed25519-multikey@npm:1.4.0"
+  dependencies:
+    "@noble/ed25519": "npm:^1.6.0"
+    "@stablelib/ed25519": "npm:^2.0.2"
+    base58-universal: "npm:^2.0.0"
+    base64url-universal: "npm:^2.0.0"
+  checksum: 10c0/1f5cc69ca8e5e797fe9d1a92f385db228c0aadde107283b0d66561b0e1f0babafdc7f239775234764bd3f24824801d62203d6567d4797015a897ed6f7d70a8dd
+  languageName: node
+  linkType: hard
+
+"@digitalcredentials/eddsa-rdfc-2022-cryptosuite@npm:^1.3.0":
+  version: 1.3.0
+  resolution: "@digitalcredentials/eddsa-rdfc-2022-cryptosuite@npm:1.3.0"
+  dependencies:
+    "@digitalcredentials/ed25519-multikey": "npm:^1.4.0"
+    "@digitalcredentials/jsonld": "npm:^9.0.0"
+    rdf-canonize: "npm:^4.0.1"
+  checksum: 10c0/9eb8936b07951e9cf35669000bd90c2aad5c80e8ca1992144fbe2024a7a99dce597af8ecae555b318c9359d276953dde12998270989884299724908f8a0da98d
   languageName: node
   linkType: hard
 
@@ -5142,6 +5193,13 @@ __metadata:
   dependencies:
     "@noble/hashes": "npm:2.0.1"
   checksum: 10c0/e0b329eb9229e862d3b7203e0444bd479e9ecf2d5990181908dad416aab69106717ca696fc7b12ad0eb19d710f58c454646b27ce517a4298ab9abc89a9bdb6ee
+  languageName: node
+  linkType: hard
+
+"@noble/ed25519@npm:^1.6.0":
+  version: 1.7.5
+  resolution: "@noble/ed25519@npm:1.7.5"
+  checksum: 10c0/9ebcdf47e1cc986f270a82725ed4fdad1922fd63cca77f6bc0ba9575685db9cd73d45e66325fb62cc1d8a398010e953331b904961c1e9f18d170eebae783d5cb
   languageName: node
   linkType: hard
 
@@ -8190,10 +8248,33 @@ __metadata:
   languageName: node
   linkType: hard
 
+"base58-universal@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "base58-universal@npm:2.0.0"
+  checksum: 10c0/f21fd50904e1f2d083832e39269058ffbd95592ad27fc2acc53ad3d9d7eacfa82c4e655181e0fd8a817619f4c925a42baca877276dd73e755d30f52def748ab6
+  languageName: node
+  linkType: hard
+
 "base64-js@npm:1.5.1, base64-js@npm:^1.2.3, base64-js@npm:^1.3.0, base64-js@npm:^1.3.1, base64-js@npm:^1.5.1":
   version: 1.5.1
   resolution: "base64-js@npm:1.5.1"
   checksum: 10c0/f23823513b63173a001030fae4f2dabe283b99a9d324ade3ad3d148e218134676f1ee8568c877cd79ec1c53158dcf2d2ba527a97c606618928ba99dd930102bf
+  languageName: node
+  linkType: hard
+
+"base64url-universal@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "base64url-universal@npm:2.0.0"
+  dependencies:
+    base64url: "npm:^3.0.1"
+  checksum: 10c0/6143326c1b5011d987d410a7451fcacad33af9282f9e7d06a21e1d4d7ed9d884e6c09a8f0d178f6c9ef3b11f8cda10ece4c84768e43dc9cb4dc47d1b5056de40
+  languageName: node
+  linkType: hard
+
+"base64url@npm:^3.0.1":
+  version: 3.0.1
+  resolution: "base64url@npm:3.0.1"
+  checksum: 10c0/5ca9d6064e9440a2a45749558dddd2549ca439a305793d4f14a900b7256b5f4438ef1b7a494e1addc66ced5d20f5c010716d353ed267e4b769e6c78074991241
   languageName: node
   linkType: hard
 
@@ -11336,7 +11417,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fast-text-encoding@npm:^1.0.3, fast-text-encoding@npm:~1.0.6":
+"fast-text-encoding@npm:^1.0.3, fast-text-encoding@npm:^1.0.6, fast-text-encoding@npm:~1.0.6":
   version: 1.0.6
   resolution: "fast-text-encoding@npm:1.0.6"
   checksum: 10c0/e1d0381bda229c92c7906f63308f3b9caca8c78b732768b1ee16f560089ed21bc159bbe1434138ccd3815931ec8d4785bdade1ad1c45accfdf27ac6606ac67d2
@@ -14144,7 +14225,7 @@ __metadata:
     "@credo-ts/anoncreds": "npm:0.6.3"
     "@credo-ts/askar": "npm:0.6.3"
     "@credo-ts/core": "npm:0.6.3"
-    "@credo-ts/didcomm": "npm:0.6.3"
+    "@credo-ts/didcomm": "patch:@credo-ts/didcomm@npm%3A0.6.3#~/.yarn/patches/@credo-ts-didcomm-npm-0.6.3-b3cbe5f2a8.patch"
     "@credo-ts/indy-vdr": "npm:0.6.3"
     "@credo-ts/openid4vc": "npm:0.6.3"
     "@credo-ts/question-answer": "npm:0.6.3"

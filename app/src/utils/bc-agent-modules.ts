@@ -53,7 +53,12 @@ interface GetBCAgentModulesOptions {
  * and AttestationStorageModule.
  * @returns modules to be used in agent setup
  */
-export function getBCAgentModules({ walletSecret, indyNetworks, mediatorInvitationUrl, txnCache }: GetBCAgentModulesOptions) {
+export function getBCAgentModules({
+  walletSecret,
+  indyNetworks,
+  mediatorInvitationUrl,
+  txnCache,
+}: GetBCAgentModulesOptions) {
   const indyCredentialFormat = new LegacyIndyDidCommCredentialFormatService()
   const indyProofFormat = new LegacyIndyDidCommProofFormatService()
 
@@ -65,7 +70,7 @@ export function getBCAgentModules({ walletSecret, indyNetworks, mediatorInvitati
     })
   }
 
-  const { RelationshipDidModule, AttestationStorageModule } = BifoldCore as any
+  const { RelationshipDidModule, AttestationStorageModule, DataIntegritySuiteModule } = BifoldCore as any
 
   const modules = {
     askar: new AskarModule({
@@ -139,6 +144,11 @@ export function getBCAgentModules({ walletSecret, indyNetworks, mediatorInvitati
     }),
     relationshipDid: new RelationshipDidModule(),
     attestationStorage: new AttestationStorageModule(),
+    // Registers DataIntegrityProof/eddsa-rdfc-2022 in the signature suite
+    // registry (verify + w3cCredentials sign). DIDComm issuance stays on
+    // Ed25519Signature2018 until the format-service work lands
+    // (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 5).
+    dataIntegritySuite: new DataIntegritySuiteModule(),
   }
 
   return modules

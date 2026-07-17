@@ -4,6 +4,7 @@ import {
   migrateRCardTemplateProofs,
   migrateToAskar,
   PersistentStorage,
+  runDataIntegritySelfTest,
   TOKENS,
   useServices,
   useStore,
@@ -227,6 +228,13 @@ const useBCAgentSetup = () => {
 
       logger.info('Setting up VRC connection handler...')
       setupVrcConnectionHandler(newAgent)
+
+      if (__DEV__) {
+        // Level 2b probe: prove eddsa-rdfc-2022 sign/verify on-device
+        // (expo-crypto SHA-256, askar KMS, RDFC on Hermes). Fire-and-forget;
+        // results in the agent log (docs/CRYPTO_SUITE_FOLLOWUP.md).
+        void runDataIntegritySelfTest(newAgent)
+      }
 
       // DISABLED: Push notifications disabled — no server backend yet
       // if (store.preferences.usePushNotifications) {
