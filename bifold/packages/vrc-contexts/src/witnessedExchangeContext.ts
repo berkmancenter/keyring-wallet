@@ -25,8 +25,15 @@ export const WITNESSED_EXCHANGE_CONTEXT_DOCUMENT = {
     WitnessCredential: 'https://trustoverip.org/credentials/witnessed-exchange#WitnessCredential',
     DTGCredential: 'https://www.firstperson.network/dtg#DTGCredential',
 
-    // Schema.org terms used in issuer object (required for issuer.name to canonicalize correctly)
-    name: 'http://schema.org/name',
+    // Schema.org terms used in issuer object (required for issuer.name to
+    // canonicalize correctly in v1.1 VWCs). MUST be byte-identical to the
+    // credentials/v2 base-context definition ("https://schema.org/name",
+    // plain string): v2 @protects the term, and redefining a protected term
+    // is only legal when the definitions match exactly — the DI signing path
+    // runs JSON-LD in safe mode where a mismatch is fatal. (The pre-fix
+    // http:// IRI means VWCs signed before this change canonicalize
+    // differently — acceptable: VWCs expire after 7 days.)
+    name: 'https://schema.org/name',
 
     // WitnessContext object (used in credentialSubject) - no @type so it accepts nested object
     witnessContext: 'https://trustoverip.org/credentials/witnessed-exchange#witnessContext',

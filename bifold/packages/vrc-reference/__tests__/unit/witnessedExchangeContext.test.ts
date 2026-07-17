@@ -59,9 +59,13 @@ describe('WitnessedExchangeContext', () => {
     })
 
     describe('schema.org terms', () => {
-      it('should define name term for issuer canonicalization', () => {
+      it('should define name identically to the protected credentials/v2 term', () => {
+        // MUST be byte-identical to the credentials/v2 definition
+        // ("https://schema.org/name", plain string): v2 @protects the term
+        // and DI signing runs JSON-LD in safe mode, where a mismatched
+        // redefinition is fatal.
         expect(WITNESSED_EXCHANGE_CONTEXT_DOCUMENT['@context']).toHaveProperty('name')
-        expect(WITNESSED_EXCHANGE_CONTEXT_DOCUMENT['@context'].name).toBe('http://schema.org/name')
+        expect(WITNESSED_EXCHANGE_CONTEXT_DOCUMENT['@context'].name).toBe('https://schema.org/name')
       })
     })
 
