@@ -85,7 +85,7 @@ import {
   ED25519_2018_SUITE_CONTEXT_URL,
   jcsCanonicalize,
 } from '@bifold/vrc-contexts'
-import { demoDocumentLoader } from '@bifold/vrc-shared'
+import { DataIntegritySuiteModule, demoDocumentLoader } from '@bifold/vrc-shared'
 
 // Import vcLibraries for debugging JSON-LD canonicalization
 import { vcLibraries } from '@credo-ts/core'
@@ -206,6 +206,11 @@ function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationU
     w3cCredentials: new W3cCredentialsModule({
       documentLoader: demoDocumentLoader,
     }),
+    // Dual-verify: accept DataIntegrityProof/eddsa-rdfc-2022 alongside
+    // Ed25519Signature2018 in the Identity Check (verification resolves
+    // suites by proof.type from this registry). Witness ISSUANCE stays 2018
+    // until the peer matrix is proven (docs/CRYPTO_SUITE_FOLLOWUP.md).
+    diSuite: new DataIntegritySuiteModule(),
     cache: new CacheModule({
       cache: new InMemoryLruCache({ limit: 100 }),
     }),

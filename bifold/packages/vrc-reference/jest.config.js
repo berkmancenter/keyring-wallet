@@ -8,7 +8,7 @@ module.exports = {
     '^.+\\.m?js$': ['babel-jest', { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }],
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(@credo-ts|@openwallet-foundation|@noble|@stablelib|@digitalcredentials|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj)/)',
+    'node_modules/(?!(@credo-ts|@openwallet-foundation|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj)/)',
   ],
   roots: ['<rootDir>/src', '<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.test.ts'],

@@ -28,7 +28,14 @@ import { AskarModule } from '@credo-ts/askar'
 import { agentDependencies, DidCommHttpInboundTransport } from '@credo-ts/node'
 import { askar } from '@openwallet-foundation/askar-nodejs'
 
-import { demoDocumentLoader, deleteWallet, walletExists, shouldUseFresh, getWalletStoragePath } from '@bifold/vrc-shared'
+import {
+  DataIntegritySuiteModule,
+  demoDocumentLoader,
+  deleteWallet,
+  walletExists,
+  shouldUseFresh,
+  getWalletStoragePath,
+} from '@bifold/vrc-shared'
 import { greenText, purpleText } from './OutputClass'
 
 type DemoAgent = Agent<ReturnType<typeof getJsonLdDemoModules>>
@@ -260,6 +267,9 @@ function getJsonLdDemoModules({ walletId, walletKey, endpoints, mediatorInvitati
     w3cCredentials: new W3cCredentialsModule({
       documentLoader: demoDocumentLoader,
     }),
+    // Dual-verify + reference issuance capability for
+    // DataIntegrityProof/eddsa-rdfc-2022 (docs/CRYPTO_SUITE_FOLLOWUP.md)
+    diSuite: new DataIntegritySuiteModule(),
     cache: new CacheModule({
       cache: new InMemoryLruCache({ limit: 100 }),
     }),
