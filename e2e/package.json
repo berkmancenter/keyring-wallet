@@ -9,7 +9,8 @@
     "vrc-exchange:android-only": "PLATFORMS=android,android node run-vrc-exchange.js",
     "vrc-exchange:devices": "node run-vrc-exchange-devices.js",
     "store-migration": "node run-store-migration.js",
-    "onboarding-smoke": "node run-onboarding-smoke.js"
+    "onboarding-smoke": "node run-onboarding-smoke.js",
+    "vrc-exchange:witnessed:devices": "node run-vrc-exchange-witnessed-devices.js"
   },
   "dependencies": {
     "webdriverio": "^9.12.0"

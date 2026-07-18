@@ -488,6 +488,79 @@ export async function acceptCredentialOfferFromChat(
  * Contacts tab. (The strong completion signal — credential state CredentialReceived/Done —
  * was already asserted by acceptCredentialOfferFromChat's "added to your wallet" wait.)
  */
+/**
+ * Connect a wallet to the witness. Connecting to a witness is the SAME
+ * scan/paste flow as adding a contact — the witness replies with a
+ * `witness-announcement` that promotes the connection, surfacing the
+ * WitnessStatusBanner ("Witness: {name}"). See docs/spikes/witnessed-e2e-spec.md.
+ */
+export async function connectToWitness(driver, witnessInvitationUrl, witnessName) {
+  await acceptInvitationViaPaste(driver, witnessInvitationUrl);
+  // Wait for the banner to confirm promotion (the announcement round-trips
+  // through the mediator, so allow time).
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {
+    if (await byTextContains(driver, witnessName).isExisting()) {
+      console.log(`[e2e] ${driver.e2ePlatform}: connected to witness "${witnessName}"`);
+      return;
+    }
+    await unlockIfLocked(driver);
+    await sleep(3000);
+  }
+  await screenshot(driver, "witness-not-connected");
+  throw new Error(
+    `${driver.e2ePlatform}: witness "${witnessName}" banner not shown — announcement not received`
+  );
+}
+
+/** Open a stored contact's detail screen by tapping its row in the Contacts list. */
+export async function openContactDetail(driver, peerName) {
+  let onTab = false;
+  for (let backs = 0; backs < 3 && !onTab; backs++) {
+    if (await existsTestId(driver, "Contacts", 3000)) {
+      await tapTestId(driver, "Contacts");
+      onTab = true;
+      break;
+    }
+    await unlockIfLocked(driver);
+    if (await existsTestId(driver, "BackButton", 2000)) {
+      await tapTestId(driver, "BackButton");
+    }
+  }
+  const row = byTextContains(driver, peerName);
+  await row.waitForExist({ timeout: 30000 });
+  await row.click();
+}
+
+/**
+ * Assert a Verifiable Witness Credential (VWC) landed for the peer: open the
+ * contact detail and confirm the Witness Records section rendered. testIDs
+ * added to ContactDetails.tsx (WitnessSection); falls back to the localized
+ * header text for older builds.
+ */
+export async function assertWitnessCredential(driver, peerName, timeout = 60000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    await openContactDetail(driver, peerName);
+    if (
+      (await existsTestId(driver, "WitnessSection", 4000)) ||
+      (await byTextContains(driver, "Witness Records").isExisting())
+    ) {
+      console.log(`[e2e] ${driver.e2ePlatform}: VWC present for "${peerName}"`);
+      return;
+    }
+    // VWC may still be in flight (issued after the VRC) — pop back and retry
+    if (await existsTestId(driver, "BackButton", 2000)) {
+      await tapTestId(driver, "BackButton");
+    }
+    await sleep(3000);
+  }
+  await screenshot(driver, "vwc-missing");
+  throw new Error(
+    `${driver.e2ePlatform}: no VWC (Witness Records) shown for "${peerName}" within ${timeout}ms`
+  );
+}
+
 export async function assertVrcReceived(driver, peerName, timeout = 120000) {
   const deadline = Date.now() + timeout;
   // we may still be on a stacked screen (chat) — pop back until the tab bar is reachable

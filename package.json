@@ -38,7 +38,8 @@
     "e2e:vrc": "cd e2e && npm run vrc-exchange",
     "e2e:vrc:devices": "cd e2e && npm run vrc-exchange:devices",
     "e2e:migration": "cd e2e && npm run store-migration",
-    "e2e:smoke": "cd e2e && npm run onboarding-smoke"
+    "e2e:smoke": "cd e2e && npm run onboarding-smoke",
+    "e2e:vrc:witnessed:devices": "cd e2e && npm run vrc-exchange:witnessed:devices"
   },
   "devDependencies": {
     "@commitlint/cli": "~19.8.1",
