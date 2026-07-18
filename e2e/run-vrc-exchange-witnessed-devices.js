@@ -49,7 +49,7 @@ import {
   enableHardwareAttestation,
   showRelationshipInvitation,
 } from "./lib/flows.js";
-import { startWitness, detectHostIp } from "./lib/witness.js";
+import { startWitness } from "./lib/witness.js";
 import {
   ANDROID_APK,
   ANDROID_UDID,
@@ -60,7 +60,6 @@ import {
 } from "./lib/config.js";
 
 const WITNESS_NAME = process.env.WITNESS_NAME || "e2e-witness";
-const WITNESS_PORT = Number(process.env.WITNESS_PORT || 9002);
 
 // ---------- device discovery ----------
 
@@ -204,12 +203,15 @@ try {
   await ensureMetro();
   await ensureAppium();
 
-  const hostIp = detectHostIp();
-  witness = await startWitness({ publicUrl: `http://${hostIp}:${WITNESS_PORT}`, name: WITNESS_NAME });
+  // The witness runs in direct mode behind a cloudflared HTTPS tunnel: the app
+  // blocks cleartext http, and production witnesses are HTTPS (real mediators
+  // like aaleon have SSL). The tunnel mirrors that locally without the
+  // instability of routing the witness through the app's mediator.
+  witness = await startWitness({ name: WITNESS_NAME });
 
   console.log(
     "\n[e2e] ATTENDED WITNESSED RUN — keep both phones unlocked and within reach.\n" +
-      "[e2e] Both phones + this Mac must share a Wi-Fi network.\n" +
+      "[e2e] Witness is reachable via an HTTPS tunnel; no LAN needed.\n" +
       "[e2e] Authenticate at the OPERATOR banners.\n"
   );
 
@@ -228,9 +230,13 @@ try {
 
   // Both wallets connect to the witness FIRST — if either isn't connected when
   // the exchange starts, the 15s session-challenge timeout fires and the
-  // exchange silently falls back to direct (no VWC).
-  await connectToWitness(android, witness.invitationUrl, WITNESS_NAME);
-  await connectToWitness(ios, witness.invitationUrl, WITNESS_NAME);
+  // exchange silently falls back to direct (no VWC). Confirm BOTH connections
+  // completed via the witness's own log (no "connected" banner exists in the
+  // app — witness participation only surfaces as a VWC after the exchange).
+  await connectToWitness(android, witness.invitationUrl);
+  await connectToWitness(ios, witness.invitationUrl);
+  await witness.waitForParticipants(2, 120000);
+  console.log("[e2e] both wallets connected to the witness");
 
   const invitationUrl = await showRelationshipInvitation(android);
   await acceptInvitationViaPaste(ios, invitationUrl);

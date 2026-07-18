@@ -491,26 +491,16 @@ export async function acceptCredentialOfferFromChat(
 /**
  * Connect a wallet to the witness. Connecting to a witness is the SAME
  * scan/paste flow as adding a contact — the witness replies with a
- * `witness-announcement` that promotes the connection, surfacing the
- * WitnessStatusBanner ("Witness: {name}"). See docs/spikes/witnessed-e2e-spec.md.
+ * `witness-announcement` that the app processes silently (there is NO
+ * "connected to witness" banner in the UI; witness participation only
+ * surfaces later as a VWC/witness-record on a contact after a witnessed
+ * exchange). So this just pastes the invitation; the CALLER confirms the
+ * connection completed via the witness server's own log
+ * (witness.waitForParticipants). See docs/spikes/witnessed-e2e-spec.md.
  */
-export async function connectToWitness(driver, witnessInvitationUrl, witnessName) {
+export async function connectToWitness(driver, witnessInvitationUrl) {
   await acceptInvitationViaPaste(driver, witnessInvitationUrl);
-  // Wait for the banner to confirm promotion (the announcement round-trips
-  // through the mediator, so allow time).
-  const deadline = Date.now() + 45000;
-  while (Date.now() < deadline) {
-    if (await byTextContains(driver, witnessName).isExisting()) {
-      console.log(`[e2e] ${driver.e2ePlatform}: connected to witness "${witnessName}"`);
-      return;
-    }
-    await unlockIfLocked(driver);
-    await sleep(3000);
-  }
-  await screenshot(driver, "witness-not-connected");
-  throw new Error(
-    `${driver.e2ePlatform}: witness "${witnessName}" banner not shown — announcement not received`
-  );
+  console.log(`[e2e] ${driver.e2ePlatform}: witness invitation submitted`);
 }
 
 /** Open a stored contact's detail screen by tapping its row in the Contacts list. */
