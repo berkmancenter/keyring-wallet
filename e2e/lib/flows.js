@@ -501,6 +501,27 @@ export async function acceptCredentialOfferFromChat(
 export async function connectToWitness(driver, witnessInvitationUrl) {
   await acceptInvitationViaPaste(driver, witnessInvitationUrl);
   console.log(`[e2e] ${driver.e2ePlatform}: witness invitation submitted`);
+  // Connecting lands on the witness's chat screen (it sends a reporting-
+  // pseudonym message). Return to the Contacts tab so the subsequent
+  // relationship-invitation flow finds the QR opener in a known state.
+  await returnToContacts(driver);
+}
+
+/** Pop any stacked screens and land on the Contacts tab. */
+export async function returnToContacts(driver) {
+  for (let i = 0; i < 5; i++) {
+    if (await existsTestId(driver, "Contacts", 3000)) {
+      await tapTestId(driver, "Contacts");
+      return;
+    }
+    await unlockIfLocked(driver);
+    if (await existsTestId(driver, "BackButton", 2000)) {
+      await tapTestId(driver, "BackButton");
+      await sleep(1000);
+    } else {
+      await sleep(1500);
+    }
+  }
 }
 
 /** Open a stored contact's detail screen by tapping its row in the Contacts list. */
@@ -523,10 +544,50 @@ export async function openContactDetail(driver, peerName) {
 }
 
 /**
- * Assert a Verifiable Witness Credential (VWC) landed for the peer: open the
- * contact detail and confirm the Witness Records section rendered. testIDs
- * added to ContactDetails.tsx (WitnessSection); falls back to the localized
- * header text for older builds.
+ * The culminating assertion: open the peer's contact and confirm BOTH shields
+ * the full stack produces —
+ *   • "Secure Exchange" (hwVerified): the peer's DEVICE ATTESTATION on the
+ *     received VRC, re-validated on-device (cert chain to Apple/Google roots).
+ *   • "Verified" + a Witness Records section (witnessRecords > 0): a VWC issued
+ *     by the WITNESS for this contact.
+ * Together they prove VC 2.0 + eddsa-rdfc-2022 DI + attestation + witnessed all
+ * landed on one credential. Text-based (works on baked-in iOS builds); the
+ * testIDs SecureExchangeBadge / WitnessedBadge / WitnessSection are preferred
+ * when present.
+ */
+export async function assertContactShields(driver, peerName, timeout = 240000) {
+  const deadline = Date.now() + timeout;
+  let sawAttestation = false;
+  let sawWitness = false;
+  while (Date.now() < deadline) {
+    await openContactDetail(driver, peerName);
+    sawAttestation =
+      (await existsTestId(driver, "SecureExchangeBadge", 3000)) ||
+      (await byTextContains(driver, "Secure Exchange").isExisting());
+    sawWitness =
+      (await existsTestId(driver, "WitnessSection", 3000)) ||
+      (await byTextContains(driver, "Witness Records").isExisting());
+    if (sawAttestation && sawWitness) {
+      console.log(`[e2e] ${driver.e2ePlatform}: "${peerName}" shows BOTH shields — Secure Exchange + Witnessed`);
+      return;
+    }
+    // Either shield may lag (VWC is issued after the VRC; hw verify is async) —
+    // pop back to the list and re-open the contact to re-render.
+    if (await existsTestId(driver, "BackButton", 2000)) {
+      await tapTestId(driver, "BackButton");
+    }
+    await sleep(3000);
+  }
+  await screenshot(driver, "shields-missing");
+  throw new Error(
+    `${driver.e2ePlatform}: "${peerName}" missing a shield — Secure Exchange=${sawAttestation}, Witnessed=${sawWitness}`
+  );
+}
+
+/**
+ * Assert a Verifiable Witness Credential (VWC) landed for the peer (witness
+ * shield only). Kept for witness-focused checks; the full run uses
+ * assertContactShields to require BOTH shields together.
  */
 export async function assertWitnessCredential(driver, peerName, timeout = 60000) {
   const deadline = Date.now() + timeout;
@@ -539,7 +600,6 @@ export async function assertWitnessCredential(driver, peerName, timeout = 60000)
       console.log(`[e2e] ${driver.e2ePlatform}: VWC present for "${peerName}"`);
       return;
     }
-    // VWC may still be in flight (issued after the VRC) — pop back and retry
     if (await existsTestId(driver, "BackButton", 2000)) {
       await tapTestId(driver, "BackButton");
     }

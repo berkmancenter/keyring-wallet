@@ -135,6 +135,12 @@ export async function startWitness({
       WITNESS_PUBLIC_URL: publicUrl,
       WITNESS_INVITATION_FILE: invitationFile,
       WITNESS_VERBOSE: process.env.WITNESS_VERBOSE || "false",
+      // Disable the co-location (BLE proximity) requirement: the witness
+      // otherwise rejects the VP with a "locality-verification" error and the
+      // exchange auto-falls back to a plain UNwitnessed VRC (no VWC / witness
+      // shield). Appium-driven phones can't produce a locality proof; a real
+      // deployment keeps this enforced.
+      WITNESS_LOCALITY_REQUIRED: process.env.WITNESS_LOCALITY_REQUIRED || "false",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

@@ -43,7 +43,7 @@ import {
   acceptCredentialOfferFromChat,
   acceptInvitationViaPaste,
   assertVrcReceived,
-  assertWitnessCredential,
+  assertContactShields,
   completeOnboarding,
   connectToWitness,
   enableHardwareAttestation,
@@ -251,15 +251,18 @@ try {
     assertVrcReceived(ios, "Alice Anderson"),
   ]);
 
-  // The VWC is issued by the witness after the VRC exchange completes.
+  // The culminating check: each contact must show BOTH shields together —
+  // "Secure Exchange" (device attestation on the DI VRC) AND "Verified" +
+  // Witness Records (VWC from the witness). VWC is issued after the VRC, so
+  // this polls both.
   await Promise.all([
-    assertWitnessCredential(android, "Bob Baker"),
-    assertWitnessCredential(ios, "Alice Anderson"),
+    assertContactShields(android, "Bob Baker"),
+    assertContactShields(ios, "Alice Anderson"),
   ]);
 
   console.log(
-    "\n[e2e] ✅ WITNESSED VRC exchange succeeded on both phones — " +
-      "hardware attestation verified and VWC issued & stored on both"
+    "\n[e2e] ✅ WITNESSED + ATTESTED VC 2.0 (eddsa-rdfc-2022) exchange succeeded on both phones —\n" +
+      "[e2e]    each contact shows BOTH shields: Secure Exchange (attestation) + Witnessed"
   );
   process.exitCode = 0;
 
