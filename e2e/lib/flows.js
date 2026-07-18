@@ -124,14 +124,20 @@ export async function completeOnboarding(driver, { firstName, lastName }) {
  * If the PIN unlock screen is showing, enter the PIN and unlock.
  */
 export async function unlockIfLocked(driver) {
-  if (!(await existsTestId(driver, "Enter", 1500))) return false;
+  // Detect by the PIN field: the inactivity-lock screen ("You were locked
+  // out after N minutes") has NO Enter button — it auto-submits on the final
+  // digit — while the cold-start unlock screen has one. Checking for the
+  // Enter button first (as this used to) made inactivity locks undetectable
+  // and long waits died staring at the PIN screen.
   const pinInput = byTestId(driver, "EnterPIN");
   if (!(await pinInput.isExisting())) return false;
   console.log(`[e2e] ${driver.e2ePlatform}: wallet locked — unlocking`);
   await pinInput.click();
   await pinInput.setValue(PIN);
-  await hideKeyboard(driver);
-  await tapTestId(driver, "Enter");
+  if (await existsTestId(driver, "Enter", 1500)) {
+    await hideKeyboard(driver);
+    await tapTestId(driver, "Enter");
+  }
   await sleep(3000);
   return true;
 }
