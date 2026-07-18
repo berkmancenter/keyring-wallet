@@ -8,6 +8,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import { ClaimFormat, W3cCredential, W3cPresentation, JsonTransformer } from '@credo-ts/core'
 import type { WitnessConnectionState } from './context/WitnessConnectionProvider'
 import { RelationshipDidRepository } from './repositories/RelationshipDidRepository'
 import { getVrcJsonLdProofOptions } from './vrc-manager'
@@ -145,8 +146,10 @@ export class WitnessedVRCManager {
     )
 
     try {
-      // Import W3C credential classes
-      const { ClaimFormat, W3cCredential, W3cPresentation, JsonTransformer } = await import('@credo-ts/core')
+      // W3C credential classes are imported statically at module top — a
+      // dynamic import() here made Metro serve them as an on-demand lazy chunk,
+      // which fails on the dev build ("LoadBundleFromServerError: Could not
+      // load bundle") mid-witnessed-exchange and drops the VP submission.
 
       // 1. Sign the VRC credential (required for witness Identity Check).
       // Capability-gated like the peer-to-peer offers: the VRC's subject IS

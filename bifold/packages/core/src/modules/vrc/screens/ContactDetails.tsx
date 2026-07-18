@@ -320,13 +320,13 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           {(witnessRecords.length > 0 || hwVerified) && (
             <View style={styles.badgesContainer}>
               {hwVerified && (
-                <View style={styles.hardwareAttestationBadge}>
+                <View style={styles.hardwareAttestationBadge} testID="SecureExchangeBadge">
                   <Icon name="shield-check" size={14} color={BADGE_HW_TEAL} />
                   <ThemedText style={styles.hardwareAttestationBadgeText}>Secure Exchange</ThemedText>
                 </View>
               )}
               {witnessRecords.length > 0 && (
-                <View style={styles.verifiedBadge}>
+                <View style={styles.verifiedBadge} testID="WitnessedBadge">
                   <Icon name="check-decagram" size={14} color={BADGE_WITNESS_PURPLE} />
                   <ThemedText style={styles.verifiedBadgeText}>Verified</ThemedText>
                 </View>

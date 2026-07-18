@@ -1,4 +1,4 @@
-import { Agent, PeerDidNumAlgo } from '@credo-ts/core'
+import { Agent, PeerDidNumAlgo, W3cCredentialRepository } from '@credo-ts/core'
 import {
   DidCommBasicMessageEventTypes,
   DidCommBasicMessageRecord,
@@ -1921,8 +1921,10 @@ export function setupVrcConnectionHandler(agent: Agent) {
                 witnessedAt: new Date().toISOString(),
               })
 
-              // Persist the metadata update
-              const { W3cCredentialRepository } = await import('@credo-ts/core')
+              // Persist the metadata update (W3cCredentialRepository imported
+              // statically at module top — a dynamic import() here failed on
+              // the dev build as an on-demand Metro lazy chunk mid-witnessed
+              // exchange, dropping the VWC routing metadata).
               const w3cCredentialRepository = agent.dependencyManager.resolve(W3cCredentialRepository)
               await w3cCredentialRepository.update(agent.context, w3cRecord)
 
