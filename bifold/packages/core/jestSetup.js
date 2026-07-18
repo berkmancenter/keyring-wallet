@@ -13,6 +13,16 @@ import { MockLogger } from './src/testing/MockLogger'
 // React 18+/19: enable proper act() behavior in tests
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
+// Neutralize VrcNameCacheProvider's async cache build in tests. Its buildCache
+// resolves after the mounting test (via __tests__/helpers/app.tsx) tears down,
+// leaking a React-19 act() state update into whatever test runs next — failing
+// unrelated suites (Settings, CameraDisclosureModal). The provider only supplies
+// display-name lookups, not behavior under test, so a passthrough is safe.
+jest.mock('./src/modules/vrc/context/VrcNameCacheProvider', () => ({
+  VrcNameCacheProvider: ({ children }) => children,
+  useVrcNameCache: () => ({ getVrcName: () => null, isLoading: false }),
+}))
+
 const mockBifoldLogger = new MockLogger()
 bifoldLoggerInstance.test = mockBifoldLogger.test
 bifoldLoggerInstance.trace = mockBifoldLogger.trace

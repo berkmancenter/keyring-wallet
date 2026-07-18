@@ -240,7 +240,7 @@ exports[`Settings Screen Renders correctly 1`] = `
               accessibilityState={
                 Object {
                   "busy": undefined,
-                  "checked": undefined,
+                  "checked": false,
                   "disabled": undefined,
                   "expanded": undefined,
                   "selected": undefined,
@@ -256,7 +256,7 @@ exports[`Settings Screen Renders correctly 1`] = `
               }
               accessible={true}
               collapsable={false}
-              focusable={false}
+              focusable={true}
               onClick={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
@@ -446,7 +446,7 @@ exports[`Settings Screen Renders correctly 1`] = `
               accessibilityState={
                 Object {
                   "busy": undefined,
-                  "checked": undefined,
+                  "checked": false,
                   "disabled": undefined,
                   "expanded": undefined,
                   "selected": undefined,
@@ -462,7 +462,7 @@ exports[`Settings Screen Renders correctly 1`] = `
               }
               accessible={true}
               collapsable={false}
-              focusable={false}
+              focusable={true}
               onClick={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
@@ -652,7 +652,7 @@ exports[`Settings Screen Renders correctly 1`] = `
               accessibilityState={
                 Object {
                   "busy": undefined,
-                  "checked": undefined,
+                  "checked": true,
                   "disabled": undefined,
                   "expanded": undefined,
                   "selected": undefined,
@@ -668,7 +668,7 @@ exports[`Settings Screen Renders correctly 1`] = `
               }
               accessible={true}
               collapsable={false}
-              focusable={false}
+              focusable={true}
               onClick={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
@@ -2089,7 +2089,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
               accessibilityState={
                 Object {
                   "busy": undefined,
-                  "checked": undefined,
+                  "checked": false,
                   "disabled": undefined,
                   "expanded": undefined,
                   "selected": undefined,
@@ -2105,7 +2105,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
               }
               accessible={true}
               collapsable={false}
-              focusable={false}
+              focusable={true}
               onClick={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
@@ -2295,7 +2295,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
               accessibilityState={
                 Object {
                   "busy": undefined,
-                  "checked": undefined,
+                  "checked": false,
                   "disabled": undefined,
                   "expanded": undefined,
                   "selected": undefined,
@@ -2311,7 +2311,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
               }
               accessible={true}
               collapsable={false}
-              focusable={false}
+              focusable={true}
               onClick={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
@@ -2501,7 +2501,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
               accessibilityState={
                 Object {
                   "busy": undefined,
-                  "checked": undefined,
+                  "checked": true,
                   "disabled": undefined,
                   "expanded": undefined,
                   "selected": undefined,
@@ -2517,7 +2517,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
               }
               accessible={true}
               collapsable={false}
-              focusable={false}
+              focusable={true}
               onClick={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}

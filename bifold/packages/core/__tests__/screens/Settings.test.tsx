@@ -1,5 +1,5 @@
 import { useNavigation } from '@react-navigation/native'
-import { render } from '@testing-library/react-native'
+import { render, act } from '@testing-library/react-native'
 import React from 'react'
 import { StoreContext } from '../../src'
 import Settings from '../../src/screens/Settings'
@@ -40,6 +40,9 @@ describe('Settings Screen', () => {
         </BasicAppContext>
       </StoreContext.Provider>
     )
+    // React 19: flush initial async/animation state updates so they don't leak
+    // an "not wrapped in act(...)" warning into the next test.
+    await act(async () => {})
     expect(tree).toMatchSnapshot()
   })
 
@@ -70,6 +73,9 @@ describe('Settings Screen', () => {
         </BasicAppContext>
       </StoreContext.Provider>
     )
+    // React 19: flush initial async/animation state updates so they don't leak
+    // an "not wrapped in act(...)" warning into the next test.
+    await act(async () => {})
 
     // Settings screen should render with wallet inviter capability enabled
     expect(tree).toMatchSnapshot()
