@@ -1,5 +1,11 @@
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
-import { DidCommBasicMessageRecord, DidCommCredentialExchangeRecord, DidCommCredentialState, DidCommProofExchangeRecord, DidCommProofState } from '@credo-ts/didcomm'
+import {
+  DidCommBasicMessageRecord,
+  DidCommCredentialExchangeRecord,
+  DidCommCredentialState,
+  DidCommProofExchangeRecord,
+  DidCommProofState,
+} from '@credo-ts/didcomm'
 import { useCredentialByState, useProofByState, useBasicMessages, useAgent } from '@bifold/react-hooks'
 import {
   BifoldAgent,
@@ -26,7 +32,9 @@ function isProtocolMessage(content: string): boolean {
   }
 }
 
-export const useNotifications = (): Array<DidCommBasicMessageRecord | DidCommCredentialExchangeRecord | DidCommProofExchangeRecord> => {
+export const useNotifications = (): Array<
+  DidCommBasicMessageRecord | DidCommCredentialExchangeRecord | DidCommProofExchangeRecord
+> => {
   const { agent } = useAgent()
   const [store] = useStore<BCState>()
   const offers = useCredentialByState(DidCommCredentialState.OfferReceived)

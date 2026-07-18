@@ -4,7 +4,11 @@ import {
   AnonCredsRequestedAttributeMatch,
   AnonCredsRequestedPredicateMatch,
 } from '@credo-ts/anoncreds'
-import { DidCommCredentialExchangeRecord, DidCommProofExchangeRecord, GetCredentialsForProofRequestReturn } from '@credo-ts/didcomm'
+import {
+  DidCommCredentialExchangeRecord,
+  DidCommProofExchangeRecord,
+  GetCredentialsForProofRequestReturn,
+} from '@credo-ts/didcomm'
 import { BifoldAgent } from '@bifold/core'
 import { Attribute, Predicate } from '@bifold/oca/build/legacy'
 

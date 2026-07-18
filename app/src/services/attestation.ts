@@ -90,7 +90,9 @@ const invitationUrlFromRestrictions = async (
   agent: BifoldAgent,
   restrictions: AttestationRestrictionsType
 ): Promise<string | undefined> => {
-  const format = (await agent.modules.didcomm.proofs.getFormatData(proof.id)) as unknown as AttestationProofRequestFormat
+  const format = (await agent.modules.didcomm.proofs.getFormatData(
+    proof.id
+  )) as unknown as AttestationProofRequestFormat
   const formatToUse = format.request?.anoncreds ? 'anoncreds' : 'indy'
   const restrictionsArePresent = format.request?.[formatToUse]?.requested_attributes?.attestationInfo?.restrictions
 
