@@ -367,10 +367,10 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
 
         {/* Witness Records */}
         {witnessRecords.length > 0 && (
-          <View style={styles.witnessSection}>
+          <View style={styles.witnessSection} testID="WitnessSection">
             <ThemedText style={styles.witnessSectionHeader}>Witness Records</ThemedText>
             {witnessRecords.map((record, index) => (
-              <View key={index} style={styles.witnessRecord}>
+              <View key={index} style={styles.witnessRecord} testID="WitnessRecord">
                 {record.event && (
                   <View style={styles.witnessSubSection}>
                     <ThemedText style={styles.witnessLabel}>Event</ThemedText>
