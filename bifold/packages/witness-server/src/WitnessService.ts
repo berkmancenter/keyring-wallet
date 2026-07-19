@@ -259,8 +259,8 @@ export class WitnessService {
   > = new Map()
 
   private static readonly PENDING_REQUEST_TTL_MS = 3 * 60 * 1000 // 3 minutes
-  private pendingRequestCleanupInterval?: NodeJS.Timeout
-  private sessionCleanupInterval?: NodeJS.Timeout
+  private pendingRequestCleanupInterval?: ReturnType<typeof setInterval>
+  private sessionCleanupInterval?: ReturnType<typeof setInterval>
 
   /** Persistent opt-in reporting graph (connectionId ↔ reportingDid, exchange edges) */
   public reportingGraph!: ReportingGraph
