@@ -8,13 +8,14 @@ this folder is a small standalone npm package.
 | Command (repo root) | What it does | Attended? |
 | --- | --- | --- |
 | `yarn e2e:vrc` | Two-device VRC exchange on the **Android emulator + iOS simulator** | No |
+| `yarn e2e:vrc:android-only` | Same exchange on **two Android emulators** (no macOS/Xcode needed; see below for the two-AVD setup) | No |
 | `yarn e2e:vrc:devices` | Same exchange on a **physical Android phone + iPhone**, proving hardware attestation + biometric signing | **Yes** — you authenticate on the phones |
 | `yarn e2e:migration` | Askar 0.2→0.6 store migration: old app → exchange → in-place upgrade | No |
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
-`vrc-exchange:devices`, `store-migration`, `onboarding-smoke` (plus
-`vrc-exchange:android-only` for two AVDs).
+`vrc-exchange:android-only`, `vrc-exchange:devices`, `store-migration`,
+`onboarding-smoke`.
 
 ## One-time setup
 
@@ -70,13 +71,105 @@ running; the port is forwarded to the phone over USB with `adb reverse`).
 
 ## Simulator/emulator run (`yarn e2e:vrc`)
 
-Fully unattended. Defaults (override via env): `ANDROID_AVD=Pixel_6_API_33`,
+Fully unattended. Defaults (override via env): `ANDROID_AVD=Pixel_8_API_33`,
 `IOS_DEVICE_NAME="iPhone 17"`, `IOS_PLATFORM_VERSION=26.3`, `ANDROID_APK` /
 `IOS_APP` for binary paths, `PLATFORMS=android,ios`.
+
+If your AVD is named differently, list what you actually have and point
+`ANDROID_AVD` at one of them:
+
+```sh
+emulator -list-avds
+ANDROID_AVD=Pixel_9_API_35 yarn e2e:vrc   # swap in your AVD's actual name
+```
+
+If Appium fails with `Error getting AVD with retry ... Timing out` (~60s),
+the emulator's cold boot is slower than Appium's default `avdLaunchTimeout`.
+Boot that same AVD yourself first, wait for it to come up, then run the
+suite — Appium attaches to the already-running instance instead of trying
+to launch one itself:
+
+```sh
+emulator -avd Pixel_8_API_33 &      # swap in your AVD's actual name
+adb wait-for-device
+# poll until this prints "1" (fully booted), then run the suite:
+adb shell getprop sys.boot_completed
+```
+
+If the emulator segfaults on launch (crash log mentions
+`createGlobalVkEmulation` / Vulkan, and dumps to `~/.android/...crash.db`),
+the host-GPU/Vulkan renderer is incompatible with your GPU driver. Force
+software rendering instead:
+
+```sh
+emulator -avd Pixel_8_API_33 -gpu swiftshader_indirect &   # swap in your AVD's actual name
+```
 
 Note: emulators/simulators **cannot** do hardware attestation (no App Attest,
 no usable TEE attestation) — the app silently falls back to a plain exchange
 with no evidence block. That path is only proven by the real-device run below.
+
+### Testing the minSdk floor (API 24)
+
+`Pixel_8_API_33` is API 33; the app's actual `minSdkVersion` is 24
+(`app/android/build.gradle`), a real backward-compatibility gap the default
+AVD never exercises (same API level as `Pixel_8_API_33`, just a different
+device profile). Create a low-API AVD once and point `ANDROID_AVD` at it to
+run the suite against the floor:
+
+```sh
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+  --install "system-images;android-24;google_apis;x86_64"
+$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd \
+  -n Pixel_2_API_24 \
+  -k "system-images;android-24;google_apis;x86_64" \
+  -d "pixel_2"
+
+emulator -avd Pixel_2_API_24 -gpu swiftshader_indirect &
+adb wait-for-device
+adb shell getprop sys.boot_completed   # poll until "1"
+
+ANDROID_AVD=Pixel_2_API_24 yarn e2e:vrc
+```
+
+### Android-only variant (`vrc-exchange:android-only`) — two emulators
+
+No macOS/Xcode required, but it needs **two** AVDs — two emulator instances
+can't share one. Check what you have and create a second if needed (example
+names below — swap in your own; `-n` is the new AVD's name):
+
+```sh
+emulator -list-avds
+$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd \
+  -n Pixel_8_API_33_b \
+  -k "system-images;android-33;google_apis_playstore;x86_64" \
+  -d "pixel_8"
+```
+
+Boot **both** before running the suite (add `-gpu swiftshader_indirect` too
+if you hit the Vulkan segfault above), and wait for both to finish booting —
+swap in your own two AVD names throughout:
+
+```sh
+emulator -avd Pixel_8_API_33 -gpu swiftshader_indirect &
+emulator -avd Pixel_8_API_33_b -gpu swiftshader_indirect &
+
+adb devices                                          # should list both, as "device"
+adb -s emulator-5554 shell getprop sys.boot_completed # repeat per serial until "1"
+adb -s emulator-5556 shell getprop sys.boot_completed
+```
+
+Then run the suite from the repo root, telling it which AVD is which
+wallet — `ANDROID_AVD` is wallet A, `ANDROID_AVD2` is wallet B:
+
+```sh
+ANDROID_AVD=Pixel_8_API_33 ANDROID_AVD2=Pixel_8_API_33_b \
+  yarn e2e:vrc:android-only
+```
+
+Appium attaches to the two already-running emulators by matching each
+session's `appium:avd` capability to that AVD's instance, rather than
+launching its own — so both must already be up before you run the command.
 
 ## Real devices (`yarn e2e:vrc:devices`) — attended
 

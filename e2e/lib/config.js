@@ -27,7 +27,9 @@ export const IOS_APP =
     "app/ios/build/e2e-dd/Build/Products/Debug-iphonesimulator/KeyRing.app"
   );
 
-export const ANDROID_AVD = process.env.ANDROID_AVD || "Pixel_6_API_33";
+export const ANDROID_AVD = process.env.ANDROID_AVD || "Pixel_8_API_33";
+// Second AVD for PLATFORMS=android,android (two emulators can't share one AVD).
+export const ANDROID_AVD2 = process.env.ANDROID_AVD2 || "";
 export const IOS_DEVICE_NAME = process.env.IOS_DEVICE_NAME || "iPhone 17";
 export const IOS_PLATFORM_VERSION = process.env.IOS_PLATFORM_VERSION || "26.3";
 
@@ -51,11 +53,11 @@ export const IOS_DEVICE_APP =
 // second PIN input" symptom). 100ms keeps a tiny settle without the stall.
 const ANDROID_SETTINGS = { "appium:settings[waitForIdleTimeout]": 100 };
 
-export function androidCaps() {
+export function androidCaps(avd = ANDROID_AVD) {
   return {
     platformName: "Android",
     "appium:automationName": "UiAutomator2",
-    "appium:avd": ANDROID_AVD,
+    "appium:avd": avd,
     "appium:app": ANDROID_APK,
     "appium:appPackage": APP_ID,
     "appium:appWaitActivity": "*",
