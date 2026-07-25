@@ -2,7 +2,7 @@
 //
 // Spawns bifold/packages/witness-server (ts-node) with a fresh temp wallet +
 // invitation per run, waits for its "READY" banner, reads the persisted
-// invitation URL, and tears it down. See docs/spikes/witnessed-e2e-spec.md.
+// invitation URL, and tears it down. See e2e/README.md for usage.
 import { spawn, execSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

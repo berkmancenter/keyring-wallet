@@ -496,7 +496,7 @@ export async function acceptCredentialOfferFromChat(
  * surfaces later as a VWC/witness-record on a contact after a witnessed
  * exchange). So this just pastes the invitation; the CALLER confirms the
  * connection completed via the witness server's own log
- * (witness.waitForParticipants). See docs/spikes/witnessed-e2e-spec.md.
+ * (witness.waitForParticipants). See e2e/README.md for usage.
  */
 export async function connectToWitness(driver, witnessInvitationUrl) {
   await acceptInvitationViaPaste(driver, witnessInvitationUrl);

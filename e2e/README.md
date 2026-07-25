@@ -10,12 +10,16 @@ this folder is a small standalone npm package.
 | `yarn e2e:vrc` | Two-device VRC exchange on the **Android emulator + iOS simulator** | No |
 | `yarn e2e:vrc:android-only` | Same exchange on **two Android emulators** (no macOS/Xcode needed; see below for the two-AVD setup) | No |
 | `yarn e2e:vrc:devices` | Same exchange on a **physical Android phone + iPhone**, proving hardware attestation + biometric signing | **Yes** — you authenticate on the phones |
-| `yarn e2e:migration` | Askar 0.2→0.6 store migration: old app → exchange → in-place upgrade | No |
+| `yarn e2e:migration` | Askar 0.2→0.6 store migration: old app → exchange → in-place upgrade (Android emulator + iOS simulator peer) | No |
+| `yarn e2e:migration:android-only` | Same migration test, **two Android emulators** (no macOS/Xcode needed) | No |
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
+| `yarn e2e:vrc:witnessed:devices` | Witnessed + hardware-attested exchange on a **physical Android phone + iPhone**, routed through a locally-run witness server — both wallets end up with a Verifiable Witness Credential (VWC) in addition to the peer VRC | **Yes** |
+| `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
 `vrc-exchange:android-only`, `vrc-exchange:devices`, `store-migration`,
-`onboarding-smoke`.
+`store-migration:android-only`, `onboarding-smoke`,
+`vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`.
 
 ## One-time setup
 
@@ -35,6 +39,17 @@ The harness starts Appium itself if nothing is listening on `:4723`.
 ## Build the app binaries first
 
 The tests install pre-built binaries; they don't build the app for you.
+
+**`app/.env` changes require a rebuild.** `react-native-config` bakes `.env`
+values (`MEDIATOR_URL`, etc.) into the native build at compile time — they are
+NOT read at JS runtime. Editing `.env` and re-running the suite against an
+already-built APK/`.app` silently keeps using the old values. If you add or
+change anything in `.env` (most commonly `MEDIATOR_URL`), rebuild before your
+next run — for Android, `cd app/android && ./gradlew assembleDebug` (or just
+`yarn android` from `app/`, which builds and installs). Symptom if you skip
+this: the app gets through onboarding and agent init fine, then fails with
+"There is no mediator to pickup messages from" — the mediator invitation was
+never processed because the module config never saw the new URL.
 
 **Android (emulator and real device — same debug APK):**
 
@@ -219,6 +234,60 @@ logs are the crypto-level proof of what validated.
 Needs a baseline APK built from the `upgrade-baseline-p0` tag — the full
 recipe is in the header comment of `run-store-migration.js`. Pass it as
 `BASELINE_APK=/path/to/app-release.apk`.
+
+### Android-only variant (`yarn e2e:migration:android-only`)
+
+Same migration test; a second Android emulator stands in for the iOS
+simulator peer (the peer is only there to have a second wallet to exchange
+a VRC with — nothing about the migration itself depends on its platform).
+Needs the same second AVD as `yarn e2e:vrc:android-only` (see that section
+above for how to create one) and the same `BASELINE_APK`:
+
+```sh
+BASELINE_APK=/path/to/app-release.apk ANDROID_AVD2=Pixel_8_API_33_b \
+  yarn e2e:migration:android-only
+```
+
+## Witnessed exchange (`yarn e2e:vrc:witnessed:devices`) — attended
+
+Same hardware-attested exchange as `yarn e2e:vrc:devices`, but both wallets
+first connect to a locally-run witness server (`bifold/packages/witness-server`,
+launched automatically), so the exchange auto-routes through the witness and
+each wallet ends up with a Verifiable Witness Credential (VWC) in addition to
+the peer VRC. See `docs/CRYPTO_SUITE_FOLLOWUP.md` for the DataIntegrityProof/
+eddsa-rdfc-2022 cryptosuite work this proves end to end.
+
+Prerequisites beyond the real-device setup above:
+
+- [`cloudflared`](https://github.com/cloudflare/cloudflared) installed — the
+  harness spins up a quick HTTPS tunnel to the locally-run witness (mobile
+  OSes block cleartext HTTP, and production witnesses are HTTPS).
+- `bifold/packages/witness-server` dependencies installed (it's launched via
+  `yarn ts-node --transpile-only src/index.ts` from that package).
+
+Same attended flow as `yarn e2e:vrc:devices` — watch for the `OPERATOR`
+banners and authenticate on both phones. Override the witness's name with
+`WITNESS_NAME`, or its ports with `WITNESS_PORT`/`WITNESS_WEB_PORT`, if the
+defaults collide with something else running locally.
+
+### Android-only variant (`yarn e2e:vrc:witnessed:android-only`)
+
+Same witnessed + attested exchange; a second **physical** Android phone
+stands in for the iPhone. Two physical phones are required, not an emulator
+pair — the whole point of this test is hardware attestation (TEE-backed
+keys + `BiometricPrompt` on both sides), and emulators cannot do hardware
+attestation (see the note under "Simulator/emulator run" above) — an
+emulator pair would silently fall back to a plain, unattested exchange.
+
+Both phones connected over USB are auto-detected (same convention as
+`ANDROID_UDID` for `yarn e2e:vrc:devices`); if more or fewer than two are
+found, set `ANDROID_UDID` and `ANDROID_UDID2` explicitly:
+
+```sh
+adb devices                                      # list connected serials
+ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
+  yarn e2e:vrc:witnessed:android-only
+```
 
 ## Troubleshooting
 

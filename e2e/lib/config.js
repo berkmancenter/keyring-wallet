@@ -37,6 +37,9 @@ export const IOS_PLATFORM_VERSION = process.env.IOS_PLATFORM_VERSION || "26.3";
 // UDIDs are auto-detected by the runner when unset (adb devices / devicectl).
 export const ANDROID_UDID = process.env.ANDROID_UDID || "";
 export const IOS_UDID = process.env.IOS_UDID || "";
+// Second physical android device for the witnessed android-only devices run
+// (two phones can't share one udid).
+export const ANDROID_UDID2 = process.env.ANDROID_UDID2 || "";
 // Apple team used to sign WebDriverAgent onto the physical iPhone.
 export const IOS_TEAM_ID = process.env.IOS_TEAM_ID || "947XHQ9DVC";
 // Device build (Debug-iphoneos, FORCE_BUNDLING=1 so it doesn't need metro) — see e2e/README.md
