@@ -1,6 +1,7 @@
 import { remote } from "webdriverio";
 import { spawn } from "node:child_process";
 import net from "node:net";
+import { mkdirSync, createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 
@@ -45,15 +46,21 @@ export async function ensureAppium() {
       );
     }
   }
-  console.log(`[e2e] starting appium on :${APPIUM_PORT}`);
+  mkdirSync("artifacts", { recursive: true });
+  const logFile = "artifacts/appium.log";
+  console.log(`[e2e] starting appium on :${APPIUM_PORT} (log: ${logFile})`);
+  const log = createWriteStream(logFile, { flags: "w" });
   appiumProc = spawn(
     "appium",
     ["--port", String(APPIUM_PORT), "--relaxed-security"],
     {
-      stdio: ["ignore", "ignore", "inherit"],
+      stdio: ["ignore", "pipe", "pipe"],
       detached: false,
     }
   );
+  appiumProc.stdout.pipe(log);
+  appiumProc.stderr.pipe(log);
+  appiumProc.stderr.pipe(process.stderr);
   for (let i = 0; i < 60; i++) {
     if (await portInUse(APPIUM_PORT)) return;
     await sleep(1000);
