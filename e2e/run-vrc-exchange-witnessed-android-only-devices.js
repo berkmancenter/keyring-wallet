@@ -76,4 +76,5 @@ await runWitnessedExchange({
   createSessionA: (udid) => createSession("android", androidDeviceCaps(udid)),
   createSessionB: (udid) => createSession("android", androidDeviceCaps(udid)),
   dumpWitnessLogs: (udids) => dumpAndroidWitnessLogs(udids),
+  name: "vrc-exchange:witnessed:android-only",
 });

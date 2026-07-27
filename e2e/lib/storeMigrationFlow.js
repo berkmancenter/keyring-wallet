@@ -32,6 +32,7 @@ import {
   dismissTourIfPresent,
   showRelationshipInvitation,
 } from "./flows.js";
+import { printSuccess, printFailure } from "./banner.js";
 
 const PEER = { firstName: "Alice", lastName: "Anderson" }; // peer wallet (new build)
 const HOLDER = { firstName: "Bob", lastName: "Baker" }; // android (old → new build)
@@ -122,8 +123,10 @@ async function unlockWallet(driver, timeout = 180000) {
  *   called once right after the peer session is created (e.g. to pre-grant a
  *   camera permission the peer platform needs); pass an async no-op if
  *   nothing is needed.
+ * @param {string} opts.name - banner name, matching the npm script that invoked this
+ *   (e.g. "store-migration" or "store-migration:android-only").
  */
-export async function runStoreMigration({ baselineApk, createPeerSession, primePeer }) {
+export async function runStoreMigration({ baselineApk, createPeerSession, primePeer, name }) {
   let android, peer;
   try {
     await ensureAppium();
@@ -206,12 +209,10 @@ export async function runStoreMigration({ baselineApk, createPeerSession, primeP
       `${PEER.firstName} ${PEER.lastName}`,
       120000
     );
-    console.log(
-      "\n[e2e] ✅ askar 0.2→0.6 migration: wallet, contact and VRC survived the upgrade"
-    );
+    printSuccess(name);
     process.exitCode = 0;
   } catch (err) {
-    console.error("\n[e2e] ❌ FAILED:", err.message);
+    printFailure(name, err);
     for (const d of [android, peer].filter(Boolean)) {
       try {
         await screenshot(d, "migration-failure");

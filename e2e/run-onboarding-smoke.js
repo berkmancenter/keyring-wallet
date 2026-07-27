@@ -10,6 +10,7 @@ import {
   dumpSource,
 } from "./lib/driver.js";
 import { completeOnboarding } from "./lib/flows.js";
+import { printSuccess, printFailure } from "./lib/banner.js";
 
 const platform = process.env.PLATFORM || "android";
 let driver;
@@ -18,10 +19,10 @@ try {
   driver = await createSession(platform);
   await completeOnboarding(driver, { firstName: "Smoke", lastName: "Test" });
   await screenshot(driver, "onboarding-done");
-  console.log("\n[e2e] ✅ onboarding smoke passed");
+  printSuccess("onboarding-smoke");
   process.exitCode = 0;
 } catch (err) {
-  console.error("\n[e2e] ❌ FAILED:", err.message);
+  printFailure("onboarding-smoke", err);
   if (driver) {
     try {
       await screenshot(driver, "failure");

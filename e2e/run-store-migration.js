@@ -73,4 +73,9 @@ async function primePeer(peer) {
   }
 }
 
-await runStoreMigration({ baselineApk: BASELINE_APK, createPeerSession, primePeer });
+await runStoreMigration({
+  baselineApk: BASELINE_APK,
+  createPeerSession,
+  primePeer,
+  name: "store-migration",
+});

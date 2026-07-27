@@ -47,6 +47,7 @@ import {
   androidDeviceCaps,
   iosDeviceCaps,
 } from "./lib/config.js";
+import { printSuccess, printFailure } from "./lib/banner.js";
 
 // ---------- device discovery ----------
 
@@ -277,16 +278,13 @@ try {
     assertVrcReceived(ios, "Alice Anderson"),
   ]);
 
-  console.log(
-    "\n[e2e] ✅ REAL-DEVICE VRC exchange succeeded on both phones with" +
-      " hardware attestation verified in both directions"
-  );
+  printSuccess("vrc-exchange:devices");
   process.exitCode = 0;
 
   dumpAndroidAttestationLogs(androidUdid);
   await dumpIosAttestationLogs(ios);
 } catch (err) {
-  console.error("\n[e2e] ❌ FAILED:", err.message);
+  printFailure("vrc-exchange:devices", err);
   for (const d of [android, ios].filter(Boolean)) {
     try {
       await screenshot(d, "failure");

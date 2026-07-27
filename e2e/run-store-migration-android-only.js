@@ -41,4 +41,9 @@ async function createPeerSession() {
 // nothing to pre-grant for the peer.
 async function primePeer() {}
 
-await runStoreMigration({ baselineApk: BASELINE_APK, createPeerSession, primePeer });
+await runStoreMigration({
+  baselineApk: BASELINE_APK,
+  createPeerSession,
+  primePeer,
+  name: "store-migration:android-only",
+});

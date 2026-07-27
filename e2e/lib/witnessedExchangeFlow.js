@@ -25,6 +25,7 @@ import {
   showRelationshipInvitation,
 } from "./flows.js";
 import { startWitness } from "./witness.js";
+import { printSuccess, printFailure } from "./banner.js";
 
 const WITNESS_NAME = process.env.WITNESS_NAME || "e2e-witness";
 const IDENTITY_A = { firstName: "Alice", lastName: "Anderson" };
@@ -93,12 +94,15 @@ export function dumpAndroidWitnessLogs(udids) {
  *   available. Use the exported `dumpAndroidWitnessLogs` helper for
  *   whichever udids are actually Android devices (ignore the rest — e.g. an
  *   iOS udid isn't reachable via `adb logcat`).
+ * @param {string} opts.name - banner name, matching the npm script that invoked this
+ *   (e.g. "vrc-exchange:witnessed:devices" or "vrc-exchange:witnessed:android-only").
  */
 export async function runWitnessedExchange({
   detectDevices,
   createSessionA,
   createSessionB,
   dumpWitnessLogs: dumpLogs,
+  name,
 }) {
   let sessionA, sessionB, witness;
   try {
@@ -165,15 +169,12 @@ export async function runWitnessedExchange({
       assertContactShields(sessionB, `${IDENTITY_A.firstName} ${IDENTITY_A.lastName}`),
     ]);
 
-    console.log(
-      "\n[e2e] ✅ WITNESSED + ATTESTED VC 2.0 (eddsa-rdfc-2022) exchange succeeded on both phones —\n" +
-        "[e2e]    each contact shows BOTH shields: Secure Exchange (attestation) + Witnessed"
-    );
+    printSuccess(name);
     process.exitCode = 0;
 
     dumpLogs([udidA, udidB].filter(Boolean));
   } catch (err) {
-    console.error("\n[e2e] ❌ FAILED:", err.message);
+    printFailure(name, err);
     for (const d of [sessionA, sessionB].filter(Boolean)) {
       try {
         await screenshot(d, "failure");

@@ -21,6 +21,19 @@ The same scripts exist inside this folder as `npm run vrc-exchange`,
 `store-migration:android-only`, `onboarding-smoke`,
 `vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`.
 
+Every script above ends by printing a bordered pass/fail banner
+(`lib/banner.js`) so a completed run is easy to spot when scrolled back
+through the appium/mocha noise:
+
+```
+============================================================
+✅  E2E PASSED — vrc-exchange
+============================================================
+```
+
+Failures print the same box with `❌  E2E FAILED — <name>` plus the error
+message, in addition to the existing screenshot/log dumps.
+
 ## One-time setup
 
 ```bash

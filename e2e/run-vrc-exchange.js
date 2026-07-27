@@ -27,6 +27,7 @@ import {
   showRelationshipInvitation,
 } from "./lib/flows.js";
 import { androidCaps, ANDROID_AVD2 } from "./lib/config.js";
+import { printSuccess, printFailure } from "./lib/banner.js";
 
 const platforms = (process.env.PLATFORMS || "android,ios")
   .split(",")
@@ -76,10 +77,10 @@ try {
     assertVrcReceived(b, "Alice Anderson"),
   ]);
 
-  console.log("\n[e2e] ✅ VRC exchange succeeded on both wallets");
+  printSuccess("vrc-exchange");
   process.exitCode = 0;
 } catch (err) {
-  console.error("\n[e2e] ❌ FAILED:", err.message);
+  printFailure("vrc-exchange", err);
   for (const d of [a, b].filter(Boolean)) {
     try {
       await screenshot(d, "failure");

@@ -128,4 +128,5 @@ await runWitnessedExchange({
   createSessionB: (udid) => createSession("ios", iosDeviceCaps(udid)),
   // only session A is Android here — an iOS udid isn't reachable via `adb logcat`
   dumpWitnessLogs: () => dumpAndroidWitnessLogs([androidUdid]),
+  name: "vrc-exchange:witnessed:devices",
 });
