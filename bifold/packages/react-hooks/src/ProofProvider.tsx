@@ -101,16 +101,18 @@ const ProofProvider: React.FC<PropsWithChildren<Props>> = ({ agent, children }) 
   useEffect(() => {
     if (!agent || state.loading) return
 
+    // Functional setState updaters only — see recordUtils.ts. Plain `state` here would
+    // drop one of two proof records saved in the same tick.
     const proofAdded$ = recordsAddedByType(agent, DidCommProofExchangeRecord).subscribe((record) =>
-      setState(addRecord(record, state))
+      setState((prevState) => addRecord(record, prevState))
     )
 
     const proofUpdated$ = recordsUpdatedByType(agent, DidCommProofExchangeRecord).subscribe((record) =>
-      setState(updateRecord(record, state))
+      setState((prevState) => updateRecord(record, prevState))
     )
 
     const proofRemoved$ = recordsRemovedByType(agent, DidCommProofExchangeRecord).subscribe((record) =>
-      setState(removeRecord(record, state))
+      setState((prevState) => removeRecord(record, prevState))
     )
 
     return () => {
@@ -118,7 +120,7 @@ const ProofProvider: React.FC<PropsWithChildren<Props>> = ({ agent, children }) 
       proofUpdated$?.unsubscribe()
       proofRemoved$?.unsubscribe()
     }
-  }, [state, agent])
+  }, [agent, state.loading])
 
   return <ProofContext.Provider value={state}>{children}</ProofContext.Provider>
 }

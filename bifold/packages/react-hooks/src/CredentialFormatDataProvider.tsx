@@ -16,6 +16,11 @@ type FormattedDataState = {
   loading: boolean
 }
 
+// addRecord/updateRecord/removeRecord are pure — callers MUST invoke them through
+// React's functional setState updater (`setState(prev => addRecord(record, prev))`),
+// never `setState(addRecord(record, state))`. See recordUtils.ts in this package for
+// why: the latter closes over a stale `state` snapshot and drops one of two records
+// saved in the same tick.
 const addRecord = (record: CredentialFormatData, state: FormattedDataState): FormattedDataState => {
   const newRecordsState = [...state.formattedData]
   newRecordsState.unshift(record)
@@ -105,22 +110,24 @@ const CredentialFormatDataProvider: React.FC<PropsWithChildren<Props>> = ({ agen
   useEffect(() => {
     if (!agent || state.loading) return
 
+    // Functional setState updaters only — see the addRecord/updateRecord/removeRecord
+    // comment above. The await here widens the race window even further.
     const credentialAdded$ = recordsAddedByType(agent, DidCommCredentialExchangeRecord).subscribe(
       async (record: DidCommCredentialExchangeRecord) => {
         const formatData = await fetchCredentialInformation(agent, record)
-        setState(addRecord(formatData, state))
+        setState((prevState) => addRecord(formatData, prevState))
       },
     )
 
     const credentialUpdate$ = recordsUpdatedByType(agent, DidCommCredentialExchangeRecord).subscribe(
       async (record: DidCommCredentialExchangeRecord) => {
         const formatData = await fetchCredentialInformation(agent, record)
-        setState(updateRecord(formatData, state))
+        setState((prevState) => updateRecord(formatData, prevState))
       },
     )
 
     const credentialRemove$ = recordsRemovedByType(agent, DidCommCredentialExchangeRecord).subscribe((record) =>
-      setState(removeRecord(record.id, state)),
+      setState((prevState) => removeRecord(record.id, prevState)),
     )
 
     return () => {
@@ -128,7 +135,7 @@ const CredentialFormatDataProvider: React.FC<PropsWithChildren<Props>> = ({ agen
       credentialUpdate$.unsubscribe()
       credentialRemove$.unsubscribe()
     }
-  }, [state, agent])
+  }, [agent, state.loading])
 
   return <CredentialFormatDataContext.Provider value={state}>{children}</CredentialFormatDataContext.Provider>
 }

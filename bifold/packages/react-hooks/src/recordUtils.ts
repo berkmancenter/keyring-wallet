@@ -24,6 +24,18 @@ export interface RecordsState<R extends BaseRecordAny> {
   records: R[]
 }
 
+/**
+ * addRecord/updateRecord/removeRecord are pure — callers MUST invoke them through
+ * React's functional setState updater (`setState(prev => addRecord(record, prev))`),
+ * never `setState(addRecord(record, state))`. The latter closes over whatever `state`
+ * was at the last render; if two RecordSaved/Updated/Deleted events fire before React
+ * re-renders (e.g. two credential-exchange records — an RCard offer and a VRC offer —
+ * created back to back on the same connection), both callbacks compute from the same
+ * stale snapshot and one update silently overwrites the other, even though the
+ * underlying agent/repository has both records. See @bifold/core's chat-messages.tsx
+ * (useReliableBasicMessages) for a previously-documented instance of this same bug
+ * class in BasicMessageProvider.
+ */
 export const addRecord = <R extends BaseRecordAny>(record: R, state: RecordsState<R>): RecordsState<R> => {
   const newRecordsState = [...state.records]
   newRecordsState.unshift(record)

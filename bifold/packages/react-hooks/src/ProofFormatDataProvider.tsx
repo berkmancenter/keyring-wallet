@@ -16,6 +16,11 @@ type FormattedProofDataState = {
   loading: boolean
 }
 
+// addRecord/updateRecord/removeRecord are pure — callers MUST invoke them through
+// React's functional setState updater (`setState(prev => addRecord(record, prev))`),
+// never `setState(addRecord(record, state))`. See recordUtils.ts in this package for
+// why: the latter closes over a stale `state` snapshot and drops one of two records
+// saved in the same tick.
 const addRecord = (record: ProofFormatData, state: FormattedProofDataState): FormattedProofDataState => {
   const newRecordsState = [...state.formattedData]
   newRecordsState.unshift(record)
@@ -100,18 +105,20 @@ const ProofFormatDataProvider: React.FC<PropsWithChildren<Props>> = ({ agent, ch
   useEffect(() => {
     if (!agent || state.loading) return
 
+    // Functional setState updaters only — see the addRecord/updateRecord/removeRecord
+    // comment above. The await here widens the race window even further.
     const proofAdded$ = recordsAddedByType(agent, DidCommProofExchangeRecord).subscribe(async (record) => {
       const formatData = await agent.modules.didcomm.proofs.getFormatData(record.id)
-      setState(addRecord({ ...formatData, id: record.id }, state))
+      setState((prevState) => addRecord({ ...formatData, id: record.id }, prevState))
     })
 
     const proofUpdate$ = recordsUpdatedByType(agent, DidCommProofExchangeRecord).subscribe(async (record) => {
       const formatData = await agent.modules.didcomm.proofs.getFormatData(record.id)
-      setState(updateRecord({ ...formatData, id: record.id }, state))
+      setState((prevState) => updateRecord({ ...formatData, id: record.id }, prevState))
     })
 
     const proofRemove$ = recordsRemovedByType(agent, DidCommProofExchangeRecord).subscribe((record) =>
-      setState(removeRecord(record, state))
+      setState((prevState) => removeRecord(record, prevState))
     )
 
     return () => {
@@ -119,7 +126,7 @@ const ProofFormatDataProvider: React.FC<PropsWithChildren<Props>> = ({ agent, ch
       proofUpdate$.unsubscribe()
       proofRemove$.unsubscribe()
     }
-  }, [state, agent])
+  }, [agent, state.loading])
 
   return <ProofFormatDataContext.Provider value={state}>{children}</ProofFormatDataContext.Provider>
 }

@@ -2254,7 +2254,9 @@ __metadata:
     "@jest/types": "npm:^29.6.3"
     "@types/jest": "npm:^29.5.12"
     "@types/react": "npm:^18.2.14"
+    "@types/react-test-renderer": "npm:~19.1.0"
     jest: "npm:^29.7.0"
+    react-test-renderer: "npm:~19.1.4"
     rimraf: "npm:^6.1.2"
     rxjs: "npm:^7.2.0"
     ts-jest: "npm:^29.2.5"
@@ -6553,6 +6555,15 @@ __metadata:
   dependencies:
     "@types/react": "npm:*"
   checksum: 10c0/09a5191dd0f3b85abfa8939df585860ba11a666d888846c7fd7d8d5d1cd72a39224e154403f90a5b82f1dc6c896fa3447e4f5061b2d3e102d0ce798e559d7f13
+  languageName: node
+  linkType: hard
+
+"@types/react-test-renderer@npm:~19.1.0":
+  version: 19.1.0
+  resolution: "@types/react-test-renderer@npm:19.1.0"
+  dependencies:
+    "@types/react": "npm:*"
+  checksum: 10c0/799654e430df10aeaf267d71507fb64ec151359ead7e3774111bfd4abce7e0911dba461811195c06c22a6d17496ea92537d3185320ff4112fe29954cad1b9152
   languageName: node
   linkType: hard
 

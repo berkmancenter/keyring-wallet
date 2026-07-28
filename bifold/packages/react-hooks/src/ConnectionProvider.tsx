@@ -87,16 +87,18 @@ const ConnectionProvider: React.FC<PropsWithChildren<Props>> = ({ agent, childre
   useEffect(() => {
     if (!agent || state.loading) return
 
+    // Functional setState updaters only — see recordUtils.ts. Plain `state` here would
+    // drop one of two connection records saved in the same tick.
     const connectionAdded$ = recordsAddedByType(agent, DidCommConnectionRecord).subscribe((record) =>
-      setState(addRecord(record, state)),
+      setState((prevState) => addRecord(record, prevState)),
     )
 
     const connectionUpdated$ = recordsUpdatedByType(agent, DidCommConnectionRecord).subscribe((record) =>
-      setState(updateRecord(record, state)),
+      setState((prevState) => updateRecord(record, prevState)),
     )
 
     const connectionRemoved$ = recordsRemovedByType(agent, DidCommConnectionRecord).subscribe((record) =>
-      setState(removeRecord(record, state)),
+      setState((prevState) => removeRecord(record, prevState)),
     )
 
     return () => {
@@ -104,7 +106,7 @@ const ConnectionProvider: React.FC<PropsWithChildren<Props>> = ({ agent, childre
       connectionUpdated$.unsubscribe()
       connectionRemoved$.unsubscribe()
     }
-  }, [state, agent])
+  }, [agent, state.loading])
 
   return <ConnectionContext.Provider value={state}>{children}</ConnectionContext.Provider>
 }

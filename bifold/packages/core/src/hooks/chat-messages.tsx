@@ -405,10 +405,15 @@ const callbackTypeForMessage = (record: DidCommCredentialExchangeRecord | DidCom
  * @returns {ExtendedChatMessage[]} The chat messages for the given connection.
  */
 /**
- * Workaround for a stale-closure bug in @credo-ts/react-hooks BasicMessageProvider.
- * The subscription callback captures `state` from closure instead of using a functional
+ * Workaround for a stale-closure bug in @bifold/react-hooks BasicMessageProvider.
+ * The subscription callback captured `state` from closure instead of using a functional
  * updater, so rapid-fire messages overwrite each other and get lost. This hook
  * supplements the subscription with periodic DB queries via the public API.
+ *
+ * BasicMessageProvider (and its sibling record providers) now use a functional setState
+ * updater — see recordUtils.ts — so this polling fallback may no longer be necessary.
+ * Left in place because it hasn't been re-verified against the fix; a candidate for
+ * simplification/removal once it has.
  */
 const useReliableBasicMessages = (connectionId: string | undefined): DidCommBasicMessageRecord[] => {
   const subscriptionMessages = useBasicMessagesByConnectionId(connectionId ?? '')

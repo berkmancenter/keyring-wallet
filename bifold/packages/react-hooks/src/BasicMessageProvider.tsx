@@ -60,16 +60,18 @@ const BasicMessageProvider: React.FC<PropsWithChildren<Props>> = ({ agent, child
   useEffect(() => {
     if (!agent || state.loading) return
 
+    // Functional setState updaters only — see recordUtils.ts. Plain `state` here would
+    // drop one of two messages saved in the same tick.
     const basicMessageAdded$ = recordsAddedByType(agent, DidCommBasicMessageRecord).subscribe((record) =>
-      setState(addRecord(record, state)),
+      setState((prevState) => addRecord(record, prevState)),
     )
 
     const basicMessageUpdated$ = recordsUpdatedByType(agent, DidCommBasicMessageRecord).subscribe((record) =>
-      setState(updateRecord(record, state)),
+      setState((prevState) => updateRecord(record, prevState)),
     )
 
     const basicMessageRemoved$ = recordsRemovedByType(agent, DidCommBasicMessageRecord).subscribe((record) =>
-      setState(removeRecord(record, state)),
+      setState((prevState) => removeRecord(record, prevState)),
     )
 
     return () => {
@@ -77,7 +79,7 @@ const BasicMessageProvider: React.FC<PropsWithChildren<Props>> = ({ agent, child
       basicMessageUpdated$?.unsubscribe()
       basicMessageRemoved$?.unsubscribe()
     }
-  }, [state, agent])
+  }, [agent, state.loading])
 
   return <BasicMessageContext.Provider value={state}>{children}</BasicMessageContext.Provider>
 }

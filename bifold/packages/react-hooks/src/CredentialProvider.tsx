@@ -94,16 +94,18 @@ const CredentialProvider: React.FC<PropsWithChildren<Props>> = ({ agent, childre
   useEffect(() => {
     if (!agent || state.loading) return
 
+    // Functional setState updaters only — see recordUtils.ts. Plain `state` here would
+    // drop one of two credential records saved in the same tick (e.g. RCard + VRC).
     const credentialAdded$ = recordsAddedByType(agent, DidCommCredentialExchangeRecord).subscribe((record) =>
-      setState(addRecord(record, state)),
+      setState((prevState) => addRecord(record, prevState)),
     )
 
     const credentialUpdated$ = recordsUpdatedByType(agent, DidCommCredentialExchangeRecord).subscribe((record) =>
-      setState(updateRecord(record, state)),
+      setState((prevState) => updateRecord(record, prevState)),
     )
 
     const credentialRemoved$ = recordsRemovedByType(agent, DidCommCredentialExchangeRecord).subscribe((record) =>
-      setState(removeRecord(record, state)),
+      setState((prevState) => removeRecord(record, prevState)),
     )
 
     return () => {
@@ -111,7 +113,7 @@ const CredentialProvider: React.FC<PropsWithChildren<Props>> = ({ agent, childre
       credentialUpdated$?.unsubscribe()
       credentialRemoved$?.unsubscribe()
     }
-  }, [state, agent])
+  }, [agent, state.loading])
 
   return <CredentialContext.Provider value={state}>{children}</CredentialContext.Provider>
 }
