@@ -186,6 +186,39 @@ export async function tapTestId(driver, key, timeout = 30000) {
   return el;
 }
 
+/**
+ * Tap an element by testID, then confirm the tap actually took effect via
+ * `verify`, re-tapping if it didn't. Some real devices (seen on Android 16)
+ * silently drop an occasional tap: the WebDriver click command returns
+ * success, but the app never receives the touch, so the expected UI change
+ * (navigation, a modal closing, a toggle flipping) never happens. A plain
+ * tapTestId() has no way to detect that — it only confirms the element it
+ * clicked existed, not that the click did anything.
+ *
+ * @param {object} driver
+ * @param {string} key - testID to tap (see byTestId)
+ * @param {() => Promise<boolean>} verify - resolves true once the tap's
+ *   expected effect has happened. Must check something OTHER than "the
+ *   tapped element still exists" — e.g. a different element appearing or
+ *   disappearing, a screen having navigated.
+ * @param {{ attempts?: number, settleMs?: number, timeout?: number }} [options]
+ */
+export async function tapTestIdReliable(driver, key, verify, options = {}) {
+  const { attempts = 3, settleMs = 1500, timeout = 15000 } = options;
+  await waitForTestId(driver, key, timeout);
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const el = byTestId(driver, key);
+    if (await el.isExisting()) {
+      await el.click().catch(() => {});
+    }
+    await sleep(settleMs);
+    if (await verify()) return;
+  }
+  throw new Error(
+    `${driver.e2ePlatform}: tap on testID=${key} did not take effect after ${attempts} attempts`
+  );
+}
+
 /** Swipe up until the element with the given testID is displayed (max 6 swipes). */
 export async function scrollToTestId(driver, key, maxSwipes = 6) {
   for (let i = 0; i < maxSwipes; i++) {

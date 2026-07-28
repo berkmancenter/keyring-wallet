@@ -7,6 +7,7 @@ import {
   scrollToTestId,
   sleep,
   tapTestId,
+  tapTestIdReliable,
   waitForTestId,
   screenshot,
 } from "./driver.js";
@@ -197,7 +198,9 @@ export async function enableHardwareAttestation(driver) {
   // Screen with the in-page ToggleButton (testID ToggleHardwareAttestation).
   // If we're already past it somehow, skip straight to the PIN field.
   if (await existsTestId(driver, "ToggleHardwareAttestation", 15000)) {
-    await tapTestId(driver, "ToggleHardwareAttestation");
+    await tapTestIdReliable(driver, "ToggleHardwareAttestation", () =>
+      existsTestId(driver, "HardwareAttestationChangedEnterPIN", 3000)
+    );
   }
 
   const pinInput = await waitForTestId(
@@ -208,7 +211,11 @@ export async function enableHardwareAttestation(driver) {
   await pinInput.click();
   await pinInput.setValue(PIN);
   await hideKeyboard(driver);
-  await tapTestId(driver, "Continue", 15000);
+
+  // The switch's own checked state only flips once this PIN modal closes via
+  // onAuthenticationComplete, so a dropped Continue tap here looks like "the
+  // toggle never switched" even though the toggle tap itself was fine.
+  await tapTestIdReliable(driver, "Continue", async () => !(await pinInput.isExisting()));
   await sleep(2000);
   console.log(`[e2e] ${driver.e2ePlatform}: hardware attestation enabled`);
   // back to the Contacts tab for the rest of the flow
@@ -507,17 +514,21 @@ export async function connectToWitness(driver, witnessInvitationUrl) {
   await returnToContacts(driver);
 }
 
+/** True once a stacked (non-tab-root) screen has been left behind. */
+async function leftStackedScreen(driver) {
+  return !(await byTestId(driver, "BackButton").isExisting());
+}
+
 /** Pop any stacked screens and land on the Contacts tab. */
 export async function returnToContacts(driver) {
   for (let i = 0; i < 5; i++) {
     if (await existsTestId(driver, "Contacts", 3000)) {
-      await tapTestId(driver, "Contacts");
+      await tapTestIdReliable(driver, "Contacts", () => leftStackedScreen(driver));
       return;
     }
     await unlockIfLocked(driver);
     if (await existsTestId(driver, "BackButton", 2000)) {
-      await tapTestId(driver, "BackButton");
-      await sleep(1000);
+      await tapTestIdReliable(driver, "BackButton", () => leftStackedScreen(driver)).catch(() => {});
     } else {
       await sleep(1500);
     }
@@ -529,13 +540,13 @@ export async function openContactDetail(driver, peerName) {
   let onTab = false;
   for (let backs = 0; backs < 3 && !onTab; backs++) {
     if (await existsTestId(driver, "Contacts", 3000)) {
-      await tapTestId(driver, "Contacts");
+      await tapTestIdReliable(driver, "Contacts", () => leftStackedScreen(driver));
       onTab = true;
       break;
     }
     await unlockIfLocked(driver);
     if (await existsTestId(driver, "BackButton", 2000)) {
-      await tapTestId(driver, "BackButton");
+      await tapTestIdReliable(driver, "BackButton", () => leftStackedScreen(driver)).catch(() => {});
     }
   }
   const row = byTextContains(driver, peerName);
