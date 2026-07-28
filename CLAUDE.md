@@ -33,6 +33,10 @@ yarn prettier      # check; yarn prettier:fix to write
 
 Single test (jest): `cd app && TZ=GMT yarn jest path/to/file.test.ts` or `yarn test -t "test name"`. Bifold packages have their own suites: `cd bifold/packages/core && yarn test` (the VRC module tests are the contract for upgrade work).
 
+Each bifold package's test gate is whatever its own `package.json` defines (usually `yarn test` → `jest`) — don't substitute an ad-hoc `tsc --noEmit` run in a package's directory as a sanity check. That surfaces whatever the package's local `node_modules` happens to look like right now, which can diverge from `yarn.lock` (e.g. a stale hoisted-vs-nested duplicate dependency left by a prior partial install) and produce errors that are a linker artifact, not a code regression — a plain `yarn install` may not clean it up; deleting the stale nested copy under that package's `node_modules` usually does. If in doubt, run the package's `test` script and the root `yarn typecheck`; nothing else.
+
+`bifold/packages/react-hooks` specifically: its jest config is plain `ts-jest` and does **not** transform `@credo-ts/*`'s ESM builds — unlike `core`, which uses the React Native preset + babel + a broad `transformIgnorePatterns` allowlist for exactly this. When writing tests here that touch providers/hooks importing `@credo-ts/core` or `@credo-ts/didcomm`, `jest.mock(...)` those modules with minimal fakes rather than importing them for real or trying to extend this package's jest/babel config to match `core`'s.
+
 Run the app (requires `app/.env`, copied from `app/.env.sample`, with a reachable DIDComm mediator):
 
 ```sh
