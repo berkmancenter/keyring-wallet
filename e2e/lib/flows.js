@@ -18,6 +18,29 @@ import { PIN } from "./config.js";
  * Drive a fresh install through the full onboarding:
  * tutorial carousel → PIN create → biometry → R-Card form → main tabs.
  */
+/**
+ * Wait for the app's own keyboard dismissal to finish (PINInput calls
+ * Keyboard.dismiss() when the final PIN digit lands). Use this INSTEAD of
+ * hideKeyboard() on screens presented inside an RN Modal: Appium's Android
+ * hideKeyboard checks dumpsys for keyboard visibility and, racing the app's
+ * own dismissal animation, concludes the keyboard is still up and sends
+ * KEYCODE_ESC/KEYCODE_BACK — which an RN Modal (an android.app.Dialog)
+ * receives as cancel, silently dismissing the modal. Seen deterministically
+ * on Android 16 (SDK 36) as "element testID=Continue not found": the PIN
+ * modal was gone before the harness looked for its Continue button.
+ */
+async function waitForKeyboardGone(driver, timeout = 5000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    try {
+      if (!(await driver.isKeyboardShown())) return;
+    } catch {
+      return; // treat "can't tell" as gone — same as hideKeyboard's catch-all
+    }
+    await sleep(250);
+  }
+}
+
 async function hideKeyboard(driver, inputEl) {
   try {
     if (driver.e2ePlatform === "ios") {
@@ -210,7 +233,10 @@ export async function enableHardwareAttestation(driver) {
   );
   await pinInput.click();
   await pinInput.setValue(PIN);
-  await hideKeyboard(driver);
+  // NOT hideKeyboard(): on Android its ESC/BACK fallback dismisses this PIN
+  // modal outright (see waitForKeyboardGone) — the app hides the keyboard
+  // itself once the 6th digit is typed.
+  await waitForKeyboardGone(driver);
 
   // The switch's own checked state only flips once this PIN modal closes via
   // onAuthenticationComplete, so a dropped Continue tap here looks like "the
