@@ -83,3 +83,6 @@ release.keystore
 
 # Local-only docs (not committed)
 .docs-local/
+
+# External clones (OpenVTC ecosystem — untracked reference/build sources)
+external/
