@@ -38,6 +38,7 @@
     "e2e:vrc": "cd e2e && npm run vrc-exchange",
     "e2e:vrc:android-only": "cd e2e && npm run vrc-exchange:android-only",
     "e2e:vrc:devices": "cd e2e && npm run vrc-exchange:devices",
+    "e2e:vrc:devices:android-only": "cd e2e && npm run vrc-exchange:devices:android-only",
     "e2e:migration": "cd e2e && npm run store-migration",
     "e2e:migration:android-only": "cd e2e && npm run store-migration:android-only",
     "e2e:smoke": "cd e2e && npm run onboarding-smoke",

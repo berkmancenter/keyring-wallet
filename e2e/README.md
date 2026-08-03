@@ -10,6 +10,7 @@ this folder is a small standalone npm package.
 | `yarn e2e:vrc` | Two-device VRC exchange on the **Android emulator + iOS simulator** | No |
 | `yarn e2e:vrc:android-only` | Same exchange on **two Android emulators** (no macOS/Xcode needed; see below for the two-AVD setup) | No |
 | `yarn e2e:vrc:devices` | Same exchange on a **physical Android phone + iPhone**, proving hardware attestation + biometric signing | **Yes** — you authenticate on the phones |
+| `yarn e2e:vrc:devices:android-only` | Same hardware-attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
 | `yarn e2e:migration` | Askar 0.2→0.6 store migration: old app → exchange → in-place upgrade (Android emulator + iOS simulator peer) | No |
 | `yarn e2e:migration:android-only` | Same migration test, **two Android emulators** (no macOS/Xcode needed) | No |
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
@@ -17,7 +18,8 @@ this folder is a small standalone npm package.
 | `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
-`vrc-exchange:android-only`, `vrc-exchange:devices`, `store-migration`,
+`vrc-exchange:android-only`, `vrc-exchange:devices`,
+`vrc-exchange:devices:android-only`, `store-migration`,
 `store-migration:android-only`, `onboarding-smoke`,
 `vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`.
 
@@ -241,6 +243,25 @@ On success and failure the runner writes to `e2e/artifacts/`: screenshots of
 the Secure Exchange banners, filtered attestation log lines from `adb logcat`
 and the iOS syslog (`[VRC:Verify]`, `GoogleAttestation*`, `AppAttest`…). Those
 logs are the crypto-level proof of what validated.
+
+### Android-only variant (`yarn e2e:vrc:devices:android-only`)
+
+Same hardware-attested exchange; a second **physical** Android phone stands
+in for the iPhone. No macOS/Xcode needed. Two physical phones are required,
+not an emulator pair — the whole point of this test is hardware attestation
+(TEE-backed keys + `BiometricPrompt` on both sides), and emulators cannot do
+hardware attestation (see "Simulator/emulator run" above) — an emulator pair
+would silently fall back to a plain, unattested exchange.
+
+Both phones connected over USB are auto-detected (same convention as
+`ANDROID_UDID` above); if more or fewer than two are found, set
+`ANDROID_UDID` and `ANDROID_UDID2` explicitly:
+
+```sh
+adb devices                                      # list connected serials
+ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
+  yarn e2e:vrc:devices:android-only
+```
 
 ## Store migration (`yarn e2e:migration`)
 

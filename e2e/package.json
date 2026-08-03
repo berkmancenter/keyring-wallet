@@ -8,6 +8,7 @@
     "vrc-exchange": "node run-vrc-exchange.js",
     "vrc-exchange:android-only": "PLATFORMS=android,android node run-vrc-exchange.js",
     "vrc-exchange:devices": "node run-vrc-exchange-devices.js",
+    "vrc-exchange:devices:android-only": "node run-vrc-exchange-devices-android-only.js",
     "store-migration": "node run-store-migration.js",
     "store-migration:android-only": "node run-store-migration-android-only.js",
     "onboarding-smoke": "node run-onboarding-smoke.js",
