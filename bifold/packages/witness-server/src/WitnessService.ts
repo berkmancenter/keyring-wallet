@@ -208,8 +208,9 @@ function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationU
     }),
     // Dual-verify: accept DataIntegrityProof/eddsa-rdfc-2022 alongside
     // Ed25519Signature2018 in the Identity Check (verification resolves
-    // suites by proof.type from this registry). Witness ISSUANCE stays 2018
-    // until the peer matrix is proven (docs/CRYPTO_SUITE_FOLLOWUP.md).
+    // suites by proof.type from this registry). Witness ISSUANCE mirrors the
+    // presented VRC's proof family via getMirroredJsonLdProofOptions — DI for
+    // DI-signed VRCs, legacy 2018 otherwise (docs/CRYPTO_SUITE_FOLLOWUP.md).
     diSuite: new DataIntegritySuiteModule(),
     cache: new CacheModule({
       cache: new InMemoryLruCache({ limit: 100 }),
