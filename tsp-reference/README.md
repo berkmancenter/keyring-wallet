@@ -2,7 +2,7 @@
 
 Small runnable programs, each proving one layer of the OpenVTC/TSP stack. They
 are the executable evidence behind
-[`docs/plans/openvtc-integration-plan.md`](../../plans/openvtc-integration-plan.md):
+[`docs/plans/openvtc-integration-plan.md`](../docs/plans/openvtc-integration-plan.md):
 where the plan makes a claim about how the protocol behaves, there is usually a
 rung here you can run to check it.
 
@@ -41,7 +41,7 @@ for d in ref-*/; do (cd "$d" && npm run -s check); done
 ```
 
 Set up the upstream clones first: see
-[`scripts/openvtc/README.md`](../../../scripts/openvtc/README.md).
+[`scripts/openvtc/README.md`](../scripts/openvtc/README.md).
 
 ## What is *not* proven yet
 

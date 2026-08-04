@@ -27,9 +27,9 @@ Verifiable Trust Agent running on this machine, serving **its own
 Native (what this rung was developed against):
 
 ```sh
-cd ../../../../external/verifiable-trust-infrastructure
+cd ../../external/verifiable-trust-infrastructure
 cargo build -p vta-service --features tsp,setup -p pnm-cli      # needs Rust ≥ 1.95
-./target/debug/vta setup --from ../../docs/spikes/tsp-reference/ref-05-local-vta/vta-setup.toml
+./target/debug/vta setup --from ../../tsp-reference/ref-05-local-vta/vta-setup.toml
 ./target/debug/vta --config /tmp/ref05-vta/config.toml &
 # optional — advertise TSP (stop the daemon first; offline writes need the store lock)
 ./target/debug/vta --config /tmp/ref05-vta/config.toml services tsp enable --mediator-did <mediator-did>

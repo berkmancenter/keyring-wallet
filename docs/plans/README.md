@@ -45,5 +45,5 @@ node scripts/openvtc/sync-external.mjs      # what changed upstream since the pi
 
 See [`scripts/openvtc/README.md`](../../scripts/openvtc/README.md) for the full
 environment guide, and
-[`docs/spikes/tsp-reference/`](../spikes/tsp-reference/) for the runnable
+[`tsp-reference/`](../../tsp-reference/) for the runnable
 reference ladder that backs the plan's technical claims.

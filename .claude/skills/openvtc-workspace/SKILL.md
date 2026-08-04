@@ -1,6 +1,6 @@
 ---
 name: openvtc-workspace
-description: Conventions and setup for the OpenVTC/TSP integration workstream — the living plan, pinned upstream clones in external/, the sync policy, and the reference ladder. Use when working on TSP, Trust Tasks, the VTA, mediators, agent names, or anything under docs/plans/, scripts/openvtc/, or docs/spikes/tsp-reference/.
+description: Conventions and setup for the OpenVTC/TSP integration workstream — the living plan, pinned upstream clones in external/, the sync policy, and the reference ladder. Use when working on TSP, Trust Tasks, the VTA, mediators, agent names, or anything under docs/plans/, scripts/openvtc/, or tsp-reference/.
 ---
 
 # OpenVTC integration workstream
@@ -44,13 +44,13 @@ Full guide: [`scripts/openvtc/README.md`](../../../scripts/openvtc/README.md).
 
 ## The reference ladder
 
-[`docs/spikes/tsp-reference/`](../../../docs/spikes/tsp-reference/) holds small
+[`tsp-reference/`](../../../tsp-reference/) holds small
 runnable programs, one per layer of the stack (`ref-00` … `ref-05`), with
 frozen fixtures. Each has a README saying what it proves.
 
 ```sh
-cd docs/spikes/tsp-reference/ref-00-hello-direct && npm install && npm start
-for d in docs/spikes/tsp-reference/ref-*/; do (cd "$d" && npm run -s check); done
+cd tsp-reference/ref-00-hello-direct && npm install && npm start
+for d in tsp-reference/ref-*/; do (cd "$d" && npm run -s check); done
 ```
 
 When adding a rung: pure TypeScript/JS core with **no React Native imports**
@@ -64,7 +64,7 @@ is a young ecosystem and we are one of its implementers. The workflow:
 
 1. Develop the change on a branch inside the relevant `external/` clone.
 2. Write a candidate document alongside the rung it came from (see
-   `docs/spikes/tsp-reference/ref-03-noble-crypto/PR-CANDIDATE.md` for the
+   `tsp-reference/ref-03-noble-crypto/PR-CANDIDATE.md` for the
    shape): the change, the **community rationale** (why it helps the ecosystem,
    not only us), and **evidence it breaks nothing** (upstream's own tests,
    vectors, fixtures).

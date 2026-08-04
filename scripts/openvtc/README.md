@@ -76,7 +76,7 @@ red tells you which layer upstream changed.
 
 Anything asserted about upstream behaviour should be checkable against these
 clones — a file path and a commit, or a runnable script. The reference ladder
-in [`docs/spikes/tsp-reference/`](../../docs/spikes/tsp-reference/) exists for
+in [`tsp-reference/`](../../tsp-reference/) exists for
 exactly that: each rung is a small runnable program that proves one layer of the
 stack, with frozen fixtures so a change upstream turns something red instead of
 quietly drifting.

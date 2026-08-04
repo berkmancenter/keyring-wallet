@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../..");
 const externalDir = resolve(repoRoot, "external");
-const ladderDir = resolve(repoRoot, "docs/spikes/tsp-reference");
+const ladderDir = resolve(repoRoot, "tsp-reference");
 const pinsPath = resolve(here, "PINS.json");
 const logPath = resolve(here, "SYNC_LOG.md");
 
