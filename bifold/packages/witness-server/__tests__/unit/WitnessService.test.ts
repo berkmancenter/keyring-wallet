@@ -10,10 +10,31 @@
  * 3. VWC credential building
  * 4. Session expiration calculations
  *
- * Note: These are pure unit tests that don't require network or crypto.
+ * The freshness / digest / VWC-building tests call the REAL exported logic
+ * (checkVrcFreshness, computeVrcDigest, buildWitnessCredentialJson) that
+ * handlePresentationSubmission and buildWitnessCredential delegate to — so a
+ * behavioral regression in those paths fails here, rather than being masked
+ * by a parallel mock implementation.
+ *
+ * Note: These are pure unit tests that don't require network or agents.
  */
 
-import { SessionData } from '../../src/WitnessService'
+import {
+  SessionData,
+  CLOCK_SKEW_ALLOWANCE_MS,
+  FRESHNESS_MARGIN_MS,
+  FRESHNESS_WINDOW_MS,
+  checkVrcFreshness,
+  computeVrcDigest,
+  buildWitnessCredentialJson,
+  WitnessCredentialBuildContext,
+} from '../../src/WitnessService'
+import { LocalityEvidence } from '../../src/LocalityService'
+import {
+  CREDENTIALS_V2_CONTEXT_URL,
+  ED25519_2018_SUITE_CONTEXT_URL,
+  WITNESSED_EXCHANGE_CONTEXT_URL,
+} from '@bifold/vrc-contexts'
 import { defaultConfig, isMediatorEnabled, WitnessServerConfig } from '../../src/config'
 
 describe('WitnessService - SessionData', () => {
@@ -198,272 +219,284 @@ describe('WitnessService - Verification Logic', () => {
   })
 
   describe('Freshness Check (timestamp validation)', () => {
-    it('should accept credential issued just now', () => {
-      const now = new Date()
-      const issuanceDate = now
+    // These call the REAL checkVrcFreshness used by handlePresentationSubmission
+    // (Step 5). The shipped window is a 5-minute clock-skew allowance (wallets
+    // backdate issuance to tolerate device clock skew) plus a 5-minute
+    // freshness margin = 10 minutes total, in either direction.
+    const now = new Date('2026-01-01T12:00:00.000Z')
+    const minutesFromNow = (minutes: number) => new Date(now.getTime() + minutes * 60 * 1000).toISOString()
 
-      const fiveMinutesMs = 5 * 60 * 1000
-      const timeDiff = Math.abs(now.getTime() - issuanceDate.getTime())
-
-      expect(timeDiff).toBeLessThanOrEqual(fiveMinutesMs)
+    it('should expose a 10-minute window (skew allowance + freshness margin)', () => {
+      expect(FRESHNESS_WINDOW_MS).toBe(CLOCK_SKEW_ALLOWANCE_MS + FRESHNESS_MARGIN_MS)
+      expect(FRESHNESS_WINDOW_MS).toBe(10 * 60 * 1000)
     })
 
-    it('should accept credential issued 4 minutes ago', () => {
-      const now = new Date()
-      const fourMinutesAgo = new Date(now.getTime() - 4 * 60 * 1000)
-
-      const fiveMinutesMs = 5 * 60 * 1000
-      const timeDiff = Math.abs(now.getTime() - fourMinutesAgo.getTime())
-
-      expect(timeDiff).toBeLessThanOrEqual(fiveMinutesMs)
+    it('should accept a credential issued just now', () => {
+      expect(checkVrcFreshness({ issuanceDate: now.toISOString() }, now)).toEqual({ fresh: true, ageMs: 0 })
     })
 
-    it('should reject credential issued 6 minutes ago', () => {
-      const now = new Date()
-      const sixMinutesAgo = new Date(now.getTime() - 6 * 60 * 1000)
+    it('should accept a 6-minute-old credential (would have failed the pre-upgrade 5-minute window)', () => {
+      expect(checkVrcFreshness({ issuanceDate: minutesFromNow(-6) }, now).fresh).toBe(true)
+    })
 
-      const fiveMinutesMs = 5 * 60 * 1000
-      const timeDiff = Math.abs(now.getTime() - sixMinutesAgo.getTime())
+    it('should accept a credential right at the 10-minute boundary', () => {
+      expect(checkVrcFreshness({ issuanceDate: minutesFromNow(-10) }, now).fresh).toBe(true)
+    })
 
-      expect(timeDiff).toBeGreaterThan(fiveMinutesMs)
+    it('should reject a credential older than 10 minutes, with the real error message', () => {
+      expect(checkVrcFreshness({ issuanceDate: minutesFromNow(-11) }, now)).toEqual({
+        fresh: false,
+        error: 'Credential issuance date is not fresh (>10 minutes old)',
+      })
+    })
+
+    it('should apply the same window to future-dated credentials (reversed clock skew)', () => {
+      expect(checkVrcFreshness({ issuanceDate: minutesFromNow(9) }, now).fresh).toBe(true)
+      expect(checkVrcFreshness({ issuanceDate: minutesFromNow(11) }, now).fresh).toBe(false)
+    })
+
+    it('should read validFrom (VCDM 2.0) in preference to issuanceDate (1.1)', () => {
+      const result = checkVrcFreshness({ validFrom: minutesFromNow(-1), issuanceDate: minutesFromNow(-60) }, now)
+      expect(result.fresh).toBe(true)
+    })
+
+    it('should fall back to issuanceDate when validFrom is absent', () => {
+      expect(checkVrcFreshness({ issuanceDate: minutesFromNow(-1) }, now).fresh).toBe(true)
+    })
+
+    it('should reject a credential with no parseable timestamp', () => {
+      expect(checkVrcFreshness({}, now)).toEqual({
+        fresh: false,
+        error: 'Credential has no parseable validFrom/issuanceDate',
+      })
+      expect(checkVrcFreshness({ issuanceDate: 'not-a-date' }, now).fresh).toBe(false)
     })
   })
 })
 
 describe('WitnessService - VWC Building', () => {
   /**
-   * Options for building a mock VWC
+   * These tests call the REAL buildWitnessCredentialJson / computeVrcDigest
+   * exported from WitnessService. The service's private buildWitnessCredential
+   * is a thin wrapper that binds the witness's issuer DID / name / config
+   * onto the same function.
    */
-  interface MockVWCOptions {
-    witnessIssuerDid: string
-    vrcIssuer: string
-    vrcJson: Record<string, any>
-    sessionId: string
-    method?: string
-    event?: string
+  const witnessIssuerDid = 'did:peer:0zwitness'
+  const witnessName = 'Test Witness'
+  const vrcIssuer = 'did:peer:0zalice'
+
+  const ed25519Proof = {
+    type: 'Ed25519Signature2018',
+    created: '2026-01-01T12:00:00Z',
+    verificationMethod: `${vrcIssuer}#key-1`,
+    proofPurpose: 'assertionMethod',
+    jws: 'eyJhbGciOiJFZERTQSJ9..sig',
   }
 
-  /**
-   * Simulate the VWC building logic from WitnessService
-   * Updated to match spec: witnessContext has event, sessionId, method (no domain/timestamp)
-   */
-  function buildMockVWC(options: MockVWCOptions) {
-    const { witnessIssuerDid, vrcIssuer, vrcJson, sessionId, method = 'session-based-challenge', event } = options
+  const diProof = {
+    type: 'DataIntegrityProof',
+    cryptosuite: 'eddsa-rdfc-2022',
+    created: '2026-01-01T12:00:00Z',
+    verificationMethod: `${vrcIssuer}#key-1`,
+    proofPurpose: 'assertionMethod',
+    proofValue: 'z5DiSig',
+  }
 
-    // Compute digest (simplified - actual uses SHA-256)
-    const vrcCanonical = JSON.stringify(vrcJson, Object.keys(vrcJson).sort())
-    const digest = 'sha256:' + Buffer.from(vrcCanonical).toString('base64').substring(0, 32)
+  /** Legacy VCDM 1.1 VRC signed with the 2018 suite (pre-v2 peer) */
+  const legacyVrc = {
+    '@context': ['https://www.w3.org/2018/credentials/v1'],
+    type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+    issuer: vrcIssuer,
+    issuanceDate: '2026-01-01T12:00:00Z',
+    credentialSubject: { id: 'did:peer:0zbob' },
+    proof: ed25519Proof,
+  }
 
-    // Build witnessContext according to spec (only sessionId, method, and optional event)
-    const witnessContext: Record<string, string> = {
-      sessionId,
-      method,
-    }
+  /** VCDM 2.0 VRC signed with the 2018 suite (RCE v2 peer) */
+  const vc20Vrc = {
+    '@context': [CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+    type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+    issuer: vrcIssuer,
+    validFrom: '2026-01-01T12:00:00Z',
+    credentialSubject: { id: 'did:peer:0zbob' },
+    proof: ed25519Proof,
+  }
 
-    // Only include event if provided
-    if (event) {
-      witnessContext.event = event
-    }
+  /** VCDM 2.0 VRC signed with DataIntegrityProof/eddsa-rdfc-2022 (RCE v3 peer) */
+  const vc20DiVrc = {
+    ...vc20Vrc,
+    '@context': [CREDENTIALS_V2_CONTEXT_URL],
+    proof: diProof,
+  }
 
-    return {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1',
-        'https://trustoverip.org/credentials/witnessed-exchange/v1',
-      ],
-      id: `urn:uuid:test-vwc-id`,
-      type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-      issuer: witnessIssuerDid,
-      issuanceDate: new Date().toISOString(),
-      credentialSubject: {
-        id: vrcIssuer,
-        digest: digest,
-        witnessContext,
-      },
-    }
+  function buildVwc(vrcJson: any, overrides: Partial<WitnessCredentialBuildContext> = {}) {
+    return buildWitnessCredentialJson(
+      { type: ['VerifiablePresentation'], verifiableCredential: [vrcJson] },
+      {
+        issuerDid: witnessIssuerDid,
+        witnessName,
+        sessionId: 'session-1',
+        verificationMethod: 'session-based-challenge',
+        ...overrides,
+      }
+    )
   }
 
   describe('VWC structure', () => {
-    const witnessIssuerDid = 'did:peer:0zwitness'
-    const vrcIssuer = 'did:peer:0zalice'
-    const mockVrc = {
-      '@context': ['https://www.w3.org/2018/credentials/v1'],
-      type: ['VerifiableCredential', 'RelationshipCredential'],
-      issuer: vrcIssuer,
-      credentialSubject: { id: 'did:peer:0zbob' },
-    }
-
     it('should have correct type array', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
+      const vwc = buildVwc(legacyVrc)
 
       expect(vwc.type).toContain('VerifiableCredential')
       expect(vwc.type).toContain('DTGCredential')
       expect(vwc.type).toContain('WitnessCredential')
     })
 
-    it('should have witness as issuer', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
+    it('should have the witness as issuer, as an { id, name } object (not a bare string)', () => {
+      const vwc = buildVwc(legacyVrc)
 
-      expect(vwc.issuer).toBe(witnessIssuerDid)
+      expect(vwc.issuer).toEqual({ id: witnessIssuerDid, name: witnessName })
     })
 
     it('should reference VRC issuer in credentialSubject.id', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
+      expect(buildVwc(legacyVrc).credentialSubject.id).toBe(vrcIssuer)
+    })
+
+    it('should unwrap an issuer object on the VRC to its id', () => {
+      const vwc = buildVwc({ ...legacyVrc, issuer: { id: vrcIssuer, name: 'Alice' } })
 
       expect(vwc.credentialSubject.id).toBe(vrcIssuer)
     })
 
-    it('should include digest of witnessed VRC', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
-
-      expect(vwc.credentialSubject.digest).toBeDefined()
-      expect(vwc.credentialSubject.digest).toContain('sha256:')
+    it('should throw when the presentation carries no VRC', () => {
+      expect(() =>
+        buildWitnessCredentialJson(
+          { type: ['VerifiablePresentation'], verifiableCredential: [] },
+          { issuerDid: witnessIssuerDid, witnessName, sessionId: 's', verificationMethod: 'm' }
+        )
+      ).toThrow('No VRC found in presentation')
     })
 
     it('should include witnessContext with sessionId and method', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-abc',
-      })
+      const vwc = buildVwc(legacyVrc, { sessionId: 'session-abc' })
 
       expect(vwc.credentialSubject.witnessContext).toBeDefined()
       expect(vwc.credentialSubject.witnessContext.sessionId).toBe('session-abc')
       expect(vwc.credentialSubject.witnessContext.method).toBe('session-based-challenge')
     })
 
-    it('should NOT include domain in witnessContext (per spec)', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
+    it('should NOT include domain or timestamp in witnessContext (per spec)', () => {
+      const ctx = buildVwc(legacyVrc).credentialSubject.witnessContext
 
-      expect(vwc.credentialSubject.witnessContext.domain).toBeUndefined()
+      expect(ctx.domain).toBeUndefined()
+      expect(ctx.timestamp).toBeUndefined()
     })
 
-    it('should NOT include timestamp in witnessContext (per spec)', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
+    it('should include witnessed exchange context URL on both data-model paths', () => {
+      expect(buildVwc(legacyVrc)['@context']).toContain(WITNESSED_EXCHANGE_CONTEXT_URL)
+      expect(buildVwc(vc20Vrc)['@context']).toContain(WITNESSED_EXCHANGE_CONTEXT_URL)
+    })
+  })
 
-      expect(vwc.credentialSubject.witnessContext.timestamp).toBeUndefined()
+  describe('VRC digest (JCS canonicalization)', () => {
+    it('should be a sha256-prefixed hex digest of the JCS canonical form', () => {
+      const digest = buildVwc(legacyVrc).credentialSubject.digest
+
+      expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/)
+      expect(digest).toBe(computeVrcDigest(legacyVrc))
     })
 
-    it('should include witnessed exchange context URL', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
+    it('should be invariant to JSON key order (JCS/RFC 8785, not naive stringify)', () => {
+      // Same data, different insertion order — a serializer-dependent digest
+      // would differ here, and no third party could recompute it.
+      const reordered = {
+        proof: legacyVrc.proof,
+        credentialSubject: { id: 'did:peer:0zbob' },
+        issuanceDate: legacyVrc.issuanceDate,
+        issuer: legacyVrc.issuer,
+        type: legacyVrc.type,
+        '@context': legacyVrc['@context'],
+      }
 
-      expect(vwc['@context']).toContain('https://trustoverip.org/credentials/witnessed-exchange/v1')
+      expect(computeVrcDigest(reordered)).toBe(computeVrcDigest(legacyVrc))
+    })
+
+    it('should change when the credential content changes', () => {
+      const tampered = { ...legacyVrc, credentialSubject: { id: 'did:peer:0zmallory' } }
+
+      expect(computeVrcDigest(tampered)).not.toBe(computeVrcDigest(legacyVrc))
+    })
+  })
+
+  describe('Data-model and proof-family mirroring', () => {
+    it('should issue a VCDM 1.1 VWC for a legacy 1.1 VRC', () => {
+      const vwc = buildVwc(legacyVrc)
+
+      expect(vwc['@context'][0]).toBe('https://www.w3.org/2018/credentials/v1')
+      expect(vwc.issuanceDate).toBeDefined()
+      expect(vwc.expirationDate).toBeDefined()
+      expect(vwc.validUntil).toBeDefined()
+      expect(vwc.validFrom).toBeUndefined()
+    })
+
+    it('should issue a VCDM 2.0 VWC for a VC 2.0 VRC', () => {
+      const vwc = buildVwc(vc20Vrc)
+
+      expect(vwc['@context'][0]).toBe(CREDENTIALS_V2_CONTEXT_URL)
+      expect(vwc.validFrom).toBeDefined()
+      expect(vwc.validUntil).toBeDefined()
+      expect(vwc.issuanceDate).toBeUndefined()
+      expect(vwc.expirationDate).toBeUndefined()
+    })
+
+    it('should keep the Ed25519 suite context on the VC 2.0 + 2018 path', () => {
+      // Required at build time or the signed VWC won't match the offer/request
+      // in credo's holder-side equality check.
+      expect(buildVwc(vc20Vrc)['@context']).toContain(ED25519_2018_SUITE_CONTEXT_URL)
+    })
+
+    it('should omit the Ed25519 suite context for a DI-signed VRC', () => {
+      const vwc = buildVwc(vc20DiVrc)
+
+      expect(vwc['@context']).toEqual([CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL])
+    })
+
+    it('should recognize a DI proof inside a proof set (array)', () => {
+      const vwc = buildVwc({ ...vc20DiVrc, proof: [ed25519Proof, diProof] })
+
+      expect(vwc['@context']).toEqual([CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL])
+    })
+  })
+
+  describe('Hardware attestation evidence flag', () => {
+    it('should set hardwareAttestationIncluded=true when the VRC carries evidence', () => {
+      const vwc = buildVwc({ ...legacyVrc, evidence: [{ type: ['HardwareAttestation'] }] })
+
+      expect(vwc.credentialSubject.witnessContext.hardwareAttestationIncluded).toBe(true)
+    })
+
+    it('should set hardwareAttestationIncluded=false when there is no evidence', () => {
+      expect(buildVwc(legacyVrc).credentialSubject.witnessContext.hardwareAttestationIncluded).toBe(false)
     })
   })
 
   describe('VWC event configuration', () => {
-    const witnessIssuerDid = 'did:peer:0zwitness'
-    const vrcIssuer = 'did:peer:0zalice'
-    const mockVrc = {
-      '@context': ['https://www.w3.org/2018/credentials/v1'],
-      type: ['VerifiableCredential', 'RelationshipCredential'],
-      issuer: vrcIssuer,
-      credentialSubject: { id: 'did:peer:0zbob' },
-    }
-
     it('should include event in witnessContext when provided', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-        event: 'EthDenver 2024',
-      })
+      const vwc = buildVwc(legacyVrc, { eventName: 'EthDenver 2024' })
 
       expect(vwc.credentialSubject.witnessContext.event).toBe('EthDenver 2024')
     })
 
     it('should NOT include event in witnessContext when not provided', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
-
-      expect(vwc.credentialSubject.witnessContext.event).toBeUndefined()
+      expect(buildVwc(legacyVrc).credentialSubject.witnessContext.event).toBeUndefined()
     })
   })
 
   describe('VWC method configuration', () => {
-    const witnessIssuerDid = 'did:peer:0zwitness'
-    const vrcIssuer = 'did:peer:0zalice'
-    const mockVrc = {
-      '@context': ['https://www.w3.org/2018/credentials/v1'],
-      type: ['VerifiableCredential', 'RelationshipCredential'],
-      issuer: vrcIssuer,
-      credentialSubject: { id: 'did:peer:0zbob' },
-    }
-
-    it('should use default method when not specified', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
-
-      expect(vwc.credentialSubject.witnessContext.method).toBe('session-based-challenge')
-    })
-
-    it('should use custom method when specified', () => {
-      const vwc = buildMockVWC({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-        method: 'in-person-proximity',
-      })
-
-      expect(vwc.credentialSubject.witnessContext.method).toBe('in-person-proximity')
-    })
-
-    it('should support various verification methods', () => {
+    it('should carry the configured verification method into witnessContext', () => {
       const methods = ['session-based-challenge', 'in-person-proximity', 'video-call', 'qr-code-scan']
 
       methods.forEach((method) => {
-        const vwc = buildMockVWC({
-          witnessIssuerDid,
-          vrcIssuer,
-          vrcJson: mockVrc,
-          sessionId: 'session-1',
-          method,
-        })
+        const vwc = buildVwc(legacyVrc, { verificationMethod: method })
 
         expect(vwc.credentialSubject.witnessContext.method).toBe(method)
       })
@@ -805,98 +838,41 @@ describe('WitnessService - Locality Integration', () => {
     }>
   }
 
-  /**
-   * Options for building a mock VWC with locality
-   */
-  interface MockVWCWithLocalityOptions {
-    witnessIssuerDid: string
-    vrcIssuer: string
-    vrcJson: Record<string, any>
-    sessionId: string
-    method?: string
-    event?: string
-    localityEvidence?: MockLocalityEvidence
-  }
-
-  /**
-   * Simulate the VWC building logic with locality evidence
-   */
-  function buildMockVWCWithLocality(options: MockVWCWithLocalityOptions) {
-    const {
-      witnessIssuerDid,
-      vrcIssuer,
-      vrcJson,
-      sessionId,
-      method = 'session-based-challenge',
-      event,
-      localityEvidence,
-    } = options
-
-    // Compute digest
-    const vrcCanonical = JSON.stringify(vrcJson, Object.keys(vrcJson).sort())
-    const digest = 'sha256:' + Buffer.from(vrcCanonical).toString('base64').substring(0, 32)
-
-    // Build witnessContext
-    const witnessContext: Record<string, any> = {
-      sessionId,
-      method,
-    }
-
-    if (event) {
-      witnessContext.event = event
-    }
-
-    // Add locality evidence if provided
-    if (localityEvidence) {
-      witnessContext.localityVerification = localityEvidence
-    }
-
-    return {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1',
-        'https://trustoverip.org/credentials/witnessed-exchange/v1',
-      ],
-      id: `urn:uuid:test-vwc-id`,
-      type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-      issuer: witnessIssuerDid,
-      issuanceDate: new Date().toISOString(),
-      credentialSubject: {
-        id: vrcIssuer,
-        digest: digest,
-        witnessContext,
-      },
-    }
-  }
-
   const witnessIssuerDid = 'did:peer:0zwitness'
+  const witnessName = 'Test Witness'
   const vrcIssuer = 'did:peer:0zalice'
   const mockVrc = {
     '@context': ['https://www.w3.org/2018/credentials/v1'],
     type: ['VerifiableCredential', 'RelationshipCredential'],
     issuer: vrcIssuer,
+    issuanceDate: '2026-01-01T12:00:00Z',
     credentialSubject: { id: 'did:peer:0zbob' },
+    proof: { type: 'Ed25519Signature2018', proofPurpose: 'assertionMethod' },
+  }
+
+  /** Build a VWC via the REAL buildWitnessCredentialJson exported from WitnessService */
+  function buildVwcWithLocality(overrides: Partial<WitnessCredentialBuildContext> = {}) {
+    return buildWitnessCredentialJson(
+      { type: ['VerifiablePresentation'], verifiableCredential: [mockVrc] },
+      {
+        issuerDid: witnessIssuerDid,
+        witnessName,
+        sessionId: 'session-1',
+        verificationMethod: 'session-based-challenge',
+        ...overrides,
+      }
+    )
   }
 
   describe('VWC without locality verification', () => {
     it('should NOT include localityVerification when not provided', () => {
-      const vwc = buildMockVWCWithLocality({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-      })
+      const vwc = buildVwcWithLocality()
 
       expect(vwc.credentialSubject.witnessContext.localityVerification).toBeUndefined()
     })
 
     it('should have complete witnessContext without locality', () => {
-      const vwc = buildMockVWCWithLocality({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-        event: 'TestEvent',
-      })
+      const vwc = buildVwcWithLocality({ eventName: 'TestEvent' })
 
       expect(vwc.credentialSubject.witnessContext.sessionId).toBe('session-1')
       expect(vwc.credentialSubject.witnessContext.method).toBe('session-based-challenge')
@@ -906,59 +882,36 @@ describe('WitnessService - Locality Integration', () => {
   })
 
   describe('VWC with locality verification', () => {
-    const mockLocalityEvidence: MockLocalityEvidence = {
+    // Matches the real LocalityEvidence shape from LocalityService
+    const mockLocalityEvidence: LocalityEvidence = {
       challenge: 'abc123def456',
       proofs: [
-        { did: 'did:key:alice', sig: 'sig-alice-base64', ip: '192.168.1.x' },
-        { did: 'did:key:bob', sig: 'sig-bob-base64', ip: '192.168.1.x' },
+        { did: 'did:key:alice', sig: 'sig-alice-base64' },
+        { did: 'did:key:bob', sig: 'sig-bob-base64' },
       ],
     }
 
     it('should include localityVerification when provided', () => {
-      const vwc = buildMockVWCWithLocality({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-        localityEvidence: mockLocalityEvidence,
-      })
+      const vwc = buildVwcWithLocality({ localityEvidence: mockLocalityEvidence })
 
       expect(vwc.credentialSubject.witnessContext.localityVerification).toBeDefined()
     })
 
     it('should include challenge in localityVerification', () => {
-      const vwc = buildMockVWCWithLocality({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-        localityEvidence: mockLocalityEvidence,
-      })
+      const vwc = buildVwcWithLocality({ localityEvidence: mockLocalityEvidence })
 
       expect(vwc.credentialSubject.witnessContext.localityVerification.challenge).toBe('abc123def456')
     })
 
     it('should include participant proofs in localityVerification', () => {
-      const vwc = buildMockVWCWithLocality({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-        localityEvidence: mockLocalityEvidence,
-      })
+      const vwc = buildVwcWithLocality({ localityEvidence: mockLocalityEvidence })
 
       const proofs = vwc.credentialSubject.witnessContext.localityVerification.proofs
       expect(proofs).toHaveLength(2)
     })
 
     it('should include correct proof data for each participant', () => {
-      const vwc = buildMockVWCWithLocality({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
-        sessionId: 'session-1',
-        localityEvidence: mockLocalityEvidence,
-      })
+      const vwc = buildVwcWithLocality({ localityEvidence: mockLocalityEvidence })
 
       const proofs = vwc.credentialSubject.witnessContext.localityVerification.proofs
       const aliceProof = proofs.find((p: any) => p.did === 'did:key:alice')
@@ -966,21 +919,16 @@ describe('WitnessService - Locality Integration', () => {
 
       expect(aliceProof).toBeDefined()
       expect(aliceProof.sig).toBe('sig-alice-base64')
-      expect(aliceProof.ip).toBe('192.168.1.x')
 
       expect(bobProof).toBeDefined()
       expect(bobProof.sig).toBe('sig-bob-base64')
-      expect(bobProof.ip).toBe('192.168.1.x')
     })
 
     it('should coexist with other witnessContext fields', () => {
-      const vwc = buildMockVWCWithLocality({
-        witnessIssuerDid,
-        vrcIssuer,
-        vrcJson: mockVrc,
+      const vwc = buildVwcWithLocality({
         sessionId: 'session-locality-test',
-        method: 'in-person-proximity',
-        event: 'Conference 2024',
+        verificationMethod: 'in-person-proximity',
+        eventName: 'Conference 2024',
         localityEvidence: mockLocalityEvidence,
       })
 

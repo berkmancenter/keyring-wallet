@@ -159,6 +159,161 @@ interface GetWitnessModulesOptions {
   mediatorInvitationUrl?: string
 }
 
+// ============================================
+// Pure verification / VWC-building logic
+// (exported so unit tests exercise the real implementation — see
+// __tests__/unit/WitnessService.test.ts)
+// ============================================
+
+// Wallets backdate issuance by up to 5 minutes to tolerate clock skew
+// between devices, so the freshness window must be that allowance plus
+// a real freshness margin.
+export const CLOCK_SKEW_ALLOWANCE_MS = 5 * 60 * 1000
+export const FRESHNESS_MARGIN_MS = 5 * 60 * 1000
+export const FRESHNESS_WINDOW_MS = CLOCK_SKEW_ALLOWANCE_MS + FRESHNESS_MARGIN_MS
+
+export type VrcFreshnessResult = { fresh: true; ageMs: number } | { fresh: false; error: string }
+
+/**
+ * Freshness check used by handlePresentationSubmission (Step 5): the VRC's
+ * timestamp must be within FRESHNESS_WINDOW_MS of the witness's clock, in
+ * either direction. VCDM 2.0 VRCs carry validFrom; 1.1 VRCs carry issuanceDate.
+ */
+export function checkVrcFreshness(
+  vrcJson: { validFrom?: string; issuanceDate?: string },
+  now: Date = new Date()
+): VrcFreshnessResult {
+  const issuanceDate = new Date(vrcJson.validFrom || vrcJson.issuanceDate || '')
+  if (Number.isNaN(issuanceDate.getTime())) {
+    return { fresh: false, error: 'Credential has no parseable validFrom/issuanceDate' }
+  }
+  const ageMs = Math.abs(now.getTime() - issuanceDate.getTime())
+  if (ageMs > FRESHNESS_WINDOW_MS) {
+    return { fresh: false, error: 'Credential issuance date is not fresh (>10 minutes old)' }
+  }
+  return { fresh: true, ageMs }
+}
+
+/**
+ * SHA-256 digest of the VRC over its JCS (RFC 8785) canonical form, so any
+ * implementation can recompute the same digest from the same JSON data
+ * regardless of key order or serializer.
+ */
+export function computeVrcDigest(vrcJson: unknown): string {
+  return 'sha256:' + createHash('sha256').update(jcsCanonicalize(vrcJson)).digest('hex')
+}
+
+export interface WitnessCredentialBuildContext {
+  issuerDid: string
+  witnessName: string
+  sessionId: string
+  verificationMethod: string
+  eventName?: string
+  localityEvidence?: LocalityEvidence
+}
+
+/**
+ * Build the (unsigned) VWC JSON for an observed presentation.
+ *
+ * Mirrors the observed VRC's data model: a VC 2.0 VRC gets a VC 2.0 VWC,
+ * a legacy 1.1 VRC gets a 1.1 VWC — so the holder's wallet can always
+ * validate the pair with the same code path it used for the VRC. The
+ * PROOF FAMILY is mirrored the same way (see the offer site): a DI VRC
+ * gets a DI VWC, whose @context needs no suite URL at all (credentials/v2
+ * already defines the DataIntegrityProof terms).
+ */
+export function buildWitnessCredentialJson(
+  observedPresentation: any,
+  buildContext: WitnessCredentialBuildContext
+): any {
+  const { issuerDid, witnessName, sessionId, verificationMethod, eventName, localityEvidence } = buildContext
+
+  const vwcId = `urn:uuid:${utils.uuid()}`
+
+  const credentials = observedPresentation.verifiableCredential || []
+  const vrcJson = credentials[0]
+
+  if (!vrcJson) {
+    throw new Error('No VRC found in presentation')
+  }
+
+  const digest = computeVrcDigest(vrcJson)
+
+  const vrcIssuer = typeof vrcJson.issuer === 'string' ? vrcJson.issuer : vrcJson.issuer?.id || 'unknown'
+
+  const hasHardwareAttestationEvidence = Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0
+
+  // Build witnessContext according to spec (event, sessionId, method - no domain/timestamp)
+  const witnessContext: Record<string, any> = {
+    sessionId,
+    method: verificationMethod,
+    // Flag indicating whether the VRC included hardware attestation evidence
+    // This does NOT mean the evidence was verified by the witness
+    // It means the participant's device performed hardware-backed authentication
+    hardwareAttestationIncluded: hasHardwareAttestationEvidence,
+  }
+
+  // Only include event if configured
+  if (eventName) {
+    witnessContext.event = eventName
+  }
+
+  // Include locality verification evidence if available
+  if (localityEvidence) {
+    witnessContext.localityVerification = localityEvidence
+  }
+
+  const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
+  const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
+  const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
+  const issuedTimestamp = new Date().toISOString()
+  const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
+
+  if (vrcIsVc20) {
+    // On the 2018 path the Ed25519 suite context must be present at build
+    // time (the v2 base context doesn't define the suite terms), or the
+    // signed VWC won't match the offer/request in credo's holder-side
+    // equality check.
+    return {
+      '@context': vrcUsesDi
+        ? [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL]
+        : [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+      id: vwcId,
+      type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
+      issuer: {
+        id: issuerDid,
+        name: witnessName,
+      },
+      validFrom: issuedTimestamp,
+      validUntil: expirationTimestamp,
+      credentialSubject: {
+        id: vrcIssuer,
+        digest: digest,
+        witnessContext,
+      },
+    }
+  }
+
+  return {
+    '@context': ['https://www.w3.org/2018/credentials/v1', WITNESSED_EXCHANGE_CONTEXT_URL],
+    id: vwcId,
+    type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
+    issuer: {
+      id: issuerDid,
+      name: witnessName,
+    },
+    issuanceDate: issuedTimestamp,
+    // W3C VC v1 expirationDate and validUntil - set to current time + 7 days
+    expirationDate: expirationTimestamp,
+    validUntil: expirationTimestamp,
+    credentialSubject: {
+      id: vrcIssuer,
+      digest: digest,
+      witnessContext,
+    },
+  }
+}
+
 function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationUrl }: GetWitnessModulesOptions) {
   return {
     askar: new AskarModule({
@@ -2190,25 +2345,12 @@ export class WitnessService {
       // ========================================
       // Step 5: FRESHNESS CHECK - Verify timestamp is recent
       // ========================================
-      // VCDM 2.0 VRCs carry validFrom; 1.1 VRCs carry issuanceDate
-      const issuanceDate = new Date(vrcJson.validFrom || vrcJson.issuanceDate)
-      if (Number.isNaN(issuanceDate.getTime())) {
-        return { verified: false, error: 'Credential has no parseable validFrom/issuanceDate' }
-      }
-      const now = new Date()
-      // Wallets backdate issuance by up to 5 minutes to tolerate clock skew
-      // between devices, so the freshness window must be that allowance plus
-      // a real freshness margin.
-      const CLOCK_SKEW_ALLOWANCE_MS = 5 * 60 * 1000
-      const FRESHNESS_MARGIN_MS = 5 * 60 * 1000
-      const freshnessWindowMs = CLOCK_SKEW_ALLOWANCE_MS + FRESHNESS_MARGIN_MS
-      const timeDiff = Math.abs(now.getTime() - issuanceDate.getTime())
-
-      if (timeDiff > freshnessWindowMs) {
-        return { verified: false, error: 'Credential issuance date is not fresh (>10 minutes old)' }
+      const freshness = checkVrcFreshness(vrcJson)
+      if (!freshness.fresh) {
+        return { verified: false, error: freshness.error }
       }
 
-      console.log(`[${this.name}]   ✓ Freshness check passed (issued ${Math.round(timeDiff / 1000)}s ago)`)
+      console.log(`[${this.name}]   ✓ Freshness check passed (issued ${Math.round(freshness.ageMs / 1000)}s ago)`)
 
       // Store the verified presentation
       sessionData.receivedPresentations.set(connectionId, presentationJson)
@@ -2406,110 +2548,28 @@ export class WitnessService {
       throw new Error('Witness issuer DID not initialized')
     }
 
-    const vwcId = `urn:uuid:${utils.uuid()}`
-
-    const credentials = observedPresentation.verifiableCredential || []
-    const vrcJson = credentials[0]
-
-    if (!vrcJson) {
-      throw new Error('No VRC found in presentation')
-    }
-
-    // Compute SHA-256 digest of the VRC over its JCS (RFC 8785) canonical
-    // form, so any implementation can recompute the same digest from the
-    // same JSON data regardless of key order or serializer.
-    const vrcCanonical = jcsCanonicalize(vrcJson)
-    const digest = 'sha256:' + createHash('sha256').update(vrcCanonical).digest('hex')
-
-    const vrcIssuer = typeof vrcJson.issuer === 'string' ? vrcJson.issuer : vrcJson.issuer?.id || 'unknown'
-
     // Check if VRC includes hardware attestation evidence
     // The witness does NOT verify the certificate chain - only records its presence
     // Device-side verification is responsible for chain validation (soft check currently)
-    const hasHardwareAttestationEvidence = Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0
-    if (hasHardwareAttestationEvidence) {
-      console.log(
-        `[${this.name}] VRC includes hardware attestation evidence (${vrcJson.evidence.length} evidence block(s))`
-      )
-    } else {
-      console.log(`[${this.name}] VRC does not include hardware attestation evidence`)
-    }
-
-    // Build witnessContext according to spec (event, sessionId, method - no domain/timestamp)
-    const witnessContext: Record<string, any> = {
-      sessionId: sessionData.sessionId,
-      method: this.config.verificationMethod,
-      // Flag indicating whether the VRC included hardware attestation evidence
-      // This does NOT mean the evidence was verified by the witness
-      // It means the participant's device performed hardware-backed authentication
-      hardwareAttestationIncluded: hasHardwareAttestationEvidence,
-    }
-
-    // Only include event if configured
-    if (this.config.eventName) {
-      witnessContext.event = this.config.eventName
-    }
-
-    // Include locality verification evidence if available
-    if (localityEvidence) {
-      witnessContext.localityVerification = localityEvidence
-    }
-
-    // Mirror the observed VRC's data model: a VC 2.0 VRC gets a VC 2.0 VWC,
-    // a legacy 1.1 VRC gets a 1.1 VWC — so the holder's wallet can always
-    // validate the pair with the same code path it used for the VRC. The
-    // PROOF FAMILY is mirrored the same way (see the offer site): a DI VRC
-    // gets a DI VWC, whose @context needs no suite URL at all (credentials/v2
-    // already defines the DataIntegrityProof terms).
-    const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
-    const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
-    const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
-    const issuedTimestamp = new Date().toISOString()
-    const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
-
-    if (vrcIsVc20) {
-      // On the 2018 path the Ed25519 suite context must be present at build
-      // time (the v2 base context doesn't define the suite terms), or the
-      // signed VWC won't match the offer/request in credo's holder-side
-      // equality check.
-      return {
-        '@context': vrcUsesDi
-          ? [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL]
-          : [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
-        id: vwcId,
-        type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-        issuer: {
-          id: this.issuerDid,
-          name: this.name,
-        },
-        validFrom: issuedTimestamp,
-        validUntil: expirationTimestamp,
-        credentialSubject: {
-          id: vrcIssuer,
-          digest: digest,
-          witnessContext,
-        },
+    const vrcJson = (observedPresentation.verifiableCredential || [])[0]
+    if (vrcJson) {
+      if (Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0) {
+        console.log(
+          `[${this.name}] VRC includes hardware attestation evidence (${vrcJson.evidence.length} evidence block(s))`
+        )
+      } else {
+        console.log(`[${this.name}] VRC does not include hardware attestation evidence`)
       }
     }
 
-    return {
-      '@context': ['https://www.w3.org/2018/credentials/v1', WITNESSED_EXCHANGE_CONTEXT_URL],
-      id: vwcId,
-      type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-      issuer: {
-        id: this.issuerDid,
-        name: this.name,
-      },
-      issuanceDate: issuedTimestamp,
-      // W3C VC v1 expirationDate and validUntil - set to current time + 7 days
-      expirationDate: expirationTimestamp,
-      validUntil: expirationTimestamp,
-      credentialSubject: {
-        id: vrcIssuer,
-        digest: digest,
-        witnessContext,
-      },
-    }
+    return buildWitnessCredentialJson(observedPresentation, {
+      issuerDid: this.issuerDid,
+      witnessName: this.name,
+      sessionId: sessionData.sessionId,
+      verificationMethod: this.config.verificationMethod,
+      eventName: this.config.eventName,
+      localityEvidence,
+    })
   }
 
   // ============================================
