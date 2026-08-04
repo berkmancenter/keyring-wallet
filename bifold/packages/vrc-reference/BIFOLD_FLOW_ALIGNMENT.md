@@ -5,6 +5,39 @@ After a thorough reading of the test files in `bifold/packages/vrc-reference` an
 
 ---
 
+### 🚧 **Scope limitation: the RCE capability-negotiation surface is deliberately NOT covered**
+
+> **Read this before treating green vrc-reference runs as end-to-end conformance proof.**
+
+Since the RCE v2/v3 rollout (VC 2.0 data model + `DataIntegrityProof`/`eddsa-rdfc-2022` + the
+RCard split), the app negotiates a per-counterparty capability version and selects credential
+shape and proof family from it. `vrc-reference` intentionally stays on the **pre-negotiation
+surface** for now:
+
+- **No `rceVersion` negotiation** — `Participant`'s handshake is `JSON.stringify({ rDid })`
+  with no capability field; the app announces/stores `vrc:rceVersion:<n>` and gates issuance
+  on it (`counterpartyRceVersionAtLeast` in `vrc-manager.ts`).
+- **No DI issuance over a real exchange** — `Participant` always signs
+  `Ed25519Signature2018`. DI signing/verification is proven in isolation
+  (`diConformance.test.ts`, a single-agent crypto round-trip) and the witness's mirroring
+  helper is unit-tested (`mirroredProofOptions.test.ts`), but no DIDComm exchange in this
+  package carries a DI-signed VRC, so the Witness's `vrcUsesDi` branch is not reached from
+  the integration flows.
+- **No RCard** — the contact-info credential the app exchanges alongside the VRC does not
+  exist in this package; the reference VRC still embeds issuer info directly.
+
+**What a green run therefore proves:** the credo 0.6 migration, the credential/witnessed-flow
+plumbing, and the DI cryptosuite in isolation. **What it does not prove:** RCE v1/v2/v3
+negotiation driving dual-stack proof selection over a real exchange, or the RCard split —
+those are covered by the app's unit matrix (`credentialDisplayMatrix.test.ts`) and the
+real-device e2e ladder (`e2e/README.md`) instead.
+
+Bringing `Participant` to full negotiation/RCard/DI parity is a planned follow-up, scoped as
+part of turning this package into a proper conformance suite for the DTG/witnessed-exchange
+spec work — not part of the upgrade PR.
+
+---
+
 ### ✅ **Strongly Aligned Areas**
 
 #### 1. **Credential Structure (VRC)**
@@ -105,4 +138,6 @@ The app includes the **DTG context** as an additional entry. This doesn't break 
 
 **The flows are well-aligned.** The core credential exchange protocol — from R-DID creation, through VRC issuance, to the full 5-phase witnessed flow and proof exchange — is structurally identical between the reference tests and the app implementation. The differences are all additive production features (biometrics, hardware attestation, error UX, mDNS discovery, richer issuer metadata) that extend but do not contradict the protocol tested in the reference suite.
 
-The reference tests serve as a reliable integration specification for the app's VRC exchange logic.
+The reference tests serve as a reliable integration specification for the app's VRC exchange
+logic **on the pre-negotiation surface** — see the scope-limitation note at the top for what
+they deliberately do not yet cover (RCE version negotiation, DI issuance over DIDComm, RCard).
