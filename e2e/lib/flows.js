@@ -244,11 +244,16 @@ export async function enableHardwareAttestation(driver) {
   await tapTestIdReliable(driver, "Continue", async () => !(await pinInput.isExisting()));
   await sleep(2000);
   console.log(`[e2e] ${driver.e2ePlatform}: hardware attestation enabled`);
-  // back to the Contacts tab for the rest of the flow
+  // back to the Contacts tab for the rest of the flow. A single "Back" pop
+  // (out of the Settings stack) isn't always enough: if the peer's message
+  // arrives in this window, the app auto-navigates into the Chat screen for
+  // that connection (its own "BackButton", not the Settings stack's "Back"),
+  // stranding a bare Contacts tap. returnToContacts() pops however many
+  // screens deep that lands us and is robust to either case.
   if (await existsTestId(driver, "Back", 3000)) {
     await tapTestId(driver, "Back");
   }
-  await tapTestId(driver, "Contacts", 15000);
+  await returnToContacts(driver);
 }
 
 /** The QR exchange bottom sheet is open if any of its content is visible. */
@@ -545,12 +550,39 @@ async function leftStackedScreen(driver) {
   return !(await byTestId(driver, "BackButton").isExisting());
 }
 
-/** Pop any stacked screens and land on the Contacts tab. */
+/**
+ * Pop any stacked screens and land on the Contacts tab.
+ *
+ * The witness sends a bounded burst of protocol messages (at most 5) right in
+ * this window, and each one can auto-navigate the app back into the Chat
+ * screen for that connection — bouncing us straight back out of Contacts the
+ * moment we land on it. So reaching Contacts once isn't enough: confirm it
+ * STAYS reached before declaring success, and retry past the worst case
+ * (5 bounces) rather than giving up after a handful of attempts. On exhaustion,
+ * throw — silently returning while still stuck on Chat just moves the failure
+ * to whatever step runs next, with a much more confusing error.
+ */
 export async function returnToContacts(driver) {
-  for (let i = 0; i < 5; i++) {
+  const MAX_ATTEMPTS = 10; // comfortably more than the witness's <=5-message burst
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
     if (await existsTestId(driver, "Contacts", 3000)) {
-      await tapTestIdReliable(driver, "Contacts", () => leftStackedScreen(driver));
-      return;
+      try {
+        await tapTestIdReliable(driver, "Contacts", () => leftStackedScreen(driver));
+      } catch (err) {
+        // The bottom tab bar's CURRENTLY SELECTED button appears to drop out
+        // of the accessibility tree (its testID becomes unqueryable) once
+        // active — seen after connectToWitness's chat screen: existsTestId
+        // just confirmed "Contacts" above, then this re-lookup inside the
+        // tap helper times out anyway. Since existsTestId only just found
+        // it, that almost always means we've already landed on the Contacts
+        // tab (nothing left to tap) rather than a real failure.
+        if (!/not found in \d+ms/.test(err.message)) throw err;
+      }
+      // A witness message landing right now can bounce us back into Chat —
+      // wait a beat and confirm Contacts is still there before returning.
+      await sleep(1500);
+      if (await existsTestId(driver, "Contacts", 2000)) return;
+      continue;
     }
     await unlockIfLocked(driver);
     if (await existsTestId(driver, "BackButton", 2000)) {
@@ -559,6 +591,9 @@ export async function returnToContacts(driver) {
       await sleep(1500);
     }
   }
+  throw new Error(
+    `${driver.e2ePlatform}: could not land on Contacts within ${MAX_ATTEMPTS} attempts (witness messages may keep bouncing the app back into Chat)`
+  );
 }
 
 /** Open a stored contact's detail screen by tapping its row in the Contacts list. */
