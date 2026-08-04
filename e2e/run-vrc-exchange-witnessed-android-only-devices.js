@@ -60,9 +60,28 @@ function preflight() {
   }
 }
 
+/**
+ * Hardware attestation needs a secure lock screen (PIN/pattern/biometric) on
+ * the device — without one, Android's Keystore silently issues a non-attested
+ * key instead of failing loudly. That doesn't surface until the very end of
+ * this attended run, as a confusing "peer evidence missing" assertion failure
+ * on the OTHER phone. Catch it up front instead, in seconds, on both devices.
+ */
+function ensureLockScreenEnabled(udid) {
+  const disabled = execSync(`adb -s ${udid} shell locksettings get-disabled`).toString().trim();
+  if (disabled === "true") {
+    throw new Error(
+      `device ${udid} has no lock screen (PIN/pattern/biometric) set — hardware attestation requires ` +
+        `one on BOTH phones. Set a PIN/pattern/biometric on this device and retry.`
+    );
+  }
+}
+
 preflight();
 const { a: udidA, b: udidB } = detectTwoAndroidUdids();
 console.log(`[e2e] android devices: ${udidA}, ${udidB}`);
+ensureLockScreenEnabled(udidA);
+ensureLockScreenEnabled(udidB);
 for (const udid of [udidA, udidB]) {
   try {
     execSync(`adb -s ${udid} logcat -c`);
