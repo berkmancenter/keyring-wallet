@@ -1,0 +1,15 @@
+{
+  "name": "ref-00-hello-direct",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 00 — Alice→Bob direct-mode pack/unpack, one process, zero infrastructure",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "dependencies": {
+    "@openvtc/vti-tsp-js": "0.1.0",
+    "@noble/curves": "^2.2.0"
+  }
+}

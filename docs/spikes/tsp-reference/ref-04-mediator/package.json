@@ -1,0 +1,17 @@
+{
+  "name": "ref-04-mediator",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 04 — Alice and Bob exchange TSP through a real mediator: one socket per DID, TSP frames demuxed off the DIDComm pickup stream",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "dependencies": {
+    "@openvtc/vti-tsp-js": "0.1.0",
+    "@openvtc/vti-didcomm-js": "0.6.2",
+    "@noble/curves": "^2.2.0",
+    "ws": "^8.18.0"
+  }
+}

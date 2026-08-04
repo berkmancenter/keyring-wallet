@@ -1,0 +1,18 @@
+{
+  "name": "ref-03-noble-crypto",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 03 — RFC 9180 HPKE-Auth on @noble only (no WebCrypto), vector- and interop-validated; the upstream PR candidate",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet",
+    "vectors": "node fetch-vectors.mjs"
+  },
+  "dependencies": {
+    "@openvtc/vti-tsp-js": "0.1.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.0.0",
+    "@noble/ciphers": "^2.0.0"
+  }
+}
