@@ -126,6 +126,11 @@ export async function startWitness({
   // rejects; a harness launching the server only needs it to run.
   const proc = spawn("yarn", ["ts-node", "--transpile-only", "src/index.ts"], {
     cwd: witnessDir,
+    // `yarn ts-node ...` spawns ts-node as a GRANDCHILD of this process — killing
+    // just `proc` only signals the yarn wrapper, orphaning the actual witness
+    // server (still holding the port, still running). detached: true makes proc
+    // its own process group leader, so stop() can kill the whole group at once.
+    detached: true,
     env: {
       ...process.env,
       TS_NODE_TRANSPILE_ONLY: "1",
@@ -186,10 +191,22 @@ export async function startWitness({
 
   const stop = async () => {
     if (!exited) {
-      proc.kill("SIGINT");
+      // negative pid targets the whole process group (yarn + its ts-node
+      // grandchild) — see the `detached: true` comment above.
+      try {
+        process.kill(-proc.pid, "SIGINT");
+      } catch {
+        /* group already gone */
+      }
       // give askar a moment to close the store cleanly
       for (let i = 0; i < 10 && !exited; i++) await sleep(300);
-      if (!exited) proc.kill("SIGKILL");
+      if (!exited) {
+        try {
+          process.kill(-proc.pid, "SIGKILL");
+        } catch {
+          /* group already gone */
+        }
+      }
     }
     if (tunnelHandle) tunnelHandle.stop();
     rmSync(dir, { recursive: true, force: true });
