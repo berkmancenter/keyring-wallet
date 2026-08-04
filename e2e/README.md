@@ -216,7 +216,11 @@ Proves the security-critical path end to end:
 - **Android phone**: plugged in over USB, USB debugging on, screen-lock PIN
   set (fingerprint optional — the prompt falls back to the device PIN), screen
   on and unlocked. Must be the only physical Android device attached (or set
-  `ANDROID_UDID`).
+  `ANDROID_UDID`). Prefer a device provisioned after Google's RKP rollout
+  (~2022+) — an older factory-keyed device's attestation chain may still
+  terminate at Google's legacy root, which expired 2026-05-24; see "Known
+  limitations" #5 in
+  [`docs/HARDWARE_ATTESTATION_FLOW.md`](../docs/HARDWARE_ATTESTATION_FLOW.md).
 - **iPhone**: plugged in, Developer Mode enabled (Settings → Privacy &
   Security), passcode set (Face ID optional), unlocked, trusts this Mac. Must
   be the only iPhone attached (or set `IOS_UDID`).

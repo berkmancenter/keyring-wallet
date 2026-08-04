@@ -196,6 +196,25 @@ and post-rotation chains.
    native multi-root validation is authoritative.  
 4. **VC proof suite** — hardware evidence ≠ Data Integrity cryptosuite; see
    [`CRYPTO_SUITE_FOLLOWUP.md`](./CRYPTO_SUITE_FOLLOWUP.md).
+5. **Older Android devices past the legacy root's expiry (2026-05-24)** —
+   observed 2026-08-04 on a real-device `yarn e2e:vrc:witnessed:android-only`
+   run: a Galaxy S20+ (Android, provisioned pre-RKP) issued a VRC whose
+   hardware evidence the witness accepted (its check is a plain signature
+   verify, not a chain/date check) but the **receiving** phone's local
+   `GoogleAttestationChainValidator` rejected — "Hardware Verification Issue"
+   instead of "Secure Exchange" — while the same run's Galaxy S25+ (RKP root,
+   valid to 2035) verified cleanly both ways. `PKIXParameters` validates
+   against the *current* date with no override, so any chain still
+   terminating at the now-expired `LEGACY_RSA_ROOT_PEM` will keep failing this
+   check going forward, regardless of retries — this isn't flaky, it's the
+   root reaching its documented end of life. Whether Google is serving this
+   specific device class a re-signed chain under `RESIGNED_RSA_ROOT_PEM`
+   (expires 2042) wasn't confirmed here — the E2E harness omits raw PEMs from
+   its credential dumps (`[VRC:IssuedCredentialJSON]`, by design) so the
+   actual chain wasn't inspected — only the app's local `valid=false` verdict.
+   Practical effect: for real-device hardware-attestation E2E, prefer devices
+   provisioned after Google's RKP rollout (~2022+); an older factory-keyed
+   device may now be permanently unable to pass the receiving side's check.
 
 ---
 
