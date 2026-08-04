@@ -52,21 +52,12 @@ const useBCAgentSetup = () => {
   const [agent, setAgent] = useState<Agent | null>(null)
   const agentInstanceRef = useRef<Agent | null>(null)
   const [store, dispatch] = useStore<BCState>()
-  const [logger, indyLedgers, attestationMonitor, credDefs, schemas] = useServices([
+  const [logger, indyLedgers, credDefs, schemas] = useServices([
     TOKENS.UTIL_LOGGER,
     TOKENS.UTIL_LEDGERS,
-    TOKENS.UTIL_ATTESTATION_MONITOR,
     TOKENS.CACHE_CRED_DEFS,
     TOKENS.CACHE_SCHEMAS,
   ])
-
-  const refreshAttestationMonitor = useCallback(
-    (agent: Agent) => {
-      attestationMonitor?.stop()
-      attestationMonitor?.start(agent)
-    },
-    [attestationMonitor]
-  )
 
   const restartExistingAgent = useCallback(
     async (agent: Agent): Promise<Agent | undefined> => {
@@ -193,7 +184,6 @@ const useBCAgentSetup = () => {
         if (restartedAgent) {
           logger.info('Successfully restarted existing agent...')
           await configureMessagePickup(restartedAgent)
-          refreshAttestationMonitor(restartedAgent)
           agentInstanceRef.current = restartedAgent
           setAgent(restartedAgent)
           return
@@ -242,10 +232,6 @@ const useBCAgentSetup = () => {
       //   activate(newAgent)
       // }
 
-      // In case the old attestationMonitor is still active, stop it and start a new one
-      logger.info('Starting attestation monitor...')
-      refreshAttestationMonitor(newAgent)
-
       logger.info('Setting new agent...')
       agentInstanceRef.current = newAgent
       setAgent(newAgent)
@@ -258,7 +244,6 @@ const useBCAgentSetup = () => {
       createNewAgent,
       migrateIfRequired,
       warmUpCache,
-      refreshAttestationMonitor,
       restartExistingAgent,
     ]
   )

@@ -6,9 +6,8 @@ import {
   DidCommProofExchangeRecord,
   DidCommProofState,
 } from '@credo-ts/didcomm'
-import { useCredentialByState, useProofByState, useBasicMessages, useAgent } from '@bifold/react-hooks'
+import { useCredentialByState, useProofByState, useBasicMessages } from '@bifold/react-hooks'
 import {
-  BifoldAgent,
   useStore,
   BasicMessageMetadata,
   CredentialMetadata,
@@ -18,9 +17,7 @@ import {
 import { ProofCustomMetadata, ProofMetadata } from '@bifold/verifier'
 import { useEffect, useState } from 'react'
 
-import { AttestationRestrictions } from '@/constants'
 import { showPersonCredentialSelector } from '@/keyring-theme/features/person-flow/utils/BCIDHelper'
-import { isProofRequestingAttestation } from '@services/attestation'
 import { BCState } from '@/store'
 
 function isProtocolMessage(content: string): boolean {
@@ -35,11 +32,9 @@ function isProtocolMessage(content: string): boolean {
 export const useNotifications = (): Array<
   DidCommBasicMessageRecord | DidCommCredentialExchangeRecord | DidCommProofExchangeRecord
 > => {
-  const { agent } = useAgent()
   const [store] = useStore<BCState>()
   const offers = useCredentialByState(DidCommCredentialState.OfferReceived)
   const proofsRequested = useProofByState(DidCommProofState.RequestReceived)
-  const [nonAttestationProofs, setNonAttestationProofs] = useState<DidCommProofExchangeRecord[]>([])
   const [notifications, setNotifications] = useState([])
   const { records: basicMessages } = useBasicMessages()
 
@@ -85,7 +80,7 @@ export const useNotifications = (): Array<
       !store.dismissPersonCredentialOffer.personCredentialOfferDismissed
         ? [{ type: 'CustomNotification', createdAt: invitationDate, id: 'custom' }]
         : []
-    const proofs = nonAttestationProofs.filter((proof) => {
+    const proofs = [...proofsRequested, ...proofsDone].filter((proof) => {
       return (
         ![DidCommProofState.Done, DidCommProofState.PresentationReceived].includes(proof.state) ||
         (proof.isVerified !== undefined &&
@@ -103,21 +98,10 @@ export const useNotifications = (): Array<
     credsReceived,
     credsDone,
     basicMessages,
-    nonAttestationProofs,
+    proofsRequested,
+    proofsDone,
     store.dismissPersonCredentialOffer.personCredentialOfferDismissed,
   ])
-
-  useEffect(() => {
-    Promise.all(
-      [...proofsRequested, ...proofsDone].map(async (proof: DidCommProofExchangeRecord) => {
-        const isAttestation = await isProofRequestingAttestation(proof, agent as BifoldAgent, AttestationRestrictions)
-        return {
-          value: proof,
-          include: !isAttestation,
-        }
-      })
-    ).then((val) => setNonAttestationProofs(val.filter((v) => v.include).map((data) => data.value)))
-  }, [proofsRequested, proofsDone, agent])
 
   return notifications
 }

@@ -48,7 +48,6 @@ import PersonCredential from './src/keyring-theme/features/person-flow/screens/P
 import PersonCredentialLoading from './src/keyring-theme/features/person-flow/screens/PersonCredentialLoading'
 import { pages } from './src/components/OnboardingPages'
 import {
-  AttestationRestrictions,
   // appHelpUrl,
   appleAppStoreUrl,
   autoDisableRemoteLoggingIntervalInMinutes,
@@ -62,7 +61,6 @@ import PINExplainer from './src/screens/PINExplainer'
 import Preface from './src/screens/Preface'
 import Splash from './src/screens/Splash'
 import Terms, { TermsVersion } from './src/screens/Terms'
-import { AttestationMonitor, allCredDefIds } from './src/services/attestation'
 import { VersionCheckService } from './src/services/version'
 import {
   BCDispatchAction,
@@ -73,8 +71,6 @@ import {
   RemoteDebuggingState,
   initialState,
 } from './src/store'
-
-const attestationCredDefIds = allCredDefIds(AttestationRestrictions)
 
 export class AppContainer implements Container {
   private _container: DependencyContainer
@@ -104,11 +100,11 @@ export class AppContainer implements Container {
     const logger = BCLogger
     logger.startEventListeners()
 
-    const options = {
-      shouldHandleProofRequestAutomatically: true,
-    }
-
-    this._container.registerInstance(TOKENS.UTIL_ATTESTATION_MONITOR, new AttestationMonitor(logger, options))
+    // BC Wallet's remote-attestation monitor (Traction) is deliberately not
+    // registered: Keyring doesn't consume Traction-gated credentials, and the
+    // credo-0.6 upgrade removed the DRPC flow it depended on. Core's default
+    // (undefined) applies; restore from bcgov/bc-wallet-mobile if BC issuer
+    // interop ever becomes a goal.
     this._container.registerInstance(TOKENS.UTIL_APP_VERSION_MONITOR, new VersionCheckService(logger))
     // Here you can register any component to override components in core package
     // Example: Replacing button in core with custom button
@@ -208,8 +204,6 @@ export class AppContainer implements Container {
       showDetailsInfo: true,
       contactHideList: ['BCAttestationService'],
       proofTemplateBaseUrl: Config.PROOF_TEMPLATE_URL,
-      // Credential Definition IDs
-      credentialHideList: attestationCredDefIds,
       // DISABLED: Push notifications disabled — no server backend yet
       // enablePushNotifications: {
       //   status: status,
