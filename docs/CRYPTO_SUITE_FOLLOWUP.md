@@ -1,8 +1,12 @@
-# Cryptosuite follow-up (deferred)
+# Cryptosuite record: Data Integrity (`eddsa-rdfc-2022`)
 
-> **Status:** intentionally deferred until the upgrade stack is clean and settled.  
-> **Do not** treat Phase 5 “VC 2.0” as “Data Integrity / eddsa-rdfc-2022 done.”  
-> Last updated: 2026-07-13.
+> **Status:** SHIPPED — the DIDComm Data Integrity layer landed 2026-07-17
+> (`1992195`, part of the consolidated upgrade PR #17): capability-gated DI
+> issuance (RCE v3), dual-verify, witness proof-family mirroring.
+> This doc previously recorded the pre-upgrade decision to *defer* DI; it now
+> records what shipped and the decisions that shaped it (code comments cite
+> them by number — e.g. the `@credo-ts/didcomm` patch cites Decision 5 Option B).
+> Last updated: 2026-08-04.
 
 ---
 
@@ -10,92 +14,52 @@
 
 | Layer | Choice |
 |-------|--------|
-| VRC / RCard **data model** | VCDM **2.0** (`@context` credentials/v2, `validFrom` / `validUntil`) when RCE ≥ 2 |
-| DIDComm JSON-LD **proof** | **`Ed25519Signature2018`** (`proofType` + suite context URL) |
-| Hardware attestation | Separate W3C **evidence** block (P-256 in SE/TEE) — orthogonal to the VC proof suite |
-
-Proof of the current VRC shape (including `proof.jws`) comes from real-device E2E
-slim dumps under `e2e/artifacts/issued-credential-*.json`.
-
----
-
-## Why 2018 (not “newer VC 2.0 crypto”)
-
-1. **Credo DIDComm `jsonld` format** is built around Linked Data Signatures /
-   `Ed25519Signature2018`. That path signs and verifies end-to-end today.
-2. Credo 0.6 **`W3cV2CredentialService`** targets **JWT / SD-JWT** enveloped
-   proofs — not Data Integrity over DIDComm for our exchange.
-3. **VCDM 2.0 data model ≠ Data Integrity cryptosuite.** We moved the payload
-   shape; we did **not** move the proof suite.
-4. **Interop:** existing wallets, RCards, witnesses, and stored credentials
-   already speak 2018. A hard cut breaks peers.
-5. Spec examples that show **`Ed25519Signature2020`** are a dead end — do not
-   migrate 2018 → 2020. The W3C-aligned v2 target is Data Integrity.
-
-See also `DTG_SPEC_FEEDBACK.md` §3 (recommend DI in the DTG spec; keep 2018
-acceptable for legacy).
+| VRC / RCard **data model** | VCDM **2.0** (`@context` credentials/v2, `validFrom` / `validUntil`) when counterparty RCE ≥ 2; VCDM 1.1 for legacy peers |
+| DIDComm JSON-LD **proof** | **`DataIntegrityProof` + `cryptosuite: eddsa-rdfc-2022`** when counterparty RCE ≥ 3; **`Ed25519Signature2018`** otherwise |
+| Verification | **Dual-verify, no sunset** — 2018 and DI both accepted indefinitely (stored 2018 credentials make that verify path effectively permanent) |
+| Witness issuance | Mirrors the presented VRC's proof family (`getMirroredJsonLdProofOptions`, `@bifold/vrc-shared`) — DI for DI-signed VRCs, legacy 2018 shape otherwise |
+| Hardware attestation | Separate W3C **evidence** block (P-256 in SE/TEE) — orthogonal to the VC proof suite; see `HARDWARE_ATTESTATION_FLOW.md` |
 
 ---
 
-## Target later (profound / separate project)
+## Decision record (resolved 2026-07-14)
 
-```json
-"proof": {
-  "type": "DataIntegrityProof",
-  "cryptosuite": "eddsa-rdfc-2022",
-  "created": "...",
-  "verificationMethod": "...",
-  "proofPurpose": "assertionMethod",
-  "proofValue": "..."
-}
-```
+Plan-review decisions made before implementation. Kept here because code and
+patch comments reference them by number.
 
-Optional later: selective disclosure via other DI cryptosuites (`bbs-2023`,
-`ecdsa-sd-2023`) — same family, separate scope.
-
-### What a real implementation must include
-
-| Area | Work |
-|------|------|
-| Credo | Sign/verify DI over the DIDComm credential format (patch and/or upstream) |
-| Canonicalization | RDFC 1.0 / suite rules — not LDS-2018 |
-| Contexts | Offline DI + cryptosuite contexts on mobile (no reliance on network) |
-| Negotiation | Issue DI only when peer capability allows (extend RCE or equivalent); else 2018 |
-| Witness / digest | Ensure VWC / JCS rules stay consistent with what is signed |
-| Dual verify | Holders must accept 2018 **and** DI during transition |
-| Conformance | Explicit tests for DI issue + verify + cross-version peers |
-
-This is **not** a Keyring-only string flip of `proofType`. Plan it as its own
-phase after bifold/credo/RN upgrade dust settles.
-
-### Explicit non-goals for that phase
-
-- Replacing hardware attestation (unchanged).  
-- Jumping to Ed25519Signature2020 as an interim.  
-- Claiming full “VC 2.0 Data Integrity conformance” while still on 2018 proofs.
+| # | Decision | Choice |
+|---|----------|--------|
+| 1 | Upstream dependency | Pure patch path — do not wait for credo-ts#2797; track it only so our patch doesn't collide later |
+| 2 | Where the work lands | Own branch stacked on the upgrade branches, merged via the consolidated upgrade PR |
+| 3 | Cryptosuite | `eddsa-rdfc-2022` (`jcs` variant considered and rejected) — matches Keyring's DTG spec feedback §3; graph canonicalization already runs on-device |
+| 4 | Libraries | `@digitalcredentials` forks (cryptosuite 1.3.0, data-integrity 2.6.0); `rdf-canonize@5` forced via resolution |
+| 5 | DIDComm options shape | **Option B** — extend the jsonld credential-detail options with `cryptosuite`; match `proof.type` **+** `proof.cryptosuite` when present, `type`-only when absent (2018 path untouched) |
+| 6 | Negotiation | `RCE_PROTOCOL_VERSION = 3` + `counterpartySpeaksDi()` (≥ 3); DI implies VC 2.0, so the version ladder holds |
+| 7 | Verify policy | Dual-verify indefinitely, no sunset; no re-signing of stored 2018 credentials; silently accept 2018 proofs from DI-capable peers (same Ed25519 keys — no security delta, no downgrade rejection) |
+| 8 | Test gates | Leveled conformance with external vc-di-eddsa test vectors at the base; the peer-matrix cell "DI issuer ↔ pre-v3 holder" must never occur (v3 gate), not merely fail gracefully |
+| 9 | Maintenance | Yarn patches are permanent carrying cost; credo-ts frozen at 0.6.3 (0.7 only on demonstrated need); opportunistic upstreaming to credo-ts#2797, never blocking |
 
 ---
 
-## Where the 2018 choice is coded
+## Where the selection is coded
 
-- `bifold/packages/core/src/modules/vrc/vrc-manager.ts` — `offerCredential` →
-  `proofType: 'Ed25519Signature2018'` (comment points here).  
-- Same pattern in RCard / witness-server / vrc-reference issuers.  
-- Suite context: `ED25519_2018_SUITE_CONTEXT_URL` on VCDM 2.0 builders.
-
-When DI lands, grep `Ed25519Signature2018` and replace via capability-gated
-issuance — do not delete 2018 verify until peers are gone.
+- `@bifold/vrc-shared` — `getVrcJsonLdProofOptions` / `getMirroredJsonLdProofOptions`:
+  the single proof-family selection path, used by both the app
+  (`bifold/packages/core/src/modules/vrc/vrc-manager.ts`) and the witness
+  (`bifold/packages/witness-server/src/WitnessService.ts`).
+- `vrc-manager.ts` — `counterpartySpeaksVc20` / `counterpartySpeaksDi` gate on
+  the per-counterparty `rceVersion` stored from the relationship-DID handshake.
+- `.yarn/patches/@credo-ts-didcomm-npm-0.6.3-*.patch` — Decision 5 Option B:
+  `cryptosuite` added to the jsonld detail options + received-proof matching.
+- `.yarn/patches/@credo-ts-core-npm-0.6.3-*.patch` — VCDM 2.0 shim + DI
+  cryptosuite matching in the W3C credential service.
 
 ---
 
-## Suggested reopen trigger
+## Still open (same family, separate scope)
 
-After:
-
-1. Upgrade phases merged / main is stable,  
-2. Real-device attestation + simulator E2E remain green,  
-3. Owner prioritizes DTG / ToIP DI conformance or Credo DI-on-DIDComm support,
-
-…open a dedicated issue (Keyring + bifold) titled roughly:
-**“VRC: DataIntegrityProof (eddsa-rdfc-2022) over DIDComm”** and treat this
-file as the design brief to expand.
+- Selective disclosure via other DI cryptosuites (`bbs-2023`, `ecdsa-sd-2023`).
+- Upstreaming the VCDM 2.0 shim / `cryptosuite` options shape to credo-ts,
+  to reduce the permanent patch-carrying cost (Decision 9).
+- Do **not** remove 2018 verification while any stored or peer-issued 2018
+  credential can still surface — i.e., plan on never.

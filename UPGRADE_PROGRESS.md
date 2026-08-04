@@ -521,12 +521,20 @@ babel/metro/jest configs, `.env.sample`.
         against Google's published roots instead of self-as-anchor. Verified on the new
         stack: 7/7 attestation JUnit tests, 29/29 BiometricSignatureVerifier TS tests,
         app `assembleDebug` green. PR #23 superseded/closed.
+  - [x] **DataIntegrityProof / eddsa-rdfc-2022 — SHIPPED (2026-07-17, `1992195`)**,
+        superseding the "separate profound follow-up" deferral that used to sit here:
+        DIDComm Data Integrity layer via the `@credo-ts/didcomm` patch (Decision 5
+        Option B), RCE v3 capability gating (`counterpartySpeaksDi`), witness
+        dual-verify + mirrored issuance. 2018 is still issued to pre-v3 peers and
+        dual-verify has no sunset. Decision record + shipped state:
+        `docs/CRYPTO_SUITE_FOLLOWUP.md`.
   - **Deliberately deferred**: custom → official context URL switch (waiting on ToIP WG;
-    draft in `dtg-context-v1.draft.jsonld`, git-excluded); **DataIntegrityProof /
-    eddsa-rdfc-2022** (separate profound follow-up — parking lot:
-    `docs/CRYPTO_SUITE_FOLLOWUP.md`; keep issuing Ed25519Signature2018 until then);
-    BBS+/ZKP (separate future project); wallet-side VWC digest verification
-    (jcsCanonicalize exported and ready).
+    draft in `dtg-context-v1.draft.jsonld`, git-excluded); BBS+/ZKP (separate future
+    project); wallet-side VWC digest verification (jcsCanonicalize exported and ready).
+  - **Tracked follow-up — `react-native-document-picker` is dead upstream** (deprecated,
+    renamed to `@react-native-documents/picker`): its `.yarn/patches` entry has no
+    upstream expiration path, so it must be manually re-verified on every future RN
+    bump until we migrate to the replacement package.
   - [x] **Real-device hardware attestation E2E (2026-07-13)**: `yarn e2e:vrc:devices`
         green — Secure Exchange both directions; native verify; Google multi-root
         anchors. Docs: `docs/HARDWARE_ATTESTATION_FLOW.md` rewritten to match.

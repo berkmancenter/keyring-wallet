@@ -100,6 +100,14 @@ device/emulator setup. Run these from the repo root:
 `yarn e2e:vrc` silently falls back to a plain, non-attested exchange — a green run
 there does **not** prove the attestation path. Only the `:devices` runs do.
 
+**A second caveat, for the witnessed run:** the harness starts the witness with
+`WITNESS_LOCALITY_REQUIRED=false` — Appium-driven phones can't produce a real
+co-location (BLE proximity) proof, and with the check on the witness would reject
+the VP and the exchange would fall back to a plain unwitnessed VRC. So a green
+`yarn e2e:vrc:witnessed:devices` run proves the witnessed exchange and attestation,
+**not** the locality-verification leg (a real deployment keeps it enforced). Set
+`WITNESS_LOCALITY_REQUIRED=true` to exercise it in an attended run.
+
 **When running the `:devices` flows:**
 
 - **iPhone Face ID matters.** The attestation gate keys off the biometric prompt —

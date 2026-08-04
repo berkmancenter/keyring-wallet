@@ -317,6 +317,15 @@ banners and authenticate on both phones. Override the witness's name with
 `WITNESS_NAME`, or its ports with `WITNESS_PORT`/`WITNESS_WEB_PORT`, if the
 defaults collide with something else running locally.
 
+**Locality verification is disabled by default.** The harness launches the
+witness with `WITNESS_LOCALITY_REQUIRED=false`: Appium-driven phones can't
+produce a co-location (BLE proximity) proof, and with the check enforced the
+witness rejects the VP and the exchange silently falls back to a plain
+unwitnessed VRC. A green witnessed run therefore proves the witnessed exchange
+and attestation, **not** the locality leg — a real deployment keeps it
+enforced. Export `WITNESS_LOCALITY_REQUIRED=true` to include it in an
+attended run.
+
 ### Android-only variant (`yarn e2e:vrc:witnessed:android-only`)
 
 Same witnessed + attested exchange; a second **physical** Android phone
@@ -338,6 +347,12 @@ ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
 
 ## Troubleshooting
 
+- **Isolating the witness-connect step**: `node debug-witness-connect.js` (run
+  from `e2e/`) drives a single Android device through fresh install → onboard →
+  connect-to-witness and confirms the "connected to witness" banner. No second
+  device or biometrics needed, so it cheaply isolates witness connectivity from
+  the rest of the witnessed flow. Diagnostic tool only — not part of the
+  maintained suite.
 - **Real device: "Unable to launch WebDriverAgent … xcodebuild failed with
   code 65"**: WDA has never been provisioned for the team on this machine
   (appium doesn't pass `-allowProvisioningUpdates`). Prime it once:
