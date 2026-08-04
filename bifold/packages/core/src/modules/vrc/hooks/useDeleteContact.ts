@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 
 import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
+import { toRawCredential } from '../utils/rcardDisplayUtils'
 import { OpenIDCredentialType } from '../../openid/types'
 import { ToastType } from '../../../components/toast/BaseToast'
 
@@ -38,23 +39,14 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
    */
   const extractIssuerId = (credential: W3cCredentialRecord): string | null => {
     try {
-      const credentialData = credential.encoded
+      const issuerValue = toRawCredential(credential)?.issuer
 
-      if (
-        credentialData &&
-        typeof credentialData === 'object' &&
-        !Array.isArray(credentialData) &&
-        'issuer' in credentialData
-      ) {
-        const issuerValue = (credentialData as any).issuer
+      if (typeof issuerValue === 'string') {
+        return issuerValue
+      }
 
-        if (typeof issuerValue === 'string') {
-          return issuerValue
-        }
-
-        if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
-          return issuerValue.id
-        }
+      if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
+        return issuerValue.id
       }
     } catch (error) {
       // eslint-disable-next-line no-console

@@ -2,7 +2,7 @@ import { Agent, W3cCredentialRecord } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { isDTGCredential, isRelationshipCredential } from '../credentialTypes'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
-import { resolveContactDisplayInfo } from './rcardDisplayUtils'
+import { resolveContactDisplayInfo, toRawCredential } from './rcardDisplayUtils'
 
 /**
  * Extract issuer information from a W3C credential
@@ -12,27 +12,18 @@ import { resolveContactDisplayInfo } from './rcardDisplayUtils'
  */
 export function extractIssuerFromCredential(credential: W3cCredentialRecord): { id: string; name?: string } | null {
   try {
-    const credentialData = credential.encoded
+    const issuerValue = toRawCredential(credential)?.issuer
 
-    if (
-      credentialData &&
-      typeof credentialData === 'object' &&
-      !Array.isArray(credentialData) &&
-      'issuer' in credentialData
-    ) {
-      const issuerValue = (credentialData as any).issuer
+    // Handle issuer as string
+    if (typeof issuerValue === 'string') {
+      return { id: issuerValue }
+    }
 
-      // Handle issuer as string
-      if (typeof issuerValue === 'string') {
-        return { id: issuerValue }
-      }
-
-      // Handle issuer as object with id property
-      if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
-        return {
-          id: issuerValue.id,
-          name: issuerValue.name || undefined,
-        }
+    // Handle issuer as object with id property
+    if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
+      return {
+        id: issuerValue.id,
+        name: issuerValue.name || undefined,
       }
     }
   } catch (_error) {
@@ -50,16 +41,10 @@ export function extractIssuerFromCredential(credential: W3cCredentialRecord): { 
  */
 export function isVrcCredential(credential: W3cCredentialRecord): boolean {
   try {
-    const credentialData = credential.encoded
-
-    if (
-      credentialData &&
-      typeof credentialData === 'object' &&
-      !Array.isArray(credentialData) &&
-      'type' in credentialData
-    ) {
+    const raw = toRawCredential(credential)
+    if (raw) {
       // Check for RelationshipCredential or DTGCredential types
-      return isRelationshipCredential(credentialData) || isDTGCredential(credentialData)
+      return isRelationshipCredential(raw) || isDTGCredential(raw)
     }
   } catch (_error) {
     // Silently fail

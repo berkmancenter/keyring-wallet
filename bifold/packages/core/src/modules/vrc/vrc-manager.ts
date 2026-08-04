@@ -20,9 +20,9 @@ import { domain, LocalStorageKeys } from '../../constants'
 import { PersistentStorage } from '../../services/storage'
 import { Preferences } from '../../types/state'
 import { isWitnessCredential } from './credentialTypes'
+import { selectCredentialContexts } from './utils/selectCredentialContexts'
 import { RelationshipDidRepository } from './repositories/RelationshipDidRepository'
 import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from './types/relationshipContext'
-import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
 import Toast from 'react-native-toast-message'
 import { ToastType } from '../../components/toast/BaseToast'
 import { createVrcLogger } from './vrc-logging'
@@ -297,15 +297,9 @@ export async function buildVrcCredential(
 
   const credential: any = useVc20
     ? {
-        // VCDM 2.0 shape per the DTG spec (SHOULD issue 2.0).
-        // On the 2018 path the Ed25519 suite context must be present at build
-        // time: the v2 base context doesn't define the suite terms (v1.1 did),
-        // so jsonld-signatures would append it during signing and the signed
-        // credential would no longer match the offer/request in credo's
-        // holder-side equality check.
-        '@context': useDi
-          ? [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL]
-          : [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+        // VCDM 2.0 shape per the DTG spec (SHOULD issue 2.0). Proof-context
+        // rules live in selectCredentialContexts (shared with the RCard builder).
+        '@context': selectCredentialContexts({ useVc20, useDi }, [DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL]),
         type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
         // Bare DID string per DTG spec — contact info rides in the RCard instead
         issuer: myRelationshipDid,
@@ -321,7 +315,7 @@ export async function buildVrcCredential(
         // (no RCard exchange, no bundled RCard context), so the contact info
         // still rides inside the issuer object — the exact shape their contact
         // display reads.
-        '@context': ['https://www.w3.org/2018/credentials/v1', DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL],
+        '@context': selectCredentialContexts({ useVc20: false }, [DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL]),
         type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
         issuer: await buildLegacyIssuerObject(agent, myRelationshipDid),
         issuanceDate: issuanceTimestamp,
@@ -369,33 +363,33 @@ export async function buildLegacyIssuerObject(agent: Agent, myRelationshipDid: s
 }
 
 /**
- * Whether the counterparty announced RCE protocol v2 (VC 2.0 capable) in its
- * relationshipDid handshake. Peers that never announced a version are treated
- * as v1 so they still receive VCDM 1.1 credentials they can validate.
+ * Whether the counterparty's stored relationshipDid handshake announced at
+ * least the given RCE protocol version. Peers that never announced a version
+ * are treated as v1, and lookup failures as "no" — so older peers keep
+ * receiving credentials they can validate.
  */
-async function counterpartySpeaksVc20(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
+async function counterpartyRceVersionAtLeast(
+  agent: Agent,
+  counterpartyRelationshipDid: string,
+  minVersion: number
+): Promise<boolean> {
   try {
     const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
     const record = await repository.findByCounterpartyRelationshipDid(agent.context, counterpartyRelationshipDid)
-    return (record?.counterpartyRceVersion ?? 1) >= 2
+    return (record?.counterpartyRceVersion ?? 1) >= minVersion
   } catch {
     return false
   }
 }
 
-/**
- * Whether the counterparty announced RCE protocol v3 (Data Integrity capable)
- * in its relationshipDid handshake. Mirrors counterpartySpeaksVc20; older
- * peers keep receiving Ed25519Signature2018 exactly as before.
- */
-async function counterpartySpeaksDi(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
-  try {
-    const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
-    const record = await repository.findByCounterpartyRelationshipDid(agent.context, counterpartyRelationshipDid)
-    return (record?.counterpartyRceVersion ?? 1) >= 3
-  } catch {
-    return false
-  }
+/** RCE v2+: the counterparty can validate VCDM 2.0 credentials. */
+function counterpartySpeaksVc20(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
+  return counterpartyRceVersionAtLeast(agent, counterpartyRelationshipDid, 2)
+}
+
+/** RCE v3+: the counterparty can verify DataIntegrityProof/eddsa-rdfc-2022. */
+function counterpartySpeaksDi(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
+  return counterpartyRceVersionAtLeast(agent, counterpartyRelationshipDid, 3)
 }
 
 /**

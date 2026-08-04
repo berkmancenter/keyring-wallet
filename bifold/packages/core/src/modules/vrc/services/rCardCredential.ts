@@ -2,7 +2,7 @@ import { Agent, JsonTransformer, W3cCredential, W3cCredentialRecord, W3cCredenti
 
 import { RCardTemplate, JCard } from '../types/rcard'
 import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../types/relationshipContext'
-import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
+import { selectCredentialContexts } from '../utils/selectCredentialContexts'
 import { createVrcLogger } from '../vrc-logging'
 
 /**
@@ -38,16 +38,10 @@ export const buildRCardCredential = async (
   const issuanceTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
 
   if (options?.useVc20) {
-    // VCDM 2.0 shape — the peer announced RCE protocol v2.
-    // On the 2018 path the Ed25519 suite context must be present at build time
-    // (the v2 base context doesn't define the suite terms), or the signed
-    // credential won't match the offer/request in credo's holder-side equality
-    // check. On the DI path (RCE v3) nothing is added: credentials/v2 already
-    // defines the DataIntegrityProof terms.
+    // VCDM 2.0 shape — the peer announced RCE protocol v2. Proof-context
+    // rules live in selectCredentialContexts (shared with the VRC builder).
     return {
-      '@context': options?.useDi
-        ? [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RCARD_CONTEXT_URL]
-        : [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RCARD_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+      '@context': selectCredentialContexts(options ?? {}, [DTG_CONTEXT_URL, RCARD_CONTEXT_URL]),
       type: ['VerifiableCredential', 'RelationshipCard'],
       issuer: myRelationshipDid,
       validFrom: issuanceTimestamp,
@@ -60,7 +54,7 @@ export const buildRCardCredential = async (
 
   // Legacy VCDM 1.1 shape for pre-VC-2.0 peers
   return {
-    '@context': ['https://www.w3.org/2018/credentials/v1', DTG_CONTEXT_URL, RCARD_CONTEXT_URL],
+    '@context': selectCredentialContexts({ useVc20: false }, [DTG_CONTEXT_URL, RCARD_CONTEXT_URL]),
     type: ['VerifiableCredential', 'RelationshipCard'],
     issuer: myRelationshipDid,
     issuanceDate: issuanceTimestamp,

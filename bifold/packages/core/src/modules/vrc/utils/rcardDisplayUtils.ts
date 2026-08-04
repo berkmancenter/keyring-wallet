@@ -19,9 +19,13 @@ export interface ContactDisplayInfo {
   organization?: string
 }
 
-/** Get the credential JSON out of a record, tolerating class instances */
+/**
+ * Get the credential JSON out of a record's `encoded` field, tolerating both
+ * plain objects and class instances (via `.toJSON()`). Canonical extraction —
+ * use this instead of reading `record.encoded` inline.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toRawCredential = (record: W3cCredentialRecord): any | null => {
+export const toRawCredential = (record: W3cCredentialRecord): any | null => {
   try {
     const credentialData = record.encoded
     if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {

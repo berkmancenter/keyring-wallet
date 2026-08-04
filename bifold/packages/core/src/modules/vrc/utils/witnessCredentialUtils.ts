@@ -8,6 +8,7 @@
 import { W3cCredentialRecord } from '@credo-ts/core'
 
 import { isPeerVrcCredential, isWitnessCredential } from '../credentialTypes'
+import { toRawCredential } from './rcardDisplayUtils'
 
 /**
  * Locality verification information from witnessContext
@@ -55,17 +56,8 @@ export interface WitnessRecord {
  */
 export function hasHardwareAttestationEvidence(credential: W3cCredentialRecord): boolean {
   try {
-    const credentialData = credential.encoded
-    if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
-      return false
-    }
-
-    let raw: any = credentialData
-    if (typeof (credentialData as any).toJSON === 'function') {
-      raw = (credentialData as any).toJSON()
-    }
-
-    if (!('evidence' in raw) || !Array.isArray(raw.evidence)) {
+    const raw = toRawCredential(credential)
+    if (!raw || !Array.isArray(raw.evidence)) {
       return false
     }
 
@@ -96,18 +88,14 @@ export function hasVrcHardwareAttestation(
 ): boolean {
   return credentials.some((credential) => {
     try {
-      const credentialData = credential.encoded
-      if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
-        return false
-      }
+      const raw = toRawCredential(credential)
+      if (!raw) return false
 
       // Must be a DTGCredential (the VRC), not a WitnessCredential
-      if (!isPeerVrcCredential(credentialData)) return false
+      if (!isPeerVrcCredential(raw)) return false
 
       // issuer.id must match the contact's DID
-      if (!('issuer' in credentialData)) return false
-      const issuer = (credentialData as any).issuer
-      const issuerId = typeof issuer === 'string' ? issuer : issuer?.id
+      const issuerId = typeof raw.issuer === 'string' ? raw.issuer : raw.issuer?.id
       if (issuerId !== issuerDid) return false
 
       return hasHardwareAttestationEvidence(credential)
@@ -131,25 +119,17 @@ export function getVrcCredentialJsonForSubject(
 ): Record<string, unknown> | null {
   for (const credential of credentials) {
     try {
-      const credentialData = credential.encoded
-      if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
-        continue
-      }
+      const raw = toRawCredential(credential)
+      if (!raw) continue
 
-      if (!isPeerVrcCredential(credentialData)) continue
+      if (!isPeerVrcCredential(raw)) continue
 
       // Match by issuer DID (the contact who issued this credential to us)
-      if (!('issuer' in credentialData)) continue
-      const issuer = (credentialData as any).issuer
-      const issuerId = typeof issuer === 'string' ? issuer : issuer?.id
+      const issuerId = typeof raw.issuer === 'string' ? raw.issuer : raw.issuer?.id
       if (issuerId !== issuerDid) continue
 
       if (!hasHardwareAttestationEvidence(credential)) continue
 
-      let raw: any = credentialData
-      if (typeof (credentialData as any).toJSON === 'function') {
-        raw = (credentialData as any).toJSON()
-      }
       return raw as Record<string, unknown>
     } catch {
       continue
@@ -166,17 +146,8 @@ export function getVrcCredentialJsonForSubject(
  */
 export function hasWitnessCredentialType(credential: W3cCredentialRecord): boolean {
   try {
-    const credentialData = credential.encoded
-
-    if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
-      return false
-    }
-
-    if (!('type' in credentialData)) {
-      return false
-    }
-
-    return isWitnessCredential(credentialData)
+    const raw = toRawCredential(credential)
+    return raw ? isWitnessCredential(raw) : false
   } catch (_error) {
     return false
   }
@@ -205,22 +176,15 @@ export function getWitnessCredentialsForSubject(
 
     // Check if credentialSubject.id matches the subjectDid
     try {
-      const credentialData = credential.encoded
-      if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
-        return false
-      }
+      const raw = toRawCredential(credential)
+      if (!raw) return false
 
-      if (!('credentialSubject' in credentialData)) {
-        return false
-      }
-
-      const credentialSubject = (credentialData as any).credentialSubject
+      const credentialSubject = raw.credentialSubject
       if (!credentialSubject || typeof credentialSubject !== 'object') {
         return false
       }
 
-      const subjectId = credentialSubject.id
-      return subjectId === subjectDid
+      return credentialSubject.id === subjectDid
     } catch (_error) {
       return false
     }
@@ -235,16 +199,9 @@ export function getWitnessCredentialsForSubject(
  */
 export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | null {
   try {
-    const credentialData = vwc.encoded
-
-    if (!credentialData || typeof credentialData !== 'object' || Array.isArray(credentialData)) {
+    const rawCredential = toRawCredential(vwc)
+    if (!rawCredential) {
       return null
-    }
-
-    // Try to get raw JSON if it's a class instance
-    let rawCredential: any = credentialData
-    if (typeof (credentialData as any).toJSON === 'function') {
-      rawCredential = (credentialData as any).toJSON()
     }
 
     // Extract issuer (witness DID)
