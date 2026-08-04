@@ -208,19 +208,28 @@ Proves the security-critical path end to end:
 - each phone signs its VRC with a hardware-backed key (Android TEE key with
   `BiometricPrompt` / iOS App Attest with `LAContext`), and
 - each **receiver** chain-validates the peer's evidence on-device (Google
-  attestation roots / Apple roots). The run **fails** unless both offer screens
-  show the "Secure Exchange" (`AttestationVerified`) banner.
+  attestation roots / Apple roots). The run **fails** unless both offer
+  screens show evidence was at least attempted — either the "Secure Exchange"
+  (`AttestationVerified`) banner or the "Hardware Verification Issue"
+  (`AttestationWarning`) banner. The warning is tolerated (not a failure):
+  this test proves the exchange flow, not that a given physical device's
+  attestation root cert is still within its validity window, which we don't
+  control — see "Known limitations" #5 in
+  [`docs/HARDWARE_ATTESTATION_FLOW.md`](../docs/HARDWARE_ATTESTATION_FLOW.md).
+  Only a banner missing entirely (evidence never attempted) fails the run.
 
 ### Prerequisites
 
 - **Android phone**: plugged in over USB, USB debugging on, screen-lock PIN
   set (fingerprint optional — the prompt falls back to the device PIN), screen
   on and unlocked. Must be the only physical Android device attached (or set
-  `ANDROID_UDID`). Prefer a device provisioned after Google's RKP rollout
-  (~2022+) — an older factory-keyed device's attestation chain may still
+  `ANDROID_UDID`). A device provisioned before Google's RKP rollout (~2022)
+  may only get the tolerated "Hardware Verification Issue" warning above,
+  not full "Secure Exchange" verification — its attestation chain can still
   terminate at Google's legacy root, which expired 2026-05-24; see "Known
   limitations" #5 in
   [`docs/HARDWARE_ATTESTATION_FLOW.md`](../docs/HARDWARE_ATTESTATION_FLOW.md).
+  Use a newer device if you specifically need to prove full verification.
 - **iPhone**: plugged in, Developer Mode enabled (Settings → Privacy &
   Security), passcode set (Face ID optional), unlocked, trusts this Mac. Must
   be the only iPhone attached (or set `IOS_UDID`).

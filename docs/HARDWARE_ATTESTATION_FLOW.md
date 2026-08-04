@@ -212,9 +212,16 @@ and post-rotation chains.
    (expires 2042) wasn't confirmed here — the E2E harness omits raw PEMs from
    its credential dumps (`[VRC:IssuedCredentialJSON]`, by design) so the
    actual chain wasn't inspected — only the app's local `valid=false` verdict.
-   Practical effect: for real-device hardware-attestation E2E, prefer devices
-   provisioned after Google's RKP rollout (~2022+); an older factory-keyed
-   device may now be permanently unable to pass the receiving side's check.
+   An older factory-keyed device may now be permanently unable to pass the
+   receiving side's *local* re-validation — but that's a fact about the
+   physical device, not the app's exchange flow, which still completed
+   correctly (VRC issued and accepted, VWC issued by the witness). The E2E
+   harness (`acceptCredentialOfferFromChat` / `assertContactShields` in
+   `e2e/lib/flows.js`) therefore treats the "Hardware Verification Issue"
+   (`AttestationWarning`) banner as an accepted outcome, not a failure — only
+   evidence never showing up at all still fails the run. Prefer a device
+   provisioned after Google's RKP rollout (~2022+) if you specifically need
+   to exercise the full "Secure Exchange" verified path.
 
 ---
 
