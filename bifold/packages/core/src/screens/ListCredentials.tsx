@@ -1,6 +1,8 @@
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
 import { useCredentialByState } from '@bifold/react-hooks'
 import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
+
+import { isVrcModuleCredential } from '../modules/vrc/credentialTypes'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useEffect } from 'react'
@@ -104,16 +106,7 @@ const ListCredentials: React.FC = () => {
           // - RelationshipCredential: Peer VRC exchanges (shown in Contacts)
           // - RCardTemplate: Self-issued business card (internal use only)
           // - RelationshipCard: Exchanged contact card (feeds Contacts display)
-          if (
-            types.some(
-              (type: unknown) =>
-                typeof type === 'string' &&
-                (type.includes('DTGCredential') ||
-                  type.includes('RelationshipCredential') ||
-                  type.includes('RCardTemplate') ||
-                  type.includes('RelationshipCard'))
-            )
-          ) {
+          if (isVrcModuleCredential(types)) {
             return true
           }
         }
@@ -161,16 +154,7 @@ const ListCredentials: React.FC = () => {
         if ('type' in credentialData) {
           const typeValue = credentialData.type
           const types = Array.isArray(typeValue) ? typeValue : [typeValue]
-          if (
-            types.some(
-              (type: unknown) =>
-                typeof type === 'string' &&
-                (type.includes('DTGCredential') ||
-                  type.includes('RelationshipCredential') ||
-                  type.includes('RCardTemplate') ||
-                  type.includes('RelationshipCard'))
-            )
-          ) {
+          if (isVrcModuleCredential(types)) {
             return true
           }
         }
@@ -181,15 +165,7 @@ const ListCredentials: React.FC = () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const typeAttribute = cred.credentialAttributes.find((attr: any) => attr && attr.name === 'type')
 
-        if (
-          typeAttribute &&
-          typeAttribute.value &&
-          typeof typeAttribute.value === 'string' &&
-          (typeAttribute.value.includes('DTGCredential') ||
-            typeAttribute.value.includes('RelationshipCredential') ||
-            typeAttribute.value.includes('RCardTemplate') ||
-            typeAttribute.value.includes('RelationshipCard'))
-        ) {
+        if (typeAttribute && typeAttribute.value && isVrcModuleCredential(typeAttribute.value)) {
           return true
         }
       }

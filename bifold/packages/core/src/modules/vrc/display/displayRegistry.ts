@@ -12,6 +12,7 @@
 import { Field } from '@bifold/oca/build/legacy'
 import {
   CredentialDisplayHandler,
+  CredentialDisplayContext,
   CredentialButtonText,
   CredentialTerminology,
   W3cCredentialJson,
@@ -66,9 +67,10 @@ class CredentialDisplayRegistry {
   /**
    * Get display information for a credential
    * @param credential The W3C credential JSON
-   * @returns Display result with fields and button text
+   * @param context Optional cross-credential context (sibling wallet records)
+   * @returns Display result with fields, subject, and button text
    */
-  getDisplayInfo(credential: W3cCredentialJson): CredentialDisplayResult {
+  getDisplayInfo(credential: W3cCredentialJson, context?: CredentialDisplayContext): CredentialDisplayResult {
     if (!credential) {
       return {
         fields: [],
@@ -80,7 +82,8 @@ class CredentialDisplayRegistry {
 
     if (handler) {
       return {
-        fields: handler.extractFields(credential),
+        fields: handler.extractFields(credential, context),
+        subject: handler.extractSubject?.(credential, context),
         buttonText: handler.getButtonText(),
         matched: true,
         credentialTypeName: handler.getCredentialTypeName?.(),
@@ -117,11 +120,12 @@ class CredentialDisplayRegistry {
   /**
    * Get display fields for a credential
    * @param credential The W3C credential JSON
+   * @param context Optional cross-credential context (sibling wallet records)
    * @returns Array of fields for display
    */
-  getFields(credential: W3cCredentialJson): Field[] {
+  getFields(credential: W3cCredentialJson, context?: CredentialDisplayContext): Field[] {
     const handler = this.findHandler(credential)
-    return handler ? handler.extractFields(credential) : []
+    return handler ? handler.extractFields(credential, context) : []
   }
 
   /**
@@ -157,24 +161,6 @@ class CredentialDisplayRegistry {
  */
 export const credentialDisplayRegistry = new CredentialDisplayRegistry()
 
-/**
- * Convenience function to check if a credential is a DTGCredential
- */
-export function isDTGCredential(credential: W3cCredentialJson): boolean {
-  if (!credential?.type) {
-    return false
-  }
-  const types = Array.isArray(credential.type) ? credential.type : [credential.type]
-  return types.some((t) => typeof t === 'string' && t.includes('DTGCredential'))
-}
-
-/**
- * Convenience function to check if a credential is a RelationshipCredential
- */
-export function isRelationshipCredential(credential: W3cCredentialJson): boolean {
-  if (!credential?.type) {
-    return false
-  }
-  const types = Array.isArray(credential.type) ? credential.type : [credential.type]
-  return types.some((t) => typeof t === 'string' && t.includes('RelationshipCredential'))
-}
+// Type predicates moved to the canonical module — re-exported here so
+// existing imports keep working.
+export { isDTGCredential, isRelationshipCredential } from '../credentialTypes'

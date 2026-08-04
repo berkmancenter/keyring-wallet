@@ -10,6 +10,7 @@
 
 import { W3cCredentialRecord } from '@credo-ts/core'
 
+import { isPeerVrcCredential, isRCard } from '../credentialTypes'
 import { extractFormInputFromJCard, JCard } from '../types/rcard'
 
 export interface ContactDisplayInfo {
@@ -38,13 +39,6 @@ const toRawCredential = (record: W3cCredentialRecord): any | null => {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const getTypes = (raw: any): string[] => {
-  const typeValue = raw?.type
-  if (!typeValue) return []
-  return Array.isArray(typeValue) ? typeValue : [typeValue]
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const getIssuerId = (raw: any): string | null => {
   const issuer = raw?.issuer
   if (typeof issuer === 'string') return issuer
@@ -59,8 +53,7 @@ const getIssuerId = (raw: any): string | null => {
 export function isReceivedRCard(record: W3cCredentialRecord): boolean {
   const raw = toRawCredential(record)
   if (!raw) return false
-  const types = getTypes(raw)
-  return types.includes('RelationshipCard') && !types.includes('RCardTemplate')
+  return isRCard(raw)
 }
 
 /**
@@ -138,8 +131,7 @@ export function resolveContactDisplayInfo(records: W3cCredentialRecord[], issuer
   for (const record of records) {
     const raw = toRawCredential(record)
     if (!raw) continue
-    const types = getTypes(raw)
-    if (!types.includes('DTGCredential') || types.includes('WitnessCredential')) continue
+    if (!isPeerVrcCredential(raw)) continue
     const issuer = raw.issuer
     if (!issuer || typeof issuer !== 'object' || issuer.id !== issuerDid) continue
     if (!issuer.name && !issuer.email && !issuer.organization) continue

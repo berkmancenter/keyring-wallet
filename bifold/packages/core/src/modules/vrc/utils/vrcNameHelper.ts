@@ -1,5 +1,6 @@
 import { Agent, W3cCredentialRecord } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
+import { isDTGCredential, isRelationshipCredential } from '../credentialTypes'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
 import { resolveContactDisplayInfo } from './rcardDisplayUtils'
 
@@ -57,14 +58,8 @@ export function isVrcCredential(credential: W3cCredentialRecord): boolean {
       !Array.isArray(credentialData) &&
       'type' in credentialData
     ) {
-      const typeValue = (credentialData as any).type
-      const types = Array.isArray(typeValue) ? typeValue : [typeValue]
-      
       // Check for RelationshipCredential or DTGCredential types
-      return types.some((type: any) => 
-        typeof type === 'string' && 
-        (type.includes('RelationshipCredential') || type.includes('DTGCredential'))
-      )
+      return isRelationshipCredential(credentialData) || isDTGCredential(credentialData)
     }
   } catch (_error) {
     // Silently fail

@@ -7,6 +7,8 @@
 
 import { W3cCredentialRecord } from '@credo-ts/core'
 
+import { isPeerVrcCredential, isWitnessCredential } from '../credentialTypes'
+
 /**
  * Locality verification information from witnessContext
  */
@@ -100,12 +102,7 @@ export function hasVrcHardwareAttestation(
       }
 
       // Must be a DTGCredential (the VRC), not a WitnessCredential
-      if (!('type' in credentialData)) return false
-      const types = Array.isArray((credentialData as any).type)
-        ? (credentialData as any).type
-        : [(credentialData as any).type]
-      if (!types.includes('DTGCredential')) return false
-      if (types.includes('WitnessCredential')) return false
+      if (!isPeerVrcCredential(credentialData)) return false
 
       // issuer.id must match the contact's DID
       if (!('issuer' in credentialData)) return false
@@ -139,12 +136,7 @@ export function getVrcCredentialJsonForSubject(
         continue
       }
 
-      if (!('type' in credentialData)) continue
-      const types = Array.isArray((credentialData as any).type)
-        ? (credentialData as any).type
-        : [(credentialData as any).type]
-      if (!types.includes('DTGCredential')) continue
-      if (types.includes('WitnessCredential')) continue
+      if (!isPeerVrcCredential(credentialData)) continue
 
       // Match by issuer DID (the contact who issued this credential to us)
       if (!('issuer' in credentialData)) continue
@@ -184,10 +176,7 @@ export function hasWitnessCredentialType(credential: W3cCredentialRecord): boole
       return false
     }
 
-    const typeValue = (credentialData as any).type
-    const types = Array.isArray(typeValue) ? typeValue : [typeValue]
-
-    return types.some((type) => typeof type === 'string' && type === 'WitnessCredential')
+    return isWitnessCredential(credentialData)
   } catch (_error) {
     return false
   }

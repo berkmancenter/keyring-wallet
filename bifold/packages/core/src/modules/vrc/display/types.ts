@@ -6,8 +6,34 @@
  */
 
 import { Attribute, Field } from '@bifold/oca/build/legacy'
+import { W3cCredentialRecord } from '@credo-ts/core'
 
 export { Attribute, Field }
+
+/**
+ * Cross-credential context for display handlers.
+ *
+ * Since the RCard/VRC separation, one contact's display identity can span two
+ * W3C credentials (the pseudonymous VRC + the RCard carrying name/email/org).
+ * Handlers that need to cross-reference sibling credentials receive them here.
+ */
+export interface CredentialDisplayContext {
+  /** Sibling W3C records in the wallet, for handlers that need to cross-reference
+   *  (e.g. RelationshipCredentialHandler resolving a contact's RCard). */
+  relatedRecords: W3cCredentialRecord[]
+}
+
+/**
+ * Canonical display identity for a credential's issuer/subject — used for
+ * headers, chat messages, and contact screens. Produced by a handler's
+ * extractSubject so every screen shows the same resolved identity.
+ */
+export interface CredentialDisplaySubject {
+  id: string
+  name?: string
+  email?: string
+  organization?: string
+}
 
 /**
  * W3C Credential JSON structure (simplified for display purposes)
@@ -118,6 +144,8 @@ export interface CredentialDisplayResult {
   matched: boolean
   /** Human-readable name of the credential type */
   credentialTypeName?: string
+  /** Canonical display identity (headers/contact rows), when the handler provides one */
+  subject?: CredentialDisplaySubject
 }
 
 /**
@@ -152,9 +180,19 @@ export interface CredentialDisplayHandler {
   /**
    * Extract display fields from the credential
    * @param credential The W3C credential JSON
+   * @param context Optional cross-credential context (sibling wallet records)
    * @returns Array of Field objects for display
    */
-  extractFields(credential: W3cCredentialJson): Field[]
+  extractFields(credential: W3cCredentialJson, context?: CredentialDisplayContext): Field[]
+
+  /**
+   * Optional: canonical display identity for this credential's issuer/subject —
+   * used for headers, chat messages, contact screens. Handlers with no notion
+   * of "subject" (e.g. WitnessCredentialHandler) simply omit it.
+   * @param credential The W3C credential JSON
+   * @param context Optional cross-credential context (sibling wallet records)
+   */
+  extractSubject?(credential: W3cCredentialJson, context?: CredentialDisplayContext): CredentialDisplaySubject
 
   /**
    * Get custom button text for the credential offer screen

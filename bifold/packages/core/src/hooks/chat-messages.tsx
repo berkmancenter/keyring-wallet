@@ -19,8 +19,8 @@ import { useCredentialsByConnectionId } from './credentials'
 import { useProofsByConnectionId } from './proofs'
 import { useConnectionDisplayName } from './connections'
 import { OpenIDCredentialType } from '../modules/openid/types'
+import { isDTGCredential, isRCardTemplate, isRelationshipCredential } from '../modules/vrc/credentialTypes'
 import { credentialDisplayRegistry } from '../modules/vrc/display/displayRegistry'
-import { resolveContactDisplayInfo } from '../modules/vrc/utils/rcardDisplayUtils'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
 import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore } from '../modules/vrc/witnessStatusStore'
 import { useStore } from '../contexts/store'
@@ -690,13 +690,9 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
           if (w3cCredRecord) {
             resolvedW3cCred = w3cCredentialRecords.find((cred) => cred.id === w3cCredRecord.credentialRecordId)
             if (resolvedW3cCred?.credential) {
-              const types = Array.isArray(resolvedW3cCred.credential.type)
-                ? resolvedW3cCred.credential.type
-                : [resolvedW3cCred.credential.type]
-              isVrcCredential = types.some(
-                (t: string) =>
-                  t.includes('DTGCredential') || t.includes('RelationshipCredential') || t.includes('RCardTemplate')
-              )
+              const credJson = resolvedW3cCred.credential
+              isVrcCredential =
+                isDTGCredential(credJson) || isRelationshipCredential(credJson) || isRCardTemplate(credJson)
             }
           }
         }
@@ -728,18 +724,21 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
             const issuerId = typeof cred.issuer === 'string' ? cred.issuer : cred.issuer?.id
 
             if (issuerId) {
-              // Contact info source: received RCard first, then the legacy VRC
-              // issuer object fields (pre-RCard-separation exchanges)
-              const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, issuerId)
+              // Contact identity via the display registry's subject path —
+              // same resolution as headers/fields (RCard first, then the
+              // legacy VRC issuer object from pre-RCard-separation exchanges)
+              const displayInfo = credentialDisplayRegistry.getDisplayInfo(cred, {
+                relatedRecords: w3cCredentialRecords,
+              }).subject
               navigation.navigate(Stacks.ContactStack as any, {
                 screen: Screens.ContactDetails,
                 params: {
                   contact: {
                     issuer: {
                       id: issuerId,
-                      name: displayInfo.name || `Unknown ...${issuerId.slice(-8)}`,
-                      email: displayInfo.email,
-                      organization: displayInfo.organization,
+                      name: displayInfo?.name || `Unknown ...${issuerId.slice(-8)}`,
+                      email: displayInfo?.email,
+                      organization: displayInfo?.organization,
                     },
                   },
                 },

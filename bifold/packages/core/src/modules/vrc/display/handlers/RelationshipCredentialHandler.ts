@@ -17,6 +17,8 @@ import {
   Attribute,
   Field,
   CredentialDisplayHandler,
+  CredentialDisplayContext,
+  CredentialDisplaySubject,
   CredentialButtonText,
   CredentialTerminology,
   W3cCredentialJson,
@@ -25,6 +27,7 @@ import {
   formatDateForDisplay,
 } from '../types'
 import { contactTerminology } from '../terminology/defaults'
+import { resolveContactDisplayInfo } from '../../utils/rcardDisplayUtils'
 
 /**
  * Handler for RelationshipCredential display
@@ -48,9 +51,34 @@ export class RelationshipCredentialHandler implements CredentialDisplayHandler {
     return 'Relationship Credential'
   }
 
-  extractFields(credential: W3cCredentialJson): Field[] {
+  /**
+   * Canonical display identity for the credential's issuer (the contact).
+   *
+   * Since the RCard/VRC separation the VRC issuer is a bare DID; the contact's
+   * name/email/organization travel in a sibling RelationshipCard credential.
+   * Resolution order: received RCard (via context.relatedRecords) first, then
+   * the credential's own embedded issuer object (pre-separation exchanges).
+   */
+  extractSubject(credential: W3cCredentialJson, context?: CredentialDisplayContext): CredentialDisplaySubject {
+    const issuer = extractIssuerObject(credential)
+    const rcardInfo = context?.relatedRecords?.length
+      ? resolveContactDisplayInfo(context.relatedRecords, issuer.id)
+      : {}
+
+    return {
+      id: issuer.id,
+      name: rcardInfo.name ?? issuer.name,
+      email: rcardInfo.email ?? issuer.email,
+      organization: rcardInfo.organization ?? issuer.organization,
+    }
+  }
+
+  extractFields(credential: W3cCredentialJson, context?: CredentialDisplayContext): Field[] {
     const fields: Field[] = []
     const issuer = extractIssuerObject(credential)
+    // Issuer identity fields come from the same resolution path as headers
+    // (extractSubject), so the two can never disagree on a screen.
+    const subject = this.extractSubject(credential, context)
     const credentialSubject = credential.credentialSubject || {}
 
     // 1. Issuance Date (validFrom or issuanceDate)
@@ -67,36 +95,36 @@ export class RelationshipCredentialHandler implements CredentialDisplayHandler {
     }
 
     // 2. Issuer Name
-    if (issuer.name) {
+    if (subject.name) {
       fields.push(
         new Attribute({
           name: 'issuerName',
           label: 'Issuer Name',
-          value: issuer.name,
+          value: subject.name,
           mimeType: 'text/plain',
         })
       )
     }
 
     // 3. Issuer Email (if present)
-    if (issuer.email) {
+    if (subject.email) {
       fields.push(
         new Attribute({
           name: 'issuerEmail',
           label: 'Issuer Email',
-          value: issuer.email,
+          value: subject.email,
           mimeType: 'text/plain',
         })
       )
     }
 
     // 4. Issuer Organization (if present)
-    if (issuer.organization) {
+    if (subject.organization) {
       fields.push(
         new Attribute({
           name: 'issuerOrganization',
           label: 'Issuer Organization',
-          value: issuer.organization,
+          value: subject.organization,
           mimeType: 'text/plain',
         })
       )

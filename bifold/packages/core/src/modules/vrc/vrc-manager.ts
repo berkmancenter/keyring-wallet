@@ -19,6 +19,7 @@ import type {
 import { domain, LocalStorageKeys } from '../../constants'
 import { PersistentStorage } from '../../services/storage'
 import { Preferences } from '../../types/state'
+import { isWitnessCredential } from './credentialTypes'
 import { RelationshipDidRepository } from './repositories/RelationshipDidRepository'
 import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from './types/relationshipContext'
 import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
@@ -1829,7 +1830,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
             const types = Array.isArray(credential.type) ? credential.type : [credential.type]
 
             // Auto-accept WitnessCredentials
-            if (types.includes('WitnessCredential')) {
+            if (isWitnessCredential(types)) {
               vwcAutoLogger.info(`✓ Auto-accepting WitnessCredential offer: ${record.id}`)
 
               await agent.modules.didcomm.credentials.acceptOffer({
@@ -1892,7 +1893,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
         vwcLogger.debug(`Credential types: ${types.join(', ')}`)
 
         // Check if this is a WitnessCredential
-        if (types.includes('WitnessCredential')) {
+        if (isWitnessCredential(types)) {
           vwcLogger.info(`✓ Detected WitnessCredential received: ${w3cRecord.id}`)
 
           // Extract counterparty's relationship DID from credentialSubject.id

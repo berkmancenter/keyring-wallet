@@ -1,4 +1,6 @@
 import { W3cCredentialRecord } from '@credo-ts/core'
+
+import { isPeerVrcCredential } from '../credentialTypes'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useEffect, useMemo, useCallback, useState } from 'react'
@@ -184,13 +186,7 @@ const ListContacts: React.FC = () => {
         !Array.isArray(credentialData) &&
         'type' in credentialData
       ) {
-        const typeValue = (credentialData as any).type
-        const types = Array.isArray(typeValue) ? typeValue : [typeValue]
-
-        const hasDTG = types.some((type) => typeof type === 'string' && type.includes('DTGCredential'))
-        const hasWitness = types.some((type) => typeof type === 'string' && type === 'WitnessCredential')
-
-        return hasDTG && !hasWitness
+        return isPeerVrcCredential(credentialData)
       }
     } catch (error) {
       // eslint-disable-next-line no-console

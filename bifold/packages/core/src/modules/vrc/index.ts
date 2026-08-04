@@ -6,6 +6,7 @@
  */
 
 // Export types
+export * from './credentialTypes'
 export { RelationshipDidRecord } from './types/RelationshipDidRecord'
 export type {
   RelationshipDidRecordProps,
