@@ -1,0 +1,79 @@
+{
+  "updated": "2026-08-01",
+  "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
+  "repos": {
+    "vta-browser-plugin": {
+      "sha": "4ef360f",
+      "commitDate": "2026-07-29",
+      "pinnedOn": "2026-08-01",
+      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "watch": [
+        "packages/tsp-js/",
+        "packages/core/src/vta/",
+        "packages/core/src/didcomm/",
+        "packages/core/src/trust-tasks/"
+      ]
+    },
+    "verifiable-trust-infrastructure": {
+      "sha": "02f10b3f",
+      "commitDate": "2026-08-01",
+      "pinnedOn": "2026-08-01",
+      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "watch": [
+        "CHANGELOG.md",
+        "docs/02-vta/",
+        "docs/05-design-notes/",
+        "vta-sdk/src/protocol/",
+        "vta-service/src/messaging/",
+        "vta-service/Cargo.toml"
+      ]
+    },
+    "vti-didcomm-js": {
+      "sha": "2365c86",
+      "commitDate": "2026-07-19",
+      "pinnedOn": "2026-08-01",
+      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "watch": [
+        "src/"
+      ]
+    },
+    "vti-setup": {
+      "sha": "9ca6511",
+      "commitDate": "2026-07-18",
+      "pinnedOn": "2026-08-01",
+      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "watch": [
+        "sysop/",
+        "developer/"
+      ]
+    },
+    "vta-mobile-agent-ios": {
+      "sha": "035dd65",
+      "commitDate": "2026-07-29",
+      "pinnedOn": "2026-08-01",
+      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "watch": [
+        "vta-mobile-agent/",
+        "project.yml"
+      ]
+    }
+  },
+  "npm": {
+    "@openvtc/vti-tsp-js": {
+      "expected": "0.1.0",
+      "tripwire": "any bump = Cypress shipping the TSP wire layer"
+    },
+    "@openvtc/pnm-core": {
+      "expected": "0.2.0",
+      "tripwire": "any bump = TSP channel chain published"
+    },
+    "@openvtc/vti-didcomm-js": {
+      "expected": "0.6.2",
+      "tripwire": "minor bump = mediator transport changes"
+    },
+    "@openvtc/trust-tasks": {
+      "expected": "0.2.55",
+      "tripwire": "churns constantly; major/minor jumps matter, patches do not"
+    }
+  }
+}
