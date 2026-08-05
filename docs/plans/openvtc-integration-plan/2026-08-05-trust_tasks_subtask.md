@@ -1,11 +1,12 @@
 # Recasting VRC Credential Exchanges as Trust Tasks — Draft
 
 **Status:** Draft for discussion. Not a commitment to implement.
-**Date:** 2026-08-04 · revised 2026-08-05 — §8 added; §4 Layer A re-modelled on the reciprocal membership exchange with `vrc/relationship/issue` added, after surveying the OpenVTC reference implementation and every VTI branch (§8.5); §9 sequencing revised twice — against the parent plan, then to move **B2 to the front and drop B1** (§9.1–9.2). **Third pass:** re-checked against [[DTG-CRED]] as authoritative — Layer C's witness tasks corrected to *qualify* under Trust Task Context Binding, the RCard-shares-a-task design withdrawn, outcome-evidence retention added as new work, and §8.5 re-anchored on documentary delegation. **Fifth pass:** resolved a contradiction between §4 and §5 over what the VWC's `taskContext` names — the witness ceremony is now modelled as its own thread nested in the relationship exchange and linked by a payload `exchangeThreadId`, since only `witness/session/submit#response` attests the witnessing. **Fourth pass:** §9 reworked again — **B2 split** into an issuance half (dropped: misaligned with the DTG credential idiom and unimplemented upstream) and a presentation half (adopted, and now the pipeline validator); spec authoring restored to the front; the `vrc/relationship/issue` boundary settled on idiom rather than topology (§9.4).
+**Date:** 2026-08-05
+**Reasoning:** [`2026-08-05-bam.md`](./2026-08-05-bam.md) Part B — the decisions behind this design and the positions each supersedes. This document states only the current design; see [`../CLAUDE.md`](../CLAUDE.md).
 **Premise:** we are moving to a new foundation and **updating Credo to support these flows**, rather than shaping the flows to fit Credo. Where this document weighs a design against "what Credo already does", that is a migration cost, not a constraint.
 **Scope:** `bifold/packages/core/src/modules/vrc`, `bifold/packages/witness-server`
 **Parent:** [`openvtc-integration-plan.md`](../openvtc-integration-plan.md) — this document is item **§7.6** of its contribution roadmap ("Witnessed-exchange Trust Task spec") in detail.
-**Companion:** [`2026-08-05-bam.md`](./2026-08-05-bam.md) — review of the parent plan. Two of its four findings constrain this document; see §8.
+**Parent-plan review:** [`2026-08-05-bam.md`](./2026-08-05-bam.md) Part A — findings A1 and A4 constrain this document; see §8.
 **Normative references:**
 - **[[TT-SPEC]]** — [Trust Tasks framework SPEC.md](https://github.com/trustoverip/dtgwg-trust-tasks-tf/blob/main/SPEC.md), framework v0.2/0.3. Unqualified `§` references in this document are to this spec. (The header says 0.2 while Appendix B documents 0.3; the editor has confirmed this is stale and is fixing it.)
 
@@ -180,10 +181,9 @@ Trust Task specification — one a `taskContext` may legitimately point at — M
    framework's `trust-task-error` to report failure — so the terminal state is
    observable from the documents themselves.
 
-> **Corrected 2026-08-05.** The previous version of the table below gave
-> `witness/session/submit` **no `#response`** and left `proof` unstated. Such a
-> specification would not qualify, and VWCs issued in our ceremony could not
-> legally bind to it. The declarations below are revised to qualify.
+These two requirements are not optional refinements: a specification that gives
+`witness/session/submit` no `#response`, or leaves `proof` unstated, does **not**
+qualify — and VWCs issued in our ceremony could not then legally bind to it.
 
 Proposed private specs:
 
@@ -202,14 +202,11 @@ current design cannot express at all.
 
 #### The error branch cannot carry outcome evidence today
 
-*Recorded 2026-08-05 from the framework editor's response on
+*Source: the framework editor on
 [dtgwg-trust-tasks-tf#173](https://github.com/trustoverip/dtgwg-trust-tasks-tf/issues/173#issuecomment-5189686547).*
 
-> **Corrected.** An earlier version of this section stated that our error
-> responses "MUST also carry `proof`" under the qualifying rules. **That is not
-> reachable in the current framework**, and we should not design as if it were.
-
-Three constraints the editor identified, all of which bear on us:
+**Our error responses cannot be required to carry `proof`** — not by us, and not
+by our specification. Three constraints, all of which bear on the design:
 
 1. **A task specification cannot strengthen `trust-task-error`'s proof
    declaration.** A consumer resolves the proof requirement from the
@@ -241,11 +238,6 @@ responses naming the originating `type` and `id` — the failure branch is
 diagnostic only.
 
 #### Two threads, not one — the witness ceremony is its own exchange
-
-*Resolved 2026-08-05. Earlier revisions said the relationship exchange and the
-witness ceremony shared a single thread opened by `vrc/relationship/propose`,
-while this section said the VWC's `taskContext` was `witness/session`'s `id`.
-Those cannot both hold. This is the resolution.*
 
 **The witness ceremony opens its own thread.** `witness/session` is its
 initiating document; that document's `id` is the ceremony thread's identifier
@@ -400,12 +392,12 @@ claims about the subject). Error codes: `vrc/relationship/issue:subjectMismatch`
 (the `credentialSubject.id` is not the recipient) and
 `vrc/relationship/issue:unsupportedFormat`.
 
-**Why `issue` exists rather than deferring to Credo.** An earlier pass of this
-document omitted it, reasoning that Credo's `issue-credential` v2 already
-delivers and a third mechanism would be redundant. That reasoning treated Credo
-as a fixed constraint to design around. It is not: **we are moving to a new
-foundation and updating Credo to support these flows, rather than shaping the
-flows to fit Credo.** The task family should therefore express the exchange we
+**Why `issue` exists rather than deferring to Credo.** Credo's
+`issue-credential` v2 already delivers credentials, so a dedicated task can look
+redundant — but that reading treats Credo's current protocol set as a fixed
+constraint to design around. It is not: **we are moving to a new foundation and
+updating Credo to support these flows, rather than shaping the flows to fit
+Credo.** The task family should therefore express the exchange we
 want, and the Credo layer follows it.
 
 That also makes the family self-contained — `propose` → `issue` → receipt is a
@@ -416,16 +408,11 @@ It is the same shape as the membership exchange's delivery leg, and it reuses
 the same receipt component.
 
 This task does not compete with `credential-exchange/issue`: the two serve
-different credential kinds, not different negotiation styles. §9.4 settles the
-boundary.
+different credential kinds, not different negotiation styles — see §4, Layer B.
 
-**RCard does NOT ride this task.**
-
-> **Corrected 2026-08-05.** An earlier version of this section had RCard sharing
-> `vrc/relationship/issue`, with the credential's `type` array discriminating a
-> `RelationshipCredential` from a `RelationshipCard`. That is invalid.
-
-[[DTG-CRED]] is explicit:
+**RCard does NOT ride this task** — despite the obvious-looking design in which
+the credential's `type` array discriminates a `RelationshipCredential` from a
+`RelationshipCard`. That design is invalid, and [[DTG-CRED]] says why:
 
 > The r-card (relationship card) that appeared in earlier drafts of this
 > specification is a **verifiable data structure (VDS), not a `DTGCredential`
@@ -449,82 +436,56 @@ derived `INVITER`/`RECEIVER` role all disappear: `shouldIssue` stops being
 *inferred* from a transport artifact and becomes a *stated* field — carried by
 `mode`, and answered explicitly in the `#response`.
 
-### Layer B — recast, in two tiers.
+### Layer B — credential issuance and presentation
 
-> **Revision note.** An earlier pass of this analysis rated layer B a poor fit,
-> on the assumption that the registry's `credential-exchange/*` family requires
-> an HTTPS OID4VCI issuer endpoint. It does not. That assumption was wrong and
-> the tiering below replaces that assessment.
->
-> **Second revision (2026-08-05).** The tiering below still reads Credo's
-> existing protocol set as the baseline to design against. Under the premise
-> stated in the header — Credo is being updated to support these flows — that
-> reading is too conservative in two places, flagged inline as **[premise]**.
-> The tiers remain useful as a *cost* ordering; they are no longer a
-> *capability* constraint.
+Layer B splits by *what is being moved*, and the split follows the registry's own
+organisation rather than our convenience.
 
-#### B1 — cheap, available now — **DROPPED, see §9.2**
+**Delivery of VRC and RCard is Layer A's `vrc/relationship/issue`** — the DTG
+idiom: the signed credential in the payload, receipts from
+`credentials/_shared/0.1`, exactly as `vtc/members/vmc` does it.
 
-> **Superseded 2026-08-05.** B1 was a hedge against Credo being immovable. The
-> header premise removes the hedge, and §9.3 sequences B2 directly. B1 is
-> retained here only as the record of a considered-and-rejected option — do not
-> plan against it. Its one durable idea, `trust-task-discovery` replacing
-> `rceVersion`, survives and moves to layer A (§9.3 step 6).
+**Presentation adopts `credential-exchange/{query,present,pending/*}`** — the
+OID4VP path. It is implemented upstream in `vta-service` (the deferral flow:
+`query`, `pending-list`, `pending-approve`, `pending-deny`), and our
+`modules/openid` already carries holder-side OID4VP with DCQL selection. This is
+also the consent-gating path the parent plan's Phase E demo depends on.
 
-Keep Credo delivering credentials; recast the negotiation and provenance around
-it. The standout item:
+**`credential-exchange/{offer,request,issue}` is not used.** Those legs wrap
+OID4VCI objects — the snake_case `credential_response` is the tell that they
+carry a foreign vocabulary verbatim — and DTG credentials do not travel that
+idiom: every DTG credential in OpenVTC uses the signed-VC-in-payload form. The
+issuance legs are also unimplemented upstream ("Handlers … land in later Phase 3
+slices"), so adopting them would make Keyring the only implementation wrapping a
+DTG credential in an OID4VCI envelope, against handlers nobody has written.
 
-**`rceVersion` → `trust-task-discovery` (§11).** Framework-reserved and already
-specified. The ordinal `>= 2` / `>= 3` gates become set membership over
-`supportedTypes`, which is strictly more expressive — a capability can be added
-or dropped without every peer having to understand an ordinal ladder.
+**Capability negotiation moves to `trust-task-discovery`** ([[TT-SPEC]] §11),
+replacing the ordinal `rceVersion` ladder that currently gates
+`counterpartySpeaksVc20` / `counterpartySpeaksDi`. Set membership over
+`supportedTypes` is strictly more expressive than an ordinal: a capability can be
+added or dropped without every peer having to understand the ladder. It lands
+with Layer A, since that is where `rceVersion` is carried today.
 
-The Trust Task thread runs *alongside* Credo's issuance protocol, correlated by
-`threadId`. That is what happens today anyway (basic messages plus
-issue-credential, correlated by `connectionId` and in-memory Maps); the
-difference is that the correlation becomes explicit and inspectable.
+#### Two rejected alternatives
 
-#### B2 — adopt `credential-exchange/*` as published — **NOW SPLIT, see §9.1**
+**Keeping Credo's `issue-credential` v2 as the delivery path**, recasting only the
+negotiation around it. This was a hedge against Credo being immovable, and the
+premise in this document's header removes it: we are updating Credo to support
+these flows. Building it would mean writing a correlation layer between the
+trust-task thread and Credo's protocol, then deleting it.
 
-> **Superseded 2026-08-05.** This section treats `credential-exchange/*` as one
-> adoptable family. It is not. §9.1 splits it: the **issuance** half
-> (`offer`/`request`/`issue`) is **dropped** — DTG credentials travel the DTG
-> idiom (a signed VC in the payload, as `vtc/members/vmc` does), and the OID4VCI
-> issuance legs are unimplemented upstream. The **presentation** half
-> (`query`/`present`/`pending/*`) is **adopted** — aligned, implemented in
-> `vta-service`, and matched by our existing holder-side `modules/openid`.
->
-> The three facts below remain accurate about the family's *mechanics*, and
-> apply to the presentation half. They are retained as the record of the
-> assessment; read §9.1 for what we are actually doing.
+**Adopting the OID4VCI issuance legs** as a low-risk way to exercise the pipeline
+against specs we did not write. The reasoning was that it needs no spec
+authorship and has a live counterparty — but the counterparty exists only for the
+*presentation* legs. For issuance there is nothing upstream to test against, and
+the idiom is wrong regardless.
 
-Three facts make this materially more reachable than first assessed:
-
-1. **The family is transport-carried, not HTTP-bound.** No issuer endpoint is
-   required — OID4VCI *objects* are carried inside Trust Task payloads. This is
-   the family's stated design: *"the Trust Task is the transport,
-   authentication, threading and relayer envelope; the body is OID4VCI."*
-
-2. **`credential-exchange/issue` already accepts our credentials unchanged.**
-   Its payload takes either an SD-JWT-VC string or "a JSON object carrying a
-   `proof` (a W3C Data-Integrity VC)". VRC and RCard fit as-is — no
-   reformatting, no new crypto suite.
-
-3. **`OpenId4VcModule` is already registered** (`bifold/packages/core/src/utils/agent.ts:133`),
-   with holder-side OID4VCI, OID4VP, and DCQL selection built out under
-   `bifold/packages/core/src/modules/openid`.
-
-**Honest remaining cost:** there is **no issuer-side OID4VCI** in the tree
-(verified by grep — holder only), so peer-as-issuer object construction is
-genuinely new work, and the offer→request→issue state machine that Credo
-currently provides would be hand-rolled. Weigh that against the fact that much
-of the surrounding orchestration is *already* hand-rolled in in-memory Maps
-(§2.2) precisely because the current protocol does not carry our state.
-
-**[premise]** "Hand-rolled" overstates it under the header premise: the state
-machine would be *built into the Credo layer we are updating*, not written
-around an unmodifiable one. The work is real, but it lands in a codebase we
-control rather than as a workaround.
+The general form of that second mistake is worth keeping in view: **"align with
+OpenVTC" and "adopt registry-published specs" are not the same instruction.** The
+registry serves several worlds at once — OID4VCI/OID4VP for wallet-to-service
+exchange, the DTG idiom for credentials inside the trust graph. Choosing a family
+by publication status rather than by idiom is how we drift while believing we are
+converging.
 
 ### Layer D — no action
 
@@ -595,7 +556,7 @@ suite currently greps logcat for markers.
 
 *`credential-exchange/{offer,request,issue}` does **not** substitute for the
 `vrc/relationship/issue` leg — a VRC is a DTG credential and travels the DTG
-idiom. §9.4 settles that boundary. The presentation family
+idiom (§4, Layer B). The presentation family
 (`credential-exchange/{query,present,pending/*}`) is a separate, adopted concern
 that sits outside this exchange.*
 
@@ -622,7 +583,7 @@ ecosystem has this exact gap.
 
 This intersects the parent plan's **§7.9**, which currently commits to "a second
 implementation of `binding/didcomm/0.1` (the Credo trust-task client)". That
-binding is DIDComm **v2.1**; Credo 0.6.3 is v1-only. See review Finding 2 — the
+binding is DIDComm **v2.1**; Credo 0.6.3 is v1-only. See review A2 — the
 commitment needs rewording either way, and a v1 binding is the gap actually worth
 filling.
 
@@ -678,7 +639,7 @@ consumers to accept multiple versions; §5.4 is written for exactly this
 sequence — so this is a stance we take client-side, not one we need upstream to
 adopt.
 
-Working policy, proposed for the parent plan as review Finding 3: **accept N and
+Working policy, proposed for the parent plan as review A3: **accept N and
 N−1 of any task version we emit, for at least one release cycle**, absorbing
 upstream URI churn in the client rather than propagating it as a hard break.
 
@@ -698,10 +659,10 @@ and a fork risk.
 
 The blocker is that §5.2 wires that model as `TT --> WIRE`, so the task layer
 depends on TSP envelope orchestration (HPKE, CESR, the noble backend) — none of
-which a DIDComm-v1 carriage needs. **Review Finding 1 proposes inverting that
+which a DIDComm-v1 carriage needs. **Review A1 proposes inverting that
 dependency** so the task model depends only on a carriage interface.
 
-If Finding 1 is adopted, this recast consumes `tsp-core`'s task model directly
+If A1 is adopted, this recast consumes `tsp-core`'s task model directly
 and becomes an early second consumer validating the abstraction — the same
 two-implementations logic the parent plan applies to adapters (§4.4) and
 bindings (§7.9). If it is rejected, §9 below needs rethinking, because the
@@ -710,7 +671,7 @@ recast would then have to carry its own model.
 ### 8.2 Constraint — §8's non-negotiables, as written, forbid this work
 
 The parent plan lists "witness flow untouched" as non-negotiable at every level,
-while §7.6 of the same document commits to recasting it. Review Finding 4 asks
+while §7.6 of the same document commits to recasting it. Review A4 asks
 for that to be scoped to the TSP transport work. Until it is, this document is
 formally in tension with a stated constraint.
 
@@ -733,8 +694,6 @@ cost to this workstream.
 ---
 
 ### 8.5 The ecosystem has the same gap — which reframes the contribution
-
-*Added 2026-08-05 after surveying the OpenVTC reference implementation.*
 
 The parent plan's §7.6 frames the witnessed-exchange spec as making Keyring's
 protocol "legible to the whole VTI world." The survey found something stronger:
@@ -805,8 +764,6 @@ see the next subsection, which is documentary.
 
 #### The gap is explicitly delegated, not merely unfilled
 
-*Added 2026-08-05 after reading [[DTG-CRED]] as authoritative.*
-
 The credential specification does not treat the witness-ceremony Trust Task as
 an oversight. It **names it, requires it, and assigns it to someone**:
 
@@ -840,8 +797,7 @@ Credential (`vta/credentials/*`, `vtc/endorsements/*`, **and future issuers**)."
 
 #### The framework editor has now invited this work by name
 
-*Added 2026-08-05 from
-[dtgwg-trust-tasks-tf#173](https://github.com/trustoverip/dtgwg-trust-tasks-tf/issues/173#issuecomment-5189686547).*
+*Source: [dtgwg-trust-tasks-tf#173](https://github.com/trustoverip/dtgwg-trust-tasks-tf/issues/173#issuecomment-5189686547).*
 
 The delegation is no longer only documentary. Closing his response, the framework
 editor writes:
@@ -911,122 +867,81 @@ one exception is the `ceremony` branch's personhood row — "VP w/
 `WitnessCredential`" — which is closer to our VWC. Do not conflate the two when
 reading that code or naming our slugs.
 
-## 9. Proposed sequencing
+## 9. Sequencing
 
-Revised three times on 2026-08-05. The first ordering put layer C first because
-it is self-contained. The second moved B2 to the front as a pipeline validator
-and dropped B1. **This third revision splits B2** — the issuance half is
-withdrawn as misaligned, the presentation half keeps the validator role.
+Each step names what makes it **done**. A step without a completion test is a
+step an implementer either stops short of or gold-plates.
 
-### 9.1 B2 splits: the registry has two credential-delivery idioms
+### 1. Resolve review A1 — `tsp-core`'s dependency direction
 
-The second revision treated `credential-exchange/*` as one adoptable family.
-It is not. The registry carries two distinct idioms, and DTG credentials use
-only one of them.
+Precondition for everything below. The trust-task model must depend on a carriage
+port, not on TSP envelope orchestration, or layer C has to carry its own task
+spine (§8.1).
 
-**The DTG idiom** — the signed credential (or a mint request) directly in the
-payload, lowerCamelCase, receipts from `credentials/_shared/0.1`:
+**Done when:** `tsp-core`'s task model compiles and its tests pass with the TSP
+wire package absent from its dependency graph.
 
-| Task | Payload |
-|---|---|
-| `vtc/members/vmc` | `{ vc, requestId?, ext? }` — the signed credential itself |
-| `vtc/endorsements/issue` | `{ subjectDid, typeUri, claim, validitySeconds? }` |
-| `vta/credentials/issue` | `{ holder, claims, credentialType?, validitySeconds, purpose? }` |
+### 2. Author the `vrc/*` and `witness/*` specifications
 
-**The OID4VCI idiom** — `credential-exchange/issue` carries `oneOf`
-`{ credential_response }` or `{ sealed }`. The **snake_case** member name is the
-tell: it is OID4VCI's own vocabulary carried verbatim, a foreign-specification
-wrapper rather than native registry shape.
+No dependency on `tsp-core` — document work, and registry lead time is long. The
+joint-appendix invitation (§8.5) runs on the framework editor's timeline, not
+ours, so starting early is free.
 
-**Every DTG credential in OpenVTC travels the first idiom. None travels the
-second.**
+**Gate on freezing, not on starting.** Hold the final shape until the framework
+editor's PR lands (error-response proof inheritance, self-describing error
+responses, terminal/non-terminal classification) — those change what a qualifying
+specification must declare.
 
-And upstream implementation status differs sharply between the two halves of
-`credential-exchange/*`:
+**Done when:** each spec has front matter declaring parties, proof requirement,
+`sideEffects`, `exposure` and error codes; a `payload.schema.json` validating
+against the registry meta-schema; and `witness/session` + `witness/session/submit`
+each declare `proof: REQUIRED` and a `#response` — i.e. they satisfy the
+qualifying profile of [[DTG-CRED]] §Trust Task Context Binding. Verify by
+round-tripping a sample document through the framework schema plus the payload
+schema.
 
-| Legs | `vta-service` status |
-|---|---|
-| `query`, `pending/{list,approve,deny}`, `present` | **Implemented** — the OID4VP presentation-deferral path (`vta-service/src/trust_tasks/credential_exchange.rs`) |
-| `offer`, `request`, `issue` | **Not implemented** — the SDK still reads "Handlers (issuer/verifier on the VTC, holder on the VTA) land in later Phase 3 slices" |
+### 3. `didcomm-v1-basicmessage` binding
 
-> **Correction.** The second revision justified B2-first on the grounds that "a
-> live counterparty exists." That is true only of the presentation slice. For
-> the issuance legs — the ones a VRC exchange would use — there is no
-> counterparty to test against, and adopting them would make Keyring the only
-> implementation wrapping a DTG credential in an OID4VCI envelope.
+Parent Phase D, once the ports exist. Prerequisite for steps 4–6.
 
-**Resulting split:**
+**Done when:** a Trust Task document round-trips between two Credo agents over a
+basic message; the receiving side derives peer identity from the connection's
+`theirDid` and rejects a document whose in-band `issuer` disagrees with it
+([[TT-SPEC]] §4.8.1); and a `trust-task-error` returns on the same connection.
 
-| Family | Verdict |
-|---|---|
-| `credential-exchange/{offer,request,issue}` | **Dropped.** Misaligned with the DTG idiom; unimplemented upstream |
-| `credential-exchange/{query,present,pending/*}` | **Adopted.** Aligned, implemented upstream, and our `modules/openid` already has holder-side OID4VP + DCQL selection |
-| `vrc/relationship/issue` (`{ vc }` + `credentials/_shared` receipt) | **Keep.** This is the aligned delivery path — a near-copy of `vtc/members/vmc` |
+### 4. Adopt `credential-exchange/{query,present,pending/*}`
 
-The general lesson, worth carrying: **"align with OpenVTC" and "adopt
-registry-published specs" are not the same instruction.** The registry serves
-several worlds at once — OID4VCI/OID4VP for wallet-to-service exchange, the DTG
-idiom for credentials inside the trust graph. Ours are the second kind. Picking
-a family by publication status rather than by idiom is how we would drift while
-believing we were converging.
+Over that binding, against `vta-service`. No spec authorship and a genuinely live
+counterparty, so a failure is unambiguously ours. Also the consent-gating path
+the parent plan's Phase E demo depends on.
 
-### 9.2 Why B1 is dropped
+**Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
+approval, approved, and answered with a `vp_token` that `vta-service` accepts —
+and the same fixtures pass in Node against the reference adapter. Interop evidence
+for parent §7.9 falls out of this.
 
-Unchanged from the second revision. B1 existed to hedge against Credo being
-immovable — keep its `issue-credential` v2 delivering while we recast only the
-negotiation around it. The header premise removes the hedge, and B1 becomes a
-staging step toward a destination we would now reach directly.
+### 5. Implement layer C — `witness/*`
 
-### 9.3 Revised order
+On `tsp-core`'s task model, including **outcome-evidence retention** (§4, Layer
+C). Retention is the item with a silent failure mode: without it the VWCs still
+verify as credentials and simply fail to prove what they exist to prove.
 
-1. **Resolve review Finding 1** — a diagram-and-interface change now, a refactor
-   of the foundational package after Phase D. Unchanged precondition.
-2. **Author the `vrc/*` and `witness/*` specs** — moves back to the front. The
-   second revision deferred authoring until B2 had settled the
-   `vrc/relationship/issue` boundary; §9.4 now settles it on idiom grounds
-   instead, so nothing blocks drafting. Registry lead time is long and the
-   joint-appendix invitation (§8.5) runs on the editor's timeline, not ours.
-   **Gate on freezing, not on starting:** hold the final shape until the
-   framework editor's PR lands (error-response proof inheritance, self-describing
-   error responses, terminal/non-terminal classification), since those change
-   what a qualifying specification must declare.
-3. **`didcomm-v1-basicmessage` binding** — parent Phase D, once the ports exist.
-   Prerequisite for everything below.
-4. **Adopt `credential-exchange/{query,present,pending/*}`** over that binding,
-   against `vta-service`. Keeps the pipeline-validator role, now correctly
-   scoped: no spec authorship, a genuinely live counterparty, and it exercises
-   the full §7.2 consumer pipeline against specs we did not write. Also the
-   consent-gating path the parent plan's Phase E demo depends on.
-5. **Implement layer C** (`witness/*`) on `tsp-core`'s task model — including
-   **outcome-evidence retention** (§4, Layer C), the one item here with a silent
-   failure mode if skipped.
-6. **Implement layer A** (`vrc/relationship/propose` + `/issue`), with
-   `trust-task-discovery` replacing the `rceVersion` ladder.
+**Done when:** a witnessed exchange completes over the new tasks; the issued VWC
+carries `taskContext` equal to the ceremony's initiating document `id`; the
+ceremony's `#response` is persisted with its proof and retrievable by that
+identifier; a presentation assembles credential and outcome evidence together;
+and `e2e:vrc:devices` stays green.
 
-### 9.4 The boundary, settled
+### 6. Implement layer A — `vrc/relationship/propose` + `/issue`
 
-The previous revision left this open, framed as "why does
-`vrc/relationship/issue` exist if `credential-exchange/issue` does?", with a
-falsifier that we should drop ours if theirs accommodated a pre-negotiated push.
+With `trust-task-discovery` replacing the `rceVersion` ladder.
 
-**That framing was wrong.** The boundary is not negotiation topology; it is
-credential kind, and the registry has already drawn it:
+**Done when:** two wallets complete an unwitnessed exchange over the new tasks and
+both store the counterparty's VRC; capability negotiation runs through
+`supportedTypes` rather than an ordinal version; a legacy peer still completes an
+exchange via the dual-send path (§7.2); and the witnessed path from step 5 still
+passes.
 
-- **DTG credentials** — VRC, VMC, VWC, endorsements: delivered as a signed VC in
-  the payload, with a `credentials/_shared/0.1` receipt. Our VRC and VWC are
-  these.
-- **OID4VCI-issued credentials** — obtained from an issuer service:
-  `credential-exchange/{offer,request,issue}`.
-
-`vrc/relationship/issue` is therefore not a competitor to
-`credential-exchange/issue`; they belong to different worlds. The earlier
-topology argument (symmetric pre-negotiated push vs asymmetric holder pull)
-remains true and is a good secondary reason, but it is not what decides it.
-
-Practical consequence: **match `vtc/members/vmc` exactly** — payload member
-named `vc`, not `credential`, and the receipt drawn from
-`credentials/_shared/0.1`. Divergence in field naming is the cheapest kind of
-misalignment to avoid and the most annoying to discover later.
 
 ## 10. Open questions
 
@@ -1037,10 +952,10 @@ misalignment to avoid and the most annoying to discover later.
 
 2. **Is the invite / air-gap case real for us?** `credential-exchange/issue`'s
    `sealed` path is built for exactly "credential minted for whoever holds a
-   key, may sit in a relayer queue before reaching them." B2 is now sequenced
-   first regardless (§9.1), so this no longer affects ordering — but it decides
-   *scope*: if our invite flow needs the sealed path, it is in scope for step 3;
-   if not, step 3 covers only the cleartext path and the sealed path can wait.
+   key, may sit in a relayer queue before reaching them." This does not affect
+   ordering, but it decides *scope*: if our invite flow needs a sealed transfer,
+   we need an equivalent on the DTG delivery path, which `vtc/members/vmc` does
+   not provide.
 
 3. **Is unidirectional mode still live**, or is bidirectional the only path in
    practice? If unidirectional is dead, layer A's payload simplifies
@@ -1048,9 +963,10 @@ misalignment to avoid and the most annoying to discover later.
 
 4. **Is issuer-side OID4VCI a call we can make**, or does it need buy-in from
    whoever owns the broader wallet roadmap? **Now the critical-path question** —
-   B2 is step 3 of §9.3, and no issuer-side OID4VCI exists in the tree today
-   (holder-side only). If the answer is "needs buy-in", that buy-in is the first
-   blocker, not a later one.
+   no issuer-side OID4VCI exists in the tree today (holder-side only). Now
+   lower-stakes than it looked: §4 Layer B keeps VRC delivery on the DTG idiom,
+   so issuer-side OID4VCI is needed only if we later issue credentials to
+   OID4VCI holders.
 
 5. **Who else consumes the witness protocol?** If `witness-server` is the only
    counterparty, layer C is a two-codebase change. If `openvtc` or
@@ -1063,8 +979,8 @@ misalignment to avoid and the most annoying to discover later.
    stay on Credo until that spec publishes? Deciding early risks building
    against a shape that changes.
 
-7. ~~**Do our VWCs need to be re-issued once a qualifying ceremony specification
-   exists?**~~ **DECIDED 2026-08-05 — legacy-tolerated.** Keyring is not in
+7. **Already-issued VWCs are legacy-tolerated** *(decided; recorded here because
+   it constrains implementation)*. Keyring is not in
    production, so no VWC issued to date has a relying party. Already-issued VWCs
    carry no `taskContext` and will not be re-issued or migrated; they are simply
    never presentable as completion evidence. No compatibility shim is needed, and
@@ -1090,7 +1006,7 @@ implementation simply disagree until they do.*
 
 Edits 1 and 3 are unblocked. Edit 2 waits on the framework PR — and note it is
 also the one that changes what our own witness specification must declare, so
-§9.3 step 2's "freeze after the editor's PR lands" gate covers both.
+§9 step 2's "freeze after the editor's PR lands" gate covers both.
 
 ---
 
