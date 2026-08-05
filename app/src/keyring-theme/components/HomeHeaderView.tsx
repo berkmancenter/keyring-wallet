@@ -1,4 +1,4 @@
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { Screens, Stacks, testIdWithKey, useTheme } from '@bifold/core'
 import { RemoteLogger } from '@bifold/remote-logs'
 import { useNavigation } from '@react-navigation/native'

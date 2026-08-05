@@ -129,8 +129,13 @@ if (!global.atob) {
   global.atob = decode
 }
 
-// Register the app
-const { AppRegistry } = require('react-native')
+// Dev-only: disable LogBox notification banners entirely. The banners overlay
+// the bottom of the screen (where primary buttons live) and repeatedly break
+// E2E taps. All warnings/errors still land in Metro/logcat/syslog.
+const { AppRegistry, LogBox } = require('react-native')
+if (global.__DEV__) {
+  LogBox.ignoreAllLogs()
+}
 const App = require('./App').default
 const { name: appName } = require('./app.json')
 

@@ -2,7 +2,9 @@ const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config')
 const fs = require('fs')
 const path = require('path')
 const escape = require('escape-string-regexp')
-const exclusionList = require('metro-config/src/defaults/exclusionList')
+// metro 0.83+ moved internal files under exports "./private/*"
+const exclusionListModule = require('metro-config/private/defaults/exclusionList')
+const exclusionList = exclusionListModule.default ?? exclusionListModule
 require('dotenv').config()
 
 const packageDirs = [
@@ -12,7 +14,7 @@ const packageDirs = [
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
-  fs.realpathSync(path.join(__dirname, 'node_modules', 'react-native-bcsc-core')),
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-hooks')),
 ]
 
 // In development, resolve these to source for hot reload; CI/production uses built output.
@@ -21,6 +23,7 @@ const BIFOLD_SOURCE_PACKAGES = [
   '@bifold/verifier',
   '@bifold/vrc-contexts',
   '@bifold/react-native-attestation',
+  '@bifold/react-hooks',
 ]
 const bifoldSourceDirByPackage = {}
 for (const dir of packageDirs) {
@@ -34,20 +37,29 @@ for (const dir of packageDirs) {
   }
 }
 
-const watchFolders = [...packageDirs]
+// bifold workspace deps hoist to bifold/node_modules; metro must watch it to
+// resolve them from bifold's built lib output (production bundles)
+const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', 'node_modules'))
+
+const watchFolders = [...packageDirs, bifoldNodeModules]
 
 const extraExclusionlist = []
 const extraNodeModules = {}
 
 // Module aliases for React Native compatibility
 const polyfillModules = {
-  // js-sha256 is used by patched packages (rdf-canonize, jsonld-signatures)
+  // js-sha256 is used by the patched rdf-canonize (RDFC SHA-256 on RN).
+  // (jsonld-signatures no longer needs a patch: v12 ships its own RN shim
+  // built on expo-crypto — see docs/CRYPTO_SUITE_FOLLOWUP.md.)
   'js-sha256': path.join(__dirname, 'node_modules', 'js-sha256', 'src', 'sha256.js'),
   // Stream and buffer polyfills
   stream: path.join(__dirname, 'node_modules', 'stream-browserify'),
   buffer: path.join(__dirname, 'node_modules', 'buffer'),
   // Force rdf-canonize to use our patched version from app's node_modules
   'rdf-canonize': path.join(__dirname, 'node_modules', 'rdf-canonize'),
+  // bifold workspace cross-deps hoist to bifold/node_modules, which metro
+  // doesn't watch; resolve them through the app's portals instead
+  '@bifold/react-hooks': path.join(__dirname, 'node_modules', '@bifold/react-hooks'),
 }
 
 for (const packageDir of packageDirs) {
@@ -103,10 +115,37 @@ module.exports = (async () => {
       },
       assetExts: assetExts.filter((ext) => ext !== 'svg'),
       sourceExts: [...sourceExts, 'svg', 'cjs'],
+      // Prefer browser builds (e.g. nanoid) over node builds that require('crypto').
+      // Same setup as bifold samples/app.
+      unstable_enablePackageExports: true,
+      unstable_conditionNames: ['react-native', 'browser', 'require'],
+      nodeModulesPaths: [path.join(__dirname, 'node_modules'), bifoldNodeModules],
       // Force specific module imports to use our polyfilled/patched versions
       resolveRequest: (context, moduleName, platform) => {
+        // Singleton packages: always resolve from the app's node_modules so
+        // bifold sources never load a second copy (bifold/node_modules is on
+        // nodeModulesPaths, which would otherwise win for react etc.)
+        const singletonPrefixes = [
+          'react',
+          'react-native',
+          'react-dom',
+          '@credo-ts/core',
+          '@credo-ts/didcomm',
+          '@credo-ts/anoncreds',
+        ]
+        const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
+        if (isSingleton && !context.originModulePath.startsWith(__dirname)) {
+          // Re-resolve as if requested from the app root (keeps package
+          // "exports" handling intact, unlike remapping to an absolute path)
+          return context.resolveRequest(
+            { ...context, originModulePath: path.join(__dirname, 'index.js') },
+            moduleName,
+            platform
+          )
+        }
         // Ensure js-sha256 is resolved from app's node_modules
-        // This is needed by patched @digitalcredentials/jsonld-signatures and rdf-canonize
+        // This is needed by the patched rdf-canonize (jsonld-signatures v12
+        // no longer needs it — its RN SHA-256 shim uses expo-crypto)
         if (moduleName === 'js-sha256') {
           return context.resolveRequest(context, path.join(__dirname, 'node_modules', 'js-sha256'), platform)
         }

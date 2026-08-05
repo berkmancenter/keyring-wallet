@@ -70,6 +70,9 @@ aries-oca-bundles/
 credo-ts/
 app/vendor/
 
+# Android native build cache
+app/android/app/.cxx/
+
 # Android keystore
 release.keystore
 *.keystore.old

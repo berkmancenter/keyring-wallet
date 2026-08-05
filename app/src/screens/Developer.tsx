@@ -4,16 +4,14 @@ import {
   Screens,
   testIdWithKey,
   TOKENS,
-  useAuth,
   useServices,
   useStore,
   useTheme,
-  LockoutReason,
   seedTestContacts,
   clearTestContacts,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -31,16 +29,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialIcons'
 
-import { BCDispatchAction, BCState, Mode } from '@/store'
+import { BCDispatchAction, BCState } from '@/store'
 import IASEnvironment from './IASEnvironment'
 import RemoteLogWarning from './RemoteLogWarning'
-import { KeyRingThemeNames } from '@/constants'
 
 const Developer: React.FC = () => {
   const { t } = useTranslation()
   const [store, dispatch] = useStore<BCState>()
-  const { lockOutUser } = useAuth()
-  const { SettingsTheme, TextTheme, ColorPalette, setTheme, themeName } = useTheme()
+  const { SettingsTheme, TextTheme, ColorPalette } = useTheme()
   const [logger] = useServices([TOKENS.UTIL_LOGGER]) as [RemoteLogger]
   const { agent } = useAgent()
   const [environmentModalVisible, setEnvironmentModalVisible] = useState<boolean>(false)
@@ -50,7 +46,6 @@ const Developer: React.FC = () => {
   const [useConnectionInviterCapability, setConnectionInviterCapability] = useState(
     !!store.preferences.useConnectionInviterCapability
   )
-  const [BCSCMode, setBCSCMode] = useState<boolean>(store.mode === Mode.BCSC)
   const [remoteLoggingWarningModalVisible, setRemoteLoggingWarningModalVisible] = useState(false)
   const [useDevVerifierTemplates, setDevVerifierTemplates] = useState(!!store.preferences.useDevVerifierTemplates)
   const [enableWalletNaming, setEnableWalletNaming] = useState(!!store.preferences.enableWalletNaming)
@@ -111,7 +106,7 @@ const Developer: React.FC = () => {
     setEnvironmentModalVisible(false)
   }
 
-  const SectionHeader = ({ icon, title }: { icon: string; title: string }): JSX.Element => (
+  const SectionHeader = ({ icon, title }: { icon: string; title: string }): React.JSX.Element => (
     <View style={[styles.section, styles.sectionHeader]}>
       <Icon name={icon} size={24} style={{ marginRight: 10, color: TextTheme.normal.color }} />
       <Text style={[TextTheme.headingThree, { flexShrink: 1 }]}>{title}</Text>
@@ -122,9 +117,9 @@ const Developer: React.FC = () => {
     title: string
     accessibilityLabel?: string
     testID?: string
-    children: JSX.Element
+    children: React.JSX.Element
     showRowSeparator?: boolean
-    subContent?: JSX.Element
+    subContent?: React.JSX.Element
     onPress?: () => void
   }
   const SectionRow = ({
@@ -295,28 +290,6 @@ const Developer: React.FC = () => {
       payload: [!enableAppToAppPersonFlow],
     })
     setEnableAppToAppPersonFlow((previousState) => !previousState)
-  }
-
-  const toggleTheme = () => {
-    if (themeName === KeyRingThemeNames.KeyRingSC) {
-      setTheme(KeyRingThemeNames.KeyRing)
-    } else {
-      setTheme(KeyRingThemeNames.KeyRingSC)
-    }
-  }
-
-  const toggleMode = () => {
-    lockOutUser(LockoutReason.Timeout)
-
-    const newMode = BCSCMode ? Mode.KeyRing : Mode.BCSC
-    const newTheme = BCSCMode ? KeyRingThemeNames.KeyRing : KeyRingThemeNames.BCSC
-
-    setTheme(newTheme)
-    dispatch({
-      type: BCDispatchAction.UPDATE_MODE,
-      payload: [newMode],
-    })
-    setBCSCMode((previousState) => !previousState)
   }
 
   const handleSeedTestContacts = async () => {
@@ -566,36 +539,6 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableAppToAppPersonFlowSwitch}
             value={enableAppToAppPersonFlow}
-          />
-        </SectionRow>
-
-        <SectionRow
-          title={t('Developer.SwitchTheme')}
-          accessibilityLabel={t('Developer.SwitchTheme')}
-          testID={testIdWithKey('ToggleTheme')}
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={
-              themeName === KeyRingThemeNames.BCSC ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey
-            }
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleTheme}
-            value={themeName === KeyRingThemeNames.BCSC}
-          />
-        </SectionRow>
-
-        <SectionRow
-          title={t('Developer.SwitchMode')}
-          accessibilityLabel={t('Developer.SwitchMode')}
-          testID={testIdWithKey('ToggleMode')}
-        >
-          <Switch
-            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
-            thumbColor={!BCSCMode ? ColorPalette.grayscale.mediumGrey : ColorPalette.brand.primary}
-            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
-            onValueChange={toggleMode}
-            value={BCSCMode}
           />
         </SectionRow>
 

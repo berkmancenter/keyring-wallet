@@ -2,6 +2,7 @@
 
 #import <WebRTCModuleOptions.h>
 #import <Firebase.h>
+#import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <React/RCTBridge.h>
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTRootView.h>
@@ -17,6 +18,8 @@
 
   [FIRApp configure];
   self.moduleName = @"KeyRing";
+  // RN 0.77+: third-party Fabric components/modules are resolved through this provider
+  self.dependencyProvider = [RCTAppDependencyProvider new];
   // You can add your custom initial props in the dictionary below.
   // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
@@ -30,10 +33,11 @@
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
 {
-  return [self getBundleURL];
+  return [self bundleURL];
 }
 
-- (NSURL *)getBundleURL
+// RN 0.74+ RCTAppDelegate calls -bundleURL (sourceURLForBridge: kept for compat)
+- (NSURL *)bundleURL
 {
 #if DEBUG
   return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index"];

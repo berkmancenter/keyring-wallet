@@ -50,6 +50,9 @@ react {
     //
     //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
     // hermesFlags = ["-O", "-output-source-map"]
+
+    /* Autolinking */
+    autolinkLibrariesWithApp()
 }
 
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
@@ -106,24 +109,8 @@ android {
             version "3.22.1"
         }
     }
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-    
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    java {
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(17))
-        }
-    }
+    // Java/Kotlin toolchain + jvmTarget are managed by the RN 0.81 gradle
+    // plugin; setting them here now fails ("languageVersion is final")
 
     defaultConfig {
         applicationId "asml.bkc.harvard.wallet"
@@ -177,6 +164,14 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+    packagingOptions {
+        jniLibs {
+            // RN 0.76+ prefab: JSI libraries (@hyperledger/*) copy the imported
+            // libreactnative.so etc. into their own AARs, colliding with the copies
+            // from the react-android AAR. The contents are identical — keep one.
+            pickFirsts += ['**/libreactnative.so', '**/libjsi.so', '**/libfbjni.so', '**/libc++_shared.so']
+        }
+    }
 }
 
 // Fix the task dependency issue between lint and React Native Vector Icons
@@ -194,7 +189,7 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.20")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
 
     implementation 'net.java.dev.jna:jna:5.14.0'
     
@@ -211,7 +206,6 @@ dependencies {
     }
 }
 
-apply from: project(':react-native-config').projectDir.getPath() + "/dotenv.gradle"
-apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)
+apply from: file("../../node_modules/react-native-config/android/dotenv.gradle")
 
 apply plugin: 'com.google.gms.google-services'

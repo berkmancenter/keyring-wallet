@@ -1,29 +1,32 @@
 import {
   createLinkSecretIfRequired,
   DispatchAction,
+  migrateRCardTemplateProofs,
   migrateToAskar,
   PersistentStorage,
+  runDataIntegritySelfTest,
   TOKENS,
   useServices,
   useStore,
   WalletSecret,
   setupVrcConnectionHandler,
 } from '@bifold/core'
-import { Agent, HttpOutboundTransport, MediatorPickupStrategy, WsOutboundTransport } from '@credo-ts/core'
-import { IndyVdrPoolConfig, IndyVdrPoolService } from '@credo-ts/indy-vdr/build/pool'
+import { Agent } from '@credo-ts/core'
+import {
+  DidCommHttpOutboundTransport,
+  DidCommMediatorPickupStrategy,
+  DidCommWsOutboundTransport,
+} from '@credo-ts/didcomm'
+import { IndyVdrPoolConfig, IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/react-native'
 import { GetCredentialDefinitionRequest, GetSchemaRequest } from '@hyperledger/indy-vdr-shared'
 import moment from 'moment'
 import { useCallback, useRef, useState } from 'react'
-import { Config } from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 // DISABLED: Push notifications disabled — no server backend yet
 // import { activate } from '@/utils/PushNotificationsHelper'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
 import { BCState, BCLocalStorageKeys } from '@/store'
-import { batchPickup, startPeriodicTrustPing } from '@/utils/mediator'
-
-const PERIODIC_PICKUP_INTERVAL_MS = 5000
 
 const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,42 +37,33 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
   }
 }
 
-const checkMediatorType = async (agent: Agent, mediatorUrl: string): Promise<void> => {
-  if (mediatorUrl.startsWith('https://mediator-credo-dev.apps.silver.devops.gov.bc.ca/')) {
-    await agent.mediationRecipient.initiateMessagePickup(undefined, MediatorPickupStrategy.PickUpV2LiveMode)
-  } else {
-    batchPickup(agent)
-  }
+// Live mode holds a WebSocket open to the mediator, which pushes messages as
+// they arrive (upstream bc-wallet-mobile approach). This replaced the previous
+// batch-pickup + 5s trust-ping polling loop; our hosted mediator advertises a
+// wss endpoint so the socket-based delivery works without polling.
+const configureMessagePickup = async (agent: Agent): Promise<void> => {
+  await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
+    undefined,
+    DidCommMediatorPickupStrategy.PickUpV2LiveMode
+  )
 }
 
 const useBCAgentSetup = () => {
   const [agent, setAgent] = useState<Agent | null>(null)
   const agentInstanceRef = useRef<Agent | null>(null)
-  const periodicPickupCleanupRef = useRef<(() => void) | null>(null)
   const [store, dispatch] = useStore<BCState>()
-  const [logger, indyLedgers, attestationMonitor, credDefs, schemas] = useServices([
+  const [logger, indyLedgers, credDefs, schemas] = useServices([
     TOKENS.UTIL_LOGGER,
     TOKENS.UTIL_LEDGERS,
-    TOKENS.UTIL_ATTESTATION_MONITOR,
     TOKENS.CACHE_CRED_DEFS,
     TOKENS.CACHE_SCHEMAS,
   ])
 
-  const refreshAttestationMonitor = useCallback(
-    (agent: Agent) => {
-      attestationMonitor?.stop()
-      attestationMonitor?.start(agent)
-    },
-    [attestationMonitor]
-  )
-
   const restartExistingAgent = useCallback(
-    async (agent: Agent, walletSecret: WalletSecret): Promise<Agent | undefined> => {
+    async (agent: Agent): Promise<Agent | undefined> => {
       try {
-        await agent.wallet.open({
-          id: walletSecret.id,
-          key: walletSecret.key,
-        })
+        // credo 0.6: the askar store config (id/key) lives on the AskarModule,
+        // so re-initializing reopens the wallet
         await agent.initialize()
       } catch (error) {
         logger.warn(`Agent restart failed with error ${error}`)
@@ -87,19 +81,15 @@ const useBCAgentSetup = () => {
     async (ledgers: IndyVdrPoolConfig[], walletSecret: WalletSecret, mediatorUrl: string): Promise<Agent> => {
       const options = {
         config: {
-          label: store.preferences.walletName || 'Keyring',
-          walletConfig: {
-            id: walletSecret.id,
-            key: walletSecret.key,
-          },
           logger,
-          mediatorPickupStrategy: MediatorPickupStrategy.Implicit,
           autoUpdateStorageOnStartup: true,
-          autoAcceptConnections: true,
+          // credo 0.6: wallet id/key live on the AskarModule store config,
+          // mediation + auto-accept live on the DidCommModule (see bc-agent-modules.ts)
           // Document loader is configured in W3cCredentialsModule (see bc-agent-modules.ts)
         },
         dependencies: agentDependencies,
         modules: getBCAgentModules({
+          walletSecret,
           indyNetworks: ledgers,
           mediatorInvitationUrl: mediatorUrl,
           txnCache: {
@@ -107,27 +97,19 @@ const useBCAgentSetup = () => {
             expiryOffsetMs: 1000 * 60 * 60 * 24 * 7,
             path: CachesDirectoryPath + '/txn-cache',
           },
-          enableProxy: store.developer.enableProxy,
-          proxyBaseUrl: Config.INDY_VDR_PROXY_URL,
-          proxyCacheSettings: {
-            allowCaching: false,
-            cacheDurationInSeconds: 60 * 60 * 24 * 7,
-          },
         }),
       }
 
-      logger.info(store.developer.enableProxy && Config.INDY_VDR_PROXY_URL ? 'VDR Proxy enabled' : 'VDR Proxy disabled')
-
       const newAgent = new Agent(options)
-      const wsTransport = new WsOutboundTransport()
-      const httpTransport = new HttpOutboundTransport()
+      const wsTransport = new DidCommWsOutboundTransport()
+      const httpTransport = new DidCommHttpOutboundTransport()
 
-      newAgent.registerOutboundTransport(wsTransport)
-      newAgent.registerOutboundTransport(httpTransport)
+      newAgent.modules.didcomm.registerOutboundTransport(wsTransport)
+      newAgent.modules.didcomm.registerOutboundTransport(httpTransport)
 
       return newAgent
     },
-    [store.preferences.walletName, logger, store.developer.enableProxy]
+    [logger]
   )
 
   const migrateIfRequired = useCallback(
@@ -146,8 +128,11 @@ const useBCAgentSetup = () => {
   const warmUpCache = useCallback(
     async (newAgent: Agent, cachedLedgers?: IndyVdrPoolConfig[]) => {
       const poolService = newAgent.dependencyManager.resolve(IndyVdrPoolService)
-      if (!cachedLedgers) {
-        // these escapes can be removed once Indy VDR has been upgraded and the patch is no longer needed
+      // refreshPoolConnections/getAllPoolTransactions came from the BC indy-vdr
+      // patch (credo 0.5); the unpatched 0.6.3 pool service does not have them
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore:next-line
+      if (!cachedLedgers && typeof poolService.refreshPoolConnections === 'function') {
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore:next-line
         await poolService.refreshPoolConnections()
@@ -195,13 +180,10 @@ const useBCAgentSetup = () => {
       const mediatorUrl = store.preferences.selectedMediator
       logger.info('Checking for existing agent...')
       if (agentInstanceRef.current) {
-        const restartedAgent = await restartExistingAgent(agentInstanceRef.current, walletSecret)
+        const restartedAgent = await restartExistingAgent(agentInstanceRef.current)
         if (restartedAgent) {
           logger.info('Successfully restarted existing agent...')
-          await checkMediatorType(restartedAgent, mediatorUrl)
-          periodicPickupCleanupRef.current?.()
-          periodicPickupCleanupRef.current = startPeriodicTrustPing(restartedAgent, PERIODIC_PICKUP_INTERVAL_MS)
-          refreshAttestationMonitor(restartedAgent)
+          await configureMessagePickup(restartedAgent)
           agentInstanceRef.current = restartedAgent
           setAgent(restartedAgent)
           return
@@ -221,10 +203,12 @@ const useBCAgentSetup = () => {
       logger.info('Initializing agent...')
       await newAgent.initialize()
 
-      logger.info(`checking mediator type for ${mediatorUrl}`)
-      await checkMediatorType(newAgent, mediatorUrl)
-      periodicPickupCleanupRef.current?.()
-      periodicPickupCleanupRef.current = startPeriodicTrustPing(newAgent, PERIODIC_PICKUP_INTERVAL_MS)
+      // Fix up R-Card template records stored by pre-credo-0.6 versions (no
+      // proof) before any UI provider reads W3C credential records
+      await migrateRCardTemplateProofs(newAgent)
+
+      logger.info(`configuring message pickup for ${mediatorUrl}`)
+      await configureMessagePickup(newAgent)
 
       logger.info('Warming up cache...')
       await warmUpCache(newAgent, cachedLedgers)
@@ -235,15 +219,18 @@ const useBCAgentSetup = () => {
       logger.info('Setting up VRC connection handler...')
       setupVrcConnectionHandler(newAgent)
 
+      if (__DEV__) {
+        // Level 2b probe: prove eddsa-rdfc-2022 sign/verify on-device
+        // (expo-crypto SHA-256, askar KMS, RDFC on Hermes). Fire-and-forget;
+        // results in the agent log (docs/CRYPTO_SUITE_FOLLOWUP.md).
+        void runDataIntegritySelfTest(newAgent)
+      }
+
       // DISABLED: Push notifications disabled — no server backend yet
       // if (store.preferences.usePushNotifications) {
       //   logger.info('Activating push notifications...')
       //   activate(newAgent)
       // }
-
-      // In case the old attestationMonitor is still active, stop it and start a new one
-      logger.info('Starting attestation monitor...')
-      refreshAttestationMonitor(newAgent)
 
       logger.info('Setting new agent...')
       agentInstanceRef.current = newAgent
@@ -257,14 +244,11 @@ const useBCAgentSetup = () => {
       createNewAgent,
       migrateIfRequired,
       warmUpCache,
-      refreshAttestationMonitor,
       restartExistingAgent,
     ]
   )
 
   const shutdownAndClearAgentIfExists = useCallback(async () => {
-    periodicPickupCleanupRef.current?.()
-    periodicPickupCleanupRef.current = null
     if (agent) {
       try {
         await agent.shutdown()

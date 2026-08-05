@@ -1,5 +1,9 @@
+require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
 source 'https://cdn.cocoapods.org'
 require_relative '../node_modules/react-native/scripts/react_native_pods'
+
+# prevents location usage from react-native-vision-camera (matches upstream bc-wallet)
+$VCEnableLocation = false
 
 # From RNP docs here: https://www.npmjs.com/package/react-native-permissions/v/4.0.1
 def node_require(script)
@@ -41,17 +45,6 @@ setup_permissions([
   # 'StoreKit',
 ])
 
-# If you are using a `react-native-flipper` your iOS build will fail when `NO_FLIPPER=1` is set.
-# because `react-native-flipper` depends on (FlipperKit,...) that will be excluded
-#
-# To fix this you can also exclude `react-native-flipper` using a `react-native.config.js`
-# ```js
-# module.exports = {
-#   dependencies: {
-#     ...(process.env.NO_FLIPPER ? { 'react-native-flipper': { platforms: { ios: null } } } : {}),
-# ```
-flipper_config = FlipperConfiguration.disabled
-
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
@@ -59,6 +52,14 @@ if linkage != nil
 end
 
 target 'AriesBifold' do
+  use_expo_modules!
+  post_integrate do |installer|
+    begin
+      expo_patch_react_imports!(installer)
+    rescue => e
+      Pod::UI.warn e
+    end
+  end
   config = use_native_modules!
 
   pod 'Firebase', :modular_headers => true

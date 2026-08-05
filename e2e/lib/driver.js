@@ -1,0 +1,303 @@
+import { remote } from "webdriverio";
+import { spawn } from "node:child_process";
+import net from "node:net";
+import { mkdirSync, createWriteStream } from "node:fs";
+
+import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
+
+function portInUse(port) {
+  return new Promise((resolve) => {
+    const sock = net.connect(port, "127.0.0.1");
+    sock.once("connect", () => (sock.destroy(), resolve(true)));
+    sock.once("error", () => resolve(false));
+  });
+}
+
+let appiumProc;
+
+export async function ensureAppium() {
+  if (await portInUse(APPIUM_PORT)) {
+    // A server from a previous run may still be tearing down (it responds to
+    // /status but dies seconds later, killing our sessions mid-run). Prefer
+    // waiting for it to exit and starting our own; only reuse if it sticks
+    // around, which means someone is running it deliberately.
+    console.log(
+      `[e2e] port :${APPIUM_PORT} in use — waiting for leftover appium to exit…`
+    );
+    for (let i = 0; i < 20 && (await portInUse(APPIUM_PORT)); i++) {
+      await sleep(1000);
+    }
+    if (await portInUse(APPIUM_PORT)) {
+      try {
+        const res = await fetch(`http://127.0.0.1:${APPIUM_PORT}/status`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          console.log(
+            `[e2e] reusing externally-managed appium on :${APPIUM_PORT}`
+          );
+          return;
+        }
+      } catch {
+        /* unresponsive */
+      }
+      throw new Error(
+        `port ${APPIUM_PORT} occupied by an unresponsive server — kill it (pkill -f appium) and retry`
+      );
+    }
+  }
+  mkdirSync("artifacts", { recursive: true });
+  const logFile = "artifacts/appium.log";
+  console.log(`[e2e] starting appium on :${APPIUM_PORT} (log: ${logFile})`);
+  const log = createWriteStream(logFile, { flags: "w" });
+  appiumProc = spawn(
+    "appium",
+    ["--port", String(APPIUM_PORT), "--relaxed-security"],
+    {
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: false,
+    }
+  );
+  appiumProc.stdout.pipe(log);
+  appiumProc.stderr.pipe(log);
+  appiumProc.stderr.pipe(process.stderr);
+  for (let i = 0; i < 60; i++) {
+    if (await portInUse(APPIUM_PORT)) return;
+    await sleep(1000);
+  }
+  throw new Error("appium did not start within 60s");
+}
+
+export function stopAppium() {
+  if (appiumProc) appiumProc.kill("SIGTERM");
+}
+
+export async function createSession(platform, capsOverride) {
+  const capabilities =
+    capsOverride ?? (platform === "android" ? androidCaps() : iosCaps());
+  const realDevice = Boolean(capabilities["appium:udid"]);
+  console.log(
+    `[e2e] creating ${platform} session${realDevice ? " (real device)" : ""}…`
+  );
+  const driver = await remote({
+    hostname: "127.0.0.1",
+    port: APPIUM_PORT,
+    connectionRetryTimeout: 600000,
+    connectionRetryCount: 1,
+    capabilities,
+  });
+  driver.e2ePlatform = platform;
+  if (platform === "android") {
+    // Debug builds load the JS bundle from metro on the host; map emulator port 8081 back
+    // BEFORE the first app launch (autoLaunch is disabled in the caps).
+    const udid =
+      driver.capabilities.deviceUDID ||
+      driver.capabilities["appium:udid"] ||
+      driver.capabilities.udid;
+    if (!udid)
+      throw new Error(
+        "could not determine android device udid for adb reverse"
+      );
+    const { execSync } = await import("node:child_process");
+    execSync(`adb -s ${udid} reverse tcp:8081 tcp:8081`);
+    console.log(`[e2e] adb reverse tcp:8081 set up on ${udid}`);
+    const { APP_ID } = await import("./config.js");
+    await driver.activateApp(APP_ID);
+    console.log("[e2e] app launched");
+  }
+  if (platform === "ios" && !realDevice) {
+    // Pre-grant camera so the Scan screen skips the camera-disclosure Modal:
+    // presenting that Modal right as the QR bottom-sheet dismisses intermittently
+    // fails on the iOS simulator, leaving a blank Scan screen. (Real devices have
+    // no simctl; the flow falls back to the in-app disclosure + autoAcceptAlerts.)
+    try {
+      const { execSync } = await import("node:child_process");
+      const { APP_ID } = await import("./config.js");
+      execSync(`xcrun simctl privacy booted grant camera ${APP_ID}`);
+      // granting TCC permission kills the app; relaunch it cleanly (immediate
+      // activate can race the teardown and leave a black screen)
+      await driver.terminateApp(APP_ID).catch(() => {});
+      await sleep(3000);
+      await driver.activateApp(APP_ID);
+      await sleep(3000);
+    } catch {
+      /* non-fatal — flow falls back to the disclosure modal */
+    }
+  }
+  return driver;
+}
+
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Accept an OS-level dialog if one is showing (camera / local-network /
+ * notification permission…). Real devices surface these where simulators
+ * don't (no simctl pre-grant, Bonjour local-network prompt), and appium's
+ * autoAcceptAlerts intermittently misses them — a blocking system alert
+ * swallows every synthesized tap, so flows stall on taps that "do nothing".
+ */
+export async function acceptSystemAlertIfPresent(driver) {
+  try {
+    const text = await driver.getAlertText();
+    if (text == null) return false;
+    // NEVER touch the OS biometric/passcode prompt — that one is for the human
+    // operator (titles from AttestationModule.kt / Attestation.mm)
+    if (/confirm relationship|confirm your identity|fingerprint|face id|passcode|pin/i.test(text)) {
+      return false;
+    }
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: accepting system alert: "${String(text)
+        .replace(/\s+/g, " ")
+        .slice(0, 100)}"`
+    );
+    await driver.acceptAlert();
+    await sleep(1000);
+    return true;
+  } catch {
+    return false; // no alert showing
+  }
+}
+
+/**
+ * Find an element by bifold testID (testIdWithKey key).
+ * RN maps testID → resource-id on Android and → accessibility identifier on iOS.
+ */
+export function byTestId(driver, key) {
+  const full = `${TEST_ID_PREFIX}${key}`;
+  if (driver.e2ePlatform === "android") {
+    return driver.$(`android=new UiSelector().resourceId("${full}")`);
+  }
+  return driver.$(`~${full}`);
+}
+
+export async function waitForTestId(driver, key, timeout = 30000) {
+  const el = byTestId(driver, key);
+  await el.waitForExist({
+    timeout,
+    timeoutMsg: `element testID=${key} not found in ${timeout}ms`,
+  });
+  return el;
+}
+
+export async function tapTestId(driver, key, timeout = 30000) {
+  const el = await waitForTestId(driver, key, timeout);
+  await el.waitForDisplayed({ timeout });
+  await el.click();
+  return el;
+}
+
+/**
+ * Tap an element by testID, then confirm the tap actually took effect via
+ * `verify`, re-tapping if it didn't. Some real devices (seen on Android 16)
+ * silently drop an occasional tap: the WebDriver click command returns
+ * success, but the app never receives the touch, so the expected UI change
+ * (navigation, a modal closing, a toggle flipping) never happens. A plain
+ * tapTestId() has no way to detect that — it only confirms the element it
+ * clicked existed, not that the click did anything.
+ *
+ * @param {object} driver
+ * @param {string} key - testID to tap (see byTestId)
+ * @param {() => Promise<boolean>} verify - resolves true once the tap's
+ *   expected effect has happened. Must check something OTHER than "the
+ *   tapped element still exists" — e.g. a different element appearing or
+ *   disappearing, a screen having navigated.
+ * @param {{ attempts?: number, settleMs?: number, timeout?: number }} [options]
+ */
+export async function tapTestIdReliable(driver, key, verify, options = {}) {
+  const { attempts = 3, settleMs = 1500, timeout = 15000 } = options;
+  await waitForTestId(driver, key, timeout);
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const el = byTestId(driver, key);
+    if (await el.isExisting()) {
+      await el.click().catch(() => {});
+    }
+    await sleep(settleMs);
+    if (await verify()) return;
+  }
+  throw new Error(
+    `${driver.e2ePlatform}: tap on testID=${key} did not take effect after ${attempts} attempts`
+  );
+}
+
+/** Swipe up until the element with the given testID is displayed (max 6 swipes). */
+export async function scrollToTestId(driver, key, maxSwipes = 6) {
+  for (let i = 0; i < maxSwipes; i++) {
+    const el = byTestId(driver, key);
+    if ((await el.isExisting()) && (await el.isDisplayed())) return el;
+    const { width, height } = await driver.getWindowRect();
+    await driver
+      .action("pointer")
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
+      .down()
+      .pause(100)
+      .move({
+        x: Math.floor(width / 2),
+        y: Math.floor(height * 0.25),
+        duration: 400,
+      })
+      .up()
+      .perform();
+    await sleep(500);
+  }
+  throw new Error(
+    `element testID=${key} not displayed after ${maxSwipes} swipes`
+  );
+}
+
+export async function existsTestId(driver, key, timeout = 4000) {
+  try {
+    await waitForTestId(driver, key, timeout);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Find by visible text (fallback when a control has no testID). */
+export function byText(driver, text) {
+  if (driver.e2ePlatform === "android") {
+    return driver.$(`android=new UiSelector().text("${text}")`);
+  }
+  return driver.$(
+    `-ios predicate string:label == "${text}" OR name == "${text}"`
+  );
+}
+
+/** Find by partial visible text (labels may have prefixes, e.g. "Contact: Alice"). */
+export function byTextContains(driver, text) {
+  if (driver.e2ePlatform === "android") {
+    return driver.$(`android=new UiSelector().textContains("${text}")`);
+  }
+  return driver.$(
+    `-ios predicate string:label CONTAINS "${text}" OR name CONTAINS "${text}"`
+  );
+}
+
+export async function tapText(driver, text, timeout = 30000) {
+  const el = byText(driver, text);
+  await el.waitForExist({
+    timeout,
+    timeoutMsg: `element text="${text}" not found in ${timeout}ms`,
+  });
+  await el.click();
+  return el;
+}
+
+export async function dumpSource(driver, label) {
+  const src = await driver.getPageSource();
+  const { writeFileSync, mkdirSync } = await import("node:fs");
+  mkdirSync("artifacts", { recursive: true });
+  const file = `artifacts/${label}-${driver.e2ePlatform}-${Date.now()}.xml`;
+  writeFileSync(file, src);
+  console.log(`[e2e] page source dumped: ${file}`);
+  return file;
+}
+
+export async function screenshot(driver, label) {
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync("artifacts", { recursive: true });
+  const file = `artifacts/${label}-${driver.e2ePlatform}-${Date.now()}.png`;
+  await driver.saveScreenshot(file);
+  console.log(`[e2e] screenshot: ${file}`);
+  return file;
+}

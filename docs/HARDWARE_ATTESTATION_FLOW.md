@@ -1,6 +1,10 @@
 # Hardware Attestation & Biometric Signing Flow
 
-Technical documentation for developers on the VRC (Verifiable Relationship Credential) hardware attestation and biometric signing implementation.
+Technical documentation for the VRC (Verifiable Relationship Credential) hardware
+attestation and biometric / device-credential signing path.
+
+Last reviewed: 2026-07-13 (aligned with native `verifyHardwareEvidence` + Google
+multi-root trust anchors + real-device E2E).
 
 ---
 
@@ -8,21 +12,32 @@ Technical documentation for developers on the VRC (Verifiable Relationship Crede
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Hardware key generation | ✅ Implemented | iOS Secure Enclave, Android StrongBox/TEE |
-| Biometric-bound signing | ✅ Implemented | ECDSA-SHA256, biometric required |
-| Attestation retrieval | ✅ Implemented | Apple App Attest, Android Key Attestation |
-| Evidence block (W3C) | ✅ Implemented | Full spec compliance |
-| Trust anchor check | ✅ Implemented | Root matches Apple/Google |
-| Signature verification | ✅ Implemented | @noble/curves ECDSA |
-| Full X.509 chain verification | ❌ Not implemented | Requires node-forge/pkijs |
-| Public key extraction | ❌ Not implemented | Trusted via attestation |
-| Certificate expiry check | ❌ Not implemented | Requires X.509 parsing |
+| Hardware key generation | ✅ | iOS Secure Enclave, Android StrongBox → TEE → Software fallback |
+| User-verified signing | ✅ | Biometric **or** device passcode (`DevicePasscode`) |
+| Attestation retrieval | ✅ | Apple App Attest, Android Key Attestation |
+| Evidence block (W3C) | ✅ | Attached to VRC before Credo LD proof |
+| Full X.509 chain verification | ✅ | **Native** — iOS `SecTrust`, Android `CertPathValidator` |
+| Trust anchors | ✅ | Apple App Attest chain; Google roots (legacy RSA, re-signed RSA, RKP ECDSA) |
+| Public key ↔ leaf match | ✅ | Native compares evidence pubkey to leaf cert |
+| Certificate expiry / path checks | ✅ | Native chain validation |
+| Signature / assertion verify | ✅ | Android DER ECDSA; iOS App Attest CBOR assertion |
+| Preference gate | ✅ | `useHardwareAttestation` (default **off** in store; Settings → Secure Exchanges) |
+| Emulator / simulator E2E | ⚠️ | No real App Attest / TEE attestation — evidence skipped |
+| Real-device E2E | ✅ | `yarn e2e:vrc:devices` — requires Secure Exchange banner both ways |
 
 ---
 
 ## Overview
 
-When two users establish a relationship via VRC, each side signs the credential using a **hardware-backed key** stored in secure hardware (iOS Secure Enclave or Android StrongBox/TEE). This provides cryptographic proof that a human approved the relationship via biometric authentication.
+When two wallets exchange a VRC **and** hardware attestation is enabled, each
+issuer signs the credential content with a **hardware-backed key** (Secure Enclave /
+StrongBox/TEE) after user verification (biometric or device passcode). The
+evidence block proves: (1) a human approved the exchange, (2) the key lives in
+attested hardware, (3) that key signed this VRC content.
+
+This is **orthogonal** to the VC Linked Data / Data Integrity **proof suite**
+(today `Ed25519Signature2018` on the relationship DID key). See
+[`CRYPTO_SUITE_FOLLOWUP.md`](./CRYPTO_SUITE_FOLLOWUP.md).
 
 ---
 
@@ -35,89 +50,68 @@ When two users establish a relationship via VRC, each side signs the credential 
 │  │ vrc-manager  │→ │ vrc-biometric│→ │vrc-hardware- │→ │ Evidence-   │  │
 │  │              │  │              │  │   signing    │  │  Builder    │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └─────────────┘  │
-│                                            ↓                            │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │            react-native-attestation (JS wrapper)                 │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
+│         │                                            ↓                    │
+│         │          react-native-attestation (JS bridge)                   │
+│         ↓                                          │                     │
+│  BiometricSignatureVerifier.verifyEvidence() ──────┘                     │
+│         → native verifyHardwareEvidence(...)                              │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │ Native Bridge
 ┌────────────────────────────────────┴────────────────────────────────────┐
 │                            NATIVE LAYER                                  │
 │  ┌────────────────────────┐          ┌─────────────────────────────┐    │
-│  │   iOS: Attestation.mm  │          │ Android: AttestationModule.kt│   │
-│  │   • Secure Enclave     │          │ • KeyStore                   │   │
-│  │   • App Attest API     │          │ • StrongBox / TEE            │   │
+│  │ iOS: Attestation.mm    │          │ Android: AttestationModule  │    │
+│  │ • Secure Enclave       │          │ • KeyStore / StrongBox/TEE  │    │
+│  │ • App Attest           │          │ • GoogleAttestationChain-   │    │
+│  │ • SecTrust verify      │          │   Validator + Roots         │    │
 │  └────────────────────────┘          └─────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+JS no longer owns PEM trust-anchor string matching. `CertificateVerifier.ts` /
+JS `trustedRoots.ts` were superseded by native verification.
+
 ---
 
-## Signing Flow (When Creating/Accepting a VRC)
+## Signing Flow (issuer, when creating a VRC)
 
-### Step 1: UI Confirmation
-User sees `BiometricConfirmationModal` asking to confirm the relationship.
+### Prerequisite: preference on
 
-**File:** `vrc-biometric.ts` → `requestBiometricWithHardwareSigning()`
+`PersistentStorage` / Preferences: `useHardwareAttestation`. Default in the React
+store is **`false`**. Users enable it under Settings → **Secure Exchanges**
+(PIN-gated). Real-device E2E turns this on after onboarding.
 
-### Step 2: Hardware Key Check
-System checks if a hardware signing key exists, creates one if needed.
+### Step 1: UI confirmation
 
-**File:** `vrc-hardware-signing.ts` → `ensureHardwareSigningKey()`
+`BiometricConfirmationModal` → `requestBiometricWithHardwareSigning()`.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    KEY GENERATION                               │
-├─────────────────────────────────────────────────────────────────┤
-│ iOS:                                                            │
-│   • Key created in Secure Enclave                               │
-│   • Biometric-bound (requires Face ID / Touch ID for use)       │
-│   • Algorithm: ECDSA with P-256 curve                           │
-│   • App Attest key registered with Apple servers                │
-│                                                                 │
-│ Android:                                                        │
-│   • Key created in KeyStore                                     │
-│   • Prefers StrongBox, falls back to TEE, then Software         │
-│   • Biometric-bound (requires fingerprint for use)              │
-│   • Algorithm: ECDSA with P-256 curve                           │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Step 2: Hardware key
 
-### Step 3: Attestation Pre-Warm (First Install Only)
-On fresh install, iOS needs time to register the App Attest key with Apple servers. The system retries up to 3 times with exponential backoff.
+`ensureHardwareSigningKey()` — create or reuse EC P-256 key in Secure Enclave /
+StrongBox/TEE, user-verification bound.
 
-**File:** `vrc-hardware-signing.ts` → `preWarmAttestation()`
+### Step 3: Attestation pre-warm (first install)
 
-### Step 4: VRC Content Preparation
-The VRC credential content (without `evidence` and `proof` blocks) is serialized to JSON. This is what gets signed.
+iOS App Attest registration can need retries (`preWarmAttestation()`).
 
-### Step 5: Hardware Signing
-Content is passed to native layer, which:
-1. Triggers biometric prompt (Face ID / Touch ID / Fingerprint)
-2. Upon successful biometric, signs with hardware key
-3. Returns DER-encoded ECDSA signature
+### Step 4: Content to sign
 
-**Native Files:**
-- iOS: `Attestation.mm` → `signWithHardwareBiometricAuth`
-- Android: `AttestationModule.kt` → `signWithHardwareBiometricAuth`
+VRC JSON **without** `evidence` / Credo `proof` is hashed/serialized; native
+signing returns DER ECDSA (Android) or App Attest assertion material (iOS), plus
+`signedContentHash` for cross-platform verify.
 
-### Step 6: Attestation Retrieval
-Certificate chain is fetched from platform:
-- **iOS:** App Attest provides CBOR attestation object containing certificate chain
-- **Android:** KeyStore provides certificate chain directly
+### Step 5: Evidence block
 
-**File:** `EvidenceBuilder.ts` → `getOrFetchAttestation()`
-
-### Step 7: Evidence Block Construction
-All components assembled into W3C-compliant evidence block:
+`EvidenceBuilder.buildEvidenceFromSignature()` — current shape (passcode example
+from real-device E2E):
 
 ```json
 {
   "id": "urn:uuid:...",
-  "type": ["BiometricAttestation", "HardwareKeyAttestation"],
-  "created": "2024-01-15T10:30:00Z",
-  "biometricMethod": {
-    "type": "FaceID",
+  "type": ["DeviceAuthentication", "HardwareKeyAttestation"],
+  "created": "2026-07-13T23:47:53.516Z",
+  "authenticationMethod": {
+    "type": "DevicePasscode",
     "authenticatorType": "platform",
     "userVerification": "required"
   },
@@ -126,198 +120,162 @@ All components assembled into W3C-compliant evidence block:
     "platform": "ios",
     "keyType": "EC-P256",
     "algorithm": "ECDSA-SHA256",
-    "publicKey": "BASE64_PUBLIC_KEY"
+    "publicKey": "BASE64..."
   },
   "attestation": {
     "format": "apple-appattest-v1",
-    "certificateChain": ["LEAF_CERT_PEM", "INTERMEDIATE_PEM", "ROOT_PEM"]
+    "certificateChain": ["LEAF_PEM", "CA_PEM"]
   },
   "signature": {
-    "value": "BASE64_SIGNATURE",
-    "algorithm": "ECDSA-SHA256"
+    "value": "BASE64...",
+    "algorithm": "ECDSA-SHA256",
+    "signedContentHash": "BASE64..."
   }
 }
 ```
 
----
+Biometric path uses `type: ["BiometricAttestation", "HardwareKeyAttestation"]` and
+an equivalent `authenticationMethod` / legacy `biometricMethod`.
 
-## Verification Flow (When Receiving a VRC)
+### Step 6: Offer over DIDComm
 
-Verification is a **2-step process**. The system logs these as `1/2` and `2/2`.
-
-### Step 1/2: Certificate Chain Trust Anchor
-
-**File:** `CertificateVerifier.ts` → `validateChainTrustAnchor()`
-
-**What IS implemented:**
-- ✅ Structure validation (non-empty, valid PEM format)
-- ✅ Trust anchor check via string comparison to known Apple/Google roots
-- ✅ Google serial pattern matching (handles certificate rotations)
-
-**What is NOT implemented (requires X.509 library like node-forge or pkijs):**
-- ❌ Full cryptographic chain validation (each cert signed by parent)
-- ❌ Certificate expiry validation
-- ❌ Public key extraction from leaf certificate
-
-### Step 2/2: Signature Verification
-
-**File:** `BiometricSignatureVerifier.ts` → `verifySignature()`
-
-**What IS implemented:**
-- ✅ ECDSA-SHA256 verification using `@noble/curves` library
-- ✅ DER-to-compact signature conversion
-- ✅ Multiple public key format handling (uncompressed, compressed, SPKI)
-- ✅ Graceful fallback when crypto library unavailable (Metro bundler issues)
-
-### What About Public Key Match?
-
-**NOT VERIFIED** - The system trusts that Apple/Google verified the public key during attestation.
-
-When the certificate chain root is trusted (Step 1/2 passes), we rely on the fact that:
-- Apple App Attest verified the key belongs to the attested device
-- Android Key Attestation verified the key is in genuine hardware
-
-Actual cryptographic comparison of the evidence public key vs the leaf certificate public key would require an X.509 parsing library. This is tracked as technical debt.
+Credo signs the credential with **`Ed25519Signature2018`** (relationship DID) and
+sends the offer. Hardware evidence is already on the credential object.
 
 ---
 
-## Verification Levels
+## Verification Flow (holder, when receiving a VRC)
 
-The system reports **how** verification was performed:
+Single path: `HardwareSignatureVerifier.verifyEvidence()` → native
+`verifyHardwareEvidence(...)`.
 
-| Level | Meaning | When Used |
-|-------|---------|-----------|
-| `cryptographic` | Full ECDSA signature verification | @noble/curves loaded successfully |
-| `attestation_trust` | Cert chain valid, but crypto unavailable | Metro bundler failed to load crypto |
-| `platform_trust` | iOS Secure Enclave attestation trusted | No cert chain, but iOS attestation format |
-| `none` | Verification failed | Chain invalid or signature mismatch |
+Native checks (both platforms where applicable):
+
+1. Parse PEMs → X.509 certificates  
+2. Full chain validation (signatures, expiry, constraints) against platform /
+   embedded Google roots  
+3. Evidence public key matches leaf certificate  
+4. Signature or App Attest assertion verifies over `signedContentHash` / content  
+5. Android: attestation extension fields; CRL where implemented  
+
+### Verification levels (current)
+
+| Level | Meaning |
+|-------|---------|
+| `cryptographic` | Native verification returned `valid=true` |
+| `none` | Native verification failed |
+
+(Older docs mentioned `attestation_trust` / `platform_trust` JS fallbacks — those
+paths are gone; native crypto is always available on device builds.)
+
+UI: Credential Offer shows **Secure Exchange** (`AttestationVerified`) when peer
+evidence verifies.
 
 ---
 
-## Trusted Root Certificates
+## Google attestation roots
 
-### iOS (Apple)
-- **Apple Root CA - G3** (primary root)
-- **Apple App Attestation CA 1** (intermediate - chains often end here)
+Embedded in `GoogleAttestationRoots.kt` (from bifold PR #23 / issue #20 work):
 
-### Android (Google)
-- **Google Hardware Attestation Root**
-- Serial number: `f92009e853b6b045`
+- Legacy RSA Google Hardware Attestation Root  
+- Re-signed RSA root  
+- RKP ECDSA root  
 
-**Note:** Google rotates root certificates while keeping the same serial number. The system uses serial pattern matching as a fallback.
-
-**File:** `trustedRoots.ts`
+Validation uses `GoogleAttestationChainValidator` — **only** recognized Google
+roots as trust anchors (no “self-as-anchor”). The historical single hard-coded
+RSA root expired **2026-05-24**; multi-root embedding is required for new devices
+and post-rotation chains.
 
 ---
 
-## Known Limitations & Technical Debt
+## Known limitations
 
-### 1. No Full X.509 Parsing
-Certificate verification is limited to **trust anchor matching only**. We check if the root certificate matches known Apple/Google roots, but we do NOT:
-- Verify each certificate's signature against its parent
-- Check certificate expiry dates
-- Extract public keys from certificates
-
-Full cryptographic chain verification would require a library like `node-forge` or `pkijs`.
-
-### 2. Public Key Match Not Verified
-We trust that Apple/Google verified the public key during attestation. We do NOT:
-- Parse the leaf certificate to extract its public key
-- Compare the extracted key with the evidence public key
-
-This means a sophisticated attacker could theoretically substitute a different public key in the evidence block. However, they would still need to produce a valid signature, which is impossible without access to the private key in hardware.
-
-### 3. Metro Bundler Issues
-`@noble/curves` uses ESM subpath exports which Metro struggles with. Workaround:
-- Lazy loading with multiple require paths
-- Fallback to trust-based verification if crypto unavailable
-
-### 4. Google Root Certificate Rotation
-Hard-coded root expires **May 24, 2026**. Current mitigation:
-- Serial number pattern matching (handles rotations with same serial)
-- **TODO:** Use Google's attestation status API for revocation checks
-
-See `CERTIFICATE_VERIFICATION_IMPROVEMENTS.md` for detailed improvement plan.
+1. **Preference default off** — forgotten toggle ⇒ no evidence, no Secure Exchange.  
+2. **Simulators** — cannot prove real hardware attestation; use `yarn e2e:vrc:devices`.  
+3. **Log noise** — some JS paths may still warn about an expired *legacy* root copy;
+   native multi-root validation is authoritative.  
+4. **VC proof suite** — hardware evidence ≠ Data Integrity cryptosuite; see
+   [`CRYPTO_SUITE_FOLLOWUP.md`](./CRYPTO_SUITE_FOLLOWUP.md).
+5. **Older Android devices past the legacy root's expiry (2026-05-24)** —
+   observed 2026-08-04 on a real-device `yarn e2e:vrc:witnessed:android-only`
+   run: a Galaxy S20+ (Android, provisioned pre-RKP) issued a VRC whose
+   hardware evidence the witness accepted (its check is a plain signature
+   verify, not a chain/date check) but the **receiving** phone's local
+   `GoogleAttestationChainValidator` rejected — "Hardware Verification Issue"
+   instead of "Secure Exchange" — while the same run's Galaxy S25+ (RKP root,
+   valid to 2035) verified cleanly both ways. `PKIXParameters` validates
+   against the *current* date with no override, so any chain still
+   terminating at the now-expired `LEGACY_RSA_ROOT_PEM` will keep failing this
+   check going forward, regardless of retries — this isn't flaky, it's the
+   root reaching its documented end of life. Whether Google is serving this
+   specific device class a re-signed chain under `RESIGNED_RSA_ROOT_PEM`
+   (expires 2042) wasn't confirmed here — the E2E harness omits raw PEMs from
+   its credential dumps (`[VRC:IssuedCredentialJSON]`, by design) so the
+   actual chain wasn't inspected — only the app's local `valid=false` verdict.
+   An older factory-keyed device may now be permanently unable to pass the
+   receiving side's *local* re-validation — but that's a fact about the
+   physical device, not the app's exchange flow, which still completed
+   correctly (VRC issued and accepted, VWC issued by the witness). The E2E
+   harness (`acceptCredentialOfferFromChat` / `assertContactShields` in
+   `e2e/lib/flows.js`) therefore treats the "Hardware Verification Issue"
+   (`AttestationWarning`) banner as an accepted outcome, not a failure — only
+   evidence never showing up at all still fails the run. Prefer a device
+   provisioned after Google's RKP rollout (~2022+) if you specifically need
+   to exercise the full "Secure Exchange" verified path.
 
 ---
 
 ## File Reference
 
-| File | Location | Purpose |
-|------|----------|---------|
-| `vrc-manager.ts` | `core/src/modules/vrc/` | VRC lifecycle management |
-| `vrc-biometric.ts` | `core/src/modules/vrc/` | Biometric UI flow orchestration |
-| `vrc-hardware-signing.ts` | `core/src/modules/vrc/` | Key creation and signing |
-| `EvidenceBuilder.ts` | `core/src/modules/vrc/services/` | W3C evidence block construction |
-| `BiometricSignatureVerifier.ts` | `core/src/modules/vrc/services/` | Signature verification (ECDSA) |
-| `CertificateVerifier.ts` | `core/src/modules/vrc/services/` | Trust anchor validation |
-| `trustedRoots.ts` | `core/src/modules/vrc/services/` | Hard-coded Apple/Google root certs |
-| `Attestation.mm` | `react-native-attestation/ios/` | iOS native (Secure Enclave, App Attest) |
-| `AttestationModule.kt` | `react-native-attestation/android/` | Android native (KeyStore, StrongBox) |
+| File | Purpose |
+|------|---------|
+| `core/src/modules/vrc/vrc-manager.ts` | Issue/offer; preference gate; offer `proofType` |
+| `core/src/modules/vrc/vrc-biometric.ts` | Confirm UI + signing orchestration |
+| `core/src/modules/vrc/vrc-hardware-signing.ts` | Key create / sign |
+| `core/src/modules/vrc/services/EvidenceBuilder.ts` | Evidence assembly + attestation cache |
+| `core/src/modules/vrc/services/BiometricSignatureVerifier.ts` | JS wrapper → native verify |
+| `core/src/modules/vrc/types/evidence.ts` | Evidence TypeScript types |
+| `core/src/screens/ToggleHardwareAttestation.tsx` | Settings toggle (PIN-gated) |
+| `react-native-attestation/.../Attestation.mm` | iOS SE / App Attest / verify |
+| `react-native-attestation/.../AttestationModule.kt` | Android KeyStore / verify |
+| `react-native-attestation/.../GoogleAttestationRoots.kt` | Embedded Google roots |
+| `react-native-attestation/.../GoogleAttestationChainValidator.kt` | Android chain vs Google anchors |
 
 ---
 
 ## Log Prefixes
 
-When debugging, look for these prefixes:
-
 | Prefix | Component |
 |--------|-----------|
 | `[VRC:Sign]` | Hardware signing |
-| `[VRC:Biometric]` | Biometric flow |
+| `[VRC:Biometric]` | Confirm / auth mode |
 | `[VRC:Evidence]` | Evidence building |
-| `[VRC:Verify]` | Signature verification |
-| `[VRC:Cert]` | Certificate verification |
-| `[VRC:iOS]` | iOS native operations |
-| `[VRC:Android]` | Android native operations |
-| `[VRC:Attest]` | Attestation retrieval |
+| `[VRC:Verify]` | Native verification wrapper |
+| `[VRC:Attest]` | Attestation fetch / cache |
+| `[VRC:IssuedCredentialJSON]` | Slim credential dump (E2E; PEMs omitted) |
+| `VRC:Android` / iOS native tags | Native sign / verify |
 
 ---
 
-## Sequence Diagram: Full Signing Flow
+## Testing
 
-```
-User          Modal         JS Layer        Native Layer      Hardware
-  │             │              │                 │               │
-  │─── Tap ────→│              │                 │               │
-  │             │── Confirm ──→│                 │               │
-  │             │              │── hasKey? ─────→│               │
-  │             │              │←── yes/no ──────│               │
-  │             │              │                 │               │
-  │             │              │── createKey ───→│── generate ──→│
-  │             │              │←── publicKey ───│←─────────────│
-  │             │              │                 │               │
-  │             │              │── sign(vrc) ───→│               │
-  │             │              │                 │── biometric ─→│
-  │←────────── Face ID / Touch ID / Fingerprint ─────────────────│
-  │─────────── Approve ──────────────────────────────────────────→│
-  │             │              │                 │               │
-  │             │              │                 │←── signature ─│
-  │             │              │←── signature ───│               │
-  │             │              │                 │               │
-  │             │              │── getAttest ───→│               │
-  │             │              │←── certChain ───│               │
-  │             │              │                 │               │
-  │             │              │── buildEvidence │               │
-  │             │              │── attachToVRC ──│               │
-  │             │              │                 │               │
-  │             │←── Done ─────│                 │               │
-  │←── Success ─│              │                 │               │
+```sh
+# Simulators — VRC exchange without real hardware evidence
+yarn e2e:vrc
+
+# Real phones — attestation + Secure Exchange (attended biometrics/passcode)
+yarn e2e:vrc:devices
 ```
 
----
-
-## Security Considerations
-
-1. **Private key never leaves hardware** - Signing happens inside Secure Enclave / StrongBox
-2. **Biometric required for each signature** - Key is bound to biometric authentication
-3. **Attestation proves hardware** - Certificate chain proves key is in genuine Apple/Google hardware
-4. **Signature over canonical content** - VRC content is signed BEFORE evidence/proof attached
+Details: [`../e2e/README.md`](../e2e/README.md). Artifacts under `e2e/artifacts/`
+include attestation logcat filters and slim issued-credential JSON dumps.
 
 ---
 
-## Related Documentation
+## Security notes
 
-- `CERTIFICATE_VERIFICATION_IMPROVEMENTS.md` - Technical debt and future improvements
-- Apple App Attest: https://developer.apple.com/documentation/devicecheck/validating_apps_that_connect_to_your_server
-- Android Key Attestation: https://developer.android.com/training/articles/security-key-attestation
+1. Private key never leaves SE / StrongBox / TEE when those storages are used.  
+2. Each signature requires user verification (biometric or device credential).  
+3. Attestation chain proves platform vouchers for the hardware key.  
+4. Hardware signs VRC **content** before evidence / Credo LD proof are attached.  
+5. Receiver verifies evidence **natively** before treating the exchange as Secure.

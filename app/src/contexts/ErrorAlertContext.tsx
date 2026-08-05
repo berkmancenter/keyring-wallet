@@ -1,0 +1,137 @@
+import { AppError } from '@/errors'
+import { AppErrorModal, ErrorModalAction, ErrorModalPayload } from '@/errors/components/ErrorModal'
+import { AlertAction, showAlert } from '@/utils/alert'
+import BCLogger from '@/utils/logger'
+
+import { createContext, PropsWithChildren, useCallback, useContext, useMemo, useState } from 'react'
+
+interface ErrorModalOptions {
+  action?: ErrorModalAction
+}
+
+export interface AlertOptions {
+  /** Custom actions/buttons for the native alert */
+  actions?: AlertAction[]
+}
+
+export interface ErrorAlertContextType {
+  /**
+   * Show error via ErrorModal (default display)
+   */
+  emitErrorModal: (title: string, description: string, error: AppError, options?: ErrorModalOptions) => void
+
+  /**
+   * Show native alert with title and description
+   */
+  emitAlert: (title: string, description: string, options?: AlertOptions) => void
+}
+
+export const ErrorAlertContext = createContext<ErrorAlertContextType | null>(null)
+
+interface ErrorAlertProviderProps extends PropsWithChildren {
+  enableReport?: boolean
+}
+
+/**
+ * ErrorAlertProvider - Unified error and alert handling (ported from bc-wallet-mobile).
+ *
+ * Owns the error modal state and renders AppErrorModal directly,
+ * eliminating DeviceEventEmitter indirection.
+ *
+ * Provides a single entry point for:
+ * - Error modals (via AppErrorModal, rendered internally)
+ * - Native alerts (via React Native Alert)
+ * - Error logging (remote logger / Loki)
+ */
+export const ErrorAlertProvider = ({ children, enableReport = true }: ErrorAlertProviderProps) => {
+  const [error, setError] = useState<ErrorModalPayload | null>(null)
+  const [errorKey, setErrorKey] = useState(0)
+  const [errorModalOptions, setErrorModalOptions] = useState<ErrorModalOptions | null>(null)
+
+  /**
+   * Show error via ErrorModal
+   *
+   * @param title - The title to display in the error modal
+   * @param description - The description/message to display in the error modal
+   * @param error - The AppError instance containing error details
+   * @returns void
+   */
+  const emitErrorModal = useCallback(
+    (title: string, description: string, error: AppError, options?: ErrorModalOptions): void => {
+      setErrorModalOptions(options ?? null)
+
+      BCLogger.error(`[${error.code}] Error modal emitted`, {
+        title,
+        description,
+        ...error.toJSON(),
+      })
+
+      setError({
+        title,
+        description,
+        message: error.fullMessage,
+        code: error.statusCode,
+        appEvent: error.appEvent,
+        stack: error.stack,
+        cause: error.cause,
+        screen: error.screen,
+        url: error.url,
+        method: error.method,
+      })
+      setErrorKey((prev) => prev + 1)
+    },
+    []
+  )
+
+  /**
+   * Show native alert with title and description
+   */
+  const emitAlert = useCallback((title: string, description: string, options?: AlertOptions): void => {
+    showAlert(title, description, options?.actions)
+  }, [])
+
+  /**
+   * Dismiss the currently displayed error modal
+   */
+  const dismissErrorModal = useCallback((): void => {
+    setError(null)
+    setErrorModalOptions(null)
+  }, [])
+
+  const value: ErrorAlertContextType = useMemo(
+    () => ({
+      emitErrorModal,
+      emitAlert,
+    }),
+    [emitErrorModal, emitAlert]
+  )
+
+  return (
+    <ErrorAlertContext.Provider value={value}>
+      {children}
+      <AppErrorModal
+        error={error}
+        errorKey={errorKey}
+        onDismiss={dismissErrorModal}
+        enableReport={enableReport}
+        action={errorModalOptions?.action}
+      />
+    </ErrorAlertContext.Provider>
+  )
+}
+
+/**
+ * Hook to access error and alert functionality
+ *
+ * @returns Error alert context with methods: emitErrorModal, emitAlert
+ * @throws Error if used outside of ErrorAlertProvider
+ */
+export const useErrorAlert = (): ErrorAlertContextType => {
+  const context = useContext(ErrorAlertContext)
+
+  if (!context) {
+    throw new Error('useErrorAlert must be used within an ErrorAlertProvider')
+  }
+
+  return context
+}

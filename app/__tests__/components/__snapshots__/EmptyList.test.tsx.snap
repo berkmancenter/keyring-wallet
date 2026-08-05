@@ -120,9 +120,7 @@ exports[`EmptyList Component renders correctly 1`] = `
       accessible={true}
       collapsable={false}
       focusable={true}
-      onBlur={[Function]}
       onClick={[Function]}
-      onFocus={[Function]}
       onResponderGrant={[Function]}
       onResponderMove={[Function]}
       onResponderRelease={[Function]}
@@ -130,29 +128,22 @@ exports[`EmptyList Component renders correctly 1`] = `
       onResponderTerminationRequest={[Function]}
       onStartShouldSetResponder={[Function]}
       style={
-        [
-          {
-            "overflow": "hidden",
+        {
+          "backgroundColor": "#622C62",
+          "borderRadius": 10,
+          "elevation": 4,
+          "opacity": 1,
+          "padding": 16,
+          "paddingHorizontal": 16,
+          "paddingVertical": 12,
+          "shadowColor": "#000000",
+          "shadowOffset": {
+            "height": 4,
+            "width": 0,
           },
-          {
-            "backgroundColor": "#622C62",
-            "borderRadius": 10,
-            "elevation": 4,
-            "padding": 16,
-            "paddingHorizontal": 16,
-            "paddingVertical": 12,
-            "shadowColor": "#000000",
-            "shadowOffset": {
-              "height": 4,
-              "width": 0,
-            },
-            "shadowOpacity": 0.15,
-            "shadowRadius": 4,
-          },
-          false,
-          false,
-          false,
-        ]
+          "shadowOpacity": 0.15,
+          "shadowRadius": 4,
+        }
       }
       testID="com.ariesbifold:id/AddFirstCredential"
     >
@@ -184,7 +175,6 @@ exports[`EmptyList Component renders correctly 1`] = `
                   "lineHeight": 24,
                   "textAlign": "center",
                 },
-                false,
                 false,
                 false,
               ],

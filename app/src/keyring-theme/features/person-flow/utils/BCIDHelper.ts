@@ -52,7 +52,7 @@ export const connectToIASAgent = async (
 ): Promise<WellKnownAgentDetails> => {
   // connect to the agent, this will re-format the legacy invite
   // until we have OOB working in ACA-py.
-  const invite = await agent.oob.parseInvitation(iasAgentInviteUrl)
+  const invite = await agent.modules.didcomm.oob.parseInvitation(iasAgentInviteUrl)
 
   if (!invite) {
     throw new BifoldError(t('Error.Title2020'), t('Error.Message2020'), t('Error.NoMessage'), ErrorCodes.BadInvitation)
@@ -60,7 +60,7 @@ export const connectToIASAgent = async (
 
   await removeExistingInvitationsById(agent, invite.id)
 
-  const record = await agent.oob.receiveInvitation(invite)
+  const record = await agent.modules.didcomm.oob.receiveInvitation(invite)
 
   if (!record) {
     throw new BifoldError(

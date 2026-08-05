@@ -3,7 +3,6 @@ import {
   AnimatedComponentsProvider,
   AuthProvider,
   ContainerProvider,
-  ErrorBoundaryWrapper,
   ErrorModal,
   initLanguages,
   initStoredLanguage,
@@ -27,8 +26,9 @@ import Toast from 'react-native-toast-message'
 import { container } from 'tsyringe'
 
 import Root from '@/Root'
-import { BCSCApiClientProvider } from '@/bcsc-theme/contexts/BCSCApiClientContext'
 import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/constants'
+import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
+import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
 import { initialState, reducer } from '@/store'
 import { themes } from '@/theme'
@@ -70,30 +70,30 @@ const App = () => {
     <ErrorBoundaryWrapper logger={BCLogger}>
       <ContainerProvider value={bcwContainer}>
         <StoreProvider initialState={initialState} reducer={reducer}>
-          <BCSCApiClientProvider>
-            <ThemeProvider themes={themes} defaultThemeName={KeyRingThemeNames.KeyRing}>
-              <NavContainer navigationRef={navigationRef}>
-                <AnimatedComponentsProvider value={animatedComponents}>
-                  <AuthProvider>
-                    <NetworkProvider>
-                      <ErrorModal enableReport />
-                      <WitnessErrorDialogContainer />
-                      <WebDisplay
-                        destinationUrl={surveyMonkeyUrl}
-                        exitUrl={surveyMonkeyExitUrl}
-                        visible={surveyVisible}
-                        onClose={() => setSurveyVisible(false)}
-                      />
-                      <TourProvider tours={tours} overlayColor={'black'} overlayOpacity={0.7}>
+          <ThemeProvider themes={themes} defaultThemeName={KeyRingThemeNames.KeyRing}>
+            <NavContainer navigationRef={navigationRef}>
+              <AnimatedComponentsProvider value={animatedComponents}>
+                <AuthProvider>
+                  <NetworkProvider>
+                    <ErrorModal enableReport />
+                    <WitnessErrorDialogContainer />
+                    <WebDisplay
+                      destinationUrl={surveyMonkeyUrl}
+                      exitUrl={surveyMonkeyExitUrl}
+                      visible={surveyVisible}
+                      onClose={() => setSurveyVisible(false)}
+                    />
+                    <TourProvider tours={tours} overlayColor={'black'} overlayOpacity={0.7}>
+                      <ErrorAlertProvider enableReport>
                         <Root />
-                      </TourProvider>
-                      <Toast topOffset={15} config={toastConfig} />
-                    </NetworkProvider>
-                  </AuthProvider>
-                </AnimatedComponentsProvider>
-              </NavContainer>
-            </ThemeProvider>
-          </BCSCApiClientProvider>
+                      </ErrorAlertProvider>
+                    </TourProvider>
+                    <Toast topOffset={15} config={toastConfig} />
+                  </NetworkProvider>
+                </AuthProvider>
+              </AnimatedComponentsProvider>
+            </NavContainer>
+          </ThemeProvider>
         </StoreProvider>
       </ContainerProvider>
     </ErrorBoundaryWrapper>

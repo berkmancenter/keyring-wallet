@@ -14,8 +14,8 @@ import {
   useStore,
   useTheme,
 } from '@bifold/core'
-import { CredentialState } from '@credo-ts/core'
-import { useAgent, useCredentialByState } from '@credo-ts/react-hooks'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
+import { useAgent, useCredentialByState } from '@bifold/react-hooks'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -38,9 +38,9 @@ const PersonCredentialLoading: React.FC<PersonProps> = ({ navigation }) => {
   const { ColorPalette, TextTheme, Spacing } = useTheme()
   const [store] = useStore<BCState>()
   const [remoteAgentDetails, setRemoteAgentDetails] = useState<WellKnownAgentDetails | undefined>()
-  const timer = useRef<NodeJS.Timeout>()
+  const timer = useRef<NodeJS.Timeout | undefined>(undefined)
   const [logger] = useServices([TOKENS.UTIL_LOGGER])
-  const receivedCredentialOffers = useCredentialByState(CredentialState.OfferReceived)
+  const receivedCredentialOffers = useCredentialByState(DidCommCredentialState.OfferReceived)
   const [stepText, setStepText] = useState<string>('Starting process...')
   const [progressPercent, setProgressPercent] = useState(0)
   const { agent } = useAgent()
@@ -73,7 +73,9 @@ const PersonCredentialLoading: React.FC<PersonProps> = ({ navigation }) => {
 
   const styles = StyleSheet.create({
     container: {
-      height: '100%',
+      // flex (not height:'100%') so the controls below the ScrollView keep their space
+      // (safe-area-context 5.x sizes SafeAreaView differently than 4.x did)
+      flex: 1,
       backgroundColor: ColorPalette.brand.modalPrimaryBackground,
       padding: 20,
     },
@@ -222,7 +224,7 @@ const PersonCredentialLoading: React.FC<PersonProps> = ({ navigation }) => {
   useEffect(() => {
     for (const credential of receivedCredentialOffers) {
       if (
-        credential.state == CredentialState.OfferReceived &&
+        credential.state == DidCommCredentialState.OfferReceived &&
         credential.connectionId === remoteAgentDetails?.connectionId
       ) {
         goToCredentialOffer(credential.id)
