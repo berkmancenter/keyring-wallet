@@ -1,7 +1,7 @@
 # Recasting VRC Credential Exchanges as Trust Tasks — Draft
 
 **Status:** Draft for discussion. Not a commitment to implement.
-**Date:** 2026-08-04 · revised 2026-08-05 — §8 added; §4 Layer A re-modelled on the reciprocal membership exchange with `vrc/relationship/issue` added, after surveying the OpenVTC reference implementation and every VTI branch (§8.5); §9 sequencing revised twice — against the parent plan, then to move **B2 to the front and drop B1** (§9.1–9.2). **Third pass:** re-checked against [[DTG-CRED]] as authoritative — Layer C's witness tasks corrected to *qualify* under Trust Task Context Binding, the RCard-shares-a-task design withdrawn, outcome-evidence retention added as new work, and §8.5 re-anchored on documentary delegation. **Fourth pass:** §9 reworked again — **B2 split** into an issuance half (dropped: misaligned with the DTG credential idiom and unimplemented upstream) and a presentation half (adopted, and now the pipeline validator); spec authoring restored to the front; the `vrc/relationship/issue` boundary settled on idiom rather than topology (§9.4).
+**Date:** 2026-08-04 · revised 2026-08-05 — §8 added; §4 Layer A re-modelled on the reciprocal membership exchange with `vrc/relationship/issue` added, after surveying the OpenVTC reference implementation and every VTI branch (§8.5); §9 sequencing revised twice — against the parent plan, then to move **B2 to the front and drop B1** (§9.1–9.2). **Third pass:** re-checked against [[DTG-CRED]] as authoritative — Layer C's witness tasks corrected to *qualify* under Trust Task Context Binding, the RCard-shares-a-task design withdrawn, outcome-evidence retention added as new work, and §8.5 re-anchored on documentary delegation. **Fifth pass:** resolved a contradiction between §4 and §5 over what the VWC's `taskContext` names — the witness ceremony is now modelled as its own thread nested in the relationship exchange and linked by a payload `exchangeThreadId`, since only `witness/session/submit#response` attests the witnessing. **Fourth pass:** §9 reworked again — **B2 split** into an issuance half (dropped: misaligned with the DTG credential idiom and unimplemented upstream) and a presentation half (adopted, and now the pipeline validator); spec authoring restored to the front; the `vrc/relationship/issue` boundary settled on idiom rather than topology (§9.4).
 **Premise:** we are moving to a new foundation and **updating Credo to support these flows**, rather than shaping the flows to fit Credo. Where this document weighs a design against "what Credo already does", that is a migration cost, not a constraint.
 **Scope:** `bifold/packages/core/src/modules/vrc`, `bifold/packages/witness-server`
 **Parent:** [`openvtc-integration-plan.md`](../openvtc-integration-plan.md) — this document is item **§7.6** of its contribution roadmap ("Witnessed-exchange Trust Task spec") in detail.
@@ -190,7 +190,7 @@ Proposed private specs:
 | Slug | Replaces | Declarations of note |
 |---|---|---|
 | `witness/announce/0.1` | `witness-announcement` | **`bearer: true`** (§4.8.3) — a broadcast attestation with no intended audience. The only one of these that should be bearer. Not a `taskContext` target, so the qualifying rules do not apply. |
-| `witness/session/0.1` + `#response` | `session-request` → `session-challenge` | The request/response convention fits exactly; `threadId` replaces ad-hoc correlation. **This document's `id` is the value the VWCs carry as `taskContext`** (see below) — it opens the ceremony. `proof: REQUIRED` on `#response`. |
+| `witness/session/0.1` + `#response` | `session-request` → `session-challenge` | **Opens the ceremony thread** — its `id` is that thread's identifier and the value VWCs carry as `taskContext` (§4, "Two threads"). Payload carries `exchangeThreadId` linking back to the relationship exchange. `proof: REQUIRED` on `#response`. |
 | `witness/session/submit/0.1` **+ `#response`** | `submit-presentation` | `exposure: { discloses: secret, actsAsSubject: true }` — a signed VP of the holder's own VRC. **`#response` and `proof: REQUIRED` are mandatory, not optional**: this is the leg whose terminal state the VWC's `taskContext` refers to. The `#response` payload SHOULD carry the issued VWC reference so success is observable in-band. |
 | `witness/reporting-did/register/0.1` | `reporting-did-registration` | `sideEffects: mutating`. Not a `taskContext` target. |
 | `witness/credential/verify/0.1` + `#response` | `verify-credential` / `-response` | `sideEffects: none` |
@@ -239,6 +239,53 @@ outcome evidence. Until the editor's proposed changes land — error responses
 inheriting the originating specification's proof requirement, and error
 responses naming the originating `type` and `id` — the failure branch is
 diagnostic only.
+
+#### Two threads, not one — the witness ceremony is its own exchange
+
+*Resolved 2026-08-05. Earlier revisions said the relationship exchange and the
+witness ceremony shared a single thread opened by `vrc/relationship/propose`,
+while this section said the VWC's `taskContext` was `witness/session`'s `id`.
+Those cannot both hold. This is the resolution.*
+
+**The witness ceremony opens its own thread.** `witness/session` is its
+initiating document; that document's `id` is the ceremony thread's identifier
+and the value every VWC from the ceremony carries as `taskContext`.
+
+The deciding argument is what the credential is actually attesting.
+[[DTG-CRED]] defines `taskContext` as naming "the trust task exchange **in which
+the witnessing occurred**", and Outcome Interpretability requires evidence that
+*that* exchange reached its terminal state. A `vrc/relationship/propose#response`
+proves the relationship exchange concluded — it says nothing about whether a
+witness observed anything. Only `witness/session/submit#response` attests the
+witnessing. If `taskContext` pointed at the exchange thread, the matching
+outcome evidence a verifier collected would be evidence of the wrong thing.
+
+**Linking the two threads is our job, not the framework's.** The Trust Tasks
+framework defines no parent-thread member — there is no `pthid` equivalent, and
+`threadId` (§4.9) is a flat correlator with no nesting semantics. So the link
+lives where we control it: `witness/session`'s **payload** carries an
+`exchangeThreadId` member naming the relationship exchange the ceremony
+witnesses.
+
+| | Relationship exchange | Witness ceremony |
+|---|---|---|
+| Opened by | `vrc/relationship/propose` | `witness/session` |
+| Thread identifier | that document's `id` | that document's `id` |
+| Terminal evidence | `vrc/relationship/propose#response` | `witness/session/submit#response` |
+| Carries `taskContext`? | no | **yes** — this is the VWC's referent |
+| Link | — | `payload.exchangeThreadId` → the exchange thread |
+
+**Consequences worth noting:**
+
+- A VWC and the VRC it attests belong to *different* threads. That is correct:
+  the VRC is durable and stands alone ([[DTG-CRED]]'s credential/artifact test),
+  while the witnessing is a bounded ceremony with its own terminal state.
+- The `digest` member of the VWC — `sha256:` over the JCS-canonicalized VRC —
+  is what binds the credential to the specific VRC, and it does so
+  cryptographically rather than by thread. The two-thread model does not weaken
+  that binding; it is the reason we do not need thread identity to carry it.
+- Retention (below) is scoped to the **ceremony** thread. We persist
+  `witness/session/submit#response`, not the relationship exchange's response.
 
 #### Layer C carries a new implementation requirement: outcome-evidence retention
 
@@ -362,9 +409,11 @@ flows to fit Credo.** The task family should therefore express the exchange we
 want, and the Credo layer follows it.
 
 That also makes the family self-contained — `propose` → `issue` → receipt is a
-complete exchange on one `threadId`, with no leg that only exists inside another
-protocol's state machine. It is the same shape as the membership exchange's
-delivery leg, and it reuses the same receipt component.
+complete exchange on the **exchange thread**, with no leg that only exists inside
+another protocol's state machine. (The witness ceremony, when present, is a
+separate nested thread rather than a leg of this one — see §4, "Two threads".)
+It is the same shape as the membership exchange's delivery leg, and it reuses
+the same receipt component.
 
 This task does not compete with `credential-exchange/issue`: the two serve
 different credential kinds, not different negotiation styles. §9.4 settles the
@@ -486,25 +535,38 @@ credential's `evidence` property. Not an exchange, nothing to recast.
 
 ## 5. The unified exchange
 
-One `threadId`, opened by the first document and carried by every subsequent
-one:
+**Two threads, linked by payload** — the relationship exchange, and (when
+witnessed) a nested witness ceremony. §4's "Two threads" subsection gives the
+reasoning; this is the shape.
 
 ```
+EXCHANGE THREAD  (id = vrc/relationship/propose.id)
+
 vrc/relationship/propose            ─┐  mode + relationship DID + capabilities
   (trust-task-discovery)             │  optional capability probe
 vrc/relationship/propose#response    │  counterparty's relationship DID + accept
                                      │
-witness/session → #response          │  challenge, if witnessed
-witness/session/submit → #response   │  VP bound to challenge; #response is
-                                     │  MANDATORY — it is the outcome evidence
+    ┌────────────────────────────────┼─── if witnessed ──────────────────┐
+    │ CEREMONY THREAD (id = witness/session.id)  ← the VWC's taskContext │
+    │                                │                                   │
+    │ witness/session → #response    │  challenge; payload carries       │
+    │                                │  exchangeThreadId → this exchange │
+    │ witness/session/submit         │  VP bound to challenge            │
+    │   → #response                  │  MANDATORY — the outcome evidence │
+    │                                │  a VWC presentation must ship     │
+    └────────────────────────────────┼───────────────────────────────────┘
+                                     │
 vrc/relationship/issue → #response   │  the signed VRC, both directions
                                     ─┘  receipt closes each leg
 ```
 
+An unwitnessed exchange is the outer thread alone — `propose` → `issue`, with
+the ceremony block simply absent. Witnessing is additive, never a precondition.
+
 Failures anywhere are `trust-task-error` with `retryable` / `retryAfter`, and —
 on any leg a VWC's `taskContext` points at — carrying `proof`.
 
-**The thread is also the VWC's `taskContext`** — and we anchor it on the
+**The ceremony thread's identifier is the VWC's `taskContext`** — anchored on the
 **initiating document's `id`**, not on `threadId`.
 
 [[DTG-CRED]] currently defines `taskContext` as carrying the `threadId`. The
