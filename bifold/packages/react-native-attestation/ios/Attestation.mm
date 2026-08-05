@@ -459,6 +459,28 @@ RCT_EXPORT_METHOD(signWithHardwareBiometricAuth:(NSArray<NSNumber *> *)dataToSig
     }];
 }
 
+RCT_EXPORT_METHOD(getAppStoreReceipt:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject) {
+    NSURL *appStoreReceiptURL = [[NSBundle mainBundle] appStoreReceiptURL];
+    NSString *missingReceiptMessage = @"No App Store receipt is available.";
+    
+    if (appStoreReceiptURL && [[NSFileManager defaultManager] fileExistsAtPath:[appStoreReceiptURL path]]) {
+        NSError *error;
+        NSData *receiptData = [NSData dataWithContentsOfURL:appStoreReceiptURL 
+                                                   options:NSDataReadingMappedIfSafe 
+                                                     error:&error];
+        if (receiptData && !error) {
+            NSString *receiptString = [receiptData base64EncodedStringWithOptions:0];
+            resolve(receiptString);
+        } else {
+            NSString *readErrorMessage = @"Failed to read App Store receipt.";
+            reject(@"receipt_error", readErrorMessage, errorWithReason(readErrorMessage, 24));
+        }
+    } else {
+        reject(@"receipt_missing", missingReceiptMessage, errorWithReason(missingReceiptMessage, 23));
+    }
+}
+
 RCT_EXPORT_METHOD(deleteHardwareSigningKey:(RCTPromiseResolveBlock)resolve
                   reject:(RCTPromiseRejectBlock)reject)
 {
@@ -896,16 +918,10 @@ static NSString *const APPLE_ROOT_CA_G3_PEM =
 "6BgD56KyKA==\n"
 "-----END CERTIFICATE-----";
 
-/** Google Hardware Attestation Root CA — from Google's attestation docs
- *  Subject: serialNumber=f92009e853b6b045
- *  Valid: 2016-05-26 to 2026-05-24
- *  Key: RSA 4096, self-signed
- *
- *  TODO(P0): Replace before expiry. Google is transitioning to Remote Key Provisioning (RKP)
- *  with short-lived certs. Monitor https://developer.android.com/privacy-and-security/security-key-attestation
- *  for an updated root or RKP migration guidance.
+/** Google attestation roots — https://android.googleapis.com/attestation/root
+ *  Legacy RSA (factory, exp 2026-05-24), re-signed RSA (exp 2042), RKP ECDSA P-384 (exp 2035).
  */
-static NSString *const GOOGLE_HARDWARE_ATTESTATION_ROOT_PEM =
+static NSString *const GOOGLE_LEGACY_RSA_ROOT_PEM =
 @"-----BEGIN CERTIFICATE-----\n"
 "MIIFYDCCA0igAwIBAgIJAOj6GWMU0voYMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV\n"
 "BAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMTYwNTI2MTY0NTUyWhcNMjYwNTI0MTY0\n"
@@ -937,6 +953,73 @@ static NSString *const GOOGLE_HARDWARE_ATTESTATION_ROOT_PEM =
 "MDSXYrB4I4WHXPGjxhZuCuPBLTdOLU8YRvMYdEvYebWHMpvwGCF6bAx3JBpIeOQ1\n"
 "wDB5y0USicV3YgYGmi+NZfhA4URSh77Yd6uuJOJENRaNVTzk\n"
 "-----END CERTIFICATE-----";
+
+static NSString *const GOOGLE_RESIGNED_RSA_ROOT_PEM =
+@"-----BEGIN CERTIFICATE-----\n"
+"MIIFHDCCAwSgAwIBAgIJAPHBcqaZ6vUdMA0GCSqGSIb3DQEBCwUAMBsxGTAXBgNV\n"
+"BAUTEGY5MjAwOWU4NTNiNmIwNDUwHhcNMjIwMzIwMTgwNzQ4WhcNNDIwMzE1MTgw\n"
+"NzQ4WjAbMRkwFwYDVQQFExBmOTIwMDllODUzYjZiMDQ1MIICIjANBgkqhkiG9w0B\n"
+"AQEFAAOCAg8AMIICCgKCAgEAr7bHgiuxpwHsK7Qui8xUFmOr75gvMsd/dTEDDJdS\n"
+"Sxtf6An7xyqpRR90PL2abxM1dEqlXnf2tqw1Ne4Xwl5jlRfdnJLmN0pTy/4lj4/7\n"
+"tv0Sk3iiKkypnEUtR6WfMgH0QZfKHM1+di+y9TFRtv6y//0rb+T+W8a9nsNL/ggj\n"
+"nar86461qO0rOs2cXjp3kOG1FEJ5MVmFmBGtnrKpa73XpXyTqRxB/M0n1n/W9nGq\n"
+"C4FSYa04T6N5RIZGBN2z2MT5IKGbFlbC8UrW0DxW7AYImQQcHtGl/m00QLVWutHQ\n"
+"oVJYnFPlXTcHYvASLu+RhhsbDmxMgJJ0mcDpvsC4PjvB+TxywElgS70vE0XmLD+O\n"
+"JtvsBslHZvPBKCOdT0MS+tgSOIfga+z1Z1g7+DVagf7quvmag8jfPioyKvxnK/Eg\n"
+"sTUVi2ghzq8wm27ud/mIM7AY2qEORR8Go3TVB4HzWQgpZrt3i5MIlCaY504LzSRi\n"
+"igHCzAPlHws+W0rB5N+er5/2pJKnfBSDiCiFAVtCLOZ7gLiMm0jhO2B6tUXHI/+M\n"
+"RPjy02i59lINMRRev56GKtcd9qO/0kUJWdZTdA2XoS82ixPvZtXQpUpuL12ab+9E\n"
+"aDK8Z4RHJYYfCT3Q5vNAXaiWQ+8PTWm2QgBR/bkwSWc+NpUFgNPN9PvQi8WEg5Um\n"
+"AGMCAwEAAaNjMGEwHQYDVR0OBBYEFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMB8GA1Ud\n"
+"IwQYMBaAFDZh4QB8iAUJUYtEbEf/GkzJ6k8SMA8GA1UdEwEB/wQFMAMBAf8wDgYD\n"
+"VR0PAQH/BAQDAgIEMA0GCSqGSIb3DQEBCwUAA4ICAQB8cMqTllHc8U+qCrOlg3H7\n"
+"174lmaCsbo/bJ0C17JEgMLb4kvrqsXZs01U3mB/qABg/1t5Pd5AORHARs1hhqGIC\n"
+"W/nKMav574f9rZN4PC2ZlufGXb7sIdJpGiO9ctRhiLuYuly10JccUZGEHpHSYM2G\n"
+"tkgYbZba6lsCPYAAP83cyDV+1aOkTf1RCp/lM0PKvmxYN10RYsK631jrleGdcdkx\n"
+"oSK//mSQbgcWnmAEZrzHoF1/0gso1HZgIn0YLzVhLSA/iXCX4QT2h3J5z3znluKG\n"
+"1nv8NQdxei2DIIhASWfu804CA96cQKTTlaae2fweqXjdN1/v2nqOhngNyz1361mF\n"
+"mr4XmaKH/ItTwOe72NI9ZcwS1lVaCvsIkTDCEXdm9rCNPAY10iTunIHFXRh+7KPz\n"
+"lHGewCq/8TOohBRn0/NNfh7uRslOSZ/xKbN9tMBtw37Z8d2vvnXq/YWdsm1+JLVw\n"
+"n6yYD/yacNJBlwpddla8eaVMjsF6nBnIgQOf9zKSe06nSTqvgwUHosgOECZJZ1Eu\n"
+"zbH4yswbt02tKtKEFhx+v+OTge/06V+jGsqTWLsfrOCNLuA8H++z+pUENmpqnnHo\n"
+"vaI47gC+TNpkgYGkkBT6B/m/U01BuOBBTzhIlMEZq9qkDWuM2cA5kW5V3FJUcfHn\n"
+"w1IdYIg2Wxg7yHcQZemFQg==\n"
+"-----END CERTIFICATE-----";
+
+static NSString *const GOOGLE_RKP_ECDSA_ROOT_PEM =
+@"-----BEGIN CERTIFICATE-----\n"
+"MIICIjCCAaigAwIBAgIRAISp0Cl7DrWK5/8OgN52BgUwCgYIKoZIzj0EAwMwUjEc\n"
+"MBoGA1UEAwwTS2V5IEF0dGVzdGF0aW9uIENBMTEQMA4GA1UECwwHQW5kcm9pZDET\n"
+"MBEGA1UECgwKR29vZ2xlIExMQzELMAkGA1UEBhMCVVMwHhcNMjUwNzE3MjIzMjE4\n"
+"WhcNMzUwNzE1MjIzMjE4WjBSMRwwGgYDVQQDDBNLZXkgQXR0ZXN0YXRpb24gQ0Ex\n"
+"MRAwDgYDVQQLDAdBbmRyb2lkMRMwEQYDVQQKDApHb29nbGUgTExDMQswCQYDVQQG\n"
+"EwJVUzB2MBAGByqGSM49AgEGBSuBBAAiA2IABCPaI3FO3z5bBQo8cuiEas4HjqCt\n"
+"G/mLFfRT0MsIssPBEEU5Cfbt6sH5yOAxqEi5QagpU1yX4HwnGb7OtBYpDTB57uH5\n"
+"Eczm34A5FNijV3s0/f0UPl7zbJcTx6xwqMIRq6NCMEAwDwYDVR0TAQH/BAUwAwEB\n"
+"/zAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0OBBYEFFIyuyz7RkOb3NaBqQ5lZuA0QepA\n"
+"MAoGCCqGSM49BAMDA2gAMGUCMETfjPO/HwqReR2CS7p0ZWoD/LHs6hDi422opifH\n"
+"EUaYLxwGlT9SLdjkVpz0UUOR5wIxAIoGyxGKRHVTpqpGRFiJtQEOOTp/+s1GcxeY\n"
+"uR2zh/80lQyu9vAFCj6E4AXc+osmRg==\n"
+"-----END CERTIFICATE-----";
+
+static NSArray<NSString *> *googleAttestationRootPems(void) {
+    return @[
+        GOOGLE_LEGACY_RSA_ROOT_PEM,
+        GOOGLE_RESIGNED_RSA_ROOT_PEM,
+        GOOGLE_RKP_ECDSA_ROOT_PEM,
+    ];
+}
+
+static BOOL certDataMatchesAnyGoogleRoot(NSData *certDer) {
+    if (certDer == nil) return NO;
+    for (NSString *pem in googleAttestationRootPems()) {
+        NSData *rootDer = pemToDer(pem);
+        if (rootDer != nil && [rootDer isEqualToData:certDer]) {
+            return YES;
+        }
+    }
+    return NO;
+}
 
 /**
  * Extract the raw 65-byte uncompressed EC P-256 point from either raw X9.63 or SPKI-wrapped input.
@@ -1166,15 +1249,12 @@ RCT_EXPORT_METHOD(verifyHardwareEvidence:(NSArray<NSString *> *)certificateChain
                 BOOL isAndroidFormat = [attestationFormat isEqualToString:@"android-key-attestation-v3"];
 
                 if (isAndroidFormat) {
-                    // Android chain → use Google Hardware Attestation Root
-                    NSData *googleRootDer = pemToDer(GOOGLE_HARDWARE_ATTESTATION_ROOT_PEM);
-                    if (googleRootDer) {
-                        SecCertificateRef googleRoot = SecCertificateCreateWithData(NULL, (__bridge CFDataRef)googleRootDer);
-                        if (googleRoot) [anchors addObject:(__bridge_transfer id)googleRoot];
-                    }
-                    // Also add the chain's own root (last cert) as an anchor
-                    if (certRefs.count > 1) {
-                        [anchors addObject:certRefs.lastObject];
+                    for (NSString *pem in googleAttestationRootPems()) {
+                        NSData *rootDer = pemToDer(pem);
+                        if (rootDer) {
+                            SecCertificateRef googleRoot = SecCertificateCreateWithData(NULL, (__bridge CFDataRef)rootDer);
+                            if (googleRoot) [anchors addObject:(__bridge_transfer id)googleRoot];
+                        }
                     }
                 } else {
                     // Apple chain → use Apple App Attestation Root + G3
@@ -1219,7 +1299,7 @@ RCT_EXPORT_METHOD(verifyHardwareEvidence:(NSArray<NSString *> *)certificateChain
 
     // Google root CA expiry warning (cross-platform: Android attestation verified on iOS)
     if ([attestationFormat isEqualToString:@"android-key-attestation-v3"]) {
-        NSLog(@"[VRC:iOS] ⚠ Google Hardware Attestation Root CA expires 2026-05-24 — update required before then");
+        NSLog(@"[VRC:iOS] ⚠ Review embedded Google attestation roots — legacy RSA root expires 2026-05-24");
     }
 
     // -------------------------------------------------------------------------
@@ -1388,6 +1468,7 @@ RCT_EXPORT_METHOD(verifyHardwareEvidence:(NSArray<NSString *> *)certificateChain
     });
 }
 
+// Don't compile this code when we build for the old architecture.
 #ifdef RCT_NEW_ARCH_ENABLED
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params

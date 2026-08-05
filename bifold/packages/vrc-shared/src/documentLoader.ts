@@ -1,5 +1,15 @@
 import type { AgentContext, DocumentLoader, DidDocument } from '@credo-ts/core'
-import { isDid, vcLibraries, Key } from '@credo-ts/core'
+import { isDid, vcLibraries, Kms, TypedArrayEncoder } from '@credo-ts/core'
+
+/** Decode a multibase fingerprint into { fingerprint, publicKeyBase58 } (credo 0.6 Kms API) */
+function keyFromFingerprint(fingerprint: string): { fingerprint: string; publicKeyBase58: string } {
+  const jwk = Kms.PublicJwk.fromFingerprint(fingerprint)
+  const publicKey = jwk.publicKey as { publicKey?: Uint8Array }
+  if (!publicKey.publicKey) {
+    throw new Error(`Unsupported key type for fingerprint ${fingerprint}`)
+  }
+  return { fingerprint: jwk.fingerprint, publicKeyBase58: TypedArrayEncoder.toBase58(publicKey.publicKey) }
+}
 
 // Import from single source of truth - @bifold/vrc-contexts
 // This ensures server uses EXACTLY the same context definitions as mobile app
@@ -8,8 +18,13 @@ import {
   DTG_CONTEXT_DOCUMENT,
   RELATIONSHIP_CONTEXT_URL,
   RELATIONSHIP_CONTEXT_DOCUMENT,
+  RCARD_CONTEXT_URL,
+  RCARD_CONTEXT_DOCUMENT,
   WITNESSED_EXCHANGE_CONTEXT_URL,
   WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
+  CREDENTIALS_V2_CONTEXT_URL,
+  CREDENTIALS_V2_CONTEXT_DOCUMENT,
+  CACHED_STANDARD_CONTEXTS,
 } from '@bifold/vrc-contexts'
 
 /**
@@ -20,7 +35,7 @@ function resolveDidKey(did: string): DidDocument | null {
   try {
     // Extract the multibase-encoded key from did:key:<multibase>
     const keyPart = did.replace('did:key:', '').split('#')[0]
-    const key = Key.fromFingerprint(keyPart)
+    const key = keyFromFingerprint(keyPart)
 
     const verificationMethodId = `${did}#${key.fingerprint}`
 
@@ -64,7 +79,7 @@ function resolveDidPeer0(did: string): DidDocument | null {
     }
 
     const keyMultibase = peerPart.substring(1) // Remove the '0' numalgo prefix
-    const key = Key.fromFingerprint(keyMultibase)
+    const key = keyFromFingerprint(keyMultibase)
 
     const verificationMethodId = `${did}#${key.fingerprint}`
 
@@ -214,6 +229,15 @@ export const demoDocumentLoader = (_agentContext: AgentContext): DocumentLoader 
       }
     }
 
+    // Handle RCard context (exchanged RelationshipCard credentials)
+    if (normalizedUrl === RCARD_CONTEXT_URL) {
+      return {
+        contextUrl: null,
+        documentUrl: url,
+        document: RCARD_CONTEXT_DOCUMENT,
+      }
+    }
+
     // Handle witnessed exchange context (ToIP DTGWG spec)
     if (normalizedUrl === WITNESSED_EXCHANGE_CONTEXT_URL) {
       return {
@@ -229,6 +253,27 @@ export const demoDocumentLoader = (_agentContext: AgentContext): DocumentLoader 
         contextUrl: null,
         documentUrl: url,
         document: DTG_CONTEXT_DOCUMENT,
+      }
+    }
+
+    // W3C VCDM 2.0 base context — served from the bundled copy so signing and
+    // verification never depend on a live w3.org fetch
+    if (normalizedUrl === CREDENTIALS_V2_CONTEXT_URL) {
+      return {
+        contextUrl: null,
+        documentUrl: url,
+        document: CREDENTIALS_V2_CONTEXT_DOCUMENT,
+      }
+    }
+
+    // Standard W3C / DID / security contexts, pinned locally so signing and
+    // verification never depend on a live w3.org / w3id.org fetch
+    const cachedStandard = CACHED_STANDARD_CONTEXTS[normalizedUrl]
+    if (cachedStandard) {
+      return {
+        contextUrl: null,
+        documentUrl: url,
+        document: cachedStandard,
       }
     }
 

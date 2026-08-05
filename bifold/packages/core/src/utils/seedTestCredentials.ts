@@ -43,7 +43,7 @@ export async function seedTestContacts(agent: Agent): Promise<number> {
     })
 
     // Tag as test data for easy identification and cleanup
-    credential.setTag('isTestData', true)
+    credential.setTags({ isTestData: true })
 
     credentials.push(credential)
   }

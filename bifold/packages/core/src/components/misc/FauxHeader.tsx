@@ -9,15 +9,18 @@ import { ThemedText } from '../texts/ThemedText'
 
 interface FauxHeaderProps {
   title: string
-  onBackPressed: () => void
+  onBackPressed?: () => void
+  showBackButton?: boolean
 }
 
-const FauxHeader: React.FC<FauxHeaderProps> = ({ title, onBackPressed }) => {
+// Used for modals that we want to look like regular screens
+const FauxHeader: React.FC<FauxHeaderProps> = ({ title, onBackPressed = () => {}, showBackButton = true }) => {
   const { ColorPalette, Spacing, NavigationTheme, GradientTheme } = useTheme()
   const { t } = useTranslation()
   const GradientBg = GradientTheme?.HeaderBackground
   const styles = StyleSheet.create({
     header: {
+      ...NavigationTheme.header,
       backgroundColor: GradientBg ? 'transparent' : NavigationTheme.colors.primary,
       elevation: 0,
       shadowOffset: { width: 0, height: 6 },
@@ -58,13 +61,15 @@ const FauxHeader: React.FC<FauxHeaderProps> = ({ title, onBackPressed }) => {
     <View style={styles.header}>
       {GradientBg && <GradientBg style={styles.gradientBg} />}
       <View style={styles.left}>
-        <IconButton
-          buttonLocation={ButtonLocation.Left}
-          accessibilityLabel={t('Global.Back')}
-          testID={testIdWithKey('BackButton')}
-          onPress={onBackPressed}
-          icon="chevron-left"
-        />
+        {showBackButton && (
+          <IconButton
+            buttonLocation={ButtonLocation.Left}
+            accessibilityLabel={t('Global.Back')}
+            testID={testIdWithKey('BackButton')}
+            onPress={onBackPressed}
+            icon="chevron-left"
+          />
+        )}
       </View>
       <View style={styles.titleContainer}>
         <ThemedText variant={'headerTitle'} numberOfLines={1} ellipsizeMode="tail" style={styles.title}>

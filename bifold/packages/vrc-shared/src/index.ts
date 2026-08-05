@@ -8,3 +8,4 @@
 export * from './config'
 export * from './walletUtils'
 export * from './documentLoader'
+export * from './dataIntegritySuite'

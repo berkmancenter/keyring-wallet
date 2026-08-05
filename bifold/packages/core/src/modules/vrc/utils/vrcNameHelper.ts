@@ -1,5 +1,8 @@
-import { Agent, ConnectionRecord, W3cCredentialRecord } from '@credo-ts/core'
+import { Agent, W3cCredentialRecord } from '@credo-ts/core'
+import { DidCommConnectionRecord } from '@credo-ts/didcomm'
+import { isDTGCredential, isRelationshipCredential } from '../credentialTypes'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
+import { resolveContactDisplayInfo, toRawCredential } from './rcardDisplayUtils'
 
 /**
  * Extract issuer information from a W3C credential
@@ -9,30 +12,21 @@ import { RelationshipDidRepository } from '../repositories/RelationshipDidReposi
  */
 export function extractIssuerFromCredential(credential: W3cCredentialRecord): { id: string; name?: string } | null {
   try {
-    const credentialData = credential.credential
+    const issuerValue = toRawCredential(credential)?.issuer
 
-    if (
-      credentialData &&
-      typeof credentialData === 'object' &&
-      !Array.isArray(credentialData) &&
-      'issuer' in credentialData
-    ) {
-      const issuerValue = (credentialData as any).issuer
+    // Handle issuer as string
+    if (typeof issuerValue === 'string') {
+      return { id: issuerValue }
+    }
 
-      // Handle issuer as string
-      if (typeof issuerValue === 'string') {
-        return { id: issuerValue }
-      }
-
-      // Handle issuer as object with id property
-      if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
-        return {
-          id: issuerValue.id,
-          name: issuerValue.name || undefined,
-        }
+    // Handle issuer as object with id property
+    if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
+      return {
+        id: issuerValue.id,
+        name: issuerValue.name || undefined,
       }
     }
-  } catch (error) {
+  } catch (_error) {
     // Silently fail - caller will handle missing data
   }
 
@@ -47,24 +41,12 @@ export function extractIssuerFromCredential(credential: W3cCredentialRecord): { 
  */
 export function isVrcCredential(credential: W3cCredentialRecord): boolean {
   try {
-    const credentialData = credential.credential
-
-    if (
-      credentialData &&
-      typeof credentialData === 'object' &&
-      !Array.isArray(credentialData) &&
-      'type' in credentialData
-    ) {
-      const typeValue = (credentialData as any).type
-      const types = Array.isArray(typeValue) ? typeValue : [typeValue]
-      
+    const raw = toRawCredential(credential)
+    if (raw) {
       // Check for RelationshipCredential or DTGCredential types
-      return types.some((type: any) => 
-        typeof type === 'string' && 
-        (type.includes('RelationshipCredential') || type.includes('DTGCredential'))
-      )
+      return isRelationshipCredential(raw) || isDTGCredential(raw)
     }
-  } catch (error) {
+  } catch (_error) {
     // Silently fail
   }
 
@@ -103,22 +85,13 @@ export async function getVrcNameForConnection(
 
     const counterpartyRelationshipDid = relationshipRecord.counterpartyRelationshipDid
 
-    // Find the W3C credential issued by the counterparty's relationship DID
-    const matchingCredential = w3cCredentialRecords.find((cred) => {
-      // Only check VRC credentials
-      if (!isVrcCredential(cred)) {
-        return false
-      }
-
-      const issuer = extractIssuerFromCredential(cred)
-      return issuer?.id === counterpartyRelationshipDid
-    })
-
-    if (matchingCredential) {
-      const issuer = extractIssuerFromCredential(matchingCredential)
-      return issuer?.name || null
+    // Resolve display name: received RCard first, then the legacy VRC
+    // issuer.name (pre-RCard-separation exchanges)
+    const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, counterpartyRelationshipDid)
+    if (displayInfo.name) {
+      return displayInfo.name
     }
-  } catch (error) {
+  } catch (_error) {
     // Silently fail - caller will use fallback name
   }
 
@@ -132,7 +105,7 @@ export async function getVrcNameForConnection(
  * @param connection - The connection record
  * @returns The cached VRC name, or null if not available
  */
-export function getVrcNameFromConnectionMetadata(connection: ConnectionRecord | undefined): string | null {
+export function getVrcNameFromConnectionMetadata(connection: DidCommConnectionRecord | undefined): string | null {
   if (!connection) {
     return null
   }
@@ -140,7 +113,7 @@ export function getVrcNameFromConnectionMetadata(connection: ConnectionRecord | 
   try {
     const vrcMetadata = connection.metadata.get('vrcName') as { name?: string } | undefined
     return vrcMetadata?.name || null
-  } catch (error) {
+  } catch (_error) {
     // Silently fail
   }
 
@@ -161,10 +134,10 @@ export async function cacheVrcNameInConnection(
   vrcName: string
 ): Promise<void> {
   try {
-    const connection = await agent.connections.getById(connectionId)
+    const connection = await agent.modules.didcomm.connections.getById(connectionId)
     await connection.metadata.set('vrcName', { name: vrcName })
     // Credo auto-persists metadata changes
-  } catch (error) {
+  } catch (_error) {
     // Silently fail - caching is optional optimization
   }
 }

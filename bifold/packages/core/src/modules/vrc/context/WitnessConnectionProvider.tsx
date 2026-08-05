@@ -13,7 +13,8 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { Agent } from '@credo-ts/core'
-import { DidExchangeState, ConnectionRepository, KeyType, PeerDidNumAlgo } from '@credo-ts/core'
+import { PeerDidNumAlgo } from '@credo-ts/core'
+import { DidCommConnectionRepository, DidCommDidExchangeState } from '@credo-ts/didcomm'
 
 import {
   registerWitnessSessionCallback,
@@ -196,17 +197,17 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
 
       try {
         // Grab the outOfBandId before deleting so we can clean up the OOB record too
-        const connection = await agent.connections.getById(connectionId)
+        const connection = await agent.modules.didcomm.connections.getById(connectionId)
         const outOfBandId = connection?.outOfBandId
 
         // Delete the DIDComm connection (this also removes it from Contacts)
-        await agent.connections.deleteById(connectionId)
+        await agent.modules.didcomm.connections.deleteById(connectionId)
         logger.current.info('Deleted DIDComm connection')
 
         // Clean up the associated OOB record to prevent duplicate-invitation errors
         if (outOfBandId) {
           try {
-            await agent.oob.deleteById(outOfBandId)
+            await agent.modules.didcomm.oob.deleteById(outOfBandId)
             logger.current.info('Deleted associated OOB record')
           } catch {
             // OOB record may already be gone — not a fatal error
@@ -298,8 +299,8 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
     }
 
     try {
-      const connection = await agent.connections.getById(activeId)
-      if (connection && connection.state === DidExchangeState.Completed) {
+      const connection = await agent.modules.didcomm.connections.getById(activeId)
+      if (connection && connection.state === DidCommDidExchangeState.Completed) {
         return true
       }
       // Connection is stale - deactivate
@@ -307,7 +308,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
       setActiveWitnessConnectionId(undefined)
       persistActiveWitnessId(undefined)
       return false
-    } catch (error) {
+    } catch (_error) {
       logger.current.warn(`Active witness connection ${activeId} not found, deactivating`)
       setActiveWitnessConnectionId(undefined)
       persistActiveWitnessId(undefined)
@@ -330,7 +331,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
 
       try {
         // Get the connection
-        const connection = await agent.connections.getById(connectionId)
+        const connection = await agent.modules.didcomm.connections.getById(connectionId)
 
         // Store witness metadata on connection for persistence
         connection.metadata.set('witnessConnection', {
@@ -341,7 +342,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
         })
 
         // Persist metadata to ConnectionRecord
-        const connectionRepository = agent.dependencyManager.resolve(ConnectionRepository)
+        const connectionRepository = agent.dependencyManager.resolve(DidCommConnectionRepository)
         await connectionRepository.update(agent.context, connection)
         logger.current.info('Stored and persisted witness metadata on connection')
 
@@ -387,7 +388,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
               method: 'peer',
               options: {
                 numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
-                keyType: KeyType.Ed25519,
+                createKey: { type: { kty: 'OKP', crv: 'Ed25519' } },
               },
             })
 
@@ -417,7 +418,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
               type: 'reporting-did-registration',
               reportingDid: newReportingDid,
             })
-            await agent.basicMessages.sendMessage(connectionId, registrationMessage)
+            await agent.modules.didcomm.basicMessages.sendMessage(connectionId, registrationMessage)
 
             logger.current.info(`✓ Reporting DID registered with witness: ${newReportingDid}`)
           } catch (reportingError) {
@@ -446,12 +447,12 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
     const restoreWitnessConnections = async () => {
       try {
         logger.current.info('Scanning for existing witness connections...')
-        const allConnections = await agent.connections.getAll()
+        const allConnections = await agent.modules.didcomm.connections.getAll()
 
         const witnessConnections: ConnectedWitness[] = []
 
         for (const conn of allConnections) {
-          if (conn.state !== DidExchangeState.Completed) continue
+          if (conn.state !== DidCommDidExchangeState.Completed) continue
 
           const metadata = conn.metadata.get('witnessConnection') as any
           if (!metadata) continue

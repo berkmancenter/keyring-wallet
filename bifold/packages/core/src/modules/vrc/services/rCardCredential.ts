@@ -1,7 +1,69 @@
 import { Agent, JsonTransformer, W3cCredential, W3cCredentialRecord, W3cCredentialRepository } from '@credo-ts/core'
 
 import { RCardTemplate, JCard } from '../types/rcard'
+import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../types/relationshipContext'
+import { selectCredentialContexts } from '../utils/selectCredentialContexts'
 import { createVrcLogger } from '../vrc-logging'
+
+/**
+ * Build an exchanged RelationshipCard (RCard) credential from the local
+ * R-Card template, per the DTG spec:
+ *
+ * - `type`: ["VerifiableCredential", "RelationshipCard"]
+ * - `issuer`: my relationship DID (bare string)
+ * - `credentialSubject.id`: the counterparty's relationship DID
+ * - `credentialSubject.card`: the jCard (RFC 7095) from the local template
+ *
+ * The RCard is a separate VDS exchanged alongside the VRC — it carries the
+ * human-readable contact info (name/email/org) that used to be embedded in
+ * the VRC's issuer object.
+ *
+ * @returns the unsigned credential JSON, or undefined when no template exists
+ */
+export const buildRCardCredential = async (
+  agent: Agent,
+  myRelationshipDid: string,
+  counterpartyRelationshipDid: string,
+  options?: { useVc20?: boolean; useDi?: boolean }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any | undefined> => {
+  const template = await loadRCardTemplate(agent)
+  if (!template?.jcard) {
+    return undefined
+  }
+
+  // Backdate issuance to tolerate clock skew between devices (same allowance
+  // as the VRC builder — the holder rejects credentials dated in its future).
+  const CLOCK_SKEW_ALLOWANCE_MS = 5 * 60 * 1000
+  const issuanceTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
+
+  if (options?.useVc20) {
+    // VCDM 2.0 shape — the peer announced RCE protocol v2. Proof-context
+    // rules live in selectCredentialContexts (shared with the VRC builder).
+    return {
+      '@context': selectCredentialContexts(options ?? {}, [DTG_CONTEXT_URL, RCARD_CONTEXT_URL]),
+      type: ['VerifiableCredential', 'RelationshipCard'],
+      issuer: myRelationshipDid,
+      validFrom: issuanceTimestamp,
+      credentialSubject: {
+        id: counterpartyRelationshipDid,
+        card: template.jcard,
+      },
+    }
+  }
+
+  // Legacy VCDM 1.1 shape for pre-VC-2.0 peers
+  return {
+    '@context': selectCredentialContexts({ useVc20: false }, [DTG_CONTEXT_URL, RCARD_CONTEXT_URL]),
+    type: ['VerifiableCredential', 'RelationshipCard'],
+    issuer: myRelationshipDid,
+    issuanceDate: issuanceTimestamp,
+    credentialSubject: {
+      id: counterpartyRelationshipDid,
+      card: template.jcard,
+    },
+  }
+}
 
 /**
  * Converts RCardTemplate (with jCard) to W3cCredentialRecord for storage in Credo/Askar
@@ -25,26 +87,80 @@ export const buildRCardTemplateW3cCredentialRecord = (rCardTemplate: RCardTempla
       label: rCardTemplate.label,
       jcard: rCardTemplate.jcard,
     },
+    // Placeholder proof: credo 0.6 validates stored credentials as W3cJsonLdVerifiableCredential,
+    // which requires a proof. The template is unsigned; a real proof is created when the
+    // credential is signed at exchange time.
+    proof: {
+      type: 'Ed25519Signature2018',
+      created: rCardTemplate.issuanceDate || new Date().toISOString(),
+      proofPurpose: 'assertionMethod',
+      verificationMethod: 'urn:aries:bifold:r-card#template',
+      jws: 'template-placeholder',
+    },
   }
 
   const w3cCredential = JsonTransformer.fromJSON(w3cCredentialJson, W3cCredential)
   const record = new W3cCredentialRecord({
-    credential: w3cCredential as any,
-    tags: {
-      type: 'RCardTemplate',
-      isSelfIssued: 'true',
-      templateId: rCardTemplate.templateId,
-    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    credentialInstances: [{ credential: w3cCredential as any }],
+  })
+  // Custom tags (credo 0.6 restricts the typed constructor tags to expandedTypes)
+  record.setTags({
+    type: 'RCardTemplate',
+    isSelfIssued: 'true',
+    templateId: rCardTemplate.templateId,
   })
 
   return record
 }
 
 /**
+ * One-time fixup for R-Card template records created by pre-credo-0.6 app
+ * versions: those were stored WITHOUT a proof, but credo 0.6 parses stored
+ * credentials as W3cJsonLdVerifiableCredential whose class validation requires
+ * one — `record.getTags()` throws and crashes any consumer that touches the
+ * record (e.g. the OpenID credential provider). Add the same placeholder proof
+ * that buildRCardTemplateW3cCredentialRecord uses for new templates.
+ */
+export const migrateRCardTemplateProofs = async (agent: Agent): Promise<void> => {
+  const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
+
+  try {
+    const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
+    const records = await repository.findByQuery(agent.context, { type: 'RCardTemplate' })
+
+    for (const record of records) {
+      // credo 0.5 records stored `credential`; the 0.6 class-transform setter
+      // moves it into `credentialInstances`, but access both shapes to be safe
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyRecord = record as any
+      const credential = anyRecord.credentialInstances?.[0]?.credential ?? anyRecord.credential
+      if (!credential || typeof credential === 'string' || credential.proof) {
+        continue
+      }
+      credential.proof = {
+        type: 'Ed25519Signature2018',
+        created: credential.issuanceDate || new Date().toISOString(),
+        proofPurpose: 'assertionMethod',
+        verificationMethod: 'urn:aries:bifold:r-card#template',
+        jws: 'template-placeholder',
+      }
+      await repository.update(agent.context, record)
+      logger.info('Added placeholder proof to legacy R-Card template record', { id: record.id })
+    }
+  } catch (error) {
+    logger.error('Failed to migrate legacy R-Card template records', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+/**
  * Converts W3cCredentialRecord back to RCardTemplate format (with jCard)
  */
 export const extractRCardTemplateFromW3cRecord = (record: W3cCredentialRecord): RCardTemplate => {
-  const w3cCred = record.credential as W3cCredential | any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w3cCred = record.encoded as W3cCredential | any
 
   const contexts = w3cCred.contexts || w3cCred.context || w3cCred['@context'] || []
   const rawSubject = w3cCred.credentialSubject
@@ -148,7 +264,7 @@ export const deleteRCardTemplate = async (agent: Agent): Promise<void> => {
     })
 
     for (const record of records) {
-      await agent.w3cCredentials.removeCredentialRecord(record.id)
+      await agent.w3cCredentials.deleteById(record.id)
     }
     logger.info('deleteRCardTemplate: Successfully completed deletion', { recordCount: records.length })
   } catch (error) {

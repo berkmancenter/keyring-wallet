@@ -14,6 +14,7 @@ interface ISVGOverlay {
   maskType?: MaskType
   customPath?: string
   strokeColor?: string
+  strokeWidth?: number
   overlayColor?: string
   overlayOpacity?: number
 }
@@ -22,11 +23,12 @@ const SVGOverlay: React.FC<ISVGOverlay> = ({
   maskType = MaskType.OVAL,
   customPath,
   strokeColor = undefined,
+  strokeWidth = 2,
   overlayColor = 'black',
   overlayOpacity = 0.6,
 }) => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions()
-  const renderCutOutShape = () => {
+  const renderCutOutShape = (fill: string) => {
     const centerX = screenWidth / 2
     const centerY = screenHeight / 2
 
@@ -35,24 +37,19 @@ const SVGOverlay: React.FC<ISVGOverlay> = ({
         return (
           <Ellipse
             cx={centerX}
-            cy={centerY - 10}
+            cy={centerY - 30}
             rx={screenWidth * 0.45}
             ry={screenHeight * 0.28}
-            fill="transparent"
+            fill={fill}
             stroke={strokeColor}
+            strokeWidth={strokeWidth}
           />
         )
 
       case MaskType.RECTANGLE: {
         const rectSize = screenWidth * 0.8
         return (
-          <Rect
-            x={centerX - rectSize / 2}
-            y={centerY - rectSize / 2}
-            width={rectSize}
-            height={rectSize}
-            fill="transparent"
-          />
+          <Rect x={centerX - rectSize / 2} y={centerY - rectSize / 2} width={rectSize} height={rectSize} fill={fill} />
         )
       }
 
@@ -68,9 +65,9 @@ const SVGOverlay: React.FC<ISVGOverlay> = ({
             height={cardHeight}
             rx={15}
             ry={15}
-            fill="transparent"
+            fill={fill}
             stroke={strokeColor}
-            strokeWidth={2}
+            strokeWidth={strokeWidth}
           />
         )
       }
@@ -82,19 +79,22 @@ const SVGOverlay: React.FC<ISVGOverlay> = ({
             y={centerY - qrSize / 1.5}
             width={qrSize}
             height={qrSize}
-            fill="transparent"
+            fill={fill}
             stroke={strokeColor}
-            strokeWidth={2}
+            strokeWidth={strokeWidth}
           />
         )
       }
       case MaskType.CUSTOM:
-        return customPath ? <Path d={customPath} fill="transparent" /> : null
+        return customPath ? <Path d={customPath} fill={fill} /> : null
 
       default:
-        return <Circle cx={centerX} cy={centerY} r={screenWidth / 2} fill="transparent" />
+        return <Circle cx={centerX} cy={centerY} r={screenWidth / 2} fill={fill} />
     }
   }
+
+  const maskCutOutShape = renderCutOutShape('black')
+  const cutOutShape = renderCutOutShape('transparent')
 
   return (
     <Svg width={screenWidth} height={screenHeight} style={{ position: 'absolute' }}>
@@ -103,7 +103,7 @@ const SVGOverlay: React.FC<ISVGOverlay> = ({
           {/* White background - visible area */}
           <Rect width={screenWidth} height={screenHeight} fill="white" />
           {/* Cutout  - transparent area */}
-          {React.cloneElement(renderCutOutShape() as React.ReactElement, { fill: 'black' })}
+          {maskCutOutShape}
         </Mask>
       </Defs>
 
@@ -117,7 +117,7 @@ const SVGOverlay: React.FC<ISVGOverlay> = ({
       />
 
       {/* Guide lines or decorations */}
-      {renderCutOutShape()}
+      {cutOutShape}
     </Svg>
   )
 }

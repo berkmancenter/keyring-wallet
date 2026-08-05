@@ -344,10 +344,8 @@ exports[`ImportWallet Screen screen renders correctly 1`] = `
             }
             accessible={true}
             collapsable={false}
-            focusable={true}
-            onBlur={[Function]}
+            focusable={false}
             onClick={[Function]}
-            onFocus={[Function]}
             onResponderGrant={[Function]}
             onResponderMove={[Function]}
             onResponderRelease={[Function]}
@@ -355,23 +353,12 @@ exports[`ImportWallet Screen screen renders correctly 1`] = `
             onResponderTerminationRequest={[Function]}
             onStartShouldSetResponder={[Function]}
             style={
-              Array [
-                Object {
-                  "overflow": "hidden",
-                },
-                Object {
-                  "backgroundColor": "#42803E",
-                  "borderRadius": 4,
-                  "padding": 16,
-                },
-                Object {
-                  "backgroundColor": "rgba(53, 130, 63, 0.35)",
-                  "borderRadius": 4,
-                  "padding": 16,
-                },
-                false,
-                false,
-              ]
+              Object {
+                "backgroundColor": "rgba(53, 130, 63, 0.35)",
+                "borderRadius": 4,
+                "opacity": 1,
+                "padding": 16,
+              }
             }
             testID="com.ariesbifold:id/ImportButton"
           >
@@ -406,7 +393,6 @@ exports[`ImportWallet Screen screen renders correctly 1`] = `
                         "fontWeight": "bold",
                         "textAlign": "center",
                       },
-                      false,
                       false,
                     ],
                   ]

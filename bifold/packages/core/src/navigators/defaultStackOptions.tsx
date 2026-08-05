@@ -28,7 +28,13 @@ export const DefaultScreenOptionsDictionary: ScreenOptionsType = {
   [Screens.CreatePIN]: {
     headerBackTestID: testIdWithKey('Back'),
   },
+  [Screens.ChangePINSuccess]: {
+    headerBackTestID: testIdWithKey('Back'),
+  },
   [Screens.ChangePIN]: {
+    headerBackTestID: testIdWithKey('Back'),
+  },
+  [Screens.VerifyPIN]: {
     headerBackTestID: testIdWithKey('Back'),
   },
   [Screens.NameWallet]: {
@@ -76,7 +82,7 @@ export const DefaultScreenOptionsDictionary: ScreenOptionsType = {
     headerShown: true,
   },
   [Screens.OpenIDProofPresentation]: {
-    headerShown: true,
+    headerShown: false,
     headerRight: () => false,
   },
 }
@@ -88,7 +94,7 @@ export function useDefaultStackOptions({ ColorPalette, GradientTheme }: ITheme):
   const GradientBg = GradientTheme?.HeaderBackground
 
   return (
-    globalScreenOptions ?? {
+    {
       headerTintColor: ColorPalette.brand.headerIcon,
       headerShown: true,
       headerBackTitleVisible: false,
@@ -111,6 +117,7 @@ export function useDefaultStackOptions({ ColorPalette, GradientTheme }: ITheme):
       headerTitle: (props: { children: React.ReactNode }) => <HeaderTitle {...props} />,
       header: (props) => <HeaderWithBanner {...props} />,
       headerBackAccessibilityLabel: t('Global.Back'),
+      ...globalScreenOptions,
     }
   )
 }

@@ -1,3 +1,4 @@
+import React from 'react'
 import { TextStyle, ViewStyle } from 'react-native'
 import { SvgProps } from 'react-native-svg'
 
@@ -569,6 +570,33 @@ export interface IPINInputTheme {
     backgroundColor: string
     borderColor: string
     borderWidth?: number // Optional for backward compatibility
+  }
+}
+
+export interface ISeparatedPINInputTheme {
+  cellText: TextStyle & {
+    color: string
+  }
+  icon: TextStyle & {
+    color: string
+  }
+  cell: ViewStyle & {
+    backgroundColor: string
+    borderColor: string
+    borderWidth?: number // Optional for backward compatibility
+  }
+  focussedCell: ViewStyle & {
+    borderColor: string
+  }
+  codeFieldRoot: ViewStyle & {
+    justifyContent: ViewStyle['justifyContent']
+    alignItems: ViewStyle['alignItems']
+  }
+  labelAndFieldContainer: ViewStyle & {
+    flexDirection: ViewStyle['flexDirection']
+    paddingHorizontal: number
+    paddingVertical: number
+    alignItems: ViewStyle['alignItems']
   }
 }
 

@@ -1,4 +1,3 @@
-import { useAgent } from '@credo-ts/react-hooks'
 import React, {
   createContext,
   PropsWithChildren,
@@ -10,10 +9,11 @@ import React, {
   useState,
 } from 'react'
 import { AppState, AppStateStatus, PanResponder, View } from 'react-native'
-import { defaultAutoLockTime } from '../constants'
 import { TOKENS, useServices } from '../container-api'
 import { LockoutReason, useAuth } from './auth'
 import { useStore } from './store'
+import { defaultAutoLockTime } from '../constants'
+import { useAppAgent } from '../utils/agent'
 
 // number of minutes before the timeout action is triggered
 // a value of 0 will never trigger the lock out action and
@@ -33,12 +33,13 @@ export interface ActivityContext {
 export const ActivityContext = createContext<ActivityContext>(null as unknown as ActivityContext)
 
 export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
-  const [logger] = useServices([TOKENS.UTIL_LOGGER])
+  const [logger, { customAutoLockTimes }] = useServices([TOKENS.UTIL_LOGGER, TOKENS.CONFIG])
   const [store] = useStore()
-  const { agent } = useAgent()
+  const { agent } = useAppAgent()
   const { lockOutUser } = useAuth()
   const lastActiveTimeRef = useRef<number | undefined>(undefined)
-  const timeoutInMilliseconds = useRef<number>((store.preferences.autoLockTime ?? defaultAutoLockTime) * 60000)
+  const defaultAutoLockoutTime = customAutoLockTimes?.default?.time ?? defaultAutoLockTime
+  const timeoutInMilliseconds = useRef<number>((store.preferences.autoLockTime ?? defaultAutoLockoutTime) * 60000)
   const inactivityTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const prevAppStateStatusRef = useRef(AppState.currentState)
   const [appStateStatus, setAppStateStatus] = useState<AppStateStatus>(AppState.currentState)
@@ -75,7 +76,7 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
         // remove timeout when backgrounded as timeout refs can be lost when app is backgrounded
         clearInactivityTimeoutIfExists()
         try {
-          await agent.mediationRecipient.stopMessagePickup()
+          await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
           logger.info('Stopped agent message pickup')
         } catch (err) {
           logger.error(`Error stopping agent message pickup, ${err}`)
@@ -94,7 +95,7 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
         } else {
           // otherwise restart message pickup
           try {
-            await agent.mediationRecipient.initiateMessagePickup()
+            await agent.modules.didcomm.mediationRecipient.initiateMessagePickup()
             logger.info('Restarted agent message pickup')
           } catch (err) {
             logger.error(`Error restarting agent message pickup, ${err}`)
@@ -120,8 +121,8 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
   useEffect(() => {
     // user has updated settings for auto lock time
-    timeoutInMilliseconds.current = store.preferences.autoLockTime * 60000
-  }, [store.preferences.autoLockTime])
+    timeoutInMilliseconds.current = (store.preferences.autoLockTime ?? defaultAutoLockoutTime) * 60000
+  }, [store.preferences.autoLockTime, defaultAutoLockoutTime])
 
   const panResponder = useMemo(() => {
     return PanResponder.create({

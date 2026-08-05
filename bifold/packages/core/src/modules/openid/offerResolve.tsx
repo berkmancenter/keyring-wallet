@@ -1,29 +1,91 @@
 import {
   OpenId4VcCredentialHolderBinding,
   OpenId4VciCredentialBindingOptions,
+  OpenId4VciDpopRequestOptions,
   OpenId4VciCredentialFormatProfile,
-  OpenId4VciCredentialSupportedWithId,
   OpenId4VciRequestTokenResponse,
   OpenId4VciResolvedCredentialOffer,
 } from '@credo-ts/openid4vc'
-import {
-  Agent,
-  DidJwk,
-  DidKey,
-  getJwkFromKey,
-  JwaSignatureAlgorithm,
-  JwkDidCreateOptions,
-  KeyBackend,
-  KeyDidCreateOptions,
-  Mdoc,
-  MdocRecord,
-  SdJwtVcRecord,
-  W3cCredentialRecord,
-  W3cJsonLdVerifiableCredential,
-  W3cJwtVerifiableCredential,
-} from '@credo-ts/core'
+import { Agent, DidJwk, DidKey, JwkDidCreateOptions, KeyDidCreateOptions, Kms } from '@credo-ts/core'
 import { extractOpenId4VcCredentialMetadata, setOpenId4VcCredentialMetadata } from './metadata'
+import { OpenIDCredentialRecord } from './credentialRecord'
 
+type CredentialBindingResolverOptions = Pick<
+  OpenId4VciCredentialBindingOptions,
+  'credentialFormat' | 'proofTypes' | 'supportedDidMethods' | 'supportsAllDidMethods' | 'supportsJwk'
+> & {
+  agent: Agent
+  enableHardwareBackedHolderBinding?: boolean
+}
+
+type CredentialBindingKey = {
+  keyId: string
+  publicJwk: Kms.PublicJwk
+}
+
+/**
+ * Creates a holder-binding key for OpenID4VCI proof signing.
+ *
+ * When hardware-backed holder binding is enabled the key is created in the secure environment.
+ * Otherwise the agent's default KMS backend is used.
+ */
+const createCredentialBindingKey = async ({
+  agent,
+  signatureAlgorithm,
+  enableHardwareBackedHolderBinding = false,
+}: {
+  agent: Agent
+  signatureAlgorithm: Kms.KnownJwaSignatureAlgorithm
+  enableHardwareBackedHolderBinding?: boolean
+}): Promise<CredentialBindingKey> => {
+  const key = await agent.kms.createKeyForSignatureAlgorithm(
+    enableHardwareBackedHolderBinding
+      ? { algorithm: signatureAlgorithm, backend: 'secureEnvironment' }
+      : { algorithm: signatureAlgorithm }
+  )
+
+  return {
+    keyId: key.keyId,
+    publicJwk: Kms.PublicJwk.fromPublicJwk(key.publicJwk),
+  }
+}
+
+/**
+ * Returns the credential configuration ids to request from the offer.
+ *
+ * If no explicit ids are provided, the first offered credential configuration is selected.
+ */
+const getCredentialConfigurationIdsToRequest = ({
+  resolvedCredentialOffer,
+  credentialConfigurationIdsToRequest,
+}: {
+  resolvedCredentialOffer: OpenId4VciResolvedCredentialOffer
+  credentialConfigurationIdsToRequest?: string[]
+}) => {
+  const credentialConfigurationIds = credentialConfigurationIdsToRequest ?? [
+    Object.keys(resolvedCredentialOffer.offeredCredentialConfigurations)[0],
+  ]
+
+  if (credentialConfigurationIds.length === 0 || !credentialConfigurationIds[0]) {
+    throw new Error('No credential configuration ID found in the credential offer.')
+  }
+
+  for (const credentialConfigurationId of credentialConfigurationIds) {
+    if (!resolvedCredentialOffer.offeredCredentialConfigurations[credentialConfigurationId]) {
+      throw new Error(
+        `Parameter 'credentialConfigurationIdsToRequest' with values ${credentialConfigurationIdsToRequest} is not a credential_configuration_id in the credential offer.`
+      )
+    }
+  }
+
+  return credentialConfigurationIds
+}
+
+/**
+ * Resolves an OpenID4VCI credential offer URI into issuer metadata and offered credential
+ * configurations. Parsed offer payloads are converted back into an offer URI because Credo
+ * currently expects a credential offer string.
+ */
 export const resolveOpenId4VciOffer = async ({
   agent,
   data,
@@ -32,7 +94,7 @@ export const resolveOpenId4VciOffer = async ({
 }: {
   agent: Agent
   // Either data itself (the offer) or uri can be passed
-  data?: string
+  data?: unknown
   uri?: string
   fetchAuthorization?: boolean
   authorization?: { clientId: string; redirectUri: string }
@@ -40,8 +102,8 @@ export const resolveOpenId4VciOffer = async ({
   let offerUri = uri
 
   if (!offerUri && data) {
-    // FIXME: Credo only support credential offer string, but we already parsed it before. So we construct an offer here
-    // but in the future we need to support the parsed offer in Credo directly
+    // Credo currently resolves credential offers from a URI string. If the caller
+    // provides an already parsed offer payload, wrap it back into an offer URI.
     offerUri = `openid-credential-offer://credential_offer=${encodeURIComponent(JSON.stringify(data))}`
   } else if (!offerUri) {
     throw new Error('either data or uri must be provided')
@@ -53,89 +115,84 @@ export const resolveOpenId4VciOffer = async ({
     uri: offerUri,
   })
 
-  const resolvedCredentialOffer = await agent.modules.openId4VcHolder.resolveCredentialOffer(offerUri)
+  const resolvedCredentialOffer = await agent.openid4vc.holder.resolveCredentialOffer(offerUri)
 
   if (authorization) {
-    throw new Error('Authorization flow is not supported yet as of Credo 0.5.13')
+    throw new Error('Authorization code flow is not implemented in this OpenID credential offer flow.')
   }
 
   return resolvedCredentialOffer
 }
 
+/**
+ * Requests an access token for a pre-authorized OpenID4VCI offer.
+ *
+ * If DPoP options are provided, Credo signs the token request with that key and returns the
+ * DPoP nonce/key metadata in the token response.
+ */
 export async function acquirePreAuthorizedAccessToken({
   agent,
   resolvedCredentialOffer,
   txCode,
+  dpop,
 }: {
   agent: Agent
   resolvedCredentialOffer: OpenId4VciResolvedCredentialOffer
   txCode?: string
-}) {
-  return await agent.modules.openId4VcHolder.requestToken({
+  dpop?: OpenId4VciDpopRequestOptions
+}): Promise<OpenId4VciRequestTokenResponse> {
+  return await agent.openid4vc.holder.requestToken({
     resolvedCredentialOffer,
     txCode,
+    dpop,
   })
 }
 
+/**
+ * Resolves the holder binding used for the credential request proof of possession.
+ *
+ * A new key is created based on the issuer-supported proof algorithm and the hardware-backed
+ * holder binding setting.
+ */
 export const customCredentialBindingResolver = async ({
   agent,
   supportedDidMethods,
-  keyType,
   supportsAllDidMethods,
   supportsJwk,
   credentialFormat,
-  supportedCredentialId,
-  resolvedCredentialOffer,
-  pidSchemes,
-}: Partial<OpenId4VciCredentialBindingOptions> & {
-  agent: Agent
-  resolvedCredentialOffer: OpenId4VciResolvedCredentialOffer
-  pidSchemes?: { sdJwtVcVcts: Array<string>; msoMdocDoctypes: Array<string> }
-}): Promise<OpenId4VcCredentialHolderBinding> => {
-  // First, we try to pick a did method
-  // Prefer did:jwk, otherwise use did:key, otherwise use undefined
+  proofTypes,
+  enableHardwareBackedHolderBinding = false,
+}: CredentialBindingResolverOptions): Promise<OpenId4VcCredentialHolderBinding> => {
   let didMethod: 'key' | 'jwk' | undefined =
     supportsAllDidMethods || supportedDidMethods?.includes('did:jwk')
       ? 'jwk'
       : supportedDidMethods?.includes('did:key')
-      ? 'key'
-      : undefined
+        ? 'key'
+        : undefined
 
-  // If supportedDidMethods is undefined, and supportsJwk is false, we will default to did:key
-  // this is important as part of MATTR launchpad support which MUST use did:key but doesn't
-  // define which did methods they support
   if (!supportedDidMethods && !supportsJwk) {
     didMethod = 'key'
   }
 
-  const offeredCredentialConfiguration = supportedCredentialId
-    ? resolvedCredentialOffer.offeredCredentialConfigurations[supportedCredentialId]
-    : undefined
+  const signatureAlgorithm = enableHardwareBackedHolderBinding
+    ? 'ES256'
+    : (proofTypes?.jwt?.supportedSignatureAlgorithms[0] ?? 'EdDSA')
 
-  const shouldKeyBeHardwareBackedForMsoMdoc =
-    offeredCredentialConfiguration?.format === OpenId4VciCredentialFormatProfile.MsoMdoc &&
-    pidSchemes?.msoMdocDoctypes.includes(offeredCredentialConfiguration.doctype)
-
-  const shouldKeyBeHardwareBackedForSdJwtVc =
-    offeredCredentialConfiguration?.format === 'vc+sd-jwt' &&
-    pidSchemes?.sdJwtVcVcts.includes(offeredCredentialConfiguration.vct)
-
-  const shouldKeyBeHardwareBacked = shouldKeyBeHardwareBackedForSdJwtVc || shouldKeyBeHardwareBackedForMsoMdoc
-
-  if (!keyType) {
-    throw new Error('keyType is required!')
+  if (enableHardwareBackedHolderBinding && !proofTypes?.jwt?.supportedSignatureAlgorithms.includes('ES256')) {
+    throw new Error('Unable to request credential with hardware-backed holder binding. Issuer does not support ES256.')
   }
 
-  const key = await agent.wallet.createKey({
-    keyType,
-    keyBackend: shouldKeyBeHardwareBacked ? KeyBackend.SecureElement : KeyBackend.Software,
+  const credentialBindingKey = await createCredentialBindingKey({
+    agent,
+    signatureAlgorithm,
+    enableHardwareBackedHolderBinding,
   })
 
   if (didMethod) {
     const didResult = await agent.dids.create<JwkDidCreateOptions | KeyDidCreateOptions>({
       method: didMethod,
       options: {
-        key,
+        keyId: credentialBindingKey.keyId,
       },
     })
 
@@ -143,22 +200,21 @@ export const customCredentialBindingResolver = async ({
       throw new Error('DID creation failed.')
     }
 
-    let verificationMethodId: string
+    let didUrl: string
     if (didMethod === 'jwk') {
-      const didJwk = DidJwk.fromDid(didResult.didState.did)
-      verificationMethodId = didJwk.verificationMethodId
+      didUrl = DidJwk.fromDid(didResult.didState.did).verificationMethodId
     } else {
       const didKey = DidKey.fromDid(didResult.didState.did)
-      verificationMethodId = `${didKey.did}#${didKey.key.fingerprint}`
+      didUrl = `${didKey.did}#${didKey.publicJwk.fingerprint}`
     }
 
     return {
-      didUrl: verificationMethodId,
       method: 'did',
+      didUrls: [didUrl],
     }
   }
 
-  // Otherwise we also support plain jwk for sd-jwt only
+  // Fallback: plain jwk for sd-jwt/mdoc only
   if (
     supportsJwk &&
     (credentialFormat === OpenId4VciCredentialFormatProfile.SdJwtVc ||
@@ -166,7 +222,7 @@ export const customCredentialBindingResolver = async ({
   ) {
     return {
       method: 'jwk',
-      jwk: getJwkFromKey(key),
+      keys: [credentialBindingKey.publicJwk],
     }
   }
 
@@ -177,103 +233,78 @@ export const customCredentialBindingResolver = async ({
   )
 }
 
+/**
+ * Requests and stores credentials from a resolved OpenID4VCI offer using an existing token response.
+ *
+ * The DPoP proof for the credential endpoint is taken from the token response. Holder binding is
+ * resolved separately for the credential request proof.
+ */
 export const receiveCredentialFromOpenId4VciOffer = async ({
   agent,
   resolvedCredentialOffer,
-  accessToken,
+  tokenResponse,
   credentialConfigurationIdsToRequest,
   clientId,
-  pidSchemes,
+  enableHardwareBackedHolderBinding = false,
 }: {
   agent: Agent
   resolvedCredentialOffer: OpenId4VciResolvedCredentialOffer
-  accessToken: OpenId4VciRequestTokenResponse
+  tokenResponse: OpenId4VciRequestTokenResponse
   credentialConfigurationIdsToRequest?: string[]
   clientId?: string
-  pidSchemes?: { sdJwtVcVcts: Array<string>; msoMdocDoctypes: Array<string> }
-}) => {
-  const offeredCredentialsToRequest = credentialConfigurationIdsToRequest
-    ? resolvedCredentialOffer.offeredCredentials.filter((offered) =>
-        credentialConfigurationIdsToRequest.includes(offered.id)
-      )
-    : [resolvedCredentialOffer.offeredCredentials[0]]
-
-  if (offeredCredentialsToRequest.length === 0) {
-    throw new Error(
-      `Parameter 'credentialConfigurationIdsToRequest' with values ${credentialConfigurationIdsToRequest} is not a credential_configuration_id in the credential offer.`
-    )
-  }
-
-  const credentials = await agent.modules.openId4VcHolder.requestCredentials({
+  enableHardwareBackedHolderBinding?: boolean
+}): Promise<OpenIDCredentialRecord> => {
+  const credentialConfigurationIds = getCredentialConfigurationIdsToRequest({
     resolvedCredentialOffer,
-    ...accessToken,
+    credentialConfigurationIdsToRequest,
+  })
+  const tokenBoundDpop = tokenResponse.dpop
+
+  const credentials = await agent.openid4vc.holder.requestCredentials({
+    resolvedCredentialOffer,
+    accessToken: tokenResponse.accessToken,
+    cNonce: tokenResponse.cNonce,
+    dpop: tokenBoundDpop,
     clientId,
-    credentialsToRequest: credentialConfigurationIdsToRequest,
+    credentialConfigurationIds,
     verifyCredentialStatus: false,
-    allowedProofOfPossessionSignatureAlgorithms: [
-      // NOTE: MATTR launchpad for JFF MUST use EdDSA. So it is important that the default (first allowed one)
-      // is EdDSA. The list is ordered by preference, so if no suites are defined by the issuer, the first one
-      // will be used
-      JwaSignatureAlgorithm.EdDSA,
-      JwaSignatureAlgorithm.ES256,
-    ],
+    allowedProofOfPossessionSignatureAlgorithms: enableHardwareBackedHolderBinding ? ['ES256'] : ['EdDSA', 'ES256'],
     credentialBindingResolver: async ({
       supportedDidMethods,
-      keyType,
+      proofTypes,
       supportsAllDidMethods,
       supportsJwk,
       credentialFormat,
-      supportedCredentialId,
     }: OpenId4VciCredentialBindingOptions) => {
       return customCredentialBindingResolver({
         agent,
         supportedDidMethods,
-        keyType,
+        proofTypes,
         supportsAllDidMethods,
         supportsJwk,
         credentialFormat,
-        supportedCredentialId,
-        resolvedCredentialOffer,
-        pidSchemes,
+        enableHardwareBackedHolderBinding,
       })
     },
   })
 
   // We only support one credential for now
-  const [firstCredential] = credentials
+  const [firstCredential] = credentials.credentials
   if (!firstCredential)
     throw new Error('Error retrieving credential using pre authorized flow: firstCredential undefined!.')
-
-  let record: SdJwtVcRecord | W3cCredentialRecord | MdocRecord
 
   if (typeof firstCredential === 'string') {
     throw new Error('Error retrieving credential using pre authorized flow: firstCredential is string.')
   }
 
-  if ('compact' in firstCredential.credential) {
-    // TODO: add claimFormat to SdJwtVc
-    record = new SdJwtVcRecord({
-      compactSdJwtVc: firstCredential.credential.compact,
-    })
-  } else if (firstCredential.credential instanceof Mdoc) {
-    record = new MdocRecord({
-      mdoc: firstCredential.credential,
-    })
-  } else {
-    record = new W3cCredentialRecord({
-      credential: firstCredential.credential as W3cJwtVerifiableCredential | W3cJsonLdVerifiableCredential,
-      // We don't support expanded types right now, but would become problem when we support JSON-LD
-      tags: {},
-    })
-  }
+  const record = firstCredential.record
+  const requestedCredentialConfiguration =
+    resolvedCredentialOffer.offeredCredentialConfigurations[credentialConfigurationIds[0]]
 
-  const openId4VcMetadata = extractOpenId4VcCredentialMetadata(
-    resolvedCredentialOffer.offeredCredentials[0] as OpenId4VciCredentialSupportedWithId,
-    {
-      id: resolvedCredentialOffer.metadata.issuer,
-      display: resolvedCredentialOffer.metadata.credentialIssuerMetadata.display,
-    }
-  )
+  const openId4VcMetadata = extractOpenId4VcCredentialMetadata(requestedCredentialConfiguration as any, {
+    id: resolvedCredentialOffer.metadata.credentialIssuer.credential_issuer,
+    display: resolvedCredentialOffer.metadata.credentialIssuer.display,
+  })
 
   setOpenId4VcCredentialMetadata(record, openId4VcMetadata)
 

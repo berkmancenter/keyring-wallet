@@ -10,30 +10,29 @@ import {
   AnonCredsRequestedPredicateMatch,
   getCredentialsForAnonCredsProofRequest,
 } from '@credo-ts/anoncreds'
+import { parseDid } from '@credo-ts/core'
+import { useConnectionById } from '@bifold/react-hooks'
 import {
-  Agent,
-  BasicMessageRecord,
-  ConnectionRecord,
-  CredentialExchangeRecord,
-  CredentialState,
-  HandshakeProtocol,
-  ProofExchangeRecord,
-  ProofState,
-  parseDid,
-  OutOfBandRecord,
-  CredentialPreviewAttribute,
-  OutOfBandRole,
-} from '@credo-ts/core'
-import { BasicMessageRole } from '@credo-ts/core/build/modules/basic-messages/BasicMessageRole'
-import { useConnectionById } from '@credo-ts/react-hooks'
+  DidCommBasicMessageRecord,
+  DidCommConnectionRecord,
+  DidCommCredentialExchangeRecord,
+  DidCommCredentialState,
+  DidCommHandshakeProtocol,
+  DidCommProofExchangeRecord,
+  DidCommProofState,
+  DidCommOutOfBandRecord,
+  DidCommCredentialPreviewAttribute,
+  DidCommOutOfBandRole,
+  DidCommBasicMessageRole,
+} from '@credo-ts/didcomm'
 import { BrandingOverlay, CaptureBaseAttributeType } from '@bifold/oca'
 import { Attribute, CredentialOverlay, Predicate } from '@bifold/oca/build/legacy'
 import { Buffer } from 'buffer'
 import moment from 'moment'
 import { parseUrl } from 'query-string'
 import { ReactNode } from 'react'
-import { TFunction } from 'react-i18next'
 import { DeviceEventEmitter } from 'react-native'
+
 import { EventTypes, domain } from '../constants'
 import { i18n } from '../localization/index'
 import { BifoldLogger } from '../services/logger'
@@ -54,17 +53,11 @@ import {
   filterInvalidProofRequestMatches,
   getDescriptorMetadata,
 } from './anonCredsProofRequestMapper'
-import { getCredentialName } from './cred-def'
+import { fallbackDefaultCredentialNameValue, defaultCredDefTag } from './cred-def'
+import { getEffectiveCredentialName } from './credential'
 import { isOpenIdCredentialOffer, isOpenIdPresentationRequest } from './parsers'
 import { isMediatorInvitation } from './mediatorhelpers'
-
-// Import VRC module functions
-export {
-  getOrCreateRelationshipDid,
-  setRelationshipDidOnConnection,
-  setupVrcConnectionHandler,
-  createRelationshipInvitation,
-} from '../modules/vrc'
+import { TFunction } from 'i18next'
 
 export { parsedCredDefNameFromCredential } from './cred-def'
 
@@ -187,9 +180,9 @@ export function formatTime(
       trim && sameYear
         ? momentTime.format(formatString)
         : // if non-english, don't include comma between year and month
-        isNonEnglish
-        ? `${momentTime.format(formatString)} ${momentTime.format('YYYY')}`
-        : `${momentTime.format(formatString)}, ${momentTime.format('YYYY')}`
+          isNonEnglish
+          ? `${momentTime.format(formatString)} ${momentTime.format('YYYY')}`
+          : `${momentTime.format(formatString)}, ${momentTime.format('YYYY')}`
     if (includeHour) {
       formattedTime = `${formattedTime}, ${momentTime.format(hoursFormat)}`
     }
@@ -260,8 +253,28 @@ export function formatIfDate(format: string | undefined, value: string | number 
   return value
 }
 
+/**
+ * Extracts attribute formats from an overlay bundle.
+ * Used by credential card components to get format information for attributes.
+ */
+export const getAttributeFormats = (bundle: any): Record<string, string | undefined> => {
+  const overlayBundle = bundle?.bundle ?? bundle
+  const attributes = overlayBundle?.attributes
+
+  if (!Array.isArray(attributes)) {
+    return {}
+  }
+
+  return attributes.reduce((prev: Record<string, string | undefined>, curr: { name?: string; format?: string }) => {
+    if (!curr?.name) {
+      return prev
+    }
+    return { ...prev, [curr.name]: curr.format }
+  }, {})
+}
+
 export function getConnectionName(
-  connection: ConnectionRecord | undefined,
+  connection: DidCommConnectionRecord | undefined,
   alternateContactNames: Record<string, string>
 ): string {
   return (
@@ -273,18 +286,31 @@ export function getConnectionName(
   )
 }
 
-export function useCredentialConnectionLabel(credential?: CredentialExchangeRecord) {
+export function useCredentialConnectionLabel(
+  credential?: DidCommCredentialExchangeRecord,
+  overlay?: CredentialOverlay<BrandingOverlay>
+) {
   const connection = useConnectionById(credential?.connectionId ?? '')
 
   if (!credential) {
     return ''
   }
 
-  if (credential.connectionId) {
-    return connection?.alias || connection?.theirLabel || credential.connectionId
+  const connectionLabel = credential.connectionId ? connection?.alias || connection?.theirLabel || '' : ''
+
+  if (connectionLabel) {
+    return connectionLabel
   }
 
-  return 'Unknown Contact'
+  if (overlay?.metaOverlay?.issuer) {
+    return overlay.metaOverlay.issuer
+  }
+
+  if (!credential.connectionId) {
+    return 'Unknown Contact'
+  }
+
+  return credential.connectionId
 }
 
 export function useConnectionImageUrl(connectionId: string) {
@@ -333,9 +359,49 @@ export const credentialSortFn = (a: any, b: any) => {
   }
 }
 
-const credNameFromRestriction = async (
+export const resolveCredDefTag = async (cred_def_id: string, agent?: BifoldAgent): Promise<string | undefined> => {
+  if (cred_def_id && agent?.modules?.anoncreds) {
+    try {
+      const { credentialDefinition } = await agent.modules.anoncreds.getCredentialDefinition(cred_def_id)
+      if (
+        credentialDefinition?.tag &&
+        credentialDefinition.tag.toLowerCase() !== defaultCredDefTag &&
+        credentialDefinition.tag !== fallbackDefaultCredentialNameValue
+      ) {
+        return credentialDefinition.tag
+      }
+    } catch (error) {
+      // Failed to resolve credential definition, return undefined
+      // This is expected when the credential definition doesn't exist or isn't accessible
+      // eslint-disable-next-line no-console
+      console.debug('Failed to resolve credential definition tag', { cred_def_id, error })
+      return undefined
+    }
+  }
+  return undefined
+}
+
+export const resolveSchemaName = async (schema_id: string, agent?: BifoldAgent): Promise<string | undefined> => {
+  if (schema_id && agent?.modules?.anoncreds) {
+    try {
+      const { schema } = await agent.modules.anoncreds.getSchema(schema_id)
+      if (schema?.name && schema.name !== fallbackDefaultCredentialNameValue) {
+        return schema.name
+      }
+    } catch (error) {
+      // Failed to resolve schema, return undefined
+      // This is expected when the schema doesn't exist or isn't accessible
+      // eslint-disable-next-line no-console
+      console.debug('Failed to resolve schema name', { schema_id, error })
+      return undefined
+    }
+  }
+  return undefined
+}
+
+export const credNameFromRestriction = async (
   queries?: AnonCredsProofRequestRestriction[],
-  agent?: Agent
+  agent?: BifoldAgent
 ): Promise<string> => {
   let schema_name = ''
   let cred_def_id = ''
@@ -345,11 +411,30 @@ const credNameFromRestriction = async (
     cred_def_id = (query?.cred_def_id as string) ?? cred_def_id
     schema_id = (query?.schema_id as string) ?? schema_id
   })
-  if (schema_name && (schema_name.toLowerCase() !== 'default' || schema_name.toLowerCase() !== 'credential')) {
+
+  // Priority 1: Provided restriction schema name (from schema_name in restriction if meaningful)
+  if (
+    schema_name &&
+    schema_name.toLowerCase() !== defaultCredDefTag &&
+    schema_name.toLowerCase() !== fallbackDefaultCredentialNameValue.toLowerCase()
+  ) {
     return schema_name
-  } else {
-    return await getCredentialName(cred_def_id, schema_id, agent)
   }
+
+  // Priority 2: Try to resolve credential definition tag
+  const credDefTag = await resolveCredDefTag(cred_def_id, agent)
+  if (credDefTag) {
+    return credDefTag
+  }
+
+  // Priority 3: Try to resolve schema name
+  const schemaName = await resolveSchemaName(schema_id, agent)
+  if (schemaName) {
+    return schemaName
+  }
+
+  // Priority 4: Return default fallback
+  return fallbackDefaultCredentialNameValue
 }
 
 export const credDefIdFromRestrictions = (queries?: AnonCredsProofRequestRestriction[]): string => {
@@ -455,8 +540,8 @@ export const evaluatePredicates =
 // Flagging any attribute not found in wallet credentials
 const addMissingDisplayAttributes = async (
   attrReq: AnonCredsRequestedAttribute,
-  records: CredentialExchangeRecord[],
-  agent?: Agent
+  records: DidCommCredentialExchangeRecord[],
+  agent?: BifoldAgent
 ): Promise<ProofCredentialAttributes> => {
   const { name, names, restrictions } = attrReq
   const credName = await credNameFromRestriction(restrictions, agent)
@@ -476,7 +561,7 @@ const addMissingDisplayAttributes = async (
 
   // Filter records for requested schema id of credential definition id
   const filteredCredentialRecords = records.filter(
-    (record: CredentialExchangeRecord) =>
+    (record: DidCommCredentialExchangeRecord) =>
       getCredentialSchemaIdForRecord(record) === schemaId || getCredentialDefinitionIdForRecord(record) === credDefId
   )
 
@@ -486,9 +571,9 @@ const addMissingDisplayAttributes = async (
   // flag any not found attributes with an error
   for (const attributeName of [...(names ?? (name && [name]) ?? [])]) {
     // filter through credential record attributes for a given name
-    const [attribute] = filteredCredentialRecords.map((item: CredentialExchangeRecord) => {
+    const [attribute] = filteredCredentialRecords.map((item: DidCommCredentialExchangeRecord) => {
       return item.credentialAttributes?.filter(
-        (attribute: CredentialPreviewAttribute) => attribute.name === attributeName
+        (attribute: DidCommCredentialPreviewAttribute) => attribute.name === attributeName
       )
     })
     if (attribute && attribute.length > 0) {
@@ -521,9 +606,9 @@ export const processProofAttributes = async (
   t: TFunction<'translation', undefined>,
   request?: AnonCredsProofRequest,
   credentials?: AnonCredsCredentialsForProofRequest, // credentials that 100% validate the proof request
-  credentialRecords?: CredentialExchangeRecord[], // all the credentials in the wallet
+  credentialRecords?: DidCommCredentialExchangeRecord[], // all the credentials in the wallet
   groupByReferent?: boolean,
-  agent?: Agent
+  agent?: BifoldAgent
 ): Promise<{ [key: string]: ProofCredentialAttributes }> => {
   const processedAttributes = {} as { [key: string]: ProofCredentialAttributes }
   const requestedProofAttributes = request?.requested_attributes
@@ -563,14 +648,6 @@ export const processProofAttributes = async (
     }
     //iterate over all credentials that satisfy the proof
     for (const credential of credentialList) {
-      let credName = key
-      if (credential?.credentialInfo?.credentialDefinitionId || credential?.credentialInfo?.schemaId) {
-        credName = await getCredentialName(
-          credential?.credentialInfo?.credentialDefinitionId,
-          credential?.credentialInfo?.schemaId,
-          agent
-        )
-      }
       let revoked = false
       let credExchangeRecord = undefined
       if (credential) {
@@ -583,6 +660,9 @@ export const processProofAttributes = async (
       } else {
         continue
       }
+
+      // Use cached metadata if we have the credential record
+      const credName = credExchangeRecord ? getEffectiveCredentialName(credExchangeRecord) : key
       for (const attributeName of [...(names ?? (name && [name]) ?? [])]) {
         if (!processedAttributes[credential.credentialId]) {
           // init processedAttributes object
@@ -635,7 +715,7 @@ export const mergeAttributesAndPredicates = (
   return merged
 }
 
-const addMissingDisplayPredicates = async (predReq: AnonCredsRequestedPredicate, agent?: Agent) => {
+const addMissingDisplayPredicates = async (predReq: AnonCredsRequestedPredicate, agent?: BifoldAgent) => {
   const { name, p_type: pType, p_value: pValue, restrictions } = predReq
 
   const credName = await credNameFromRestriction(restrictions, agent)
@@ -667,9 +747,9 @@ const addMissingDisplayPredicates = async (predReq: AnonCredsRequestedPredicate,
 export const processProofPredicates = async (
   request?: AnonCredsProofRequest,
   credentials?: AnonCredsCredentialsForProofRequest,
-  credentialRecords?: CredentialExchangeRecord[],
+  credentialRecords?: DidCommCredentialExchangeRecord[],
   groupByReferent?: boolean,
-  agent?: Agent
+  agent?: BifoldAgent
 ): Promise<{ [key: string]: ProofCredentialPredicates }> => {
   const processedPredicates = {} as { [key: string]: ProofCredentialPredicates }
   const requestedProofPredicates = request?.requested_predicates
@@ -717,14 +797,10 @@ export const processProofPredicates = async (
 
       const credNameRestriction = await credNameFromRestriction(requestedProofPredicates[key]?.restrictions, agent)
 
-      let credName = credNameRestriction ?? key
-      if (credential?.credentialInfo?.credentialDefinitionId || credential?.credentialInfo?.schemaId) {
-        credName = await getCredentialName(
-          credential?.credentialInfo?.credentialDefinitionId,
-          credential?.credentialInfo?.schemaId,
-          agent
-        )
-      }
+      // Use cached metadata if we have the credential record
+      const credName = credExchangeRecord
+        ? getEffectiveCredentialName(credExchangeRecord)
+        : (credNameRestriction ?? key)
       if (!processedPredicates[credential.credentialId]) {
         processedPredicates[credential.credentialId] = {
           altCredentials,
@@ -755,8 +831,8 @@ export const processProofPredicates = async (
 
 export const retrieveCredentialsForProof = async (
   agent: BifoldAgent,
-  proof: ProofExchangeRecord,
-  fullCredentials: CredentialExchangeRecord[],
+  proof: DidCommProofExchangeRecord,
+  fullCredentials: DidCommCredentialExchangeRecord[],
   t: TFunction<'translation', undefined>,
   groupByReferent?: boolean
 ): Promise<CredentialDataForProof | undefined> => {
@@ -764,19 +840,24 @@ export const retrieveCredentialsForProof = async (
   // `getCredentialsForRequest` will fail otherwise.
   // if a proof is declined, it will move out of a RequestReceived state
   // and this will fail because it is running against a declined proof
-  if (proof.state !== ProofState.RequestReceived) {
+  if (proof.state !== DidCommProofState.RequestReceived) {
     return
   }
 
   try {
-    const format = await agent.proofs.getFormatData(proof.id)
+    const didcomm = (agent as any)?.modules?.didcomm ?? (agent as any)
+    if (!didcomm?.proofs) {
+      throw new Error(t('ProofRequest.RequestedCredentialsCouldNotBeFound'))
+    }
+
+    const format = await didcomm.proofs.getFormatData(proof.id)
     const hasPresentationExchange = format.request?.presentationExchange !== undefined
     const hasAnonCreds = format.request?.anoncreds !== undefined
     const hasIndy = format.request?.indy !== undefined
 
     // Will fail if credential not in state 'request-received'
-    const credentialsAsPromise = agent.proofs.getCredentialsForRequest({
-      proofRecordId: proof.id,
+    const credentialsAsPromise = didcomm.proofs.getCredentialsForRequest({
+      proofExchangeRecordId: proof.id,
       proofFormats: {
         // FIXME: Credo will try to use the format, even if the value is undefined (but the key is present)
         // We should ignore the key, if the value is undefined. For now this is a workaround.
@@ -807,8 +888,8 @@ export const retrieveCredentialsForProof = async (
     })
 
     // Will fail if credential not in state 'request-received'
-    const credentialsWithRevokedAsPromise = agent.proofs.getCredentialsForRequest({
-      proofRecordId: proof.id,
+    const credentialsWithRevokedAsPromise = didcomm.proofs.getCredentialsForRequest({
+      proofExchangeRecordId: proof.id,
       proofFormats: {
         // FIXME: Credo will try to use the format, even if the value is undefined (but the key is present)
         // We should ignore the key, if the value is undefined. For now this is a workaround.
@@ -990,8 +1071,8 @@ export const sortCredentialsForAutoSelect = (
     }
   }
 
-  requestedAttributes && requestedAttributes.sort(sortFn)
-  requestedPredicates && requestedPredicates.sort(sortFn)
+  requestedAttributes?.sort(sortFn)
+  requestedPredicates?.sort(sortFn)
 
   return credentials
 }
@@ -1003,18 +1084,22 @@ export const sortCredentialsForAutoSelect = (
  * received invitations exist
  * @param agent an Agent instance
  * @param invitationId specifically a *received* invitation id
+ * @param logger optional logger instance
  */
-export const removeExistingInvitationsById = async (agent: Agent | undefined, invitationId: string): Promise<void> => {
+export const removeExistingInvitationsById = async (
+  agent: BifoldAgent | undefined,
+  invitationId: string
+): Promise<void> => {
   // This is implemented just as findByReceivedInvitationId is
   // in Credo only this is able to return multiple if they exist
   const oobRecords =
-    (await agent?.oob.findAllByQuery({
+    (await agent?.modules.didcomm.oob.findAllByQuery({
       invitationId,
-      role: OutOfBandRole.Receiver,
+      role: DidCommOutOfBandRole.Receiver,
     })) || []
 
   for (const r of oobRecords) {
-    await agent?.oob.deleteById(r.id)
+    await agent?.modules.didcomm.oob.deleteById(r.id)
     agent?.config.logger.info('Successfully removed an existing oob invitation')
   }
 }
@@ -1029,11 +1114,11 @@ export const removeExistingInvitationsById = async (agent: Agent | undefined, in
  */
 export const connectFromInvitation = async (
   uri: string,
-  agent: Agent | undefined,
+  agent: BifoldAgent | undefined,
   implicitInvitations: boolean = false,
   reuseConnection: boolean = false
-): Promise<OutOfBandRecord> => {
-  const invitation = await agent?.oob.parseInvitation(uri)
+): Promise<DidCommOutOfBandRecord> => {
+  const invitation = await agent?.modules.didcomm.oob.parseInvitation(uri)
 
   if (!invitation) {
     throw new Error('Could not parse invitation from URL')
@@ -1043,21 +1128,24 @@ export const connectFromInvitation = async (
     try {
       if (invitation.getDidServices().length > 0) {
         const did = parseDid(invitation.getDidServices()[0])
-        const record = await agent?.oob.receiveImplicitInvitation({
+        const record = await agent?.modules.didcomm.oob.receiveImplicitInvitation({
           did: did.did,
-          label: invitation.label,
-          handshakeProtocols: invitation.handshakeProtocols as HandshakeProtocol[] | undefined,
+          label: invitation.label ?? '',
+          handshakeProtocols: invitation.handshakeProtocols as DidCommHandshakeProtocol[] | undefined,
         })
 
-        return record?.outOfBandRecord as OutOfBandRecord
+        return record?.outOfBandRecord as DidCommOutOfBandRecord
       }
-    } catch (e) {
+    } catch {
       // don't throw an error, will try to connect again below
     }
   }
 
-  const record = await agent?.oob.receiveInvitation(invitation, { reuseConnection })
-  return record?.outOfBandRecord as OutOfBandRecord
+  const record = await agent?.modules.didcomm.oob.receiveInvitation(invitation, {
+    reuseConnection,
+    label: 'didcomm-oob-invitation',
+  })
+  return record?.outOfBandRecord as DidCommOutOfBandRecord
 }
 
 const processBetaUrlIfRequired = (uri: string): string => {
@@ -1083,10 +1171,10 @@ const processBetaUrlIfRequired = (uri: string): string => {
  * is initialized. Polls until a trust ping succeeds, confirming end-to-end
  * transport readiness.
  */
-const waitForMediatorTransport = async (agent: Agent, logger: BifoldLogger, timeoutMs = 12000): Promise<void> => {
+const waitForMediatorTransport = async (agent: BifoldAgent, logger: BifoldLogger, timeoutMs = 12000): Promise<void> => {
   let mediator
   try {
-    mediator = await agent.mediationRecipient.findDefaultMediator()
+    mediator = await agent.modules.didcomm.mediationRecipient.findDefaultMediator()
   } catch {
     return
   }
@@ -1101,9 +1189,9 @@ const waitForMediatorTransport = async (agent: Agent, logger: BifoldLogger, time
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const connection = await agent.connections.getById(mediator.connectionId)
+      const connection = await agent.modules.didcomm.connections.getById(mediator.connectionId)
       if (connection?.isReady) {
-        await agent.connections.sendPing(mediator.connectionId, {
+        await agent.modules.didcomm.connections.sendPing(mediator.connectionId, {
           responseRequested: false,
           withReturnRouting: true,
         })
@@ -1133,7 +1221,7 @@ const waitForMediatorTransport = async (agent: Agent, logger: BifoldLogger, time
  */
 export const connectFromScanOrDeepLink = async (
   uri: string,
-  agent: Agent | undefined,
+  agent: BifoldAgent | undefined,
   logger: BifoldLogger,
   navigation: any,
   isDeepLink: boolean,
@@ -1144,17 +1232,17 @@ export const connectFromScanOrDeepLink = async (
     return
   }
 
-  // TODO:(jl) Do we care if the connection is a deep link?
   logger.info(`Attempting to connect from ${isDeepLink ? 'deeplink' : 'qr scan'}`)
 
   if (isDeepLink) {
     await waitForMediatorTransport(agent, logger)
   }
+
   try {
     if (isOpenIdCredentialOffer(uri)) {
       navigation.navigate(Stacks.ConnectionStack as any, {
-        screen: Screens.Connection,
-        params: { oobRecordId: '', openIDUri: uri },
+        screen: Screens.OpenIDConnection,
+        params: { openIDUri: uri },
       })
 
       return
@@ -1162,8 +1250,8 @@ export const connectFromScanOrDeepLink = async (
 
     if (isOpenIdPresentationRequest(uri)) {
       navigation.navigate(Stacks.ConnectionStack as any, {
-        screen: Screens.Connection,
-        params: { oobRecordId: '', openIDPresentationUri: uri },
+        screen: Screens.OpenIDConnection,
+        params: { openIDPresentationUri: uri },
       })
 
       return
@@ -1200,8 +1288,9 @@ export const connectFromScanOrDeepLink = async (
  * @param goalCode add goalCode to connection invitation
  * @returns a connection record
  */
-export const createConnectionInvitation = async (agent: Agent | undefined, goalCode?: string) => {
-  const record = await agent?.oob.createInvitation({ goalCode })
+export const createConnectionInvitation = async (agent: BifoldAgent | undefined, goalCode?: string) => {
+  const didcomm = (agent as any)?.modules?.didcomm ?? (agent as any)
+  const record = await didcomm?.oob?.createInvitation?.({ goalCode })
   if (!record) {
     throw new Error('Could not create new invitation')
   }
@@ -1221,7 +1310,7 @@ export const createConnectionInvitation = async (agent: Agent | undefined, goalC
  * @param type add goalCode to connection invitation
  * @returns a connection record
  */
-export const createTempConnectionInvitation = async (agent: Agent | undefined, type: 'issue' | 'verify') => {
+export const createTempConnectionInvitation = async (agent: BifoldAgent | undefined, type: 'issue' | 'verify') => {
   return createConnectionInvitation(agent, `aries.vc.${type}.once`)
 }
 
@@ -1237,105 +1326,105 @@ export function isChildFunction<T>(children: ReactNode | ChildFn<T>): children i
 }
 
 // Fetches the credential definition id for a given credential exchange record, returns null if ID is not found
-export const getCredentialDefinitionIdForRecord = (record: CredentialExchangeRecord): string | null => {
+export const getCredentialDefinitionIdForRecord = (record: DidCommCredentialExchangeRecord): string | null => {
   // assumes record is anonCred
   return record.metadata.get('_anoncreds/credential')?.credentialDefinitionId ?? null
 }
 
 // Fetches the schema id for a given credential exchange record, returns null if ID is not found
-export const getCredentialSchemaIdForRecord = (record: CredentialExchangeRecord): string | null => {
+export const getCredentialSchemaIdForRecord = (record: DidCommCredentialExchangeRecord): string | null => {
   // assumes record is anonCred
   return record.metadata.get('_anoncreds/credential')?.schemaId ?? null
 }
 
-export function getCredentialEventRole(record: CredentialExchangeRecord) {
+export function getCredentialEventRole(record: DidCommCredentialExchangeRecord) {
   switch (record.state) {
     // assuming only Holder states are supported here
-    case CredentialState.ProposalSent:
+    case DidCommCredentialState.ProposalSent:
       return Role.me
-    case CredentialState.OfferReceived:
-      return Role.them // Issuer sent the offer
-    case CredentialState.RequestSent:
+    case DidCommCredentialState.OfferReceived:
+      return Role.them
+    case DidCommCredentialState.RequestSent:
       return Role.me
-    case CredentialState.Declined:
+    case DidCommCredentialState.Declined:
       return Role.me
-    case CredentialState.CredentialReceived:
-      return Role.them // Issuer sent the credential
-    case CredentialState.Done:
-      return Role.them // Issuer completed the issuance - credential came from them
+    case DidCommCredentialState.CredentialReceived:
+      return Role.me
+    case DidCommCredentialState.Done:
+      return Role.me
     default:
       return Role.me
   }
 }
 
-export function getCredentialEventLabel(record: CredentialExchangeRecord) {
+export function getCredentialEventLabel(record: DidCommCredentialExchangeRecord) {
   switch (record.state) {
     // assuming only Holder states are supported here
-    case CredentialState.ProposalSent:
+    case DidCommCredentialState.ProposalSent:
       return 'Chat.CredentialProposalSent'
-    case CredentialState.OfferReceived:
+    case DidCommCredentialState.OfferReceived:
       return 'Chat.CredentialOfferReceived'
-    case CredentialState.RequestSent:
+    case DidCommCredentialState.RequestSent:
       return 'Chat.CredentialRequestSent'
-    case CredentialState.Declined:
+    case DidCommCredentialState.Declined:
       return 'Chat.CredentialDeclined'
-    case CredentialState.CredentialReceived:
-    case CredentialState.Done:
+    case DidCommCredentialState.CredentialReceived:
+    case DidCommCredentialState.Done:
       return 'Chat.CredentialReceived'
     default:
       return ''
   }
 }
 
-export function getProofEventRole(record: ProofExchangeRecord) {
+export function getProofEventRole(record: DidCommProofExchangeRecord) {
   switch (record.state) {
-    case ProofState.RequestSent:
+    case DidCommProofState.RequestSent:
       return Role.me
-    case ProofState.ProposalReceived:
+    case DidCommProofState.ProposalReceived:
       return Role.me
-    case ProofState.PresentationReceived:
+    case DidCommProofState.PresentationReceived:
       return Role.them
-    case ProofState.RequestReceived:
+    case DidCommProofState.RequestReceived:
       return Role.them
-    case ProofState.ProposalSent:
-    case ProofState.PresentationSent:
+    case DidCommProofState.ProposalSent:
+    case DidCommProofState.PresentationSent:
       return Role.me
-    case ProofState.Declined:
+    case DidCommProofState.Declined:
       return Role.me
-    case ProofState.Abandoned:
+    case DidCommProofState.Abandoned:
       return Role.them
-    case ProofState.Done:
+    case DidCommProofState.Done:
       return record.isVerified !== undefined ? Role.them : Role.me
     default:
       return Role.me
   }
 }
 
-export function getProofEventLabel(record: ProofExchangeRecord) {
+export function getProofEventLabel(record: DidCommProofExchangeRecord) {
   switch (record.state) {
-    case ProofState.RequestSent:
-    case ProofState.ProposalReceived:
+    case DidCommProofState.RequestSent:
+    case DidCommProofState.ProposalReceived:
       return 'Chat.ProofRequestSent'
-    case ProofState.PresentationReceived:
+    case DidCommProofState.PresentationReceived:
       return 'Chat.ProofPresentationReceived'
-    case ProofState.RequestReceived:
+    case DidCommProofState.RequestReceived:
       return 'Chat.ProofRequestReceived'
-    case ProofState.ProposalSent:
-    case ProofState.PresentationSent:
+    case DidCommProofState.ProposalSent:
+    case DidCommProofState.PresentationSent:
       return 'Chat.ProofRequestSatisfied'
-    case ProofState.Declined:
+    case DidCommProofState.Declined:
       return 'Chat.ProofRequestRejected'
-    case ProofState.Abandoned:
+    case DidCommProofState.Abandoned:
       return 'Chat.ProofRequestRejectReceived'
-    case ProofState.Done:
+    case DidCommProofState.Done:
       return record.isVerified !== undefined ? 'Chat.ProofPresentationReceived' : 'Chat.ProofRequestSatisfied'
     default:
       return ''
   }
 }
 
-export function getMessageEventRole(record: BasicMessageRecord) {
-  return record.role === BasicMessageRole.Sender ? Role.me : Role.them
+export function getMessageEventRole(record: DidCommBasicMessageRecord) {
+  return record.role === DidCommBasicMessageRole.Sender ? Role.me : Role.them
 }
 
 export function generateRandomWalletName() {
@@ -1366,3 +1455,11 @@ export function getSecondaryBackgroundColor(
       : overlay.brandingOverlay?.secondaryBackgroundColor
   }
 }
+
+// Re-export VRC module functions (Keyring)
+export {
+  getOrCreateRelationshipDid,
+  setRelationshipDidOnConnection,
+  setupVrcConnectionHandler,
+  createRelationshipInvitation,
+} from '../modules/vrc'

@@ -3,7 +3,6 @@
  * Tests the integration between VRC credential exchange and the witness flow
  */
 
-import { Agent } from '@credo-ts/core'
 import {
   registerWitnessStateGetter,
   registerWitnessSessionCallback,
@@ -20,48 +19,10 @@ jest.mock('../../witnessed-vrc-manager', () => ({
 }))
 
 describe('VRC Manager - Witness Integration', () => {
-  let mockAgent: any
   let mockWitnessState: WitnessConnectionState
-  let capturedSessionCallback: ((session: WitnessSession) => void) | undefined
-  let capturedNotificationCallback: ((message: string, type: 'success' | 'error' | 'info') => void) | undefined
 
   beforeEach(() => {
     jest.clearAllMocks()
-
-    // Reset captured callbacks
-    capturedSessionCallback = undefined
-    capturedNotificationCallback = undefined
-
-    // Setup mock agent
-    mockAgent = {
-      config: {
-        logger: {
-          info: jest.fn(),
-          debug: jest.fn(),
-          error: jest.fn(),
-          warn: jest.fn(),
-        },
-      },
-      basicMessages: {
-        sendMessage: jest.fn().mockResolvedValue(undefined),
-      },
-      connections: {
-        getById: jest.fn(),
-        getAll: jest.fn().mockResolvedValue([]),
-      },
-      credentials: {
-        offerCredential: jest.fn().mockResolvedValue(undefined),
-      },
-      oob: {
-        findById: jest.fn(),
-      },
-      dependencyManager: {
-        resolve: jest.fn(),
-      },
-      w3cCredentials: {
-        signPresentation: jest.fn(),
-      },
-    }
 
     // Setup mock witness state (connected with valid locality)
     const now = new Date()
@@ -91,9 +52,6 @@ describe('VRC Manager - Witness Integration', () => {
 
       registerWitnessSessionCallback(sessionCallback)
 
-      // Store the callback for verification
-      capturedSessionCallback = sessionCallback
-
       expect(() => registerWitnessSessionCallback(sessionCallback)).not.toThrow()
     })
 
@@ -101,9 +59,6 @@ describe('VRC Manager - Witness Integration', () => {
       const notificationCallback = jest.fn()
 
       registerWitnessNotificationCallback(notificationCallback)
-
-      // Store the callback for verification
-      capturedNotificationCallback = notificationCallback
 
       expect(() => registerWitnessNotificationCallback(notificationCallback)).not.toThrow()
     })
@@ -319,7 +274,6 @@ describe('VRC Manager - Witness Integration', () => {
   describe('Credential Offer Prevention', () => {
     it('should prevent duplicate credential offers when witness is involved', () => {
       // The connectionCredentialOffers Map tracks offers to prevent duplicates
-      const connectionId = 'conn-peer-123'
       const offerStatus = 'pending'
 
       // Once stored, should not create duplicate offers

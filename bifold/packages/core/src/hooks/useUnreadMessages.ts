@@ -1,4 +1,4 @@
-import { useBasicMessages } from '@credo-ts/react-hooks'
+import { useBasicMessages } from '@bifold/react-hooks'
 import { useMemo } from 'react'
 
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
@@ -37,5 +37,7 @@ export const useUnreadMessages = (): { unreadByConnection: Record<string, number
     }
 
     return { unreadByConnection, totalUnread }
+    // exclusionVersion intentionally triggers recomputation when the exclusion list changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basicMessages, exclusionVersion])
 }

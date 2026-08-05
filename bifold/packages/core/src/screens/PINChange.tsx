@@ -75,7 +75,7 @@ const PINChange: React.FC<StackScreenProps<SettingStackParams, Screens.ChangePIN
     setModalState,
     clearModal,
     PINSecurity,
-  } = usePINValidation(PIN, PINTwo)
+  } = usePINValidation(PIN)
   usePreventScreenCapture(preventScreenCapture)
 
   const style = StyleSheet.create({
@@ -172,7 +172,7 @@ const PINChange: React.FC<StackScreenProps<SettingStackParams, Screens.ChangePIN
   }, [inlineMessages, isLoading, PIN, PINTwo, PINOld])
 
   return (
-    <KeyboardView keyboardAvoiding={false}>
+    <KeyboardView>
       <View style={style.screenContainer}>
         <View style={style.contentContainer}>
           <PINHeader updatePin />

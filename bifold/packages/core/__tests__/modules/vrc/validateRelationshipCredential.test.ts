@@ -1,4 +1,5 @@
-import { Agent, ConnectionRecord } from '@credo-ts/core'
+import { Agent } from '@credo-ts/core'
+import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { validateRelationshipCredential } from '../../../src/modules/vrc/vrc-manager'
 import { RelationshipDidRepository } from '../../../src/modules/vrc/repositories/RelationshipDidRepository'
 import { RelationshipDidRecord } from '../../../src/modules/vrc/types/RelationshipDidRecord'
@@ -16,7 +17,7 @@ jest.mock('../../../src/modules/vrc/vrc-logging', () => ({
 describe('validateRelationshipCredential', () => {
   let mockAgent: jest.Mocked<Agent>
   let mockRepository: jest.Mocked<RelationshipDidRepository>
-  let mockConnection: Partial<ConnectionRecord>
+  let mockConnection: Partial<DidCommConnectionRecord>
 
   const connectionId = 'connection-123'
   const theirDid = 'did:peer:counterparty-connection-did'
@@ -40,8 +41,12 @@ describe('validateRelationshipCredential', () => {
 
     // Mock agent
     mockAgent = {
-      connections: {
-        getById: jest.fn().mockResolvedValue(mockConnection),
+      modules: {
+        didcomm: {
+          connections: {
+            getById: jest.fn().mockResolvedValue(mockConnection),
+          },
+        },
       },
       dependencyManager: {
         resolve: jest.fn().mockReturnValue(mockRepository),
@@ -186,7 +191,7 @@ describe('validateRelationshipCredential', () => {
     it('should fail when connection has no theirDid', async () => {
       // Arrange
       mockConnection.theirDid = undefined
-      mockAgent.connections.getById = jest.fn().mockResolvedValue(mockConnection)
+      mockAgent.modules.didcomm.connections.getById = jest.fn().mockResolvedValue(mockConnection)
 
       // Act
       const result = await validateRelationshipCredential(
@@ -222,7 +227,7 @@ describe('validateRelationshipCredential', () => {
 
     it('should handle errors gracefully', async () => {
       // Arrange
-      mockAgent.connections.getById = jest.fn().mockRejectedValue(new Error('Connection not found'))
+      mockAgent.modules.didcomm.connections.getById = jest.fn().mockRejectedValue(new Error('Connection not found'))
 
       // Act
       const result = await validateRelationshipCredential(

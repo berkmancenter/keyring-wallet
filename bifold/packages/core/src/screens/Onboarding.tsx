@@ -25,6 +25,8 @@ export interface OnboardingStyleSheet {
   pagerNavigationButton: ViewStyle
 }
 
+// Keyring custom onboarding: card-style carousel with arrow overlays and an
+// always-visible "Get Started" button (instead of upstream's Next/Back pager).
 const CARD_MARGIN = 20
 const ARROW_HIT_AREA = 64
 const ARROW_ICON_SIZE = 56
@@ -133,11 +135,13 @@ const Onboarding: React.FC<OnboardingProps> = ({
     useCallback(() => {
       const onBackPress = () => {
         BackHandler.exitApp()
+
         return true
       }
 
-      BackHandler.addEventListener('hardwareBackPress', onBackPress)
-      return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress)
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress)
+
+      return () => subscription.remove()
     }, [])
   )
 

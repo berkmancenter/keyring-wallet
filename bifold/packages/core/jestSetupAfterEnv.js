@@ -9,7 +9,7 @@ beforeEach(() => {
     if (clearExcludedNotificationConnectionIds) {
       clearExcludedNotificationConnectionIds()
     }
-  } catch (e) {
+  } catch (_e) {
     // Module may not be loaded yet, that's okay
   }
 })

@@ -9,7 +9,7 @@ jest.mock('react-native-document-picker', () => ({
   types: { allFiles: '*/*' },
 }))
 
-jest.mock('@credo-ts/react-hooks', () => ({
+jest.mock('@bifold/react-hooks', () => ({
   useAgent: jest.fn(() => ({
     agent: {
       isInitialized: true,

@@ -127,7 +127,7 @@ export async function ensureHardwareSigningKey(agent: Agent): Promise<{ publicKe
             publicKey: publicKeyBuffer.toString('base64'),
             storage: keyInfo.storage || 'Unknown',
           }
-        } catch (attestError) {
+        } catch (_attestError) {
           // Attestation also failed — delete the orphaned key and recreate from scratch
           logger.warn(`${LOG_PREFIX} Recovery attestation failed — deleting key and recreating...`)
           try {

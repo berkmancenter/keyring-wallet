@@ -47,9 +47,13 @@ describe('WitnessConnectionProvider', () => {
     }
 
     mockAgent = {
-      connections: {
-        getAll: jest.fn().mockResolvedValue([]),
-        getById: jest.fn(),
+      modules: {
+        didcomm: {
+          connections: {
+            getAll: jest.fn().mockResolvedValue([]),
+            getById: jest.fn(),
+          },
+        },
       },
       dependencyManager: {
         resolve: jest.fn().mockReturnValue(mockConnectionRepository),
@@ -85,7 +89,7 @@ describe('WitnessConnectionProvider', () => {
           }),
         },
       }
-      mockAgent.connections.getAll = jest.fn().mockResolvedValue([mockConn])
+      mockAgent.modules.didcomm.connections.getAll = jest.fn().mockResolvedValue([mockConn])
 
       const { result } = renderHook(() => useWitnessConnection(), { wrapper })
 
@@ -112,7 +116,7 @@ describe('WitnessConnectionProvider', () => {
           }),
         },
       }
-      mockAgent.connections.getAll = jest.fn().mockResolvedValue([mockConn])
+      mockAgent.modules.didcomm.connections.getAll = jest.fn().mockResolvedValue([mockConn])
 
       const { result } = renderHook(() => useWitnessConnection(), { wrapper })
 
@@ -140,7 +144,7 @@ describe('WitnessConnectionProvider', () => {
           }),
         },
       }
-      mockAgent.connections.getAll = jest.fn().mockResolvedValue([mockConn])
+      mockAgent.modules.didcomm.connections.getAll = jest.fn().mockResolvedValue([mockConn])
 
       const { result } = renderHook(() => useWitnessConnection(), { wrapper })
 
@@ -183,7 +187,7 @@ describe('WitnessConnectionProvider', () => {
           }),
         },
       }
-      mockAgent.connections.getAll = jest.fn().mockResolvedValue([mockConn])
+      mockAgent.modules.didcomm.connections.getAll = jest.fn().mockResolvedValue([mockConn])
 
       const { result } = renderHook(() => useWitnessConnection(), { wrapper })
 
@@ -214,7 +218,7 @@ describe('WitnessConnectionProvider', () => {
           }),
         },
       }
-      mockAgent.connections.getAll = jest.fn().mockResolvedValue([mockConn])
+      mockAgent.modules.didcomm.connections.getAll = jest.fn().mockResolvedValue([mockConn])
 
       const { result } = renderHook(() => useWitnessConnection(), { wrapper })
 
@@ -246,7 +250,7 @@ describe('WitnessConnectionProvider', () => {
           }),
         },
       }
-      mockAgent.connections.getAll = jest.fn().mockResolvedValue([mockConn])
+      mockAgent.modules.didcomm.connections.getAll = jest.fn().mockResolvedValue([mockConn])
 
       const { result } = renderHook(() => useWitnessConnection(), { wrapper })
 
@@ -288,7 +292,7 @@ describe('WitnessConnectionProvider', () => {
           }),
         },
       }
-      mockAgent.connections.getAll = jest.fn().mockResolvedValue([mockConn])
+      mockAgent.modules.didcomm.connections.getAll = jest.fn().mockResolvedValue([mockConn])
 
       const { result } = renderHook(() => useWitnessConnection(), { wrapper })
 

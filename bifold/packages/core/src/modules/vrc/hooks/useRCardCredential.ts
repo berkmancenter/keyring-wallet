@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 
 import { DispatchAction } from '../../../contexts/reducers/store'
 import { useStore } from '../../../contexts/store'

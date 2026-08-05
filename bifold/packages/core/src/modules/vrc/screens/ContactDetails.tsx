@@ -2,7 +2,7 @@ import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState, useMemo } from 'react'
 import { StyleSheet, View, TouchableOpacity, ScrollView } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { useTranslation } from 'react-i18next'
 
@@ -16,6 +16,7 @@ import { useDeleteContact } from '../hooks/useDeleteContact'
 import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
 import { getWitnessCredentialsForSubject, extractWitnessInfo, getVrcCredentialJsonForSubject, WitnessRecord } from '../utils/witnessCredentialUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
+import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 
 const AVATAR_BG = '#E8E0E8'
 const NAME_COLOR = '#010B13'
@@ -42,6 +43,16 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
 
+  // Live-resolve contact info from stored credentials (received RCard first,
+  // legacy VRC issuer object second) so the screen self-heals if the RCard
+  // arrives after navigation. Route params act as the final fallback.
+  const displayInfo = useMemo(() => {
+    return resolveContactDisplayInfo(w3cCredentialRecords, contact.issuer.id)
+  }, [w3cCredentialRecords, contact.issuer.id])
+  const displayName = displayInfo.name || contact.issuer.name
+  const displayEmail = displayInfo.email || contact.issuer.email
+  const displayOrganization = displayInfo.organization || contact.issuer.organization
+
   const witnessCredentials = useMemo(() => {
     return getWitnessCredentialsForSubject(w3cCredentialRecords, contact.issuer.id)
   }, [w3cCredentialRecords, contact.issuer.id])
@@ -56,20 +67,25 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
     let cancelled = false
     const verify = async () => {
       try {
+        // eslint-disable-next-line no-console
         console.log(`[VRC:Badge] ContactDetails: verifying HW attestation for issuer=${contact.issuer.id}`)
         const rawCred = getVrcCredentialJsonForSubject(w3cCredentialRecords, contact.issuer.id)
         if (!rawCred) {
+          // eslint-disable-next-line no-console
           console.log(`[VRC:Badge] ContactDetails: no raw credential found for issuer`)
           if (!cancelled) setHwVerified(false)
           return
         }
+        // eslint-disable-next-line no-console
         console.log(`[VRC:Badge] ContactDetails: raw credential keys: ${Object.keys(rawCred).sort().join(', ')}`)
         const result = await verifyVrcHardwareEvidence(rawCred as any)
+        // eslint-disable-next-line no-console
         console.log(`[VRC:Badge] ContactDetails: verification result valid=${result?.valid}, error=${result?.error ?? 'none'}`)
         if (!cancelled) {
           setHwVerified(result?.valid === true)
         }
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.log(`[VRC:Badge] ContactDetails: verification exception: ${e}`)
         if (!cancelled) setHwVerified(false)
       }
@@ -90,6 +106,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           setConnectionId(record.connectionId)
         }
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.warn('[VRC:ContactDetails] Connection lookup error:', error instanceof Error ? error.message : String(error))
       }
     }
@@ -299,17 +316,17 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           <View style={styles.avatarCircle}>
             <Icon name="account-outline" size={32} color="#666666" />
           </View>
-          <ThemedText style={styles.contactName}>{contact.issuer.name}</ThemedText>
+          <ThemedText style={styles.contactName}>{displayName}</ThemedText>
           {(witnessRecords.length > 0 || hwVerified) && (
             <View style={styles.badgesContainer}>
               {hwVerified && (
-                <View style={styles.hardwareAttestationBadge}>
+                <View style={styles.hardwareAttestationBadge} testID="SecureExchangeBadge">
                   <Icon name="shield-check" size={14} color={BADGE_HW_TEAL} />
                   <ThemedText style={styles.hardwareAttestationBadgeText}>Secure Exchange</ThemedText>
                 </View>
               )}
               {witnessRecords.length > 0 && (
-                <View style={styles.verifiedBadge}>
+                <View style={styles.verifiedBadge} testID="WitnessedBadge">
                   <Icon name="check-decagram" size={14} color={BADGE_WITNESS_PURPLE} />
                   <ThemedText style={styles.verifiedBadgeText}>Verified</ThemedText>
                 </View>
@@ -322,20 +339,20 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
 
         {/* Detail Fields */}
         <View style={styles.detailsSection}>
-          {contact.issuer.email && (
+          {displayEmail && (
             <View style={styles.fieldGroup}>
               <ThemedText style={styles.fieldLabel}>Email</ThemedText>
               <ThemedText style={styles.fieldValue} selectable={true}>
-                {contact.issuer.email}
+                {displayEmail}
               </ThemedText>
             </View>
           )}
 
-          {contact.issuer.organization && (
+          {displayOrganization && (
             <View style={styles.fieldGroup}>
               <ThemedText style={styles.fieldLabel}>Organisation</ThemedText>
               <ThemedText style={styles.fieldValue} selectable={true}>
-                {contact.issuer.organization}
+                {displayOrganization}
               </ThemedText>
             </View>
           )}
@@ -350,10 +367,10 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
 
         {/* Witness Records */}
         {witnessRecords.length > 0 && (
-          <View style={styles.witnessSection}>
+          <View style={styles.witnessSection} testID="WitnessSection">
             <ThemedText style={styles.witnessSectionHeader}>Witness Records</ThemedText>
             {witnessRecords.map((record, index) => (
-              <View key={index} style={styles.witnessRecord}>
+              <View key={index} style={styles.witnessRecord} testID="WitnessRecord">
                 {record.event && (
                   <View style={styles.witnessSubSection}>
                     <ThemedText style={styles.witnessLabel}>Event</ThemedText>

@@ -23,7 +23,7 @@ describe('Credential Verification Integration', () => {
   describe('Cryptographic Verification', () => {
     // Helper to get the most recently created credential (not stale ones from previous runs)
     const getNewestCredential = async (agent: typeof alice.agent) => {
-      const records = await agent.w3cCredentials.getAllCredentialRecords()
+      const records = await agent.w3cCredentials.getAll()
       const sorted = records
         .filter((r) => r.credential !== null)
         .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))

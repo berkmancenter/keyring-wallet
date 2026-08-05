@@ -1,7 +1,6 @@
 import type { StackScreenProps } from '@react-navigation/stack'
-
-import { CredentialExchangeRecord } from '@credo-ts/core'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
+import { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
 import { BrandingOverlay } from '@bifold/oca'
 import { Attribute, BrandingOverlayType, CredentialOverlay } from '@bifold/oca/build/legacy'
 import React, { useCallback, useEffect, useState } from 'react'
@@ -11,7 +10,6 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
 import { useStore } from '../contexts/store'
 
-import CredentialCard from '../components/misc/CredentialCard'
 import InfoBox, { InfoBoxType } from '../components/misc/InfoBox'
 import CommonRemoveModal from '../components/modals/CommonRemoveModal'
 import Record from '../components/record/Record'
@@ -24,17 +22,23 @@ import { BifoldError } from '../types/error'
 import { CredentialMetadata, credentialCustomMetadata } from '../types/metadata'
 import { ContactStackParams, NotificationStackParams, RootStackParams, Screens, Stacks } from '../types/navigators'
 import { ModalUsage } from '../types/remove'
-import { credentialTextColor, getCredentialIdentifiers, isValidAnonCredsCredential } from '../utils/credential'
+import {
+  credentialTextColor,
+  getCredentialIdentifiers,
+  isValidAnonCredsCredential,
+  getEffectiveCredentialName,
+  ensureCredentialMetadata,
+} from '../utils/credential'
 import { formatTime, useCredentialConnectionLabel } from '../utils/helpers'
 import { buildFieldsFromAnonCredsCredential } from '../utils/oca'
 import { testIdWithKey } from '../utils/testable'
 import { HistoryCardType, HistoryRecord } from '../modules/history/types'
-import { getCredentialName } from '../utils/cred-def'
 import CredentialCardLogo from '../components/views/CredentialCardLogo'
 import CredentialDetailPrimaryHeader from '../components/views/CredentialDetailPrimaryHeader'
 import CredentialDetailSecondaryHeader from '../components/views/CredentialDetailSecondaryHeader'
 import { ThemedText } from '../components/texts/ThemedText'
 import CardWatermark from '../components/misc/CardWatermark'
+import CredentialCardGen from '../components/misc/CredentialCardGen'
 
 type CredentialDetailsProps = StackScreenProps<
   RootStackParams & ContactStackParams & NotificationStackParams,
@@ -51,8 +55,9 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
 
   const { credentialId } = route.params
   const { width, height } = useWindowDimensions()
-  const [credential, setCredential] = useState<CredentialExchangeRecord | undefined>(undefined)
+  const [credential, setCredential] = useState<DidCommCredentialExchangeRecord | undefined>(undefined)
   const { agent } = useAgent()
+  const didcommCredentials = (agent as any)?.modules?.didcomm?.credentials ?? (agent as any)?.credentials
   const { t, i18n } = useTranslation()
   const { ColorPalette, Assets } = useTheme()
   const [bundleResolver, logger, historyManagerCurried, historyEnabled, historyEventsLogger] = useServices([
@@ -83,9 +88,12 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
     // fetch credential for ID
     const fetchCredential = async () => {
       try {
-        const credentialExchangeRecord = await agent?.credentials.getById(credentialId)
+        const credentialExchangeRecord = await didcommCredentials?.getById?.(credentialId)
+        if (!credentialExchangeRecord) {
+          throw new Error('Credential record not found')
+        }
         setCredential(credentialExchangeRecord)
-      } catch (error) {
+      } catch {
         // credential not found for id, display an error
         DeviceEventEmitter.emit(
           EventTypes.ERROR_ADDED,
@@ -94,7 +102,7 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
       }
     }
     fetchCredential()
-  }, [credentialId, agent, t])
+  }, [credentialId, didcommCredentials, t])
 
   const [overlay, setOverlay] = useState<CredentialOverlay<BrandingOverlay>>({
     bundle: undefined,
@@ -102,7 +110,7 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
     metaOverlay: undefined,
     brandingOverlay: undefined,
   })
-  const credentialConnectionLabel = useCredentialConnectionLabel(credential)
+  const credentialConnectionLabel = useCredentialConnectionLabel(credential, overlay)
   const isBranding10 = bundleResolver.getBrandingOverlayType() === BrandingOverlayType.Branding10
   const isBranding11 = bundleResolver.getBrandingOverlayType() === BrandingOverlayType.Branding11
 
@@ -125,9 +133,13 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
   }
 
   const navigateToContactDetails = () => {
-    // Navigation to ContactDetails disabled - ContactDetails now shows issuer groups
-    // This functionality may need to be re-implemented differently
-    return
+    if (credential?.connectionId) {
+      // Keyring's ContactDetails expects a full contact object, so route to Chat by connection id instead
+      navigation.navigate(Stacks.ContactStack, {
+        screen: Screens.Chat,
+        params: { connectionId: credential.connectionId },
+      })
+    }
   }
 
   const callViewJSONDetails = useCallback(() => {
@@ -158,44 +170,54 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
       setPreciseRevocationDate(formatTime(date, { includeHour: true }))
     }
 
-    const identifiers = getCredentialIdentifiers(credential)
+    const params = {
+      identifiers: getCredentialIdentifiers(credential),
+      meta: {
+        alias: credentialConnectionLabel,
+        credConnectionId: credential.connectionId,
+      },
+      attributes: buildFieldsFromAnonCredsCredential(credential),
+      language: i18n.language,
+    }
 
-    const resolveOverlay = async () => {
-      let credName = 'Credential'
-      try {
-        credName = await getCredentialName(identifiers.credentialDefinitionId, identifiers.schemaId, agent)
-      } catch { /* cred def resolution failed */ }
-
-      const params = {
-        identifiers,
-        meta: {
-          credName,
-          alias: credentialConnectionLabel,
-          credConnectionId: credential.connectionId,
-        },
-        attributes: buildFieldsFromAnonCredsCredential(credential),
-        language: i18n.language,
-      }
-
-      const bundle = await bundleResolver.resolveAllBundles(params)
-
+    bundleResolver.resolveAllBundles(params).then((bundle) => {
       setOverlay((o) => ({
         ...o,
         ...(bundle as CredentialOverlay<BrandingOverlay>),
         presentationFields: bundle.presentationFields?.filter((field) => (field as Attribute).value),
+        // Apply effective name
+        metaOverlay: {
+          ...bundle.metaOverlay,
+          name: getEffectiveCredentialName(credential, bundle.metaOverlay?.name),
+        } as any,
       }))
+    })
+  }, [credential, credentialConnectionLabel, bundleResolver, i18n.language])
+
+  // Ensure credential has all required metadata
+  useEffect(() => {
+    if (!credential || !isValidAnonCredsCredential(credential) || !agent) {
+      return
     }
 
-    resolveOverlay()
-  }, [credential, credentialConnectionLabel, bundleResolver, i18n.language, agent])
+    const restoreMetadata = async () => {
+      try {
+        await ensureCredentialMetadata(credential, agent, undefined, logger)
+      } catch (error) {
+        // If metadata restoration fails, we'll fall back to default credential name
+        logger?.warn('Failed to restore credential metadata', { error: error as Error })
+      }
+    }
+    restoreMetadata()
+  }, [credential, agent, logger])
 
   useEffect(() => {
     if (credential?.revocationNotification) {
       const meta = credential.metadata.get(CredentialMetadata.customMetadata)
       credential.metadata.set(CredentialMetadata.customMetadata, { ...meta, revoked_seen: true })
-      agent?.credentials.update(credential)
+      didcommCredentials?.update?.(credential)
     }
-  }, [credential, agent])
+  }, [credential, didcommCredentials])
 
   const callOnRemove = useCallback(() => {
     setIsRemoveModalDisplayed(true)
@@ -216,9 +238,7 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
       }
       const historyManager = historyManagerCurried(agent)
 
-      const ids = getCredentialIdentifiers(credential)
-      const name =
-        overlay.metaOverlay?.name ?? (await getCredentialName(ids.credentialDefinitionId, ids.schemaId, agent))
+      const name = getEffectiveCredentialName(credential, overlay.metaOverlay?.name)
 
       /** Save history record for credential removed */
       const recordData: HistoryRecord = {
@@ -254,7 +274,7 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
         await logHistoryRecord()
       }
 
-      await agent.credentials.deleteById(credential.id)
+      await agent.modules.credentials.deleteById(credential.id)
 
       navigation.pop()
 
@@ -280,11 +300,11 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
     if (credential) {
       const meta = credential.metadata.get(CredentialMetadata.customMetadata)
       credential.metadata.set(CredentialMetadata.customMetadata, { ...meta, revoked_detail_dismissed: true })
-      agent?.credentials.update(credential)
+      didcommCredentials?.update?.(credential)
     }
-  }, [credential, agent])
+  }, [credential, didcommCredentials])
 
-  const CredentialRevocationMessage: React.FC<{ credential: CredentialExchangeRecord }> = ({ credential }) => {
+  const CredentialRevocationMessage: React.FC<{ credential: DidCommCredentialExchangeRecord }> = ({ credential }) => {
     return (
       <InfoBox
         notificationType={InfoBoxType.Error}
@@ -306,7 +326,7 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
         <>
           <CredentialDetailSecondaryHeader overlay={overlay} />
           <CredentialCardLogo overlay={overlay} />
-          <CredentialDetailPrimaryHeader overlay={overlay} />
+          <CredentialDetailPrimaryHeader overlay={overlay} credential={credential} />
         </>
       )
     }
@@ -363,7 +383,7 @@ const CredentialDetails: React.FC<CredentialDetailsProps> = ({ navigation, route
             {credential && <CredentialRevocationMessage credential={credential} />}
           </View>
         ) : null}
-        {credential && <CredentialCard credential={credential} style={{ margin: 16 }} />}
+        {credential && <CredentialCardGen credential={credential} style={{ margin: 16 }} />}
       </View>
     ) : (
       <View style={styles.container}>

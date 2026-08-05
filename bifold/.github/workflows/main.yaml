@@ -1,22 +1,12 @@
+# Native iOS/Android sample-app builds are disabled below (no CI credentials in this repo).
+# Code quality CI runs in quality.yaml. KeyRing native builds run in keyring-wallet staging.yaml.
 name: Native Build
 
 env:
   cacheId: '11' # increment to expire the cache
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/main.yaml'
-      - '.github/workflows/publish.yaml'
-      - '.github/actions/setup-node/action.yaml'
-      - 'packages/**'
-      - 'samples/**'
-      - 'package.json'
-      - 'yarn.lock'
-    types: [opened, synchronize, reopened, labeled]
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   # build-ios: # DISABLED - needs correct context and credentials

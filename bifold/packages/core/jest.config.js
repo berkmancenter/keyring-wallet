@@ -2,10 +2,15 @@ process.env.TZ = 'UTC'
 
 module.exports = {
   preset: 'react-native',
-  testTimeout: 12012,
-  setupFiles: ['<rootDir>/jestSetup.js'],
-  setupFilesAfterEnv: ['@testing-library/jest-native/extend-expect', '<rootDir>/jestSetupAfterEnv.js'],
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  testTimeout: 12000,
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
+  setupFiles: [],
+  setupFilesAfterEnv: [
+    '<rootDir>/jestSetup.js',
+    '@testing-library/jest-native/extend-expect',
+    '<rootDir>/jestSetupAfterEnv.js',
+  ],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node', 'mjs'],
   moduleNameMapper: {
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       '<rootDir>/__mocks__/file.js',
@@ -13,14 +18,17 @@ module.exports = {
     axios: require.resolve('axios'),
     'react-i18next': '<rootDir>/__mocks__/react-i18next.ts',
     '^uuid$': require.resolve('uuid'),
-    '@credo-ts/core': require.resolve('@credo-ts/core'),
-    '@credo-ts/anoncreds': require.resolve('@credo-ts/anoncreds'),
-    '^../../../../witness-server/src/pseudonym-dictionaries$': '/home/brendan/code/asml/AdvancedIdentity/bifold/packages/witness-server/src/pseudonym-dictionaries.ts',
+    '^@bifold/oca$': '<rootDir>/../oca/src/index.ts',
+    '^@bifold/verifier$': '<rootDir>/../verifier/src/index.ts',
+    'expo-crypto': '<rootDir>/__mocks__/@expo/expo-crypto.js',
+    '@expo/app-integrity': '<rootDir>/__mocks__/@expo/app-integrity.js',
   },
   transform: {
-    '^.+\\.(js|jsx|ts|tsx)$': 'babel-jest',
+    '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
   },
-  transformIgnorePatterns: ['node_modules\\/(?!(.*react-native.*)|(uuid)|(@credo-ts\\/core)|(@credo-ts\\/anoncreds)|(@noble\\/curves))'],
+  transformIgnorePatterns: [
+    'node_modules/(?!(.*react-native.*|@credo-ts|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|expo(nent)?|@expo(nent)?/.*)/)',
+  ],
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]sx?$',
   testPathIgnorePatterns: [
     '\\.snap$',

@@ -7,7 +7,8 @@
  * - Creating relationship invitations with appropriate goal codes
  */
 
-import { Agent, PeerDidNumAlgo, KeyType } from '@credo-ts/core'
+import { Agent } from '@credo-ts/core'
+import { PeerDidNumAlgo } from '@credo-ts/core'
 
 // Test DIDs
 const testDids = {
@@ -55,19 +56,23 @@ const createMockAgent = () => ({
     create: jest.fn(),
     resolve: jest.fn(),
   },
-  connections: {
-    getById: jest.fn().mockResolvedValue(mockConnection),
-  },
-  oob: {
-    createInvitation: jest.fn(),
-    findById: jest.fn(),
+  modules: {
+    didcomm: {
+      connections: {
+        getById: jest.fn().mockResolvedValue(mockConnection),
+      },
+      oob: {
+        createInvitation: jest.fn(),
+        findById: jest.fn(),
+      },
+      basicMessages: {
+        sendMessage: jest.fn(),
+      },
+    },
   },
   events: {
     on: jest.fn(),
     off: jest.fn(),
-  },
-  basicMessages: {
-    sendMessage: jest.fn(),
   },
   context: {},
 })
@@ -138,7 +143,7 @@ describe('VRC Manager', () => {
         method: 'peer',
         options: {
           numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
-          keyType: KeyType.Ed25519,
+          createKey: { type: { kty: 'OKP', crv: 'Ed25519' } },
         },
       })
     })
@@ -222,7 +227,7 @@ describe('VRC Manager', () => {
         testDids.myRelationshipDid
       )
 
-      expect(mockAgent.connections.getById).toHaveBeenCalledWith('connection-123')
+      expect(mockAgent.modules.didcomm.connections.getById).toHaveBeenCalledWith('connection-123')
       expect(mockConnection.metadata.set).toHaveBeenCalledWith('relationshipDid', {
         did: testDids.myRelationshipDid,
       })
@@ -238,7 +243,7 @@ describe('VRC Manager', () => {
     }
 
     beforeEach(() => {
-      mockAgent.oob.createInvitation.mockResolvedValue(mockInvitationRecord)
+      mockAgent.modules.didcomm.oob.createInvitation.mockResolvedValue(mockInvitationRecord)
     })
 
     it('should create OOB invitation with bidirectional goalCode by default', async () => {
@@ -247,7 +252,7 @@ describe('VRC Manager', () => {
         'My Wallet'
       )
 
-      expect(mockAgent.oob.createInvitation).toHaveBeenCalledWith({
+      expect(mockAgent.modules.didcomm.oob.createInvitation).toHaveBeenCalledWith({
         label: 'My Wallet',
         goalCode: 'relationship.credential.bidirectional',
         goal: 'Establish connection and exchange relationship credentials',
@@ -263,7 +268,7 @@ describe('VRC Manager', () => {
         'unidirectional'
       )
 
-      expect(mockAgent.oob.createInvitation).toHaveBeenCalledWith({
+      expect(mockAgent.modules.didcomm.oob.createInvitation).toHaveBeenCalledWith({
         label: 'My Wallet',
         goalCode: 'relationship.credential',
         goal: 'Establish connection and issue relationship credential',
@@ -286,7 +291,7 @@ describe('VRC Manager', () => {
     })
 
     it('should throw error when invitation creation returns null', async () => {
-      mockAgent.oob.createInvitation.mockResolvedValue(null)
+      mockAgent.modules.didcomm.oob.createInvitation.mockResolvedValue(null)
 
       await expect(
         createRelationshipInvitation(mockAgent as unknown as Agent, 'My Wallet')
@@ -355,7 +360,7 @@ describe('VRC Manager', () => {
       expect(mockAgent.dids.create).toHaveBeenCalledWith(
         expect.objectContaining({
           options: expect.objectContaining({
-            keyType: KeyType.Ed25519,
+            createKey: { type: { kty: 'OKP', crv: 'Ed25519' } },
           }),
         })
       )
@@ -370,7 +375,7 @@ describe('VRC Manager', () => {
      */
 
     it('should use bidirectional goal code for two-way credential exchange', async () => {
-      mockAgent.oob.createInvitation.mockResolvedValue({
+      mockAgent.modules.didcomm.oob.createInvitation.mockResolvedValue({
         id: 'oob-123',
         outOfBandInvitation: { toUrl: jest.fn().mockReturnValue('url') },
       })
@@ -381,7 +386,7 @@ describe('VRC Manager', () => {
         'bidirectional'
       )
 
-      expect(mockAgent.oob.createInvitation).toHaveBeenCalledWith(
+      expect(mockAgent.modules.didcomm.oob.createInvitation).toHaveBeenCalledWith(
         expect.objectContaining({
           goalCode: 'relationship.credential.bidirectional',
         })
@@ -389,7 +394,7 @@ describe('VRC Manager', () => {
     })
 
     it('should use unidirectional goal code for one-way credential issuance', async () => {
-      mockAgent.oob.createInvitation.mockResolvedValue({
+      mockAgent.modules.didcomm.oob.createInvitation.mockResolvedValue({
         id: 'oob-123',
         outOfBandInvitation: { toUrl: jest.fn().mockReturnValue('url') },
       })
@@ -400,7 +405,7 @@ describe('VRC Manager', () => {
         'unidirectional'
       )
 
-      expect(mockAgent.oob.createInvitation).toHaveBeenCalledWith(
+      expect(mockAgent.modules.didcomm.oob.createInvitation).toHaveBeenCalledWith(
         expect.objectContaining({
           goalCode: 'relationship.credential',
         })

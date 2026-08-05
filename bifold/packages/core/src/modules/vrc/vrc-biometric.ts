@@ -110,7 +110,7 @@ export async function sendBiometricStatusNotification(
   const message = `${BIOMETRIC_STATUS_MESSAGE_PREFIX}${status}:${timestamp}${reason ? `:${reason}` : ''}`
 
   try {
-    await agent.basicMessages.sendMessage(connectionId, message)
+    await agent.modules.didcomm.basicMessages.sendMessage(connectionId, message)
   } catch {
     // Best-effort notification - don't fail the flow
   }

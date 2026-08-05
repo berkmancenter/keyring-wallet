@@ -302,7 +302,7 @@ describe('ListContacts Screen', () => {
       credentialSubject: { id: holderDid },
     })
     // Modify the type array to remove DTGCredential
-    ;(nonDtgCredential.credential as any).type = ['VerifiableCredential']
+    ;(nonDtgCredential.encoded as any).type = ['VerifiableCredential']
 
     mockUseOpenIDCredentials.mockReturnValue({
       openIdState: {

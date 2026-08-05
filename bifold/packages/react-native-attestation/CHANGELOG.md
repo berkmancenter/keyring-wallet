@@ -1,5 +1,148 @@
 # @bifold/react-native-attestation
 
+## 3.0.16
+
+## 3.0.15
+
+## 3.0.14
+
+### Patch Changes
+
+- 6e3f989: added patch and updated gradle versions
+
+## 3.0.13
+
+## 3.0.12
+
+## 3.0.11
+
+## 3.0.10
+
+## 3.0.9
+
+## 3.0.8
+
+## 3.0.7
+
+## 3.0.6
+
+## 3.0.5
+
+## 3.0.4
+
+## 3.0.3
+
+## 3.0.2
+
+## 3.0.1
+
+## 3.0.0
+
+### Major Changes
+
+- c1df038: Updated all bifold packages for compatibility with credo-ts v0.6.x.
+  Compatibility with this credo-ts release is important as it has big enhancements across the board,
+  especially for OpenID related credentials such as mdoc.
+  This version of credo changes many type and method names, changes which types and methods are available from which exports,
+  and modifies the interfaces of many existing modules. Thus, changes are made across the project,
+  some of which may be breaking.
+
+## 2.12.8
+
+## 2.12.7
+
+### Patch Changes
+
+- 75cca52: Bump package versions for release
+
+## 2.12.6
+
+### Patch Changes
+
+- 90b964b: Bump package versions for release
+
+## 2.12.5
+
+### Patch Changes
+
+- 30b4754: force release to align all packages including new react-hooks package
+
+## 2.12.4
+
+## 2.12.3
+
+## 2.12.2
+
+### Patch Changes
+
+- 72a1171: fix typo in turbo module
+
+## 2.12.1
+
+### Patch Changes
+
+- c42e7d5: fix for turbomodule support in attestation package
+
+## 2.12.0
+
+### Minor Changes
+
+- 43446f3: upgrade to React Native 0.81.5
+
+## 2.11.12
+
+## 2.11.11
+
+## 2.11.10
+
+### Patch Changes
+
+- a16e341: ledger export
+
+## 2.11.9
+
+### Patch Changes
+
+- 414b3c0: added resolutions to use patched versions of elliptic and sha.js
+
+## 2.11.8
+
+## 2.11.7
+
+## 2.11.6
+
+## 2.11.5
+
+## 2.11.4
+
+## 2.11.3
+
+### Patch Changes
+
+- 538a3a6: added app store receipt checking method to attestation lib
+
+## 2.11.2
+
+## 2.11.1
+
+## 2.11.0
+
+## 2.10.2
+
+## 2.10.1
+
+## 2.10.0
+
+## 2.9.0
+
+### Patch Changes
+
+- c5cc3e7: updated pr template
+
+## 2.8.0
+
+## 2.7.5
+
 ## 2.7.4
 
 ## 2.7.3

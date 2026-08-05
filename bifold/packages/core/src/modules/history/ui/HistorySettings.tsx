@@ -1,4 +1,4 @@
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -6,7 +6,7 @@ import { StyleSheet, View } from 'react-native'
 
 // eslint-disable-next-line import/no-named-as-default
 import { ButtonType } from '../../../components/buttons/Button-api'
-import KeyboardView from '../../../components/views/KeyboardView'
+import ScreenWrapper from '../../../components/views/ScreenWrapper'
 import { TOKENS, useServices } from '../../../container-api'
 import { useAnimatedComponents } from '../../../contexts/animated-components'
 import { useTheme } from '../../../contexts/theme'
@@ -17,7 +17,7 @@ import { HistoryBlockSelection, IHistoryManager } from '../types'
 import SingleSelectBlock from './components/SingleSelectBlock'
 import { ThemedText } from '../../../components/texts/ThemedText'
 
-interface HistorySettingsProps extends StackScreenProps<SettingStackParams, Screens.HistorySettings> {}
+type HistorySettingsProps = StackScreenProps<SettingStackParams, Screens.HistorySettings>
 
 const HistorySettings: React.FC<HistorySettingsProps> = () => {
   const [continueEnabled] = useState(true)
@@ -97,7 +97,7 @@ const HistorySettings: React.FC<HistorySettingsProps> = () => {
       //     animated: true,
       //   })
       // console.log('History option saved')
-    } catch (e: unknown) {
+    } catch {
       //TODO: Impliment Alert
       // console.log('Error:', e)
       //   log(`[${SettingsActivityHistory.name}]: Handle history save: ${e}`, LogLevel.error)
@@ -136,7 +136,7 @@ const HistorySettings: React.FC<HistorySettingsProps> = () => {
   }, [historyManager, logger])
 
   return (
-    <KeyboardView>
+    <ScreenWrapper keyboardActive>
       <View style={style.screenContainer}>
         <View style={style.contentContainer}>
           <View>
@@ -176,7 +176,7 @@ const HistorySettings: React.FC<HistorySettingsProps> = () => {
           </Button>
         </View>
       </View>
-    </KeyboardView>
+    </ScreenWrapper>
   )
 }
 

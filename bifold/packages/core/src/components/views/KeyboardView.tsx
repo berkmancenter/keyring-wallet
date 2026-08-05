@@ -1,8 +1,7 @@
-import React from 'react'
-import { KeyboardAvoidingView, ScrollView } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { useTheme } from '../../contexts/theme'
 import { useHeaderHeight } from '@react-navigation/elements'
+import React, { RefObject } from 'react'
+import { KeyboardAvoidingView, Platform, ScrollView, ScrollViewProps } from 'react-native'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 
 const useSafeHeaderHeight = (): number => {
   try {
@@ -12,29 +11,39 @@ const useSafeHeaderHeight = (): number => {
   }
 }
 
-const KeyboardView: React.FC<{ children: React.ReactNode; keyboardAvoiding?: boolean }> = ({
-  children,
-  keyboardAvoiding = true,
-}) => {
-  const { ColorPalette } = useTheme()
-  const headerHeight = useSafeHeaderHeight()
+/**
+ * A wrapper component that provides keyboard-aware scrolling and safe area handling
+ *
+ * This component creates a full-screen container with safe area insets and optional
+ * keyboard avoidance behavior. It's designed to be used as a top-level wrapper for
+ * screen content that may contain input fields or other interactive elements.
+ *
+ * @param children - The content to render inside the keyboard view
+ * @param scrollViewProps - Additional props to pass to the internal KeyboardAwareScrollView component
+ */
+const KeyboardView: React.FC<{
+  children: React.ReactNode
+  scrollViewProps?: ScrollViewProps
+  scrollViewRef?: RefObject<ScrollView | null>
+}> = ({ children, scrollViewProps, scrollViewRef }) => {
+  const safeHeaderHeight = useSafeHeaderHeight()
+
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: ColorPalette.brand.primaryBackground }}
-      edges={['bottom', 'left', 'right']}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      keyboardVerticalOffset={safeHeaderHeight}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {keyboardAvoiding ? (
-        <KeyboardAvoidingView style={{ flex: 1 }} keyboardVerticalOffset={headerHeight} behavior="padding">
-          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps={'handled'}>
-            {children}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      ) : (
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps={'handled'}>
-          {children}
-        </ScrollView>
-      )}
-    </SafeAreaView>
+      <KeyboardAwareScrollView
+        keyboardShouldPersistTaps={'handled'}
+        contentContainerStyle={[{ flexGrow: 1 }, scrollViewProps?.contentContainerStyle]}
+        showsVerticalScrollIndicator={false}
+        ref={scrollViewRef}
+        {...scrollViewProps}
+      >
+        {children}
+      </KeyboardAwareScrollView>
+    </KeyboardAvoidingView>
   )
 }
 

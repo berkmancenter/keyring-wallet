@@ -1,5 +1,5 @@
-import { ConnectionType, DidExchangeState } from '@credo-ts/core'
-import { useConnections } from '@credo-ts/react-hooks'
+import { DidCommConnectionType, DidCommDidExchangeState } from '@credo-ts/didcomm'
+import { useConnections } from '@bifold/react-hooks'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -30,9 +30,9 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
 
   // Filter connections to show peer-to-peer and witness connections (not infrastructure)
   const connections = connectionRecords.filter((r) => {
-    const isMediatorConnection = r.connectionTypes.includes(ConnectionType.Mediator)
+    const isMediatorConnection = r.connectionTypes.includes(DidCommConnectionType.Mediator)
     const isHidden = contactHideList?.includes((r.theirLabel || r.alias) ?? '')
-    const isCompleted = r.state === DidExchangeState.Completed
+    const isCompleted = r.state === DidCommDidExchangeState.Completed
 
     if (!store.preferences.developerModeEnabled) {
       return !isMediatorConnection && !isHidden && isCompleted

@@ -18,6 +18,13 @@
 // This ensures decorator metadata is available for tsyringe dependency injection
 import 'reflect-metadata'
 
+// CRITICAL: register the native askar binding BEFORE any @credo-ts module
+// loads. askar-nodejs registers into askar-shared's module-level singleton as
+// an import side effect; if @credo-ts/askar loads first, its NativeAskar
+// instance is undefined and key creation fails with "Cannot read properties
+// of undefined (reading 'keyGetJwkSecret')" at agent.initialize().
+import '@openwallet-foundation/askar-nodejs'
+
 import 'dotenv/config'
 import { loadConfig } from './config'
 import { WitnessService } from './WitnessService'

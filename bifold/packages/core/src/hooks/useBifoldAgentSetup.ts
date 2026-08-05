@@ -1,5 +1,6 @@
-import { Agent, HttpOutboundTransport, WsOutboundTransport } from '@credo-ts/core'
-import { IndyVdrPoolService } from '@credo-ts/indy-vdr/build/pool'
+import { Agent, CredoError } from '@credo-ts/core'
+import { DidCommHttpOutboundTransport, DidCommWsOutboundTransport } from '@credo-ts/didcomm'
+import { IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/react-native'
 import { GetCredentialDefinitionRequest, GetSchemaRequest } from '@hyperledger/indy-vdr-shared'
 import { useCallback, useRef, useState } from 'react'
@@ -22,20 +23,18 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
   const [agent, setAgent] = useState<Agent | null>(null)
   const agentInstanceRef = useRef<Agent | null>(null)
   const [store, dispatch] = useStore()
-  const [cacheSchemas, cacheCredDefs, logger, indyLedgers] = useServices([
+  const [cacheSchemas, cacheCredDefs, logger, indyLedgers, bridge] = useServices([
     TOKENS.CACHE_SCHEMAS,
     TOKENS.CACHE_CRED_DEFS,
     TOKENS.UTIL_LOGGER,
     TOKENS.UTIL_LEDGERS,
+    TOKENS.UTIL_AGENT_BRIDGE,
+    TOKENS.UTIL_REFRESH_ORCHESTRATOR,
   ])
 
   const restartExistingAgent = useCallback(
-    async (agent: Agent, walletSecret: WalletSecret): Promise<Agent | undefined> => {
+    async (agent: Agent): Promise<Agent | undefined> => {
       try {
-        await agent.wallet.open({
-          id: walletSecret.id,
-          key: walletSecret.key,
-        })
         await agent.initialize()
       } catch (error) {
         logger.warn(`Agent restart failed with error ${error}`)
@@ -53,16 +52,12 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
     async (walletSecret: WalletSecret, mediatorUrl: string): Promise<Agent> => {
       const newAgent = new Agent({
         config: {
-          label: store.preferences.walletName || 'Keyring',
-          walletConfig: {
-            id: walletSecret.id,
-            key: walletSecret.key,
-          },
           logger,
           autoUpdateStorageOnStartup: true,
         },
         dependencies: agentDependencies,
         modules: getAgentModules({
+          walletSecret,
           indyNetworks: indyLedgers,
           mediatorInvitationUrl: mediatorUrl,
           txnCache: {
@@ -72,15 +67,15 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
           },
         }),
       })
-      const wsTransport = new WsOutboundTransport()
-      const httpTransport = new HttpOutboundTransport()
+      const wsTransport = new DidCommWsOutboundTransport()
+      const httpTransport = new DidCommHttpOutboundTransport()
 
-      newAgent.registerOutboundTransport(wsTransport)
-      newAgent.registerOutboundTransport(httpTransport)
+      newAgent.modules.didcomm.registerOutboundTransport(wsTransport)
+      newAgent.modules.didcomm.registerOutboundTransport(httpTransport)
 
       return newAgent
     },
-    [store.preferences.walletName, logger, indyLedgers]
+    [logger, indyLedgers]
   )
 
   const migrateIfRequired = useCallback(
@@ -99,7 +94,7 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
 
   const warmUpCache = useCallback(
     async (newAgent: Agent) => {
-      const poolService = newAgent.dependencyManager.resolve(IndyVdrPoolService)
+      const poolService: IndyVdrPoolService = newAgent.dependencyManager.resolve(IndyVdrPoolService) // Maybe should resolve differently
       cacheCredDefs.forEach(async ({ did, id }) => {
         const pool = await poolService.getPoolForDid(newAgent.context, did)
         const credDefRequest = new GetCredentialDefinitionRequest({ credentialDefinitionId: id })
@@ -120,10 +115,11 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
       const mediatorUrl = store.preferences.selectedMediator
       logger.info('Checking for existing agent...')
       if (agentInstanceRef.current) {
-        const restartedAgent = await restartExistingAgent(agentInstanceRef.current, walletSecret)
+        const restartedAgent = await restartExistingAgent(agentInstanceRef.current)
         if (restartedAgent) {
           logger.info('Successfully restarted existing agent...')
           agentInstanceRef.current = restartedAgent
+          bridge.setAgent(restartedAgent)
           setAgent(restartedAgent)
           return
         }
@@ -135,8 +131,16 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
       logger.info('Migrating if required...')
       await migrateIfRequired(newAgent, walletSecret)
 
-      logger.info('Initializing agent...')
-      await newAgent.initialize()
+      try {
+        logger.info('Initializing agent...')
+        await newAgent.initialize()
+      } catch (e: any) {
+        logger.error('Stack: ' + (e as CredoError).stack)
+        logger.error('Message: ' + (e as CredoError).message)
+        logger.error((e as CredoError).cause?.stack ?? 'No cause stack')
+        logger.error((e as CredoError).cause?.message ?? 'No cause message')
+        throw e
+      }
 
       logger.info('Creating link secret if required...')
       await createLinkSecretIfRequired(newAgent)
@@ -147,8 +151,17 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
       logger.info('Agent initialized successfully')
       agentInstanceRef.current = newAgent
       setAgent(newAgent)
+      bridge.setAgent(newAgent)
     },
-    [logger, restartExistingAgent, createNewAgent, migrateIfRequired, warmUpCache, store.preferences.selectedMediator]
+    [
+      logger,
+      restartExistingAgent,
+      createNewAgent,
+      migrateIfRequired,
+      warmUpCache,
+      store.preferences.selectedMediator,
+      bridge,
+    ]
   )
 
   const shutdownAndClearAgentIfExists = useCallback(async () => {
@@ -158,10 +171,11 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
       } catch (error) {
         logger.error(`Error shutting down agent with shutdownAndClearAgentIfExists: ${error}`)
       } finally {
+        bridge.clearAgent()
         setAgent(null)
       }
     }
-  }, [agent, logger])
+  }, [agent, logger, bridge])
 
   return { agent, initializeAgent, shutdownAndClearAgentIfExists }
 }

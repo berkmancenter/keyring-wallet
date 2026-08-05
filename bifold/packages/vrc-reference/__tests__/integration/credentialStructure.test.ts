@@ -23,7 +23,7 @@ describe('Credential Structure Integration', () => {
 
   describe('Relationship Credential Structure', () => {
     it('should create valid relationship credential structure', async () => {
-      const storedCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const storedCredentials = await alice.agent.w3cCredentials.getAll()
       const storedCredential = storedCredentials.find((r) => r.credential !== null)
 
       expect(storedCredential).toBeDefined()
@@ -48,12 +48,12 @@ describe('Credential Structure Integration', () => {
     }, 45000)
 
     it('should use correct R-DIDs in credential', async () => {
-      const storedCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const storedCredentials = await alice.agent.w3cCredentials.getAll()
       const storedCredential = storedCredentials.find((r) => r.credential !== null)
       const credential = storedCredential?.credential as any
 
       // Get Alice's R-DID from connection metadata
-      const aliceConnection = await alice.agent.connections.getById(alice.connectionRecordId!)
+      const aliceConnection = await alice.agent.modules.didcomm.connections.getById(alice.connectionRecordId!)
       const holderSubjectMetadata = aliceConnection.metadata.get('holderSubjectDid') as { did?: string } | undefined
 
       const subject = credential.credentialSubject || credential.credentialSubjects?.[0]
@@ -70,7 +70,7 @@ describe('Credential Structure Integration', () => {
     }, 45000)
 
     it('should include valid Ed25519Signature2018 proof', async () => {
-      const storedCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const storedCredentials = await alice.agent.w3cCredentials.getAll()
       const storedCredential = storedCredentials.find((r) => r.credential !== null)
 
       // Verify the credential cryptographically - this confirms the proof exists and is valid

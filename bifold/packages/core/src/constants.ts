@@ -28,6 +28,8 @@ export enum LocalStorageKeys {
   Tours = 'ToursState',
   HistorySettingsOption = 'historySettingsOption',
   Language = 'language',
+  AttestationKey = 'AttestationKey',
+  AttestationConfigured = 'AttestationConfigured',
   WitnessSettings = 'WitnessSettings',
 }
 
@@ -43,6 +45,8 @@ export enum EventTypes {
   BIOMETRY_UPDATE = 'BiometryUpdate',
   BIOMETRY_ERROR = 'BiometryError',
   DID_COMPLETE_ONBOARDING = 'DidCompleteOnboarding',
+  OPENID_REFRESH_REQUEST = 'OPENID_REFRESH_REQUEST',
+  OPENID_CONNECTION_ERROR = 'OPENID_CONNECTION_ERROR',
 }
 
 export const second = 1000
@@ -88,15 +92,25 @@ export const walletId = 'walletId'
 
 export const minPINLength = 6
 
+export const maxPINLength = 6
+
 export const PINRules: PINValidationRules = {
   only_numbers: true,
   min_length: 6,
   max_length: 6,
+  use_nist_requirements: false,
   no_repeated_numbers: 0,
   no_repetition_of_the_two_same_numbers: false,
   no_series_of_numbers: false,
   no_even_or_odd_series_of_numbers: false,
   no_cross_pattern: false,
+  most_used_pins: false,
+  unacceptable_pin_list: [
+    '123456',
+    '111111',
+    '000000',
+    '123123',
+  ]
 }
 
 export const domain = 'https://wallet.asml.berkmancenter.org/invite'

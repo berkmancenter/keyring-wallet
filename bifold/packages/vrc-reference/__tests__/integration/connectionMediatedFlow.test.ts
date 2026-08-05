@@ -53,7 +53,7 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
       
       // Bob creates invitation
       console.log('[Bob] Creating invitation...')
-      const outOfBand = await bob.agent.oob.createInvitation()
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation()
       bob.outOfBandId = outOfBand.id
       expect(bob.outOfBandId).toBeDefined()
       console.log('[Bob] ✓ Invitation created\n')
@@ -73,7 +73,7 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
       const bobConnectionPromise = (async () => {
         let connectionRecord
         for (let i = 0; i < 300; i++) { // 30 seconds (300 * 100ms)
-          const [record] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+          const [record] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
           if (record) {
             connectionRecord = record
             break
@@ -84,7 +84,7 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
           throw new Error('Bob connection record not found after 30 seconds')
         }
         console.log('[Bob] ✓ Connection record found, waiting for completion...')
-        await bob.agent.connections.returnWhenIsConnected(connectionRecord.id)
+        await bob.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
         console.log('[Bob] ✓ Connection completed')
       })()
 
@@ -104,10 +104,10 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
       expect(alice.connectionRecordId).toBeDefined()
 
       // Verify connection records exist
-      const aliceConnection = await alice.agent.connections.getById(alice.connectionRecordId!)
+      const aliceConnection = await alice.agent.modules.didcomm.connections.getById(alice.connectionRecordId!)
       expect(aliceConnection.state).toBe('completed')
 
-      const [bobConnection] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+      const [bobConnection] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
       expect(bobConnection.state).toBe('completed')
 
       console.log('✓ Alice connection state:', aliceConnection.state)
@@ -118,7 +118,7 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
     it('should exchange did:peer identifiers during mediated connection', async () => {
       console.log('🔑 Testing DID exchange through mediator...\n')
       
-      const outOfBand = await bob.agent.oob.createInvitation()
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation()
       bob.outOfBandId = outOfBand.id
       const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
         domain: `http://localhost:${bob.port}`,
@@ -128,7 +128,7 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
       const bobConnectionPromise = (async () => {
         let connectionRecord
         for (let i = 0; i < 300; i++) {
-          const [record] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+          const [record] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
           if (record) {
             connectionRecord = record
             break
@@ -136,7 +136,7 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
         if (!connectionRecord) throw new Error('Bob connection record not found')
-        await bob.agent.connections.returnWhenIsConnected(connectionRecord.id)
+        await bob.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
       })()
 
       await Promise.race([
@@ -144,8 +144,8 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
         new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timeout')), 30000)),
       ])
 
-      const aliceConnection = await alice.agent.connections.getById(alice.connectionRecordId!)
-      const [bobConnection] = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+      const aliceConnection = await alice.agent.modules.didcomm.connections.getById(alice.connectionRecordId!)
+      const [bobConnection] = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
 
       // Verify did:peer identifiers (typically did:peer:1 for DIDComm connections)
       expect(aliceConnection.did).toMatch(/^did:peer:/)
@@ -209,7 +209,7 @@ describeIfMediator('Mediated Connection Flow Integration', () => {
       console.log('🚫 Testing timeout handling...\n')
       
       // Create invitation but don't accept it
-      const outOfBand = await bob.agent.oob.createInvitation()
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation()
       bob.outOfBandId = outOfBand.id
 
       // Verify Bob's agent doesn't crash

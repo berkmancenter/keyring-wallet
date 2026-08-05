@@ -44,6 +44,7 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
           PasteUrl.PasteUrlDescription
         </Text>
         <TextInput
+          accessibilityLabel="PasteUrl.PasteUrlInput"
           multiline={true}
           numberOfLines={15}
           onChangeText={[Function]}
@@ -71,6 +72,8 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
         }
       >
         <View
+          accessibilityLabel="PasteUrl.ScanDisabled"
+          accessibilityRole="button"
           accessibilityState={
             Object {
               "busy": undefined,
@@ -91,6 +94,14 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
           accessible={true}
           collapsable={false}
           focusable={true}
+          hitSlop={
+            Object {
+              "bottom": 44,
+              "left": 44,
+              "right": 44,
+              "top": 44,
+            }
+          }
           onClick={[Function]}
           onResponderGrant={[Function]}
           onResponderMove={[Function]}
@@ -127,10 +138,8 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
             }
             accessible={true}
             collapsable={false}
-            focusable={true}
-            onBlur={[Function]}
+            focusable={false}
             onClick={[Function]}
-            onFocus={[Function]}
             onResponderGrant={[Function]}
             onResponderMove={[Function]}
             onResponderRelease={[Function]}
@@ -138,23 +147,12 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
             onResponderTerminationRequest={[Function]}
             onStartShouldSetResponder={[Function]}
             style={
-              Array [
-                Object {
-                  "overflow": "hidden",
-                },
-                Object {
-                  "backgroundColor": "#42803E",
-                  "borderRadius": 4,
-                  "padding": 16,
-                },
-                Object {
-                  "backgroundColor": "rgba(53, 130, 63, 0.35)",
-                  "borderRadius": 4,
-                  "padding": 16,
-                },
-                false,
-                false,
-              ]
+              Object {
+                "backgroundColor": "rgba(53, 130, 63, 0.35)",
+                "borderRadius": 4,
+                "opacity": 1,
+                "padding": 16,
+              }
             }
             testID="com.ariesbifold:id/ScanPastedUrl"
           >
@@ -189,7 +187,6 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
                         "fontWeight": "bold",
                         "textAlign": "center",
                       },
-                      false,
                       false,
                     ],
                   ]
@@ -230,9 +227,7 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
             accessible={true}
             collapsable={false}
             focusable={true}
-            onBlur={[Function]}
             onClick={[Function]}
-            onFocus={[Function]}
             onResponderGrant={[Function]}
             onResponderMove={[Function]}
             onResponderRelease={[Function]}
@@ -240,20 +235,13 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
             onResponderTerminationRequest={[Function]}
             onStartShouldSetResponder={[Function]}
             style={
-              Array [
-                Object {
-                  "overflow": "hidden",
-                },
-                Object {
-                  "borderColor": "#42803E",
-                  "borderRadius": 4,
-                  "borderWidth": 2,
-                  "padding": 16,
-                },
-                false,
-                false,
-                false,
-              ]
+              Object {
+                "borderColor": "#42803E",
+                "borderRadius": 4,
+                "borderWidth": 2,
+                "opacity": 1,
+                "padding": 16,
+              }
             }
             testID="com.ariesbifold:id/ClearPastedUrl"
           >
@@ -282,7 +270,6 @@ exports[`PasteUrl Screen Paste URL renders correctly 1`] = `
                         "fontWeight": "bold",
                         "textAlign": "center",
                       },
-                      false,
                       false,
                       false,
                     ],

@@ -12,7 +12,7 @@ interface WitnessChatBannerProps {
 const TOGGLE_ACTIVE_COLOR = '#A349A4'
 const TOGGLE_INACTIVE_COLOR = '#9CA3AF'
 
-export const WitnessChatBanner: React.FC<WitnessChatBannerProps> = ({ connectionId, navigation: _navigation }) => {
+export const WitnessChatBanner: React.FC<WitnessChatBannerProps> = ({ connectionId: _connectionId, navigation: _navigation }) => {
   const [store, dispatch] = useStore()
   const { t } = useTranslation()
 

@@ -1,4 +1,4 @@
-import type { CredentialExchangeRecord, ProofExchangeRecord } from '@credo-ts/core'
+import type { DidCommCredentialExchangeRecord, DidCommProofExchangeRecord } from '@credo-ts/didcomm'
 
 import { clear } from 'console'
 import { textSync } from 'figlet'
@@ -6,6 +6,7 @@ import { prompt } from 'inquirer'
 
 import { Participant, createParticipant } from './Participant'
 import { BaseInquirer, ConfirmOptions } from './BaseInquirer'
+import { Title, greenText, purpleText, redText } from './OutputClass'
 import { Listener } from './Listener'
 
 enum PromptOptions {
@@ -106,19 +107,19 @@ export class ParticipantInquirer extends BaseInquirer {
     }
   }
 
-  public async acceptCredentialOffer(credentialRecord: CredentialExchangeRecord) {
+  public async acceptCredentialOffer(credentialRecord: DidCommCredentialExchangeRecord) {
     const confirm = await prompt([this.inquireConfirmation(Title.CredentialOfferTitle)])
     if (confirm.options === ConfirmOptions.No) {
-      await this.participant.agent.credentials.declineOffer(credentialRecord.id)
+      await this.participant.agent.modules.didcomm.credentials.declineOffer({ credentialExchangeRecordId: credentialRecord.id })
     } else if (confirm.options === ConfirmOptions.Yes) {
       await this.participant.acceptCredentialOffer(credentialRecord)
     }
   }
 
-  public async acceptProofRequest(proofRecord: ProofExchangeRecord) {
+  public async acceptProofRequest(proofRecord: DidCommProofExchangeRecord) {
     const confirm = await prompt([this.inquireConfirmation(Title.ProofRequestTitle)])
     if (confirm.options === ConfirmOptions.No) {
-      await this.participant.agent.proofs.declineRequest({ proofRecordId: proofRecord.id })
+      await this.participant.agent.modules.didcomm.proofs.declineRequest({ proofExchangeRecordId: proofRecord.id })
     } else if (confirm.options === ConfirmOptions.Yes) {
       await this.participant.acceptProofRequest(proofRecord)
     }
@@ -171,7 +172,7 @@ export class ParticipantInquirer extends BaseInquirer {
     console.log(purpleText(`Domain: ${sessionData.domain}\n`))
 
     // Get all connections to find counterparty
-    const connections = await this.participant.agent.connections.getAll()
+    const connections = await this.participant.agent.modules.didcomm.connections.getAll()
     const otherConnections = connections.filter((c) => c.id !== sessionData.witnessConnectionId)
 
     if (otherConnections.length === 0) {

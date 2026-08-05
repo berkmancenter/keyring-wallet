@@ -1,12 +1,10 @@
+import { Agent, W3cCredentialRecord, utils } from '@credo-ts/core'
 import {
-  Agent,
-  ConnectionRecord,
-  CredentialExchangeRecord,
-  CredentialState,
-  ProofExchangeRecord,
-  W3cCredentialRecord,
-  utils,
-} from '@credo-ts/core'
+  DidCommConnectionRecord as ConnectionRecord,
+  DidCommCredentialExchangeRecord,
+  DidCommCredentialState as CredentialState,
+  DidCommProofExchangeRecord,
+} from '@credo-ts/didcomm'
 import type { Alice } from '../../src/Alice'
 import type { Bob } from '../../src/Bob'
 import type { Witness } from '../../src/Witness'
@@ -179,8 +177,8 @@ export function createMockConnectionRecord(overrides?: Partial<ConnectionRecord>
  * Create a mock credential exchange record
  */
 export function createMockCredentialExchangeRecord(
-  overrides?: Partial<CredentialExchangeRecord>
-): CredentialExchangeRecord {
+  overrides?: Partial<DidCommCredentialExchangeRecord>
+): DidCommCredentialExchangeRecord {
   return {
     id: utils.uuid(),
     createdAt: new Date(),
@@ -191,7 +189,7 @@ export function createMockCredentialExchangeRecord(
     protocolVersion: 'v2',
     credentials: [],
     ...overrides,
-  } as unknown as CredentialExchangeRecord
+  } as unknown as DidCommCredentialExchangeRecord
 }
 
 /**
@@ -227,7 +225,7 @@ export function createMockW3cCredentialRecord(overrides?: Partial<W3cCredentialR
 /**
  * Create a mock proof exchange record
  */
-export function createMockProofExchangeRecord(overrides?: Partial<ProofExchangeRecord>): ProofExchangeRecord {
+export function createMockProofExchangeRecord(overrides?: Partial<DidCommProofExchangeRecord>): DidCommProofExchangeRecord {
   return {
     id: utils.uuid(),
     createdAt: new Date(),
@@ -237,7 +235,7 @@ export function createMockProofExchangeRecord(overrides?: Partial<ProofExchangeR
     threadId: utils.uuid(),
     protocolVersion: 'v2',
     ...overrides,
-  } as unknown as ProofExchangeRecord
+  } as unknown as DidCommProofExchangeRecord
 }
 
 /**

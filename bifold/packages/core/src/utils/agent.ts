@@ -1,43 +1,51 @@
 import {
-  AnonCredsCredentialFormatService,
+  AnonCredsDidCommCredentialFormatService,
+  AnonCredsDidCommProofFormatService,
   AnonCredsModule,
-  AnonCredsProofFormatService,
-  DataIntegrityCredentialFormatService,
-  LegacyIndyCredentialFormatService,
-  LegacyIndyProofFormatService,
-  V1CredentialProtocol,
-  V1ProofProtocol,
+  DataIntegrityDidCommCredentialFormatService,
+  DidCommCredentialV1Protocol,
+  DidCommProofV1Protocol,
+  LegacyIndyDidCommCredentialFormatService,
+  LegacyIndyDidCommProofFormatService,
 } from '@credo-ts/anoncreds'
-import { AskarModule } from '@credo-ts/askar'
+
+import { AskarKeyManagementService, AskarModule } from '@credo-ts/askar'
+import { Agent, DcqlModule, DidsModule, JwkDidResolver, KeyDidResolver, Kms, PeerDidResolver, WebDidResolver, X509Module } from '@credo-ts/core'
+
 import {
-  Agent,
-  AutoAcceptCredential,
-  AutoAcceptProof,
-  ConnectionsModule,
-  CredentialsModule,
-  DifPresentationExchangeProofFormatService,
-  MediationRecipientModule,
-  MediatorPickupStrategy,
-  ProofsModule,
-  V2CredentialProtocol,
-  V2ProofProtocol,
-} from '@credo-ts/core'
+  DidCommAutoAcceptCredential,
+  DidCommAutoAcceptProof,
+  DidCommCredentialV2Protocol,
+  DidCommProofV2Protocol,
+  DidCommDifPresentationExchangeProofFormatService,
+  DidCommModule,
+  DidCommMediatorPickupStrategy,
+} from '@credo-ts/didcomm'
+
 import { IndyVdrAnonCredsRegistry, IndyVdrModule, IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
-import { OpenId4VcHolderModule } from '@credo-ts/openid4vc'
-// DISABLED: Push notifications disabled — no server backend yet
+import { WebVhAnonCredsRegistry, WebVhDidResolver } from '@credo-ts/webvh'
+import { useAgent } from '@bifold/react-hooks'
+import { OpenId4VcModule } from '@credo-ts/openid4vc'
+import { SecureEnvironmentKeyManagementService } from '@credo-ts/react-native'
 // import { PushNotificationsApnsModule, PushNotificationsFcmModule } from '@credo-ts/push-notifications'
-import { useAgent } from '@credo-ts/react-hooks'
 import { anoncreds } from '@hyperledger/anoncreds-react-native'
-import { ariesAskar } from '@hyperledger/aries-askar-react-native'
+import { askar } from '@openwallet-foundation/askar-react-native'
 import { indyVdr } from '@hyperledger/indy-vdr-react-native'
+import Config from 'react-native-config'
+import { WalletSecret } from '../types/security'
 
 interface GetAgentModulesOptions {
+  walletSecret: WalletSecret
   indyNetworks: IndyVdrPoolConfig[]
   mediatorInvitationUrl?: string
   txnCache?: { capacity: number; expiryOffsetMs: number; path?: string }
 }
 
-export type BifoldAgent = Agent<ReturnType<typeof getAgentModules>>
+export type BifoldAgentModules = ReturnType<typeof getAgentModules>
+
+export type BifoldAgent = Agent<BifoldAgentModules>
+
+const mdocTrustedCertificate = Config.MDOC_TRUSTED_CERTIFICATE_BASE64
 
 /**
  * Constructs the modules to be used in the agent setup
@@ -46,67 +54,99 @@ export type BifoldAgent = Agent<ReturnType<typeof getAgentModules>>
  * @param txnCache optional local cache config for indyvdr
  * @returns modules to be used in agent setup
  */
-export function getAgentModules({ indyNetworks, mediatorInvitationUrl, txnCache }: GetAgentModulesOptions) {
-  const indyCredentialFormat = new LegacyIndyCredentialFormatService()
-  const indyProofFormat = new LegacyIndyProofFormatService()
+export function getAgentModules({
+  walletSecret,
+  indyNetworks,
+  mediatorInvitationUrl,
+  txnCache,
+}: GetAgentModulesOptions) {
+  const indyCredentialFormat = new LegacyIndyDidCommCredentialFormatService()
+  const indyProofFormat = new LegacyIndyDidCommProofFormatService()
 
   if (txnCache) {
-    indyVdr.setLedgerTxnCache({
-      capacity: txnCache.capacity,
-      expiry_offset_ms: txnCache.expiryOffsetMs,
-      path: txnCache.path,
-    })
+    // TODO: Not a function?
+    // indyVdr.setLedgerTxnCache({
+    //   capacity: txnCache.capacity,
+    //   expiry_offset_ms: txnCache.expiryOffsetMs,
+    //   path: txnCache.path,
+    // })
   }
 
   return {
     askar: new AskarModule({
-      ariesAskar,
+      enableKms: false,
+      askar,
+      store: { id: walletSecret.id, key: walletSecret.key },
+    }),
+    kms: new Kms.KeyManagementModule({
+      backends: [
+        new AskarKeyManagementService(),
+        new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
+      ],
+      defaultBackend: 'askar',
     }),
     anoncreds: new AnonCredsModule({
       anoncreds,
-      registries: [new IndyVdrAnonCredsRegistry()],
+      registries: [new IndyVdrAnonCredsRegistry(), new WebVhAnonCredsRegistry()],
     }),
     indyVdr: new IndyVdrModule({
       indyVdr,
       networks: indyNetworks as [IndyVdrPoolConfig],
     }),
-    connections: new ConnectionsModule({
-      autoAcceptConnections: true,
+    didcomm: new DidCommModule({
+      useDidSovPrefixWhereAllowed: true,
+      connections: {
+        autoAcceptConnections: true,
+      },
+      credentials: {
+        autoAcceptCredentials: DidCommAutoAcceptCredential.ContentApproved,
+        credentialProtocols: [
+          new DidCommCredentialV1Protocol({ indyCredentialFormat }),
+          new DidCommCredentialV2Protocol({
+            credentialFormats: [
+              indyCredentialFormat,
+              new AnonCredsDidCommCredentialFormatService(),
+              new DataIntegrityDidCommCredentialFormatService(),
+            ],
+          }),
+        ],
+      },
+      proofs: {
+        autoAcceptProofs: DidCommAutoAcceptProof.ContentApproved,
+        proofProtocols: [
+          new DidCommProofV1Protocol({ indyProofFormat }),
+          new DidCommProofV2Protocol({
+            proofFormats: [
+              indyProofFormat,
+              new AnonCredsDidCommProofFormatService(),
+              new DidCommDifPresentationExchangeProofFormatService(),
+            ],
+          }),
+        ],
+      },
+      mediationRecipient: {
+        mediatorInvitationUrl: mediatorInvitationUrl,
+        mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+      },
     }),
-    credentials: new CredentialsModule({
-      autoAcceptCredentials: AutoAcceptCredential.ContentApproved,
-      credentialProtocols: [
-        new V1CredentialProtocol({ indyCredentialFormat }),
-        new V2CredentialProtocol({
-          credentialFormats: [
-            indyCredentialFormat,
-            new AnonCredsCredentialFormatService(),
-            new DataIntegrityCredentialFormatService(),
-          ],
-        }),
+    dcql: new DcqlModule(),
+    openid4vc: new OpenId4VcModule(),
+    ...(mdocTrustedCertificate
+      ? {
+          x509: new X509Module({
+            trustedCertificates: [mdocTrustedCertificate],
+          }),
+        }
+      : {}),
+    dids: new DidsModule({
+      resolvers: [
+        new WebVhDidResolver(),
+        new WebDidResolver(),
+        new JwkDidResolver(),
+        new KeyDidResolver(),
+        new PeerDidResolver(),
       ],
     }),
-    proofs: new ProofsModule({
-      autoAcceptProofs: AutoAcceptProof.ContentApproved,
-      proofProtocols: [
-        new V1ProofProtocol({ indyProofFormat }),
-        new V2ProofProtocol({
-          proofFormats: [
-            indyProofFormat,
-            new AnonCredsProofFormatService(),
-            new DifPresentationExchangeProofFormatService(),
-          ],
-        }),
-      ],
-    }),
-    mediationRecipient: new MediationRecipientModule({
-      mediatorInvitationUrl: mediatorInvitationUrl,
-      mediatorPickupStrategy: MediatorPickupStrategy.Implicit,
-    }),
-    // DISABLED: Push notifications disabled — no server backend yet
-    // pushNotificationsFcm: new PushNotificationsFcmModule(),
-    // pushNotificationsApns: new PushNotificationsApnsModule(),
-    openId4VcHolder: new OpenId4VcHolderModule(),
   }
 }
 
@@ -117,7 +157,7 @@ interface MyAgentContextInterface {
 
 export const useAppAgent = useAgent as () => MyAgentContextInterface
 
-export const createLinkSecretIfRequired = async (agent: Agent) => {
+export const createLinkSecretIfRequired = async (agent: BifoldAgent) => {
   // If we don't have any link secrets yet, we will create a
   // default link secret that will be used for all anoncreds
   // credential requests.

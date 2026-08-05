@@ -1,11 +1,9 @@
-// Dont remove the following import line or the pin check will fail when opening askar waller
-import '@hyperledger/aries-askar-react-native'
-
 import 'reflect-metadata'
+import { AskarModule, AskarModuleConfig, AskarStoreManager } from '@credo-ts/askar'
 import { DeviceEventEmitter } from 'react-native'
-import { AskarWallet } from '@credo-ts/askar'
-import { Agent, ConsoleLogger, LogLevel, SigningProviderRegistry } from '@credo-ts/core'
+import { Agent, ConsoleLogger, LogLevel } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/react-native'
+import { askar } from '@openwallet-foundation/askar-react-native'
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -21,10 +19,10 @@ import {
   wipeWalletKey,
 } from '../services/keychain'
 import { WalletSecret } from '../types/security'
-import { hashPIN } from '../utils/crypto'
 import { migrateToAskar } from '../utils/migration'
 import { BifoldError } from '../types/error'
 import { EventTypes } from '../constants'
+import { useServices, TOKENS } from '../container-api'
 
 export interface AuthContext {
   lockOutUser: (reason: LockoutReason) => void
@@ -50,11 +48,15 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   const [walletSecret, setWalletSecret] = useState<WalletSecret>()
   const [store, dispatch] = useStore()
   const { t } = useTranslation()
+  const [hashPIN, logger] = useServices([TOKENS.FN_PIN_HASH_ALGORITHM, TOKENS.UTIL_LOGGER])
 
-  const setPIN = useCallback(async (PIN: string): Promise<void> => {
-    const secret = await secretForPIN(PIN)
-    await storeWalletSecret(secret)
-  }, [])
+  const setPIN = useCallback(
+    async (PIN: string): Promise<void> => {
+      const secret = await secretForPIN(PIN, hashPIN)
+      await storeWalletSecret(secret)
+    },
+    [hashPIN]
+  )
 
   const getWalletSecret = useCallback(async (): Promise<WalletSecret | undefined> => {
     if (walletSecret) {
@@ -98,7 +100,6 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     async (PIN: string): Promise<boolean> => {
       try {
         const secret = await loadWalletSalt()
-
         if (!secret?.salt) {
           return false
         }
@@ -112,47 +113,63 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           })
         }
 
-        // NOTE: We create an instance of AskarWallet, which is the underlying wallet that powers the app
-        // we then open that instance with the provided id and key to verify their integrity
-        const askarWallet = new AskarWallet(
-          new ConsoleLogger(LogLevel.off),
-          new agentDependencies.FileSystem(),
-          new SigningProviderRegistry([])
-        )
+        const validationAgent = new Agent({
+          config: {
+            logger: new ConsoleLogger(LogLevel.off),
+            autoUpdateStorageOnStartup: false,
+          },
+          modules: {
+            askar: new AskarModule({
+              askar,
+              store: { id: secret.id, key: hash },
+            }),
+          },
+          dependencies: agentDependencies,
+        })
+
+        const storeManager = validationAgent.dependencyManager.resolve(AskarStoreManager)
 
         try {
-          await askarWallet.open({
-            id: secret.id,
-            key: hash,
-          })
-          await askarWallet.close()
-        } catch (openError) {
-          // The Askar wallet is only created during agent initialization (Splash).
-          // If the user force-closed the app during onboarding before Splash ran,
-          // the wallet doesn't exist yet and open() will fail for any PIN.
-          // Verify the PIN against the stored key in the keychain instead.
-          if (!store.onboarding.didCompleteOnboarding) {
-            const storedKey = await loadWalletKey()
-            if (!storedKey || storedKey.key !== hash) {
-              return false
+          try {
+            await storeManager.openStore(validationAgent.context)
+          } catch (openError) {
+            // The Askar store is only created during agent initialization (Splash).
+            // If the user force-closed the app during onboarding before Splash ran,
+            // the store doesn't exist yet and openStore() will fail for any PIN.
+            // Verify the PIN against the stored key in the keychain instead.
+            if (!store.onboarding.didCompleteOnboarding) {
+              const storedKey = await loadWalletKey()
+              if (!storedKey || storedKey.key !== hash) {
+                return false
+              }
+              setWalletSecret({ id: secret.id, key: hash, salt: secret.salt })
+              // Now that we've verified, wipe the key (biometrics-disabled behavior)
+              if (!store.preferences.useBiometry) {
+                await wipeWalletKey(false)
+              }
+              return true
             }
-            setWalletSecret({ id: secret.id, key: hash, salt: secret.salt })
-            // Now that we've verified, wipe the key (biometrics-disabled behavior)
-            if (!store.preferences.useBiometry) {
-              await wipeWalletKey(false)
-            }
-            return true
+            throw openError
           }
-          throw openError
+        } finally {
+          if (storeManager.isStoreOpen(validationAgent.context)) {
+            await storeManager.closeStore(validationAgent.context)
+          }
         }
 
         setWalletSecret({ id: secret.id, key: hash, salt: secret.salt })
         return true
-      } catch (e) {
+      } catch {
         return false
       }
     },
-    [dispatch, store.migration.didMigrateToAskar, store.onboarding.didCompleteOnboarding, store.preferences.useBiometry]
+    [
+      dispatch,
+      store.migration.didMigrateToAskar,
+      hashPIN,
+      store.onboarding.didCompleteOnboarding,
+      store.preferences.useBiometry,
+    ]
   )
 
   const removeSavedWalletSecret = useCallback(() => {
@@ -182,34 +199,45 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     async (agent: Agent, oldPin: string, newPin: string, useBiometry?: boolean): Promise<boolean> => {
       try {
         if (!agent) {
-          // no agent set, cannot rekey the wallet
-          return false
-        }
-        // argon2.hash can sometimes generate an error
-        const secret = await loadWalletSalt()
-        if (!secret) {
+          logger.warn('No agent set, cannot rekey wallet')
           return false
         }
 
-        const oldHash = await hashPIN(oldPin, secret.salt)
-        const newSecret = await secretForPIN(newPin)
-        const newHash = await hashPIN(newPin, newSecret.salt)
+        const secret = await loadWalletSalt()
+        if (!secret) {
+          logger.warn('No wallet secret found, cannot rekey wallet')
+          return false
+        }
+
+        const oldKey = await hashPIN(oldPin, secret.salt)
+        const newSecret = await secretForPIN(newPin, hashPIN)
         if (!newSecret.key) {
           return false
         }
 
-        await agent.wallet.close()
-        // wallet.rotateKey calls open under the hood
-        await agent.wallet.rotateKey({ id: secret.id, key: oldHash, rekey: newHash })
+        const storeManager = agent.dependencyManager.resolve(AskarStoreManager)
+        const askarModuleConfig = agent.dependencyManager.resolve(AskarModuleConfig)
+        if (askarModuleConfig.store.key !== oldKey) {
+          logger.warn('Old PIN is incorrect')
+          return false
+        }
+
+        if (!storeManager.isStoreOpen(agent.context)) {
+          await storeManager.openStore(agent.context)
+        }
+
+        await storeManager.rotateStoreKey(agent.context, { newKey: newSecret.key })
+        askarModuleConfig.store.key = newSecret.key
 
         await storeWalletSecret(newSecret, useBiometry)
         setWalletSecret(newSecret)
-      } catch {
+      } catch (err) {
+        logger.error('Error rekeying wallet', err as Error)
         return false
       }
       return true
     },
-    []
+    [hashPIN, logger]
   )
 
   const verifyPIN = useCallback(
@@ -219,7 +247,6 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         if (!credentials) {
           throw new Error('Get wallet credentials error')
         }
-
         const key = await hashPIN(PIN, credentials.salt)
         if (credentials.key !== key) {
           return false
@@ -237,7 +264,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
         return false
       }
     },
-    [getWalletSecret, t]
+    [getWalletSecret, t, hashPIN]
   )
 
   // During initial onboarding we keep the wallet key in the keychain so that

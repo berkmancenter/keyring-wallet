@@ -10,6 +10,12 @@ abstract class AttestationSpec internal constructor(context: ReactApplicationCon
 
   abstract fun isPlayIntegrityAvailable(promise: Promise)
   abstract fun googleAttestation(nonce: String, promise: Promise)
+  // iOS-only methods, mirrored so old/new arch spec surfaces stay identical
+  abstract fun generateKey(cache: Boolean, promise: Promise)
+  abstract fun sha256(stringToHash: String, promise: Promise)
+  abstract fun appleKeyAttestation(keyId: String, challenge: String, promise: Promise)
+  abstract fun getAppStoreReceipt(promise: Promise)
+  abstract fun attestHardwareSigningKey(challenge: String, promise: Promise)
   abstract fun verifyHardwareEvidence(
     certificateChainPem: ReadableArray,
     signatureBase64: String,

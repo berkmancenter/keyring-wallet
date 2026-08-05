@@ -1,37 +1,161 @@
-import type { W3cCredentialRecord, SdJwtVcRecord, MdocRecord } from '@credo-ts/core'
-import type { OpenId4VciCredentialSupported, OpenId4VciIssuerMetadataDisplay } from '@credo-ts/openid4vc'
-import type { MetadataDisplay } from '@sphereon/oid4vci-common'
-import { CredentialSubjectRecord } from './types'
+import { W3cCredentialRecord, SdJwtVcRecord, MdocRecord, W3cV2CredentialRecord, AgentContext, W3cCredentialRepository, W3cV2CredentialRepository, SdJwtVcRepository, MdocRepository } from '@credo-ts/core'
+import type {
+  OpenId4VciCredentialIssuerMetadataDisplay,
+  OpenId4VciMetadata,
+  OpenId4VciRequestTokenResponse,
+} from '@credo-ts/openid4vc'
+import { RefreshCredentialMetadata, RefreshStatus } from './refresh/types'
+import { CredentialDisplay, CredentialSubjectRecord } from './types'
+import { OpenIDCredentialRecord } from './credentialRecord'
 
+export const openID4VcCredentialMetadataKey = '_bifold/openID4VcCredentialMetadata'
+export const refreshCredentialMetadataKey = '_bifold/refreshCredentialMetadata'
 export interface OpenId4VcCredentialMetadata {
   credential: {
-    display?: OpenId4VciCredentialSupported['display']
-    order?: OpenId4VciCredentialSupported['order']
+    display?: CredentialDisplay[]
+    order?: string[]
     credential_subject?: CredentialSubjectRecord
   }
   issuer: {
-    display?: OpenId4VciIssuerMetadataDisplay[]
+    display?: OpenId4VciCredentialIssuerMetadataDisplay[]
     id: string
   }
 }
 
-export type OpenId4VcCredentialMetadataExtended = Partial<
-  OpenId4VciCredentialSupported & { credential_subject: CredentialSubjectRecord }
->
-const openId4VcCredentialMetadataKey = '_bifold/openId4VcCredentialMetadata'
+type CredentialMetadataImage = {
+  uri?: string
+  url?: string
+  altText?: string
+  alt_text?: string
+}
+
+type CredentialMetadataDisplay = {
+  name: string
+  locale?: string
+  description?: string
+  textColor?: string
+  text_color?: string
+  backgroundColor?: string
+  background_color?: string
+  backgroundImage?: CredentialMetadataImage
+  background_image?: CredentialMetadataImage
+  logo?: CredentialMetadataImage
+  primary_overlay_attribute?: string
+}
+
+type CredentialSupported = {
+  credential_metadata?: {
+    display?: CredentialMetadataDisplay[]
+    claims?: Array<{
+      path?: Array<string | number>
+      display?: Array<{
+        name: string
+        locale?: string
+      }>
+    }>
+  }
+  format?: string
+}
+
+export type OpenIDCredentialNotificationMetadata = {
+  notificationMetadata?: OpenId4VciMetadata
+  tokenResponse?: OpenId4VciRequestTokenResponse
+}
+
+const normalizeImage = (image?: CredentialMetadataImage) => {
+  if (!image) return undefined
+
+  const uri = image.uri ?? image.url
+  if (!uri) return undefined
+
+  return {
+    uri,
+    altText: image.altText ?? image.alt_text,
+  }
+}
+
+const normalizeCredentialDisplay = (display: CredentialMetadataDisplay): CredentialDisplay => ({
+  locale: display.locale,
+  name: display.name,
+  description: display.description,
+  textColor: display.textColor ?? display.text_color,
+  backgroundColor: display.backgroundColor ?? display.background_color,
+  backgroundImage: normalizeImage(display.backgroundImage ?? display.background_image),
+  logo: normalizeImage(display.logo),
+  primary_overlay_attribute: display.primary_overlay_attribute,
+} as CredentialDisplay)
+
+const normalizeIssuerDisplay = (display: OpenId4VciCredentialIssuerMetadataDisplay): OpenId4VciCredentialIssuerMetadataDisplay => {
+  const normalized = {
+    ...display,
+    logo: normalizeImage(display.logo),
+  }
+
+  return normalized as OpenId4VciCredentialIssuerMetadataDisplay
+}
+
+const getClaimDisplayKey = (claimPath: Array<string | number> | undefined, format?: string): string | undefined => {
+  if (!claimPath?.length) return undefined
+
+  if (format === 'mso_mdoc' && claimPath.length > 1) {
+    return String(claimPath[claimPath.length - 1])
+  }
+
+  return String(claimPath[0])
+}
+
+const claimsToCredentialSubject = (
+  claims: NonNullable<CredentialSupported['credential_metadata']>['claims'],
+  format?: string
+): CredentialSubjectRecord | undefined => {
+  if (!claims?.length) return undefined
+
+  const credentialSubject: CredentialSubjectRecord = {}
+  for (const claim of claims) {
+    const key = getClaimDisplayKey(claim.path, format)
+    if (!key || !claim.display?.length || credentialSubject[key]) continue
+
+    credentialSubject[key] = {
+      display: claim.display,
+    }
+  }
+
+  return Object.keys(credentialSubject).length ? credentialSubject : undefined
+}
+
+const claimsToOrder = (
+  claims: NonNullable<CredentialSupported['credential_metadata']>['claims'],
+  format?: string
+): string[] | undefined => {
+  if (!claims?.length) return undefined
+
+  const order: string[] = []
+  const seen = new Set<string>()
+  for (const claim of claims) {
+    const key = getClaimDisplayKey(claim.path, format)
+    if (!key || seen.has(key)) continue
+
+    seen.add(key)
+    order.push(key)
+  }
+
+  return order.length ? order : undefined
+}
 
 export function extractOpenId4VcCredentialMetadata(
-  credentialMetadata: Partial<OpenId4VciCredentialSupported & { credential_subject: CredentialSubjectRecord }>,
-  serverMetadata: { display?: MetadataDisplay[]; id: string }
+  credentialMetadata: Partial<CredentialSupported>,
+  serverMetadata: { display?: OpenId4VciCredentialIssuerMetadataDisplay[]; id: string }
 ): OpenId4VcCredentialMetadata {
+  const metadata = credentialMetadata.credential_metadata
+
   return {
     credential: {
-      display: credentialMetadata.display,
-      order: credentialMetadata.order,
-      credential_subject: credentialMetadata.credential_subject,
+      display: metadata?.display?.map(normalizeCredentialDisplay),
+      order: claimsToOrder(metadata?.claims, credentialMetadata.format),
+      credential_subject: claimsToCredentialSubject(metadata?.claims, credentialMetadata.format),
     },
     issuer: {
-      display: serverMetadata.display,
+      display: serverMetadata.display?.map(normalizeIssuerDisplay),
       id: serverMetadata.id,
     },
   }
@@ -41,9 +165,9 @@ export function extractOpenId4VcCredentialMetadata(
  * Gets the OpenId4Vc credential metadata from the given W3C credential record.
  */
 export function getOpenId4VcCredentialMetadata(
-  credentialRecord: W3cCredentialRecord | SdJwtVcRecord | MdocRecord
+  credentialRecord: OpenIDCredentialRecord
 ): OpenId4VcCredentialMetadata | null {
-  return credentialRecord.metadata.get(openId4VcCredentialMetadataKey)
+  return credentialRecord.metadata.get(openID4VcCredentialMetadataKey)
 }
 
 /**
@@ -52,8 +176,79 @@ export function getOpenId4VcCredentialMetadata(
  * NOTE: this does not save the record.
  */
 export function setOpenId4VcCredentialMetadata(
-  credentialRecord: W3cCredentialRecord | SdJwtVcRecord | MdocRecord,
+  credentialRecord: OpenIDCredentialRecord,
   metadata: OpenId4VcCredentialMetadata
 ) {
-  credentialRecord.metadata.set(openId4VcCredentialMetadataKey, metadata)
+  credentialRecord.metadata.set(openID4VcCredentialMetadataKey, metadata)
+}
+
+/**
+ * Gets the refresh credential metadata from the given credential record.
+ */
+export function getRefreshCredentialMetadata(
+  credentialRecord: OpenIDCredentialRecord
+): RefreshCredentialMetadata | null {
+  return credentialRecord.metadata.get(refreshCredentialMetadataKey)
+}
+
+/**
+ * Sets the refresh credential metadata on the given credential record
+ *
+ * NOTE: this does not save the record.
+ */
+export function setRefreshCredentialMetadata(
+  credentialRecord: OpenIDCredentialRecord,
+  metadata: RefreshCredentialMetadata
+) {
+  credentialRecord.metadata.set(refreshCredentialMetadataKey, metadata)
+}
+
+export function deleteRefreshCredentialMetadata(
+  credentialRecord: OpenIDCredentialRecord
+) {
+  credentialRecord.metadata.delete(refreshCredentialMetadataKey)
+}
+
+export async function persistCredentialRecord(
+  agentContext: AgentContext,
+  record: OpenIDCredentialRecord
+) {
+  if (record instanceof W3cCredentialRecord) {
+    await agentContext.dependencyManager.resolve(W3cCredentialRepository).update(agentContext, record)
+  } else if (record instanceof W3cV2CredentialRecord) {
+    await agentContext.dependencyManager.resolve(W3cV2CredentialRepository).update(agentContext, record)
+  } else if (record instanceof SdJwtVcRecord) {
+    await agentContext.dependencyManager.resolve(SdJwtVcRepository).update(agentContext, record)
+  } else if (record instanceof MdocRecord) {
+    await agentContext.dependencyManager.resolve(MdocRepository).update(agentContext, record)
+  } else {
+    throw new Error('Unsupported credential record type for persistence')
+  }
+}
+
+export async function markOpenIDCredentialStatus({
+  credential,
+  status,
+  agentContext,
+}: {
+  credential: OpenIDCredentialRecord
+  status: RefreshStatus
+  agentContext: AgentContext
+}) {
+  const refreshMetadata = getRefreshCredentialMetadata(credential)
+  if (!refreshMetadata) {
+    throw new Error('No refresh metadata found on the credential record.')
+  }
+
+  refreshMetadata.lastCheckResult = status
+
+  setRefreshCredentialMetadata(credential, refreshMetadata)
+
+  // Persist the updated credential record
+  await persistCredentialRecord(agentContext, credential)
+}
+
+export const temporaryMetaVanillaObject: OpenIDCredentialNotificationMetadata = {
+  notificationMetadata: undefined,
+  tokenResponse: undefined,
 }

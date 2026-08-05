@@ -1,20 +1,20 @@
 import { BrandingOverlay } from '@bifold/oca'
 import { BrandingOverlayType, CredentialOverlay } from '@bifold/oca/build/legacy'
-import { CredentialExchangeRecord } from '@credo-ts/core'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, useWindowDimensions, View } from 'react-native'
 import CardWatermark from '../../components/misc/CardWatermark'
 import { useTheme } from '../../contexts/theme'
-import { credentialTextColor } from '../../utils/credential'
-import { formatTime } from '../../utils/helpers'
+import { credentialTextColor, getEffectiveCredentialName } from '../../utils/credential'
 import { testIdWithKey } from '../../utils/testable'
+import { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
+import { formatTime } from '../../utils/helpers'
 import { ThemedText } from '../texts/ThemedText'
 
 type CredentialDetailPrimaryHeaderProps = {
   overlay: CredentialOverlay<BrandingOverlay>
   brandingOverlayType?: BrandingOverlayType
-  credential?: CredentialExchangeRecord
+  credential?: DidCommCredentialExchangeRecord
 }
 
 const paddingHorizontal = 24
@@ -30,6 +30,11 @@ const CredentialDetailPrimaryHeader: React.FC<CredentialDetailPrimaryHeaderProps
   const { ColorPalette } = useTheme()
   const { width, height } = useWindowDimensions()
   const isBranding11 = brandingOverlayType === BrandingOverlayType.Branding11
+
+  const effectiveName = credential
+    ? getEffectiveCredentialName(credential, overlay.metaOverlay?.name)
+    : overlay.metaOverlay?.name
+
   const styles = StyleSheet.create({
     primaryHeaderContainer: {
       paddingHorizontal: isBranding11 ? 16 : paddingHorizontal,
@@ -73,7 +78,7 @@ const CredentialDetailPrimaryHeader: React.FC<CredentialDetailPrimaryHeaderProps
           </ThemedText>
         )}
         <ThemedText
-          accessibilityLabel={`${overlay.metaOverlay?.name} ${t('Credentials.Credential')}`}
+          accessibilityLabel={`${effectiveName} ${t('Credentials.Credential')}`}
           testID={testIdWithKey('CredentialName')}
           style={[
             styles.textContainer,
@@ -82,7 +87,7 @@ const CredentialDetailPrimaryHeader: React.FC<CredentialDetailPrimaryHeaderProps
             },
           ]}
         >
-          {overlay.metaOverlay?.name}
+          {effectiveName}
         </ThemedText>
         {brandingOverlayType === BrandingOverlayType.Branding11 && credential && (
           <ThemedText

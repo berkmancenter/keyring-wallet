@@ -1,22 +1,16 @@
-import {
-  BasicMessageRecord,
-  ConnectionRecord,
-  CredentialExchangeRecord,
-  CredentialRole,
-  CredentialState,
-  ProofExchangeRecord,
-  ProofState,
-  CredentialEventTypes,
-  W3cCredentialRecord,
-} from '@credo-ts/core'
+import { W3cCredentialRecord } from '@credo-ts/core'
+import { DidCommBasicMessageRecord, DidCommConnectionRecord, DidCommCredentialEventTypes, DidCommCredentialExchangeRecord, DidCommCredentialRole, DidCommCredentialState, DidCommProofExchangeRecord, DidCommProofState } from '@credo-ts/didcomm'
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
-import { useBasicMessagesByConnectionId, useAgent } from '@credo-ts/react-hooks'
+import { useBasicMessagesByConnectionId, useAgent } from '@bifold/react-hooks'
 import { isPresentationReceived } from '@bifold/verifier'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Linking, View, TouchableOpacity, Text } from 'react-native'
+import { Linking, View, Text } from 'react-native'
+// gesture-handler touchable: RN's own touchables miss taps inside GiftedChat's
+// inverted list + GestureHandlerRootView on Android with the new architecture
+import { TouchableOpacity } from 'react-native-gesture-handler'
 
 import { ChatEvent } from '../components/chat/ChatEvent'
 import { ExtendedChatMessage, CallbackType, MessageIconType } from '../components/chat/ChatMessage'
@@ -25,16 +19,14 @@ import { useCredentialsByConnectionId } from './credentials'
 import { useProofsByConnectionId } from './proofs'
 import { useConnectionDisplayName } from './connections'
 import { OpenIDCredentialType } from '../modules/openid/types'
+import { isDTGCredential, isRCardTemplate, isRelationshipCredential } from '../modules/vrc/credentialTypes'
 import { credentialDisplayRegistry } from '../modules/vrc/display/displayRegistry'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
-import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore, VrcFlowStatus } from '../modules/vrc/witnessStatusStore'
+import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore } from '../modules/vrc/witnessStatusStore'
 import { useStore } from '../contexts/store'
-import { DispatchAction } from '../contexts/reducers/store'
 import { Role } from '../types/chat'
 import { RootStackParams, ContactStackParams, Screens, Stacks } from '../types/navigators'
 import {
-  getCredentialEventLabel,
-  getCredentialEventRole,
   getMessageEventRole,
   getProofEventLabel,
   getProofEventRole,
@@ -42,7 +34,6 @@ import {
 import { ThemedText } from '../components/texts/ThemedText'
 import { BIOMETRIC_STATUS_MESSAGE_PREFIX } from '../modules/vrc/vrc-biometric'
 import { derivePseudonym } from '../utils/pseudonym'
-import { testIdWithKey } from '../utils/testable'
 
 /**
  * Transforms VRC biometric status messages into user-friendly text
@@ -87,7 +78,7 @@ export const useRoutedWitnessCredentials = (connectionId: string): W3cCredential
     
     const loadRoutedCredentials = async () => {
       try {
-        const allW3cRecords = await agent.w3cCredentials.getAllCredentialRecords()
+        const allW3cRecords = await agent.w3cCredentials.getAll()
         
         // Filter for credentials with routing metadata pointing to this connection
         const filtered = allW3cRecords.filter(record => {
@@ -97,6 +88,7 @@ export const useRoutedWitnessCredentials = (connectionId: string): W3cCredential
         
         setRoutedCreds(filtered)
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error('[VRC] Error loading routed witness credentials:', error)
       }
     }
@@ -105,7 +97,7 @@ export const useRoutedWitnessCredentials = (connectionId: string): W3cCredential
     
     // Listen for credential state changes to update
     const handleCredentialChange = () => loadRoutedCredentials()
-    agent.events.on(CredentialEventTypes.CredentialStateChanged, handleCredentialChange)
+    agent.events.on(DidCommCredentialEventTypes.DidCommCredentialStateChanged, handleCredentialChange)
     
     // Also listen for witness status updates (routing metadata is added after credential arrives)
     const handleWitnessStatusUpdate = ({ connectionId: statusConnectionId }: { connectionId: string }) => {
@@ -118,7 +110,7 @@ export const useRoutedWitnessCredentials = (connectionId: string): W3cCredential
     witnessStatusStore.on('statusUpdate', handleWitnessStatusUpdate)
     
     return () => {
-      agent.events.off(CredentialEventTypes.CredentialStateChanged, handleCredentialChange)
+      agent.events.off(DidCommCredentialEventTypes.DidCommCredentialStateChanged, handleCredentialChange)
       witnessStatusStore.off('statusUpdate', handleWitnessStatusUpdate)
     }
   }, [agent, connectionId])
@@ -333,6 +325,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
             !(currentStatus === 'offer-sent' && currentHasReceived) &&
             !currentComplete
           if (shouldStillBeActive) {
+            // eslint-disable-next-line no-console
             console.warn(`[VRC Flow] Timeout after ${timeoutMs / 1000}s | Status: ${currentStatus} — showing timeout UI`)
             setTimedOut(true)
             setStatusText("The exchange didn't complete. You may need to try connecting again.")
@@ -366,87 +359,37 @@ export const useWitnessFlowInProgress = (connectionId: string): boolean => {
   return inProgress
 }
 
-/**
- * Helper function to get display title and subtitle for witness status messages
- * Returns full details (not truncated) for expanded view
- */
-function getWitnessStatusDisplay(status: WitnessStatusMessage): { title: string; subtitle?: string } {
-  switch (status.status) {
-    case 'session-requested':
-      return {
-        title: 'Witness Session Requested',
-        subtitle: `Witness: ${status.witnessName}`,
-      }
-    case 'session-joined':
-      return {
-        title: 'Session Joined',
-        subtitle: status.sessionId 
-          ? `Session ID: ${status.sessionId}` 
-          : `Connected to witness: ${status.witnessName}`,
-      }
-    case 'vp-submitted':
-      return {
-        title: 'Credential Submitted',
-        subtitle: 'Awaiting witness verification...',
-      }
-    case 'witnessed':
-      return {
-        title: 'Exchange Witnessed',
-        subtitle: `Verified by: ${status.witnessName}`,
-      }
-    case 'witness-complete':
-      return {
-        title: 'Witness Attestation Received',
-        subtitle: `From: ${status.witnessName}`,
-      }
-    case 'witness-skipped':
-      return {
-        title: 'Witness Verification Skipped',
-        subtitle: status.errorMessage || 'Contact not connected to witness',
-      }
-    case 'error':
-      return {
-        title: 'Witness Flow Error',
-        subtitle: status.errorMessage || 'An error occurred during witness verification',
-      }
-    default:
-      return {
-        title: 'Witness Status',
-        subtitle: status.witnessName,
-      }
-  }
-}
 
 /**
  * Determines the callback to be called when the button below a given chat message is pressed, if it exists.
  *
  * eg. 'View offer' -> opens the credential offer screen
  *
- * @param {CredentialExchangeRecord | ProofExchangeRecord} record - The record to determine the callback type for.
+ * @param {DidCommCredentialExchangeRecord | DidCommProofExchangeRecord} record - The record to determine the callback type for.
  * @returns {CallbackType} The callback type for the given record.
  */
-const callbackTypeForMessage = (record: CredentialExchangeRecord | ProofExchangeRecord) => {
+const callbackTypeForMessage = (record: DidCommCredentialExchangeRecord | DidCommProofExchangeRecord) => {
   // For credentials in OfferReceived state, show "View offer" button to accept
   // For credentials in Done state, don't set a specific callback type (will show "Full Contact details")
-  if (record instanceof CredentialExchangeRecord) {
-    if (record.state === CredentialState.OfferReceived) {
+  if (record instanceof DidCommCredentialExchangeRecord) {
+    if (record.state === DidCommCredentialState.OfferReceived) {
       return CallbackType.CredentialOffer
     }
     // Credentials in Done state return undefined - will show "Full Contact details"
     return undefined
   }
 
-  // All proof-related checks below - only for ProofExchangeRecord
-  if (record instanceof ProofExchangeRecord) {
+  // All proof-related checks below - only for DidCommProofExchangeRecord
+  if (record instanceof DidCommProofExchangeRecord) {
     if (
       (isPresentationReceived(record) && record.isVerified !== undefined) ||
-      record.state === ProofState.RequestReceived ||
-      (record.state === ProofState.Done && record.isVerified === undefined)
+      record.state === DidCommProofState.RequestReceived ||
+      (record.state === DidCommProofState.Done && record.isVerified === undefined)
     ) {
       return CallbackType.ProofRequest
     }
 
-    if (record.state === ProofState.PresentationSent || record.state === ProofState.Done) {
+    if (record.state === DidCommProofState.PresentationSent || record.state === DidCommProofState.Done) {
       return CallbackType.PresentationSent
     }
   }
@@ -458,25 +401,30 @@ const callbackTypeForMessage = (record: CredentialExchangeRecord | ProofExchange
  * Custom hook for retrieving chat messages for a given connection. This hook includes some of
  * the JSX for rendering the chat messages, including the logic for handling links in messages.
  *
- * @param {ConnectionRecord} connection - The connection to retrieve chat messages for.
+ * @param {DidCommConnectionRecord} connection - The connection to retrieve chat messages for.
  * @returns {ExtendedChatMessage[]} The chat messages for the given connection.
  */
 /**
- * Workaround for a stale-closure bug in @credo-ts/react-hooks BasicMessageProvider.
- * The subscription callback captures `state` from closure instead of using a functional
+ * Workaround for a stale-closure bug in @bifold/react-hooks BasicMessageProvider.
+ * The subscription callback captured `state` from closure instead of using a functional
  * updater, so rapid-fire messages overwrite each other and get lost. This hook
  * supplements the subscription with periodic DB queries via the public API.
+ *
+ * BasicMessageProvider (and its sibling record providers) now use a functional setState
+ * updater — see recordUtils.ts — so this polling fallback may no longer be necessary.
+ * Left in place because it hasn't been re-verified against the fix; a candidate for
+ * simplification/removal once it has.
  */
-const useReliableBasicMessages = (connectionId: string | undefined): BasicMessageRecord[] => {
+const useReliableBasicMessages = (connectionId: string | undefined): DidCommBasicMessageRecord[] => {
   const subscriptionMessages = useBasicMessagesByConnectionId(connectionId ?? '')
   const { agent } = useAgent()
-  const [dbMessages, setDbMessages] = useState<BasicMessageRecord[]>([])
+  const [dbMessages, setDbMessages] = useState<DidCommBasicMessageRecord[]>([])
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchFromDb = useCallback(async () => {
     if (!agent || !connectionId) return
     try {
-      const records = await agent.basicMessages.findAllByQuery({ connectionId })
+      const records = await agent.modules.didcomm.basicMessages.findAllByQuery({ connectionId })
       setDbMessages(records)
     } catch {
       // Silently fail — subscription data is still available
@@ -508,7 +456,7 @@ const useReliableBasicMessages = (connectionId: string | undefined): BasicMessag
   }, [fetchFromDb])
 
   const merged = React.useMemo(() => {
-    const byId = new Map<string, BasicMessageRecord>()
+    const byId = new Map<string, DidCommBasicMessageRecord>()
     for (const r of subscriptionMessages) byId.set(r.id, r)
     for (const r of dbMessages) {
       if (!byId.has(r.id)) byId.set(r.id, r)
@@ -541,7 +489,7 @@ const areChatMessagesEqual = (a: ExtendedChatMessage[], b: ExtendedChatMessage[]
   return true
 }
 
-export const useChatMessagesByConnection = (connection: ConnectionRecord): ExtendedChatMessage[] => {
+export const useChatMessagesByConnection = (connection: DidCommConnectionRecord): ExtendedChatMessage[] => {
   const [messages, setMessages] = useState<Array<ExtendedChatMessage>>([])
   const latestMessagesRef = useRef<Array<ExtendedChatMessage>>([])
   const { t } = useTranslation()
@@ -559,7 +507,7 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
   } = useOpenIDCredentials()
 
   useEffect(() => {
-    const transformedMessages: Array<ExtendedChatMessage> = (basicMessages.map((record: BasicMessageRecord) => {
+    const transformedMessages: Array<ExtendedChatMessage> = (basicMessages.map((record: DidCommBasicMessageRecord) => {
       const role = getMessageEventRole(record)
 
       // Hide all JSON protocol messages (witness-announcement, session-challenge,
@@ -698,25 +646,40 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
     // Only show where user is HOLDER. Handles both AnonCreds and W3C/JSON-LD credentials.
     // Witness connection credentials get simplified display (full details in Contact Details).
     const actionableCredentials = credentials.filter(
-      (record: CredentialExchangeRecord) => {
+      (record: DidCommCredentialExchangeRecord) => {
         // Base filter: only show actionable states where user is HOLDER
-        const isActionableState = record.state === CredentialState.Done || record.state === CredentialState.OfferReceived
-        const isHolder = record.role === CredentialRole.Holder
+        const isActionableState = record.state === DidCommCredentialState.Done || record.state === DidCommCredentialState.OfferReceived
+        const isHolder = record.role === DidCommCredentialRole.Holder
         
         if (!isActionableState || !isHolder) {
           return false
         }
-        
+
+        // Hide RelationshipCard (contact card) exchanges — they are auto-accepted
+        // protocol plumbing alongside the VRC, not user-facing chat events.
+        // Detected via the metadata tag set by the auto-accept handler, or via
+        // the bound W3C credential's type once the exchange is Done.
+        if (record.metadata.get('rcardExchange')) {
+          return false
+        }
+        const w3cBinding = record.credentials.find((cred) => cred.credentialRecordType === 'w3c')
+        if (w3cBinding) {
+          const w3cRecord = w3cCredentialRecords.find((cred) => cred.id === w3cBinding.credentialRecordId)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const typeValue = (w3cRecord as any)?.credential?.type
+          const types = Array.isArray(typeValue) ? typeValue : typeValue ? [typeValue] : []
+          if (types.some((t: unknown) => t === 'RelationshipCard')) {
+            return false
+          }
+        }
+
         // All credentials pass through - witness connection credentials get special handling below
         return true
       }
     )
 
     transformedMessages.push(
-      ...actionableCredentials.map((record: CredentialExchangeRecord) => {
-        const role = getCredentialEventRole(record)
-        const actionLabel = t(getCredentialEventLabel(record) as any)
-
+      ...actionableCredentials.map((record: DidCommCredentialExchangeRecord) => {
         const isJsonLdCredential = record.credentials.some((cred) => cred.credentialRecordType === 'w3c')
 
         // Resolve the W3C credential record (if any) to check its type
@@ -727,13 +690,9 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
           if (w3cCredRecord) {
             resolvedW3cCred = w3cCredentialRecords.find((cred) => cred.id === w3cCredRecord.credentialRecordId)
             if (resolvedW3cCred?.credential) {
-              const types = Array.isArray(resolvedW3cCred.credential.type)
-                ? resolvedW3cCred.credential.type
-                : [resolvedW3cCred.credential.type]
-              isVrcCredential = types.some(
-                (t: string) =>
-                  t.includes('DTGCredential') || t.includes('RelationshipCredential') || t.includes('RCardTemplate')
-              )
+              const credJson = resolvedW3cCred.credential
+              isVrcCredential =
+                isDTGCredential(credJson) || isRelationshipCredential(credJson) || isRCardTemplate(credJson)
             }
           }
         }
@@ -750,7 +709,7 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
         let eventTitle: string
         let eventSubtitle: string | undefined
 
-        if (record.state === CredentialState.OfferReceived) {
+        if (record.state === DidCommCredentialState.OfferReceived) {
           eventTitle = theirLabel
           eventSubtitle = ` — ${t(chatOfferTitleKey as any)}`
         } else {
@@ -762,25 +721,24 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
           if (isVrcCredential && resolvedW3cCred?.credential) {
             // VRC credentials navigate to contact details
             const cred = resolvedW3cCred.credential as any
-            const issuer = typeof cred.issuer === 'string' 
-              ? { id: cred.issuer, name: undefined, email: undefined, organization: undefined }
-              : { 
-                  id: cred.issuer?.id, 
-                  name: cred.issuer?.name,
-                  email: cred.issuer?.email,
-                  organization: cred.issuer?.organization,
-                }
-            
-            if (issuer.id) {
+            const issuerId = typeof cred.issuer === 'string' ? cred.issuer : cred.issuer?.id
+
+            if (issuerId) {
+              // Contact identity via the display registry's subject path —
+              // same resolution as headers/fields (RCard first, then the
+              // legacy VRC issuer object from pre-RCard-separation exchanges)
+              const displayInfo = credentialDisplayRegistry.getDisplayInfo(cred, {
+                relatedRecords: w3cCredentialRecords,
+              }).subject
               navigation.navigate(Stacks.ContactStack as any, {
                 screen: Screens.ContactDetails,
                 params: {
                   contact: {
                     issuer: {
-                      id: issuer.id,
-                      name: issuer.name || `Unknown ...${issuer.id.slice(-8)}`,
-                      email: issuer.email,
-                      organization: issuer.organization,
+                      id: issuerId,
+                      name: displayInfo?.name || `Unknown ...${issuerId.slice(-8)}`,
+                      email: displayInfo?.email,
+                      organization: displayInfo?.organization,
                     },
                   },
                 },
@@ -809,7 +767,7 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
 
         return {
           _id: record.id,
-          text: record.state === CredentialState.OfferReceived
+          text: record.state === DidCommCredentialState.OfferReceived
             ? `${theirLabel} — ${t(chatOfferTitleKey as any)}`
             : `${t(chatReceivedTitleKey as any)} ${t('Chat.CredentialFromSuffix', { name: theirLabel })}`,
           renderEvent: () => (
@@ -820,7 +778,7 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
                 title={eventTitle}
                 subtitle={eventSubtitle}
               />
-              {record.state === CredentialState.Done && (
+              {record.state === DidCommCredentialState.Done && (
                 <TouchableOpacity onPress={handleViewDetails} style={{ marginTop: 8 }}>
                   <Text style={{ color: 'black', fontSize: 14, textDecorationLine: 'underline' }}>
                     {isVrcCredential ? t('Chat.FullContactDetails') : t('Chat.Details')}
@@ -835,7 +793,7 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
           iconType: MessageIconType.Credential,
           messageOpensCallbackType: callbackTypeForMessage(record),
           // Only set onDetails for OfferReceived — the Done state link is now inside renderEvent
-          onDetails: record.state === CredentialState.OfferReceived ? () => {
+          onDetails: record.state === DidCommCredentialState.OfferReceived ? () => {
             if (navigation.getParent()) {
               navigation.getParent()?.navigate(Stacks.ConnectionStack, {
                 screen: Screens.Connection,
@@ -848,15 +806,15 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
               })
             }
           } : undefined,
-          onDecline: record.state === CredentialState.OfferReceived ? async () => {
+          onDecline: record.state === DidCommCredentialState.OfferReceived ? async () => {
             try {
               if (agent) {
                 const connectionId = record.connectionId ?? ''
-                const connection = await agent.connections.findById(connectionId)
-                await agent.credentials.declineOffer(record.id)
+                const connection = await agent.modules.didcomm.connections.findById(connectionId)
+                await agent.modules.didcomm.credentials.declineOffer({ credentialExchangeRecordId: record.id })
                 if (connection) {
-                  await agent.credentials.sendProblemReport({
-                    credentialRecordId: record.id,
+                  await agent.modules.didcomm.credentials.sendProblemReport({
+                    credentialExchangeRecordId: record.id,
                     description: t('CredentialOffer.Declined'),
                   })
                 }
@@ -871,7 +829,7 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
     )
 
     transformedMessages.push(
-      ...proofs.map((record: ProofExchangeRecord) => {
+      ...proofs.map((record: DidCommProofExchangeRecord) => {
         const role = getProofEventRole(record)
         const userLabel = role === Role.me ? t('Chat.UserYou') : theirLabel
         const actionLabel = t(getProofEventLabel(record) as any)
@@ -893,16 +851,16 @@ export const useChatMessagesByConnection = (connection: ConnectionRecord): Exten
                   recordId: record.id,
                   isHistory: true,
                   senderReview:
-                    record.state === ProofState.PresentationSent ||
-                    (record.state === ProofState.Done && record.isVerified === undefined),
+                    record.state === DidCommProofState.PresentationSent ||
+                    (record.state === DidCommProofState.Done && record.isVerified === undefined),
                 },
               })
             }
-            const navMap: { [key in ProofState]?: () => void } = {
-              [ProofState.Done]: toProofDetails,
-              [ProofState.PresentationSent]: toProofDetails,
-              [ProofState.PresentationReceived]: toProofDetails,
-              [ProofState.RequestReceived]: () => {
+            const navMap: { [key in DidCommProofState]?: () => void } = {
+              [DidCommProofState.Done]: toProofDetails,
+              [DidCommProofState.PresentationSent]: toProofDetails,
+              [DidCommProofState.PresentationReceived]: toProofDetails,
+              [DidCommProofState.RequestReceived]: () => {
                 // if we are in the contact stack, use the parent navigator
                 if (navigation.getParent()) {
                   navigation.getParent()?.navigate(Stacks.ConnectionStack, {

@@ -1,6 +1,6 @@
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
-import { CredentialPreviewAttribute } from '@credo-ts/core'
-import { useCredentialById } from '@credo-ts/react-hooks'
+import { DidCommCredentialPreviewAttribute } from '@credo-ts/didcomm'
+import { useCredentialById } from '@bifold/react-hooks'
 import { BrandingOverlay, MetaOverlay } from '@bifold/oca'
 import { Attribute, CredentialOverlay, Field } from '@bifold/oca/build/legacy'
 import { useIsFocused } from '@react-navigation/native'
@@ -12,7 +12,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../components/buttons/Button'
 import ConnectionImage from '../components/misc/ConnectionImage'
-import CredentialCard from '../components/misc/CredentialCard'
+import CredentialCard from '../components/misc/CredentialCardGen'
 import CommonRemoveModal from '../components/modals/CommonRemoveModal'
 import Record from '../components/record/Record'
 import { EventTypes } from '../constants'
@@ -46,6 +46,8 @@ import {
 } from '../modules/vrc/services/BiometricSignatureVerifier'
 import type { HardwareAttestationEvidence } from '../modules/vrc/types/evidence'
 import WitnessVerifiedBanner from '../modules/vrc/components/WitnessVerifiedBanner'
+import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
+import { isDTGCredential, isRelationshipCredential } from '../modules/vrc/credentialTypes'
 
 type CredentialOfferProps = {
   navigation: any
@@ -97,6 +99,9 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
   const [attestationValidation, setAttestationValidation] = useState<SignatureVerificationResult | null>(null)
   const credential = useCredentialById(credentialId)
   const credentialConnectionLabel = useCredentialConnectionLabel(credential)
+  const {
+    openIdState: { w3cCredentialRecords },
+  } = useOpenIDCredentials()
   const [store, dispatch] = useStore()
   const { start } = useTour()
   const screenIsFocused = useIsFocused()
@@ -130,11 +135,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
     }
     // Check JSON-LD credential type array
     if (jsonLdCredentialData?.type) {
-      const types = Array.isArray(jsonLdCredentialData.type) ? jsonLdCredentialData.type : [jsonLdCredentialData.type]
-      return types.some(
-        (type: unknown) =>
-          typeof type === 'string' && (type.includes('DTGCredential') || type.includes('RelationshipCredential'))
-      )
+      return isDTGCredential(jsonLdCredentialData) || isRelationshipCredential(jsonLdCredentialData)
     }
     return false
   }, [goalCode, jsonLdCredentialData])
@@ -203,7 +204,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
 
       try {
         // Get format data to determine credential type
-        const formatData = await agent.credentials.getFormatData(credential.id)
+        const formatData = await agent.modules.didcomm.credentials.getFormatData(credential.id)
         logger?.info(`[CredentialOffer] Format data: ${JSON.stringify(formatData, null, 2)}`)
 
         // Check if this is a JSON-LD credential (data integrity format)
@@ -247,7 +248,9 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
 
             // Check if it's a DTG credential and use custom display
             if (isDTGCredentialType(credentialData) && credentialDisplayRegistry) {
-              const displayInfo = credentialDisplayRegistry.getDisplayInfo(credentialData)
+              const displayInfo = credentialDisplayRegistry.getDisplayInfo(credentialData, {
+                relatedRecords: w3cCredentialRecords,
+              })
               logger?.info(
                 `[CredentialOffer] Display info: matched=${displayInfo.matched}, fields count=${displayInfo.fields.length}`
               )
@@ -271,11 +274,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
             }
 
             // Validate RelationshipCredential DIDs against stored values
-            if (
-              credential?.connectionId &&
-              Array.isArray(credentialData.type) &&
-              credentialData.type.includes('RelationshipCredential')
-            ) {
+            if (credential?.connectionId && isRelationshipCredential(credentialData)) {
               const issuerDid =
                 typeof credentialData.issuer === 'string' ? credentialData.issuer : credentialData.issuer?.id
               const subjectDid = credentialData.credentialSubject?.id as string
@@ -395,7 +394,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
           }
 
           if (offerAttributes) {
-            credential.credentialAttributes = [...offerAttributes.map((item) => new CredentialPreviewAttribute(item))]
+            credential.credentialAttributes = [...offerAttributes.map((item) => new DidCommCredentialPreviewAttribute(item))]
           }
 
           // Resolve presentation fields for AnonCreds
@@ -425,7 +424,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
     }
 
     processCredential()
-  }, [credential, agent, bundleResolver, i18n.language, logger, credentialDisplayRegistry, t])
+  }, [credential, agent, bundleResolver, i18n.language, logger, credentialDisplayRegistry, t, w3cCredentialRecords])
 
   const toggleDeclineModalVisible = useCallback(() => setDeclineModalVisible((prev) => !prev), [])
 
@@ -446,7 +445,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
         }
         const ids = getCredentialIdentifiers(credential)
         const name =
-          overlay.metaOverlay?.name ?? (await getCredentialName(ids.credentialDefinitionId, ids.schemaId, agent))
+          overlay.metaOverlay?.name ?? (await getCredentialName(ids.credentialDefinitionId, ids.schemaId))
 
         /** Save history record for card accepted */
         const recordData: HistoryRecord = {
@@ -473,7 +472,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
       setButtonsVisible(false)
       setAcceptModalVisible(true)
 
-      await agent.credentials.acceptOffer({ credentialRecordId: credential.id })
+      await agent.modules.didcomm.credentials.acceptOffer({ credentialExchangeRecordId: credential.id })
       if (historyEventsLogger.logAttestationAccepted) {
         const type = HistoryCardType.CardAccepted
         await logHistoryRecord(type)
@@ -489,13 +488,13 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
     try {
       if (agent && credential) {
         const connectionId = credential.connectionId ?? ''
-        const connection = await agent.connections.findById(connectionId)
+        const connection = await agent.modules.didcomm.connections.findById(connectionId)
 
-        await agent.credentials.declineOffer(credential.id)
+        await agent.modules.didcomm.credentials.declineOffer({ credentialExchangeRecordId: credential.id })
 
         if (connection) {
-          await agent.credentials.sendProblemReport({
-            credentialRecordId: credential.id,
+          await agent.modules.didcomm.credentials.sendProblemReport({
+            credentialExchangeRecordId: credential.id,
             description: t('CredentialOffer.Declined'),
           })
         }
@@ -522,10 +521,19 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
     historyEventsLogger.logAttestationRefused,
   ])
 
-  // Get issuer name for JSON-LD credentials
-  const jsonLdIssuerName =
-    jsonLdCredentialData?.issuer?.name ||
-    (typeof jsonLdCredentialData?.issuer === 'string' ? jsonLdCredentialData.issuer : null)
+  // Get issuer name for JSON-LD credentials. Post-RCard-separation the VRC
+  // issuer is a bare DID, so try the received RCard (auto-accepted alongside
+  // the offer) before falling back to the legacy issuer.name / raw DID.
+  const jsonLdIssuerDid =
+    typeof jsonLdCredentialData?.issuer === 'string' ? jsonLdCredentialData.issuer : jsonLdCredentialData?.issuer?.id
+  // Header identity comes from the same handler path (extractSubject) as the
+  // field list above, so the two are structurally guaranteed to agree.
+  const rcardDisplayInfo =
+    (jsonLdCredentialData &&
+      credentialDisplayRegistry?.getDisplayInfo(jsonLdCredentialData, { relatedRecords: w3cCredentialRecords })
+        .subject) ||
+    {}
+  const jsonLdIssuerName = rcardDisplayInfo.name || jsonLdCredentialData?.issuer?.name || jsonLdIssuerDid || null
 
   // Display fields - use custom fields for DTG credentials, overlay fields for AnonCreds
   const displayFields = customDisplayFields.length > 0 ? customDisplayFields : overlay.presentationFields || []

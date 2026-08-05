@@ -2,9 +2,7 @@
 
 exports[`DismissiblePopupModal Component Renders correctly with call to action 1`] = `
 <Modal
-  hardwareAccelerated={false}
   transparent={true}
-  visible={true}
 >
   <View
     accessibilityState={
@@ -314,9 +312,7 @@ exports[`DismissiblePopupModal Component Renders correctly with call to action 1
               accessible={true}
               collapsable={false}
               focusable={true}
-              onBlur={[Function]}
               onClick={[Function]}
-              onFocus={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
               onResponderRelease={[Function]}
@@ -324,19 +320,12 @@ exports[`DismissiblePopupModal Component Renders correctly with call to action 1
               onResponderTerminationRequest={[Function]}
               onStartShouldSetResponder={[Function]}
               style={
-                Array [
-                  Object {
-                    "overflow": "hidden",
-                  },
-                  Object {
-                    "backgroundColor": "#42803E",
-                    "borderRadius": 4,
-                    "padding": 16,
-                  },
-                  false,
-                  false,
-                  false,
-                ]
+                Object {
+                  "backgroundColor": "#42803E",
+                  "borderRadius": 4,
+                  "opacity": 1,
+                  "padding": 16,
+                }
               }
               testID="com.ariesbifold:id/Okay"
             >
@@ -367,7 +356,6 @@ exports[`DismissiblePopupModal Component Renders correctly with call to action 1
                         },
                         false,
                         false,
-                        false,
                       ],
                     ]
                   }
@@ -386,9 +374,7 @@ exports[`DismissiblePopupModal Component Renders correctly with call to action 1
 
 exports[`DismissiblePopupModal Component Renders correctly without call to action 1`] = `
 <Modal
-  hardwareAccelerated={false}
   transparent={true}
-  visible={true}
 >
   <View
     accessibilityState={

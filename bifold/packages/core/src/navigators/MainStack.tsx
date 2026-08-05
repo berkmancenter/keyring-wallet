@@ -1,6 +1,6 @@
 import { ProofCustomMetadata, ProofMetadata } from '@bifold/verifier'
-import { useAgent, useProofByState } from '@credo-ts/react-hooks'
-import { ProofState } from '@credo-ts/core'
+import { useAgent, useProofByState } from '@bifold/react-hooks'
+import { DidCommProofState} from '@credo-ts/didcomm'
 import { CardStyleInterpolators, StackCardStyleInterpolator, createStackNavigator } from '@react-navigation/stack'
 import React, { useEffect, useMemo } from 'react'
 import { View } from 'react-native'
@@ -40,7 +40,7 @@ const MainStack: React.FC = () => {
     TOKENS.CUSTOM_NAV_STACK_1,
     TOKENS.OBJECT_SCREEN_CONFIG,
   ])
-  const declinedProofs = useProofByState([ProofState.Declined, ProofState.Abandoned])
+  const declinedProofs = useProofByState([DidCommProofState.Declined, DidCommProofState.Abandoned])
   useDeepLinks()
 
   // Initialize R-card credential hook to handle migration from state to Credo
@@ -51,7 +51,7 @@ const MainStack: React.FC = () => {
     declinedProofs.forEach((proof) => {
       const meta = proof?.metadata?.get(ProofMetadata.customMetadata) as ProofCustomMetadata
       if (meta?.delete_conn_after_seen) {
-        agent?.connections.deleteById(proof?.connectionId ?? '').catch(() => null)
+        agent?.modules.didcomm.connections.deleteById(proof?.connectionId ?? '').catch(() => null)
         proof?.metadata.set(ProofMetadata.customMetadata, { ...meta, delete_conn_after_seen: false })
       }
     })

@@ -21,7 +21,6 @@ const currentMessage: ExtendedChatMessage = {
 const props: MessageProps<ExtendedChatMessage> = {
   user,
   currentMessage: currentMessage,
-  key: '1',
   position: 'left',
 }
 

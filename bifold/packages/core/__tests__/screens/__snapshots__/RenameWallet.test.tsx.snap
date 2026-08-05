@@ -260,9 +260,7 @@ exports[`RenameWallet Screen Check non-onboarding rendering 1`] = `
         accessible={true}
         collapsable={false}
         focusable={true}
-        onBlur={[Function]}
         onClick={[Function]}
-        onFocus={[Function]}
         onResponderGrant={[Function]}
         onResponderMove={[Function]}
         onResponderRelease={[Function]}
@@ -270,19 +268,12 @@ exports[`RenameWallet Screen Check non-onboarding rendering 1`] = `
         onResponderTerminationRequest={[Function]}
         onStartShouldSetResponder={[Function]}
         style={
-          Array [
-            Object {
-              "overflow": "hidden",
-            },
-            Object {
-              "backgroundColor": "#42803E",
-              "borderRadius": 4,
-              "padding": 16,
-            },
-            false,
-            false,
-            false,
-          ]
+          Object {
+            "backgroundColor": "#42803E",
+            "borderRadius": 4,
+            "opacity": 1,
+            "padding": 16,
+          }
         }
         testID="com.ariesbifold:id/Save"
       >
@@ -311,7 +302,6 @@ exports[`RenameWallet Screen Check non-onboarding rendering 1`] = `
                     "fontWeight": "bold",
                     "textAlign": "center",
                   },
-                  false,
                   false,
                   false,
                 ],
@@ -352,9 +342,7 @@ exports[`RenameWallet Screen Check non-onboarding rendering 1`] = `
           accessible={true}
           collapsable={false}
           focusable={true}
-          onBlur={[Function]}
           onClick={[Function]}
-          onFocus={[Function]}
           onResponderGrant={[Function]}
           onResponderMove={[Function]}
           onResponderRelease={[Function]}
@@ -362,20 +350,13 @@ exports[`RenameWallet Screen Check non-onboarding rendering 1`] = `
           onResponderTerminationRequest={[Function]}
           onStartShouldSetResponder={[Function]}
           style={
-            Array [
-              Object {
-                "overflow": "hidden",
-              },
-              Object {
-                "borderColor": "#42803E",
-                "borderRadius": 4,
-                "borderWidth": 2,
-                "padding": 16,
-              },
-              false,
-              false,
-              false,
-            ]
+            Object {
+              "borderColor": "#42803E",
+              "borderRadius": 4,
+              "borderWidth": 2,
+              "opacity": 1,
+              "padding": 16,
+            }
           }
           testID="com.ariesbifold:id/Cancel"
         >
@@ -404,7 +385,6 @@ exports[`RenameWallet Screen Check non-onboarding rendering 1`] = `
                       "fontWeight": "bold",
                       "textAlign": "center",
                     },
-                    false,
                     false,
                     false,
                   ],

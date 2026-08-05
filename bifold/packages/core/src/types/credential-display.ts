@@ -7,6 +7,9 @@
  */
 
 import { Field } from '@bifold/oca/build/legacy'
+import { W3cCredentialRecord } from '@credo-ts/core'
+
+import { isDTGCredential } from '../modules/vrc/credentialTypes'
 
 /**
  * W3C Credential JSON structure (simplified for display purposes)
@@ -34,6 +37,26 @@ export interface CredentialButtonText {
 }
 
 /**
+ * Cross-credential context for display resolution: sibling W3C records in the
+ * wallet, so a handler can cross-reference related credentials (e.g. resolving
+ * a contact's RCard for a pseudonymous VRC).
+ */
+export interface CredentialDisplayContextForDisplay {
+  relatedRecords: W3cCredentialRecord[]
+}
+
+/**
+ * Canonical display identity for a credential's issuer/subject — used for
+ * headers, chat messages, and contact screens.
+ */
+export interface CredentialDisplaySubjectForDisplay {
+  id: string
+  name?: string
+  email?: string
+  organization?: string
+}
+
+/**
  * Result from a display handler containing fields and UI customizations
  */
 export interface CredentialDisplayResult {
@@ -45,6 +68,8 @@ export interface CredentialDisplayResult {
   matched: boolean
   /** Human-readable name of the credential type (e.g., "Relationship Credential") */
   credentialTypeName?: string
+  /** Canonical display identity (headers/contact rows), when the handler provides one */
+  subject?: CredentialDisplaySubjectForDisplay
 }
 
 /**
@@ -96,9 +121,13 @@ export interface ICredentialDisplayRegistry {
   /**
    * Get display information for a credential
    * @param credential The W3C credential JSON
-   * @returns Display result with fields and button text
+   * @param context Optional cross-credential context (sibling wallet records)
+   * @returns Display result with fields, subject, and button text
    */
-  getDisplayInfo(credential: W3cCredentialJsonForDisplay): CredentialDisplayResult
+  getDisplayInfo(
+    credential: W3cCredentialJsonForDisplay,
+    context?: CredentialDisplayContextForDisplay
+  ): CredentialDisplayResult
 
   /**
    * Check if a credential type has a registered handler
@@ -131,11 +160,11 @@ export interface ICredentialDisplayRegistry {
 
 /**
  * Check if a credential is a DTGCredential (base type for relationship credentials)
+ *
+ * Delegates to the canonical predicate. The import targets the dependency-free
+ * leaf file directly (not the VRC module index) to preserve this file's
+ * core/VRC decoupling.
  */
 export function isDTGCredentialType(credential: W3cCredentialJsonForDisplay): boolean {
-  if (!credential?.type) {
-    return false
-  }
-  const types = Array.isArray(credential.type) ? credential.type : [credential.type]
-  return types.some((t) => typeof t === 'string' && t.includes('DTGCredential'))
+  return isDTGCredential(credential)
 }

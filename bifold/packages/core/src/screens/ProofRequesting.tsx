@@ -1,10 +1,9 @@
 import type { StackScreenProps } from '@react-navigation/stack'
 
-import { DidExchangeState, ProofState } from '@credo-ts/core'
-import { useAgent, useProofById } from '@credo-ts/react-hooks'
 import { ProofCustomMetadata, ProofMetadata, linkProofWithTemplate, sendProofRequest } from '@bifold/verifier'
-import { TOKENS, useServices } from '../container-api'
-import { useIsFocused, useFocusEffect } from '@react-navigation/native'
+import { useAgent, useProofById } from '@bifold/react-hooks'
+import { DidCommDidExchangeState, DidCommProofState } from '@credo-ts/didcomm'
+import { useFocusEffect, useIsFocused } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -19,11 +18,13 @@ import {
 } from 'react-native'
 import { isTablet } from 'react-native-device-info'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { TOKENS, useServices } from '../container-api'
 
 import LoadingIndicator from '../components/animated/LoadingIndicator'
 import Button, { ButtonType } from '../components/buttons/Button'
 import IconButton, { ButtonLocation } from '../components/buttons/IconButton'
 import QRRenderer from '../components/misc/QRRenderer'
+import { ThemedText } from '../components/texts/ThemedText'
 import { EventTypes } from '../constants'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
@@ -33,7 +34,6 @@ import { BifoldError } from '../types/error'
 import { ProofRequestsStackParams, Screens } from '../types/navigators'
 import { createTempConnectionInvitation } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
-import { ThemedText } from '../components/texts/ThemedText'
 
 type ProofRequestingProps = StackScreenProps<ProofRequestsStackParams, Screens.ProofRequesting>
 
@@ -145,9 +145,9 @@ const ProofRequesting: React.FC<ProofRequestingProps> = ({ route, navigation }) 
         return true
       }
 
-      BackHandler.addEventListener('hardwareBackPress', onBackPress)
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress)
 
-      return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress)
+      return () => subscription.remove()
     }, [navigation])
   )
 
@@ -181,7 +181,7 @@ const ProofRequesting: React.FC<ProofRequestingProps> = ({ route, navigation }) 
     }
 
     const sendAsyncProof = async () => {
-      if (record && record.state === DidExchangeState.Completed) {
+      if (record && record.state === DidCommDidExchangeState.Completed) {
         //send haptic feedback to verifier that connection is completed
         Vibration.vibrate()
 
@@ -204,7 +204,7 @@ const ProofRequesting: React.FC<ProofRequestingProps> = ({ route, navigation }) 
   }, [template, record, agent, predicateValues, templateId, logger])
 
   useEffect(() => {
-    if (proofRecord && proofRecord.state === ProofState.RequestSent) {
+    if (proofRecord && proofRecord.state === DidCommProofState.RequestSent) {
       navigation.navigate(Screens.MobileVerifierLoading, { proofId: proofRecord.id, connectionId: record?.id ?? '' })
 
       setProofRecordId(undefined)

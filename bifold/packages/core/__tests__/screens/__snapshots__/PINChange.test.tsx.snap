@@ -1,29 +1,30 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`PINChange Screen PIN change renders correctly 1`] = `
-<RNCSafeAreaView
-  edges={
-    Object {
-      "bottom": "additive",
-      "left": "additive",
-      "right": "additive",
-      "top": "off",
-    }
-  }
+<View
+  onLayout={[Function]}
   style={
-    Object {
-      "backgroundColor": "#000000",
-      "flex": 1,
-    }
+    Array [
+      Object {
+        "flex": 1,
+      },
+      Object {
+        "paddingBottom": 0,
+      },
+    ]
   }
 >
   <RCTScrollView
     contentContainerStyle={
-      Object {
-        "flexGrow": 1,
-      }
+      Array [
+        Object {
+          "flexGrow": 1,
+        },
+        undefined,
+      ]
     }
     keyboardShouldPersistTaps="handled"
+    showsVerticalScrollIndicator={false}
   >
     <View>
       <View
@@ -141,6 +142,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -169,6 +172,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -197,6 +202,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -225,6 +232,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -253,6 +262,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -281,6 +292,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -309,6 +322,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -337,6 +352,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -365,6 +382,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -393,6 +412,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -421,6 +442,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -522,7 +545,7 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                 style={
                   Object {
                     "opacity": 1,
-                    "paddingHorizontal": 10,
+                    "paddingLeft": 10,
                   }
                 }
                 testID="com.ariesbifold:id/Show"
@@ -616,6 +639,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -644,6 +669,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -672,6 +699,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -700,6 +729,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -728,6 +759,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -756,6 +789,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -784,6 +819,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -812,6 +849,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -840,6 +879,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -868,6 +909,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -896,6 +939,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -997,7 +1042,7 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                 style={
                   Object {
                     "opacity": 1,
-                    "paddingHorizontal": 10,
+                    "paddingLeft": 10,
                   }
                 }
                 testID="com.ariesbifold:id/Show"
@@ -1091,6 +1136,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1119,6 +1166,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1147,6 +1196,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1175,6 +1226,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1203,6 +1256,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1231,6 +1286,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1259,6 +1316,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1287,6 +1346,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1315,6 +1376,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1343,6 +1406,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1371,6 +1436,8 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                     style={
                       Object {
                         "backgroundColor": "#313132",
+                        "borderColor": "#313132",
+                        "borderWidth": 1,
                         "height": 48,
                         "paddingHorizontal": 2,
                       }
@@ -1472,7 +1539,7 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                 style={
                   Object {
                     "opacity": 1,
-                    "paddingHorizontal": 10,
+                    "paddingLeft": 10,
                   }
                 }
                 testID="com.ariesbifold:id/Show"
@@ -1528,9 +1595,7 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
             accessible={true}
             collapsable={false}
             focusable={true}
-            onBlur={[Function]}
             onClick={[Function]}
-            onFocus={[Function]}
             onResponderGrant={[Function]}
             onResponderMove={[Function]}
             onResponderRelease={[Function]}
@@ -1538,19 +1603,12 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
             onResponderTerminationRequest={[Function]}
             onStartShouldSetResponder={[Function]}
             style={
-              Array [
-                Object {
-                  "overflow": "hidden",
-                },
-                Object {
-                  "backgroundColor": "#42803E",
-                  "borderRadius": 4,
-                  "padding": 16,
-                },
-                false,
-                false,
-                false,
-              ]
+              Object {
+                "backgroundColor": "#42803E",
+                "borderRadius": 4,
+                "opacity": 1,
+                "padding": 16,
+              }
             }
             testID="com.ariesbifold:id/ChangePIN"
           >
@@ -1581,7 +1639,6 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
                       },
                       false,
                       false,
-                      false,
                     ],
                   ]
                 }
@@ -1594,5 +1651,5 @@ exports[`PINChange Screen PIN change renders correctly 1`] = `
       </View>
     </View>
   </RCTScrollView>
-</RNCSafeAreaView>
+</View>
 `;

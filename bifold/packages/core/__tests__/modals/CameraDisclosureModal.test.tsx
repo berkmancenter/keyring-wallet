@@ -18,8 +18,11 @@ describe('CameraDisclosureModal Component', () => {
     requestCameraUse = jest.fn(() => Promise.resolve(true))
   })
 
-  test('Renders correctly', () => {
+  test('Renders correctly', async () => {
     const tree = render(<CameraDisclosureModal requestCameraUse={requestCameraUse} />)
+    // React 19: flush the modal's entrance-animation state update so it doesn't
+    // leak an "not wrapped in act(...)" warning into the next test.
+    await act(async () => {})
     expect(tree).toMatchSnapshot()
   })
 

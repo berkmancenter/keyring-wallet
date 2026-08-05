@@ -1,5 +1,383 @@
 # Change Log
 
+## 3.0.16
+
+### Patch Changes
+
+- Updated dependencies [282bb4e]
+  - @bifold/core@3.0.16
+
+## 3.0.15
+
+### Patch Changes
+
+- Updated dependencies [9ed3b0f]
+- Updated dependencies [fc4eeb1]
+- Updated dependencies [7fce466]
+  - @bifold/core@3.0.15
+
+## 3.0.14
+
+### Patch Changes
+
+- Updated dependencies [c70df9d]
+- Updated dependencies [4704ce3]
+  - @bifold/core@3.0.14
+
+## 3.0.13
+
+### Patch Changes
+
+- Updated dependencies [f813512]
+  - @bifold/core@3.0.13
+
+## 3.0.12
+
+### Patch Changes
+
+- Updated dependencies [dd22c43]
+  - @bifold/core@3.0.12
+
+## 3.0.11
+
+### Patch Changes
+
+- 178d2f8: logging change had strange side effects
+  - @bifold/core@3.0.11
+
+## 3.0.10
+
+### Patch Changes
+
+- 149265d: added a custom log replacer to handle nested error objects
+- Updated dependencies [e3d82d0]
+  - @bifold/core@3.0.10
+
+## 3.0.9
+
+### Patch Changes
+
+- Updated dependencies [0944c44]
+  - @bifold/core@3.0.9
+
+## 3.0.8
+
+### Patch Changes
+
+- Updated dependencies [75e0535]
+  - @bifold/core@3.0.8
+
+## 3.0.7
+
+### Patch Changes
+
+- Updated dependencies [7cb7ff0]
+  - @bifold/core@3.0.7
+
+## 3.0.6
+
+### Patch Changes
+
+- Updated dependencies [8d27002]
+  - @bifold/core@3.0.6
+
+## 3.0.5
+
+### Patch Changes
+
+- Updated dependencies [4be9c48]
+- Updated dependencies [cc8ce46]
+- Updated dependencies [21d6689]
+- Updated dependencies [becac32]
+  - @bifold/core@3.0.5
+
+## 3.0.4
+
+### Patch Changes
+
+- Updated dependencies [d0f1003]
+  - @bifold/core@3.0.4
+
+## 3.0.3
+
+### Patch Changes
+
+- Updated dependencies [25146c1]
+- Updated dependencies [c7b866a]
+  - @bifold/core@3.0.3
+
+## 3.0.2
+
+### Patch Changes
+
+- Updated dependencies [226ae62]
+- Updated dependencies [23c9d1e]
+- Updated dependencies [4ee6a41]
+- Updated dependencies [f445fa2]
+  - @bifold/core@3.0.2
+
+## 3.0.1
+
+### Patch Changes
+
+- 6ff5dbb: updated credo ts packages to 0.6.3
+- Updated dependencies [1e57f76]
+- Updated dependencies [fda1a41]
+- Updated dependencies [b4c4ded]
+- Updated dependencies [a9428ed]
+- Updated dependencies [6ff5dbb]
+  - @bifold/core@3.0.1
+
+## 3.0.0
+
+### Major Changes
+
+- c1df038: Updated all bifold packages for compatibility with credo-ts v0.6.x.
+  Compatibility with this credo-ts release is important as it has big enhancements across the board,
+  especially for OpenID related credentials such as mdoc.
+  This version of credo changes many type and method names, changes which types and methods are available from which exports,
+  and modifies the interfaces of many existing modules. Thus, changes are made across the project,
+  some of which may be breaking.
+
+### Patch Changes
+
+- Updated dependencies [c1df038]
+- Updated dependencies [2aa1740]
+- Updated dependencies [cb1442e]
+  - @bifold/core@3.0.0
+
+## 2.12.8
+
+### Patch Changes
+
+- Updated dependencies [4263767]
+- Updated dependencies [c9ba746]
+- Updated dependencies [fd2e7cd]
+- Updated dependencies [04a41bb]
+  - @bifold/core@2.12.8
+
+## 2.12.7
+
+### Patch Changes
+
+- 75cca52: Bump package versions for release
+- Updated dependencies [75cca52]
+  - @bifold/core@2.12.7
+
+## 2.12.6
+
+### Patch Changes
+
+- 90b964b: Bump package versions for release
+- Updated dependencies [90b964b]
+  - @bifold/core@2.12.6
+
+## 2.12.5
+
+### Patch Changes
+
+- 30b4754: force release to align all packages including new react-hooks package
+- Updated dependencies [30b4754]
+- Updated dependencies [c9b8621]
+- Updated dependencies [958987e]
+  - @bifold/core@2.12.5
+
+## 2.12.4
+
+### Patch Changes
+
+- Updated dependencies [fecd99e]
+  - @bifold/core@2.12.4
+
+## 2.12.3
+
+### Patch Changes
+
+- Updated dependencies [e26f1ff]
+  - @bifold/core@2.12.3
+
+## 2.12.2
+
+### Patch Changes
+
+- Updated dependencies [8ba7a18]
+  - @bifold/core@2.12.2
+
+## 2.12.1
+
+### Patch Changes
+
+- @bifold/core@2.12.1
+
+## 2.12.0
+
+### Minor Changes
+
+- 43446f3: upgrade to React Native 0.81.5
+
+### Patch Changes
+
+- Updated dependencies [e718f5b]
+- Updated dependencies [43446f3]
+  - @bifold/core@2.12.0
+
+## 2.11.12
+
+### Patch Changes
+
+- Updated dependencies [7fe30c1]
+  - @bifold/core@2.11.12
+
+## 2.11.11
+
+### Patch Changes
+
+- Updated dependencies [7d51e3d]
+  - @bifold/core@2.11.11
+
+## 2.11.10
+
+### Patch Changes
+
+- a16e341: ledger export
+- Updated dependencies [a16e341]
+  - @bifold/core@2.11.10
+
+## 2.11.9
+
+### Patch Changes
+
+- 414b3c0: added resolutions to use patched versions of elliptic and sha.js
+- Updated dependencies [bc3bea3]
+- Updated dependencies [57a071d]
+- Updated dependencies [f4b8a77]
+- Updated dependencies [414b3c0]
+  - @bifold/core@2.11.9
+
+## 2.11.8
+
+### Patch Changes
+
+- cf1badc: bumps axios version 1.4.0->1.13.2
+- Updated dependencies [cf1badc]
+  - @bifold/core@2.11.8
+
+## 2.11.7
+
+### Patch Changes
+
+- Updated dependencies [8630ecd]
+  - @bifold/core@2.11.7
+
+## 2.11.6
+
+### Patch Changes
+
+- Updated dependencies [0f05f73]
+- Updated dependencies [fc9d6fe]
+- Updated dependencies [a08da5f]
+  - @bifold/core@2.11.6
+
+## 2.11.5
+
+### Patch Changes
+
+- Updated dependencies [7a0ccbb]
+  - @bifold/core@2.11.5
+
+## 2.11.4
+
+### Patch Changes
+
+- 17e72a0: simplify logger configuration and improve output clarity
+- Updated dependencies [615c1f6]
+  - @bifold/core@2.11.4
+
+## 2.11.3
+
+### Patch Changes
+
+- @bifold/core@2.11.3
+
+## 2.11.2
+
+### Patch Changes
+
+- Updated dependencies [3246436]
+  - @bifold/core@2.11.2
+
+## 2.11.1
+
+### Patch Changes
+
+- Updated dependencies [ec19ffc]
+  - @bifold/core@2.11.1
+
+## 2.11.0
+
+### Patch Changes
+
+- Updated dependencies [1d6c2f3]
+- Updated dependencies [6f1cb40]
+- Updated dependencies [00c2ea3]
+- Updated dependencies [0362ba3]
+  - @bifold/core@2.11.0
+
+## 2.10.2
+
+### Patch Changes
+
+- Updated dependencies [a2323ee]
+- Updated dependencies [7c7d27f]
+- Updated dependencies [84cf1b0]
+  - @bifold/core@2.10.2
+
+## 2.10.1
+
+### Patch Changes
+
+- Updated dependencies [374a412]
+  - @bifold/core@2.10.1
+
+## 2.10.0
+
+### Patch Changes
+
+- Updated dependencies [165cb53]
+- Updated dependencies [a667312]
+  - @bifold/core@2.10.0
+
+## 2.9.0
+
+### Patch Changes
+
+- c5cc3e7: updated pr template
+- Updated dependencies [2319500]
+- Updated dependencies [fe7a7bc]
+- Updated dependencies [aa3286d]
+- Updated dependencies [c5cc3e7]
+  - @bifold/core@2.9.0
+
+## 2.8.0
+
+### Patch Changes
+
+- Updated dependencies [00ed384]
+- Updated dependencies [f4d46be]
+  - @bifold/core@2.8.0
+
+## 2.7.5
+
+### Patch Changes
+
+- Updated dependencies [83d6ce9]
+- Updated dependencies [eaffaec]
+- Updated dependencies [56d9fb3]
+- Updated dependencies [53169b9]
+- Updated dependencies [07ea6be]
+- Updated dependencies [c4b153a]
+  - @bifold/core@2.7.5
+
 ## 2.7.4
 
 ### Patch Changes

@@ -1,4 +1,4 @@
-import { KeyType, PeerDidNumAlgo } from '@credo-ts/core'
+import { PeerDidNumAlgo } from '@credo-ts/core'
 
 import { Alice } from '../../src/Alice'
 import {
@@ -43,6 +43,7 @@ jest.mock('../../src/BaseAgent', () => {
           dids: {
             create: jest.fn(),
             import: jest.fn(),
+            getCreatedDids: jest.fn().mockResolvedValue([]),
           },
           basicMessages: {
             sendMessage: jest.fn(),
@@ -57,7 +58,7 @@ jest.mock('../../src/BaseAgent', () => {
             acceptRequest: jest.fn(),
           },
           w3cCredentials: {
-            getAllCredentialRecords: jest.fn(),
+            getAll: jest.fn(),
             signCredential: jest.fn(),
             signPresentation: jest.fn(),
           },
@@ -94,6 +95,7 @@ describe('Alice (Participant)', () => {
       dids: {
         create: jest.fn(),
         import: jest.fn(),
+        getCreatedDids: jest.fn().mockResolvedValue([]),
       },
       basicMessages: {
         sendMessage: jest.fn(),
@@ -108,7 +110,7 @@ describe('Alice (Participant)', () => {
         acceptRequest: jest.fn(),
       },
       w3cCredentials: {
-        getAllCredentialRecords: jest.fn(),
+        getAll: jest.fn(),
       },
       shutdown: jest.fn(),
       events: {
@@ -119,6 +121,16 @@ describe('Alice (Participant)', () => {
 
     // Create Alice (which is now Participant) and assign mock agent
     alice = new Alice(9000, 'test-alice')
+    // credo 0.6: didcomm APIs live under agent.modules.didcomm - alias the same mocks there
+    mockAgent.modules = {
+      didcomm: {
+        connections: mockAgent.connections,
+        oob: mockAgent.oob,
+        credentials: mockAgent.credentials,
+        proofs: mockAgent.proofs,
+        basicMessages: mockAgent.basicMessages,
+      },
+    }
     alice.agent = mockAgent
   })
 
@@ -174,7 +186,7 @@ describe('Alice (Participant)', () => {
     it('should receive and accept connection invitation', async () => {
       await alice.acceptConnection(invitationUrl)
 
-      expect(mockAgent.oob.receiveInvitationFromUrl).toHaveBeenCalledWith(invitationUrl)
+      expect(mockAgent.oob.receiveInvitationFromUrl).toHaveBeenCalledWith(invitationUrl, { label: 'test-alice' })
       expect(mockAgent.connections.returnWhenIsConnected).toHaveBeenCalledWith(mockConnectionRecord.id)
       expect(alice.connected).toBe(true)
       expect(alice.connectionRecordId).toBe(mockConnectionRecord.id)
@@ -183,13 +195,11 @@ describe('Alice (Participant)', () => {
     it('should create a dedicated R-DID for the relationship', async () => {
       await alice.acceptConnection(invitationUrl)
 
-      expect(mockAgent.wallet.createKey).toHaveBeenCalledWith({
-        keyType: KeyType.Ed25519,
-      })
       expect(mockAgent.dids.create).toHaveBeenCalledWith({
         method: 'peer',
         options: expect.objectContaining({
           numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
+          createKey: { type: { kty: 'OKP', crv: 'Ed25519' } },
         }),
       })
     })
@@ -243,7 +253,7 @@ describe('Alice (Participant)', () => {
       await alice.acceptCredentialOffer(mockCredentialRecord)
 
       expect(mockAgent.credentials.acceptOffer).toHaveBeenCalledWith({
-        credentialRecordId: mockCredentialRecord.id,
+        credentialExchangeRecordId: mockCredentialRecord.id,
       })
     })
   })
@@ -267,7 +277,7 @@ describe('Alice (Participant)', () => {
       await alice.acceptProofRequest(mockProofRecord)
 
       expect(mockAgent.proofs.selectCredentialsForRequest).toHaveBeenCalledWith({
-        proofRecordId: mockProofRecord.id,
+        proofExchangeRecordId: mockProofRecord.id,
       })
     })
 
@@ -275,7 +285,7 @@ describe('Alice (Participant)', () => {
       await alice.acceptProofRequest(mockProofRecord)
 
       expect(mockAgent.proofs.acceptRequest).toHaveBeenCalledWith({
-        proofRecordId: mockProofRecord.id,
+        proofExchangeRecordId: mockProofRecord.id,
         proofFormats: mockSelectedCredentials.proofFormats,
       })
     })
@@ -311,19 +321,19 @@ describe('Alice (Participant)', () => {
         createMockW3cCredentialRecord(),
         createMockW3cCredentialRecord({ createdAt: new Date(Date.now() + 1000) }),
       ]
-      mockAgent.w3cCredentials.getAllCredentialRecords.mockResolvedValue(mockCredentials)
+      mockAgent.w3cCredentials.getAll.mockResolvedValue(mockCredentials)
 
       await alice.listStoredCredentials()
 
-      expect(mockAgent.w3cCredentials.getAllCredentialRecords).toHaveBeenCalled()
+      expect(mockAgent.w3cCredentials.getAll).toHaveBeenCalled()
     })
 
     it('should handle no stored credentials', async () => {
-      mockAgent.w3cCredentials.getAllCredentialRecords.mockResolvedValue([])
+      mockAgent.w3cCredentials.getAll.mockResolvedValue([])
 
       await alice.listStoredCredentials()
 
-      expect(mockAgent.w3cCredentials.getAllCredentialRecords).toHaveBeenCalled()
+      expect(mockAgent.w3cCredentials.getAll).toHaveBeenCalled()
     })
 
     it('should filter out records without credentials', async () => {
@@ -331,11 +341,11 @@ describe('Alice (Participant)', () => {
         createMockW3cCredentialRecord(),
         { ...createMockW3cCredentialRecord(), credential: null },
       ]
-      mockAgent.w3cCredentials.getAllCredentialRecords.mockResolvedValue(mockCredentials)
+      mockAgent.w3cCredentials.getAll.mockResolvedValue(mockCredentials)
 
       await alice.listStoredCredentials()
 
-      expect(mockAgent.w3cCredentials.getAllCredentialRecords).toHaveBeenCalled()
+      expect(mockAgent.w3cCredentials.getAll).toHaveBeenCalled()
     })
 
     it('should sort credentials by creation date (oldest first)', async () => {
@@ -345,11 +355,11 @@ describe('Alice (Participant)', () => {
         createMockW3cCredentialRecord({ createdAt: new Date(now) }),
         createMockW3cCredentialRecord({ createdAt: new Date(now + 1000) }),
       ]
-      mockAgent.w3cCredentials.getAllCredentialRecords.mockResolvedValue(mockCredentials)
+      mockAgent.w3cCredentials.getAll.mockResolvedValue(mockCredentials)
 
       await alice.listStoredCredentials()
 
-      expect(mockAgent.w3cCredentials.getAllCredentialRecords).toHaveBeenCalled()
+      expect(mockAgent.w3cCredentials.getAll).toHaveBeenCalled()
     })
   })
 

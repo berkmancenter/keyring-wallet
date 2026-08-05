@@ -1,3 +1,4 @@
+import React from 'react'
 import { View } from 'react-native'
 
 export enum ButtonType {
@@ -18,8 +19,9 @@ export interface ButtonProps extends React.PropsWithChildren {
   accessibilityHint?: string
   maxfontSizeMultiplier?: number
   testID?: string
-  onPress?: () => void
+  onPress?: (...args: any[]) => void
   disabled?: boolean
+  ref?: React.Ref<View>
 }
 
 export enum ButtonState {
@@ -33,5 +35,14 @@ export enum ButtonStyleNames {
   Critical_Disabled = 'Critical' + '_' + ButtonState.Disabled,
   Critical_Active = 'Critical' + '_' + ButtonState.Active,
 }
-
-export type Button = React.FC<ButtonProps & React.RefAttributes<View>>
+/*
+type stylesType = { readonly [key in ButtonStyleNames]?: ViewStyle | TextStyle | ImageStyle}
+const styles: stylesType = StyleSheet.create({
+  [ButtonStyleNames.Critical_Default]: {},
+  [ButtonType.Secondary]: {},
+  [ButtonType.ModalCritical]: {},
+  [ButtonType.ModalPrimary]: {},
+  [ButtonType.ModalSecondary]: {},
+})
+*/
+export type Button = React.FC<ButtonProps>

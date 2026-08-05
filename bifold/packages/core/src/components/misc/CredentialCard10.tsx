@@ -1,4 +1,4 @@
-import { CredentialExchangeRecord } from '@credo-ts/core'
+import { DidCommCredentialExchangeRecord } from '@credo-ts/didcomm'
 import { LegacyBrandingOverlay } from '@bifold/oca'
 import { CredentialOverlay } from '@bifold/oca/build/legacy'
 import React, { useEffect, useState } from 'react'
@@ -22,6 +22,7 @@ import {
   getCredentialIdentifiers,
   isValidAnonCredsCredential,
   toImageSource,
+  getEffectiveCredentialName,
 } from '../../utils/credential'
 import { formatTime, useCredentialConnectionLabel } from '../../utils/helpers'
 import { buildFieldsFromAnonCredsCredential } from '../../utils/oca'
@@ -30,7 +31,7 @@ import { testIdWithKey } from '../../utils/testable'
 import CardWatermark from './CardWatermark'
 
 interface CredentialCard10Props {
-  credential: CredentialExchangeRecord
+  credential: DidCommCredentialExchangeRecord
   onPress?: GenericFn
   style?: ViewStyle
 }
@@ -157,6 +158,11 @@ const CredentialCard10: React.FC<CredentialCard10Props> = ({ credential, style =
         ...o,
         ...bundle,
         brandingOverlay: bundle.brandingOverlay as LegacyBrandingOverlay,
+        // Apply effective name
+        metaOverlay: {
+          ...bundle.metaOverlay,
+          name: getEffectiveCredentialName(credential, bundle.metaOverlay?.name),
+        } as any,
       }))
     })
   }, [credential, credentialConnectionLabel, i18n.language, bundleResolver])

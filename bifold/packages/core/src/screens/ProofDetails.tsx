@@ -1,7 +1,6 @@
 import type { StackScreenProps } from '@react-navigation/stack'
-
-import { ProofExchangeRecord, ProofState } from '@credo-ts/core'
-import { useAgent, useConnectionById, useProofById } from '@credo-ts/react-hooks'
+import { useAgent, useConnectionById, useProofById } from '@bifold/react-hooks'
+import { DidCommProofExchangeRecord, DidCommProofState } from '@credo-ts/didcomm'
 import { GroupedSharedProofDataItem, ProofCustomMetadata, ProofMetadata, markProofAsViewed } from '@bifold/verifier'
 import { useFocusEffect } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
@@ -23,7 +22,7 @@ import usePreventScreenCapture from '../hooks/screen-capture'
 type ProofDetailsProps = StackScreenProps<ProofRequestsStackParams, Screens.ProofDetails>
 
 type VerifiedProofProps = {
-  record: ProofExchangeRecord
+  record: DidCommProofExchangeRecord
   isHistory?: boolean
   senderReview?: boolean
   connectionLabel: string
@@ -32,7 +31,7 @@ type VerifiedProofProps = {
 }
 
 type UnverifiedProofProps = {
-  record: ProofExchangeRecord
+  record: DidCommProofExchangeRecord
   onBackPressed: () => void
   onGenerateNewPressed: () => void
 }
@@ -191,7 +190,7 @@ const UnverifiedProof: React.FC<UnverifiedProofProps> = ({ record, onBackPressed
     <ScrollView contentContainerStyle={{ flexGrow: 1 }} testID={testIdWithKey('UnverifiedProofView')}>
       <View style={styles.header}>
         <View style={styles.headerTitleContainer}>
-          {record.state === ProofState.Abandoned && (
+          {record.state === DidCommProofState.Abandoned && (
             <ThemedText variant="bold" style={styles.headerTitle}>
               {t('ProofRequest.ProofRequestDeclined')}
             </ThemedText>
@@ -253,7 +252,7 @@ const ProofDetails: React.FC<ProofDetailsProps> = ({ route, navigation }) => {
 
     const promises = Array<Promise<void>>()
     if (!store.preferences.useDataRetention) {
-      promises.push(agent.proofs.deleteById(recordId))
+      promises.push(agent.modules.proofs.deleteById(recordId))
     }
 
     if (
@@ -262,7 +261,7 @@ const ProofDetails: React.FC<ProofDetailsProps> = ({ route, navigation }) => {
       ((record.metadata.get(ProofMetadata.customMetadata) as ProofCustomMetadata).delete_conn_after_seen ||
         goalCode?.endsWith('verify.once'))
     ) {
-      promises.push(agent.connections.deleteById(record.connectionId))
+      promises.push(agent.modules.connections.deleteById(record.connectionId))
     }
 
     return Promise.allSettled(promises)
@@ -304,9 +303,9 @@ const ProofDetails: React.FC<ProofDetailsProps> = ({ route, navigation }) => {
 
   useFocusEffect(
     useCallback(() => {
-      BackHandler.addEventListener('hardwareBackPress', onBackPressed)
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPressed)
 
-      return () => BackHandler.removeEventListener('hardwareBackPress', onBackPressed)
+      return () => subscription.remove()
     }, [onBackPressed])
   )
 

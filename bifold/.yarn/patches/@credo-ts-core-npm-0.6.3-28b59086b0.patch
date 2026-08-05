@@ -1,0 +1,69 @@
+diff --git a/build/modules/vc/models/credential/W3cCredential.d.mts b/build/modules/vc/models/credential/W3cCredential.d.mts
+index 6ecceb006c81a8f7dba8500b18e217c3d6b8c192..6df40bc454dec759ac878f20cb4eec9e74b742d0 100644
+--- a/build/modules/vc/models/credential/W3cCredential.d.mts
++++ b/build/modules/vc/models/credential/W3cCredential.d.mts
+@@ -10,7 +10,7 @@ interface W3cCredentialOptions {
+   id?: string;
+   type: Array<string>;
+   issuer: string | W3cIssuerOptions;
+-  issuanceDate: string;
++  issuanceDate?: string;
+   expirationDate?: string;
+   credentialSubject: SingleOrArray<W3cCredentialSubjectOptions>;
+   credentialStatus?: W3cCredentialStatus;
+@@ -22,7 +22,7 @@ declare class W3cCredential {
+   id?: string;
+   type: Array<string>;
+   issuer: string | W3cIssuer;
+-  issuanceDate: string;
++  issuanceDate?: string;
+   expirationDate?: string;
+   credentialSubject: SingleOrArray<W3cCredentialSubject>;
+   credentialSchema?: SingleOrArray<W3cCredentialSchema>;
+diff --git a/build/modules/vc/models/credential/W3cCredential.mjs b/build/modules/vc/models/credential/W3cCredential.mjs
+index f3ad42c21d31e28b0f297416f17d7e560454082d..783cae8b47016777ac82d96f599319e8cfd63b3d 100644
+--- a/build/modules/vc/models/credential/W3cCredential.mjs
++++ b/build/modules/vc/models/credential/W3cCredential.mjs
+@@ -66,7 +66,13 @@ __decorate([
+ 	IsW3cIssuer(),
+ 	__decorateMetadata("design:type", Object)
+ ], W3cCredential.prototype, "issuer", void 0);
+-__decorate([IsRFC3339(), __decorateMetadata("design:type", String)], W3cCredential.prototype, "issuanceDate", void 0);
++// KEYRING PATCH (VCDM 2.0): issuanceDate is v1.1-only; VCDM 2.0 credentials
++// use validFrom instead, so the property must be optional to accept them.
++__decorate([
++	IsRFC3339(),
++	IsOptional(),
++	__decorateMetadata("design:type", String)
++], W3cCredential.prototype, "issuanceDate", void 0);
+ __decorate([
+ 	IsRFC3339(),
+ 	IsOptional(),
+diff --git a/build/modules/vc/validators.mjs b/build/modules/vc/validators.mjs
+index 1dc281ee34c7ee80285bf99008d2fa2bd85ef0e2..4fe87ad71253a0af11cae2f52be8f8eb8a041b8c 100644
+--- a/build/modules/vc/validators.mjs
++++ b/build/modules/vc/validators.mjs
+@@ -5,15 +5,21 @@ import { CREDENTIALS_CONTEXT_V1_URL, VERIFIABLE_CREDENTIAL_TYPE, VERIFIABLE_PRES
+ import { ValidateBy, buildMessage, isString, isURL } from "class-validator";
+ 
+ //#region src/modules/vc/validators.ts
++// KEYRING PATCH (VCDM 2.0 over DIDComm JSON-LD): also accept the VCDM 2.0
++// context URL as the first @context entry, so v2-context credentials can be
++// parsed/validated by the v1 W3cCredential model used by the DIDComm jsonld
++// credential format. See https://www.w3.org/TR/vc-data-model-2.0/
++const CREDENTIALS_CONTEXT_V2_URL_PATCH = "https://www.w3.org/ns/credentials/v2";
+ function IsCredentialJsonLdContext(validationOptions) {
+ 	const allowString = validationOptions?.allowString ?? false;
+ 	const credentialContext = validationOptions?.credentialContext ?? CREDENTIALS_CONTEXT_V1_URL;
++	const acceptedContexts = credentialContext === CREDENTIALS_CONTEXT_V1_URL ? [CREDENTIALS_CONTEXT_V1_URL, CREDENTIALS_CONTEXT_V2_URL_PATCH] : [credentialContext];
+ 	return ValidateBy({
+ 		name: "IsCredentialJsonLdContext",
+ 		validator: {
+ 			validate: (value) => {
+-				if (!Array.isArray(value)) return allowString && isString(value) && value === credentialContext;
+-				if (value[0] !== credentialContext) return false;
++				if (!Array.isArray(value)) return allowString && isString(value) && acceptedContexts.includes(value);
++				if (!acceptedContexts.includes(value[0])) return false;
+ 				return value.every((v) => isString(v) && isURL(v) || isJsonObject(v));
+ 			},
+ 			defaultMessage: buildMessage((eachPrefix) => `${eachPrefix}$property must be an array of strings or objects, where the first item is the verifiable credential context URL.`, validationOptions)

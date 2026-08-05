@@ -6,6 +6,7 @@
  */
 
 // Export types
+export * from './credentialTypes'
 export { RelationshipDidRecord } from './types/RelationshipDidRecord'
 export type {
   RelationshipDidRecordProps,
@@ -15,8 +16,10 @@ export type {
 export {
   DTG_CONTEXT_URL,
   RELATIONSHIP_CONTEXT_URL,
+  RCARD_CONTEXT_URL,
   DTG_CONTEXT_DOCUMENT,
   RELATIONSHIP_CONTEXT_DOCUMENT,
+  RCARD_CONTEXT_DOCUMENT,
 } from './types/relationshipContext'
 export { WITNESSED_EXCHANGE_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_DOCUMENT } from './types/witnessedExchangeContext'
 
@@ -63,8 +66,24 @@ export {
 // Export document loader for W3C credentials
 export { createVrcDocumentLoader } from './createVrcDocumentLoader'
 
+// Export the Data Integrity (eddsa-rdfc-2022) signature suite
+export {
+  DATA_INTEGRITY_PROOF_TYPE,
+  EDDSA_RDFC_2022_CRYPTOSUITE_NAME,
+  EddsaRdfc2022DataIntegritySuite,
+} from './services/EddsaRdfc2022DataIntegritySuite'
+export { DataIntegritySuiteModule } from './module/DataIntegritySuiteModule'
+export { runDataIntegritySelfTest } from './services/dataIntegritySelfTest'
+export type { DataIntegritySelfTestResult } from './services/dataIntegritySelfTest'
+
 // Export JSON-LD context data (convenience exports for document loading)
-export { DTG_CONTEXT, RELATIONSHIP_CONTEXT, WITNESSED_EXCHANGE_CONTEXT, CUSTOM_CONTEXTS } from './jsonLdDocumentLoader'
+export {
+  DTG_CONTEXT,
+  RELATIONSHIP_CONTEXT,
+  WITNESSED_EXCHANGE_CONTEXT,
+  RCARD_CONTEXT,
+  CUSTOM_CONTEXTS,
+} from './jsonLdDocumentLoader'
 
 // Export logging utilities
 export { createVrcLogger, VrcLogger } from './vrc-logging'
@@ -156,6 +175,16 @@ export {
   extractFormInputFromJCard,
   buildRCardTemplate,
 } from './types/rcard'
+export { migrateRCardTemplateProofs, buildRCardCredential } from './services/rCardCredential'
+
+// Export RCard display resolution utilities (received RCard → contact info)
+export {
+  isReceivedRCard,
+  getReceivedRCardForIssuer,
+  extractContactInfoFromRCard,
+  resolveContactDisplayInfo,
+} from './utils/rcardDisplayUtils'
+export type { ContactDisplayInfo } from './utils/rcardDisplayUtils'
 
 // =============================================================================
 // Attestation and Evidence Services

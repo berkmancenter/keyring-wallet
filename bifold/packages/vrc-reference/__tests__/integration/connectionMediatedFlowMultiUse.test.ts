@@ -54,7 +54,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       
       // Bob creates a MULTI-USE invitation
       console.log('[Bob] Creating multi-use invitation...')
-      const outOfBand = await bob.agent.oob.createInvitation({
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation({
         multiUseInvitation: true,
       })
       bob.outOfBandId = outOfBand.id
@@ -76,7 +76,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       const bobConnection1Promise = (async () => {
         let connectionRecord
         for (let i = 0; i < 300; i++) { // 30 seconds (300 * 100ms)
-          const records = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+          const records = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
           if (records.length > 0) {
             connectionRecord = records[0]
             break
@@ -87,10 +87,10 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
           throw new Error('Bob connection record #1 not found after 30 seconds')
         }
         console.log('[Bob] ✓ Connection record #1 found (ID: ' + connectionRecord.id + '), waiting for completion...')
-        await bob.agent.connections.returnWhenIsConnected(connectionRecord.id)
+        await bob.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
         console.log('[Bob] ✓ Connection #1 completed')
         // Fetch the updated connection record to get the latest state
-        return await bob.agent.connections.getById(connectionRecord.id)
+        return await bob.agent.modules.didcomm.connections.getById(connectionRecord.id)
       })()
 
       // Wait for first connection with 30-second timeout
@@ -108,7 +108,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       expect(alice1.connected).toBe(true)
       expect(alice1.connectionRecordId).toBeDefined()
 
-      const alice1Connection = await alice1.agent.connections.getById(alice1.connectionRecordId!)
+      const alice1Connection = await alice1.agent.modules.didcomm.connections.getById(alice1.connectionRecordId!)
       expect(alice1Connection.state).toBe('completed')
       expect(bobConnection1.state).toBe('completed')
 
@@ -126,7 +126,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
         const firstConnectionId = bobConnection1.id
         let connectionRecord
         for (let i = 0; i < 300; i++) { // 30 seconds
-          const records = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+          const records = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
           // Find a connection that's NOT the first one
           const newConnection = records.find(r => r.id !== firstConnectionId)
           if (newConnection) {
@@ -139,10 +139,10 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
           throw new Error('Bob connection record #2 not found after 30 seconds')
         }
         console.log('[Bob] ✓ Connection record #2 found (ID: ' + connectionRecord.id + '), waiting for completion...')
-        await bob.agent.connections.returnWhenIsConnected(connectionRecord.id)
+        await bob.agent.modules.didcomm.connections.returnWhenIsConnected(connectionRecord.id)
         console.log('[Bob] ✓ Connection #2 completed')
         // Fetch the updated connection record to get the latest state
-        return await bob.agent.connections.getById(connectionRecord.id)
+        return await bob.agent.modules.didcomm.connections.getById(connectionRecord.id)
       })()
 
       // Wait for second connection with 30-second timeout
@@ -160,7 +160,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       expect(alice2.connected).toBe(true)
       expect(alice2.connectionRecordId).toBeDefined()
 
-      const alice2Connection = await alice2.agent.connections.getById(alice2.connectionRecordId!)
+      const alice2Connection = await alice2.agent.modules.didcomm.connections.getById(alice2.connectionRecordId!)
       expect(alice2Connection.state).toBe('completed')
       expect(bobConnection2.state).toBe('completed')
 
@@ -190,7 +190,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       console.log('🔍 Testing separate connection records for multi-use invitation...\n')
       
       // Bob creates a multi-use invitation
-      const outOfBand = await bob.agent.oob.createInvitation({
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation({
         multiUseInvitation: true,
       })
       bob.outOfBandId = outOfBand.id
@@ -209,7 +209,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       ])
 
       // Get all Bob's connections for this invitation
-      const bobConnections = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+      const bobConnections = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
       
       expect(bobConnections).toHaveLength(2)
       expect(bobConnections[0].id).not.toBe(bobConnections[1].id)
@@ -225,7 +225,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
     it('should exchange unique did:peer identifiers for each connection from multi-use invitation', async () => {
       console.log('🔑 Testing unique DIDs for each multi-use invitation connection...\n')
       
-      const outOfBand = await bob.agent.oob.createInvitation({
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation({
         multiUseInvitation: true,
       })
       bob.outOfBandId = outOfBand.id
@@ -243,9 +243,9 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       ])
 
       // Get connection records
-      const alice1Connection = await alice1.agent.connections.getById(alice1.connectionRecordId!)
-      const alice2Connection = await alice2.agent.connections.getById(alice2.connectionRecordId!)
-      const bobConnections = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+      const alice1Connection = await alice1.agent.modules.didcomm.connections.getById(alice1.connectionRecordId!)
+      const alice2Connection = await alice2.agent.modules.didcomm.connections.getById(alice2.connectionRecordId!)
+      const bobConnections = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
 
       // Verify all DIDs are did:peer
       expect(alice1Connection.did).toMatch(/^did:peer:/)
@@ -273,7 +273,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
     it('should maintain invitation availability after first connection', async () => {
       console.log('🔄 Testing invitation reusability...\n')
       
-      const outOfBand = await bob.agent.oob.createInvitation({
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation({
         multiUseInvitation: true,
       })
       bob.outOfBandId = outOfBand.id
@@ -290,7 +290,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       // Invitation should still be valid for second connection
       await alice2.acceptConnection(invitationUrl)
       
-      const bobConnections = await bob.agent.connections.findAllByOutOfBandId(bob.outOfBandId!)
+      const bobConnections = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(bob.outOfBandId!)
       expect(bobConnections).toHaveLength(2)
       
       console.log('✓ Invitation remained valid after first use')
@@ -300,12 +300,12 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
     it('should retrieve out-of-band record marked as reusable', async () => {
       console.log('📝 Testing out-of-band record reusable flag...\n')
       
-      const outOfBand = await bob.agent.oob.createInvitation({
+      const outOfBand = await bob.agent.modules.didcomm.oob.createInvitation({
         multiUseInvitation: true,
       })
       
       // Retrieve the out-of-band record
-      const oobRecord = await bob.agent.oob.findById(outOfBand.id)
+      const oobRecord = await bob.agent.modules.didcomm.oob.findById(outOfBand.id)
       
       expect(oobRecord).toBeDefined()
       expect(oobRecord?.reusable).toBe(true)
@@ -322,13 +322,13 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       
       // Create single-use invitation
       console.log('[Bob] Creating single-use invitation...')
-      const singleUseOob = await bob.agent.oob.createInvitation({
+      const singleUseOob = await bob.agent.modules.didcomm.oob.createInvitation({
         multiUseInvitation: false, // or omit, as false is default
       })
       
       // Create multi-use invitation  
       console.log('[Bob] Creating multi-use invitation...')
-      const multiUseOob = await bob.agent.oob.createInvitation({
+      const multiUseOob = await bob.agent.modules.didcomm.oob.createInvitation({
         multiUseInvitation: true,
       })
       bob.outOfBandId = multiUseOob.id
@@ -337,8 +337,8 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       })
       
       // Check reusable flags
-      const singleUseRecord = await bob.agent.oob.findById(singleUseOob.id)
-      const multiUseRecord = await bob.agent.oob.findById(multiUseOob.id)
+      const singleUseRecord = await bob.agent.modules.didcomm.oob.findById(singleUseOob.id)
+      const multiUseRecord = await bob.agent.modules.didcomm.oob.findById(multiUseOob.id)
       
       expect(singleUseRecord?.reusable).toBe(false)
       expect(multiUseRecord?.reusable).toBe(true)
@@ -350,7 +350,7 @@ describeIfMediator('Mediated Connection Flow Integration - Multi-Use Invitations
       await alice1.acceptConnection(multiUseUrl)
       await alice2.acceptConnection(multiUseUrl)
       
-      const multiUseConnections = await bob.agent.connections.findAllByOutOfBandId(multiUseOob.id)
+      const multiUseConnections = await bob.agent.modules.didcomm.connections.findAllByOutOfBandId(multiUseOob.id)
       expect(multiUseConnections).toHaveLength(2)
       
       console.log('✓ Multi-use invitation created 2 connections')

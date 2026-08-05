@@ -2,12 +2,12 @@
 
 buildscript {
     ext {
-        buildToolsVersion = "33.0.2"
+        buildToolsVersion = "36.0.0"
         minSdkVersion = 24
-        compileSdkVersion = 34
-        targetSdkVersion = 34
-        ndkVersion = "25.1.8937393"
-        kotlinVersion = "1.7.22"
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
 
     }
     repositories {
@@ -41,9 +41,37 @@ subprojects {
     configurations.all {
        it.resolutionStrategy.activateDependencyLocking()
     }
+
+    // Fix for NDK 27 C++ compatibility issues with native modules
+    afterEvaluate { project ->
+        ["com.android.application", "com.android.library"].each { pluginId ->
+            project.plugins.withId(pluginId) {
+                project.android {
+                    compileOptions {
+                        sourceCompatibility JavaVersion.VERSION_17
+                        targetCompatibility JavaVersion.VERSION_17
+                    }
+                }
+            }
+        }
+
+        project.plugins.withId("com.android.library") {
+            project.android {
+                if (project.android.hasProperty("externalNativeBuild")) {
+                    project.android.defaultConfig {
+                        externalNativeBuild {
+                            cmake {
+                                cppFlags "-std=c++17"
+                                arguments "-DCMAKE_CXX_STANDARD=17"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 dependencyLocking {
     lockAllConfigurations()
 }
-

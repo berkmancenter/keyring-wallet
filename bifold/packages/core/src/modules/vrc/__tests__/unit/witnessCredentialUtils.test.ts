@@ -10,14 +10,13 @@ import {
   hasWitnessCredentialType,
   getWitnessCredentialsForSubject,
   extractWitnessInfo,
-  WitnessRecord,
 } from '../../utils/witnessCredentialUtils'
 
 describe('witnessCredentialUtils', () => {
   describe('hasWitnessCredentialType', () => {
     it('should return true for WitnessCredential type', () => {
       const mockCredential = {
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
           issuer: 'did:example:witness',
           credentialSubject: {},
@@ -29,7 +28,7 @@ describe('witnessCredentialUtils', () => {
 
     it('should return true when WitnessCredential is the only type', () => {
       const mockCredential = {
-        credential: {
+        encoded: {
           type: 'WitnessCredential',
           issuer: 'did:example:witness',
           credentialSubject: {},
@@ -41,7 +40,7 @@ describe('witnessCredentialUtils', () => {
 
     it('should return false for non-WitnessCredential types', () => {
       const mockCredential = {
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
           issuer: 'did:example:issuer',
           credentialSubject: {},
@@ -53,7 +52,7 @@ describe('witnessCredentialUtils', () => {
 
     it('should return false when credential has no type field', () => {
       const mockCredential = {
-        credential: {
+        encoded: {
           issuer: 'did:example:issuer',
           credentialSubject: {},
         },
@@ -64,7 +63,7 @@ describe('witnessCredentialUtils', () => {
 
     it('should return false when credential is null or undefined', () => {
       const mockCredential = {
-        credential: null,
+        encoded: null,
       } as unknown as W3cCredentialRecord
 
       expect(hasWitnessCredentialType(mockCredential)).toBe(false)
@@ -72,7 +71,7 @@ describe('witnessCredentialUtils', () => {
 
     it('should return false when credential data is malformed', () => {
       const mockCredential = {
-        credential: 'not an object',
+        encoded: 'not an object',
       } as unknown as W3cCredentialRecord
 
       expect(hasWitnessCredentialType(mockCredential)).toBe(false)
@@ -85,7 +84,7 @@ describe('witnessCredentialUtils', () => {
     it('should filter VWCs by credentialSubject.id', () => {
       const credentials = [
         {
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -94,7 +93,7 @@ describe('witnessCredentialUtils', () => {
           },
         },
         {
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'RelationshipCredential'],
             issuer: 'did:example:issuer',
             credentialSubject: {
@@ -107,13 +106,13 @@ describe('witnessCredentialUtils', () => {
       const result = getWitnessCredentialsForSubject(credentials, mockSubjectDid)
 
       expect(result).toHaveLength(1)
-      expect(result[0].credential.type).toContain('WitnessCredential')
+      expect(result[0].encoded.type).toContain('WitnessCredential')
     })
 
     it('should return empty array when no matches', () => {
       const credentials = [
         {
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -131,7 +130,7 @@ describe('witnessCredentialUtils', () => {
     it('should return multiple matching VWCs', () => {
       const credentials = [
         {
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness1',
             credentialSubject: {
@@ -141,7 +140,7 @@ describe('witnessCredentialUtils', () => {
           },
         },
         {
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness2',
             credentialSubject: {
@@ -168,14 +167,14 @@ describe('witnessCredentialUtils', () => {
     it('should filter out credentials with malformed credentialSubject', () => {
       const credentials = [
         {
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: null,
           },
         },
         {
-          credential: {
+          encoded: {
             type: ['VerifiableCredential', 'WitnessCredential'],
             issuer: 'did:example:witness',
             credentialSubject: {
@@ -195,7 +194,7 @@ describe('witnessCredentialUtils', () => {
     it('should extract all fields from complete VWC', () => {
       const mockCredential = {
         id: 'credential-123',
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'WitnessCredential'],
           issuer: {
             id: 'did:example:witness',
@@ -230,7 +229,7 @@ describe('witnessCredentialUtils', () => {
     it('should handle issuer as string instead of object', () => {
       const mockCredential = {
         id: 'credential-456',
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'WitnessCredential'],
           issuer: 'did:example:witness',
           credentialSubject: {
@@ -253,7 +252,7 @@ describe('witnessCredentialUtils', () => {
     it('should handle missing optional witnessContext fields', () => {
       const mockCredential = {
         id: 'credential-789',
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'WitnessCredential'],
           issuer: 'did:example:witness',
           credentialSubject: {
@@ -277,7 +276,7 @@ describe('witnessCredentialUtils', () => {
     it('should handle issuanceDate instead of validFrom', () => {
       const mockCredential = {
         id: 'credential-101',
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'WitnessCredential'],
           issuer: 'did:example:witness',
           issuanceDate: '2026-01-15T08:30:00Z',
@@ -297,7 +296,7 @@ describe('witnessCredentialUtils', () => {
     it('should handle missing witnessContext', () => {
       const mockCredential = {
         id: 'credential-202',
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'WitnessCredential'],
           issuer: 'did:example:witness',
           credentialSubject: {
@@ -318,7 +317,7 @@ describe('witnessCredentialUtils', () => {
     it('should return null for invalid credential', () => {
       const mockCredential = {
         id: 'credential-303',
-        credential: null,
+        encoded: null,
       } as unknown as W3cCredentialRecord
 
       const result = extractWitnessInfo(mockCredential)
@@ -329,7 +328,7 @@ describe('witnessCredentialUtils', () => {
     it('should return null when issuer is missing', () => {
       const mockCredential = {
         id: 'credential-404',
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'WitnessCredential'],
           // No issuer
           credentialSubject: {
@@ -346,7 +345,7 @@ describe('witnessCredentialUtils', () => {
     it('should handle malformed witnessContext', () => {
       const mockCredential = {
         id: 'credential-505',
-        credential: {
+        encoded: {
           type: ['VerifiableCredential', 'WitnessCredential'],
           issuer: 'did:example:witness',
           credentialSubject: {

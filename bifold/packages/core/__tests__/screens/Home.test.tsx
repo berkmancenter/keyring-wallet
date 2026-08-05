@@ -1,4 +1,4 @@
-import { BasicMessageRecord, CredentialExchangeRecord as CredentialRecord, ProofExchangeRecord } from '@credo-ts/core'
+import { DidCommCredentialExchangeRecord as CredentialRecord } from '@credo-ts/didcomm'
 import { useNavigation } from '@react-navigation/native'
 import { fireEvent, render, act } from '@testing-library/react-native'
 
@@ -9,7 +9,7 @@ import Home from '../../src/screens/Home'
 import { testIdWithKey } from '../../src/utils/testable'
 import { BasicAppContext } from '../helpers/app'
 
-import { useBasicMessages, useCredentialByState, useProofByState } from '@credo-ts/react-hooks'
+import { useBasicMessages, useCredentialByState, useProofByState } from '@bifold/react-hooks'
 
 jest.useFakeTimers()
 
@@ -20,6 +20,7 @@ describe('displays a home screen', () => {
     // jest.resetAllMocks()
   })
 
+  // eslint-disable-next-line jest/no-disabled-tests
   test.skip('defaults to no notifications', async () => {
     // @ts-expect-error This is a mock object and the fn exists
     useBasicMessages.mockReturnValue({ records: [] as BasicMessageRecord[] })
@@ -46,6 +47,7 @@ describe('displays a home screen', () => {
     })
   })
 
+  // eslint-disable-next-line jest/no-disabled-tests
   test.skip('notifications are displayed', async () => {
     const tree = render(
       <BasicAppContext>

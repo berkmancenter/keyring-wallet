@@ -1,16 +1,16 @@
-import { ConnectionRecord, OutOfBandRecord } from '@credo-ts/core'
-import { useAgent, useConnectionById, useConnections } from '@credo-ts/react-hooks'
+import { DidCommConnectionRecord, DidCommOutOfBandRecord } from '@credo-ts/didcomm'
+import { useAgent, useConnectionById, useConnections } from '@bifold/react-hooks'
 import { useMemo, useState } from 'react'
 
 import { useStore } from '../contexts/store'
 import { getConnectionName } from '../utils/helpers'
 import { useVrcNameCache } from '../modules/vrc/context/VrcNameCacheProvider'
 
-export const useOutOfBandById = (oobId: string): OutOfBandRecord | undefined => {
+export const useOutOfBandById = (oobId: string): DidCommOutOfBandRecord | undefined => {
   const { agent } = useAgent()
-  const [oob, setOob] = useState<OutOfBandRecord | undefined>(undefined)
+  const [oob, setOob] = useState<DidCommOutOfBandRecord | undefined>(undefined)
   if (!oob) {
-    agent?.oob.findById(oobId).then((res) => {
+    agent?.modules.didcomm.oob.findById(oobId).then((res: DidCommOutOfBandRecord | null) => {
       if (res) {
         setOob(res)
       }
@@ -19,14 +19,14 @@ export const useOutOfBandById = (oobId: string): OutOfBandRecord | undefined => 
   return oob
 }
 
-export const useConnectionByOutOfBandId = (outOfBandId: string): ConnectionRecord | undefined => {
+export const useConnectionByOutOfBandId = (outOfBandId: string): DidCommConnectionRecord | undefined => {
   const reuseConnectionId = useOutOfBandById(outOfBandId)?.reuseConnectionId
   const { records: connections } = useConnections()
 
   return useMemo(
     () =>
       connections.find(
-        (connection: ConnectionRecord) =>
+        (connection: DidCommConnectionRecord) =>
           connection.outOfBandId === outOfBandId ||
           // Check for a reusable connection
           (reuseConnectionId && connection.id === reuseConnectionId)
@@ -35,7 +35,7 @@ export const useConnectionByOutOfBandId = (outOfBandId: string): ConnectionRecor
   )
 }
 
-export const useOutOfBandByConnectionId = (connectionId: string): OutOfBandRecord | undefined => {
+export const useOutOfBandByConnectionId = (connectionId: string): DidCommOutOfBandRecord | undefined => {
   const connection = useConnectionById(connectionId)
   return useOutOfBandById(connection?.outOfBandId ?? '')
 }

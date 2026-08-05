@@ -1,7 +1,7 @@
 import { DefaultOCABundleResolver } from '@bifold/oca/build/legacy'
 import { getProofRequestTemplates } from '@bifold/verifier'
 import { Agent } from '@credo-ts/core'
-import { createContext, useContext } from 'react'
+import React, { createContext, useContext } from 'react'
 import { DependencyContainer } from 'tsyringe'
 
 import * as bundle from './assets/oca-bundles.json'
@@ -14,8 +14,8 @@ import EmptyList from './components/misc/EmptyList'
 import NoNewUpdates from './components/misc/NoNewUpdates'
 import PINHeader from './components/misc/PINHeader'
 import Record from './components/record/Record'
-import HomeFooterView from './components/views/HomeFooterView'
 import { Banner } from './components/views/Banner'
+import HomeFooterView from './components/views/HomeFooterView'
 import HomeHeaderView from './components/views/HomeHeaderView'
 import defaultIndyLedgers from './configs/ledgers/indy'
 import { LocalStorageKeys, PINRules } from './constants'
@@ -27,6 +27,8 @@ import useBifoldAgentSetup from './hooks/useBifoldAgentSetup'
 import { Locales } from './localization'
 import { IHistoryManager } from './modules/history'
 import HistoryManager from './modules/history/context/historyManager'
+import { RefreshOrchestrator } from './modules/openid/refresh/refreshOrchestrator'
+import { IRefreshOrchestrator, OpenIDCredentialRefreshFlowType } from './modules/openid/refresh/types'
 import OnboardingStack from './navigators/OnboardingStack'
 import { DefaultScreenLayoutOptions } from './navigators/defaultLayoutOptions'
 import { DefaultScreenOptionsDictionary } from './navigators/defaultStackOptions'
@@ -42,9 +44,10 @@ import Splash from './screens/Splash'
 import ScreenTerms, { TermsVersion } from './screens/Terms'
 import ToggleBiometry from './screens/ToggleBiometry'
 import UpdateAvailable from './screens/UpdateAvailable'
+import { AgentBridge } from './services/AgentBridge'
+import { bifoldLoggerInstance } from './services/bifoldLogger'
 import { loadLoginAttempt } from './services/keychain'
 import { BifoldLogger } from './services/logger'
-import { bifoldLoggerInstance } from './services/bifoldLogger'
 import { PersistentStorage } from './services/storage'
 import { Config, HistoryEventsLoggerConfig } from './types/config'
 import { InlineErrorPosition } from './types/error'
@@ -57,6 +60,7 @@ import {
   Tours as ToursState,
   WitnessSettings,
 } from './types/state'
+import { hashPIN } from './utils/crypto'
 
 export const defaultConfig: Config = {
   PINSecurity: {
@@ -85,6 +89,13 @@ export const defaultConfig: Config = {
     appleAppStoreUrl: 'https://example.com',
     googlePlayStoreUrl: 'https://example.com',
   },
+  PINScreensConfig: {
+    useNewPINDesign: false,
+  },
+  showGenericErrors: false,
+  enableFullScreenErrorModal: false,
+  enableHardwareBackedHolderBinding: true,
+  enableAttestation: false,
 }
 
 export const defaultHistoryEventsLogger: HistoryEventsLoggerConfig = {
@@ -147,6 +158,7 @@ export class MainContainer implements Container {
     this._container.registerInstance(TOKENS.UTIL_PROOF_TEMPLATE, getProofRequestTemplates)
     this._container.registerInstance(TOKENS.UTIL_ATTESTATION_MONITOR, { useValue: undefined })
     this._container.registerInstance(TOKENS.UTIL_APP_VERSION_MONITOR, { useValue: undefined })
+    this._container.registerInstance(TOKENS.UTIL_CREDENTIAL_PROVISIONING_MONITOR, { useValue: undefined })
     this._container.registerInstance(TOKENS.NOTIFICATIONS, {
       useNotifications,
     })
@@ -186,8 +198,7 @@ export class MainContainer implements Container {
       const loadState = async <Type>(key: LocalStorageKeys, updateVal: (newVal: Type) => void) => {
         const data = await this.storage.getValueForKey(key)
         if (data) {
-          // @ts-expect-error Fix complicated type error
-          updateVal(data)
+          updateVal(data as Type)
         }
       }
 
@@ -198,6 +209,7 @@ export class MainContainer implements Container {
       let onboarding = defaultState.onboarding
       let witness = defaultState.witness
 
+      // eslint-disable-next-line no-console
       console.log('[DEBUG] Loading state - defaultState.witness:', JSON.stringify(defaultState.witness))
 
       await Promise.all([
@@ -211,11 +223,13 @@ export class MainContainer implements Container {
         loadState<ToursState>(LocalStorageKeys.Tours, (val) => (tours = val)),
         loadState<StoreOnboardingState>(LocalStorageKeys.Onboarding, (val) => (onboarding = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
+          // eslint-disable-next-line no-console
           console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
         }),
       ])
 
+      // eslint-disable-next-line no-console
       console.log('[DEBUG] Final witness value before dispatch:', JSON.stringify(witness))
 
       const state = {
@@ -228,12 +242,47 @@ export class MainContainer implements Container {
         witness: { ...defaultState.witness, ...witness },
       } as State
 
+      // eslint-disable-next-line no-console
       console.log('[DEBUG] State being dispatched - witness:', JSON.stringify(state.witness))
 
       dispatch({ type: DispatchAction.STATE_DISPATCH, payload: [state] })
     })
 
     this._container.registerInstance(TOKENS.ONBOARDING, generateOnboardingWorkflowSteps)
+
+    this._container.registerInstance(TOKENS.UTIL_AGENT_BRIDGE, new AgentBridge())
+
+    // Register OpenID Credentials Refresh Orchestrator
+    const orchestrator: IRefreshOrchestrator = new RefreshOrchestrator(
+      this._container.resolve(TOKENS.UTIL_LOGGER),
+      this._container.resolve(TOKENS.UTIL_AGENT_BRIDGE) as AgentBridge,
+      {
+        autoStart: false,
+        runOnStart: true,
+        intervalMs: undefined,
+        flowType: OpenIDCredentialRefreshFlowType.FullReplacement,
+        listRecords: async () => {
+          const agent = (this._container.resolve(TOKENS.UTIL_AGENT_BRIDGE) as AgentBridge).current
+          if (!agent) return []
+          const [w3c, w3cV2, sdjwt, mdoc] = await Promise.all([
+            agent.w3cCredentials.getAll(),
+            agent.w3cV2Credentials.getAll(),
+            agent.sdJwtVc.getAll(),
+            agent.mdoc.getAll(),
+          ])
+          return [...w3c, ...w3cV2, ...sdjwt, ...mdoc]
+        },
+      }
+    )
+
+    this._container.registerInstance(TOKENS.UTIL_REFRESH_ORCHESTRATOR, orchestrator)
+
+    this._container.registerInstance(TOKENS.FN_PIN_HASH_ALGORITHM, (PIN: string, salt: string) => {
+      return hashPIN(PIN, salt)
+    })
+
+    this._container.registerInstance(TOKENS.FN_ATTESTATION_GET_CHALLENGE, () => {})
+    this._container.registerInstance(TOKENS.FN_ATTESTATION_GET_JWT, () => {})
 
     return this
   }

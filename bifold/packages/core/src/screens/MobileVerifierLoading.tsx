@@ -1,5 +1,5 @@
 import { isPresentationFailed, isPresentationReceived } from '@bifold/verifier'
-import { useAgent, useProofById } from '@credo-ts/react-hooks'
+import { useAgent, useProofById } from '@bifold/react-hooks'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -31,7 +31,9 @@ const MobileVerifierLoading: React.FC<MobileVerifierLoadingProps> = ({ navigatio
 
   const styles = StyleSheet.create({
     container: {
-      height: '100%',
+      // flex (not height:'100%') so the controls below the ScrollView keep their space
+      // (safe-area-context 5.x sizes SafeAreaView differently than 4.x did)
+      flex: 1,
       backgroundColor: ColorPalette.brand.modalPrimaryBackground,
       padding: 20,
     },
@@ -59,7 +61,7 @@ const MobileVerifierLoading: React.FC<MobileVerifierLoadingProps> = ({ navigatio
   const onDismissModalTouched = useCallback(() => {
     if (proofRecord && (isPresentationReceived(proofRecord) || isPresentationFailed(proofRecord))) {
       if (goalCode?.endsWith('verify.once')) {
-        agent.connections.deleteById(connectionId)
+        agent.modules.connections.deleteById(connectionId)
       }
     }
 
@@ -74,7 +76,7 @@ const MobileVerifierLoading: React.FC<MobileVerifierLoadingProps> = ({ navigatio
 
   return (
     <SafeAreaModal transparent animationType={'slide'}>
-      <SafeAreaView style={{ backgroundColor: ColorPalette.brand.modalPrimaryBackground }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: ColorPalette.brand.modalPrimaryBackground }}>
         <ScrollView style={styles.container}>
           <View style={styles.messageContainer}>
             <ThemedText

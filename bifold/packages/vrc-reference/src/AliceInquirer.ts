@@ -1,6 +1,8 @@
 import { clear } from 'console'
 import { textSync } from 'figlet'
 
+import { ParticipantInquirer } from './ParticipantInquirer'
+
 
 /**
  * AliceInquirer is a type alias for ParticipantInquirer.

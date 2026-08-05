@@ -4,7 +4,19 @@ module.exports = {
   testEnvironment: 'node',
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { isolatedModules: true }],
+    // credo-ts 0.6 ships ESM-only (.mjs); transpile it to CJS for jest
+    '^.+\\.m?js$': ['babel-jest', { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }],
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!(@credo-ts|@openwallet-foundation|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj)/)',
+  ],
+  // NOTE: integration suites MUST run one jest process per test file (see
+  // scripts/run-integration.mjs / `yarn test:integration`). askar-nodejs's
+  // FFI struct registry is process-global while jest re-executes the module
+  // per test file — the second file dies at import with "Duplicate type name
+  // 'ByteBuffer'". Sandboxing prevents any in-process singleton workaround
+  // (fresh globalThis AND process per file), so per-file processes are the
+  // supported mode; the default `test` script therefore runs unit tests only.
   roots: ['<rootDir>/src', '<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.test.ts'],
   collectCoverageFrom: [

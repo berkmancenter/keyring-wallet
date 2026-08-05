@@ -46,10 +46,19 @@
     "Updated": "Mis à jour",
     "Remove": "Supprimer",
     "Close": "Fermer",
+    "CloseNotification": "Close notification (FR)",
     "GotIt": "Got it (FR)",
     "Send": "Envoyer",
     "Reset": "Reset (FR)",
-    "ViewJSON": "View JSON Details (FR)"
+    "ViewJSON": "View JSON Details (FR)",
+    "RefreshCredentials": "Refresh Credentials (FR)",
+    "AppName": "Aries Bifold (FR)"
+  },
+  "Toast": {
+    "OpenIDCredRefreshing": {
+      "Title": "Refreshing credentials (FR)",
+      "Message": "Your OpenID credentials are being refreshed in the background. (FR)"
+    }
   },
   "Date": {
     "ShortFormat": "D MMM",
@@ -150,7 +159,13 @@
     "Title1048": "Proof request problems. (FR)",
     "Message1048": "There was a problem with the proof request. (FR)",
     "Title1049": "Unable to change PIN. (FR)",
-    "Message1049": "There was a problem while attempting to change your PIN. (FR)"
+    "Message1049": "There was a problem while attempting to change your PIN. (FR)",
+    "Title1050": "Unable to access biometrics (FR)",
+    "Message1050": "There was a problem while attempting to access this device' biometrics (FR)",
+    "GenericError": {
+      "Title": "Something went wrong (FR)",
+      "Message": "There was an unexpected error, please try again later. (FR)"
+    }
   },
   "SelectionAxs": {
     "RadioChecked": "checked(fr)",
@@ -200,6 +215,8 @@
     "OpenSettings": "Ouvrir les paramètres"
   },
   "PINCreate": {
+    "Header": "Aries Bifold (FR)",
+    "Subheader": "Secure your Aries wallet (FR)",
     "Explainer": {
       "PrimaryHeading": "Secure your Wallet (FR)",
       "PINReminder": "On the following screen you will be asked to set up a strong <b>personal identification number</b> (PIN). (FR)",
@@ -210,6 +227,10 @@
         "ParagraphList2": "Or use your biometrics to open your wallet, and if your biometrics change change on your device you will need to use the PIN to authenticate your wallet (FR)"
       }
     },
+    "InfoBox": {
+      "title": "Remember your PIN (FR)",
+      "message": "Make sure you remember your PIN\n- If you forget it you will need to setup the wallet again and re-add your cards (FR)"
+    },
     "Message": {
       "CrossPatternValidation": "Un patron de croix a été détecté dans votre NIP. Veuillez saisir un NIP différent.",
       "OddOrEvenSequenceValidation": "Une séquence impaire ou paire a été détectée dans votre NIP. Veuillez saisir un NIP différent.",
@@ -219,7 +240,8 @@
       "NoSeriesOfNumbersValidation": "Une suite a été détectée dans votre NIP. Veuillez saisir un NIP différent.",
       "PINOnlyContainDigitsValidation": "Votre NIP doit contenir que des chiffres. Veuillez saisir un NIP différent.",
       "PINTooShortValidation": "Votre NIP est trop court. Veuillez saisir un NIP différent.",
-      "PINTooLongValidation": "Votre NIP est trop long. Veuillez saisir un NIP différent."
+      "PINTooLongValidation": "Votre NIP est trop long. Veuillez saisir un NIP différent.",
+      "PINCommonlyUsed": "Your PIN uses a commonly used pattern. Please try again. (FR)"
     },
     "Helper": {
       "CrossPatternValidation": "Ne doit pas contenir un patron de croix.",
@@ -264,7 +286,25 @@
     "Continue": "Continuer",
     "EnterYourCurrentPIN": "Entrez votre NIP actuel"
   },
+  "PINChange": {
+    "PinChangeSuccessTitle": "Successfully changed your PIN (FR)",
+    "PinChangeSuccessMessage": "Your PIN was successsfully changed. You can now log in with your new PIN. (FR)",
+    "EnterOldPINTitle": "Enter your old PIN (FR)",
+    "EnterOldPIN": "Enter your old PIN (FR)",
+    "EnterPINTitle": "Enter a new 6 digit PIN (FR)",
+    "ReenterPIN": "Re-enter new PIN (FR)",
+    "RememberChangePIN": "Change your PIN to secure your wallet. (FR)",
+    "ChangePIN": "Change PIN (FR)"
+  },
+  "PINChangeSuccess": {
+    "InfoBox": {
+      "Title": "Your PIN has been changed (FR)",
+      "Description": "You can now log-in with your new PIN (FR)"
+    },
+    "PrimaryButton": "Go back to settings (FR)"
+  },
   "PINEnter": {
+    "AppTitle": "Aries Bifold",
     "Title": "Content de te revoir",
     "SubText": "Connectez-vous pour accéder à votre portefeuille.",
     "EnterPIN": "Veuillez saisir votre NIP",
@@ -297,7 +337,9 @@
     "ChangeHardwareAttestationInputLabel": "Enter your wallet PIN (FR)",
     "ForgotPINLink": "Forgot your PIN? (FR)",
     "ForgotPINModalTitle": "Forgot your PIN? (FR)",
-    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (FR)"
+    "ForgotPINModalDescription": "For security purposes, you're unable to recover or reset your PIN. You will need to reinstall your wallet and add your credentials again. (FR)",
+    "Loading": "Logging in (FR)",
+    "DeveloperMenuTrigger": "App information (FR)"
   },
   "AttemptLockout": {
     "Title": "Votre portefeuille est temporairement verrouillé",
@@ -597,7 +639,9 @@
     "ErrorTextboxEmpty": "La zone de texte est vide",
     "ErrorTextboxEmptyDescription": "Veuillez ajouter une URL destinée aux portefeuilles numériques et réessayer.",
     "ErrorInvalidUrl": "URL non reconnue",
-    "ErrorInvalidUrlDescription": "Vérifiez si l'URL est destinée aux portefeuilles numériques et si elle a été copiée correctement, puis réessayez."
+    "ErrorInvalidUrlDescription": "Vérifiez si l'URL est destinée aux portefeuilles numériques et si elle a été copiée correctement, puis réessayez.",
+    "PasteUrlInput": "URL input (FR)",
+    "ScanDisabled": "Submit disabled, enter a URL first (FR)"
   },
   "Connection": {
     "JustAMoment": "Un instant pendant que nous établissons une connexion sécurisée...",
@@ -685,6 +729,8 @@
     "RequestProcessing": "Juste un instant...",
     "OfferDelay": "Retard de l'offre",
     "ChangeCredential": "Modifier l'attestations d'identification",
+    "SelectCredential": "Select credential (FR)",
+    "PredicateInput": "Enter value for {{label}} (FR)",
     "GetThisCredential": "Obtenir cette attestation d'identification",
     "RejectThisProof?": "Rejeter cette preuve?",
     "AcceptingProof": "Acceptation de la preuve",
@@ -732,7 +778,19 @@
     "CredentialForProofIsRevoked": "revoked credential (FR)",
     "ProofRequestStateError": "The proof request received is in: {{state}}, decline this proof and try again. (FR)",
     "ProofRequestErrorMessage": "Something went wrong with the proof request. (FR)",
-    "PleaseAddress": " Please address them before continuing. (FR)"
+    "PleaseAddress": " Please address them before continuing. (FR)",
+    "DetailsHeader": "Information Requested (FR)",
+    "OID4VCTitle": "Information Request (FR)",
+    "UseDifferentCard": "Use different card (FR)"
+  },
+  "UnsatisfiedProofRequest": {
+    "Title": "Information Request (FR)",
+    "InfoBox": {
+      "Title": "You do not have a card for this request (FR)",
+      "Subtitle": "Check with {{verifierName}} for accepted cards. (FR)"
+    },
+    "VerifierDetail": "Received an information request from: (FR)",
+    "RequestPurpose": " • {{requestPurpose}} (FR)"
   },
   "Settings": {
     "Version": "Version",
@@ -753,14 +811,17 @@
     "Logout": "Déconnexion",
     "ConfigureMediator": "Configurer le médiateur",
     "ChangeMediator": "Change mediator (FR)",
-    "ChangeMediatorDescription": "Changing the mediator will restart the app. Do you want to continue? (FR)"
+    "ChangeMediatorDescription": "Changing the mediator will restart the app. Do you want to continue? (FR)",
+    "GenericErrorMessages": "Generic error messages (FR)",
+    "VersionInfo": "Version information (FR)"
   },
   "AutoLockTimes": {
     "OneHour": "One Hour (FR)",
     "FiveMinutes": "Five Minutes (FR)",
     "ThreeMinutes": "Three Minutes (FR)",
     "OneMinute": "One Minute (FR)",
-    "Never": "Never (FR)"
+    "Never": "Never (FR)",
+    "Preview": "{{autoLockTime}} min (FR)"
   },
   "TabStack": {
     "Messages": "Messages",
@@ -769,6 +830,11 @@
     "QRCode": "Code QR",
     "Credentials": "Justificatifs",
     "Wallet": "Portefeuille"
+  },
+  "TabStackAccessibility": {
+    "Home": "Notifications tab {{notifications}} notifications (FR)",
+    "Scan": "Scan tab (FR)",
+    "Credentials": "Credentials tab (FR)"
   },
   "RootStack": {
     "Contacts": "Contacts",
@@ -1002,5 +1068,18 @@
   },
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts (FR)"
+  },
+  "FullScreenErrorModal": {
+    "PrimaryCTA": "Go back to home (FR)"
+  },
+  "OpenIDNotification": {
+    "CredentialRefresh": {
+      "Title": "Update to {{cardName}} available (FR)",
+      "CTA": "View offer (FR)"
+    },
+    "CredentialExpired": {
+      "Title": "{{cardName}} has expired (FR)",
+      "CTA": "View offer (FR)"
+    }
   }
 }

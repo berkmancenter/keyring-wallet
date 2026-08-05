@@ -79,8 +79,8 @@ const About: React.FC = () => {
 
         <Text style={styles.bullet}>
           {'\u2022 '}
-          <Text style={styles.bold}>Biometric security</Text> — Your device's fingerprint or facial recognition confirms
-          you're the legitimate owner
+          <Text style={styles.bold}>Biometric security</Text> — Your device&apos;s fingerprint or facial recognition confirms
+          you&apos;re the legitimate owner
         </Text>
 
         <Text style={styles.bullet}>
@@ -95,7 +95,7 @@ const About: React.FC = () => {
           <Text style={styles.link} onPress={() => openLink('https://asml.cyber.harvard.edu/')}>
             Applied Social Media Lab
           </Text>{' '}
-          at Harvard's Berkman Klein Center. It extends the{' '}
+          at Harvard&apos;s Berkman Klein Center. It extends the{' '}
           <Text
             style={styles.link}
             onPress={() => openLink('https://github.com/openwallet-foundation/bifold-wallet')}

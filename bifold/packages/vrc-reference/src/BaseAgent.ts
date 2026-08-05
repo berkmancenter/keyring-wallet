@@ -1,36 +1,41 @@
 import type { InitConfig } from '@credo-ts/core'
 import {
   Agent,
-  BasicMessagesModule,
-  AutoAcceptCredential,
-  AutoAcceptProof,
   CacheModule,
   ConsoleLogger,
-  ConnectionsModule,
-  CredentialsModule,
   DidsModule,
-  DifPresentationExchangeProofFormatService,
   InMemoryLruCache,
-  JsonLdCredentialFormatService,
   KeyDidRegistrar,
   KeyDidResolver,
   LogLevel,
   PeerDidRegistrar,
   PeerDidResolver,
-  ProofsModule,
-  V2CredentialProtocol,
-  V2ProofProtocol,
   W3cCredentialsModule,
-  MediatorPickupStrategy,
-  MediationRecipientModule,
-  WsOutboundTransport,
 } from '@credo-ts/core'
+import {
+  DidCommAutoAcceptCredential,
+  DidCommAutoAcceptProof,
+  DidCommCredentialV2Protocol,
+  DidCommDifPresentationExchangeProofFormatService,
+  DidCommHttpOutboundTransport,
+  DidCommJsonLdCredentialFormatService,
+  DidCommMediatorPickupStrategy,
+  DidCommModule,
+  DidCommProofV2Protocol,
+  DidCommWsOutboundTransport,
+} from '@credo-ts/didcomm'
 import { AskarModule } from '@credo-ts/askar'
-import { agentDependencies, HttpInboundTransport } from '@credo-ts/node'
-import { HttpOutboundTransport } from '@credo-ts/core'
-import { ariesAskar } from '@hyperledger/aries-askar-nodejs'
+import { agentDependencies, DidCommHttpInboundTransport } from '@credo-ts/node'
+import { askar } from '@openwallet-foundation/askar-nodejs'
 
-import { demoDocumentLoader, deleteWallet, walletExists, shouldUseFresh, getWalletStoragePath } from '@bifold/vrc-shared'
+import {
+  DataIntegritySuiteModule,
+  demoDocumentLoader,
+  deleteWallet,
+  walletExists,
+  shouldUseFresh,
+  getWalletStoragePath,
+} from '@bifold/vrc-shared'
 import { greenText, purpleText } from './OutputClass'
 
 type DemoAgent = Agent<ReturnType<typeof getJsonLdDemoModules>>
@@ -49,25 +54,7 @@ export class BaseAgent {
     this.mediatorInvitationUrl = mediatorInvitationUrl
 
     const config: InitConfig = {
-      label: name,
-      walletConfig: {
-        id: name,
-        key: name,
-        storage: {
-          type: 'sqlite',
-          config: {
-            path: getWalletStoragePath(name),
-          },
-        },
-      },
-      // When using mediator, endpoints are provided by the mediator
-      endpoints: mediatorInvitationUrl ? undefined : [`http://localhost:${this.port}`],
       logger: new ConsoleLogger(getLogLevelFromEnv()),
-      // CRITICAL: Enable concurrent message processing for multi-use invitations
-      // Without this, connections get stuck at "request-received" state when multiple
-      // devices connect via the same multi-use invitation (especially with mediator)
-      // See: https://github.com/openwallet-foundation/credo-ts/blob/v0.5.x/packages/core/src/types.ts#L86
-      processDidCommMessagesConcurrently: true,
     }
 
     this.config = config
@@ -75,20 +62,26 @@ export class BaseAgent {
     this.agent = new Agent({
       config,
       dependencies: agentDependencies,
-      modules: getJsonLdDemoModules(mediatorInvitationUrl),
+      modules: getJsonLdDemoModules({
+        walletId: name,
+        walletKey: name,
+        // When using mediator, endpoints are provided by the mediator
+        endpoints: mediatorInvitationUrl ? undefined : [`http://localhost:${this.port}`],
+        mediatorInvitationUrl,
+      }),
     })
 
     // Configure transport based on whether we're using a mediator
     if (mediatorInvitationUrl) {
       // Mediated transport: Use WebSocket for mediator communication
       console.log(greenText(`[${this.name}] Using mediated transport via: ${mediatorInvitationUrl.substring(0, 50)}...`))
-      this.agent.registerOutboundTransport(new WsOutboundTransport())
-      this.agent.registerOutboundTransport(new HttpOutboundTransport())
+      this.agent.modules.didcomm.registerOutboundTransport(new DidCommWsOutboundTransport())
+      this.agent.modules.didcomm.registerOutboundTransport(new DidCommHttpOutboundTransport())
     } else {
       // Direct transport: Use HTTP inbound/outbound
       console.log(greenText(`[${this.name}] Using direct HTTP transport on port ${this.port}`))
-      this.agent.registerInboundTransport(new HttpInboundTransport({ port }))
-      this.agent.registerOutboundTransport(new HttpOutboundTransport())
+      this.agent.modules.didcomm.registerInboundTransport(new DidCommHttpInboundTransport({ port }))
+      this.agent.modules.didcomm.registerOutboundTransport(new DidCommHttpOutboundTransport())
     }
   }
 
@@ -132,7 +125,7 @@ export class BaseAgent {
   private async setupMediation(): Promise<void> {
     try {
       // Find default mediator connection (created automatically during initialize)
-      const mediatorConnection = await this.agent.mediationRecipient.findDefaultMediatorConnection()
+      const mediatorConnection = await this.agent.modules.didcomm.mediationRecipient.findDefaultMediatorConnection()
       
       if (!mediatorConnection) {
         console.log(purpleText(`[${this.name}] ⚠️  No mediator connection found yet`))
@@ -142,19 +135,19 @@ export class BaseAgent {
       console.log(greenText(`[${this.name}] ✓ Mediator connection found`))
 
       // Check if mediation already provisioned
-      let mediationRecord = await this.agent.mediationRecipient.findByConnectionId(mediatorConnection.id)
+      let mediationRecord = await this.agent.modules.didcomm.mediationRecipient.findByConnectionId(mediatorConnection.id)
       
       if (!mediationRecord) {
         // Provision mediation (requests and waits for mediation grant)
         console.log(purpleText(`[${this.name}] Provisioning mediation...`))
-        mediationRecord = await this.agent.mediationRecipient.provision(mediatorConnection)
+        mediationRecord = await this.agent.modules.didcomm.mediationRecipient.provision(mediatorConnection)
         console.log(greenText(`[${this.name}] ✓ Mediation provisioned`))
       } else {
         console.log(greenText(`[${this.name}] ✓ Mediation already provisioned`))
       }
 
       // Initiate message pickup - CRITICAL for receiving messages from mediator
-      await this.agent.mediationRecipient.initiateMessagePickup(mediationRecord)
+      await this.agent.modules.didcomm.mediationRecipient.initiateMessagePickup(mediationRecord)
       console.log(greenText(`[${this.name}] ✓ Message pickup initiated`))
       
     } catch (error) {
@@ -166,8 +159,8 @@ export class BaseAgent {
 
   private async logWalletState(isFresh: boolean) {
     try {
-      const connections = await this.agent.connections.getAll()
-      const credentials = await this.agent.w3cCredentials.getAllCredentialRecords()
+      const connections = await this.agent.modules.didcomm.connections.getAll()
+      const credentials = await this.agent.w3cCredentials.getAll()
 
       if (isFresh) {
         console.log(greenText(`[${this.name}] ✓ Fresh wallet initialized (0 connections, 0 credentials)`))
@@ -179,7 +172,7 @@ export class BaseAgent {
         console.log(purpleText(`    - ${credentials.length} credential(s)`))
         console.log(purpleText(`    Use --fresh flag to start clean\n`))
       }
-    } catch (error) {
+    } catch (_error) {
       // Ignore errors during state logging
     }
   }
@@ -220,22 +213,63 @@ function getLogLevelFromEnv(): LogLevel {
   return levelFromEnv ? mapping[levelFromEnv] ?? LogLevel.info : LogLevel.info
 }
 
-function getJsonLdDemoModules(mediatorInvitationUrl?: string) {
-  const modules: Record<string, any> = {
-    connections: new ConnectionsModule({
-      autoAcceptConnections: true,
+interface GetDemoModulesOptions {
+  walletId: string
+  walletKey: string
+  endpoints?: string[]
+  mediatorInvitationUrl?: string
+}
+
+function getJsonLdDemoModules({ walletId, walletKey, endpoints, mediatorInvitationUrl }: GetDemoModulesOptions) {
+  return {
+    askar: new AskarModule({
+      askar,
+      store: {
+        id: walletId,
+        key: walletKey,
+        database: {
+          type: 'sqlite',
+          config: {
+            path: getWalletStoragePath(walletId),
+          },
+        },
+      },
     }),
-    credentials: new CredentialsModule({
-      autoAcceptCredentials: AutoAcceptCredential.Never,
-      credentialProtocols: [new V2CredentialProtocol({ credentialFormats: [new JsonLdCredentialFormatService()] })],
-    }),
-    proofs: new ProofsModule({
-      autoAcceptProofs: AutoAcceptProof.Never,
-      proofProtocols: [new V2ProofProtocol({ proofFormats: [new DifPresentationExchangeProofFormatService()] })],
+    didcomm: new DidCommModule({
+      endpoints,
+      // CRITICAL: Enable concurrent message processing for multi-use invitations
+      // Without this, connections get stuck at "request-received" state when multiple
+      // devices connect via the same multi-use invitation (especially with mediator)
+      processDidCommMessagesConcurrently: true,
+      connections: {
+        autoAcceptConnections: true,
+      },
+      credentials: {
+        autoAcceptCredentials: DidCommAutoAcceptCredential.Never,
+        credentialProtocols: [
+          new DidCommCredentialV2Protocol({ credentialFormats: [new DidCommJsonLdCredentialFormatService()] }),
+        ],
+      },
+      proofs: {
+        autoAcceptProofs: DidCommAutoAcceptProof.Never,
+        proofProtocols: [
+          new DidCommProofV2Protocol({ proofFormats: [new DidCommDifPresentationExchangeProofFormatService()] }),
+        ],
+      },
+      // Mediation recipient config is only applied when a mediator URL is provided
+      mediationRecipient: mediatorInvitationUrl
+        ? {
+            mediatorInvitationUrl,
+            mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+          }
+        : undefined,
     }),
     w3cCredentials: new W3cCredentialsModule({
       documentLoader: demoDocumentLoader,
     }),
+    // Dual-verify + reference issuance capability for
+    // DataIntegrityProof/eddsa-rdfc-2022 (docs/CRYPTO_SUITE_FOLLOWUP.md)
+    diSuite: new DataIntegritySuiteModule(),
     cache: new CacheModule({
       cache: new InMemoryLruCache({ limit: 100 }),
     }),
@@ -243,19 +277,5 @@ function getJsonLdDemoModules(mediatorInvitationUrl?: string) {
       resolvers: [new KeyDidResolver(), new PeerDidResolver()],
       registrars: [new KeyDidRegistrar(), new PeerDidRegistrar()],
     }),
-    askar: new AskarModule({
-      ariesAskar,
-    }),
-    basicMessages: new BasicMessagesModule(),
   }
-
-  // Add mediation recipient module if mediator URL is provided
-  if (mediatorInvitationUrl) {
-    modules.mediationRecipient = new MediationRecipientModule({
-      mediatorInvitationUrl,
-      mediatorPickupStrategy: MediatorPickupStrategy.Implicit,
-    })
-  }
-
-  return modules as const
 }

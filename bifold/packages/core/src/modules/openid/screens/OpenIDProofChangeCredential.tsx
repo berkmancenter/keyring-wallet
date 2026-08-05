@@ -2,23 +2,32 @@ import { StackScreenProps } from '@react-navigation/stack'
 import { useTranslation } from 'react-i18next'
 import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native'
 
-import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
+import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord, W3cV2CredentialRecord } from '@credo-ts/core'
 import React, { useEffect, useState } from 'react'
 import RecordLoading from '../../../components/animated/RecordLoading'
-import { CredentialCard } from '../../../components/misc'
+import { hitSlop } from '../../../constants'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import ScreenLayout from '../../../layout/ScreenLayout'
 import { DeliveryStackParams, Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { useOpenIDCredentials } from '../context/OpenIDCredentialRecordProvider'
-import { isSdJwtProofRequest, isW3CProofRequest } from '../utils/utils'
+import CredentialCardGen from '../../../components/misc/CredentialCardGen'
+import { OpenIDCredentialRecord } from '../credentialRecord'
 
 type Props = StackScreenProps<DeliveryStackParams, Screens.OpenIDProofCredentialSelect>
 type TypedCred = {
-  credential: W3cCredentialRecord | SdJwtVcRecord | MdocRecord
+  credential: OpenIDCredentialRecord
   claimFormat: string
 }
+
+const isDisplayableOpenIDProofCredential = (
+  credential: OpenIDCredentialRecord
+): credential is TypedCred['credential'] =>
+  credential instanceof W3cCredentialRecord ||
+  credential instanceof W3cV2CredentialRecord ||
+  credential instanceof SdJwtVcRecord ||
+  credential instanceof MdocRecord
 
 const OpenIDProofCredentialSelect: React.FC<Props> = ({ route, navigation }: Props) => {
   if (!route?.params) {
@@ -28,7 +37,7 @@ const OpenIDProofCredentialSelect: React.FC<Props> = ({ route, navigation }: Pro
   const altCredentials = route.params.altCredIDs
   const onCredChange = route.params.onCredChange
   const { ColorPalette, SelectedCredTheme } = useTheme()
-  const { getW3CCredentialById, getSdJwtCredentialById } = useOpenIDCredentials()
+  const { getCredentialById } = useOpenIDCredentials()
 
   const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
@@ -43,14 +52,9 @@ const OpenIDProofCredentialSelect: React.FC<Props> = ({ route, navigation }: Pro
       const creds: TypedCred[] = []
 
       for (const { id, claimFormat } of Object.values(altCredentials)) {
-        let credential: W3cCredentialRecord | SdJwtVcRecord | MdocRecord | undefined
-        if (isW3CProofRequest(claimFormat)) {
-          credential = await getW3CCredentialById(id)
-        } else if (isSdJwtProofRequest(claimFormat)) {
-          credential = await getSdJwtCredentialById(id)
-        }
+        const credential = await getCredentialById(id)
 
-        if (credential) {
+        if (credential && isDisplayableOpenIDProofCredential(credential)) {
           creds.push({
             credential,
             claimFormat,
@@ -61,7 +65,7 @@ const OpenIDProofCredentialSelect: React.FC<Props> = ({ route, navigation }: Pro
       setLoading(false)
     }
     fetchCreds()
-  }, [altCredentials, getW3CCredentialById, getSdJwtCredentialById])
+  }, [altCredentials, getCredentialById])
 
   const styles = StyleSheet.create({
     pageContainer: {
@@ -113,14 +117,16 @@ const OpenIDProofCredentialSelect: React.FC<Props> = ({ route, navigation }: Pro
             <View style={styles.pageMargin}>
               <TouchableOpacity
                 accessibilityRole="button"
+                accessibilityLabel={t('ProofRequest.SelectCredential')}
                 testID={testIdWithKey(`select:${item.credential.id}`)}
                 onPress={() => changeCred(item)}
+                hitSlop={hitSlop}
                 style={[
                   item.credential.id === selectedCredentialID ? SelectedCredTheme : undefined,
                   { marginBottom: 10 },
                 ]}
               >
-                <CredentialCard credential={item.credential}></CredentialCard>
+                <CredentialCardGen credential={item.credential}></CredentialCardGen>
               </TouchableOpacity>
             </View>
           )

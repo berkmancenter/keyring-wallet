@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
 import { Agent, W3cCredentialRecord } from '@credo-ts/core'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 
 import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
@@ -76,7 +76,7 @@ export const VrcNameCacheProvider: React.FC<React.PropsWithChildren> = ({ childr
     }
 
     return newCache
-  }, [])
+  }, [logger])
 
   /**
    * Rebuild cache when credentials or agent changes

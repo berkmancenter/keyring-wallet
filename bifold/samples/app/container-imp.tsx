@@ -46,7 +46,16 @@ export class AppContainer implements Container {
         ),
       },
     })
-      */
+    // Add custom pbkdf hashing algorithm implementation using react-native-quick-crypto
+    this.container.registerInstance(TOKENS.FN_PIN_HASH_ALGORITHM, (PIN: string, salt: string) => {
+      try {
+        const hashedPIN = crypto.pbkdf2Sync(PIN, salt, 300000, 128, 'sha256').toString('hex')
+        return hashedPIN
+      } catch (error) {
+        throw new Error(`Error generating hash for PIN ${String((error as Error)?.message ?? error)}`)
+      }
+    })
+    */ 
     return this
   }
 

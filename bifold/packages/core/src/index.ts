@@ -1,8 +1,8 @@
 /* eslint-disable import/no-cycle */
 import type { OnboardingStyleSheet } from './screens/Onboarding'
 
+import AgentProvider from '@bifold/react-hooks'
 import { Agent } from '@credo-ts/core'
-import AgentProvider from '@credo-ts/react-hooks'
 
 import createApp from './App'
 import * as components from './components'
@@ -13,13 +13,15 @@ import CheckBoxRow from './components/inputs/CheckBoxRow'
 import LimitedTextInput from './components/inputs/LimitedTextInput'
 import NotificationListItem from './components/listItems/NotificationListItem'
 import ContentGradient from './components/misc/ContentGradient'
-import CredentialCard from './components/misc/CredentialCard'
 import ErrorBoundaryWrapper from './components/misc/ErrorBoundary'
 import FauxHeader from './components/misc/FauxHeader'
 import InfoBox, { InfoBoxType } from './components/misc/InfoBox'
+import QRRenderer from './components/misc/QRRenderer'
 import QRScannerTorch from './components/misc/QRScannerTorch'
+import ScanCamera from './components/misc/ScanCamera'
 import SVGOverlay, { MaskType } from './components/misc/SVGOverlay'
 import DeveloperModal from './components/modals/DeveloperModal'
+import DismissiblePopupModal from './components/modals/DismissiblePopupModal'
 import ErrorModal from './components/modals/ErrorModal'
 import SafeAreaModal from './components/modals/SafeAreaModal'
 import Record from './components/record/Record'
@@ -40,6 +42,7 @@ import { TourBox } from './components/tour/TourBox'
 import { Banner, BannerMessage, BannerSection } from './components/views/Banner'
 import HomeFooterView from './components/views/HomeFooterView'
 import KeyboardView from './components/views/KeyboardView'
+import ScreenWrapper from './components/views/ScreenWrapper'
 import { attemptLockoutConfig, PINRules, tours, walletTimeout } from './constants'
 import { defaultConfig, defaultHistoryEventsLogger } from './container-impl'
 import * as contexts from './contexts'
@@ -53,6 +56,7 @@ import { useDeveloperMode } from './hooks/developer-mode'
 import usePreventScreenCapture from './hooks/screen-capture'
 import useBifoldAgentSetup from './hooks/useBifoldAgentSetup'
 import { OpenIDCredentialRecordProvider } from './modules/openid/context/OpenIDCredentialRecordProvider'
+import { RefreshOrchestrator } from './modules/openid/refresh/refreshOrchestrator'
 import { DefaultScreenLayoutOptions } from './navigators/defaultLayoutOptions'
 import { DefaultScreenOptionsDictionary, useDefaultStackOptions } from './navigators/defaultStackOptions'
 import AttemptLockout from './screens/AttemptLockout'
@@ -61,6 +65,7 @@ import Developer from './screens/Developer'
 import Onboarding from './screens/Onboarding'
 import OnboardingPages from './screens/OnboardingPages'
 import Preface from './screens/Preface'
+import RenameWallet from './screens/RenameWallet'
 import Scan from './screens/Scan'
 import Splash from './screens/Splash'
 import Terms from './screens/Terms'
@@ -68,12 +73,15 @@ import UpdateAvailable from './screens/UpdateAvailable'
 import ExportWallet from './screens/ExportWallet'
 import ImportWallet from './screens/ImportWallet'
 import { AbstractBifoldLogger } from './services/AbstractBifoldLogger'
+import { AgentBridge } from './services/AgentBridge'
 import { bifoldLoggerInstance } from './services/bifoldLogger'
 import { isBiometricsActive, loadLoginAttempt } from './services/keychain'
 import { BifoldLogger } from './services/logger'
+import { MockLogger } from './testing/MockLogger'
 import { DeepPartial, ThemeBuilder } from './theme-builder'
 import * as types from './types'
 import { CredentialListFooterProps } from './types/credential-list-footer'
+import { QrCodeScanError } from './types/error'
 
 export { animatedComponents } from './animated-components'
 export { EventTypes, LocalStorageKeys } from './constants'
@@ -93,6 +101,7 @@ export { createStyles } from './screens/OnboardingPages'
 export * from './services/storage'
 export { bifoldTheme, ColorPalette, Assets as ImageAssets } from './theme'
 export * from './types/attestation'
+export * from './types/auto-credential'
 export { BifoldError } from './types/error'
 export { Screens, Stacks, TabStacks } from './types/navigators'
 export * from './types/version-check'
@@ -100,11 +109,14 @@ export { createLinkSecretIfRequired, getAgentModules } from './utils/agent'
 export { getCredentialIdentifiers, isValidAnonCredsCredential } from './utils/credential'
 export {
   connectFromScanOrDeepLink,
+  createConnectionInvitation,
   formatTime,
   getConnectionName,
   removeExistingInvitationsById,
   useCredentialConnectionLabel,
 } from './utils/helpers'
+export { FileCache } from './utils/fileCache'
+export type { CacheDataFile } from './utils/fileCache'
 export { seedTestContacts, clearTestContacts } from './utils/seedTestCredentials'
 export {
   DTG_CONTEXT,
@@ -112,13 +124,18 @@ export {
   CUSTOM_CONTEXTS,
   DTG_CONTEXT_URL,
   RELATIONSHIP_CONTEXT_URL,
+  RCARD_CONTEXT_URL,
 } from './modules/vrc'
-export { DTG_CONTEXT_DOCUMENT, RELATIONSHIP_CONTEXT_DOCUMENT } from './modules/vrc'
+export { DTG_CONTEXT_DOCUMENT, RELATIONSHIP_CONTEXT_DOCUMENT, RCARD_CONTEXT_DOCUMENT } from './modules/vrc'
 export { getIndyLedgers, IndyLedger, readIndyLedgersFromFile, writeIndyLedgersToFile } from './utils/ledger'
 export { statusBarStyleForColor, StatusBarStyles } from './utils/luminance'
 export { migrateToAskar } from './utils/migration'
 export { buildFieldsFromAnonCredsCredential } from './utils/oca'
+export { parsedSchema } from './utils/schema'
 export { testIdForAccessabilityLabel, testIdWithKey } from './utils/testable'
+
+export { default as OpenIDCredentialDetails } from './modules/openid/screens/OpenIDCredentialDetails'
+export { default as CredentialDetails } from './screens/CredentialDetails'
 
 export type { AnimatedComponents } from './animated-components'
 export type { ReducerAction } from './contexts/reducers/store'
@@ -174,8 +191,17 @@ export {
   getOrCreateRelationshipDid,
   setRelationshipDidOnConnection,
   setupVrcConnectionHandler,
+  migrateRCardTemplateProofs,
+  buildRCardCredential,
+  resolveContactDisplayInfo,
+  isReceivedRCard,
   createRelationshipInvitation,
   createVrcDocumentLoader,
+  DATA_INTEGRITY_PROOF_TYPE,
+  EDDSA_RDFC_2022_CRYPTOSUITE_NAME,
+  EddsaRdfc2022DataIntegritySuite,
+  DataIntegritySuiteModule,
+  runDataIntegritySelfTest,
   initializeVrcModule,
   registerVrcDisplayHandlers,
   registerVrcWithContainer,
@@ -187,6 +213,7 @@ export type {
   CustomTags,
   DefaultRelationshipDidRecordTags,
   VrcRegistrationOptions,
+  DataIntegritySelfTestResult,
 } from './modules/vrc'
 
 // VRC Biometric confirmation
@@ -247,12 +274,17 @@ export type { OnboardingStackProps } from './navigators/OnboardingStack'
 export type { SplashProps } from './screens/Splash'
 export { BaseTourID } from './types/tour'
 
+export type { ScanCameraProps } from './components/misc/ScanCamera'
+export type { DismissiblePopupModalProps } from './components/modals/DismissiblePopupModal'
 export type { BannerSectionProps } from './components/views/Banner'
+export { OpenIDCredentialRefreshFlowType } from './modules/openid/refresh/types'
+export type { IRefreshOrchestrator } from './modules/openid/refresh/types'
 
 export {
   AbstractBifoldLogger,
   ActivityProvider,
   Agent,
+  AgentBridge,
   AgentProvider,
   AttachTourStep,
   AttemptLockout,
@@ -273,7 +305,6 @@ export {
   ContentGradient,
   contexts,
   createApp,
-  CredentialCard,
   contactOfferTourSteps,
   contactsTourSteps,
   credentialOfferTourSteps,
@@ -284,6 +315,7 @@ export {
   DefaultScreenOptionsDictionary,
   Developer,
   DeveloperModal,
+  DismissiblePopupModal,
   ErrorBoundaryWrapper,
   ErrorModal,
   ExportWallet,
@@ -301,6 +333,7 @@ export {
   Link,
   loadLoginAttempt,
   MaskType,
+  MockLogger,
   NavContainer,
   NetworkProvider,
   NotificationListItem,
@@ -310,10 +343,16 @@ export {
   PINRules,
   Preface,
   proofRequestTourSteps,
+  QrCodeScanError,
+  QRRenderer,
   QRScannerTorch,
   Record,
+  RefreshOrchestrator,
+  RenameWallet,
   SafeAreaModal,
   Scan,
+  ScanCamera,
+  ScreenWrapper,
   Splash,
   SVGOverlay,
   Terms,
@@ -336,3 +375,24 @@ export {
   walletTimeout,
 }
 export type { BannerMessage, DeepPartial, IButton }
+
+// Reusable screens for embedding in consumer-side nav graphs that don't register
+// Bifold's ConnectionStack / ContactStack hierarchy verbatim.
+export { default as Connection } from './screens/Connection'
+export { default as CredentialOffer } from './screens/CredentialOffer'
+export { default as ProofRequest } from './screens/ProofRequest'
+
+// Loading view used by consumer-side connection-loading screens while a proof
+// or credential-offer notification is awaited.
+export { default as LoadingPlaceholder, LoadingPlaceholderWorkflowType } from './components/views/LoadingPlaceholder'
+
+// Hooks that let consumers detect when a notification (offer / proof) has
+// arrived for a freshly received out-of-band invitation.
+export { useConnectionByOutOfBandId, useOutOfBandByConnectionId, useOutOfBandById } from './hooks/connections'
+export { useNotifications } from './hooks/notifications'
+export type { NotificationItemType, NotificationReturnType, NotificationsInputProps } from './hooks/notifications'
+
+// URL classifiers consumer-side scan dispatchers use to recognize and reject
+// OpenID / mediator URIs before parsing them as DIDComm OOB invitations.
+export { isMediatorInvitation } from './utils/mediatorhelpers'
+export { isDidCommInvitation, isOpenIdCredentialOffer, isOpenIdPresentationRequest } from './utils/parsers'

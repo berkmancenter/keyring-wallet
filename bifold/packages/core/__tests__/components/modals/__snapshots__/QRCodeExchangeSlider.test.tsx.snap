@@ -3,7 +3,6 @@
 exports[`QRCodeExchangeSlider Component Renders correctly when visible 1`] = `
 <Modal
   animationType="slide"
-  hardwareAccelerated={false}
   onRequestClose={[MockFunction]}
   transparent={true}
   visible={true}
@@ -215,9 +214,7 @@ exports[`QRCodeExchangeSlider Component Renders correctly when visible 1`] = `
           accessible={true}
           collapsable={false}
           focusable={true}
-          onBlur={[Function]}
           onClick={[Function]}
-          onFocus={[Function]}
           onResponderGrant={[Function]}
           onResponderMove={[Function]}
           onResponderRelease={[Function]}
@@ -225,19 +222,12 @@ exports[`QRCodeExchangeSlider Component Renders correctly when visible 1`] = `
           onResponderTerminationRequest={[Function]}
           onStartShouldSetResponder={[Function]}
           style={
-            Array [
-              Object {
-                "overflow": "hidden",
-              },
-              Object {
-                "backgroundColor": "#42803E",
-                "borderRadius": 4,
-                "padding": 16,
-              },
-              false,
-              false,
-              false,
-            ]
+            Object {
+              "backgroundColor": "#42803E",
+              "borderRadius": 4,
+              "opacity": 1,
+              "padding": 16,
+            }
           }
           testID="com.ariesbifold:id/ScanQRCode"
         >
@@ -266,7 +256,6 @@ exports[`QRCodeExchangeSlider Component Renders correctly when visible 1`] = `
                       "fontWeight": "bold",
                       "textAlign": "center",
                     },
-                    false,
                     false,
                     false,
                   ],
@@ -308,9 +297,7 @@ exports[`QRCodeExchangeSlider Component Renders correctly when visible 1`] = `
           accessible={true}
           collapsable={false}
           focusable={true}
-          onBlur={[Function]}
           onClick={[Function]}
-          onFocus={[Function]}
           onResponderGrant={[Function]}
           onResponderMove={[Function]}
           onResponderRelease={[Function]}
@@ -318,19 +305,12 @@ exports[`QRCodeExchangeSlider Component Renders correctly when visible 1`] = `
           onResponderTerminationRequest={[Function]}
           onStartShouldSetResponder={[Function]}
           style={
-            Array [
-              Object {
-                "overflow": "hidden",
-              },
-              Object {
-                "backgroundColor": "#42803E",
-                "borderRadius": 4,
-                "padding": 16,
-              },
-              false,
-              false,
-              false,
-            ]
+            Object {
+              "backgroundColor": "#42803E",
+              "borderRadius": 4,
+              "opacity": 1,
+              "padding": 16,
+            }
           }
           testID="com.ariesbifold:id/GenerateQRCode"
         >
@@ -359,7 +339,6 @@ exports[`QRCodeExchangeSlider Component Renders correctly when visible 1`] = `
                       "fontWeight": "bold",
                       "textAlign": "center",
                     },
-                    false,
                     false,
                     false,
                   ],

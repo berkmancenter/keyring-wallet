@@ -1,19 +1,20 @@
-import { CredentialState } from '@credo-ts/core'
-import { useCredentialById } from '@credo-ts/react-hooks'
+import { useCredentialById, useAgent } from '@bifold/react-hooks'
+import { DidCommCredentialState } from '@credo-ts/didcomm'
 import { useNavigation, CommonActions } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AccessibilityInfo, ScrollView, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { AccessibilityInfo, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../components/buttons/Button'
 import SafeAreaModal from '../components/modals/SafeAreaModal'
 import { useAnimatedComponents } from '../contexts/animated-components'
 import { useTheme } from '../contexts/theme'
-import { Stacks, TabStacks } from '../types/navigators'
+import { Screens, Stacks, TabStacks } from '../types/navigators'
 import { testIdWithKey } from '../utils/testable'
 import { TOKENS, useServices } from '../container-api'
 import { ThemedText } from '../components/texts/ThemedText'
+import { ensureCredentialMetadata } from '../utils/credential'
+import ScreenWrapper from '../components/views/ScreenWrapper'
 
 enum DeliveryStatus {
   Pending,
@@ -39,6 +40,7 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
   navigateToContacts,
 }) => {
   const { t } = useTranslation()
+  const { agent } = useAgent()
   const [shouldShowDelayMessage, setShouldShowDelayMessage] = useState<boolean>(false)
   const [credentialDeliveryStatus, setCredentialDeliveryStatus] = useState<DeliveryStatus>(DeliveryStatus.Pending)
   const [timerDidFire, setTimerDidFire] = useState<boolean>(false)
@@ -47,14 +49,9 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
   const navigation = useNavigation()
   const { ListItems } = useTheme()
   const { CredentialAdded, CredentialPending } = useAnimatedComponents()
-  const [{ connectionTimerDelay }] = useServices([TOKENS.CONFIG])
+  const [{ connectionTimerDelay }, logger] = useServices([TOKENS.CONFIG, TOKENS.UTIL_LOGGER])
   const connTimerDelay = connectionTimerDelay ?? 10000 // in ms
   const styles = StyleSheet.create({
-    container: {
-      ...ListItems.credentialOfferBackground,
-      height: '100%',
-      padding: 20,
-    },
     image: {
       marginTop: 20,
     },
@@ -64,10 +61,6 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
     messageText: {
       textAlign: 'center',
       marginTop: 30,
-    },
-    controlsContainer: {
-      marginTop: 'auto',
-      margin: 20,
     },
     delayMessageText: {
       textAlign: 'center',
@@ -80,7 +73,7 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
   }
 
   const onBackToHomeTouched = useCallback(() => {
-    navigation.getParent()?.navigate(Stacks.TabStack)
+    navigation.getParent()?.navigate(TabStacks.HomeStack, { screen: Screens.Home })
   }, [navigation])
 
   const onDoneTouched = useCallback(() => {
@@ -101,20 +94,7 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
         })
       )
     } else {
-      // Default: navigate to Credentials/Wallet
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [
-            {
-              name: Stacks.TabStack,
-              state: {
-                routes: [{ name: TabStacks.CredentialStack }],
-              },
-            },
-          ],
-        })
-      )
+      navigation.getParent()?.navigate(TabStacks.CredentialStack, { screen: Screens.Credentials })
     }
   }, [navigation, navigateToContacts])
 
@@ -122,11 +102,22 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
     if (!credential) {
       return
     }
-    if (credential.state === CredentialState.CredentialReceived || credential.state === CredentialState.Done) {
+    if (credential.state === DidCommCredentialState.CredentialReceived || credential.state === DidCommCredentialState.Done) {
       timer && clearTimeout(timer)
       setCredentialDeliveryStatus(DeliveryStatus.Completed)
+
+      const restoreMetadata = async () => {
+        if (agent) {
+          try {
+            await ensureCredentialMetadata(credential, agent, undefined, logger)
+          } catch (error) {
+            logger?.warn('Failed to restore credential metadata', { error: error as Error })
+          }
+        }
+      }
+      restoreMetadata()
     }
-  }, [credential, timer])
+  }, [credential, timer, agent, logger])
 
   useEffect(() => {
     if (confirmationOnly) {
@@ -158,75 +149,73 @@ const CredentialOfferAccept: React.FC<CredentialOfferAcceptProps> = ({
     }
   }, [shouldShowDelayMessage, credentialDeliveryStatus, t])
 
+  const controls = (
+    <>
+      {credentialDeliveryStatus === DeliveryStatus.Pending && (
+        <Button
+          title={t('Loading.BackToHome')}
+          accessibilityLabel={t('Loading.BackToHome')}
+          testID={testIdWithKey('BackToHome')}
+          onPress={onBackToHomeTouched}
+          buttonType={ButtonType.ModalSecondary}
+        />
+      )}
+
+      {credentialDeliveryStatus === DeliveryStatus.Completed && (
+        <Button
+          title={t('Global.Done')}
+          accessibilityLabel={t('Global.Done')}
+          testID={testIdWithKey('Done')}
+          onPress={onDoneTouched}
+          buttonType={ButtonType.ModalPrimary}
+        />
+      )}
+    </>
+  )
+
   return (
-    <SafeAreaModal visible={visible} transparent={true} animationType={'none'}>
-      <SafeAreaView style={{ ...ListItems.credentialOfferBackground }}>
-        <ScrollView style={styles.container}>
-          <View style={styles.messageContainer}>
-            {credentialDeliveryStatus === DeliveryStatus.Pending && (
-              <ThemedText
-                style={[ListItems.credentialOfferTitle, styles.messageText]}
-                testID={testIdWithKey(navigateToContacts ? 'ContactOnTheWay' : 'CredentialOnTheWay')}
-              >
-                {t((navigateToContacts ? 'Contacts.ContactOnTheWay' : 'CredentialOffer.CredentialOnTheWay') as any)}
-              </ThemedText>
-            )}
-
-            {credentialDeliveryStatus === DeliveryStatus.Completed && (
-              <ThemedText
-                style={[ListItems.credentialOfferTitle, styles.messageText]}
-                testID={testIdWithKey(navigateToContacts ? 'ContactAddedToYourWallet' : 'CredentialAddedToYourWallet')}
-              >
-                {t(
-                  (navigateToContacts
-                    ? 'Contacts.ContactAddedToYourWallet'
-                    : 'CredentialOffer.CredentialAddedToYourWallet') as any
-                )}
-              </ThemedText>
-            )}
-          </View>
-
-          <View style={[styles.image, { minHeight: 250, alignItems: 'center', justifyContent: 'flex-end' }]}>
-            {credentialDeliveryStatus === DeliveryStatus.Completed && <CredentialAdded />}
-            {credentialDeliveryStatus === DeliveryStatus.Pending && <CredentialPending />}
-          </View>
-
-          {shouldShowDelayMessage && credentialDeliveryStatus === DeliveryStatus.Pending && (
-            <ThemedText
-              style={[ListItems.credentialOfferDetails, styles.delayMessageText]}
-              testID={testIdWithKey('TakingTooLong')}
-            >
-              {t('Connection.TakingTooLong')}
-            </ThemedText>
-          )}
-        </ScrollView>
-
-        <View style={styles.controlsContainer}>
+    <SafeAreaModal visible={visible} transparent animationType="none">
+      <ScreenWrapper edges={['bottom', 'top', 'left', 'right']} controls={controls}>
+        <View style={styles.messageContainer}>
           {credentialDeliveryStatus === DeliveryStatus.Pending && (
-            <View>
-              <Button
-                title={t('Loading.BackToHome')}
-                accessibilityLabel={t('Loading.BackToHome')}
-                testID={testIdWithKey('BackToHome')}
-                onPress={onBackToHomeTouched}
-                buttonType={ButtonType.ModalSecondary}
-              />
-            </View>
+            <ThemedText
+              style={[ListItems.credentialOfferTitle, styles.messageText]}
+              testID={testIdWithKey(navigateToContacts ? 'ContactOnTheWay' : 'CredentialOnTheWay')}
+            >
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {t((navigateToContacts ? 'Contacts.ContactOnTheWay' : 'CredentialOffer.CredentialOnTheWay') as any)}
+            </ThemedText>
           )}
 
           {credentialDeliveryStatus === DeliveryStatus.Completed && (
-            <View>
-              <Button
-                title={t('Global.Done')}
-                accessibilityLabel={t('Global.Done')}
-                testID={testIdWithKey('Done')}
-                onPress={onDoneTouched}
-                buttonType={ButtonType.ModalPrimary}
-              />
-            </View>
+            <ThemedText
+              style={[ListItems.credentialOfferTitle, styles.messageText]}
+              testID={testIdWithKey(navigateToContacts ? 'ContactAddedToYourWallet' : 'CredentialAddedToYourWallet')}
+            >
+              {t(
+                (navigateToContacts
+                  ? 'Contacts.ContactAddedToYourWallet'
+                  : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    'CredentialOffer.CredentialAddedToYourWallet') as any
+              )}
+            </ThemedText>
           )}
         </View>
-      </SafeAreaView>
+
+        <View style={[styles.image, { minHeight: 250, alignItems: 'center', justifyContent: 'flex-end' }]}>
+          {credentialDeliveryStatus === DeliveryStatus.Completed && <CredentialAdded />}
+          {credentialDeliveryStatus === DeliveryStatus.Pending && <CredentialPending />}
+        </View>
+
+        {shouldShowDelayMessage && credentialDeliveryStatus === DeliveryStatus.Pending && (
+          <ThemedText
+            style={[ListItems.credentialOfferDetails, styles.delayMessageText]}
+            testID={testIdWithKey('TakingTooLong')}
+          >
+            {t('Connection.TakingTooLong')}
+          </ThemedText>
+        )}
+      </ScreenWrapper>
     </SafeAreaModal>
   )
 }

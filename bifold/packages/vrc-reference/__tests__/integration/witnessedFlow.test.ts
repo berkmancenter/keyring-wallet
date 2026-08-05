@@ -57,11 +57,11 @@ describe('Witnessed Flow Integration', () => {
 
     // Wait for Bob's connection to be ready
     await waitForCondition(async () => {
-      const bobConns = await bob.agent.connections.getAll()
+      const bobConns = await bob.agent.modules.didcomm.connections.getAll()
       return bobConns.length > 0 && bobConns.some((c) => c.state === 'completed')
     }, 15000)
 
-    const bobConnections = await bob.agent.connections.getAll()
+    const bobConnections = await bob.agent.modules.didcomm.connections.getAll()
     bobAliceConnectionId = bobConnections[0].id
     bob.connectionRecordId = bobAliceConnectionId
 
@@ -91,10 +91,10 @@ describe('Witnessed Flow Integration', () => {
     console.log(`  Bob R-DID: ${bobIssuerDid}`)
 
     // Both sides explicitly send their R-DIDs
-    await bob.agent.basicMessages.sendMessage(bobAliceConnectionId, JSON.stringify({ rDid: bobIssuerDid }))
+    await bob.agent.modules.didcomm.basicMessages.sendMessage(bobAliceConnectionId, JSON.stringify({ rDid: bobIssuerDid }))
     console.log('✓ Bob shared R-DID with Alice')
 
-    await alice.agent.basicMessages.sendMessage(aliceBobConnectionId, JSON.stringify({ rDid: aliceIssuerDid }))
+    await alice.agent.modules.didcomm.basicMessages.sendMessage(aliceBobConnectionId, JSON.stringify({ rDid: aliceIssuerDid }))
     console.log('✓ Alice shared R-DID with Bob\n')
 
     // Wait for basic message processing
@@ -116,18 +116,18 @@ describe('Witnessed Flow Integration', () => {
 
     await Promise.race([
       waitForCondition(async () => {
-        const aliceConns = await alice.agent.connections.getAll()
+        const aliceConns = await alice.agent.modules.didcomm.connections.getAll()
         return aliceConns.length >= 2
       }, 10000),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Alice-Witness connection timeout')), 15000)),
     ])
 
     // Get witness's connection IDs (not Alice/Bob's IDs)
-    let witnessConnections = await witness.agent.connections.getAll()
+    let witnessConnections = await witness.agent.modules.didcomm.connections.getAll()
     aliceWitnessConnectionId = witnessConnections[0].id // Witness's connection to Alice
 
     // Get Alice's connection ID to witness (from Alice's perspective)
-    const aliceConns = await alice.agent.connections.getAll()
+    const aliceConns = await alice.agent.modules.didcomm.connections.getAll()
     aliceConnectionToWitness = aliceConns.find((c) => c.id !== aliceBobConnectionId)!.id
 
     console.log('✓ Alice and Witness connected\n')
@@ -135,19 +135,24 @@ describe('Witnessed Flow Integration', () => {
     // Connect Bob to Witness
     const witnessBobInvite = await witness.createConnectionInvitation()
 
-    const { connectionRecord: bobWitnessConn } = await bob.agent.oob.receiveInvitationFromUrl(witnessBobInvite)
+    // credo 0.6 requires the config argument — omitting it throws
+    // "Cannot destructure property 'routing' of 'config' as it is undefined"
+    const { connectionRecord: bobWitnessConn } = await bob.agent.modules.didcomm.oob.receiveInvitationFromUrl(
+      witnessBobInvite,
+      { label: 'bob' }
+    )
 
     await Promise.race([
-      bob.agent.connections.returnWhenIsConnected(bobWitnessConn!.id),
+      bob.agent.modules.didcomm.connections.returnWhenIsConnected(bobWitnessConn!.id),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Bob-Witness connection timeout')), 15000)),
     ])
 
     // Get witness's connection ID to Bob
-    witnessConnections = await witness.agent.connections.getAll()
+    witnessConnections = await witness.agent.modules.didcomm.connections.getAll()
     bobWitnessConnectionId = witnessConnections.find((c) => c.id !== aliceWitnessConnectionId)!.id
 
     // Get Bob's connection ID to witness (from Bob's perspective)
-    const bobConns = await bob.agent.connections.getAll()
+    const bobConns = await bob.agent.modules.didcomm.connections.getAll()
     bobConnectionToWitness = bobConns.find((c) => c.id !== bobAliceConnectionId)!.id
 
     console.log('✓ Bob and Witness connected\n')
@@ -469,8 +474,8 @@ describe('Witnessed Flow Integration', () => {
 
       // Verify that credentials were received
       // Note: In the current implementation, Alice and Bob auto-accept credentials
-      const aliceCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
-      const bobCredentials = await bob.agent.w3cCredentials.getAllCredentialRecords()
+      const aliceCredentials = await alice.agent.w3cCredentials.getAll()
+      const bobCredentials = await bob.agent.w3cCredentials.getAll()
 
       console.log('📊 CREDENTIAL COUNTS:')
       console.log('  Alice holds', aliceCredentials.length, 'credential(s)')

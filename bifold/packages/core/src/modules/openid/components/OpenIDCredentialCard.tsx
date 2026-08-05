@@ -17,16 +17,19 @@ import { testIdWithKey } from '../../../utils/testable'
 import { credentialTextColor, toImageSource } from '../../../utils/credential'
 import { useTheme } from '../../../contexts/theme'
 import { SvgUri } from 'react-native-svg'
-import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
 import { getCredentialForDisplay } from '../display'
 import { BifoldError } from '../../../types/error'
 import { EventTypes } from '../../../constants'
 import { Attribute } from '@bifold/oca/build/legacy'
 import { getAttributeField } from '../../../utils/oca'
+import { useCredentialErrorsFromRegistry } from '../hooks/useCredentialErrorsFromRegistry'
+import { CredentialErrors } from '../../../types/credentials'
+import { OpenIDCredentialRecord } from '../credentialRecord'
+import CredentialCardStatusBadge from '../../../components/misc/CredentialCardStatusBadge'
 
 interface CredentialCardProps {
   credentialDisplay?: W3cCredentialDisplay
-  credentialRecord?: W3cCredentialRecord | SdJwtVcRecord | MdocRecord
+  credentialRecord?: OpenIDCredentialRecord
   onPress?: GenericFn
   style?: ViewStyle
 }
@@ -46,6 +49,11 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
 
+  const computedErrors = useCredentialErrorsFromRegistry(credentialRecord, [])
+  const isInvalid = useMemo(() => {
+    return computedErrors.includes(CredentialErrors.Revoked)
+  }, [computedErrors])
+
   const display = useMemo((): CredentialDisplay | undefined => {
     if (credentialDisplay) return credentialDisplay.display
 
@@ -59,7 +67,7 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
       DeviceEventEmitter.emit(EventTypes.ERROR_ADDED, error)
       return
     }
-    const result = getCredentialForDisplay(credentialRecord as W3cCredentialRecord)
+    const result = getCredentialForDisplay(credentialRecord)
     return result.display
   }, [credentialDisplay, credentialRecord, t])
 
@@ -71,6 +79,7 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
   const { width } = useWindowDimensions()
   const cardHeight = width * 0.55 // a card height is half of the screen width
   const cardHeaderHeight = cardHeight / 4 // a card has a total of 4 rows, and the header occupy 1 row
+  const cardBackgroundColor = display?.backgroundColor ?? ColorPalette.brand.credentialCardPlaceholderBackground
 
   const styles = StyleSheet.create({
     container: {},
@@ -78,7 +87,7 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
       marginBottom: 30,
     },
     cardContainer: {
-      backgroundColor: display?.backgroundColor ? display.backgroundColor : transparent,
+      backgroundColor: cardBackgroundColor,
       height: cardHeight,
       borderRadius: borderRadius,
     },
@@ -104,7 +113,7 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
     innerHeaderCredInfoContainer: {
       flex: 3,
       alignItems: 'flex-end',
-      marginRight: paddingHorizontal,
+      marginRight: paddingHorizontal + (isInvalid ? cardHeaderHeight : 0),
     },
     bodyContainer: {
       flexGrow: 1,
@@ -118,15 +127,14 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
       borderBottomLeftRadius: borderRadius,
       borderBottomRightRadius: borderRadius,
     },
-    revokedFooter: {
-      backgroundColor: ColorPalette.notification.error,
-      flexGrow: 1,
-      marginHorizontal: -1 * paddingHorizontal,
-      marginVertical: -1 * paddingVertical,
-      paddingHorizontal: paddingHorizontal,
-      paddingVertical: paddingVertical,
+    statusContainer: {
+      backgroundColor: transparent,
+      borderTopRightRadius: borderRadius,
       borderBottomLeftRadius: borderRadius,
-      borderBottomRightRadius: borderRadius,
+      height: cardHeaderHeight,
+      width: cardHeaderHeight,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     flexGrow: {
       flexGrow: 1,
@@ -139,13 +147,13 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
     credentialInfoContainer: {},
     titleFontCredentialName: {
       ...TextTheme.labelTitle,
-      color: display?.textColor ?? credentialTextColor(ColorPalette, display?.backgroundColor),
+      color: display?.textColor ?? credentialTextColor(ColorPalette, cardBackgroundColor),
       textAlignVertical: 'center',
       marginBottom: 8,
     },
     titleFontCredentialDescription: {
       ...TextTheme.label,
-      color: display?.textColor ?? credentialTextColor(ColorPalette, display?.backgroundColor),
+      color: display?.textColor ?? credentialTextColor(ColorPalette, cardBackgroundColor),
       textAlignVertical: 'center',
     },
   })
@@ -155,7 +163,7 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
   const logoContaineter = (logo: DisplayImage | undefined) => {
     const width = 64
     const height = 48
-    const src = logo?.url
+    const src = logo?.uri
     if (!src) {
       return <View />
     }
@@ -178,6 +186,11 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
   const CardHeader: React.FC = () => {
     return (
       <View style={[styles.outerHeaderContainer]}>
+        <CredentialCardStatusBadge
+          status={isInvalid ? 'error' : undefined}
+          logoHeight={cardHeaderHeight}
+          containerStyle={styles.statusContainer}
+        />
         <View testID={testIdWithKey('CredentialCardHeader')} style={[styles.innerHeaderContainer]}>
           <View style={styles.innerHeaderContainerCredLogo}>{logoContaineter(display?.logo)}</View>
           <View style={styles.innerHeaderCredInfoContainer}>
@@ -221,7 +234,7 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
           style={[
             TextTheme.caption,
             {
-              color: display?.textColor ?? credentialTextColor(ColorPalette, display?.backgroundColor),
+              color: display?.textColor ?? credentialTextColor(ColorPalette, cardBackgroundColor),
             },
           ]}
           testID={testIdWithKey('CredentialIssued')}
@@ -258,7 +271,7 @@ const OpenIDCredentialCard: React.FC<CredentialCardProps> = ({
         <View style={[styles.flexGrow, { overflow: 'hidden' }]} testID={testIdWithKey('CredentialCard')}>
           {display?.backgroundImage ? (
             <ImageBackground
-              source={toImageSource(display.backgroundImage.url)}
+              source={toImageSource(display.backgroundImage.uri)}
               style={styles.flexGrow}
               imageStyle={{ borderRadius }}
             >

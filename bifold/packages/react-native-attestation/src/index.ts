@@ -391,3 +391,11 @@ export const verifyHardwareEvidence = async (
     revocationChecked: result.revocationChecked,
   };
 };
+
+export const getAppStoreReceipt = async (): Promise<string> => {
+  if (Platform.OS !== 'ios') {
+    throw new Error('getAppStoreReceipt is only available on iOS');
+  }
+
+  return await Attestation.getAppStoreReceipt();
+};

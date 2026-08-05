@@ -3,6 +3,7 @@ import figlet from 'figlet'
 import { prompt } from 'inquirer'
 
 import { BaseInquirer, ConfirmOptions } from './BaseInquirer'
+import { Title, greenText, purpleText, redText } from './OutputClass'
 import { Witness } from './Witness'
 import { Listener } from './Listener'
 
@@ -85,7 +86,7 @@ export class WitnessInquirer extends BaseInquirer {
   }
 
   public async listConnections() {
-    const connections = await this.witness.agent.connections.getAll()
+    const connections = await this.witness.agent.modules.didcomm.connections.getAll()
 
     if (connections.length === 0) {
       console.log('\nNo connections yet.\n')
@@ -102,7 +103,7 @@ export class WitnessInquirer extends BaseInquirer {
   }
 
   public async createSession() {
-    const connections = await this.witness.agent.connections.getAll()
+    const connections = await this.witness.agent.modules.didcomm.connections.getAll()
 
     if (connections.length < 2) {
       console.log('\nNeed at least 2 connections to create a witnessed session.\n')
@@ -223,7 +224,7 @@ export class WitnessInquirer extends BaseInquirer {
   }
 
   public async message() {
-    const connections = await this.witness.agent.connections.getAll()
+    const connections = await this.witness.agent.modules.didcomm.connections.getAll()
 
     if (connections.length === 0) {
       console.log('\nNo connections available to send messages.\n')

@@ -2,7 +2,7 @@ import { useNavigation } from '@react-navigation/native'
 import { render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { container } from 'tsyringe'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 
 import { ContainerProvider } from '../../src/container-api'
 import { MainContainer } from '../../src/container-impl'
@@ -33,7 +33,7 @@ describe('Scan Screen', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     // @ts-expect-error useAgent will be replaced with a mock which will have this method
-    useAgent().agent?.oob.createInvitation.mockReturnValue({
+    useAgent().agent?.modules.didcomm.oob.createInvitation.mockReturnValue({
       outOfBandInvitation: {
         toUrl: () => {
           return 'https://example.com/invitation'

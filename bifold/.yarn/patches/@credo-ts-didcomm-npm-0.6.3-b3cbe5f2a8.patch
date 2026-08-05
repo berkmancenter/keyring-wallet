@@ -1,0 +1,83 @@
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.d.mts b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.d.mts
+index 1175bf65bbd5328b3dc3c08d6bfbba65e460c949..286beea925df63ee4303800f355c4989f9411b44 100644
+--- a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.d.mts
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.d.mts
+@@ -13,6 +13,7 @@ interface DidCommJsonLdCredentialDetailOptionsOptions {
+   challenge?: string;
+   credentialStatus?: DidCommJsonLdCredentialDetailCredentialStatus;
+   proofType: string;
++  cryptosuite?: string;
+ }
+ declare class DidCommJsonLdCredentialDetailOptions {
+   constructor(options: DidCommJsonLdCredentialDetailOptionsOptions);
+@@ -21,6 +22,7 @@ declare class DidCommJsonLdCredentialDetailOptions {
+   domain?: string;
+   challenge?: string;
+   proofType: string;
++  cryptosuite?: string;
+   credentialStatus?: DidCommJsonLdCredentialDetailCredentialStatus;
+ }
+ //#endregion
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.mjs b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.mjs
+index 16e977f4701e036b2d67b147c6bc4fb921256afa..96a2185d1c41642fc323be053cbc4eedb18439a4 100644
+--- a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.mjs
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.mjs
+@@ -19,6 +19,10 @@ var DidCommJsonLdCredentialDetailOptions = class {
+ 			this.challenge = options.challenge;
+ 			this.credentialStatus = options.credentialStatus;
+ 			this.proofType = options.proofType;
++			// KEYRING PATCH (Data Integrity): DataIntegrityProof proofs carry the
++			// concrete algorithm in proof.cryptosuite; the request options must be
++			// able to pin it (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 5 Option B).
++			this.cryptosuite = options.cryptosuite;
+ 		}
+ 	}
+ };
+@@ -39,6 +43,11 @@ __decorate([
+ 	__decorateMetadata("design:type", String)
+ ], DidCommJsonLdCredentialDetailOptions.prototype, "challenge", void 0);
+ __decorate([IsString(), __decorateMetadata("design:type", String)], DidCommJsonLdCredentialDetailOptions.prototype, "proofType", void 0);
++__decorate([
++	IsString(),
++	IsOptional(),
++	__decorateMetadata("design:type", String)
++], DidCommJsonLdCredentialDetailOptions.prototype, "cryptosuite", void 0);
+ __decorate([
+ 	IsOptional(),
+ 	IsObject(),
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts
+index f6c655038122a044377ee872e4d5b17a6c1bbd89..0c759a06544dc17151c583e00e1a437add1dd884 100644
+--- a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts
+@@ -20,6 +20,7 @@ interface DidCommJsonLdCredentialDetailFormat {
+   options: {
+     proofPurpose: string;
+     proofType: string;
++    cryptosuite?: string;
+   };
+ }
+ type EmptyObject = Record<string, never>;
+@@ -81,6 +82,7 @@ interface JsonLdFormatDataCredentialDetail {
+ interface JsonLdFormatDataCredentialDetailOptions {
+   proofPurpose: string;
+   proofType: string;
++  cryptosuite?: string;
+   created?: string;
+   domain?: string;
+   challenge?: string;
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormatService.mjs b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormatService.mjs
+index ef75c086b244014c31cbaa5ef3ca3d83f0b96507..64af8e41977562d2b64e93acbb733e85a767defc 100644
+--- a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormatService.mjs
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormatService.mjs
+@@ -188,6 +188,11 @@ var DidCommJsonLdCredentialFormatService = class {
+ 		if (credential.proof.domain !== request.options.domain) throw new CredoError("Received credential proof domain does not match domain from credential request");
+ 		if (credential.proof.challenge !== request.options.challenge) throw new CredoError("Received credential proof challenge does not match challenge from credential request");
+ 		if (credential.proof.type !== request.options.proofType) throw new CredoError("Received credential proof type does not match proof type from credential request");
++		// KEYRING PATCH (Data Integrity): when the request pins a cryptosuite
++		// (DataIntegrityProof), the received proof must carry the same one.
++		// Absent option (Ed25519Signature2018 path) keeps type-only matching
++		// (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 5 Option B).
++		if (request.options.cryptosuite !== void 0 && credential.proof.cryptosuite !== request.options.cryptosuite) throw new CredoError("Received credential proof cryptosuite does not match cryptosuite from credential request");
+ 		if (credential.proof.proofPurpose !== request.options.proofPurpose) throw new CredoError("Received credential proof purpose does not match proof purpose from credential request");
+ 		if (!utils.areObjectsEqual(jsonCredential, request.credential)) throw new CredoError("Received credential does not match credential request");
+ 	}

@@ -2,17 +2,17 @@ import globals from 'globals'
 import pluginJs from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactPlugin from 'eslint-plugin-react'
-import importPlugin from 'eslint-plugin-import';
-import reactHooks from 'eslint-plugin-react-hooks';
+import importPlugin from 'eslint-plugin-import'
+import reactHooks from 'eslint-plugin-react-hooks'
 import jestPlugin from 'eslint-plugin-jest'
 
 export default [
   {
     settings: {
-      "react": {
-        "version": "detect"
-      }
-    }
+      react: {
+        version: 'detect',
+      },
+    },
   },
   { files: ['**/*.{js,mjs,cjs,ts,jsx,tsx}'] },
   { files: ['**/*.js'], languageOptions: { sourceType: 'commonjs' } },
@@ -51,8 +51,14 @@ export default [
       ...reactHooks.configs.recommended.rules,
       ...reactPlugin.configs.flat.recommended.rules,
       'react/react-in-jsx-scope': 'off',
+      'react/prop-types': 'off',
       'react-hooks/exhaustive-deps': 'error',
-      'no-console': "error",
+      'no-console': 'error',
+      '@typescript-eslint/no-unused-expressions': ['error', { 
+        allowShortCircuit: true, 
+        allowTernary: true,
+        allowTaggedTemplates: true 
+      }],
     },
   },
   {
@@ -66,6 +72,7 @@ export default [
       'no-console': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-var-requires': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
       'no-case-declarations': 'off',
     },
   },
@@ -81,7 +88,6 @@ export default [
   },
   {
     ignores: [
-      'commitlint.config.js',
       'eslint.config.mjs',
       '.eslintrc-common.js',
       '**/.eslintrc.js',
@@ -98,6 +104,8 @@ export default [
       'packages/vrc-contexts/build/',
       'packages/core/lib/',
       'packages/legacy/core/lib',
+      'packages/react-hooks/build/',
+      'samples/app/lib/',
       'vrc_reference/**/dist/',
       'packages/witness-server/dist/',
     ],
@@ -118,6 +126,22 @@ export default [
       'jest/no-identical-title': 'error',
       'jest/prefer-to-have-length': 'warn',
       'jest/valid-expect': 'error',
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      'react/display-name': 'off',
+    },
+  },
+  {
+    files: ['**/app.config.js', '**/cli.js', '**/jestSetup.js', '**/jestSetupAfterEnv.js'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  // For images, inline require statements that metro needs
+  {
+    files: ['**/theme.ts', '**/theme.tsx'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
   {
@@ -125,6 +149,6 @@ export default [
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
-    }
+    },
   },
 ]

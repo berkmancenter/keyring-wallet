@@ -34,12 +34,12 @@ describe('Proof Exchange Integration', () => {
 
       // Wait for Alice to receive proof request
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'request-received')
       }, 8000)
 
       // Get proof request
-      const proofRecords = await alice.agent.proofs.getAll()
+      const proofRecords = await alice.agent.modules.didcomm.proofs.getAll()
       const proofRequest = proofRecords.find((r) => r.state === 'request-received')
       expect(proofRequest).toBeDefined()
 
@@ -48,24 +48,24 @@ describe('Proof Exchange Integration', () => {
 
       // Wait for Bob to receive the presentation
       await waitForCondition(async () => {
-        const records = await bob.agent.proofs.getAll()
+        const records = await bob.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'presentation-received')
       }, 10000)
 
       // Bob accepts/verifies the presentation (required because autoAcceptProofs is Never)
-      const bobProofRecords = await bob.agent.proofs.getAll()
+      const bobProofRecords = await bob.agent.modules.didcomm.proofs.getAll()
       const receivedPresentation = bobProofRecords.find((r) => r.state === 'presentation-received')
       expect(receivedPresentation).toBeDefined()
-      await bob.agent.proofs.acceptPresentation({ proofRecordId: receivedPresentation!.id })
+      await bob.agent.modules.didcomm.proofs.acceptPresentation({ proofExchangeRecordId: receivedPresentation!.id })
 
       // Wait for proof exchange to complete (state='done' on Alice's side)
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'done')
       }, 10000)
 
       // Verify proof exchange completed
-      const completedProofs = await alice.agent.proofs.getAll()
+      const completedProofs = await alice.agent.modules.didcomm.proofs.getAll()
       const completedProof = completedProofs.find((r) => r.state === 'done')
       expect(completedProof).toBeDefined()
     }, 45000)
@@ -74,11 +74,11 @@ describe('Proof Exchange Integration', () => {
       await bob.sendProofRequest()
 
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'request-received')
       }, 8000)
 
-      const proofRecords = await alice.agent.proofs.getAll()
+      const proofRecords = await alice.agent.modules.didcomm.proofs.getAll()
       const proofRequest = proofRecords.find((r) => r.state === 'request-received')
 
       // Verify presentation exchange format is used
@@ -90,16 +90,16 @@ describe('Proof Exchange Integration', () => {
       await bob.sendProofRequest()
 
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'request-received')
       }, 8000)
 
-      const proofRecords = await alice.agent.proofs.getAll()
+      const proofRecords = await alice.agent.modules.didcomm.proofs.getAll()
       const proofRequest = proofRecords.find((r) => r.state === 'request-received')
 
       // Select credentials
-      const selectedCredentials = await alice.agent.proofs.selectCredentialsForRequest({
-        proofRecordId: proofRequest!.id,
+      const selectedCredentials = await alice.agent.modules.didcomm.proofs.selectCredentialsForRequest({
+        proofExchangeRecordId: proofRequest!.id,
       })
 
       expect(selectedCredentials).toBeDefined()
@@ -111,34 +111,34 @@ describe('Proof Exchange Integration', () => {
       await bob.sendProofRequest()
 
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'request-received')
       }, 8000)
 
-      const proofRecords = await alice.agent.proofs.getAll()
+      const proofRecords = await alice.agent.modules.didcomm.proofs.getAll()
       const proofRequest = proofRecords.find((r) => r.state === 'request-received')
       await alice.acceptProofRequest(proofRequest!)
 
       // Wait for Bob to receive the presentation
       await waitForCondition(async () => {
-        const records = await bob.agent.proofs.getAll()
+        const records = await bob.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'presentation-received')
       }, 10000)
 
       // Bob accepts/verifies the presentation (required because autoAcceptProofs is Never)
-      const bobProofRecords = await bob.agent.proofs.getAll()
+      const bobProofRecords = await bob.agent.modules.didcomm.proofs.getAll()
       const receivedPresentation = bobProofRecords.find((r) => r.state === 'presentation-received')
       expect(receivedPresentation).toBeDefined()
-      await bob.agent.proofs.acceptPresentation({ proofRecordId: receivedPresentation!.id })
+      await bob.agent.modules.didcomm.proofs.acceptPresentation({ proofExchangeRecordId: receivedPresentation!.id })
 
       // Wait for proof exchange to complete
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'done')
       }, 10000)
 
       // Verify proof was sent successfully
-      const completedProofs = await alice.agent.proofs.getAll()
+      const completedProofs = await alice.agent.modules.didcomm.proofs.getAll()
       const completedProof = completedProofs.find((r) => r.state === 'done')
       expect(completedProof).toBeDefined()
     }, 45000)
@@ -149,16 +149,16 @@ describe('Proof Exchange Integration', () => {
       await bob.sendProofRequest()
 
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'request-received')
       }, 8000)
 
-      const proofRecords = await alice.agent.proofs.getAll()
+      const proofRecords = await alice.agent.modules.didcomm.proofs.getAll()
       const proofRequest = proofRecords.find((r) => r.state === 'request-received')
       expect(proofRequest).toBeDefined()
 
       // Get the format data to verify presentation definition
-      const formatData = await alice.agent.proofs.getFormatData(proofRequest!.id)
+      const formatData = await alice.agent.modules.didcomm.proofs.getFormatData(proofRequest!.id)
       expect(formatData.request).toBeDefined()
 
       // Verify the presentation exchange format is used
@@ -186,16 +186,16 @@ describe('Proof Exchange Integration', () => {
       await bob.sendProofRequest()
 
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'request-received')
       }, 8000)
 
-      const proofRecords = await alice.agent.proofs.getAll()
+      const proofRecords = await alice.agent.modules.didcomm.proofs.getAll()
       const proofRequest = proofRecords.find((r) => r.state === 'request-received')
       expect(proofRequest).toBeDefined()
 
       // Get the format data to verify presentation definition
-      const formatData = await alice.agent.proofs.getFormatData(proofRequest!.id)
+      const formatData = await alice.agent.modules.didcomm.proofs.getFormatData(proofRequest!.id)
       expect(formatData.request?.presentationExchange).toBeDefined()
 
       const presentationDefinition = formatData.request?.presentationExchange?.presentation_definition
@@ -220,7 +220,7 @@ describe('Proof Exchange Integration', () => {
   describe('Error Handling', () => {
     it('should handle proof request without credentials', async () => {
       // Remove all credentials from Alice
-      const allCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const allCredentials = await alice.agent.w3cCredentials.getAll()
       for (const cred of allCredentials) {
         await alice.agent.w3cCredentials.removeCredentialRecord(cred.id)
       }
@@ -228,17 +228,17 @@ describe('Proof Exchange Integration', () => {
       await bob.sendProofRequest()
 
       await waitForCondition(async () => {
-        const records = await alice.agent.proofs.getAll()
+        const records = await alice.agent.modules.didcomm.proofs.getAll()
         return records.some((r) => r.state === 'request-received')
       }, 8000)
 
-      const proofRecords = await alice.agent.proofs.getAll()
+      const proofRecords = await alice.agent.modules.didcomm.proofs.getAll()
       const proofRequest = proofRecords.find((r) => r.state === 'request-received')
 
       // Try to select credentials - should throw an error when no credentials match
       await expect(
-        alice.agent.proofs.selectCredentialsForRequest({
-          proofRecordId: proofRequest!.id,
+        alice.agent.modules.didcomm.proofs.selectCredentialsForRequest({
+          proofExchangeRecordId: proofRequest!.id,
         })
       ).rejects.toThrow()
 

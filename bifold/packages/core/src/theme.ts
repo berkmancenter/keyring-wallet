@@ -54,6 +54,8 @@ import TabOneIcon from './assets/img/message-text-icon-outline.svg'
 import TabTwoIcon from './assets/img/qrcode-scan-icon.svg'
 import TabThreeFocusedIcon from './assets/img/wallet-icon.svg'
 import TabThreeIcon from './assets/img/wallet-icon-outline.svg'
+import CredentialRevoked from './assets/img/credential-revoked.svg'
+import CredentialNotAvailable from './assets/img/credential-not-available.svg'
 import TabFourFocusedIcon from './assets/img/chat-processing.svg'
 import TabFourIcon from './assets/img/chat-processing-outline.svg'
 import IconCircleDotsWhite from './assets/img/circle-dots-white.svg'
@@ -83,6 +85,7 @@ import {
   IDialogTheme,
   ILoadingTheme,
   IPINInputTheme,
+  ISeparatedPINInputTheme,
   IInlineInputMessage,
   IButtons,
   IListItems,
@@ -153,6 +156,8 @@ export interface ISVGAssets {
   tabTwoIcon: React.FC<SvgProps>
   tabThreeIcon: React.FC<SvgProps>
   tabThreeFocusedIcon: React.FC<SvgProps>
+  credentialRevoked: React.FC<SvgProps>
+  credentialNotAvailable: React.FC<SvgProps>
   tabFourIcon: React.FC<SvgProps>
   tabFourFocusedIcon: React.FC<SvgProps>
   tabMenuIcon?: React.FC<SvgProps>
@@ -240,6 +245,11 @@ export interface IErrorColors {
   warning: string
 }
 
+export interface IIconColors {
+  credentialRevoked: string
+  credentialNotAvailable: string
+}
+
 export interface IColorPalette {
   brand: IBrandColors
   semantic: ISemanticColors
@@ -296,6 +306,11 @@ const BrandColors = {
   primaryLight: `rgba(53, 130, 63, ${lightOpacity})`,
   highlight: '#FCBA19',
   primaryBackground: '#000000',
+  credentialCardPlaceholderBackground: '#1C1C1E',
+  credentialCardStatusBadgeErrorBackground: '#FDECEA',
+  credentialCardStatusBadgeErrorIcon: '#000000',
+  credentialCardStatusBadgeWarningBackground: '#FFF8E1',
+  credentialCardStatusBadgeWarningIcon: '#000000',
   secondaryBackground: '#313132',
   tertiaryBackground: '#313132',
   modalPrimary: '#42803E',
@@ -317,6 +332,7 @@ const BrandColors = {
   tabBarInactive: GrayscaleColors.white,
   inlineError: InlineErrorMessageColors.error,
   inlineWarning: InlineErrorMessageColors.warning,
+  loadingIcon: GrayscaleColors.white,
 }
 export type IBrandColors = typeof BrandColors
 
@@ -885,6 +901,13 @@ export function createNavigationTheme(theme: { ColorPalette: IColorPalette }) {
       border: theme.ColorPalette.grayscale.white,
       notification: theme.ColorPalette.grayscale.white,
     },
+    header: {
+      shadowOffset: { width: 0, height: 6 },
+      shadowRadius: 6,
+      shadowColor: ColorPalette.grayscale.black,
+      shadowOpacity: 0.15,
+      elevation: 0,
+    },
   }
 }
 export type INavigationTheme = ReturnType<typeof createNavigationTheme>
@@ -983,6 +1006,7 @@ export function createChatTheme(theme: { ColorPalette: IColorPalette; TextTheme:
       lineHeight: undefined,
       fontWeight: '500',
       fontSize: theme.TextTheme.normal.fontSize,
+      color: theme.ColorPalette.brand.text,
     },
     openButtonTextStyle: {
       fontSize: theme.TextTheme.normal.fontSize,
@@ -1100,7 +1124,7 @@ export function createOnboardingTheme(theme: { ColorPalette: IColorPalette; Text
   return {
     ...textStyles,
     ...viewStyles,
-    headerTintColor: ColorPalette.grayscale.white,
+    headerTintColor: theme.ColorPalette.brand.headerIcon,
     imageDisplayOptions: {
       fill: ColorPalette.notification.infoText,
     },
@@ -1170,8 +1194,10 @@ export function createPINInputTheme(theme: { ColorPalette: IColorPalette }): IPI
 
   const viewStyles = StyleSheet.create({
     cell: {
+      height: 48,
+      paddingHorizontal: 2,
       backgroundColor: theme.ColorPalette.brand.secondaryBackground,
-      borderColor: theme.ColorPalette.brand.secondary,
+      borderColor: theme.ColorPalette.brand.secondaryBackground,
       borderWidth: 1,
     },
     focussedCell: {
@@ -1196,6 +1222,53 @@ export function createPINInputTheme(theme: { ColorPalette: IColorPalette }): IPI
   return { ...textStyles, ...viewStyles }
 }
 export const PINInputTheme = createPINInputTheme({ ColorPalette })
+
+/**
+ * Creates a theme for a separated PIN input based on the provided color pallet.
+ *
+ * @param {{ ColorPalette: IColorPalette }} theme - The theme object containing the color pallet
+ * @returns {*} {ISeparatedPINInputTheme} - The created  PIN input theme
+ */
+export function createSeparatedPINInputTheme(theme: { ColorPalette: IColorPalette }): ISeparatedPINInputTheme {
+  const textStyles = StyleSheet.create({
+    cellText: {
+      color: theme.ColorPalette.brand.text,
+    },
+    icon: {
+      color: theme.ColorPalette.brand.headerIcon,
+    },
+  })
+
+  const viewStyles = StyleSheet.create({
+    cell: {
+      height: 48,
+      paddingHorizontal: 4,
+      backgroundColor: theme.ColorPalette.brand.secondaryBackground,
+      borderColor: theme.ColorPalette.brand.secondary,
+      borderWidth: 1,
+      margin: 6,
+      borderRadius: 4,
+      flex: 1,
+      flexShrink: 0,
+    },
+    focussedCell: {
+      borderColor: theme.ColorPalette.brand.headerIcon,
+    },
+    codeFieldRoot: {
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    labelAndFieldContainer: {
+      flexDirection: 'row',
+      paddingHorizontal: 0,
+      paddingVertical: 4,
+      alignItems: 'center',
+    },
+  })
+
+  return { ...textStyles, ...viewStyles }
+}
+export const SeparatedPINInputTheme = createSeparatedPINInputTheme({ ColorPalette })
 
 const CredentialCardShadowTheme = {
   shadowColor: '#000',
@@ -1277,6 +1350,8 @@ export const Assets = {
     tabTwoIcon: TabTwoIcon,
     tabThreeIcon: TabThreeIcon,
     tabThreeFocusedIcon: TabThreeFocusedIcon,
+    credentialRevoked: CredentialRevoked,
+    credentialNotAvailable: CredentialNotAvailable,
     tabFourIcon: TabFourIcon,
     tabFourFocusedIcon: TabFourFocusedIcon,
     // Chat message icons (white for dark bubbles, black for light bubbles)
@@ -1347,6 +1422,7 @@ export interface ITheme {
   LoadingTheme: ILoadingTheme
   PINEnterTheme: IPINEnterTheme
   PINInputTheme: IPINInputTheme
+  SeparatedPINInputTheme: ISeparatedPINInputTheme
   CredentialCardShadowTheme: ViewStyle
   SelectedCredTheme: ViewStyle
   heavyOpacity: typeof heavyOpacity
@@ -1376,6 +1452,7 @@ export const bifoldTheme: ITheme = {
   LoadingTheme,
   PINEnterTheme,
   PINInputTheme,
+  SeparatedPINInputTheme,
   CredentialCardShadowTheme,
   SelectedCredTheme,
   heavyOpacity,
@@ -1410,5 +1487,6 @@ export type {
   IDialogTheme,
   ILoadingTheme,
   IPINInputTheme,
+  ISeparatedPINInputTheme,
   IGradientTheme,
 } from './theme.interface'

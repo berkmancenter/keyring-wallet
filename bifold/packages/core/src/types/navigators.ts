@@ -1,4 +1,4 @@
-import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
+import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord, W3cV2CredentialRecord } from '@credo-ts/core'
 import { NavigatorScreenParams } from '@react-navigation/native'
 import { StackNavigationOptions } from '@react-navigation/stack'
 import { OpenId4VPRequestRecord, OpenIDCredentialType } from '../modules/openid/types'
@@ -12,7 +12,10 @@ export enum Screens {
   Preface = 'Preface',
   CreatePIN = 'Create a PIN',
   ChangePIN = 'Change PIN',
+  ChangePINConfirmation = 'Change PIN Confirmation',
+  ChangePINSuccess = 'Change PIN Success',
   EnterPIN = 'Enter PIN',
+  VerifyPIN = 'Verify PIN',
   Home = 'Home',
   Scan = 'Scan',
   PasteUrl = 'Paste URL',
@@ -23,6 +26,7 @@ export enum Screens {
   OpenIDCredentialOffer = 'Open ID Credential offer',
   OpenIDProofPresentation = 'Open ID Proof Presentation',
   OpenIDProofCredentialSelect = 'Open ID Proof Credential Select',
+  OpenIDConnection = 'Open ID Connection',
   ProofRequest = 'Proof Request',
   ProofRequestDetails = 'Proof Request Details',
   ProofRequestUsageHistory = 'Proof Request Usage History',
@@ -214,6 +218,7 @@ export type SettingStackParams = {
   [Screens.Tours]: undefined
   [Screens.ToggleBiometry]: undefined
   [Screens.ChangePIN]: undefined
+  [Screens.ChangePINSuccess]: undefined
   [Screens.Terms]: undefined
   [Screens.Onboarding]: undefined
   [Screens.Developer]: undefined
@@ -249,6 +254,10 @@ export type DeliveryStackParams = {
     openIDUri?: string
     openIDPresentationUri?: string
   }
+  [Screens.OpenIDConnection]: {
+    openIDUri?: string
+    openIDPresentationUri?: string
+  }
   [Screens.MobileVerifierLoading]: { proofId: string; connectionId: string }
   [Screens.ProofDetails]: { recordId: string }
   [Screens.CredentialOffer]: { credentialId: string }
@@ -257,7 +266,7 @@ export type DeliveryStackParams = {
   [Screens.Declined]: { credentialId: string }
   [Screens.Chat]: { connectionId: string }
   [Screens.OpenIDCredentialOffer]: {
-    credential: SdJwtVcRecord | W3cCredentialRecord | MdocRecord
+    credential: SdJwtVcRecord | W3cCredentialRecord | MdocRecord | W3cV2CredentialRecord
   }
   [Screens.OpenIDProofPresentation]: { credential: OpenId4VPRequestRecord }
   [Screens.OpenIDProofCredentialSelect]: {

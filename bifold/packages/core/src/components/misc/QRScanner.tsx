@@ -1,5 +1,5 @@
-import { DidExchangeState } from '@credo-ts/core'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
+import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -141,7 +141,22 @@ const QRScanner: React.FC<Props> = ({
     if (!showTabs && defaultToConnect && showingQRCodeView) {
       navigation.setOptions({ title: t('Scan.ScanQRCode'), headerRight: () => undefined })
     } else if (!showTabs) {
-      navigation.setOptions({ title: t('Scan.ScanQRCode'), headerRight: () => undefined })
+      // Camera scan without tabs: still offer the paste-URL fallback (also used by E2E
+      // to feed an invitation link without scanning a QR code with the camera).
+      navigation.setOptions({
+        title: t('Scan.ScanQRCode'),
+        headerRight: () => (
+          <IconButton
+            buttonLocation={ButtonLocation.Right}
+            accessibilityLabel={t('Scan.PasteUrl')}
+            testID={testIdWithKey('PasteUrlButton')}
+            onPress={() => {
+              navigation.navigate(Screens.PasteUrl)
+            }}
+            icon="link"
+          />
+        ),
+      })
     } else if (showTabs) {
       let headerRight: React.ReactElement | undefined = undefined
       let title = t('Scan.MyQRCode')
@@ -172,7 +187,8 @@ const QRScanner: React.FC<Props> = ({
   }, [showTabs, firstTabActive, defaultToConnect, createInvitation, store.preferences.walletName])
 
   useEffect(() => {
-    if (showTabs && record?.state === DidExchangeState.Completed) {
+    // Effect not required if tabs are not enabled
+    if (showTabs && record?.state === DidCommDidExchangeState.Completed) {
       navigation.getParent()?.navigate(Stacks.ConnectionStack, {
         screen: Screens.Connection,
         params: { oobRecordId: recordId },
@@ -184,7 +200,7 @@ const QRScanner: React.FC<Props> = ({
     if (!defaultToConnect || showTabs) return
 
     const connected =
-      record?.state === DidExchangeState.Completed || record?.state === DidExchangeState.ResponseSent
+      record?.state === DidCommDidExchangeState.Completed || record?.state === DidCommDidExchangeState.ResponseSent
 
     if (connected && record?.id) {
       navigation.getParent()?.navigate(Stacks.ContactStack, {
@@ -200,7 +216,8 @@ const QRScanner: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      <SafeAreaView edges={['left', 'right']} style={styles.mainSafeArea}>
+      <SafeAreaView edges={['left', 'right']} style={styles.mainSafeArea} testID={testIdWithKey('QRScanner')}>
+        {/* Decide to show camera content or connection invitation content */}
         {(!showTabs && !showingQRCodeView) || (showTabs && firstTabActive) ? (
           <>
             <ScanCamera
@@ -209,7 +226,9 @@ const QRScanner: React.FC<Props> = ({
               enableCameraOnError={enableCameraOnError}
               torchActive={torchActive}
             />
-            <SVGOverlay maskType={MaskType.QR_CODE} strokeColor={ColorPalette.grayscale.white} />
+            <View style={StyleSheet.absoluteFill} pointerEvents="none" testID={testIdWithKey('ScanOverlay')}>
+              <SVGOverlay maskType={MaskType.QR_CODE} strokeColor={ColorPalette.grayscale.white} />
+            </View>
             <View style={styles.cameraViewContainer}>
               <View style={styles.messageContainer}>
                 {error ? (
@@ -309,6 +328,18 @@ const QRScanner: React.FC<Props> = ({
               {!invitation && <LoadingIndicator />}
               {invitation && <QRRenderer value={invitation} size={qrSize} />}
             </View>
+            {/* E2E-only: expose invitation URL to the accessibility tree so Appium can
+                read it and paste it into the peer wallet (avoids camera-based QR scan). */}
+            {__DEV__ && invitation && (
+              <ThemedText
+                testID={testIdWithKey('InvitationUrl')}
+                accessibilityLabel={invitation}
+                style={{ height: 1, opacity: 0.01 }}
+                numberOfLines={1}
+              >
+                {invitation}
+              </ThemedText>
+            )}
             <ThemedText style={styles.instruction}>
               {t('Scan.YourQRCodeInstruction')}
             </ThemedText>

@@ -87,7 +87,6 @@ exports[`Preface Screen Button enabled by checkbox being checked 1`] = `
             style={
               Object {
                 "alignItems": "center",
-                "flex": 1,
                 "flexDirection": "row-reverse",
                 "margin": 10,
               }
@@ -218,9 +217,7 @@ exports[`Preface Screen Button enabled by checkbox being checked 1`] = `
               accessible={true}
               collapsable={false}
               focusable={true}
-              onBlur={[Function]}
               onClick={[Function]}
-              onFocus={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
               onResponderRelease={[Function]}
@@ -228,19 +225,12 @@ exports[`Preface Screen Button enabled by checkbox being checked 1`] = `
               onResponderTerminationRequest={[Function]}
               onStartShouldSetResponder={[Function]}
               style={
-                Array [
-                  Object {
-                    "overflow": "hidden",
-                  },
-                  Object {
-                    "backgroundColor": "#42803E",
-                    "borderRadius": 4,
-                    "padding": 16,
-                  },
-                  false,
-                  false,
-                  false,
-                ]
+                Object {
+                  "backgroundColor": "#42803E",
+                  "borderRadius": 4,
+                  "opacity": 1,
+                  "padding": 16,
+                }
               }
               testID="com.ariesbifold:id/Continue"
             >
@@ -269,7 +259,6 @@ exports[`Preface Screen Button enabled by checkbox being checked 1`] = `
                           "fontWeight": "bold",
                           "textAlign": "center",
                         },
-                        false,
                         false,
                         false,
                       ],
@@ -375,7 +364,6 @@ exports[`Preface Screen Renders correctly 1`] = `
             style={
               Object {
                 "alignItems": "center",
-                "flex": 1,
                 "flexDirection": "row-reverse",
                 "margin": 10,
               }
@@ -505,10 +493,8 @@ exports[`Preface Screen Renders correctly 1`] = `
               }
               accessible={true}
               collapsable={false}
-              focusable={true}
-              onBlur={[Function]}
+              focusable={false}
               onClick={[Function]}
-              onFocus={[Function]}
               onResponderGrant={[Function]}
               onResponderMove={[Function]}
               onResponderRelease={[Function]}
@@ -516,23 +502,12 @@ exports[`Preface Screen Renders correctly 1`] = `
               onResponderTerminationRequest={[Function]}
               onStartShouldSetResponder={[Function]}
               style={
-                Array [
-                  Object {
-                    "overflow": "hidden",
-                  },
-                  Object {
-                    "backgroundColor": "#42803E",
-                    "borderRadius": 4,
-                    "padding": 16,
-                  },
-                  Object {
-                    "backgroundColor": "rgba(53, 130, 63, 0.35)",
-                    "borderRadius": 4,
-                    "padding": 16,
-                  },
-                  false,
-                  false,
-                ]
+                Object {
+                  "backgroundColor": "rgba(53, 130, 63, 0.35)",
+                  "borderRadius": 4,
+                  "opacity": 1,
+                  "padding": 16,
+                }
               }
               testID="com.ariesbifold:id/Continue"
             >
@@ -567,7 +542,6 @@ exports[`Preface Screen Renders correctly 1`] = `
                           "fontWeight": "bold",
                           "textAlign": "center",
                         },
-                        false,
                         false,
                       ],
                     ]

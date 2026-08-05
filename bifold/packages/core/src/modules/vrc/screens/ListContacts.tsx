@@ -1,4 +1,6 @@
 import { W3cCredentialRecord } from '@credo-ts/core'
+
+import { isPeerVrcCredential } from '../credentialTypes'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useEffect, useMemo, useCallback, useState } from 'react'
@@ -22,6 +24,7 @@ import {
   hasVrcHardwareAttestation,
   getVrcCredentialJsonForSubject,
 } from '../utils/witnessCredentialUtils'
+import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 
 const ListContacts: React.FC = () => {
@@ -132,7 +135,7 @@ const ListContacts: React.FC = () => {
     credential: W3cCredentialRecord
   ): { id: string; name?: string; email?: string; organization?: string } | null => {
     try {
-      const credentialData = credential.credential
+      const credentialData = credential.encoded
 
       if (
         credentialData &&
@@ -156,6 +159,7 @@ const ListContacts: React.FC = () => {
         }
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.warn('[VRC:Contacts] extractIssuer error:', error)
     }
 
@@ -174,7 +178,7 @@ const ListContacts: React.FC = () => {
   // Helper function to check if credential type contains "DTGCredential" but NOT "WitnessCredential"
   const hasDTGCredentialType = (credential: W3cCredentialRecord): boolean => {
     try {
-      const credentialData = credential.credential
+      const credentialData = credential.encoded
 
       if (
         credentialData &&
@@ -182,15 +186,10 @@ const ListContacts: React.FC = () => {
         !Array.isArray(credentialData) &&
         'type' in credentialData
       ) {
-        const typeValue = (credentialData as any).type
-        const types = Array.isArray(typeValue) ? typeValue : [typeValue]
-
-        const hasDTG = types.some((type) => typeof type === 'string' && type.includes('DTGCredential'))
-        const hasWitness = types.some((type) => typeof type === 'string' && type === 'WitnessCredential')
-
-        return hasDTG && !hasWitness
+        return isPeerVrcCredential(credentialData)
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.warn('[VRC:Contacts] hasDTGCredentialType error:', error)
     }
 
@@ -200,7 +199,7 @@ const ListContacts: React.FC = () => {
   // Helper function to extract date from credential (validFrom or issuanceDate)
   const getCredentialDate = (credential: W3cCredentialRecord): Date | null => {
     try {
-      const credentialData = credential.credential
+      const credentialData = credential.encoded
 
       if (credentialData && typeof credentialData === 'object' && !Array.isArray(credentialData)) {
         if ('validFrom' in credentialData && credentialData.validFrom) {
@@ -218,6 +217,7 @@ const ListContacts: React.FC = () => {
         }
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.warn('[VRC:Contacts] getCredentialDate error:', error)
     }
 
@@ -261,12 +261,15 @@ const ListContacts: React.FC = () => {
 
       if (issuerData) {
         const { id, name, email, organization } = issuerData
+        // Contact info source: received RCard first (post-separation exchanges),
+        // then the legacy VRC issuer object fields (pre-separation exchanges).
+        const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, id)
         contactDetails.push({
           issuer: {
             id,
-            name: formatIssuerName(id, name),
-            email,
-            organization,
+            name: formatIssuerName(id, displayInfo.name || name),
+            email: displayInfo.email || email,
+            organization: displayInfo.organization || organization,
           },
           hasWitnessCredentials: hasWitnessCredential(id),
           hasHardwareAttestation: hasHardwareAttestationCredential(id),
@@ -275,7 +278,7 @@ const ListContacts: React.FC = () => {
     })
 
     return contactDetails.sort((a, b) => a.issuer.name.localeCompare(b.issuer.name))
-  }, [w3cCredentialRecords])
+  }, [w3cCredentialRecords, hasWitnessCredential, hasHardwareAttestationCredential])
 
   // Run cryptographic verification for contacts that claim HW attestation
   useEffect(() => {
@@ -296,6 +299,7 @@ const ListContacts: React.FC = () => {
           const result = await verifyVrcHardwareEvidence(rawCred as any)
           results[contact.issuer.id] = result?.valid === true
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.warn('[VRC:Contacts] HW verification error:', error)
           results[contact.issuer.id] = false
         }

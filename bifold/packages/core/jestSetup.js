@@ -1,28 +1,146 @@
 /* eslint-disable no-undef */
 // eslint-disable-next-line import/no-extraneous-dependencies
-import 'reflect-metadata'
-import 'react-native-gesture-handler/jestSetup'
 import mockRNCNetInfo from '@react-native-community/netinfo/jest/netinfo-mock.js'
+import path from 'path'
 import mockRNLocalize from 'react-native-localize/mock'
 import mockRNDeviceInfo from 'react-native-device-info/jest/react-native-device-info-mock'
+import 'react-native-gesture-handler/jestSetup'
 import mockSafeAreaContext from 'react-native-safe-area-context/jest/mock'
+import 'reflect-metadata'
+import { bifoldLoggerInstance } from './src/services/bifoldLogger'
+import { MockLogger } from './src/testing/MockLogger'
+
+// React 18+/19: enable proper act() behavior in tests
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
+
+// Neutralize VrcNameCacheProvider's async cache build in tests. Its buildCache
+// resolves after the mounting test (via __tests__/helpers/app.tsx) tears down,
+// leaking a React-19 act() state update into whatever test runs next — failing
+// unrelated suites (Settings, CameraDisclosureModal). The provider only supplies
+// display-name lookups, not behavior under test, so a passthrough is safe.
+jest.mock('./src/modules/vrc/context/VrcNameCacheProvider', () => ({
+  VrcNameCacheProvider: ({ children }) => children,
+  useVrcNameCache: () => ({ getVrcName: () => null, isLoading: false }),
+}))
+
+const mockBifoldLogger = new MockLogger()
+bifoldLoggerInstance.test = mockBifoldLogger.test
+bifoldLoggerInstance.trace = mockBifoldLogger.trace
+bifoldLoggerInstance.debug = mockBifoldLogger.debug
+bifoldLoggerInstance.info = mockBifoldLogger.info
+bifoldLoggerInstance.warn = mockBifoldLogger.warn
+bifoldLoggerInstance.error = mockBifoldLogger.error
+bifoldLoggerInstance.fatal = mockBifoldLogger.fatal
+bifoldLoggerInstance.report = mockBifoldLogger.report
 
 mockRNDeviceInfo.getVersion = jest.fn(() => '1')
 mockRNDeviceInfo.getBuildNumber = jest.fn(() => '1')
 
+jest.mock('react-native', () => jest.requireActual('react-native'))
+
+// RNGH's own jest mocks render buttons without children (RawButton discards
+// them), which blanks out labels of gesture-handler touchables under test.
+// Map the touchables to their RN equivalents so children render normally.
+jest.mock('react-native-gesture-handler', () => {
+  const RN = jest.requireActual('react-native')
+  const actual = jest.requireActual('react-native-gesture-handler')
+  return {
+    ...actual,
+    TouchableOpacity: RN.TouchableOpacity,
+    TouchableHighlight: RN.TouchableHighlight,
+    TouchableWithoutFeedback: RN.TouchableWithoutFeedback,
+  }
+})
+
 jest.mock('react-native-safe-area-context', () => mockSafeAreaContext)
 jest.mock('react-native-device-info', () => mockRNDeviceInfo)
 jest.mock('@react-native-community/netinfo', () => mockRNCNetInfo)
-jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper')
-jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter')
+// jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter')
 jest.mock('react-native-localize', () => mockRNLocalize)
 jest.mock('react-native-fs', () => ({}))
 jest.mock('@hyperledger/anoncreds-react-native', () => ({}))
-jest.mock('@hyperledger/aries-askar-react-native', () => ({}))
+jest.mock('@openwallet-foundation/askar-react-native', () => ({
+  Argon2: { derivePassword: jest.fn(() => new Uint8Array(32)) },
+  Argon2Algorithm: { Argon2id: 'Argon2id' },
+  Argon2Version: { V0x13: 'V0x13' },
+}))
 jest.mock('@hyperledger/indy-vdr-react-native', () => ({}))
 jest.mock('react-native-permissions', () => require('react-native-permissions/mock'))
+jest.mock('react-native-orientation-locker', () => require('./__mocks__/custom/react-native-orientation-locker'))
 jest.mock('react-native-vision-camera', () => {
   return require('./__mocks__/custom/react-native-camera')
+})
+
+/* -------------------------------------------------------------------------- */
+/* MOCK REFRESH ORCHESTRATOR (AVOID TIMERS / LOGS DURING TESTS)            */
+/* -------------------------------------------------------------------------- */
+
+const refreshOrchestratorPath = path.resolve(__dirname, 'src/modules/openid/refresh/RefreshOrchestrator')
+
+jest.mock(refreshOrchestratorPath, () => {
+  return {
+    RefreshOrchestrator: jest.fn().mockImplementation(() => ({
+      configure: jest.fn(),
+      start: jest.fn(),
+      stop: jest.fn(),
+      runOnce: jest.fn(),
+    })),
+  }
+})
+
+jest.mock('react-native-keyboard-controller', () => {
+  const { ScrollView, View } = jest.requireActual('react-native')
+  return {
+    KeyboardProvider: ({ children }) => children,
+    KeyboardAwareScrollView: ScrollView,
+    KeyboardAvoidingView: View,
+  }
+})
+
+// Mock Keyboard to fix KeyboardAvoidingView cleanup issues in tests
+// React Native 0.81+ exports Keyboard as .default
+const mockKeyboard = {
+  addListener: jest.fn(() => ({ remove: jest.fn() })),
+  removeListener: jest.fn(),
+  dismiss: jest.fn(),
+  scheduleLayoutAnimation: jest.fn(),
+  isVisible: jest.fn(() => false),
+  metrics: jest.fn(() => null),
+}
+jest.mock('react-native/Libraries/Components/Keyboard/Keyboard', () => ({
+  default: mockKeyboard,
+  ...mockKeyboard,
+}))
+
+// Mock BackHandler to return subscription with remove() method
+// This covers the new subscription-based API used in React Native 0.81+
+const mockBackHandler = {
+  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
+  removeEventListener: jest.fn(),
+  exitApp: jest.fn(),
+}
+jest.mock('react-native/Libraries/Utilities/BackHandler', () => ({
+  default: mockBackHandler,
+  ...mockBackHandler,
+}))
+
+// Fix timezone issues in tests
+process.env.TZ = 'UTC' // or 'America/Toronto' — pick one and keep it fixed
+// Freeze "now" without enabling fake timers (prevents act() overlaps)
+const FIXED_NOW = new Date('2024-01-01T00:00:00Z').valueOf()
+let dateNowSpy
+let consoleDebugSpy
+
+beforeAll(() => {
+  dateNowSpy = jest.spyOn(Date, 'now').mockImplementation(() => FIXED_NOW)
+  if (!process.env.TEST_VERBOSE) {
+    consoleDebugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {})
+  }
+})
+
+afterAll(() => {
+  if (dateNowSpy) dateNowSpy.mockRestore()
+  if (consoleDebugSpy) consoleDebugSpy.mockRestore()
 })
 
 // Mock @bifold/react-native-attestation native module
@@ -47,4 +165,3 @@ jest.mock('@bifold/react-native-attestation', () => ({
   }),
   deleteHardwareSigningKey: jest.fn().mockResolvedValue(true),
 }))
-

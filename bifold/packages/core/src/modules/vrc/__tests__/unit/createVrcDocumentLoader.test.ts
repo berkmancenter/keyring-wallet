@@ -1,5 +1,3 @@
-import { DidResolverService, isDid } from '@credo-ts/core'
-
 import { createVrcDocumentLoader } from '../../createVrcDocumentLoader'
 import { DTG_CONTEXT_URL, DTG_CONTEXT_DOCUMENT } from '../../types/relationshipContext'
 import {

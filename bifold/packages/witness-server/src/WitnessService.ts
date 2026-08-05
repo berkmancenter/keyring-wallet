@@ -11,53 +11,47 @@
 
 import {
   Agent,
-  AutoAcceptCredential,
-  AutoAcceptProof,
-  BasicMessageEventTypes,
-  BasicMessagesModule,
   CacheModule,
-  ConnectionEventTypes,
-  ConnectionsModule,
-  CredentialsModule,
   DidsModule,
-  DifPresentationExchangeProofFormatService,
   InMemoryLruCache,
   InitConfig,
-  JsonLdCredentialFormatService,
   JsonTransformer,
-  Key,
   KeyDidRegistrar,
   KeyDidResolver,
-  KeyType,
   LogLevel,
   ConsoleLogger,
   PeerDidNumAlgo,
   PeerDidRegistrar,
   PeerDidResolver,
-  ProofsModule,
   TypedArrayEncoder,
   utils,
-  V2CredentialProtocol,
-  V2ProofProtocol,
   W3cCredentialsModule,
   W3cJsonLdVerifiableCredential,
   W3cJsonLdVerifiablePresentation,
   WebDidResolver,
-  type BasicMessageStateChangedEvent,
-  type ConnectionRecord,
-  type ConnectionStateChangedEvent,
 } from '@credo-ts/core'
-import { AskarModule } from '@credo-ts/askar'
-import { agentDependencies, HttpInboundTransport } from '@credo-ts/node'
 import {
-  HttpOutboundTransport,
-  WsOutboundTransport,
-  MediatorPickupStrategy,
-  MediationRecipientModule,
-} from '@credo-ts/core'
-import { ariesAskar } from '@hyperledger/aries-askar-nodejs'
+  DidCommAutoAcceptCredential,
+  DidCommAutoAcceptProof,
+  DidCommBasicMessageEventTypes,
+  DidCommBasicMessageStateChangedEvent,
+  DidCommConnectionEventTypes,
+  DidCommConnectionRecord,
+  DidCommConnectionStateChangedEvent,
+  DidCommCredentialV2Protocol,
+  DidCommDifPresentationExchangeProofFormatService,
+  DidCommHttpOutboundTransport,
+  DidCommJsonLdCredentialFormatService,
+  DidCommMediatorPickupStrategy,
+  DidCommModule,
+  DidCommProofV2Protocol,
+  DidCommWsOutboundTransport,
+} from '@credo-ts/didcomm'
+import { AskarModule } from '@credo-ts/askar'
+import { agentDependencies, DidCommHttpInboundTransport } from '@credo-ts/node'
+import { askar } from '@openwallet-foundation/askar-nodejs'
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
-import { createHash, randomBytes } from 'crypto'
+import { createHash, createPrivateKey, createPublicKey, randomBytes } from 'crypto'
 import path from 'path'
 
 import {
@@ -85,8 +79,13 @@ import { LocalityService, LocalityEvidence } from './LocalityService'
 import { LLMService, createLLMService } from './LLMService'
 
 // Import shared modules from @bifold/vrc-contexts and @bifold/vrc-shared
-import { WITNESSED_EXCHANGE_CONTEXT_URL } from '@bifold/vrc-contexts'
-import { demoDocumentLoader } from '@bifold/vrc-shared'
+import {
+  WITNESSED_EXCHANGE_CONTEXT_URL,
+  CREDENTIALS_V2_CONTEXT_URL,
+  ED25519_2018_SUITE_CONTEXT_URL,
+  jcsCanonicalize,
+} from '@bifold/vrc-contexts'
+import { DataIntegritySuiteModule, demoDocumentLoader, getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
 // Import vcLibraries for debugging JSON-LD canonicalization
 import { vcLibraries } from '@credo-ts/core'
@@ -151,65 +150,223 @@ export interface VerificationResult {
   error?: string
 }
 
-type WitnessAgent = Agent<ReturnType<typeof getWitnessModulesTyped>>
+type WitnessAgent = Agent<ReturnType<typeof getWitnessModules>>
 
-function getWitnessModules(mediatorInvitationUrl?: string) {
-  const modules: Record<string, unknown> = {
-    connections: new ConnectionsModule({
-      autoAcceptConnections: true,
-    }),
-    credentials: new CredentialsModule({
-      autoAcceptCredentials: AutoAcceptCredential.Never,
-      credentialProtocols: [new V2CredentialProtocol({ credentialFormats: [new JsonLdCredentialFormatService()] })],
-    }),
-    proofs: new ProofsModule({
-      autoAcceptProofs: AutoAcceptProof.Never,
-      proofProtocols: [new V2ProofProtocol({ proofFormats: [new DifPresentationExchangeProofFormatService()] })],
-    }),
-    w3cCredentials: new W3cCredentialsModule({
-      documentLoader: demoDocumentLoader,
-    }),
-    cache: new CacheModule({
-      cache: new InMemoryLruCache({ limit: 100 }),
-    }),
-    dids: new DidsModule({
-      resolvers: [new KeyDidResolver(), new PeerDidResolver(), new WebDidResolver()],
-      registrars: [new KeyDidRegistrar(), new PeerDidRegistrar()],
-    }),
-    askar: new AskarModule({
-      ariesAskar,
-    }),
-    basicMessages: new BasicMessagesModule(),
-  }
-
-  // Add mediation recipient module if mediator URL is provided
-  if (mediatorInvitationUrl) {
-    modules.mediationRecipient = new MediationRecipientModule({
-      mediatorInvitationUrl,
-      mediatorPickupStrategy: MediatorPickupStrategy.Implicit,
-    })
-  }
-
-  return modules as ReturnType<typeof getWitnessModulesTyped>
+interface GetWitnessModulesOptions {
+  walletId: string
+  walletKey: string
+  endpoints?: string[]
+  mediatorInvitationUrl?: string
 }
 
-// Type helper for module inference
-function getWitnessModulesTyped() {
+// ============================================
+// Pure verification / VWC-building logic
+// (exported so unit tests exercise the real implementation — see
+// __tests__/unit/WitnessService.test.ts)
+// ============================================
+
+// Wallets backdate issuance by up to 5 minutes to tolerate clock skew
+// between devices, so the freshness window must be that allowance plus
+// a real freshness margin.
+export const CLOCK_SKEW_ALLOWANCE_MS = 5 * 60 * 1000
+export const FRESHNESS_MARGIN_MS = 5 * 60 * 1000
+export const FRESHNESS_WINDOW_MS = CLOCK_SKEW_ALLOWANCE_MS + FRESHNESS_MARGIN_MS
+
+export type VrcFreshnessResult = { fresh: true; ageMs: number } | { fresh: false; error: string }
+
+/**
+ * Freshness check used by handlePresentationSubmission (Step 5): the VRC's
+ * timestamp must be within FRESHNESS_WINDOW_MS of the witness's clock, in
+ * either direction. VCDM 2.0 VRCs carry validFrom; 1.1 VRCs carry issuanceDate.
+ */
+export function checkVrcFreshness(
+  vrcJson: { validFrom?: string; issuanceDate?: string },
+  now: Date = new Date()
+): VrcFreshnessResult {
+  const issuanceDate = new Date(vrcJson.validFrom || vrcJson.issuanceDate || '')
+  if (Number.isNaN(issuanceDate.getTime())) {
+    return { fresh: false, error: 'Credential has no parseable validFrom/issuanceDate' }
+  }
+  const ageMs = Math.abs(now.getTime() - issuanceDate.getTime())
+  if (ageMs > FRESHNESS_WINDOW_MS) {
+    return { fresh: false, error: 'Credential issuance date is not fresh (>10 minutes old)' }
+  }
+  return { fresh: true, ageMs }
+}
+
+/**
+ * SHA-256 digest of the VRC over its JCS (RFC 8785) canonical form, so any
+ * implementation can recompute the same digest from the same JSON data
+ * regardless of key order or serializer.
+ */
+export function computeVrcDigest(vrcJson: unknown): string {
+  return 'sha256:' + createHash('sha256').update(jcsCanonicalize(vrcJson)).digest('hex')
+}
+
+export interface WitnessCredentialBuildContext {
+  issuerDid: string
+  witnessName: string
+  sessionId: string
+  verificationMethod: string
+  eventName?: string
+  localityEvidence?: LocalityEvidence
+}
+
+/**
+ * Build the (unsigned) VWC JSON for an observed presentation.
+ *
+ * Mirrors the observed VRC's data model: a VC 2.0 VRC gets a VC 2.0 VWC,
+ * a legacy 1.1 VRC gets a 1.1 VWC — so the holder's wallet can always
+ * validate the pair with the same code path it used for the VRC. The
+ * PROOF FAMILY is mirrored the same way (see the offer site): a DI VRC
+ * gets a DI VWC, whose @context needs no suite URL at all (credentials/v2
+ * already defines the DataIntegrityProof terms).
+ */
+export function buildWitnessCredentialJson(
+  observedPresentation: any,
+  buildContext: WitnessCredentialBuildContext
+): any {
+  const { issuerDid, witnessName, sessionId, verificationMethod, eventName, localityEvidence } = buildContext
+
+  const vwcId = `urn:uuid:${utils.uuid()}`
+
+  const credentials = observedPresentation.verifiableCredential || []
+  const vrcJson = credentials[0]
+
+  if (!vrcJson) {
+    throw new Error('No VRC found in presentation')
+  }
+
+  const digest = computeVrcDigest(vrcJson)
+
+  const vrcIssuer = typeof vrcJson.issuer === 'string' ? vrcJson.issuer : vrcJson.issuer?.id || 'unknown'
+
+  const hasHardwareAttestationEvidence = Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0
+
+  // Build witnessContext according to spec (event, sessionId, method - no domain/timestamp)
+  const witnessContext: Record<string, any> = {
+    sessionId,
+    method: verificationMethod,
+    // Flag indicating whether the VRC included hardware attestation evidence
+    // This does NOT mean the evidence was verified by the witness
+    // It means the participant's device performed hardware-backed authentication
+    hardwareAttestationIncluded: hasHardwareAttestationEvidence,
+  }
+
+  // Only include event if configured
+  if (eventName) {
+    witnessContext.event = eventName
+  }
+
+  // Include locality verification evidence if available
+  if (localityEvidence) {
+    witnessContext.localityVerification = localityEvidence
+  }
+
+  const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
+  const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
+  const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
+  const issuedTimestamp = new Date().toISOString()
+  const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
+
+  if (vrcIsVc20) {
+    // On the 2018 path the Ed25519 suite context must be present at build
+    // time (the v2 base context doesn't define the suite terms), or the
+    // signed VWC won't match the offer/request in credo's holder-side
+    // equality check.
+    return {
+      '@context': vrcUsesDi
+        ? [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL]
+        : [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+      id: vwcId,
+      type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
+      issuer: {
+        id: issuerDid,
+        name: witnessName,
+      },
+      validFrom: issuedTimestamp,
+      validUntil: expirationTimestamp,
+      credentialSubject: {
+        id: vrcIssuer,
+        digest: digest,
+        witnessContext,
+      },
+    }
+  }
+
   return {
-    connections: new ConnectionsModule({
-      autoAcceptConnections: true,
+    '@context': ['https://www.w3.org/2018/credentials/v1', WITNESSED_EXCHANGE_CONTEXT_URL],
+    id: vwcId,
+    type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
+    issuer: {
+      id: issuerDid,
+      name: witnessName,
+    },
+    issuanceDate: issuedTimestamp,
+    // W3C VC v1 expirationDate and validUntil - set to current time + 7 days
+    expirationDate: expirationTimestamp,
+    validUntil: expirationTimestamp,
+    credentialSubject: {
+      id: vrcIssuer,
+      digest: digest,
+      witnessContext,
+    },
+  }
+}
+
+function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationUrl }: GetWitnessModulesOptions) {
+  return {
+    askar: new AskarModule({
+      askar,
+      store: {
+        id: walletId,
+        key: walletKey,
+        database: {
+          type: 'sqlite',
+          config: {
+            path: getWalletStoragePath(walletId),
+          },
+        },
+      },
     }),
-    credentials: new CredentialsModule({
-      autoAcceptCredentials: AutoAcceptCredential.Never,
-      credentialProtocols: [new V2CredentialProtocol({ credentialFormats: [new JsonLdCredentialFormatService()] })],
-    }),
-    proofs: new ProofsModule({
-      autoAcceptProofs: AutoAcceptProof.Never,
-      proofProtocols: [new V2ProofProtocol({ proofFormats: [new DifPresentationExchangeProofFormatService()] })],
+    didcomm: new DidCommModule({
+      endpoints,
+      // CRITICAL: Enable concurrent message processing for multi-use invitations
+      // Without this, connections get stuck at "request-received" state when multiple
+      // devices connect via the same multi-use invitation (especially with mediator)
+      processDidCommMessagesConcurrently: true,
+      connections: {
+        autoAcceptConnections: true,
+      },
+      credentials: {
+        autoAcceptCredentials: DidCommAutoAcceptCredential.Never,
+        credentialProtocols: [
+          new DidCommCredentialV2Protocol({ credentialFormats: [new DidCommJsonLdCredentialFormatService()] }),
+        ],
+      },
+      proofs: {
+        autoAcceptProofs: DidCommAutoAcceptProof.Never,
+        proofProtocols: [
+          new DidCommProofV2Protocol({ proofFormats: [new DidCommDifPresentationExchangeProofFormatService()] }),
+        ],
+      },
+      // Mediation recipient config is only applied when a mediator URL is provided
+      mediationRecipient: mediatorInvitationUrl
+        ? {
+            mediatorInvitationUrl,
+            mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+          }
+        : undefined,
     }),
     w3cCredentials: new W3cCredentialsModule({
       documentLoader: demoDocumentLoader,
     }),
+    // Dual-verify: accept DataIntegrityProof/eddsa-rdfc-2022 alongside
+    // Ed25519Signature2018 in the Identity Check (verification resolves
+    // suites by proof.type from this registry). Witness ISSUANCE mirrors the
+    // presented VRC's proof family via getMirroredJsonLdProofOptions — DI for
+    // DI-signed VRCs, legacy 2018 otherwise (docs/CRYPTO_SUITE_FOLLOWUP.md).
+    diSuite: new DataIntegritySuiteModule(),
     cache: new CacheModule({
       cache: new InMemoryLruCache({ limit: 100 }),
     }),
@@ -217,15 +374,7 @@ function getWitnessModulesTyped() {
       resolvers: [new KeyDidResolver(), new PeerDidResolver(), new WebDidResolver()],
       registrars: [new KeyDidRegistrar(), new PeerDidRegistrar()],
     }),
-    askar: new AskarModule({
-      ariesAskar,
-    }),
-    basicMessages: new BasicMessagesModule(),
-    mediationRecipient: new MediationRecipientModule({
-      mediatorInvitationUrl: '',
-      mediatorPickupStrategy: MediatorPickupStrategy.Implicit,
-    }),
-  } as const
+  }
 }
 
 /**
@@ -266,8 +415,8 @@ export class WitnessService {
   > = new Map()
 
   private static readonly PENDING_REQUEST_TTL_MS = 3 * 60 * 1000 // 3 minutes
-  private pendingRequestCleanupInterval?: NodeJS.Timeout
-  private sessionCleanupInterval?: NodeJS.Timeout
+  private pendingRequestCleanupInterval?: ReturnType<typeof setInterval>
+  private sessionCleanupInterval?: ReturnType<typeof setInterval>
 
   /** Persistent opt-in reporting graph (connectionId ↔ reportingDid, exchange edges) */
   public reportingGraph!: ReportingGraph
@@ -297,44 +446,29 @@ export class WitnessService {
     const walletId = `${config.name}-wallet`
 
     const agentConfig: InitConfig = {
-      label: config.name,
-      walletConfig: {
-        id: walletId,
-        key: `${config.name}-key`,
-        storage: {
-          type: 'sqlite',
-          config: {
-            path: getWalletStoragePath(walletId),
-          },
-        },
-      },
-      // When using mediator, endpoints are provided by the mediator
-      endpoints: useMediator ? undefined : [config.publicUrl],
       logger: new ConsoleLogger(config.verbose ? LogLevel.debug : LogLevel.warn),
-      // CRITICAL: Enable concurrent message processing for multi-use invitations
-      // Without this, connections get stuck at "request-received" state when multiple
-      // devices connect via the same multi-use invitation (especially with mediator)
-      // See: https://github.com/openwallet-foundation/credo-ts/blob/v0.5.x/packages/core/src/types.ts#L86
-      processDidCommMessagesConcurrently: true,
     }
 
     this.agent = new Agent({
       config: agentConfig,
       dependencies: agentDependencies,
-      modules: getWitnessModules(config.mediatorInvitationUrl),
+      modules: getWitnessModules({
+        walletId,
+        walletKey: `${config.name}-key`,
+        // When using mediator, endpoints are provided by the mediator
+        endpoints: useMediator ? undefined : [config.publicUrl],
+        mediatorInvitationUrl: config.mediatorInvitationUrl,
+      }),
     })
 
     if (useMediator) {
       // Use WebSocket for mediator communication with keep-alive
-      const wsTransport = new WsOutboundTransport()
-      const httpTransport = new HttpOutboundTransport()
-
-      this.agent.registerOutboundTransport(wsTransport)
-      this.agent.registerOutboundTransport(httpTransport)
+      this.agent.modules.didcomm.registerOutboundTransport(new DidCommWsOutboundTransport())
+      this.agent.modules.didcomm.registerOutboundTransport(new DidCommHttpOutboundTransport())
     } else {
       // Use direct HTTP transport
-      this.agent.registerInboundTransport(new HttpInboundTransport({ port: config.port }))
-      this.agent.registerOutboundTransport(new HttpOutboundTransport())
+      this.agent.modules.didcomm.registerInboundTransport(new DidCommHttpInboundTransport({ port: config.port }))
+      this.agent.modules.didcomm.registerOutboundTransport(new DidCommHttpOutboundTransport())
     }
 
     // Initialize credential registry
@@ -514,8 +648,8 @@ export class WitnessService {
     const relativePath = this.getRelativeWalletPath(walletPath)
 
     // Get wallet state information
-    const connections = await this.agent.connections.getAll()
-    const credentials = await this.agent.w3cCredentials.getAllCredentialRecords()
+    const connections = await this.agent.modules.didcomm.connections.getAll()
+    const credentials = await this.agent.w3cCredentials.getAll()
     const walletState = connections.length === 0 && credentials.length === 0 ? 'FRESH' : 'EXISTING'
 
     // Check persistence files and determine seed status
@@ -812,40 +946,6 @@ export class WitnessService {
     console.log(`[${this.name}]   ✓ DID imported successfully`)
   }
 
-  /**
-   * Verify that the provided key matches the DID document's public key
-   */
-  private async verifyKeyAgainstDidDocument(did: string, key: Key): Promise<void> {
-    console.log(`[${this.name}]   Verifying key against DID document...`)
-
-    const resolved = await this.agent.dids.resolve(did)
-    if (!resolved.didDocument) {
-      throw new Error(`Failed to resolve DID document for verification: ${did}`)
-    }
-
-    const verificationMethod = resolved.didDocument.verificationMethod?.[0]
-    if (!verificationMethod) {
-      throw new Error(`DID document has no verification methods: ${did}`)
-    }
-
-    // Extract public key from DID document
-    const docPublicKey =
-      verificationMethod.publicKeyMultibase ||
-      verificationMethod.publicKeyBase58 ||
-      (verificationMethod as any).publicKeyJwk?.x
-
-    // Compare with our key
-    const ourPublicKey = key.publicKeyBase58
-
-    if (docPublicKey !== ourPublicKey) {
-      console.log(`[${this.name}]   ✗ Key mismatch detected!`)
-      console.log(`[${this.name}]     DID document key: ${String(docPublicKey).substring(0, 20)}...`)
-      console.log(`[${this.name}]     Provided key:     ${ourPublicKey.substring(0, 20)}...`)
-      throw new Error('Key does not match DID document public key')
-    }
-
-    console.log(`[${this.name}]   ✓ Key verified against DID document`)
-  }
 
   /**
    * Get the seed file path (derives from invitation file path)
@@ -904,28 +1004,60 @@ export class WitnessService {
   }
 
   /**
+   * Import an Ed25519 key derived from a 32-byte seed into the agent KMS and return the KMS key id.
+   * In credo 0.6 `dids.create` no longer accepts a raw seed, so the key material is imported
+   * explicitly (for Ed25519 the private key IS the seed).
+   */
+  private async importEd25519KeyFromSeed(seedHex: string): Promise<string> {
+    const seedBytes = TypedArrayEncoder.fromHex(seedHex)
+
+    // Derive the public key using Node's built-in Ed25519 support (PKCS8 = fixed prefix + seed)
+    const pkcs8 = Buffer.concat([Buffer.from('302e020100300506032b657004220420', 'hex'), Buffer.from(seedBytes)])
+    const privateKey = createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' })
+    const publicJwk = createPublicKey(privateKey).export({ format: 'jwk' }) as { x: string }
+
+    const imported = await this.agent.kms.importKey({
+      privateJwk: {
+        kty: 'OKP',
+        crv: 'Ed25519',
+        d: TypedArrayEncoder.toBase64URL(seedBytes),
+        x: publicJwk.x,
+      },
+    })
+
+    return imported.keyId
+  }
+
+  /**
    * Create a did:peer from a seed (deterministic, stable across restarts)
    * If the DID already exists in the wallet, it will be reused
    */
   private async createDidPeerFromSeed(seedHex: string): Promise<void> {
     console.log(`[${this.name}] Creating did:peer from seed...`)
 
-    const seedBytes = TypedArrayEncoder.fromHex(seedHex)
-
-    // Let Credo handle key creation internally during DID creation
-    const result = await this.agent.dids.create({
-      method: 'peer',
-      options: {
-        numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
-        keyType: KeyType.Ed25519,
-      },
-      secret: {
-        seed: seedBytes,
-      },
-    })
+    let result
+    try {
+      const keyId = await this.importEd25519KeyFromSeed(seedHex)
+      result = await this.agent.dids.create({
+        method: 'peer',
+        options: {
+          numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
+          keyId,
+        },
+      })
+    } catch (error) {
+      // Key import fails if the key already exists in the wallet - handled below
+      result = {
+        didState: { state: 'failed' as const, reason: (error as Error).message },
+      }
+    }
 
     // If creation failed because key exists, find the existing DID
-    if (result.didState?.state === 'failed' && result.didState.reason?.includes('Key already exists')) {
+    if (
+      result.didState?.state === 'failed' &&
+      ((result.didState as { reason?: string }).reason?.includes('Key already exists') ||
+        (result.didState as { reason?: string }).reason?.toLowerCase().includes('already exists'))
+    ) {
       console.log(`[${this.name}]   Key already exists in wallet, reusing existing DID...`)
 
       // Get all DIDs and find the one created from this seed
@@ -1035,17 +1167,14 @@ export class WitnessService {
     // Generate random seed for deterministic DID creation
     const seedBuffer = randomBytes(32)
     const seedHex = seedBuffer.toString('hex')
-    const seedBytes = TypedArrayEncoder.fromHex(seedHex)
 
-    // Let Credo handle key creation internally during DID creation
+    // Import the seed-derived key and create the DID from it (credo 0.6 pattern)
+    const keyId = await this.importEd25519KeyFromSeed(seedHex)
     const result = await this.agent.dids.create({
       method: 'peer',
       options: {
         numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
-        keyType: KeyType.Ed25519,
-      },
-      secret: {
-        seed: seedBytes,
+        keyId,
       },
     })
 
@@ -1076,8 +1205,8 @@ export class WitnessService {
    */
   private registerMessageHandlers(): void {
     // Listen for connection state changes to send witness announcement
-    this.agent.events.on<ConnectionStateChangedEvent>(
-      ConnectionEventTypes.ConnectionStateChanged,
+    this.agent.events.on<DidCommConnectionStateChangedEvent>(
+      DidCommConnectionEventTypes.DidCommConnectionStateChanged,
       async ({ payload }) => {
         const { connectionRecord, previousState } = payload
 
@@ -1110,13 +1239,15 @@ export class WitnessService {
                 eventName: this.config.eventName || null,
                 eventStartTime: this.config.eventStartTime?.toISOString() || null,
                 eventEndTime: this.config.eventEndTime?.toISOString() || null,
-                capabilities: ['witnessed-vrc-exchange'],
-                version: '1.0',
+                // vc-2.0: this witness verifies VCDM 2.0 VRCs and mirrors the
+                // VRC's data model version when issuing the VWC
+                capabilities: ['witnessed-vrc-exchange', 'vc-2.0'],
+                version: '2.0',
               },
               timestamp: new Date().toISOString(),
             }
 
-            await this.agent.basicMessages.sendMessage(connectionRecord.id, JSON.stringify(announcement))
+            await this.agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, JSON.stringify(announcement))
             console.log(`[${this.name}] ✓ Sent witness-announcement to ${peerLabel}`)
 
             // Send human-readable welcome messages after the machine-readable announcement
@@ -1129,7 +1260,7 @@ export class WitnessService {
               `You're all set — go connect with others!`
 
             await new Promise((resolve) => setTimeout(resolve, 750))
-            await this.agent.basicMessages.sendMessage(connectionRecord.id, welcomeMessage)
+            await this.agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, welcomeMessage)
             console.log(`[${this.name}] ✓ Sent welcome message to ${peerLabel}`)
           } catch (error) {
             console.error(`[${this.name}] Failed to send witness announcement:`, error)
@@ -1139,8 +1270,8 @@ export class WitnessService {
     )
 
     // Listen for basic messages for witnessed exchange protocol
-    this.agent.events.on<BasicMessageStateChangedEvent>(
-      BasicMessageEventTypes.BasicMessageStateChanged,
+    this.agent.events.on<DidCommBasicMessageStateChangedEvent>(
+      DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged,
       async ({ payload }) => {
         const { basicMessageRecord, message } = payload
 
@@ -1154,7 +1285,7 @@ export class WitnessService {
         // Get connection info for friendly logging
         let peerName = 'Unknown'
         try {
-          const conn = await this.agent.connections.getById(connectionId)
+          const conn = await this.agent.modules.didcomm.connections.getById(connectionId)
           peerName = conn.theirLabel || 'Unknown'
         } catch {
           // Connection lookup failed, use default
@@ -1227,12 +1358,12 @@ export class WitnessService {
 
           // Unknown JSON message type
           console.log(`[${this.name}] 💬 ${peerName}: ${content.substring(0, 200)}`)
-          await this.agent.basicMessages.sendMessage(
+          await this.agent.modules.didcomm.basicMessages.sendMessage(
             connectionId,
             'Thanks for your message! If you have feedback about the Keyring, please share it here: https://forms.gle/KWEDvvmDUVSMz4VK9'
           )
           await this.deleteMessageRecord(messageId, 'feedback message')
-        } catch (parseError) {
+        } catch (_parseError) {
           // Plain text message — handle with LLM if enabled, otherwise use fallback
           console.log(`[${this.name}] 💬 ${peerName}: ${content}`)
 
@@ -1248,7 +1379,7 @@ export class WitnessService {
                 console.log(`[${this.name}] 🤖 Sending to connectionId: ${connectionId}`)
               }
 
-              const sentMessage = await this.agent.basicMessages.sendMessage(connectionId, aiResponse)
+              const sentMessage = await this.agent.modules.didcomm.basicMessages.sendMessage(connectionId, aiResponse)
 
               if (this.config.verbose) {
                 console.log(
@@ -1264,14 +1395,14 @@ export class WitnessService {
             } catch (llmError) {
               console.error(`[${this.name}] LLM error:`, llmError)
               // Fallback to default message if LLM fails
-              await this.agent.basicMessages.sendMessage(
+              await this.agent.modules.didcomm.basicMessages.sendMessage(
                 connectionId,
                 'Thanks for your message! If you have feedback about the Keyring, please share it here: https://forms.gle/KWEDvvmDUVSMz4VK9'
               )
             }
           } else {
             // LLM disabled - use default response
-            await this.agent.basicMessages.sendMessage(
+            await this.agent.modules.didcomm.basicMessages.sendMessage(
               connectionId,
               'Thanks for your message! If you have feedback about the Keyring, please share it here: https://forms.gle/KWEDvvmDUVSMz4VK9'
             )
@@ -1317,7 +1448,7 @@ export class WitnessService {
     if (this.config.eventStartTime && now < this.config.eventStartTime) {
       const startIso = this.config.eventStartTime.toISOString()
       console.log(`[${this.name}]   ✗ Session request rejected: event has not started (starts ${startIso})`)
-      await this.agent.basicMessages.sendMessage(
+      await this.agent.modules.didcomm.basicMessages.sendMessage(
         initiatorConnectionId,
         JSON.stringify({
           type: 'error',
@@ -1332,7 +1463,7 @@ export class WitnessService {
     if (this.config.eventEndTime && now > this.config.eventEndTime) {
       const endIso = this.config.eventEndTime.toISOString()
       console.log(`[${this.name}]   ✗ Session request rejected: event has ended (ended ${endIso})`)
-      await this.agent.basicMessages.sendMessage(
+      await this.agent.modules.didcomm.basicMessages.sendMessage(
         initiatorConnectionId,
         JSON.stringify({
           type: 'error',
@@ -1346,7 +1477,7 @@ export class WitnessService {
     // ── End of event time window check ──────────────────────────────────────
 
     // Verify initiator connection exists
-    const initiatorConnection = await this.agent.connections.findById(initiatorConnectionId)
+    const initiatorConnection = await this.agent.modules.didcomm.connections.findById(initiatorConnectionId)
 
     if (!initiatorConnection) {
       console.log(`[${this.name}]   ✗ Initiator connection not found!`)
@@ -1383,7 +1514,7 @@ export class WitnessService {
     console.log(`[${this.name}]   ✓ Found counterparty connection: ${counterpartyConnectionId}`)
 
     // Verify counterparty connection is completed
-    const counterpartyConnection = await this.agent.connections.findById(counterpartyConnectionId)
+    const counterpartyConnection = await this.agent.modules.didcomm.connections.findById(counterpartyConnectionId)
     if (!counterpartyConnection || counterpartyConnection.state !== 'completed') {
       console.log(`[${this.name}]   ✗ Counterparty connection not ready`)
       await this.sendErrorMessage(initiatorConnectionId, 'Session request failed: Counterparty not connected')
@@ -1582,7 +1713,7 @@ export class WitnessService {
       ...result,
     }
 
-    await this.agent.basicMessages.sendMessage(connectionId, JSON.stringify(response))
+    await this.agent.modules.didcomm.basicMessages.sendMessage(connectionId, JSON.stringify(response))
     console.log(`[${this.name}] Sent verify-credential-response: verified=${result.verified}`)
   }
 
@@ -1692,7 +1823,7 @@ export class WitnessService {
    */
   private async sendErrorMessage(connectionId: string, error: string): Promise<void> {
     try {
-      await this.agent.basicMessages.sendMessage(connectionId, JSON.stringify({ type: 'error', error }))
+      await this.agent.modules.didcomm.basicMessages.sendMessage(connectionId, JSON.stringify({ type: 'error', error }))
     } catch {
       console.log(`[${this.name}] Failed to send error message to ${connectionId}`)
     }
@@ -1740,7 +1871,7 @@ export class WitnessService {
         // Verify the OOB record actually exists in the wallet
         // If wallet was wiped but file still exists, this will fail
         try {
-          const outOfBandRecord = await this.agent.oob.findById(this.outOfBandId)
+          const outOfBandRecord = await this.agent.modules.didcomm.oob.findById(this.outOfBandId)
           if (!outOfBandRecord) {
             throw new Error('OOB record not found in wallet')
           }
@@ -1774,7 +1905,7 @@ export class WitnessService {
     }
 
     // Create new invitation
-    const outOfBand = await this.agent.oob.createInvitation({
+    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation({
       multiUseInvitation: true,
     })
 
@@ -1804,7 +1935,7 @@ export class WitnessService {
     }
 
     // Get the out-of-band record by ID
-    const outOfBandRecord = await this.agent.oob.findById(this.outOfBandId)
+    const outOfBandRecord = await this.agent.modules.didcomm.oob.findById(this.outOfBandId)
     if (!outOfBandRecord) {
       throw new Error(`Out-of-band record not found: ${this.outOfBandId}`)
     }
@@ -1918,7 +2049,7 @@ export class WitnessService {
    * Create a single-use connection invitation
    */
   public async createConnectionInvitation(): Promise<string> {
-    const outOfBand = await this.agent.oob.createInvitation()
+    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation()
     const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
       domain: this.config.publicUrl,
     })
@@ -1937,8 +2068,8 @@ export class WitnessService {
   /**
    * Get all active connections
    */
-  public async getConnections(): Promise<ConnectionRecord[]> {
-    return this.agent.connections.getAll()
+  public async getConnections(): Promise<DidCommConnectionRecord[]> {
+    return this.agent.modules.didcomm.connections.getAll()
   }
 
   /**
@@ -2014,8 +2145,8 @@ export class WitnessService {
       domain,
     })
 
-    await this.agent.basicMessages.sendMessage(aliceConnectionId, challengeMessage)
-    await this.agent.basicMessages.sendMessage(bobConnectionId, challengeMessage)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(aliceConnectionId, challengeMessage)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(bobConnectionId, challengeMessage)
 
     console.log(`[${this.name}] Sent session challenge to both participants`)
 
@@ -2214,16 +2345,12 @@ export class WitnessService {
       // ========================================
       // Step 5: FRESHNESS CHECK - Verify timestamp is recent
       // ========================================
-      const issuanceDate = new Date(vrcJson.issuanceDate)
-      const now = new Date()
-      const fiveMinutesInMs = 5 * 60 * 1000
-      const timeDiff = Math.abs(now.getTime() - issuanceDate.getTime())
-
-      if (timeDiff > fiveMinutesInMs) {
-        return { verified: false, error: 'Credential issuance date is not fresh (>5 minutes old)' }
+      const freshness = checkVrcFreshness(vrcJson)
+      if (!freshness.fresh) {
+        return { verified: false, error: freshness.error }
       }
 
-      console.log(`[${this.name}]   ✓ Freshness check passed (issued ${Math.round(timeDiff / 1000)}s ago)`)
+      console.log(`[${this.name}]   ✓ Freshness check passed (issued ${Math.round(freshness.ageMs / 1000)}s ago)`)
 
       // Store the verified presentation
       sessionData.receivedPresentations.set(connectionId, presentationJson)
@@ -2271,7 +2398,7 @@ export class WitnessService {
         // Get participant DIDs from connections
         const participantDids: string[] = []
         for (const connId of participantIds) {
-          const conn = await this.agent.connections.findById(connId)
+          const conn = await this.agent.modules.didcomm.connections.findById(connId)
           if (conn?.theirDid) {
             participantDids.push(conn.theirDid)
           }
@@ -2297,23 +2424,26 @@ export class WitnessService {
         const rawIssuer = presentation.verifiableCredential?.[0]?.issuer
         const vrcIssuer = typeof rawIssuer === 'string' ? rawIssuer : (rawIssuer as any)?.id || 'unknown'
 
-        await this.agent.credentials.offerCredential({
+        // Mirror the observed VRC's proof family: a DI-signed VRC implies its
+        // counterparty (this VWC's cross-distributed recipient) is DI-capable
+        // (docs/CRYPTO_SUITE_FOLLOWUP.md, witness issuance mirroring)
+        const proofOptions = getMirroredJsonLdProofOptions(presentation.verifiableCredential?.[0]?.proof)
+        console.log(`[${this.name}] Issuing VWC with proofType=${proofOptions.proofType}`)
+
+        await this.agent.modules.didcomm.credentials.offerCredential({
           connectionId: recipientConnectionId,
           protocolVersion: 'v2',
-          autoAcceptCredential: AutoAcceptCredential.Always,
+          autoAcceptCredential: DidCommAutoAcceptCredential.Always,
           credentialFormats: {
             jsonld: {
               credential: witnessCredential,
-              options: {
-                proofType: 'Ed25519Signature2018',
-                proofPurpose: 'assertionMethod',
-              },
+              options: proofOptions,
             },
           },
         })
 
         // Get recipient DID for registry
-        const recipientConnection = await this.agent.connections.findById(recipientConnectionId)
+        const recipientConnection = await this.agent.modules.didcomm.connections.findById(recipientConnectionId)
         const recipientDid = recipientConnection?.theirDid || 'unknown'
 
         // Register the issued credential
@@ -2418,71 +2548,28 @@ export class WitnessService {
       throw new Error('Witness issuer DID not initialized')
     }
 
-    const vwcId = `urn:uuid:${utils.uuid()}`
-
-    const credentials = observedPresentation.verifiableCredential || []
-    const vrcJson = credentials[0]
-
-    if (!vrcJson) {
-      throw new Error('No VRC found in presentation')
-    }
-
-    // Compute SHA-256 digest of the VRC
-    const vrcCanonical = JSON.stringify(vrcJson, Object.keys(vrcJson).sort())
-    const digest = 'sha256:' + createHash('sha256').update(vrcCanonical).digest('hex')
-
-    const vrcIssuer = typeof vrcJson.issuer === 'string' ? vrcJson.issuer : vrcJson.issuer?.id || 'unknown'
-
     // Check if VRC includes hardware attestation evidence
     // The witness does NOT verify the certificate chain - only records its presence
     // Device-side verification is responsible for chain validation (soft check currently)
-    const hasHardwareAttestationEvidence = Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0
-    if (hasHardwareAttestationEvidence) {
-      console.log(
-        `[${this.name}] VRC includes hardware attestation evidence (${vrcJson.evidence.length} evidence block(s))`
-      )
-    } else {
-      console.log(`[${this.name}] VRC does not include hardware attestation evidence`)
+    const vrcJson = (observedPresentation.verifiableCredential || [])[0]
+    if (vrcJson) {
+      if (Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0) {
+        console.log(
+          `[${this.name}] VRC includes hardware attestation evidence (${vrcJson.evidence.length} evidence block(s))`
+        )
+      } else {
+        console.log(`[${this.name}] VRC does not include hardware attestation evidence`)
+      }
     }
 
-    // Build witnessContext according to spec (event, sessionId, method - no domain/timestamp)
-    const witnessContext: Record<string, any> = {
+    return buildWitnessCredentialJson(observedPresentation, {
+      issuerDid: this.issuerDid,
+      witnessName: this.name,
       sessionId: sessionData.sessionId,
-      method: this.config.verificationMethod,
-      // Flag indicating whether the VRC included hardware attestation evidence
-      // This does NOT mean the evidence was verified by the witness
-      // It means the participant's device performed hardware-backed authentication
-      hardwareAttestationIncluded: hasHardwareAttestationEvidence,
-    }
-
-    // Only include event if configured
-    if (this.config.eventName) {
-      witnessContext.event = this.config.eventName
-    }
-
-    // Include locality verification evidence if available
-    if (localityEvidence) {
-      witnessContext.localityVerification = localityEvidence
-    }
-
-    return {
-      '@context': ['https://www.w3.org/2018/credentials/v1', WITNESSED_EXCHANGE_CONTEXT_URL],
-      id: vwcId,
-      type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-      issuer: {
-        id: this.issuerDid,
-        name: this.name,
-      },
-      issuanceDate: new Date().toISOString(),
-      // W3C VC v1 expirationDate and validUntil - set to current time + 7 days
-      expirationDate: new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString(),
-      validUntil: new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString(),
-      credentialSubject: {
-        id: vrcIssuer,
-        digest: digest,
-        witnessContext,
-      },
-    }
+      verificationMethod: this.config.verificationMethod,
+      eventName: this.config.eventName,
+      localityEvidence,
+    })
   }
 
   // ============================================
@@ -2545,7 +2632,7 @@ export class WitnessService {
    * Send a basic message to a connection
    */
   public async sendMessage(connectionId: string, message: string): Promise<void> {
-    await this.agent.basicMessages.sendMessage(connectionId, message)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(connectionId, message)
   }
 
   /**
@@ -2570,7 +2657,7 @@ export class WitnessService {
     }
 
     try {
-      await this.agent.basicMessages.deleteById(messageId)
+      await this.agent.modules.didcomm.basicMessages.deleteById(messageId)
       if (this.config.verbose) {
         console.log(`[${this.name}] 🗑️ Deleted ${messageType} message record: ${messageId.substring(0, 8)}...`)
       }

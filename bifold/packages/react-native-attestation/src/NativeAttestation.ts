@@ -71,6 +71,7 @@ export interface Spec extends TurboModule {
   // Android-only: Play Integrity
   isPlayIntegrityAvailable(): Promise<boolean>;
   googleAttestation(nonce: string): Promise<string>;
+  getAppStoreReceipt(): Promise<string>;
 
   // Cross-platform: Hardware-backed signing key
   createSecureEnclaveKey(): Promise<NativeHardwareKeyGenerationResult>;

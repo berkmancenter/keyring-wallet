@@ -10,8 +10,7 @@ import { DeviceEventEmitter, FlatList, StyleSheet, TouchableOpacity, View } from
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import RecordLoading from '../components/animated/RecordLoading'
-import { CredentialCard } from '../components/misc'
-import { EventTypes } from '../constants'
+import { EventTypes, hitSlop } from '../constants'
 import { useTheme } from '../contexts/theme'
 import { useAllCredentialsForProof } from '../hooks/proofs'
 import { BifoldError } from '../types/error'
@@ -19,8 +18,9 @@ import { ProofRequestsStackParams, Screens } from '../types/navigators'
 import { ProofCredentialItems } from '../types/proof-items'
 import { Fields, evaluatePredicates } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
-import { CredentialErrors } from '../components/misc/CredentialCard11'
 import { ThemedText } from '../components/texts/ThemedText'
+import { CredentialErrors } from '../types/credentials'
+import CredentialCardGen from '../components/misc/CredentialCardGen'
 
 type ProofChangeProps = StackScreenProps<ProofRequestsStackParams, Screens.ProofChangeCredential>
 
@@ -151,11 +151,13 @@ const ProofChangeCredential: React.FC<ProofChangeProps> = ({ route, navigation }
             <View style={styles.pageMargin}>
               <TouchableOpacity
                 accessibilityRole="button"
+                accessibilityLabel={t('ProofRequest.SelectCredential')}
                 testID={testIdWithKey(`select:${item.credId}`)}
                 onPress={() => changeCred(item.credId ?? '')}
+                hitSlop={hitSlop}
                 style={[item.credId === selectedCred ? SelectedCredTheme : undefined, { marginBottom: 10 }]}
               >
-                <CredentialCard
+                <CredentialCardGen
                   credential={item.credExchangeRecord}
                   credDefId={item.credDefId}
                   schemaId={item.schemaId}
@@ -166,7 +168,7 @@ const ProofChangeCredential: React.FC<ProofChangeProps> = ({ route, navigation }
                   credName={item.credName}
                   proof
                   credentialErrors={errors}
-                ></CredentialCard>
+                ></CredentialCardGen>
               </TouchableOpacity>
             </View>
           )

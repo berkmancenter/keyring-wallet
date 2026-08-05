@@ -1,13 +1,18 @@
 import { AnonCredsCredentialMetadataKey } from '@credo-ts/anoncreds'
-import { CredentialExchangeRecord, CredentialRole, CredentialState, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
-import { useCredentialByState } from '@credo-ts/react-hooks'
+import { useCredentialByState } from '@bifold/react-hooks'
+import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
+
+import { isVrcModuleCredential } from '../modules/vrc/credentialTypes'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FlatList, View } from 'react-native'
-
-import CredentialCard from '../components/misc/CredentialCard'
+import {
+  DidCommCredentialExchangeRecord,
+  DidCommCredentialRole,
+  DidCommCredentialState,
+} from '@credo-ts/didcomm'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
@@ -18,9 +23,9 @@ import { EmptyListProps } from '../components/misc/EmptyList'
 import { CredentialListFooterProps } from '../types/credential-list-footer'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
 import { GenericCredentialExchangeRecord } from '../types/credentials'
-import { CredentialErrors } from '../components/misc/CredentialCard11'
 import { BaseTourID } from '../types/tour'
 import { OpenIDCredentialType } from '../modules/openid/types'
+import CredentialCardGen from '../components/misc/CredentialCardGen'
 
 const ListCredentials: React.FC = () => {
   const { t } = useTranslation()
@@ -41,31 +46,36 @@ const ListCredentials: React.FC = () => {
   const { start, stop } = useTour()
   const screenIsFocused = useIsFocused()
   const {
-    openIdState: { w3cCredentialRecords, sdJwtVcRecords },
+    openIdState: { w3cCredentialRecords, sdJwtVcRecords, mdocVcRecords },
   } = useOpenIDCredentials()
 
   let credentials: GenericCredentialExchangeRecord[] = [
-    ...useCredentialByState(CredentialState.CredentialReceived),
-    ...useCredentialByState(CredentialState.Done),
+    ...useCredentialByState(DidCommCredentialState.CredentialReceived),
+    ...useCredentialByState(DidCommCredentialState.Done),
     ...w3cCredentialRecords,
     ...sdJwtVcRecords,
+    ...mdocVcRecords,
   ]
+
+  const CredentialEmptyList = credentialEmptyList as React.FC<EmptyListProps>
+  const CredentialListFooter = credentialListFooter as React.FC<CredentialListFooterProps>
 
   // Deduplicate: if a credential exists in both CredentialReceived and Done states
   // (same threadId), keep only the Done record. This prevents ghost "Unknown Credential"
   // cards from appearing during the brief transition between states.
   const doneThreadIds = new Set(
     credentials
-      .filter((r): r is CredentialExchangeRecord =>
-        r instanceof CredentialExchangeRecord && r.state === CredentialState.Done
+      .filter(
+        (r): r is DidCommCredentialExchangeRecord =>
+          r instanceof DidCommCredentialExchangeRecord && r.state === DidCommCredentialState.Done
       )
       .map((r) => r.threadId)
       .filter(Boolean)
   )
   credentials = credentials.filter((r) => {
     if (
-      r instanceof CredentialExchangeRecord &&
-      r.state === CredentialState.CredentialReceived &&
+      r instanceof DidCommCredentialExchangeRecord &&
+      r.state === DidCommCredentialState.CredentialReceived &&
       r.threadId &&
       doneThreadIds.has(r.threadId)
     ) {
@@ -74,13 +84,11 @@ const ListCredentials: React.FC = () => {
     return true
   })
 
-  const CredentialEmptyList = credentialEmptyList as React.FC<EmptyListProps>
-  const CredentialListFooter = credentialListFooter as React.FC<CredentialListFooterProps>
-
   // Helper function to check if credential should be hidden from wallet view
   // This includes DTGCredential (RelationshipCredential) and RCardTemplate
   const shouldHideFromWallet = (credential: GenericCredentialExchangeRecord): boolean => {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cred = credential as any
 
       // For W3C credentials - check if it has a 'credential' property (duck typing)
@@ -97,15 +105,8 @@ const ListCredentials: React.FC = () => {
           // - DTGCredential: Relationship credentials (shown in Contacts)
           // - RelationshipCredential: Peer VRC exchanges (shown in Contacts)
           // - RCardTemplate: Self-issued business card (internal use only)
-          if (
-            types.some(
-              (type: unknown) =>
-                typeof type === 'string' &&
-                (type.includes('DTGCredential') ||
-                  type.includes('RelationshipCredential') ||
-                  type.includes('RCardTemplate'))
-            )
-          ) {
+          // - RelationshipCard: Exchanged contact card (feeds Contacts display)
+          if (isVrcModuleCredential(types)) {
             return true
           }
         }
@@ -113,7 +114,7 @@ const ListCredentials: React.FC = () => {
 
       // For CredentialExchangeRecord - hide issuer role records
       // Issuer role means YOU issued this credential to someone else, not a credential you hold
-      if (cred.role === CredentialRole.Issuer) {
+      if (cred.role === DidCommCredentialRole.Issuer) {
         return true
       }
 
@@ -124,7 +125,7 @@ const ListCredentials: React.FC = () => {
       //
       // Detection strategy: AnonCreds exchange records have credentialAttributes populated
       // and/or AnonCreds metadata. If neither is present, it's a JSON-LD exchange record.
-      if (cred.state === CredentialState.Done || cred.state === CredentialState.CredentialReceived) {
+      if (cred.state === DidCommCredentialState.Done || cred.state === DidCommCredentialState.CredentialReceived) {
         const hasAnonCredsMetadata =
           cred.metadata?.data?.[AnonCredsCredentialMetadataKey]?.credentialDefinitionId ||
           cred.metadata?._anoncreds?.credentialDefinitionId
@@ -133,9 +134,9 @@ const ListCredentials: React.FC = () => {
         const hasW3cBinding =
           cred.credentials &&
           Array.isArray(cred.credentials) &&
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           cred.credentials.some((c: any) => c.credentialRecordType === 'w3c')
-        const hasAnyBindings =
-          cred.credentials && Array.isArray(cred.credentials) && cred.credentials.length > 0
+        const hasAnyBindings = cred.credentials && Array.isArray(cred.credentials) && cred.credentials.length > 0
 
         // Only apply JSON-LD exchange record hiding when there are actual credential bindings.
         // Records with no bindings are either pending or minimal mock records.
@@ -153,15 +154,7 @@ const ListCredentials: React.FC = () => {
         if ('type' in credentialData) {
           const typeValue = credentialData.type
           const types = Array.isArray(typeValue) ? typeValue : [typeValue]
-          if (
-            types.some(
-              (type: unknown) =>
-                typeof type === 'string' &&
-                (type.includes('DTGCredential') ||
-                  type.includes('RelationshipCredential') ||
-                  type.includes('RCardTemplate'))
-            )
-          ) {
+          if (isVrcModuleCredential(types)) {
             return true
           }
         }
@@ -169,16 +162,10 @@ const ListCredentials: React.FC = () => {
 
       // For AnonCreds CredentialExchangeRecord, check credential attributes
       if (cred.credentialAttributes && Array.isArray(cred.credentialAttributes)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const typeAttribute = cred.credentialAttributes.find((attr: any) => attr && attr.name === 'type')
 
-        if (
-          typeAttribute &&
-          typeAttribute.value &&
-          typeof typeAttribute.value === 'string' &&
-          (typeAttribute.value.includes('DTGCredential') ||
-            typeAttribute.value.includes('RelationshipCredential') ||
-            typeAttribute.value.includes('RCardTemplate'))
-        ) {
+        if (typeAttribute && typeAttribute.value && isVrcModuleCredential(typeAttribute.value)) {
           return true
         }
       }
@@ -195,8 +182,10 @@ const ListCredentials: React.FC = () => {
   // the exchange record already handles display with proper OCA branding.
   const w3cIdsOwnedByExchangeRecords = new Set<string>()
   credentials.forEach((r) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cred = r as any
     if (cred.credentials && Array.isArray(cred.credentials)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       cred.credentials.forEach((binding: any) => {
         if (binding.credentialRecordId) {
           w3cIdsOwnedByExchangeRecords.add(binding.credentialRecordId)
@@ -241,13 +230,11 @@ const ListCredentials: React.FC = () => {
     return stop
   }, [stop])
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const renderCardItem = (cred: GenericCredentialExchangeRecord) => {
     return (
-      <CredentialCard
-        credential={cred as CredentialExchangeRecord}
-        credentialErrors={
-          (cred as CredentialExchangeRecord).revocationNotification?.revocationDate && [CredentialErrors.Revoked]
-        }
+      <CredentialCardGen
+        credential={cred}
         onPress={() => {
           if (cred instanceof W3cCredentialRecord) {
             navigation.navigate(Screens.OpenIDCredentialDetails, {
@@ -259,6 +246,11 @@ const ListCredentials: React.FC = () => {
               credentialId: cred.id,
               type: OpenIDCredentialType.SdJwtVc,
             })
+          } else if (cred instanceof MdocRecord) {
+            navigation.navigate(Screens.OpenIDCredentialDetails, {
+              credentialId: cred.id,
+              type: OpenIDCredentialType.Mdoc,
+            })
           } else {
             navigation.navigate(Screens.CredentialDetails, { credentialId: cred.id })
           }
@@ -268,10 +260,9 @@ const ListCredentials: React.FC = () => {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View>
       <FlatList
         style={{ backgroundColor: ColorPalette.brand.primaryBackground }}
-        contentContainerStyle={{ flexGrow: 1 }}
         data={credentials.sort((a, b) => new Date(b.createdAt).valueOf() - new Date(a.createdAt).valueOf())}
         keyExtractor={(credential) => credential.id}
         renderItem={({ item: credential, index }) => {
@@ -283,6 +274,7 @@ const ListCredentials: React.FC = () => {
                 marginBottom: index === credentials.length - 1 ? 45 : 0,
               }}
             >
+              {/* use renderCardItemGen to render new card with abstracted types  */}
               {renderCardItem(credential)}
             </View>
           )

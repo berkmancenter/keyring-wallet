@@ -24,12 +24,12 @@ describe('Credential Issuance Integration', () => {
 
       // Wait for Alice to receive offer
       await waitForCondition(async () => {
-        const records = await alice.agent.credentials.getAll()
+        const records = await alice.agent.modules.didcomm.credentials.getAll()
         return records.some((r) => r.state === 'offer-received')
       }, 8000)
 
       // Get credential offer
-      const credentialRecords = await alice.agent.credentials.getAll()
+      const credentialRecords = await alice.agent.modules.didcomm.credentials.getAll()
       const offerRecord = credentialRecords.find((r) => r.state === 'offer-received')
       expect(offerRecord).toBeDefined()
 
@@ -39,12 +39,12 @@ describe('Credential Issuance Integration', () => {
       // Wait for credential to be issued and stored
       // This can take longer due to cryptographic signing and storage operations
       await waitForCondition(async () => {
-        const records = await alice.agent.w3cCredentials.getAllCredentialRecords()
+        const records = await alice.agent.w3cCredentials.getAll()
         return records.some((r) => r.credential !== null)
       }, 15000)
 
       // Verify credential is stored
-      const storedCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const storedCredentials = await alice.agent.w3cCredentials.getAll()
       const storedCredential = storedCredentials.find((r) => r.credential !== null)
 
       expect(storedCredential).toBeDefined()
@@ -57,20 +57,20 @@ describe('Credential Issuance Integration', () => {
       await bob.issueCredential()
 
       await waitForCondition(async () => {
-        const records = await alice.agent.credentials.getAll()
+        const records = await alice.agent.modules.didcomm.credentials.getAll()
         return records.some((r) => r.state === 'offer-received')
       }, 8000)
 
       // Get the offer record
-      const credentialRecords = await alice.agent.credentials.getAll()
+      const credentialRecords = await alice.agent.modules.didcomm.credentials.getAll()
       const offerRecord = credentialRecords.find((r) => r.state === 'offer-received')
       expect(offerRecord).toBeDefined()
 
       // Alice declines the credential offer
-      await alice.agent.credentials.declineOffer(offerRecord!.id)
+      await alice.agent.modules.didcomm.credentials.declineOffer(offerRecord!.id)
 
       // Verify the offer was declined (state should change to 'abandoned' or record deleted)
-      const updatedRecords = await alice.agent.credentials.getAll()
+      const updatedRecords = await alice.agent.modules.didcomm.credentials.getAll()
       const declinedRecord = updatedRecords.find((r) => r.id === offerRecord!.id)
 
       // After declining, the record should either be declined or not exist
@@ -82,7 +82,7 @@ describe('Credential Issuance Integration', () => {
       }
 
       // Verify no W3C credential was stored
-      const storedCredentials = await alice.agent.w3cCredentials.getAllCredentialRecords()
+      const storedCredentials = await alice.agent.w3cCredentials.getAll()
       const credentialFromThisOffer = storedCredentials.find(
         (c) => c.createdAt && c.createdAt >= offerRecord!.createdAt
       )

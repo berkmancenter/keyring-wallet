@@ -10,7 +10,7 @@
  * 4) Witnessing ON + Reporting ON → Witness flow with reportingDid included
  */
 
-import { Agent, ConnectionRecord, DidExchangeState, CredentialRole } from '@credo-ts/core'
+import { DidCommConnectionRecord, DidCommCredentialRole, DidCommDidExchangeState } from '@credo-ts/didcomm'
 
 // Test DIDs
 const testDids = {
@@ -96,12 +96,12 @@ const mockLogger = {
 }
 
 // Mock connection record
-const createMockConnectionRecord = (): ConnectionRecord => ({
+const createMockConnectionRecord = (): DidCommConnectionRecord => ({
   id: 'connection-123',
   theirDid: testDids.counterpartyConnectionDid,
   theirLabel: 'Test Contact',
-  state: DidExchangeState.Completed,
-  role: CredentialRole.Holder,
+  state: DidCommDidExchangeState.Completed,
+  role: DidCommCredentialRole.Holder,
   outOfBandId: 'oob-123',
   metadata: {
     get: jest.fn(),
@@ -109,8 +109,8 @@ const createMockConnectionRecord = (): ConnectionRecord => ({
   },
   createdAt: new Date(),
   tags: {},
-  type: 'ConnectionRecord',
-} as unknown as ConnectionRecord)
+  type: 'DidCommConnectionRecord',
+} as unknown as DidCommConnectionRecord)
 
 // Mock witness connection state
 const createMockWitnessState = (connected = true, hasReportingDid = true) => ({

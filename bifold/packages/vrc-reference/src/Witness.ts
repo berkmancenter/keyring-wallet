@@ -1,18 +1,11 @@
 import type BottomBar from 'inquirer/lib/ui/bottom-bar'
 
-import {
-  KeyType,
-  PeerDidNumAlgo,
-  utils,
-  type ConnectionRecord,
-  JsonTransformer,
-  AutoAcceptCredential,
-  BasicMessageEventTypes,
-  type BasicMessageStateChangedEvent,
-  W3cJsonLdVerifiableCredential,
-} from '@credo-ts/core'
+import { PeerDidNumAlgo, utils, JsonTransformer, W3cJsonLdVerifiableCredential } from '@credo-ts/core'
+import { DidCommAutoAcceptCredential, DidCommBasicMessageEventTypes, DidCommBasicMessageStateChangedEvent, DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { ui } from 'inquirer'
 import { createHash } from 'crypto'
+import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL, jcsCanonicalize } from '@bifold/vrc-contexts'
+import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
 import { BaseAgent } from './BaseAgent'
 import { greenText, Output, purpleText, redText } from './OutputClass'
@@ -56,8 +49,8 @@ export class Witness extends BaseAgent {
   }
 
   private registerBasicMessageHandler() {
-    this.agent.events.on<BasicMessageStateChangedEvent>(
-      BasicMessageEventTypes.BasicMessageStateChanged,
+    this.agent.events.on<DidCommBasicMessageStateChangedEvent>(
+      DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged,
       async ({ payload }) => {
         const { basicMessageRecord, message } = payload
 
@@ -99,7 +92,7 @@ export class Witness extends BaseAgent {
           } else {
             console.log(purpleText(`[${this.name}] Message type: ${parsedMessage.type || 'unknown'}`))
           }
-        } catch (error) {
+        } catch (_error) {
           // Not a JSON message or not a presentation, ignore
           console.log(purpleText(`[${this.name}] Non-JSON or non-presentation message`))
         }
@@ -114,7 +107,7 @@ export class Witness extends BaseAgent {
       method: 'peer',
       options: {
         numAlgo: PeerDidNumAlgo.InceptionKeyWithoutDoc,
-        keyType: KeyType.Ed25519,
+        createKey: { type: { kty: 'OKP', crv: 'Ed25519' } },
       },
     })
 
@@ -139,7 +132,7 @@ export class Witness extends BaseAgent {
   }
 
   public async createConnectionInvitation(): Promise<string> {
-    const outOfBand = await this.agent.oob.createInvitation()
+    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation()
     const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
       domain: `http://localhost:${this.port}`,
     })
@@ -184,8 +177,8 @@ export class Witness extends BaseAgent {
       domain,
     })
 
-    await this.agent.basicMessages.sendMessage(aliceConnectionId, challengeMessage)
-    await this.agent.basicMessages.sendMessage(bobConnectionId, challengeMessage)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(aliceConnectionId, challengeMessage)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(bobConnectionId, challengeMessage)
 
     console.log(greenText(`[${this.name}] Sent session challenge to Alice and Bob\n`))
 
@@ -282,7 +275,11 @@ export class Witness extends BaseAgent {
       // ========================================
       // Step 4: FRESHNESS CHECK - Verify timestamp is recent
       // ========================================
-      const issuanceDate = new Date(vrcJson.issuanceDate)
+      // VCDM 2.0 VRCs carry validFrom; 1.1 VRCs carry issuanceDate
+      const issuanceDate = new Date(vrcJson.validFrom || vrcJson.issuanceDate)
+      if (Number.isNaN(issuanceDate.getTime())) {
+        return { verified: false, error: 'Credential has no parseable validFrom/issuanceDate' }
+      }
       const now = new Date()
       const fiveMinutesInMs = 5 * 60 * 1000
       const timeDiff = Math.abs(now.getTime() - issuanceDate.getTime())
@@ -340,17 +337,21 @@ export class Witness extends BaseAgent {
       // Extract VRC issuer for logging
       const vrcIssuer = presentation.verifiableCredential?.[0]?.issuer || 'unknown'
 
-      await this.agent.credentials.offerCredential({
+      // Mirror the observed VRC's proof family: a DI-signed VRC implies its
+      // counterparty (this VWC's cross-distributed recipient) is DI-capable
+      const proofOptions = getMirroredJsonLdProofOptions(presentation.verifiableCredential?.[0]?.proof)
+
+      await this.agent.modules.didcomm.credentials.offerCredential({
         connectionId: recipientConnectionId, // Send to the OTHER participant
         protocolVersion: 'v2',
-        autoAcceptCredential: AutoAcceptCredential.Always,
+        autoAcceptCredential: DidCommAutoAcceptCredential.Always,
         credentialFormats: {
           jsonld: {
-            credential: witnessCredential,
-            options: {
-              proofType: 'Ed25519Signature2018',
-              proofPurpose: 'assertionMethod',
-            },
+            // Cast: credo's JsonCredential type still requires the v1.1
+            // issuanceDate; the patched runtime accepts VCDM 2.0 validFrom
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            credential: witnessCredential as any,
+            options: proofOptions,
           },
         },
       })
@@ -390,8 +391,10 @@ export class Witness extends BaseAgent {
       throw new Error('No VRC found in presentation')
     }
 
-    // Compute SHA-256 digest of the VRC for cryptographic binding
-    const vrcCanonical = JSON.stringify(vrcJson, Object.keys(vrcJson).sort())
+    // Compute SHA-256 digest of the VRC for cryptographic binding.
+    // JCS (RFC 8785) canonicalization makes the digest reproducible from the
+    // same JSON data regardless of key order or serializer.
+    const vrcCanonical = jcsCanonicalize(vrcJson)
     const digest = 'sha256:' + createHash('sha256').update(vrcCanonical).digest('hex')
 
     // Extract VRC issuer (who created the VRC - this is the R-DID of the credential issuer)
@@ -406,15 +409,22 @@ export class Witness extends BaseAgent {
 
     // Build the VWC according to the DTG spec structure
     // The credentialSubject.id MUST match the Subject of the witnessed VRC (i.e., the VRC issuer's R-DID)
+    // VCDM 2.0 shape (v2 context, validFrom) — reference tracks the current spec.
+    // Proof family mirrors the observed VRC (see the offer site): DI VWCs need
+    // no suite context URL, 2018 VWCs need the Ed25519 suite terms.
+    const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
     return {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1', // W3C VC Data Model v1 (Credo compatible)
-        WITNESSED_EXCHANGE_CONTEXT_URL, // DTG witnessed-exchange context (locally resolved)
-      ],
+      '@context': vrcUsesDi
+        ? [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL]
+        : [
+            CREDENTIALS_V2_CONTEXT_URL, // W3C VC Data Model 2.0 (locally resolved)
+            WITNESSED_EXCHANGE_CONTEXT_URL, // DTG witnessed-exchange context (locally resolved)
+            ED25519_2018_SUITE_CONTEXT_URL, // suite terms (the v2 base context doesn't define them)
+          ],
       id: vwcId,
       type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
       issuer: this.issuerDid,
-      issuanceDate: new Date().toISOString(),
+      validFrom: new Date().toISOString(),
       credentialSubject: {
         // Per spec: id MUST match the Subject of the witnessed VRC
         // The VRC issuer's R-DID represents the subject of the witness attestation
@@ -429,8 +439,8 @@ export class Witness extends BaseAgent {
     }
   }
 
-  public async getConnectionByOutOfBandId(outOfBandId: string): Promise<ConnectionRecord | undefined> {
-    const connections = await this.agent.connections.findAllByOutOfBandId(outOfBandId)
+  public async getConnectionByOutOfBandId(outOfBandId: string): Promise<DidCommConnectionRecord | undefined> {
+    const connections = await this.agent.modules.didcomm.connections.findAllByOutOfBandId(outOfBandId)
     return connections[0]
   }
 
@@ -476,7 +486,7 @@ export class Witness extends BaseAgent {
   }
 
   public async sendMessage(connectionId: string, message: string): Promise<void> {
-    await this.agent.basicMessages.sendMessage(connectionId, message)
+    await this.agent.modules.didcomm.basicMessages.sendMessage(connectionId, message)
   }
 
   public async exit(): Promise<void> {

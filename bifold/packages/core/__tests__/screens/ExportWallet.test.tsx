@@ -4,7 +4,7 @@ import React from 'react'
 import ExportWallet from '../../src/screens/ExportWallet'
 import { testIdWithKey } from '../../src/utils/testable'
 
-jest.mock('@credo-ts/react-hooks', () => ({
+jest.mock('@bifold/react-hooks', () => ({
   useAgent: jest.fn(() => ({
     agent: {
       isInitialized: true,

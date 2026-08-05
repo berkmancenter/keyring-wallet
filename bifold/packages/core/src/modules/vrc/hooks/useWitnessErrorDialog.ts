@@ -100,6 +100,7 @@ export function useWitnessErrorDialog(): UseWitnessErrorDialogResult {
       await error.onRetry()
     } catch (retryError) {
       // Error will be set by the retry handler if needed
+      // eslint-disable-next-line no-console
       console.error('[WitnessErrorDialog] Retry failed:', retryError)
     } finally {
       setIsRetrying(false)
@@ -124,6 +125,7 @@ export function useWitnessErrorDialog(): UseWitnessErrorDialogResult {
     try {
       await error.onProceedWithout()
     } catch (proceedError) {
+      // eslint-disable-next-line no-console
       console.error('[WitnessErrorDialog] Proceed without witness failed:', proceedError)
     }
     // Error should be cleared by the handler

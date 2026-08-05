@@ -1,9 +1,9 @@
-import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DeviceEventEmitter } from 'react-native'
 import { EventTypes } from '../../../constants'
+import { TOKENS, useServices } from '../../../container-api'
 import { BifoldError } from '../../../types/error'
 import {
   acquirePreAuthorizedAccessToken,
@@ -12,6 +12,11 @@ import {
 } from '../offerResolve'
 import { getCredentialsForProofRequest } from '../resolverProof'
 import { OpenId4VPRequestRecord } from '../types'
+import { getCredentialConfigurationIds } from '../utils/utils'
+import { setRefreshCredentialMetadata } from '../metadata'
+import { RefreshStatus } from '../refresh/types'
+import { temporaryMetaVanillaObject } from '../metadata'
+import { OpenIDCredentialRecord } from '../credentialRecord'
 
 type OpenIDContextProps = {
   openIDUri?: string
@@ -21,13 +26,12 @@ type OpenIDContextProps = {
 export const useOpenID = ({
   openIDUri,
   openIDPresentationUri,
-}: OpenIDContextProps): SdJwtVcRecord | W3cCredentialRecord | MdocRecord | OpenId4VPRequestRecord | undefined => {
-  const [openIdRecord, setOpenIdRecord] = useState<
-    SdJwtVcRecord | W3cCredentialRecord | MdocRecord | OpenId4VPRequestRecord
-  >()
+}: OpenIDContextProps): OpenIDCredentialRecord | OpenId4VPRequestRecord | undefined => {
+  const [openIdRecord, setOpenIdRecord] = useState<OpenIDCredentialRecord | OpenId4VPRequestRecord>()
 
   const { agent } = useAgent()
   const { t } = useTranslation()
+  const [{ enableHardwareBackedHolderBinding }] = useServices([TOKENS.CONFIG])
 
   const resolveOpenIDCredential = useCallback(
     async (uri: string) => {
@@ -40,25 +44,78 @@ export const useOpenID = ({
           uri: uri,
         })
 
-        const tokenResponse = await acquirePreAuthorizedAccessToken({ agent, resolvedCredentialOffer })
+        const authServers = resolvedCredentialOffer.metadata.credentialIssuer.authorization_servers
+        const authServer = resolvedCredentialOffer.metadata.authorizationServers[0]
+        const credentialIssuer = authServer.issuer
+        const issuerMetadata = resolvedCredentialOffer.metadata.credentialIssuer
+        const configID = getCredentialConfigurationIds(resolvedCredentialOffer)?.[0]
+        const tokenEndpoint = authServer?.token_endpoint
+        const credentialEndpoint = issuerMetadata.credential_endpoint
 
-        return await receiveCredentialFromOpenId4VciOffer({
+        if (!configID) {
+          throw new Error('No credential configuration ID found in the credential offer metadata')
+        }
+        if (!credentialIssuer) {
+          throw new Error('No credential issuer found in the credential offer metadata')
+        }
+
+        const tokenResponse = await acquirePreAuthorizedAccessToken({
           agent,
           resolvedCredentialOffer,
-          accessToken: tokenResponse,
         })
+        const refreshToken = tokenResponse.refreshToken
+
+        temporaryMetaVanillaObject.tokenResponse = tokenResponse
+
+        const credential = await receiveCredentialFromOpenId4VciOffer({
+          agent,
+          resolvedCredentialOffer,
+          tokenResponse: tokenResponse,
+          enableHardwareBackedHolderBinding,
+        })
+
+        if (refreshToken) {
+          setRefreshCredentialMetadata(credential, {
+            tokenEndpoint: tokenEndpoint,
+            refreshToken: refreshToken,
+            authorizationServer: tokenResponse.authorizationServer,
+            issuerMetadataCache: {
+              credential_issuer: credentialIssuer,
+              credential_endpoint: credentialEndpoint,
+              token_endpoint: tokenEndpoint,
+              authorization_servers: authServers,
+              credential_configurations_supported: issuerMetadata?.credential_configurations_supported,
+            },
+            credentialIssuer: credentialIssuer,
+            credentialConfigurationId: configID,
+            tokenBinding: tokenResponse.dpop ? 'DPoP' : 'Bearer',
+            dpop: tokenResponse.dpop
+              ? {
+                  alg: tokenResponse.dpop.alg,
+                  jwk: tokenResponse.dpop.jwk.toJson(),
+                  nonce: tokenResponse.dpop.nonce,
+                }
+              : undefined,
+            lastCheckedAt: Date.now(),
+            lastCheckResult: RefreshStatus.Valid,
+            attemptCount: 0,
+            resolvedCredentialOffer: resolvedCredentialOffer,
+          })
+        }
+
+        return credential
       } catch (err: unknown) {
-        //TODO: Sppecify different error
+        const errorMessage = err instanceof Error ? err.message : String(err)
         const error = new BifoldError(
           t('Error.Title1024'),
-          t('Error.Message1024'),
-          (err as Error)?.message ?? err,
+          errorMessage,
+          errorMessage,
           1043
         )
-        DeviceEventEmitter.emit(EventTypes.ERROR_ADDED, error)
+        DeviceEventEmitter.emit(EventTypes.OPENID_CONNECTION_ERROR, error)
       }
     },
-    [agent, t]
+    [agent, enableHardwareBackedHolderBinding, t]
   )
 
   const resolveOpenIDPresentationRequest = useCallback(
@@ -69,17 +126,18 @@ export const useOpenID = ({
       try {
         const record = await getCredentialsForProofRequest({
           agent: agent,
-          uri: uri,
+          request: uri,
         })
         return record
       } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
         const error = new BifoldError(
           t('Error.Title1043'),
-          t('Error.Message1043'),
-          (err as Error)?.message ?? err,
+          errorMessage,
+          errorMessage,
           1043
         )
-        DeviceEventEmitter.emit(EventTypes.ERROR_ADDED, error)
+        DeviceEventEmitter.emit(EventTypes.OPENID_CONNECTION_ERROR, error)
       }
     },
     [agent, t]

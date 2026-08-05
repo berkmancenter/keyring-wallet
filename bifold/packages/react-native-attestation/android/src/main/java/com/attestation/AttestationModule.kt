@@ -63,42 +63,6 @@ class AttestationModule : AttestationSpec {
 
     private const val ATTESTATION_EXTENSION_OID = "1.3.6.1.4.1.11129.2.1.17"
 
-    // Google Hardware Attestation Root CA — expires May 24, 2026
-    // TODO(P0): Replace before expiry. Google is transitioning to Remote Key Provisioning (RKP)
-    //   with short-lived certs. Monitor https://developer.android.com/privacy-and-security/security-key-attestation
-    //   for an updated root or RKP migration guidance.
-    private const val GOOGLE_ROOT_PEM = "-----BEGIN CERTIFICATE-----\n" +
-      "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\n" +
-      "-----END CERTIFICATE-----"
-
     /** Hex representation of first/last few bytes for diagnostic logging */
     fun bytesToHexShort(bytes: ByteArray, maxBytes: Int = 8): String {
       if (bytes.isEmpty()) return "(empty)"
@@ -159,6 +123,37 @@ class AttestationModule : AttestationSpec {
   }
 
   private var keySecurityLevel: String = "Software"
+
+  // --- iOS-only spec methods -------------------------------------------------
+  // With the New Architecture, codegen makes every spec method abstract on both
+  // platforms, so the iOS-only ones need explicit Android stubs.
+
+  @ReactMethod
+  override fun generateKey(cache: Boolean, promise: Promise) {
+    promise.reject("UNSUPPORTED", "generateKey is only available on iOS")
+  }
+
+  @ReactMethod
+  override fun sha256(stringToHash: String, promise: Promise) {
+    promise.reject("UNSUPPORTED", "sha256 is only available on iOS")
+  }
+
+  @ReactMethod
+  override fun appleKeyAttestation(keyId: String, challenge: String, promise: Promise) {
+    promise.reject("UNSUPPORTED", "appleKeyAttestation is only available on iOS")
+  }
+
+  @ReactMethod
+  override fun getAppStoreReceipt(promise: Promise) {
+    promise.reject("UNSUPPORTED", "getAppStoreReceipt is only available on iOS")
+  }
+
+  @ReactMethod
+  override fun attestHardwareSigningKey(challenge: String, promise: Promise) {
+    promise.reject("UNSUPPORTED", "attestHardwareSigningKey is only available on iOS")
+  }
+
+  // ---------------------------------------------------------------------------
 
   @ReactMethod
   override fun isPlayIntegrityAvailable(promise: Promise) {
@@ -1288,6 +1283,7 @@ class AttestationModule : AttestationSpec {
       for (i in 0 until certificateChainPem.size()) {
         try {
           val pem = certificateChainPem.getString(i)
+            ?: throw IllegalArgumentException("null certificate entry")
           val cert = certFactory.generateCertificate(
             ByteArrayInputStream(pem.toByteArray(Charsets.UTF_8))
           ) as X509Certificate
@@ -1309,12 +1305,10 @@ class AttestationModule : AttestationSpec {
       // Step 2: X.509 certificate chain verification using CertPathValidator
       // -----------------------------------------------------------------------
       try {
-        // Build trust anchors based on attestation format
-        val trustAnchors = mutableSetOf<TrustAnchor>()
         val isAppleFormat = attestationFormat == "apple-appattest-v1"
 
         if (isAppleFormat) {
-          // Apple chain → use Apple App Attestation Root + G3
+          val trustAnchors = mutableSetOf<TrustAnchor>()
           val appleRootCert = certFactory.generateCertificate(
             ByteArrayInputStream(APPLE_APP_ATTESTATION_ROOT_PEM.toByteArray(Charsets.UTF_8))
           ) as X509Certificate
@@ -1328,31 +1322,28 @@ class AttestationModule : AttestationSpec {
           } catch (e: Exception) {
             Log.w(TAG, "  Could not parse Apple G3 root: ${e.message}")
           }
+
+          val lastCert = certs.last()
+          val lastIsAppleRoot = trustAnchors.any { it.trustedCert.encoded.contentEquals(lastCert.encoded) }
+          val pathCerts =
+            if (lastIsAppleRoot && certs.size > 1) certs.dropLast(1) else certs
+
+          val certPath = certFactory.generateCertPath(pathCerts)
+          val params = PKIXParameters(trustAnchors)
+          params.isRevocationEnabled = false
+          CertPathValidator.getInstance("PKIX").validate(certPath, params)
+          chainValid = true
+          Log.i(TAG, "  ✓ Certificate chain valid")
         } else {
-          // Android chain → use Google root
-          val googleRootCert = certFactory.generateCertificate(
-            ByteArrayInputStream(GOOGLE_ROOT_PEM.toByteArray(Charsets.UTF_8))
-          ) as X509Certificate
-          trustAnchors.add(TrustAnchor(googleRootCert, null))
+          val chainResult = GoogleAttestationChainValidator.validateChain(certs)
+          chainValid = chainResult.valid
+          if (chainValid) {
+            Log.i(TAG, "  ✓ Certificate chain valid")
+          } else {
+            errors.add("Certificate chain validation failed: ${chainResult.error}")
+            Log.w(TAG, "  ✗ Chain validation failed: ${chainResult.error}")
+          }
         }
-
-        // Also add chain's own root as anchor
-        if (certs.size > 1) {
-          trustAnchors.add(TrustAnchor(certs.last(), null))
-        }
-
-        // CertPath = leaf + intermediates (everything except the trust anchor/root)
-        val pathCerts = if (certs.size > 1) certs.dropLast(1) else certs
-        val certPath = certFactory.generateCertPath(pathCerts)
-
-        val params = PKIXParameters(trustAnchors)
-        params.isRevocationEnabled = false  // Revocation checked separately via Google CRL
-
-        val validator = CertPathValidator.getInstance("PKIX")
-        validator.validate(certPath, params)
-
-        chainValid = true
-        Log.i(TAG, "  ✓ Certificate chain valid")
       } catch (e: Exception) {
         errors.add("Certificate chain validation failed: ${e.message}")
         Log.w(TAG, "  ✗ Chain validation failed: ${e.message}")
@@ -1371,14 +1362,12 @@ class AttestationModule : AttestationSpec {
             Log.w(TAG, "  $warning")
           }
         }
-        // Only check Google root expiry for Android attestation format
+        // Warn when any embedded Google root is nearing expiry
         if (attestationFormat == "android-key-attestation-v3") {
-          val googleRootCert = certFactory.generateCertificate(
-            ByteArrayInputStream(GOOGLE_ROOT_PEM.toByteArray(Charsets.UTF_8))
-          ) as X509Certificate
-          val googleDaysUntilExpiry = (googleRootCert.notAfter.time - System.currentTimeMillis()) / (1000L * 60 * 60 * 24)
-          if (googleDaysUntilExpiry < 180) {
-            val warning = "WARNING: Embedded Google root certificate expires in $googleDaysUntilExpiry days — update required"
+          val daysUntilExpiry = GoogleAttestationRoots.daysUntilEarliestRootExpiry()
+          if (daysUntilExpiry != null && daysUntilExpiry < 180) {
+            val warning =
+              "WARNING: A Google attestation root expires in $daysUntilExpiry days — review embedded roots"
             errors.add(warning)
             Log.w(TAG, "  $warning")
           }

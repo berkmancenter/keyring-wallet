@@ -1,5 +1,4 @@
-import { BaseRecord, TagsBase } from '@credo-ts/core'
-import { uuid } from '@credo-ts/core/build/utils/uuid'
+import { BaseRecord, TagsBase, utils } from '@credo-ts/core'
 
 export interface RelationshipDidRecordProps {
   id?: string
@@ -7,6 +6,8 @@ export interface RelationshipDidRecordProps {
   myRelationshipDid: string
   counterpartyRelationshipDid?: string
   connectionId?: string
+  /** RCE protocol version announced by the counterparty (absent = 1, pre-VC-2.0 peer) */
+  counterpartyRceVersion?: number
   createdAt?: Date
   tags?: CustomTags
 }
@@ -37,6 +38,8 @@ export class RelationshipDidRecord extends BaseRecord<DefaultRelationshipDidReco
   public myRelationshipDid!: string
   public counterpartyRelationshipDid?: string
   public connectionId?: string
+  /** RCE protocol version announced by the counterparty (absent = 1, pre-VC-2.0 peer) */
+  public counterpartyRceVersion?: number
 
   public static readonly type = 'RelationshipDidRecord'
   public readonly type = RelationshipDidRecord.type
@@ -45,11 +48,12 @@ export class RelationshipDidRecord extends BaseRecord<DefaultRelationshipDidReco
     super()
 
     if (props) {
-      this.id = props.id ?? uuid()
+      this.id = props.id ?? utils.uuid()
       this.counterpartyConnectionDid = props.counterpartyConnectionDid
       this.myRelationshipDid = props.myRelationshipDid
       this.counterpartyRelationshipDid = props.counterpartyRelationshipDid
       this.connectionId = props.connectionId
+      this.counterpartyRceVersion = props.counterpartyRceVersion
       this.createdAt = props.createdAt ?? new Date()
       this._tags = props.tags ?? ({} as CustomTags)
     }

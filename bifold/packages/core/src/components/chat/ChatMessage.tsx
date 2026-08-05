@@ -1,7 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TouchableOpacity, View, Text } from 'react-native'
-import { Bubble, IMessage, Message } from 'react-native-gifted-chat'
+import { View, Text } from 'react-native'
+// gesture-handler touchables: RN's own touchables miss taps inside GiftedChat's
+// inverted list + GestureHandlerRootView on Android with the new architecture
+import { TouchableOpacity } from 'react-native-gesture-handler'
+import { Bubble, IMessage, MessageProps } from 'react-native-gifted-chat'
 import moment from 'moment'
 
 import { useTheme } from '../../contexts/theme'
@@ -30,11 +33,11 @@ export enum MessageIconType {
 }
 
 export interface ChatMessageProps {
-  messageProps: React.ComponentProps<typeof Message>
+  messageProps: MessageProps<ExtendedChatMessage>
 }
 
 export interface ExtendedChatMessage extends IMessage {
-  renderEvent: () => JSX.Element
+  renderEvent: () => React.JSX.Element
   createdAt: Date
   messageOpensCallbackType?: CallbackType
   onDetails?: () => void
@@ -42,8 +45,8 @@ export interface ExtendedChatMessage extends IMessage {
   iconType?: MessageIconType // Icon to display for this message
   relationshipDid?: string // The actual DID for RelationshipDID messages
   // Collapsible witness message support
-  collapsedContent?: () => JSX.Element // Content shown when collapsed
-  expandedContent?: () => JSX.Element // Additional content shown when expanded
+  collapsedContent?: () => React.JSX.Element // Content shown when collapsed
+  expandedContent?: () => React.JSX.Element // Additional content shown when expanded
 }
 
 const MessageTime: React.FC<{ message: ExtendedChatMessage }> = ({ message }) => {
@@ -157,7 +160,7 @@ const CredentialOfferActions: React.FC<{
     if (message.onDecline) {
       message.onDecline()
     }
-  }, [message.onDecline])
+  }, [message])
   
   if (!message.onDetails) {
     return null
@@ -247,14 +250,15 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
   const { ChatTheme: theme } = useTheme()
   const message = useMemo(() => messageProps.currentMessage as ExtendedChatMessage, [messageProps])
   const previousMessage = messageProps.previousMessage as ExtendedChatMessage | undefined
+
+  const showDaySeparator = useMemo(
+    () => (message ? shouldShowDaySeparator(message, previousMessage) : false),
+    [message, previousMessage]
+  )
+
   if (!message) {
     return null
   }
-
-  const showDaySeparator = useMemo(
-    () => shouldShowDaySeparator(message, previousMessage),
-    [message, previousMessage]
-  )
 
   const isMe = message.user?._id === Role.me
 
@@ -289,8 +293,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ messageProps }) => {
         <View style={{ ...theme.containerStyle }}>
           <Bubble
             {...messageProps}
-            key={messageProps.key}
-            renderUsernameOnMessage={false}
+            isUsernameVisible={false}
             renderMessageText={() => message.renderEvent()}
             containerStyle={{
               left: { margin: 0 },

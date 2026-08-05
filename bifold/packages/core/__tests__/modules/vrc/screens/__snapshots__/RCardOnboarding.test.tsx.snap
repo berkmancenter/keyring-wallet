@@ -429,9 +429,7 @@ exports[`RCardOnboarding Screen submits valid form with all fields and stores te
           accessible={true}
           collapsable={false}
           focusable={true}
-          onBlur={[Function]}
           onClick={[Function]}
-          onFocus={[Function]}
           onResponderGrant={[Function]}
           onResponderMove={[Function]}
           onResponderRelease={[Function]}
@@ -439,19 +437,12 @@ exports[`RCardOnboarding Screen submits valid form with all fields and stores te
           onResponderTerminationRequest={[Function]}
           onStartShouldSetResponder={[Function]}
           style={
-            Array [
-              Object {
-                "overflow": "hidden",
-              },
-              Object {
-                "backgroundColor": "#42803E",
-                "borderRadius": 4,
-                "padding": 16,
-              },
-              false,
-              false,
-              false,
-            ]
+            Object {
+              "backgroundColor": "#42803E",
+              "borderRadius": 4,
+              "opacity": 1,
+              "padding": 16,
+            }
           }
           testID="com.ariesbifold:id/RCardSubmit"
         >
@@ -480,7 +471,6 @@ exports[`RCardOnboarding Screen submits valid form with all fields and stores te
                       "fontWeight": "bold",
                       "textAlign": "center",
                     },
-                    false,
                     false,
                     false,
                   ],

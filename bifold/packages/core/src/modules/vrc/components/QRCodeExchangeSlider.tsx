@@ -1,9 +1,8 @@
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback } from 'react'
+import React, { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StyleSheet, TouchableOpacity, View } from 'react-native'
 
-import { useTheme } from '../../../contexts/theme'
 import { Screens, Stacks, TabStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -21,27 +20,59 @@ interface QRCodeExchangeSliderProps {
 
 const QRCodeExchangeSlider: React.FC<QRCodeExchangeSliderProps> = ({ visible, onDismiss, navigation }) => {
   const { t } = useTranslation()
-  const { TextTheme } = useTheme()
+  const pendingNavRef = useRef<(() => void) | null>(null)
+
+  // Dismiss the sheet first and navigate only once this Modal has fully gone
+  // away. Navigating first races the Scan screen's camera-disclosure Modal
+  // against this Modal's dismissal — on real iOS devices the second present
+  // fails silently, leaving a blank Scan screen. Modal.onDismiss fires after
+  // the dismissal animation on iOS; the timeout is the Android/safety path.
+  const dismissThenNavigate = useCallback(
+    (navigate: () => void) => {
+      pendingNavRef.current = navigate
+      onDismiss()
+      setTimeout(() => {
+        if (pendingNavRef.current) {
+          const nav = pendingNavRef.current
+          pendingNavRef.current = null
+          nav()
+        }
+      }, 450)
+    },
+    [onDismiss]
+  )
+
+  const handleModalDismissed = useCallback(() => {
+    if (pendingNavRef.current) {
+      const nav = pendingNavRef.current
+      pendingNavRef.current = null
+      nav()
+    }
+  }, [])
 
   const goToScanScreen = useCallback(() => {
-    navigation.navigate(Stacks.ConnectStack as any, { screen: Screens.Scan })
-    requestAnimationFrame(() => {
-      onDismiss()
+    dismissThenNavigate(() => {
+      navigation.navigate(Stacks.ConnectStack as any, { screen: Screens.Scan })
     })
-  }, [navigation, onDismiss])
+  }, [navigation, dismissThenNavigate])
 
   const goToGenerateRelationshipQRCode = useCallback(() => {
-    navigation.navigate(Stacks.ConnectStack as any, {
-      screen: Screens.Scan,
-      params: { defaultToConnect: true, offerRelationshipCredential: true },
+    dismissThenNavigate(() => {
+      navigation.navigate(Stacks.ConnectStack as any, {
+        screen: Screens.Scan,
+        params: { defaultToConnect: true, offerRelationshipCredential: true },
+      })
     })
-    requestAnimationFrame(() => {
-      onDismiss()
-    })
-  }, [navigation, onDismiss])
+  }, [navigation, dismissThenNavigate])
 
   return (
-    <SafeAreaModal animationType="slide" transparent={true} visible={visible} onRequestClose={onDismiss}>
+    <SafeAreaModal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onDismiss}
+      onDismiss={handleModalDismissed}
+    >
       <TouchableOpacity style={styles.outsideListener} onPress={onDismiss} activeOpacity={1} />
       <View style={styles.centeredView}>
         <View style={styles.modalView}>

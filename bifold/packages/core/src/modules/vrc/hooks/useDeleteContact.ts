@@ -1,11 +1,12 @@
 import { useCallback } from 'react'
-import { useAgent } from '@credo-ts/react-hooks'
+import { useAgent } from '@bifold/react-hooks'
 import { W3cCredentialRecord } from '@credo-ts/core'
 import Toast from 'react-native-toast-message'
 import { useTranslation } from 'react-i18next'
 
 import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
+import { toRawCredential } from '../utils/rcardDisplayUtils'
 import { OpenIDCredentialType } from '../../openid/types'
 import { ToastType } from '../../../components/toast/BaseToast'
 
@@ -38,25 +39,17 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
    */
   const extractIssuerId = (credential: W3cCredentialRecord): string | null => {
     try {
-      const credentialData = credential.credential
+      const issuerValue = toRawCredential(credential)?.issuer
 
-      if (
-        credentialData &&
-        typeof credentialData === 'object' &&
-        !Array.isArray(credentialData) &&
-        'issuer' in credentialData
-      ) {
-        const issuerValue = (credentialData as any).issuer
+      if (typeof issuerValue === 'string') {
+        return issuerValue
+      }
 
-        if (typeof issuerValue === 'string') {
-          return issuerValue
-        }
-
-        if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
-          return issuerValue.id
-        }
+      if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
+        return issuerValue.id
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.warn('[VRC:DeleteContact] Issuer extraction error:', error instanceof Error ? error.message : String(error))
     }
     return null
@@ -96,21 +89,21 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
         if (connectionId) {
           try {
             // Get the connection record to find its outOfBandId
-            const connection = await agent.connections.getById(connectionId)
+            const connection = await agent.modules.didcomm.connections.getById(connectionId)
             const outOfBandId = connection?.outOfBandId
 
             // Delete the connection first
-            await agent.connections.deleteById(connectionId)
+            await agent.modules.didcomm.connections.deleteById(connectionId)
 
             // Delete the associated OOB record to prevent duplicate invitation errors
             if (outOfBandId) {
               try {
-                await agent.oob.deleteById(outOfBandId)
-              } catch (oobError) {
+                await agent.modules.didcomm.oob.deleteById(outOfBandId)
+              } catch (_oobError) {
                 // OOB record may already be deleted or not exist
               }
             }
-          } catch (error) {
+          } catch (_error) {
             // Connection may already be deleted or not exist
           }
         }
@@ -122,7 +115,7 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
           if (record) {
             await repository.delete(agent.context, record)
           }
-        } catch (error) {
+        } catch (_error) {
           // RelationshipDid record may not exist
         }
 
@@ -133,7 +126,7 @@ export const useDeleteContact = (): UseDeleteContactReturn => {
         })
 
         return true
-      } catch (error) {
+      } catch (_error) {
         // Show error toast
         Toast.show({
           type: ToastType.Error,

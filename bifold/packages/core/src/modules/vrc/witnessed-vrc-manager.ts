@@ -8,8 +8,10 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import { ClaimFormat, W3cCredential, W3cPresentation, JsonTransformer } from '@credo-ts/core'
 import type { WitnessConnectionState } from './context/WitnessConnectionProvider'
 import { RelationshipDidRepository } from './repositories/RelationshipDidRepository'
+import { getVrcJsonLdProofOptions } from './vrc-manager'
 import { createVrcLogger } from './vrc-logging'
 import { PersistentStorage } from '../../services/storage'
 import { LocalStorageKeys } from '../../constants'
@@ -50,7 +52,7 @@ export class WitnessedVRCManager {
 
     try {
       // Get the peer connection to find their connection DID
-      const peerConnection = await agent.connections.getById(peerConnectionId)
+      const peerConnection = await agent.modules.didcomm.connections.getById(peerConnectionId)
       const peerConnectionDid = peerConnection.theirDid
 
       if (!peerConnectionDid) {
@@ -97,7 +99,7 @@ export class WitnessedVRCManager {
         witness: useWitnessing,
       }
 
-      await agent.basicMessages.sendMessage(witnessState.connectedWitness.connectionId, JSON.stringify(sessionRequest))
+      await agent.modules.didcomm.basicMessages.sendMessage(witnessState.connectedWitness.connectionId, JSON.stringify(sessionRequest))
 
       logger.info('✓ Session request sent to witness with both relationship DIDs')
       logger.debug('Waiting for session-challenge from witness (handled by BasicMessage listener)')
@@ -144,30 +146,49 @@ export class WitnessedVRCManager {
     )
 
     try {
-      // Import W3C credential classes
-      const { ClaimFormat, W3cCredential, W3cPresentation, JsonTransformer } = await import('@credo-ts/core')
+      // W3C credential classes are imported statically at module top — a
+      // dynamic import() here made Metro serve them as an on-demand lazy chunk,
+      // which fails on the dev build ("LoadBundleFromServerError: Could not
+      // load bundle") mid-witnessed-exchange and drops the VP submission.
 
-      // 1. Sign the VRC credential (required for witness Identity Check)
+      // 1. Sign the VRC credential (required for witness Identity Check).
+      // Capability-gated like the peer-to-peer offers: the VRC's subject IS
+      // the counterparty relationship DID, so the same RCE v3 gate applies —
+      // DI only when the counterparty announced it. The witness dual-verifies
+      // both families, and its VWC issuance mirrors the proof family it
+      // observes here (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 6 + witness
+      // mirroring).
       logger.debug('Signing VRC credential')
+      const counterpartyRelationshipDid = vrcCredential?.credentialSubject?.id as string
+      const proofOptions = await getVrcJsonLdProofOptions(agent, counterpartyRelationshipDid)
+      logger.info(`Signing witnessed VRC with proofType=${proofOptions.proofType}`)
       const vrcUnsigned = JsonTransformer.fromJSON(vrcCredential, W3cCredential)
       const signedVrc = await agent.w3cCredentials.signCredential({
         format: ClaimFormat.LdpVc,
         credential: vrcUnsigned,
         verificationMethod: verificationMethodId,
-        proofType: 'Ed25519Signature2018',
+        proofType: proofOptions.proofType,
       })
       const vrcJson = JsonTransformer.toJSON(signedVrc)
       logger.debug('✓ VRC signed')
 
       // 2. Create VP wrapping the signed VRC
       logger.debug('Creating Verifiable Presentation')
-      
+
       // Extract holder DID from verification method ID
       // Format: did:peer:0z6Mk...#z6Mk... → did:peer:0z6Mk...
       const holderDid = verificationMethodId.split('#')[0]
-      
+
+      // The VP @context must match the wrapped credential's data model: a v1
+      // VP embedding a VCDM 2.0 credential fails JSON-LD expansion at signing
+      // ("tried to redefine a protected term" — v1 and v2 both @protect the
+      // core terms with different definitions).
+      const vrcContexts: string[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
+      const vpContext = vrcContexts.includes('https://www.w3.org/ns/credentials/v2')
+        ? 'https://www.w3.org/ns/credentials/v2'
+        : 'https://www.w3.org/2018/credentials/v1'
       const vpUnsignedJson = {
-        '@context': ['https://www.w3.org/2018/credentials/v1'],
+        '@context': [vpContext],
         type: ['VerifiablePresentation'],
         holder: holderDid,
         verifiableCredential: [vrcJson],
@@ -176,15 +197,23 @@ export class WitnessedVRCManager {
 
       // 3. Sign VP with session challenge
       logger.debug('Signing VP with session challenge')
+      // Cast: credo 0.6 TYPES proofPurpose as a required string, but the
+      // RUNTIME passes it straight to jsonld-signatures, which needs a
+      // ProofPurpose instance — a string crashes with "purpose.update is not
+      // a function". Omitting it is the correct runtime behavior (vc builds
+      // an AuthenticationProofPurpose from challenge + domain).
       const signedVp = await agent.w3cCredentials.signPresentation({
         format: ClaimFormat.LdpVp,
         presentation: vpUnsigned,
         verificationMethod: verificationMethodId,
+        // INTENTIONAL: stays Ed25519Signature2018 until the witness-server
+        // dual-verifies Data Integrity proofs (see note on the VRC signing
+        // above / docs/CRYPTO_SUITE_FOLLOWUP.md).
         proofType: 'Ed25519Signature2018',
-        proofPurpose: 'authentication',
         challenge: sessionChallenge.challenge,
         domain: sessionChallenge.domain,
-      })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
       const vpJson = JsonTransformer.toJSON(signedVp)
       logger.debug('✓ VP signed with session challenge')
 
@@ -202,7 +231,7 @@ export class WitnessedVRCManager {
         logger.debug('No reportingDid — exchange will not be recorded by witness')
       }
 
-      await agent.basicMessages.sendMessage(witnessConnectionId, JSON.stringify(submitRequest))
+      await agent.modules.didcomm.basicMessages.sendMessage(witnessConnectionId, JSON.stringify(submitRequest))
 
       logger.info('✓ VP submitted to witness for verification')
       logger.debug('Waiting for witness to verify and issue VWC')

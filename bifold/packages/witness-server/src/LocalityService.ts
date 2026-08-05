@@ -93,8 +93,8 @@ export class LocalityService {
   private readonly provider: LocalityProvider
   private currentChallenge: ChallengeState
   private verifiedProofs: Map<string, LocalityProof> = new Map()
-  private rotationInterval: NodeJS.Timeout | null = null
-  private cleanupInterval: NodeJS.Timeout | null = null
+  private rotationInterval: ReturnType<typeof setInterval> | null = null
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null
 
   constructor(config: LocalityConfig, provider?: LocalityProvider) {
     this.config = config
