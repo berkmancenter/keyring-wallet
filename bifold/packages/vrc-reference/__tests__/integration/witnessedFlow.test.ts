@@ -135,7 +135,12 @@ describe('Witnessed Flow Integration', () => {
     // Connect Bob to Witness
     const witnessBobInvite = await witness.createConnectionInvitation()
 
-    const { connectionRecord: bobWitnessConn } = await bob.agent.modules.didcomm.oob.receiveInvitationFromUrl(witnessBobInvite)
+    // credo 0.6 requires the config argument — omitting it throws
+    // "Cannot destructure property 'routing' of 'config' as it is undefined"
+    const { connectionRecord: bobWitnessConn } = await bob.agent.modules.didcomm.oob.receiveInvitationFromUrl(
+      witnessBobInvite,
+      { label: 'bob' }
+    )
 
     await Promise.race([
       bob.agent.modules.didcomm.connections.returnWhenIsConnected(bobWitnessConn!.id),
