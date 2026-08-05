@@ -13,8 +13,14 @@ One plan is one file plus a companion folder:
 <plan-name>.md                       the plan
 <plan-name>/
   <YYYY-MM-DD>-<initials>.md         findings and decisions, dated and attributed
-  <YYYY-MM-DD>-<topic>_subtask.md    a sub-plan owned by the parent
+  <topic>_subtask.md                 a sub-plan owned by the parent
 ```
+
+**Dates go on point-in-time artifacts, not on living ones.** A dated companion
+records what someone concluded on a day and is never revised afterwards, so the
+date is part of its identity. A plan — including a subtask plan — is revised
+continuously, so a date in its filename is wrong the moment it is edited, and
+worse, it advertises a currency the file may not have.
 
 **One dated file per author per working session, not per topic.** The initials
 are of the person or people behind it. A session that produces both a review of
