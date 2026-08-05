@@ -1073,6 +1073,27 @@ misalignment to avoid and the most annoying to discover later.
 
 ---
 
+## 11. Companion edits owed in `dtgwg-cred-spec`
+
+*Reminder only — these are edits to [[DTG-CRED]], a different repository, where
+we hold the pen. Tracked here because they follow directly from the design in
+this document and from the framework editor's response on
+[#173](https://github.com/trustoverip/dtgwg-trust-tasks-tf/issues/173#issuecomment-5189686547).
+Nothing in Keyring depends on them landing; the spec text and our
+implementation simply disagree until they do.*
+
+| # | Edit | Gated on | Why it matters here |
+|---|---|---|---|
+| 1 | **Re-anchor `taskContext` on the initiating document's `id`** — the text currently says `threadId` | Nothing; can be done now | §5 of this document already anchors on `id`, per the editor's recommendation ([[TT-SPEC]] §4.3 gives normative uniqueness; §4.9 explicitly gives `threadId` none). Until the edit lands, we implement against advice the spec text does not yet reflect |
+| 2 | **Drop cred-spec's hand-rolled terminal/non-terminal split** and cite the framework's definition instead | The editor's framework PR, change (4) | The editor asked specifically that cred-spec not hand-roll this, so that one citation survives `trust-task-ok` landing under [[TT-SPEC]] §8.6. Our current two-branch definition (a `#response` **or** a `trust-task-error`) breaks the moment §8.6 is filled in |
+| 3 | **Cite §7.3 requirements by name, with a pinned framework `MAJOR.MINOR`** | Nothing; can be done now | cred-spec currently cites by item ordinal ("§7.3 item 8", "item 7.6"). Items 13–14 were added in framework 0.3 and nothing in CI guards the numbering, so the citations are a latent breakage. [[TT-SPEC]] §7.3's target-framework-version declaration is the natural anchor |
+
+Edits 1 and 3 are unblocked. Edit 2 waits on the framework PR — and note it is
+also the one that changes what our own witness specification must declare, so
+§9.3 step 2's "freeze after the editor's PR lands" gate covers both.
+
+---
+
 ## Appendix — key source references
 
 | Concern | Location |
