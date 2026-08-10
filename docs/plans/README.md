@@ -24,7 +24,10 @@ invisible to an agent reading the codebase. So:
 1. **One living plan per workstream** is the single source of truth. It is the
    first thing to read, and the first thing an agent should be pointed at.
 2. **Changes arrive as dated proposals**, not silent edits to the living plan.
-   Naming: `YYYYMMDD_topic_author.md` (e.g. `20260729_revisions_brendan.md`).
+   They live in the plan's companion folder, named `YYYY-MM-DD-initials.md` —
+   one file per author per working session. Authoring conventions (what goes in
+   the plan vs. a dated companion, citation rules) are in
+   [`CLAUDE.md`](./CLAUDE.md).
 3. **A proposal gets a response with evidence**, not opinions: claim → verdict
    → citation (file path, commit, or a runnable check).
 4. **Agreed items merge into the living plan**, which bumps its revision line
