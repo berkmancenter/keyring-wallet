@@ -190,7 +190,7 @@ Proposed private specs:
 | Slug | Replaces | Declarations of note |
 |---|---|---|
 | `witness/announce/0.1` | `witness-announcement` | **`bearer: true`** (§4.8.3) — a broadcast attestation with no intended audience. The only one of these that should be bearer. Not a `taskContext` target, so the qualifying rules do not apply. |
-| `witness/session/0.1` + `#response` | `session-request` → `session-challenge` | **Opens the ceremony thread** — its `id` is that thread's identifier and the value VWCs carry as `taskContext` (§4, "Two threads"). Payload carries `exchangeThreadId` linking back to the relationship exchange. `proof: REQUIRED` on `#response`. |
+| `witness/session/0.1` + `#response` | `session-request` → `session-challenge` | **Opens the ceremony thread** — its `id` is that thread's identifier and the value VWCs carry as `taskContext` (§4, "Two threads"). Ceremony documents carry `parentThreadId` (framework 0.4, §4.9.2) linking back to the relationship exchange. `proof: REQUIRED` on `#response`. |
 | `witness/session/submit/0.1` **+ `#response`** | `submit-presentation` | `exposure: { discloses: secret, actsAsSubject: true }` — a signed VP of the holder's own VRC. **`#response` and `proof: REQUIRED` are mandatory, not optional**: this is the leg whose terminal state the VWC's `taskContext` refers to. The `#response` payload SHOULD carry the issued VWC reference so success is observable in-band. |
 | `witness/reporting-did/register/0.1` | `reporting-did-registration` | `sideEffects: mutating`. Not a `taskContext` target. |
 | `witness/credential/verify/0.1` + `#response` | `verify-credential` / `-response` | `sideEffects: none` |
@@ -252,12 +252,14 @@ witness observed anything. Only `witness/session/submit#response` attests the
 witnessing. If `taskContext` pointed at the exchange thread, the matching
 outcome evidence a verifier collected would be evidence of the wrong thing.
 
-**Linking the two threads is our job, not the framework's.** The Trust Tasks
-framework defines no parent-thread member — there is no `pthid` equivalent, and
-`threadId` (§4.9) is a flat correlator with no nesting semantics. So the link
-lives where we control it: `witness/session`'s **payload** carries an
-`exchangeThreadId` member naming the relationship exchange the ceremony
-witnesses.
+**Linking the two threads is the framework's `parentThreadId` member**
+(framework 0.4, §4.9.2). Every document of the ceremony thread carries
+`parentThreadId` naming the relationship exchange's thread. The member is
+navigation only — the framework states it "does not change which exchange
+attests an event" — which is precisely the property the two-thread design
+needs: the VWC's evidence stays anchored on the ceremony thread whether or not
+the link is present. On the DIDComm v1 wire it maps to `~thread.pthid`
+(binding `didcomm-v1` 0.1), subject to that binding's representability rule.
 
 | | Relationship exchange | Witness ceremony |
 |---|---|---|
@@ -265,7 +267,7 @@ witnesses.
 | Thread identifier | that document's `id` | that document's `id` |
 | Terminal evidence | `vrc/relationship/propose#response` | `witness/session/submit#response` |
 | Carries `taskContext`? | no | **yes** — this is the VWC's referent |
-| Link | — | `payload.exchangeThreadId` → the exchange thread |
+| Link | — | `parentThreadId` → the exchange thread (framework 0.4, §4.9.2; `pthid` on the v1 wire) |
 
 **Consequences worth noting:**
 
@@ -496,9 +498,9 @@ credential's `evidence` property. Not an exchange, nothing to recast.
 
 ## 5. The unified exchange
 
-**Two threads, linked by payload** — the relationship exchange, and (when
-witnessed) a nested witness ceremony. §4's "Two threads" subsection gives the
-reasoning; this is the shape.
+**Two threads, linked by `parentThreadId`** — the relationship exchange, and
+(when witnessed) a nested witness ceremony. §4's "Two threads" subsection gives
+the reasoning; this is the shape.
 
 ```
 EXCHANGE THREAD  (id = vrc/relationship/propose.id)
@@ -510,8 +512,8 @@ vrc/relationship/propose#response    │  counterparty's relationship DID + acce
     ┌────────────────────────────────┼─── if witnessed ──────────────────┐
     │ CEREMONY THREAD (id = witness/session.id)  ← the VWC's taskContext │
     │                                │                                   │
-    │ witness/session → #response    │  challenge; payload carries       │
-    │                                │  exchangeThreadId → this exchange │
+    │ witness/session → #response    │  challenge; documents carry       │
+    │                                │  parentThreadId → this exchange   │
     │ witness/session/submit         │  VP bound to challenge            │
     │   → #response                  │  MANDATORY — the outcome evidence │
     │                                │  a VWC presentation must ship     │
@@ -562,30 +564,38 @@ that sits outside this exchange.*
 
 ---
 
-## 6. The actual blocker: no usable transport binding
+## 6. The transport binding: drafted upstream, carriage proven, amendments ours
 
 `binding/didcomm/0.1` is **DIDComm v2.1 authcrypt JWE**. We are on Credo 0.6.3 —
 **DIDComm v1 / AIP 2.0**, basic messages over connection records. The published
-binding does not apply.
+v2.1 binding does not apply to the legacy stack.
 
-We need a **`didcomm-v1-basicmessage`** binding:
+The v1 binding exists: the framework editor drafted
+[`bindings/didcomm-v1/0.1`](https://github.com/trustoverip/dtgwg-trust-tasks-tf/tree/main/bindings/didcomm-v1)
+with a Rust reference implementation (`trust-tasks-didcomm-v1`), and its Status
+section hands it to the DTG Core Credentials task force — us — "to take over
+and amend". Its shape, confirmed against Credo by
+[`tsp-reference/ref-06v1-didcomm-v1-binding`](../../../tsp-reference/ref-06v1-didcomm-v1-binding/)
+and [`ref-06v1b-mediated`](../../../tsp-reference/ref-06v1b-mediated/)
+(19 checks; agent-to-agent and through the production Keyring mediator):
 
-- **Carriage:** Trust Task document as the JSON body of a basic message.
+- **Carriage:** the document rides an `~attach` decorator (reserved id
+  `trust-task`) on a basic message, `content` staying a human-readable summary
+  — *not* the JSON body sketched here earlier; the attachment survives Credo's
+  authcrypt and mediator forwarding byte-identically.
 - **Identity mapping:** the connection's `theirDid` is the transport-authenticated
-  sender for the §4.8.1 cross-check. Sound, because basic messages are
-  authcrypted with connection keys.
-- **Error delivery:** `trust-task-error` documents returned as basic messages on
-  the same connection.
+  sender for the §4.8.1 cross-check — as drafted, and as proven.
+- **Error delivery:** `trust-task-error` documents returned the same way on the
+  same connection.
 
-Write it as a private binding first, then offer it upstream. It is plausibly the
-most reusable thing we would contribute — every Credo-based wallet in the
-ecosystem has this exact gap.
-
-This intersects the parent plan's **§7.9**, which currently commits to "a second
-implementation of `binding/didcomm/0.1` (the Credo trust-task client)". That
-binding is DIDComm **v2.1**; Credo 0.6.3 is v1-only. See review A2 — the
-commitment needs rewording either way, and a v1 binding is the gap actually worth
-filling.
+One amendment is required before the binding is implementable on the stack it
+targets: Credo enforces RFC 0008's thread-id shape and rejects `urn:uuid:`
+`~thread` values, so correlators must be transport-representable (bare UUIDs)
+or omitted. The staged spec change, with the full evidence trail, is
+[`PR-CANDIDATE.md`](../../../tsp-reference/ref-06v1-didcomm-v1-binding/PR-CANDIDATE.md);
+smaller findings live in the rung's `UPSTREAM-FEEDBACK.md`. The Credo client
+itself (a small module with its own send path — the chat API is content-only)
+is Phase D work on `tsp-core`'s Carriage port (§8.1).
 
 **Secondary:** §7.2 requires payload schema validation. In React Native, compile
 schemas to standalone ajv validators at build time and bundle them. This also
@@ -696,8 +706,11 @@ cost to this workstream.
 ### 8.5 The ecosystem has the same gap — which reframes the contribution
 
 The parent plan's §7.6 frames the witnessed-exchange spec as making Keyring's
-protocol "legible to the whole VTI world." The survey found something stronger:
-**upstream has not migrated its own VRC exchange to Trust Tasks either.**
+protocol "legible to the whole VTI world." Upstream's own VRC exchange is
+mid-migration: the registry now carries `vtc/relationships/request` (VRC
+request/issue as Trust Tasks — worked examples of the DTG idiom for our
+`vrc/*` authoring), while the `openvtc` app still speaks its bespoke types.
+The *witnessed* exchange remains unmodelled anywhere but here.
 
 `openvtc` runs peer-to-peer VRC exchange over bespoke DIDComm message types
 under authorities it does not share with the framework
