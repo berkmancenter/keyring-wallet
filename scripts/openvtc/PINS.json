@@ -56,6 +56,23 @@
         "vta-mobile-agent/",
         "project.yml"
       ]
+    },
+    "dtgwg-trust-tasks-tf": {
+      "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
+      "sha": "fbe196a",
+      "commitDate": "2026-08-10",
+      "pinnedOn": "2026-08-10",
+      "why": "Trust Tasks framework + Trust Ceremony (SPEC 0.4, ADR 0001) baseline; added when the tf repo became a first-class dependency of the plan",
+      "watch": [
+        "SPEC.md",
+        "specs/_framework/",
+        "specs/trust-ceremony-receipt/",
+        "specs/task-consent/",
+        "bindings/didcomm-v1/",
+        "bindings/tsp/",
+        "trust-tasks-ts/",
+        "ceremonies/"
+      ]
     }
   },
   "npm": {

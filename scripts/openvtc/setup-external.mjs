@@ -39,7 +39,7 @@ let problems = 0;
 
 for (const [name, pin] of Object.entries(pins.repos)) {
   const dir = join(externalDir, name);
-  const url = `${ORG}/${name}.git`;
+  const url = pin.url ?? `${ORG}/${name}.git`;
 
   if (!existsSync(dir)) {
     if (STATUS_ONLY) {
