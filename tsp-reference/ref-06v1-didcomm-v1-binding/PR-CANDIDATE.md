@@ -1,9 +1,8 @@
 # PR candidate — `fix(bindings): didcomm-v1 thread correlators must be transport-representable`
 
-*Staging target: `Mickens-Lab/dtgwg-trust-tasks-tf` (internal fork), branch
-`didcomm-v1-credo-findings`, base `main` (synced to upstream `fbe196a`).
-Commit `a475923`, DCO-signed. **Blocked on push access** — `albertoleon7794`
-currently has read-only on the fork. The official upstream PR to
+*Staged: **[Mickens-Lab/dtgwg-trust-tasks-tf#2](https://github.com/Mickens-Lab/dtgwg-trust-tasks-tf/pull/2)**
+— branch `didcomm-v1-credo-findings`, base `main` (synced to upstream
+`fbe196a`), commit `a475923`, DCO-signed. The official upstream PR to
 `trustoverip/dtgwg-trust-tasks-tf` comes later, after review.*
 
 ---
