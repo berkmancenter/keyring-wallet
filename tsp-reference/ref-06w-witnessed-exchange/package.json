@@ -1,0 +1,22 @@
+{
+  "name": "ref-06w-witnessed-exchange",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 06w — the witnessed relationship exchange as draft Trust Task documents: two threads linked by parentThreadId, taskContext on the ceremony opener, retained outcome evidence",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "overrides": {
+    "@openwallet-foundation/askar-shared": "0.6.0"
+  },
+  "dependencies": {
+    "@credo-ts/askar": "0.6.3",
+    "@credo-ts/core": "0.6.3",
+    "@credo-ts/didcomm": "0.6.3",
+    "@credo-ts/node": "0.6.3",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "@openvtc/trust-tasks": "0.6.0"
+  }
+}
