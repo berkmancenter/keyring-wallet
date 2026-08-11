@@ -907,14 +907,19 @@ wire package absent from its dependency graph.
 
 ### 2. Author the `vrc/*` and `witness/*` specifications
 
-No dependency on `tsp-core` — document work, and registry lead time is long. The
-joint-appendix invitation (§8.5) runs on the framework editor's timeline, not
-ours, so starting early is free.
+**Drafted — staged as
+[Mickens-Lab/dtgwg-trust-tasks-tf#3](https://github.com/Mickens-Lab/dtgwg-trust-tasks-tf/pull/3)**
+(four specs: `vrc/relationship/{propose,issue}`, `witness/session{,/submit}`,
+targeting framework 0.4, registry-validated with bindings regenerated;
+authored from the running exchange in
+[`ref-06w`](../../../tsp-reference/ref-06w-witnessed-exchange/)). Open in
+review: namespace/CODEOWNERS, category, bilateral-submission expression,
+challenge-vs-transcript upgrade path — enumerated in the PR. Upstream
+submission follows review.
 
-**Gate on freezing, not on starting.** Hold the final shape until the framework
-editor's PR lands (error-response proof inheritance, self-describing error
-responses, terminal/non-terminal classification) — those change what a qualifying
-specification must declare.
+The freeze-gate this step once carried is open: the framework editor's #173
+changes (per-variant proof, self-describing errors) landed in 0.3, and the
+drafts target 0.4.
 
 **Done when:** each spec has front matter declaring parties, proof requirement,
 `sideEffects`, `exposure` and error codes; a `payload.schema.json` validating
