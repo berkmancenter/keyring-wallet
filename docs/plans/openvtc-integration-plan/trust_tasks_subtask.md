@@ -526,6 +526,17 @@ vrc/relationship/issue → #response   │  the signed VRC, both directions
 An unwitnessed exchange is the outer thread alone — `propose` → `issue`, with
 the ceremony block simply absent. Witnessing is additive, never a precondition.
 
+This shape runs:
+[`tsp-reference/ref-06w-witnessed-exchange`](../../../tsp-reference/ref-06w-witnessed-exchange/)
+executes it end-to-end between three Credo agents with draft payloads and the
+official §7.2 pipeline — the two threads, the `parentThreadId` nesting, the
+`taskContext` anchoring, per-variant `proof: REQUIRED` enforced on the witness
+responses, and the retained `submit#response` (2,213 bytes) passing the
+third-party pairing check. The rung's simplifications relative to the full
+design (single submitter, stub VWC shape, no `witness/announce`, no
+attestation evidence) are listed in its README and are the delta the
+specifications below must add.
+
 Failures anywhere are `trust-task-error` with `retryable` / `retryAfter`, and —
 on any leg a VWC's `taskContext` points at — carrying `proof`.
 

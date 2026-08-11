@@ -11,6 +11,42 @@ the documents are carriage-independent, which is the task layer's whole point).
 
 Run: `npm install && npm start` (`npm run check` for quiet).
 
+```mermaid
+sequenceDiagram
+    participant A as alice
+    participant B as bob
+    participant W as wendy (witness)
+    Note over A,B: EXCHANGE THREAD — threadId = propose.id
+    B->>A: vrc/relationship/propose {mode mutual, witnessed}
+    A->>B: propose#response {accept}
+    Note over B,W: CEREMONY THREAD — threadId = session.id (= the VWC's taskContext)<br/>every document carries parentThreadId → propose.id
+    B->>W: witness/session
+    W->>B: session#response {challenge, domain} + proof
+    B->>W: witness/session/submit {vp bound to challenge}
+    W->>B: submit#response {VWC · taskContext = session.id} + proof
+    Note over B: RETAINED — the outcome evidence (2,213 bytes)
+    Note over A,B: back on the exchange thread
+    A->>B: vrc/relationship/issue {vrc A→B}
+    B->>A: issue#response (receipt)
+    B->>A: vrc/relationship/issue {vrc B→A}
+    A->>B: issue#response (receipt)
+```
+
+## Fidelity to Keyring's real witnessed exchange
+
+The skeleton is the app's ceremony, message for message (with the chat-regex
+handshake replaced by `propose` — that *is* the recast). Deliberate
+simplifications, which the appendix specs add back:
+
+| This rung | The real flow |
+|---|---|
+| Only bob submits; one VWC naming both parties | **Bilateral** — both parties submit and each receives a VWC (`perRole` multiplicity in ceremony vocabulary) |
+| Stub VWC shape | The cred-spec's VWC schema (digest/commitment, evidence axes) |
+| No hardware attestation | Secure Enclave / StrongBox evidence rides the real submission |
+| No `witness/announce` | The witness broadcasts capability first (the bearer task that needs a proof) |
+| No RCard | Correctly absent — a VDS with its own future spec (decision B4) |
+| Proof stubs | Real `eddsa-*` signatures (Phase D) |
+
 ## What it proves — the subtask's design decisions, executed
 
 - **Two threads, nested by `parentThreadId` (framework 0.4 §4.9.2).** The
