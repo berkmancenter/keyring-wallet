@@ -1,6 +1,6 @@
 # TSP / OpenVTC Integration — Analysis, Architecture & Phased Plan
 
-*Living plan for the OpenVTC infrastructure-compatibility workstream, at **Rev 6**. Supporting research (TSP/DIDComm learning notes, engineering brief) is kept out of the repo for now; ask if you want it.*
+*Living plan for the OpenVTC infrastructure-compatibility workstream, at **Rev 7**. Supporting research (TSP/DIDComm learning notes, engineering brief) is kept out of the repo for now; ask if you want it.*
 
 **Reviews that shaped it** — each records its own reasoning and disposition; this plan states only the current position:
 
@@ -10,6 +10,7 @@
 | 4 (07-29) | [`2026-07-29-bam.md`](./openvtc-integration-plan/2026-07-29-bam.md) — Brendan. Adopted: the `tsp-core`/`credo-tsp-adapter` split, external-package-not-fork, two-adapter conformance. Rejected on evidence: static-until-rotation selection, per-transport proof rules, the `TspMessaging` service name |
 | 5 (08-05) | [`2026-08-05-bam.md`](./openvtc-integration-plan/2026-08-05-bam.md) — Part A: six findings against this plan (A5 still uncosted). Part B: the Trust Tasks design decisions, detailed in [`trust_tasks_subtask.md`](./openvtc-integration-plan/trust_tasks_subtask.md) |
 | 6 (08-10) | [`2026-08-10-al.md`](./openvtc-integration-plan/2026-08-10-al.md) — Alberto. Upstream re-audit (five 08-05 positions superseded by upstream movement) + the first implementation of the DIDComm v1 binding (rungs ref-06v1/ref-06v1b, 19 checks) and the spec amendment staged from it |
+| 7 (08-11) | [`2026-08-11-al.md`](./openvtc-integration-plan/2026-08-11-al.md) — Alberto. Cypress RC-1 tagged (pin advance deferred to its own boundary session); the task-layer probe's findings (ref-06v1c) against the #173 asks; the two-rungs-before-appendix sequencing |
 
 ---
 
