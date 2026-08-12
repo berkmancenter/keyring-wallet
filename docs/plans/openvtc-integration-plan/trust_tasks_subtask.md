@@ -617,6 +617,18 @@ build-time carve-out.
 
 ## 7. Migration
 
+### 7.0 The migration's premises are proven
+
+[`tsp-reference/ref-06w2-compat`](../../../tsp-reference/ref-06w2-compat/)
+backs this section with runnable evidence against the real compiled
+witness-server core: the two dances share one crypto core (byte-identical
+VWCs), a lossless translator maps the session messages onto the recast
+shapes with the unmapped delta enumerated, and a dual-stack witness serves a
+**mixed-dialect session** — one legacy party, one task party, one challenge,
+both attested. The legacy `rceVersion` ordinal doubles as the capability
+gate (`4` = speaks Trust Tasks), and the legacy `sessionId` equals the
+ceremony identifier during transition, converging the identifier spaces.
+
 ### 7.1 Receivers already tolerate unknown documents
 
 The current dispatcher logs and falls through on an unrecognized `type`
