@@ -68,7 +68,7 @@ have identical mediated-path evidence.
 ## What it does NOT prove
 - The dedicated `@type` used here (`trusttasks.org/didcomm-v1/1.0/task`) is a
   strawman URI for measurement, not a proposal for the registry.
-- Same standing limits as the family: in-process transport, Node only.
+- Same standing limits as the family otherwise: Node only (Hermes is ref-08); the comparison acts (1–3) run in-process, with the mediated path covered by the confirmation above.
 
 Pinned against: `@credo-ts/*` 0.6.3; carriage conventions from
 `bindings/didcomm-v1/0.1` @ `dtgwg-trust-tasks-tf` `fbe196a`.
