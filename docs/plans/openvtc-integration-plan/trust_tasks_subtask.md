@@ -1033,9 +1033,14 @@ implementation simply disagree until they do.*
 | 2 | **Drop cred-spec's hand-rolled terminal/non-terminal split** and cite the framework's definition instead | The editor's framework PR, change (4) | The editor asked specifically that cred-spec not hand-roll this, so that one citation survives `trust-task-ok` landing under [[TT-SPEC]] §8.6. Our current two-branch definition (a `#response` **or** a `trust-task-error`) breaks the moment §8.6 is filled in |
 | 3 | **Cite §7.3 requirements by name, with a pinned framework `MAJOR.MINOR`** | Nothing; can be done now | cred-spec currently cites by item ordinal ("§7.3 item 8", "item 7.6"). Items 13–14 were added in framework 0.3 and nothing in CI guards the numbering, so the citations are a latent breakage. [[TT-SPEC]] §7.3's target-framework-version declaration is the natural anchor |
 
-Edits 1 and 3 are unblocked. Edit 2 waits on the framework PR — and note it is
-also the one that changes what our own witness specification must declare, so
-§9 step 2's "freeze after the editor's PR lands" gate covers both.
+All three edits are drafted, together with the qualifying-profile rewording
+and the retained-evidence pairing checklist, as
+[Mickens-Lab/dtgwg-cred-spec#3](https://github.com/Mickens-Lab/dtgwg-cred-spec/pull/3)
+(the framework changes edit 2 waited on landed in 0.3/0.4). The related W3C
+crypto alignment — `digestMultibase`, `DataIntegrityProof`/`eddsa-jcs-2022` —
+is [Mickens-Lab/dtgwg-cred-spec#2](https://github.com/Mickens-Lab/dtgwg-cred-spec/pull/2).
+Both pend internal review; upstream submission follows the still-open
+upstream #15.
 
 ---
 
