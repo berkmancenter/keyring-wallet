@@ -6,7 +6,8 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node run.mjs",
-    "check": "node run.mjs --quiet"
+    "check": "node run.mjs --quiet",
+    "start:mediated": "node run-mediated.mjs"
   },
   "overrides": {
     "@openwallet-foundation/askar-shared": "0.6.0"

@@ -56,12 +56,16 @@ reach argument does no remaining work. Keyring's evidence therefore leans
 attachment convention *within* it. The call belongs to the binding review with
 Brendan and the editor; this rung supplies the numbers.
 
-## What it does NOT prove
+## The mediated confirmation
 
-- Nothing about mediator handling of the custom `@type` over a real network
-  hop (v1 mediator forwarding is type-agnostic by design; 06v1b proved the
-  pattern for basic-message — a re-run against the dedicated type belongs to
-  the same session that advances the pins).
+`run-mediated.mjs` (`npm run start:mediated`) completes the picture: the
+dedicated `@type` crosses the **production Keyring mediator** — mediation
+granted, store-and-forward, implicit pickup — with the chat store still empty
+end-to-end. As theory predicts (the `@type` is inside the encrypted envelope,
+invisible to the mediator), but proven rather than assumed. Both carriages now
+have identical mediated-path evidence.
+
+## What it does NOT prove
 - The dedicated `@type` used here (`trusttasks.org/didcomm-v1/1.0/task`) is a
   strawman URI for measurement, not a proposal for the registry.
 - Same standing limits as the family: in-process transport, Node only.
