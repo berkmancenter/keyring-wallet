@@ -264,6 +264,8 @@ Rules for every rung: *pure-TS core, no RN imports* (so the same file later runs
 | Rung | Script does | You learn | Est. |
 |---|---|---|---|
 | **ref-03-noble-crypto** | ref-00 re-run on a noble-backed KDF/KEM injected into hpke-js's pluggable `CipherSuite`; validated against CFRG Auth-mode vectors + ref-01 fixtures; byte-identical output proven | Why only HKDF/X25519 needed WebCrypto; how the suite plugs; ⭱ **PR to vti-tsp-js** (unblocks RN for the whole ecosystem) | 2–3 d |
+| **ref-03b-hermes-identity** ✅ | The PR's `hpke-noble.ts` + the CFRG vector bundled into ONE file, run under Node 20 and the app Pods' Hermes VM binary; 9/9 PASS both, transcript hashes identical (`c73ea5ad…`) | "Pure JS behaves the same on Hermes" measured, not inferred; the RN Babel preset is the required lowering step (Hermes has no class syntax; esbuild alone can't lower without breaking BigInt) | done |
+| **ref-03c-app-identity** ✅ | Same probe injected into the real Keyring app (Xcode build, Metro bundle, iOS simulator); 9/9 PASS, same transcript hash — four runtimes, one hash | Keyring itself polyfills a **partial** `crypto.subtle` (digest only) — a live specimen of why env detection is fragile; direct evidence for the 2026-08 Glenn/Brendan decision to drop detection and go noble-everywhere | done |
 
 ### Phase C — real infrastructure, one piece at a time
 
