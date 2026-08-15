@@ -1,5 +1,11 @@
 # ref-06v1d — the carrier question, measured
 
+> **Status (2026-08-15): answered upstream.** This rung's measurement carried
+> the decision — `bindings/didcomm-v1/0.2` (#216) moved the carriage to the
+> dedicated `@type`, citing these results in its §2.1. Kept as the evidence
+> record; the living carriage tests are ref-06v1e (type shape) and ref-06v1c
+> (0.2 carriage + §2.3 migration).
+
 The drafted `bindings/didcomm-v1/0.1` rides Aries **basic-message** with the
 document in `~attach`. The framework editor's ⚠ open question — flagged
 time-sensitive in [#173](https://github.com/trustoverip/dtgwg-trust-tasks-tf/issues/173):

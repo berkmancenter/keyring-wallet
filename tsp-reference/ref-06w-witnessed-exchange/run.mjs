@@ -154,6 +154,7 @@ async function makeAgent(name) {
   agent.modules.didcomm.registerOutboundTransport(new InProcOutboundTransport());
   await agent.initialize();
   peers.set(`inproc://${name}`, agent);
+  agent.myName = name;
 
   const inbox = [];
   const waiters = [];
@@ -161,6 +162,7 @@ async function makeAgent(name) {
     supportedMessages: [TrustTaskMessage],
     handle: async (ctx) => {
       const doc = ctx.message.document;
+      log(`\n      ◀── ${agent.myName} RECEIVES ${doc.type.split("/").slice(-4).join("/")}`);
       const i = waiters.findIndex((w) => w.match(doc));
       if (i >= 0) waiters.splice(i, 1)[0].resolve(doc);
       else inbox.push(doc);
@@ -191,6 +193,8 @@ async function connect(a, b, aName, bName) {
 }
 
 async function send(fromAgent, connection, doc) {
+  log(`\n  ──▶ ${fromAgent.myName} SENDS ${doc.type.split("/").slice(-4).join("/")}   (thread ${doc.threadId?.slice(0,8)}…${doc.parentThreadId ? `, parent ${doc.parentThreadId.slice(0,8)}…` : ""})`);
+  log(JSON.stringify(doc, null, 2).split("\n").map(l => "      " + l).join("\n"));
   const sender = fromAgent.dependencyManager.resolve(DidCommMessageSender);
   await sender.sendMessage(
     new DidCommOutboundMessageContext(

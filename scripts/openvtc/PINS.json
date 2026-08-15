@@ -1,12 +1,12 @@
 {
-  "updated": "2026-08-01",
+  "updated": "2026-08-15",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
-      "sha": "4ef360f",
-      "commitDate": "2026-07-29",
-      "pinnedOn": "2026-08-01",
-      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "sha": "ebebb50",
+      "commitDate": "2026-08-14",
+      "pinnedOn": "2026-08-15",
+      "why": "pnm-core 0.3.0 + consent/durability fixes (#104-#115); base for the noble-crypto PR rebase check",
       "watch": [
         "packages/tsp-js/",
         "packages/core/src/vta/",
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "02f10b3f",
-      "commitDate": "2026-08-01",
-      "pinnedOn": "2026-08-01",
-      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "sha": "1c20e315",
+      "commitDate": "2026-08-14",
+      "pinnedOn": "2026-08-15",
+      "why": "Cypress-RC-1-era advance (tag re-cut at 719fa90f, main +47 past it incl. trust-tasks 0.6/0.7 dependency alignment #979); ladder re-run follows",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
@@ -59,10 +59,10 @@
     },
     "dtgwg-trust-tasks-tf": {
       "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
-      "sha": "fbe196a",
-      "commitDate": "2026-08-10",
-      "pinnedOn": "2026-08-10",
-      "why": "Trust Tasks framework + Trust Ceremony (SPEC 0.4, ADR 0001) baseline; added when the tf repo became a first-class dependency of the plan",
+      "sha": "8eb7509",
+      "commitDate": "2026-08-15",
+      "pinnedOn": "2026-08-15",
+      "why": "Adoption-week boundary: #208/#212 (our thread amendment + follow-ups), #213 (the four witnessed-exchange specs), #216 (binding 0.2, dedicated @type on our ref-06v1d measurement), #214/#217 (DigestMultibase convergence), 0.4-track authorization work; ladder re-run follows",
       "watch": [
         "SPEC.md",
         "specs/_framework/",

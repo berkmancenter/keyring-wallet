@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "description": "TSP reference rung 06v1c — a real registry Trust Task (vtc/relationships/request) processed by the official @openvtc/trust-tasks consumer pipeline, over the proven didcomm-v1 carriage",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node run.mjs",
     "check": "node run.mjs --quiet"
@@ -17,6 +19,6 @@
     "@credo-ts/didcomm": "0.6.3",
     "@credo-ts/node": "0.6.3",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
-    "@openvtc/trust-tasks": "0.6.0"
+    "@openvtc/trust-tasks": "^0.7.0"
   }
 }

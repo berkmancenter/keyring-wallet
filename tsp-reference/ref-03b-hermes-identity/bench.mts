@@ -6,7 +6,7 @@ if (typeof console === "undefined") {
   (globalThis as any).console = { log: (...a: unknown[]) => (print as any)(a.join(" ")) };
 }
 
-import { seal, open } from "/Users/albertoleon/Documents/keyring-wallet/external/vta-browser-plugin/packages/tsp-js/src/crypto/hpke-noble.ts";
+import { seal, open } from "@pr-branch/hpke-noble";
 import { x25519 } from "@noble/curves/ed25519.js";
 
 const fill = (n: number, b: number) => new Uint8Array(n).fill(b);

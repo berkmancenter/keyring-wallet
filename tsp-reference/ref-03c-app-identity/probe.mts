@@ -8,7 +8,7 @@ if (typeof console === "undefined") {
   (globalThis as any).console = { log: (...a: unknown[]) => (print as any)(a.join(" ")) };
 }
 
-import { seal, open, authEncap, authDecap } from "/Users/albertoleon/Documents/keyring-wallet/external/vta-browser-plugin/packages/tsp-js/src/crypto/hpke-noble.ts";
+import { seal, open, authEncap, authDecap } from "@pr-branch/hpke-noble";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { x25519 } from "@noble/curves/ed25519.js";
 import vectorFile from "/Users/albertoleon/Documents/keyring-wallet/tsp-reference/ref-03-noble-crypto/vectors/cfrg-auth-x25519-chacha.json";

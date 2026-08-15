@@ -10,10 +10,16 @@ HERMES="$ROOT/app/ios/Pods/hermes-engine/destroot/bin/hermes"
 WORK="$HERE/.work"
 mkdir -p "$WORK"
 
-# 1. Bundle the probe + the PR branch's hpke-noble.ts + the CFRG vector into one es2020 file.
+# 1. Extract the PR branch's hpke-noble.ts from git (the clone may be checked
+#    out elsewhere — e.g. main after a pin advance; the ladder must not depend
+#    on the clone's HEAD), then bundle probe + module + CFRG vector into one
+#    es2020 file. The alias maps the probe's import onto the extracted file.
+git -C "$PLUGIN" show feat/pure-js-crypto-backend:packages/tsp-js/src/crypto/hpke-noble.ts > "$WORK/hpke-noble.ts"
 NODE_PATH="$PLUGIN/packages/tsp-js/node_modules:$PLUGIN/node_modules" \
   "$PLUGIN/node_modules/.bin/esbuild" "$HERE/probe.mts" \
-  --bundle --format=iife --target=es2020 --outfile="$WORK/probe.es2020.js"
+  --bundle --format=iife --target=es2020 \
+  --alias:@pr-branch/hpke-noble="$WORK/hpke-noble.ts" \
+  --outfile="$WORK/probe.es2020.js"
 
 # 2. Lower for Hermes with React Native's own Babel preset — the same transform
 #    Metro applies in production (Hermes has no native class syntax).

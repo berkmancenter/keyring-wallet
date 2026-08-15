@@ -1,5 +1,11 @@
 # ref-06w — the witnessed relationship exchange, as draft Trust Task documents
 
+> **Status (2026-08-15): historical.** The draft specs this rung authored were
+> merged upstream (revised) as #213 — bilateral sessions, receipt digest
+> REQUIRED, `witnessed` answered on the response. The living version of this
+> exchange runs on the published package: **ref-06w4-package-truth**. Kept as
+> the record of what was proposed and why.
+
 The appendix's raw material. The two-thread design from
 [`trust_tasks_subtask.md`](../../docs/plans/openvtc-integration-plan/trust_tasks_subtask.md) §5,
 run for real: **alice** and **bob** (the relationship parties) and **wendy**

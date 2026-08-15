@@ -1,6 +1,8 @@
 // ref-06v1c — the task layer, for real: a registry Trust Task processed by the
-// official @openvtc/trust-tasks consumer pipeline, over the didcomm-v1
-// carriage rung 06v1 proved.
+// official @openvtc/trust-tasks consumer pipeline (0.7.x), over the
+// didcomm-v1 0.2 carriage (#216's dedicated @type — adopted from our
+// ref-06v1d measurement), with the §2.3 migration rule exercised: a 0.1
+// basic-message carriage still lands at this 0.2 consumer.
 //
 // Five acts, each answering one question:
 //   1  Does the library enforce the qualifying profile? (proof REQUIRED)
@@ -25,13 +27,17 @@ import { agentDependencies } from "@credo-ts/node";
 import { AskarModule } from "@credo-ts/askar";
 import {
   DidCommModule,
+  DidCommMessage,
   DidCommBasicMessage,
   DidCommBasicMessageEventTypes,
   DidCommAttachment,
   DidCommAttachmentData,
   DidCommMessageSender,
   DidCommMessageReceiver,
+  DidCommMessageHandlerRegistry,
   DidCommOutboundMessageContext,
+  parseMessageType,
+  IsValidMessageType,
 } from "@credo-ts/didcomm";
 
 import {
@@ -64,7 +70,8 @@ function check(name, fn) {
   }
 }
 
-const BINDING_URI = "https://trusttasks.org/binding/didcomm-v1/0.1";
+const BINDING_URI = "https://trusttasks.org/binding/didcomm-v1/0.2";
+const ENVELOPE_TYPE = "https://trusttasks.org/binding/didcomm-v1/0.2/trust-task/1.0/task";
 const ATTACHMENT_ID = "trust-task";
 const NOW = () => "2026-08-11T12:00:00Z";
 let errSeq = 0;
@@ -84,9 +91,39 @@ const STUB_PROOF = {
 };
 
 // ----------------------------------------------------------- carriage bits --
-// Same shape rung 06v1 proved (transport-safe bare-UUID correlators).
+// Binding 0.2: the document rides ~attach on the dedicated message type.
+// Transport-safe bare-UUID correlators as rung 06v1 proved.
+
+class TrustTaskMessage extends DidCommMessage {
+  constructor(options) {
+    super();
+    if (options) {
+      this.id = options.id ?? this.generateId();
+      if (options.threadId) this.setThread({ threadId: options.threadId });
+      if (options.attachments) this.appendedAttachments = options.attachments;
+    }
+  }
+  type = TrustTaskMessage.type.messageTypeUri;
+  static type = parseMessageType(ENVELOPE_TYPE);
+}
+IsValidMessageType(TrustTaskMessage.type)(TrustTaskMessage.prototype, "type");
 
 function buildBindingMessage(doc) {
+  return new TrustTaskMessage({
+    threadId: doc.threadId ?? doc.id,
+    attachments: [
+      new DidCommAttachment({
+        id: ATTACHMENT_ID,
+        mimeType: "application/json",
+        data: new DidCommAttachmentData({ json: doc }),
+      }),
+    ],
+  });
+}
+
+// The 0.1 carriage, kept for the §2.3 migration check: a 0.2 consumer MUST
+// still accept it (receivers move first).
+function buildLegacyBasicMessageCarriage(doc) {
   const message = new DidCommBasicMessage({ content: `Trust Task: ${doc.type}` });
   message.setThread({ threadId: doc.threadId ?? doc.id });
   message.appendedAttachments = [
@@ -130,6 +167,21 @@ async function makeAgent(name) {
   agent.modules.didcomm.registerOutboundTransport(new InProcOutboundTransport());
   await agent.initialize();
   peers.set(`inproc://${name}`, agent);
+
+  // Inbound trust-task queue for the dedicated @type (binding 0.2).
+  agent.trustTaskInbox = [];
+  agent.trustTaskWaiters = [];
+  agent.dependencyManager.resolve(DidCommMessageHandlerRegistry).registerMessageHandler({
+    supportedMessages: [TrustTaskMessage],
+    handle: async (ctx) => {
+      const doc = ctx.message.appendedAttachments[0].getDataAsJson();
+      agent.lastInboundHadConnection = ctx.connection !== undefined && ctx.connection !== null;
+      const waiter = agent.trustTaskWaiters.shift();
+      if (waiter) waiter(doc);
+      else agent.trustTaskInbox.push(doc);
+      return undefined;
+    },
+  });
   return agent;
 }
 
@@ -144,6 +196,12 @@ async function sendDocument(fromAgent, connection, doc) {
 }
 
 function nextDocumentFrom(agent) {
+  if (agent.trustTaskInbox.length) return Promise.resolve(agent.trustTaskInbox.shift());
+  return new Promise((resolve) => agent.trustTaskWaiters.push(resolve));
+}
+
+// One-shot listener for the LEGACY basic-message carriage (§2.3 check only).
+function nextLegacyDocumentFrom(agent) {
   return new Promise((resolve) => {
     const listener = (ev) => {
       if (ev.payload.basicMessageRecord.role !== "receiver") return;
@@ -293,6 +351,22 @@ try {
     check("bob consumes the retained #response through the same pipeline (RESPONSE_SPEC)", () => {
       deepStrictEqual(responseOutcome.kind, "handled");
     });
+
+    // §2.3 (binding 0.2): a 0.2 consumer still accepts the 0.1 basic-message
+    // carriage — receivers move first, producers stop emitting it.
+    const legacyArrival = nextLegacyDocumentFrom(alice);
+    const legacyDoc = makeRequest("88fdfef9-ca4b-4f87-a235-9f78dafff908", { proof: STUB_PROOF });
+    const sender = bob.dependencyManager.resolve(DidCommMessageSender);
+    await sender.sendMessage(
+      new DidCommOutboundMessageContext(buildLegacyBasicMessageCarriage(legacyDoc), {
+        agentContext: bob.context,
+        connection: bobConn,
+      })
+    );
+    const legacyReceived = await legacyArrival;
+    check("§2.3 migration: the 0.1 basic-message carriage still lands at this 0.2 consumer", () => {
+      deepStrictEqual(legacyReceived, legacyDoc);
+    });
   }
 
   // ---- ACT 3: a decline is a self-describing trust-task-error --------------
@@ -387,18 +461,34 @@ try {
   log("\n— act 5: authcrypt from a verkey bound to no known DID (binding §3 case 2) —");
   {
     // Alice forgets the connection; bob's next envelope is cryptographically
-    // sound but attributable to nobody alice knows.
+    // sound but attributable to nobody alice knows. CARRIER-DEPENDENT finding:
+    // under the 0.1 basic-message carriage this hard-failed inside Credo's
+    // basic-message module ("No connection associated with incoming message"),
+    // before any app code. Under the 0.2 dedicated @type, the envelope still
+    // decrypts (the keys outlive the connection record) and Credo dispatches
+    // to OUR handler with NO connection attached — case 2 now surfaces at the
+    // app layer, which is exactly where the binding's three-way identity
+    // split says it must be handled (map to UnauthenticatedTransport; never
+    // treat the in-band issuer as authenticated).
     await alice.modules.didcomm.connections.deleteById(aliceConn.id);
+    const arrival = nextDocumentFrom(alice);
     let observed = null;
     try {
       await sendDocument(bob, bobConn, makeRequest("66dbfcf7-a829-4f65-e013-7e56b8fef706", { proof: STUB_PROOF }));
     } catch (e) {
       observed = e;
     }
-    check("Credo surfaces case 2 as a hard processing failure (recorded verbatim below)", () => {
-      ok(observed !== null, "expected the unknown-sender envelope to fail processing");
+    const doc = await Promise.race([
+      arrival,
+      new Promise((r) => setTimeout(() => r(null), 3000)),
+    ]);
+    check("0.2 carriage: case 2 REACHES the handler (no hard failure) — unlike basic-message", () => {
+      ok(observed === null, `unexpected transport error: ${observed}`);
+      ok(doc !== null, "document did not arrive");
     });
-    log(`  · observed Credo behavior: ${String(observed?.message ?? observed).slice(0, 160)}`);
+    check("…but with NO connection attached — transport-unauthenticated, the app must treat it as such", () => {
+      deepStrictEqual(alice.lastInboundHadConnection, false);
+    });
   }
 } finally {
   await alice.shutdown().catch(() => {});
