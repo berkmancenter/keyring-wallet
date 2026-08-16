@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openvtc/trust-tasks": "^0.7.0"
+    "@openvtc/trust-tasks": "^0.9.0",
+    "ajv": "^8.20.0"
   }
 }

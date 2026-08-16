@@ -8,8 +8,13 @@
 // published package — the moment "our proposal" becomes "their spec, and we
 // are a conforming consumer."
 //
-// It also verifies the #213 design calls behave as specified, and probes the
-// TS Payload-alias generator bug Glenn disclosed (fixed by #215 — confirmed).
+// It also verifies the #213 design calls behave as specified, probes the
+// TS Payload-alias generator bug Glenn disclosed (fixed by #215 — confirmed),
+// and — since 0.9.0 — verifies that #237 closed the schema-validation gap
+// this rung originally found (#230): SPEC objects now carry payloadSchema,
+// consumeInbound requires an explicit payloadPolicy, and REQUIRED members
+// are enforced. The original gap checks are kept, inverted: what was
+// accepted is now rejected.
 //
 // No Credo here: transport identity is stubbed (StaticTransport), because the
 // carriage was proven separately (ref-06v1, v1b, v1d). This rung is about the
@@ -21,6 +26,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { consumeInbound, respondWith, StaticTransport } from "@openvtc/trust-tasks";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import * as propose from "@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload";
 import * as issue from "@openvtc/trust-tasks/vrc/relationships/issue/0.1/payload";
 import * as session from "@openvtc/trust-tasks/witness/session/0.1/payload";
@@ -71,14 +77,21 @@ const DID = { alice: "did:peer:4alice", bob: "did:peer:4bob", wendy: "did:peer:4
 const REL = { alice: "did:peer:alice-rel", bob: "did:peer:bob-rel" };
 
 // consume(at=myVid, from=senderVid, spec, doc, handler)
-// Default handler echoes the doc: consumeInbound crashes on a handler that
-// returns undefined (isErrorResponse reads .type unguarded) — a sharp edge
-// present since 0.6.0, noted in the README as an upstream paper-cut.
+// (The undefined-handler crash this rung found in ≤0.7.0 was fixed by #237.)
+const ajv = new Ajv2020({ strict: false });
+const VALIDATOR = {
+  validate(schema, payload) {
+    const ok = ajv.validate(schema, payload);
+    return ok ? true : { ok: false, errors: (ajv.errors ?? []).map((e) => `${e.instancePath} ${e.message}`) };
+  },
+};
+
 async function consume(myVid, senderVid, spec, doc, handler = (d) => d) {
   return consumeInbound({
     transport: new StaticTransport({ issuer: senderVid, recipient: myVid }, BINDING_URI),
     spec,
     proofPolicy: { kind: "acceptUnverified" },
+    payloadPolicy: { kind: "validate", validate: VALIDATOR },
     doc,
     myVid,
     now: Date.parse(NOW()),
@@ -194,8 +207,8 @@ let submitResponse;
   delete stripped.payload.vwcDigestMultibase;
   stripped.proof = STUB_PROOF;
   const rejected = await consume(DID.bob, DID.wendy, submit.RESPONSE_SPEC, stripped);
-  check("FINDING: a response missing REQUIRED vwcDigestMultibase is ACCEPTED — the runtime spec objects carry no payload schema, so §7.2 schema validation never runs", () =>
-    deepStrictEqual(rejected.kind, "handled"));
+  check("FIXED by #237 (was #230's finding): a response missing REQUIRED vwcDigestMultibase is now REJECTED", () =>
+    deepStrictEqual(rejected.kind, "rejected"));
 
   submitResponse.proof = STUB_PROOF;
   const accepted = await consume(DID.bob, DID.wendy, submit.RESPONSE_SPEC, submitResponse);
@@ -225,8 +238,8 @@ log("\n— act 4: vrc/relationships/issue — the receipt digest is the correlat
   delete strippedReceipt.payload.vrcDigestMultibase;
   strippedReceipt.proof = STUB_PROOF;
   const rejected = await consume(DID.bob, DID.alice, issue.RESPONSE_SPEC, strippedReceipt);
-  check("FINDING: a receipt missing REQUIRED vrcDigestMultibase is ACCEPTED — same schema-validation gap on the receipt path", () =>
-    deepStrictEqual(rejected.kind, "handled"));
+  check("FIXED by #237: a receipt missing REQUIRED vrcDigestMultibase is now REJECTED", () =>
+    deepStrictEqual(rejected.kind, "rejected"));
 
   receipt.proof = STUB_PROOF;
   const accepted = await consume(DID.bob, DID.alice, issue.RESPONSE_SPEC, receipt);
@@ -234,8 +247,8 @@ log("\n— act 4: vrc/relationships/issue — the receipt digest is the correlat
     deepStrictEqual(accepted.kind, "handled"));
 }
 
-// ---- act 4b: the schema-validation gap, stated directly --------------------
-log("\n— act 4b: FINDING — the TS runtime validates no payload schemas at all —");
+// ---- act 4b: the schema-validation gap, closed (#230 → #237, 0.9.0) --------
+log("\n— act 4b: the gap this rung found is CLOSED — §7.2 item 2 runs, and skipping must be stated —");
 {
   const bogus = {
     id: "9999aaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", type: T.propose,
@@ -244,8 +257,22 @@ log("\n— act 4b: FINDING — the TS runtime validates no payload schemas at al
     payload: { wrongMember: true },
   };
   const outcome = await consume(DID.alice, DID.bob, propose.SPEC, bogus);
-  check("FINDING: a request whose payload matches NOTHING in the schema is handled — SPEC objects expose only { typeUri, isBearer, isProofRequired, isRecipientRequired }", () =>
-    deepStrictEqual(outcome.kind, "handled"));
+  check("FIXED by #237: a nonsense payload is rejected with malformedRequest", () => {
+    deepStrictEqual(outcome.kind, "rejected");
+    deepStrictEqual(outcome.error.payload.code, "malformedRequest");
+  });
+  // The "says so when it does not" half: omitting payloadPolicy is a hard error,
+  // so a consumer can no longer skip §7.2 item 2 silently.
+  let threw = null;
+  try {
+    await consumeInbound({
+      transport: new StaticTransport({ issuer: DID.bob, recipient: DID.alice }, BINDING_URI),
+      spec: propose.SPEC, proofPolicy: { kind: "acceptUnverified" },
+      doc: bogus, myVid: DID.alice, now: Date.parse(NOW()), newErrorId, handler: (d) => d,
+    });
+  } catch (e) { threw = e; }
+  check("omitting payloadPolicy throws — skipping validation must now be an explicit statement", () =>
+    ok(threw !== null && /payloadPolicy/.test(String(threw))));
 }
 
 // ---- act 5: the generator-bug probe (Glenn's disclosure, #215's fix) -------

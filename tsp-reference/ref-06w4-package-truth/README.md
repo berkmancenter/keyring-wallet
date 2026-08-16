@@ -24,7 +24,11 @@ one significant upstream finding.** `npm install && node run.mjs`.
 - **The TS `Payload`-alias generator bug is FIXED in 0.7.0** (#215) — zero
   mis-aliased modules; our four modules export their real payload interfaces.
 
-## THE FINDING — the TS runtime validates no payload schemas
+## THE FINDING — found here, fixed upstream as #237, verified here on 0.9.0
+
+> **Resolution:** reported as [#230](https://github.com/trustoverip/dtgwg-trust-tasks-tf/issues/230); fixed by #237 exactly as proposed (schemas wired onto the spec objects, validated in `consumeInbound` behind a now-REQUIRED `payloadPolicy`), shipped as 0.9.0 in both libraries. The checks below are kept **inverted** — what 0.7.0 accepted, 0.9.0 rejects — plus a new check that omitting `payloadPolicy` throws (skipping §7.2 item 2 must now be stated, never silent). The undefined-handler crash is fixed too. 16/16.
+
+The original finding, as recorded against 0.7.0:
 
 The generated runtime spec objects expose exactly four members:
 
