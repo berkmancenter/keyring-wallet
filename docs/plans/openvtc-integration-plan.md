@@ -290,6 +290,19 @@ Rules for every rung: *pure-TS core, no RN imports* (so the same file later runs
 
 | **ref-06x-cypress-stack** ✅ | The stack composed joint-by-joint at the Cypress release: local release-binary VTA (self-hosted webvh, capability ladder read wallet-side), the mediator dialect measured live, and the witnessed exchange end-to-end — three Credo agents, binding 0.2 `@type`, trust-tasks 0.9.0 with real payload validation, §4.9.3 task digests (counterfeit fails the digest half, live), digest receipts. 14 checks green | Closes step 3 of the build-up phasing. **Two measured findings**: Credo 0.6.3 cannot resolve `did:webvh` (`unsupportedDidMethod` — a ~20-line wallet-side adapter suffices, proven; candidate Credo contribution), and the Cypress mediator refuses v1 (404, v2-only by design — Keyring's v1 traffic keeps its own mediator until the TSP transport lands, now measured rather than assumed). Enrollment (admin DID/ACL/trust context) deliberately out of scope — it is the Prague onboarding flow on the OpenVTC TS library | done (08-17) |
 
+### ✅ GATE — investigation complete; Keyring implementation can start (2026-08-17)
+
+Every protocol question the app implementation needed answered is answered, evidence-linked, and green **at the Cypress release**. The one-page index for reviewers is the [phasing map at the top of `tsp-reference/README.md`](../../tsp-reference/README.md) — each claim below is one `node run.mjs` away:
+
+| Claim | Evidence |
+|---|---|
+| The full witnessed ceremony (propose → bilateral sessions → VWC with §4.9.3 task digest → VRC + digest receipt) runs on published artifacts — trust-tasks **0.9.0**, binding **0.2** — on Credo 0.6.3, end-to-end in **43 ms** | [`ref-06x`](../../tsp-reference/ref-06x-cypress-stack/) (14 checks), [`ref-06w4`](../../tsp-reference/ref-06w4-package-truth/) (16 checks) |
+| The carriage crosses our production mediator byte-identically | [`ref-06v1b`](../../tsp-reference/ref-06v1b-mediated/) |
+| The recast produces byte-identical credentials with the production witness core | [`ref-06w2`](../../tsp-reference/ref-06w2-compat/) |
+| The Cypress joints are measured: webvh needs a 0.6.3 resolver adapter (`@credo-ts/webvh` arrives with Credo 0.7); the VTI mediator is v2-only by design — the ceremony needs neither | [`ref-06x`](../../tsp-reference/ref-06x-cypress-stack/) findings ledger |
+
+What remains is **integration engineering, not discovery** — Phase D below: (1) the trust-task client module in bifold (the rungs' ~25-line pattern, productionized), (2) real `eddsa-jcs-2022` proof verification (all rungs stub proofs deliberately), (3) the `did:webvh` resolver adapter on `didwebvh-ts`, (4) the `rceVersion: 4` migration gate, and (5) — for VTI features only, never blocking the ceremony — the v2 half via the OpenVTC TS library when it exists.
+
 ### Phase D — tsp-core ports & the Credo adapter (validation, not investigation)
 
 The Credo-integration question is **decided by design** (§4.3, adopted from team review): Credo-agnostic core + external adapter, no fork. Phase D builds and *validates* that design instead of investigating from scratch.

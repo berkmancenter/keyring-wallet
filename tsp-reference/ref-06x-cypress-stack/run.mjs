@@ -312,9 +312,13 @@ async function consume(myVid, senderVid, spec, doc, handler = (d) => d) {
 }
 
 try {
+  const tConn = process.hrtime.bigint();
   const ab = await connect(alice, bob, "alice", "bob");
   const bw = await connect(bob, wendy, "bob", "wendy");
   const aw = await connect(alice, wendy, "alice", "wendy");
+
+  const tCeremony = process.hrtime.bigint();
+  log(`  · connections (3 pairwise DIDComm handshakes): ${Number(tCeremony - tConn) / 1e6 | 0} ms`);
 
   const REL = { alice: "did:peer:alice-rel", bob: "did:peer:bob-rel" };
 
@@ -404,6 +408,7 @@ try {
       { vrcDigestMultibase: taskDigest({ ...vrc, proof: undefined }) }, NOW));
   check("issue crosses the carriage; the receipt carries the receiver-computed digest (design call 2)", () =>
     deepStrictEqual(issueOutcome.kind, "handled"));
+  log(`  · full ceremony (propose → 2 sessions → submit/VWC → issue/receipt): ${Number(process.hrtime.bigint() - tCeremony) / 1e6 | 0} ms`);
 } finally {
   await alice.shutdown().catch(() => {});
   await bob.shutdown().catch(() => {});
