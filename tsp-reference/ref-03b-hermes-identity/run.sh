@@ -10,11 +10,11 @@ HERMES="$ROOT/app/ios/Pods/hermes-engine/destroot/bin/hermes"
 WORK="$HERE/.work"
 mkdir -p "$WORK"
 
-# 1. Extract the PR branch's hpke-noble.ts from git (the clone may be checked
+# 1. Extract the MERGED hpke-noble.ts from upstream main via git (the clone may be checked
 #    out elsewhere — e.g. main after a pin advance; the ladder must not depend
 #    on the clone's HEAD), then bundle probe + module + CFRG vector into one
 #    es2020 file. The alias maps the probe's import onto the extracted file.
-git -C "$PLUGIN" show feat/pure-js-crypto-backend:packages/tsp-js/src/crypto/hpke-noble.ts > "$WORK/hpke-noble.ts"
+git -C "$PLUGIN" show origin/main:packages/tsp-js/src/crypto/hpke-noble.ts > "$WORK/hpke-noble.ts"
 NODE_PATH="$PLUGIN/packages/tsp-js/node_modules:$PLUGIN/node_modules" \
   "$PLUGIN/node_modules/.bin/esbuild" "$HERE/probe.mts" \
   --bundle --format=iife --target=es2020 \

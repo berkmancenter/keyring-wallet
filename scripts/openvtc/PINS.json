@@ -1,12 +1,12 @@
 {
-  "updated": "2026-08-15",
+  "updated": "2026-08-17",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
-      "sha": "ebebb50",
-      "commitDate": "2026-08-14",
-      "pinnedOn": "2026-08-15",
-      "why": "pnm-core 0.3.0 + consent/durability fixes (#104-#115); base for the noble-crypto PR rebase check",
+      "sha": "89d70c4",
+      "commitDate": "2026-08-17",
+      "pinnedOn": "2026-08-17",
+      "why": "Cypress release tag (== main 89d70c4): our noble HPKE merged (#116) and shipped as vti-tsp-js 0.2.0 + pnm-core 0.4.0; Web Store packaging",
       "watch": [
         "packages/tsp-js/",
         "packages/core/src/vta/",
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "1c20e315",
-      "commitDate": "2026-08-14",
-      "pinnedOn": "2026-08-15",
-      "why": "Cypress-RC-1-era advance (tag re-cut at 719fa90f, main +47 past it incl. trust-tasks 0.6/0.7 dependency alignment #979); ladder re-run follows",
+      "sha": "187ad9cd",
+      "commitDate": "2026-08-17",
+      "pinnedOn": "2026-08-17",
+      "why": "Cypress release tag (== main 187ad9cd): the official cut, 56 days / 15 repos per the release report",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
@@ -38,10 +38,10 @@
       ]
     },
     "vti-setup": {
-      "sha": "9ca6511",
-      "commitDate": "2026-07-18",
-      "pinnedOn": "2026-08-01",
-      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "sha": "22f712f",
+      "commitDate": "2026-08-17",
+      "pinnedOn": "2026-08-17",
+      "why": "Cypress-era guides refresh (+2)",
       "watch": [
         "sysop/",
         "developer/"
@@ -59,10 +59,10 @@
     },
     "dtgwg-trust-tasks-tf": {
       "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
-      "sha": "8eb7509",
-      "commitDate": "2026-08-15",
-      "pinnedOn": "2026-08-15",
-      "why": "Adoption-week boundary: #208/#212 (our thread amendment + follow-ups), #213 (the four witnessed-exchange specs), #216 (binding 0.2, dedicated @type on our ref-06v1d measurement), #214/#217 (DigestMultibase convergence), 0.4-track authorization work; ladder re-run follows",
+      "sha": "7e0d755",
+      "commitDate": "2026-08-16",
+      "pinnedOn": "2026-08-17",
+      "why": "The Cypress-lock trust-tasks: 0.9.0 libraries (#236 §4.9.3 task digest, #237 payloadPolicy validation), task control §12, trust-task-ok §8.6",
       "watch": [
         "SPEC.md",
         "specs/_framework/",
@@ -77,20 +77,20 @@
   },
   "npm": {
     "@openvtc/vti-tsp-js": {
-      "expected": "0.1.0",
-      "tripwire": "any bump = Cypress shipping the TSP wire layer"
+      "expected": "0.2.0",
+      "tripwire": "our noble HPKE is the shipped wire layer; any bump = crypto or CESR change — audit before adopting"
     },
     "@openvtc/pnm-core": {
-      "expected": "0.2.0",
-      "tripwire": "any bump = TSP channel chain published"
+      "expected": "0.4.0",
+      "tripwire": "channel chain + consent surface; minor bump = wallet-facing API moved"
     },
     "@openvtc/vti-didcomm-js": {
       "expected": "0.6.2",
       "tripwire": "minor bump = mediator transport changes"
     },
     "@openvtc/trust-tasks": {
-      "expected": "0.2.55",
-      "tripwire": "churns constantly; major/minor jumps matter, patches do not"
+      "expected": "0.9.0",
+      "tripwire": "the Cypress lock; any bump past 0.9.x = post-Cypress framework movement"
     }
   }
 }

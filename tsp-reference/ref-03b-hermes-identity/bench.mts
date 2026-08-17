@@ -18,10 +18,10 @@ const AAD = new Uint8Array(0);
 async function bench(label: string, size: number, iters: number) {
   const pt = fill(size, 0xab);
   // warmup
-  for (let i = 0; i < 10; i++) await seal(pt, AAD, skS, pkR, info, skE);
+  for (let i = 0; i < 10; i++) await seal(pt, AAD, skS, pkR, info, { __unsafeFixedEphemeralSk: skE });
   let t0 = Date.now();
   let last: any;
-  for (let i = 0; i < iters; i++) last = await seal(pt, AAD, skS, pkR, info, skE);
+  for (let i = 0; i < iters; i++) last = await seal(pt, AAD, skS, pkR, info, { __unsafeFixedEphemeralSk: skE });
   const sealMs = Date.now() - t0;
   t0 = Date.now();
   for (let i = 0; i < iters; i++) await open(last.ciphertext, AAD, last.enc, skR, pkS, info);

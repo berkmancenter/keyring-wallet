@@ -48,7 +48,7 @@ async function main() {
   const v = (vectorFile as any).vectors[0];
   const info = fromHex(v.info);
 
-  const encap = authEncap(fromHex(v.pkRm), fromHex(v.skSm), fromHex(v.skEm));
+  const encap = authEncap(fromHex(v.pkRm), fromHex(v.skSm), { __unsafeFixedEphemeralSk: fromHex(v.skEm) });
   check("cfrg.authEncap.enc", toHex(encap.enc), v.enc);
   check("cfrg.authEncap.shared_secret", toHex(encap.sharedSecret), v.shared_secret);
 
@@ -57,7 +57,7 @@ async function main() {
 
   // seq=0 encryption: single-shot seal must reproduce the vector's first ciphertext.
   const e0 = v.encryptions[0];
-  const sealed = await seal(fromHex(e0.pt), fromHex(e0.aad), fromHex(v.skSm), fromHex(v.pkRm), info, fromHex(v.skEm));
+  const sealed = await seal(fromHex(e0.pt), fromHex(e0.aad), fromHex(v.skSm), fromHex(v.pkRm), info, { __unsafeFixedEphemeralSk: fromHex(v.skEm) });
   check("cfrg.seal.enc", toHex(sealed.enc), v.enc);
   check("cfrg.seal.ciphertext", toHex(sealed.ciphertext), e0.ct);
 
@@ -74,7 +74,7 @@ async function main() {
   const pt = new TextEncoder().encode("trust task: witness/session bbbb2222 — engine identity probe");
   const tspInfo = new TextEncoder().encode("TSP-E-envelope-frame");
 
-  const s2 = await seal(pt, new Uint8Array(0), skS, pkR, tspInfo, skE);
+  const s2 = await seal(pt, new Uint8Array(0), skS, pkR, tspInfo, { __unsafeFixedEphemeralSk: skE });
   check("tsp.seal.enc", toHex(s2.enc));
   check("tsp.seal.ciphertext", toHex(s2.ciphertext));
   const rt = await open(s2.ciphertext, new Uint8Array(0), s2.enc, skR, pkS, tspInfo);

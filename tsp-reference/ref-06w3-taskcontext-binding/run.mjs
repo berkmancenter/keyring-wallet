@@ -113,11 +113,13 @@ const forged = {
 };
 
 // Wendy's VWC (three variants of the binding member under test).
+// taskContext lives at the credential's TOP level (cred-spec Base Structure),
+// not inside credentialSubject — placement fixed per the #18 first-pass review.
 const vwcBase = {
   issuer: "did:example:wendy",
+  taskContext: SESSION_ID,
   credentialSubject: {
     witnessedRelationship: ["did:example:alice-rel", "did:example:bob-rel"],
-    taskContext: SESSION_ID,
   },
 };
 
@@ -126,7 +128,7 @@ console.log("ref-06w3 — taskContext binding: id-only vs digest vs proofValue\n
 // ── act 1: the spec as merged — id-only ─────────────────────────────────────
 console.log("act 1 — id-only binding (witness/session/submit 0.1: “taskContext MUST equal the id”)");
 
-const pairById = (vwc, doc) => doc.id === vwc.credentialSubject.taskContext;
+const pairById = (vwc, doc) => doc.id === vwc.taskContext;
 
 check("genuine document pairs by id", () => ok(pairById(vwcBase, genuineSigned)));
 check("FORGED document ALSO pairs by id — evidence of the wrong event verifies cleanly", () =>
@@ -136,12 +138,12 @@ check("FORGED document ALSO pairs by id — evidence of the wrong event verifies
 console.log("\nact 2 — taskDigestMultibase (digest over JCS of the whole document)");
 
 const vwcDigest = structuredClone(vwcBase);
-vwcDigest.credentialSubject.taskDigestMultibase = digestMultibase(genuineUnproofed);
+vwcDigest.taskDigestMultibase = digestMultibase(genuineUnproofed);
 
 const pairByDigest = (vwc, doc) => {
   const { proof: _p, ...sansProof } = doc; // digest is over the document as authored (pre-proof)
-  return doc.id === vwc.credentialSubject.taskContext &&
-         digestMultibase(sansProof) === vwc.credentialSubject.taskDigestMultibase;
+  return doc.id === vwc.taskContext &&
+         digestMultibase(sansProof) === vwc.taskDigestMultibase;
 };
 
 check("genuine document pairs: id matches AND digest matches", () =>
@@ -151,19 +153,19 @@ check("forged document REJECTED: id matches but digest differs", () =>
 check("works on a conforming UNPROOFED session (request proof is OPTIONAL in 0.1)", () =>
   ok(pairByDigest(vwcDigest, genuineUnproofed)));
 check("digest is conformant DigestMultibase (z + base58btc multihash, per _framework/0.3)", () =>
-  ok(/^z[1-9A-HJ-NP-Za-km-z]+$/.test(vwcDigest.credentialSubject.taskDigestMultibase) &&
-     vwcDigest.credentialSubject.taskDigestMultibase.length >= 16));
+  ok(/^z[1-9A-HJ-NP-Za-km-z]+$/.test(vwcDigest.taskDigestMultibase) &&
+     vwcDigest.taskDigestMultibase.length >= 16));
 
 // ── act 3: proofValue binding ───────────────────────────────────────────────
 console.log("\nact 3 — taskProofValue (anchor on the session document's proof.proofValue)");
 
 const vwcProof = structuredClone(vwcBase);
-vwcProof.credentialSubject.taskProofValue = genuineSigned.proof.proofValue;
+vwcProof.taskProofValue = genuineSigned.proof.proofValue;
 
 // 3a. String-match alone is spoofable: Mallory pastes the genuine proof block.
 const forgedWithStolenProof = { ...forged, proof: structuredClone(genuineSigned.proof) };
 const pairByProofString = (vwc, doc) =>
-  doc.proof?.proofValue === vwc.credentialSubject.taskProofValue;
+  doc.proof?.proofValue === vwc.taskProofValue;
 
 check("string-match pairs the genuine signed document", () =>
   ok(pairByProofString(vwcProof, genuineSigned)));
