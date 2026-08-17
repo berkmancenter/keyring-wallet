@@ -24,7 +24,7 @@ step lives — every step is one `node run.mjs` away:
 |---|---|---|
 | 1. Alice+Bob, DIDComm 1 (Credo-ts) | ✅ | [`ref-06v1`](./ref-06v1-didcomm-v1-binding/) — plus [`ref-06v1c`](./ref-06v1c-task-layer/) (task layer over it), [`ref-06v1d`](./ref-06v1d-carrier/) (carrier decision), [`ref-06v1e`](./ref-06v1e-type-shape/) (binding-0.2 @type) |
 | 2. …with credo mediator | ✅ | [`ref-06v1b`](./ref-06v1b-mediated/) (production Keyring mediator) |
-| 3. …with Cypress VTA/VTI (affinidi mediator, webvh hosting) | ✅ composed, with measured gaps | [`ref-06x`](./ref-06x-cypress-stack/) — components separately: [`ref-04`](./ref-04-mediator/) (mediator), [`ref-05`](./ref-05-local-vta/) (VTA + webvh) |
+| 3. …with Cypress VTA/VTI (affinidi mediator, webvh hosting) | ✅ **closed by measurement** — the literal form (v1 through the affinidi mediator) is impossible **by design**, permanently (v2-only, measured 404); the step's intent splits: webvh + VTA REST serve a v1 wallet directly ([`ref-06x`](./ref-06x-cypress-stack/)), and the mediator leg is the dual-stack's v2 half ([`ref-04`](./ref-04-mediator/), `vti-didcomm-js`) — never DIDComm 1 | [`ref-06x`](./ref-06x-cypress-stack/), [`ref-04`](./ref-04-mediator/), [`ref-05`](./ref-05-local-vta/) |
 | 4. Fallback to pinned version if needed | ✅ standing | [`scripts/openvtc/PINS.json`](../scripts/openvtc/PINS.json) + `sync-external.mjs` — pins are the fallback; advances are logged decisions ([`SYNC_LOG.md`](../scripts/openvtc/SYNC_LOG.md)) |
 
 The witnessed-exchange evidence line (`ref-06w*`) sits on top of step 1:
