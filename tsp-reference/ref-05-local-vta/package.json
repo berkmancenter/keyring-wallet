@@ -1,0 +1,11 @@
+{
+  "name": "ref-05-local-vta",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 05 — a local VTA: self-hosted did:webvh, the transport ladder, and capability change without key rotation",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  }
+}

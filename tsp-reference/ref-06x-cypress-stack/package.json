@@ -1,0 +1,17 @@
+{
+  "name": "ref-06x-cypress-stack",
+  "private": true,
+  "type": "module",
+  "scripts": { "check": "node run.mjs --quiet", "start": "node run.mjs" },
+  "dependencies": {
+    "@credo-ts/askar": "0.6.3",
+    "@credo-ts/core": "0.6.3",
+    "@credo-ts/didcomm": "0.6.3",
+    "@credo-ts/node": "0.6.3",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "@openvtc/trust-tasks": "^0.9.0",
+    "@openvtc/vti-didcomm-js": "^0.6.2",
+    "ajv": "^8.17.1"
+  },
+  "overrides": { "@openwallet-foundation/askar-shared": "0.6.0" }
+}

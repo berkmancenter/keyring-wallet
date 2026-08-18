@@ -1,0 +1,96 @@
+{
+  "updated": "2026-08-17",
+  "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
+  "repos": {
+    "vta-browser-plugin": {
+      "sha": "89d70c4",
+      "commitDate": "2026-08-17",
+      "pinnedOn": "2026-08-17",
+      "why": "Cypress release tag (== main 89d70c4): our noble HPKE merged (#116) and shipped as vti-tsp-js 0.2.0 + pnm-core 0.4.0; Web Store packaging",
+      "watch": [
+        "packages/tsp-js/",
+        "packages/core/src/vta/",
+        "packages/core/src/didcomm/",
+        "packages/core/src/trust-tasks/"
+      ]
+    },
+    "verifiable-trust-infrastructure": {
+      "sha": "187ad9cd",
+      "commitDate": "2026-08-17",
+      "pinnedOn": "2026-08-17",
+      "why": "Cypress release tag (== main 187ad9cd): the official cut, 56 days / 15 repos per the release report",
+      "watch": [
+        "CHANGELOG.md",
+        "docs/02-vta/",
+        "docs/05-design-notes/",
+        "vta-sdk/src/protocol/",
+        "vta-service/src/messaging/",
+        "vta-service/Cargo.toml"
+      ]
+    },
+    "vti-didcomm-js": {
+      "sha": "2365c86",
+      "commitDate": "2026-07-19",
+      "pinnedOn": "2026-08-01",
+      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "watch": [
+        "src/"
+      ]
+    },
+    "vti-setup": {
+      "sha": "22f712f",
+      "commitDate": "2026-08-17",
+      "pinnedOn": "2026-08-17",
+      "why": "Cypress-era guides refresh (+2)",
+      "watch": [
+        "sysop/",
+        "developer/"
+      ]
+    },
+    "vta-mobile-agent-ios": {
+      "sha": "035dd65",
+      "commitDate": "2026-07-29",
+      "pinnedOn": "2026-08-01",
+      "why": "Cypress-RC-0-era pin; baseline for ref-00",
+      "watch": [
+        "vta-mobile-agent/",
+        "project.yml"
+      ]
+    },
+    "dtgwg-trust-tasks-tf": {
+      "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
+      "sha": "7e0d755",
+      "commitDate": "2026-08-16",
+      "pinnedOn": "2026-08-17",
+      "why": "The Cypress-lock trust-tasks: 0.9.0 libraries (#236 §4.9.3 task digest, #237 payloadPolicy validation), task control §12, trust-task-ok §8.6",
+      "watch": [
+        "SPEC.md",
+        "specs/_framework/",
+        "specs/trust-ceremony-receipt/",
+        "specs/task-consent/",
+        "bindings/didcomm-v1/",
+        "bindings/tsp/",
+        "trust-tasks-ts/",
+        "ceremonies/"
+      ]
+    }
+  },
+  "npm": {
+    "@openvtc/vti-tsp-js": {
+      "expected": "0.2.0",
+      "tripwire": "our noble HPKE is the shipped wire layer; any bump = crypto or CESR change — audit before adopting"
+    },
+    "@openvtc/pnm-core": {
+      "expected": "0.4.0",
+      "tripwire": "channel chain + consent surface; minor bump = wallet-facing API moved"
+    },
+    "@openvtc/vti-didcomm-js": {
+      "expected": "0.6.2",
+      "tripwire": "minor bump = mediator transport changes"
+    },
+    "@openvtc/trust-tasks": {
+      "expected": "0.9.0",
+      "tripwire": "the Cypress lock; any bump past 0.9.x = post-Cypress framework movement"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+# ref-05 — local VTA setup recipe (non-interactive, re-runnable).
+#
+#   cargo run -p vta-service --features tsp,webvh,setup -- setup --from vta-setup.toml
+#
+# Choices and why:
+#   • plaintext seed under data_dir — dev only, but container-friendly (no OS
+#     keyring inside a container; the documented alternative for CI/images is
+#     `config_seed`). NEVER for anything real.
+#   • serverless did:webvh — the VTA hosts and serves its OWN DID document at
+#     http://localhost:8100/.well-known/did.jsonl, so the local stack needs no
+#     separate DID-hosting service. This is what makes a one-command local VTA
+#     possible at all.
+#   • messaging = skip — no mediator on first boot. The mediator (and with it
+#     the TSP/DIDComm transports) is enabled at runtime once we have one;
+#     `pnm services tsp enable --mediator-did <did>`.
+#   • data_dir_exists = "delete" + overwrite_config — re-run friendly, which is
+#     what makes this usable from a script and from a container entrypoint.
+
+config_path      = "/tmp/ref05-vta/config.toml"
+data_dir         = "/tmp/ref05-vta/data"
+public_url       = "http://localhost:8100"
+vta_name         = "ref05-local"
+data_dir_exists  = "delete"
+overwrite_config = true
+
+[server]
+host = "0.0.0.0"
+port = 8100
+
+[log]
+level  = "info"
+format = "text"
+
+[secrets]
+backend = "plaintext"
+
+[messaging]
+kind = "skip"
+
+[vta_did]
+kind = "create_webvh"
+url  = "http://localhost:8100"

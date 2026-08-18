@@ -1,0 +1,15 @@
+{
+  "name": "ref-01-modes",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 01 — nested + routed modes, the onion walked hop by hop, first frozen fixtures",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "dependencies": {
+    "@openvtc/vti-tsp-js": "0.1.0",
+    "@noble/curves": "^2.2.0"
+  }
+}

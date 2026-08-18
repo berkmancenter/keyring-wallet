@@ -1,0 +1,21 @@
+{
+  "name": "ref-06v1-didcomm-v1-binding",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 06v1 — Credo 0.6.3 speaking the drafted Trust Tasks DIDComm v1 binding (~attach carriage) against fixtures from the upstream reference implementation",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "overrides": {
+    "@openwallet-foundation/askar-shared": "0.6.0"
+  },
+  "dependencies": {
+    "@credo-ts/askar": "0.6.3",
+    "@credo-ts/core": "0.6.3",
+    "@credo-ts/didcomm": "0.6.3",
+    "@credo-ts/node": "0.6.3",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0"
+  }
+}

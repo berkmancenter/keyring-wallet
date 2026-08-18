@@ -1,0 +1,9 @@
+{
+  "name": "ref-06w4-package-truth",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openvtc/trust-tasks": "^0.9.0",
+    "ajv": "^8.20.0"
+  }
+}

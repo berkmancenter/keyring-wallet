@@ -1,0 +1,83 @@
+{
+  "note": "Frozen 2026-08-01 against @openvtc/vti-tsp-js 0.1.0 (see ../PINS.json). Wires are frozen captures; unpack is deterministic, so any byte-format change upstream turns this rung red.",
+  "keys": {
+    "alice": {
+      "signPriv": "617fcb6a162a73725ea2476b32e56114048a714a280c0bf868b358b3f4d54c76",
+      "encPriv": "882f2c92815aee9af7b41388a418a31c7e68cf43efd8d4b2276c17018c219e2d"
+    },
+    "bob": {
+      "signPriv": "58e78e3babc54a445d61a7ba9eb6d042cf0dde21caf2c63b02b9f532391a25ce",
+      "encPriv": "e7903ac012e5341edf75a4d603e76274d79d4499b56c06f2e681b83b20db1cc4"
+    },
+    "relay1": {
+      "signPriv": "877b57020ea6f36b66808524e497d897e0199f07b503822f01775751af97ad83",
+      "encPriv": "c7e48ddf00fa9cc3643c3dcb3ddfb68cf5211f8ea1a81ec41e14b12adba8e4ef"
+    },
+    "relay2": {
+      "signPriv": "5581a6fbf3eb77d1d67702b8d93fda1084fb94e3b5cacce56605a5893f338f36",
+      "encPriv": "25a767a710718395a459f24ce30c39a4fd12dee34c6f4db1efdae569be44c5ec"
+    }
+  },
+  "vectors": [
+    {
+      "name": "direct-pairwise-core",
+      "wire": "f8401161348ff80001e8100600006469643a706565723a70772d61376633e8100600006469643a706565723a70772d623265395c0000e0601be394496d80c36481c1481929f72e704458b6bf4ff47eedff3343178baf78400c596fee8dfe30309356a3484afd4612abda54337cb71ac6ab715880c3e5e27c8554b102ea92419ff353f89c5d690d67df3cf82016f8a016d010e6a03680f8c837ff7a1d2d3d70100f7c8d23cfd3ee59190bc9c4f50b64a6621c3bdda2148fff3024bd8b550b94d91527909f95ac30c3b817a2b9da85ffdf2307",
+      "unpackAs": [
+        "bob",
+        "alice"
+      ],
+      "expect": {
+        "sender": "did:peer:pw-a7f3",
+        "receiver": "did:peer:pw-b2e9",
+        "messageType": "direct",
+        "payloadUtf8": "hello through the onion"
+      }
+    },
+    {
+      "name": "nested-outer",
+      "wire": "f8401461348ff80001e010076469643a7765623a616c6963652e6578616d706c65e8100800006469643a7765623a72656c6179312e6578616d706c655c0000e0605a0219baa0504d619ddce241f41416a657e58bc3dfe0aa144da64176896cac49b4731ca2fd7da01d597a9c493b782609f49dba58466229f76ac69446bffaf27c9b33ca619f960c40ceb9fd0a72ceb86e510e036be85f2d0dadcebb9d7f6b865d7e89b46b77818ccdbfde8f86efb180a729bd8d0a4fcc66275a2fbefdb9ef63a422ee3ef758c2d96bc1129863cdcedc4c8505025f47d6640d598c598be4a4b57c0a45ad6b3ba21e5a3427d8bef4ac2f5c8d8d36a328d81d62f3cc87b211b98bc83ed6f2d70f2406588924e5e5ad8bf8fef91e98da2bffe87d3f4de907b872257f3595790667ccb901187825c0f3a7abc1e4a6e49e2ac473f76f0aaefdf6d2a5defcca26e74119b1334cb15ee49c0013f82016f8a016d0103a88ba841c51cb5354d37c79268519ceed729f49da109ab8f9671573388c62f62b1dfa3fd7e80e23c7a716401d2f1e23d275dd9a26dc3e228ea6d68e2d736908",
+      "unpackAs": [
+        "relay1",
+        "alice"
+      ],
+      "expect": {
+        "sender": "did:web:alice.example",
+        "receiver": "did:web:relay1.example",
+        "messageType": "nested"
+      }
+    },
+    {
+      "name": "routed-leg1",
+      "wire": "f8401461348ff80001e010076469643a7765623a616c6963652e6578616d706c65e8100800006469643a7765623a72656c6179312e6578616d706c655c0000e0606ae233890ab9241d1bbc16debf3abd42927ba1bf20e30664235275af5a059d90780d48ecc3d81e196e8cb0dda89bc12ff3be76645b5fdf7ccdc77da94cbbf88ad78028a1bd4b97eb82e89b4dec7143146acc98600c03e85d36b1698ffcbfee5f492ac46b828243ea5b6b00f7c63f2f48bc325d5e73abc38b83069f27a02b428a84878d5a02340bf424be92d3a851969723d1736447c6cbb2b4f49504042288e7ae32b67e75216884bd9caf14633cbb10e2cd3e3158d79117c1d1efc93f4abe184670c77a241f845b07114b58d153d4ef3ad871d29b23baeb71dcc41e41b17f4394025ae58874009a2afb07765f28d672641901d2c955660b58f184ffb633681af831f842ee582245f347b4904c25883d5cb8e1312b3736b944f37eb48de1eb4a311792251d58f6ad527b54c289e124a27596378f030da7507e2948f15e0a5af82016f8a016d01067bf0827d2bec263c1fd46bc2f4413d3d6f8bfa7d0f6980baf98aa38656f2f9937b6ffe357e380df5d5b10144e71416959cc6965378979718cd7586ec06cfd08",
+      "unpackAs": [
+        "relay1",
+        "alice"
+      ],
+      "expect": {
+        "sender": "did:web:alice.example",
+        "receiver": "did:web:relay1.example",
+        "messageType": "routed",
+        "hops": [
+          "did:web:relay2.example",
+          "did:peer:pw-b2e9"
+        ]
+      }
+    },
+    {
+      "name": "routed-leg2",
+      "wire": "f8401561348ff80001e8100800006469643a7765623a72656c6179312e6578616d706c65e8100800006469643a7765623a72656c6179322e6578616d706c655c0000e0606119ef281f1ce224c967b95d1d071239da2d36a8f5ed0f08522c075026618cda4c76840044d10decb645b476df9b57f1c3ad842d9e61cc71a5e372776a29cc3d439b6d63ab1c9669e66cec3c0fa56400073816685df17e5d8a8c2daf6fc4b1e60843a44c5c4381bb86326aefb03904071420d04062bffe9f51b280c2ba874427149d0408a44c70e8aedb9333c7551e04c55c18a6103c8e5af4a002a0d13007f49de99867619f6a8955dc177dbfbcfcb8661e5538fa41a6d946b4b421fe8ef3d437849f7cf02f71270bcd526f3fc147b847f3bab153bc4c9e7e3952605341c61e7fa5a20d371602b890fd52e7828a317ba5a63a538dedd794f3e26c94ff58f7f375060b96c9102455aa918bd9cf88be19c8a7154fab3adb3db6c17edd05876d2dd852076bf82016f8a016d01032a1ba0551ee261a97a207c8bf8ce71f2b842e1e49e07d3be9497df794e5336a6c8c053cd919d9d90c9c9dcc410e599f2b02ed7379514d2154ecc0386cd5660d",
+      "unpackAs": [
+        "relay2",
+        "relay1"
+      ],
+      "expect": {
+        "sender": "did:web:relay1.example",
+        "receiver": "did:web:relay2.example",
+        "messageType": "routed",
+        "hops": [
+          "did:peer:pw-b2e9"
+        ]
+      }
+    }
+  ]
+}

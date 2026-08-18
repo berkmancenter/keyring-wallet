@@ -1,0 +1,29 @@
+{
+  "@id": "8bea1ca8-ba9f-46f6-b29d-9f4ea11d01a4",
+  "@type": "did:sov:BzCbsNYhMrjHiqZDTUASHg;spec/basicmessage/1.0/message",
+  "~thread": {
+    "thid": "urn:uuid:0f39d1f6-2f6b-4e9a-8f21-4e0c0a5b9d01",
+    "pthid": "urn:uuid:7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f"
+  },
+  "content": "Trust Task: https://trusttasks.org/spec/acl/grant/0.1",
+  "~attach": [
+    {
+      "@id": "trust-task",
+      "data": {
+        "json": {
+          "id": "urn:uuid:0f39d1f6-2f6b-4e9a-8f21-4e0c0a5b9d01",
+          "parentThreadId": "urn:uuid:7c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
+          "payload": {
+            "entry": {
+              "role": "admin",
+              "subject": "did:sov:alice"
+            }
+          },
+          "threadId": "urn:uuid:0f39d1f6-2f6b-4e9a-8f21-4e0c0a5b9d01",
+          "type": "https://trusttasks.org/spec/acl/grant/0.1"
+        }
+      },
+      "mime-type": "application/json"
+    }
+  ]
+}

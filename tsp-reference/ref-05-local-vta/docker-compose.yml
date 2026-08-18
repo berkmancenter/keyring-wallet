@@ -1,0 +1,57 @@
+# A local VTI stack for integration testing.
+#
+#   docker compose up --build          # first run provisions, then serves
+#   curl localhost:8100/health
+#   curl localhost:8100/.well-known/did.jsonl   # the VTA's own did:webvh
+#   docker compose down -v             # discard everything
+#
+# What's here and what isn't:
+#   • vta — the Verifiable Trust Agent, serving REST on 8100 and hosting its
+#     OWN did:webvh document (serverless webvh). That self-hosting is what
+#     removes a separate DID-hosting service from a local stack.
+#   • mediator — commented out below. The production mediator cannot mint its
+#     own DID (a VTA mints it and hands over a sealed bundle), so a one-command
+#     local mediator needs the `affinidi-messaging-test-mediator` harness
+#     instead; see ref-04 for talking to a mediator, and the README here for
+#     the current state of that work.
+#
+# Dev posture: plaintext seed backend, debug-friendly logging, disposable
+# volume. Never use this file as a production baseline.
+
+services:
+  vta:
+    build:
+      context: ../../../../external/verifiable-trust-infrastructure
+      dockerfile: ../../docs/spikes/tsp-reference/ref-05-local-vta/Dockerfile
+    image: vti-local-vta:dev
+    container_name: vti-vta
+    ports:
+      - "8100:8100"
+    environment:
+      # The URL the VTA publishes in its DID document. Must be reachable by
+      # whatever resolves the DID — from the host that's localhost:8100; from
+      # a sibling container it would be http://vta:8100.
+      VTA_PUBLIC_URL: "http://localhost:8100"
+      VTA_NAME: "vti-local"
+      VTA_LOG_LEVEL: "info"
+      # Advertise TSP at first boot (adds `#tsp` / TSPTransport to the DID
+      # document — with no key rotation). Point it at your mediator's DID.
+      # VTA_TSP_MEDIATOR_DID: "did:webvh:...:mediator"
+      # Grant admin to a DID you control, without sealing the VTA.
+      # VTA_ADMIN_DID: "did:key:z6Mk..."
+    volumes:
+      - vta-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8100/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  # mediator:
+  #   Not yet included — see README. The upstream production mediator expects
+  #   its DID to be minted by a VTA and delivered as a sealed bundle, so it is
+  #   not a drop-in container. The test harness crate is the tractable path.
+
+volumes:
+  vta-data:
