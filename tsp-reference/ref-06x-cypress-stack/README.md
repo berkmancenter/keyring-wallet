@@ -16,9 +16,12 @@ setup; the Cypress-built binary), then `npm install && node run.mjs`.
 2. **webvh at the wallet — FINDING:** Credo 0.6.3 **cannot resolve
    `did:webvh`** (`unsupportedDidMethod`). The workaround is ~20 lines —
    fetch `did.jsonl`, take the last entry's state — and this rung's own code
-   is the existence proof. For Keyring: a small resolver adapter is needed
-   before the app touches Cypress DIDs; possibly worth contributing to Credo
-   as a resolver module (decide-together item).
+   is the existence proof. Refinement after checking the ecosystem: the
+   official **`@credo-ts/webvh`** extension exists (0.7.0, built on DIF's
+   `didwebvh-ts`) but only for Credo **0.7** — Keyring runs 0.6.3. Options:
+   a 0.6.3-compatible custom `DidResolver` wrapping `didwebvh-ts` (~50 lines,
+   with real log verification — the near-term move), or the Credo 0.7 upgrade
+   (already on the roadmap), which gets the official extension for free.
 3. **The mediator dialect — FINDING (measured, not assumed):** the Cypress
    mediator's own `did:webvh` resolves wallet-side and names its endpoint;
    the client package (`vti-didcomm-js`) is DIDComm **v2**
@@ -49,5 +52,5 @@ setup; the Cypress-built binary), then `npm install && node run.mjs`.
 
 | # | Finding | Candidate action |
 |---|---|---|
-| 1 | Credo 0.6.3: `did:webvh` → `unsupportedDidMethod` | Keyring resolver adapter (small); optionally upstream a Credo webvh resolver module |
+| 1 | Credo 0.6.3: `did:webvh` → `unsupportedDidMethod` (`@credo-ts/webvh` exists but requires Credo 0.7) | Near-term: 0.6.3 `DidResolver` adapter on `didwebvh-ts`; long-term: the Credo 0.7 upgrade brings the official extension |
 | 2 | Cypress mediator refuses v1 (404; v2-only by design) | none upstream — validates the plan's dual-stack transport strategy |
