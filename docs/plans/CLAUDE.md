@@ -40,6 +40,34 @@ Cross-link them explicitly in the headers — parent → subtask and subtask →
 parent. A plan that does not name its companions gets read alone and acted on
 alone.
 
+## Every substantive change writes a companion
+
+**Changing a plan — or adding a subplan — is not done until a dated companion
+records why.** Write it *with* the change, not afterwards: the argument is
+cheapest to capture while it is still live, and batching it up later is how it
+gets lost. That is the failure this rule exists to prevent, and the reason the
+obligation is on the change rather than on the author's discretion.
+
+- **Same author, same working session → update that day's file.** One file per
+  author per session still holds; a second change that afternoon extends the
+  morning's document rather than starting a new one.
+- **Otherwise → create one**, `<YYYY-MM-DD>-<initials>.md`.
+- **Add the pointer to the plan's review index** in the same commit, so the
+  companion is reachable from the document it explains. A companion nothing
+  links to is a file nobody opens.
+
+**Substantive** means: a new or restructured subplan, a design position adopted
+or rejected, a phase's scope or acceptance criteria changed, or an external
+constraint that moved under us. Mechanical edits — a typo, a dead link, a
+reflow, renumbering a list — do not need one, and demanding a companion for them
+devalues the ones that matter.
+
+The content rule is unchanged: state what was concluded, the evidence, and what
+position it supersedes. If a change only reverses something you wrote an hour
+ago, that still counts — a superseded position of your own is exactly what the
+next reader needs, because otherwise the corrected version reads as though it
+were obvious from the start.
+
 ## Three kinds of content, kept apart
 
 | Kind | Where | Voice |
