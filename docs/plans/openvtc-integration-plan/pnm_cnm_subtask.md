@@ -672,11 +672,31 @@ and it moved onto our own work: `taskDigestMultibase` landed in
 [cred-spec #18](https://github.com/trustoverip/dtgwg-cred-spec/pull/18) from the
 staged [Mickens-Lab#5](https://github.com/Mickens-Lab/dtgwg-cred-spec/pull/5) on
 2026-08-17, and now *cites* the framework's task digest (§4.5) rather than
-defining the computation from first principles. **#18 is still open** — Geoff's
-review is answered but not merged — so this section states the shape we are
-driving, not ratified text; Q7's reasoning applies here in the same way it
-applies to #12. Three constraints follow. All three are wallet work, not spec
-work, and none of them is visible in the Cypress implementation.
+defining the computation from first principles.
+
+**#18 is still open, but the obligation on us is not waiting for it.** The
+credential *schema* — where `taskDigestMultibase` is defined — lands with #18.
+The *holder's* duty is already normative and already in our pin, stated by the
+merged `witness/session/submit/0.1` specification for exactly the case Keyring
+cares about:
+
+> A holder later presenting that VWC as proof the witnessing occurred **MUST**
+> retain this `#response` **and the `witness/session` document that opened the
+> session**, and ship both with the presentation — the digest check is not
+> performable without the document it is taken over.
+
+That specification is explicit about the split it is living with —
+"`taskDigestMultibase` is a member of the credential, whose schema belongs to
+DTG Core Credentials; this specification states only the obligation that the
+value pair with the session document". So a merged spec normatively requires a
+credential member no published schema defines yet, and that gap closes when #18
+merges. **Two consequences.** The retention work below is not contingent on #18
+and should not be scheduled as though it were. And reviewing #5/#18 is not only
+our own roadmap gating — it closes a live inconsistency in someone else's
+merged specification, which is a reason to move it up rather than merely along.
+
+Three constraints follow. All three are wallet work, not spec work, and none of
+them is visible in the Cypress implementation.
 
 **1. The VWC carries two properties where it carried one.** `taskContext`
 (REQUIRED) is the `id` of the exchange's initiating document;
@@ -690,7 +710,12 @@ document; only the digest match confirms it is *the* document."
 **2. Outcome evidence is a pair, and the initiating document is half of it.**
 Matching evidence is now "the exchange's initiating document together with a
 terminal Trust Task document", paired as `terminal.threadId ==
-(initiating.threadId ?? initiating.id)`. The indirection through the initiating
+(initiating.threadId ?? initiating.id)`. The witness specification states the
+same rule in its concrete form and adds two checks the general rule leaves to
+the task specification: the evidence's `issuer` is the witness that issued the
+VWC, and **the presented credential's own digest equals the evidence's
+`vwcDigestMultibase`** — so a VWC presentation is verified against the response
+that delivered it, not merely against the session it names. The indirection through the initiating
 document is deliberate and is the part a holder cannot work around: §4.9 lets an
 initiator mint a fresh `threadId`, so pairing the terminal document directly
 against the credential's `taskContext` would orphan legitimate evidence

@@ -1,6 +1,6 @@
 # TSP / OpenVTC Integration — Analysis, Architecture & Phased Plan
 
-*Living plan for the OpenVTC infrastructure-compatibility workstream, at **Rev 8**. Supporting research (TSP/DIDComm learning notes, engineering brief) is kept out of the repo for now; ask if you want it.*
+*Living plan for the OpenVTC infrastructure-compatibility workstream, at **Rev 12**. Supporting research (TSP/DIDComm learning notes, engineering brief) is kept out of the repo for now; ask if you want it.*
 
 **Subtask plans** — each owned by this plan, each stating current design for one workstream in detail:
 
@@ -17,10 +17,10 @@
 | 6 (08-10) | [`2026-08-10-al.md`](./openvtc-integration-plan/2026-08-10-al.md) — Alberto. Upstream re-audit (five 08-05 positions superseded by upstream movement) + the first implementation of the DIDComm v1 binding (rungs ref-06v1/ref-06v1b, 19 checks) and the spec amendment staged from it |
 | 7 (08-11) | [`2026-08-11-al.md`](./openvtc-integration-plan/2026-08-11-al.md) — Alberto. Cypress RC-1 tagged (pin advance deferred to its own boundary session); rungs ref-06v1c/06v1d/06w run (task layer, carrier measurements, the witnessed exchange); positions taken (carrier = dedicated `@type`; `inResponseTo` mandatory-at-next-major); the five-item internal review stack staged — trust-tasks [#2](https://github.com/Mickens-Lab/dtgwg-trust-tasks-tf/pull/2)/[#3](https://github.com/Mickens-Lab/dtgwg-trust-tasks-tf/pull/3), cred-spec [#2](https://github.com/Mickens-Lab/dtgwg-cred-spec/pull/2)/[#3](https://github.com/Mickens-Lab/dtgwg-cred-spec/pull/3), plus the positions |
 | 8 (08-12) | [`2026-08-12-al.md`](./openvtc-integration-plan/2026-08-12-al.md) — Alberto. Compatibility evidence (ref-06w2 against the real witness core): shared crypto core, lossless translator, mixed-dialect session; migration levers B/C proven, lever D (split VWC delivery) raised for the PR #3 review |
-| 12 (08-17) | [`2026-08-17-bam.md`](./openvtc-integration-plan/2026-08-17-bam.md) — Brendan. The PNM/CNM subplan's upstream-alignment sweep (seven corrections, one of which — outcome evidence is a *pair* — rewrote §8.1 here) and the four scope gaps closed against it: the CLI counterparty, backup/restore and mnemonic export brought in scope, P6's two-service split, approvals management. Generates roadmap items 11 and 12 |
-| 11 (08-17) | [`2026-08-17-al.md`](./openvtc-integration-plan/2026-08-17-al.md) — Alberto. Cypress released with our noble HPKE as its TSP wire layer (vti-tsp-js 0.2.0); all pins re-anchored on the release, full ladder green; Geoff's 13-comment #18 review (one blocking) answered on the #5 stack |
-| 10 (08-16) | [`2026-08-16-al.md`](./openvtc-integration-plan/2026-08-16-al.md) — Alberto. The taskContext digest promoted to framework §4.9.3 (#236, co-authored; #229's substance intact) and the schema-validation gap fixed as proposed (#237, shipped 0.9.0 — the Cypress-lock version); crypto PR merged on the fork pending its upstream PR; the reprioritized queue |
 | 9 (08-15) | [`2026-08-15-al.md`](./openvtc-integration-plan/2026-08-15-al.md) — Alberto. Upstream adopted the whole stack (#208 merged; #209 → #213 with three design calls; carrier → binding 0.2 via #216 on our measurement; digest convergence #214/#217). The Glenn sync's proof-value directive answered with evidence (ref-06w3 → `taskDigestMultibase`, staged as Mickens cred-spec #5 + tf draft #229); the `@type` shape probed (ref-06v1e); the exchange re-proven on the published package (ref-06w4) surfacing the **schema-validation gap** in the TS runtime. Crypto PR #1 updated to noble-everywhere per the sync, proven byte-identical on Hermes and in-app (ref-03b/ref-03c) |
+| 10 (08-16) | [`2026-08-16-al.md`](./openvtc-integration-plan/2026-08-16-al.md) — Alberto. The taskContext digest promoted to framework §4.9.3 (#236, co-authored; #229's substance intact) and the schema-validation gap fixed as proposed (#237, shipped 0.9.0 — the Cypress-lock version); crypto PR merged on the fork pending its upstream PR; the reprioritized queue |
+| 11 (08-17) | [`2026-08-17-al.md`](./openvtc-integration-plan/2026-08-17-al.md) — Alberto. Cypress released with our noble HPKE as its TSP wire layer (vti-tsp-js 0.2.0); all pins re-anchored on the release, full ladder green; Geoff's 13-comment #18 review (one blocking) answered on the #5 stack |
+| 12 (08-17) | [`2026-08-17-bam.md`](./openvtc-integration-plan/2026-08-17-bam.md) — Brendan. The PNM/CNM subplan's upstream-alignment sweep (seven corrections, one of which — outcome evidence is a *pair* — rewrote §8.1 here) and the four scope gaps closed against it: the CLI counterparty, backup/restore and mnemonic export brought in scope, P6's two-service split, approvals management. Generates roadmap items 11 and 12 |
 
 ---
 
@@ -252,6 +252,55 @@ Inverting it costs a port definition today. After Phase D it is a refactor of th
 - **Reference corpus** in `tsp-reference/ref-NN-*` at the repo root (§6) — a standalone suite outside the yarn workspaces, the same shape as `e2e/`. It does not move wholesale: the conformance rungs stay there, and only the integration rungs follow their packages (§6, "where the corpus ends up").
 - **External clones** in `external/` at repo root (gitignored), each pinned to a recorded SHA; unpublished TS packages are consumed from the clones until the "Cypress" release puts them on npm.
 
+### 5.4 Delivery phasing for the VRC/witness exchange — a different axis from §6
+
+Two phasings run in this workstream and the plan previously stated only one,
+which made them easy to conflate. **§6 is a validation ladder** — reference
+scripts that prove each mechanism works, in the order that makes each cheap to
+learn. **This is the delivery order** for the thing a user actually gets: the
+VRC and witnessed exchange, moving carriage by carriage while the credential
+and the operation layer stay put. A rung in §6 answers "does this work"; a stage
+here answers "what does Keyring ship next".
+
+The invariant that makes the stages cheap is §2.3's byte-identity property: a
+Trust Task document is the same bytes on every carriage, so once the exchange is
+*task documents*, each later stage is a transport swap and not a rewrite. That
+is why the recast comes first and everything else is carriage.
+
+| Stage | Carriage | Operation layer | Status |
+|---|---|---|---|
+| **1. DIDComm v1 via Credo** | Credo's Aries stack, existing connections | today's regex-in-a-chat-message | **Shipping.** The legacy baseline, untouched — §8 keeps it non-negotiable throughout |
+| **2. Trust Tasks over DIDComm v1** | same Credo connection, `bindings/didcomm-v1/0.2` | `vrc/relationships/*`, `witness/*` Trust Tasks | **Designed and proven.** [`trust_tasks_subtask.md`](./openvtc-integration-plan/trust_tasks_subtask.md) §6 and §9 steps 1–6, each with acceptance criteria; ref-06v1/06v1b/06v1c ran it, and binding 0.2 is upstream (#216, #238) |
+| **3. Trust Tasks over DIDComm v2** | `@openvtc/vti-didcomm-js` beside Credo | the same task documents, unchanged | **Reachable, not yet named as a stage.** See below |
+| **4. Trust Tasks over TSP** | `tsp-core`'s Carriage port | the same task documents, unchanged | Ecosystem phase — gated on `vta-service` shipping TSP enabled, which it does not at Cypress ([`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) §2.3) |
+| **5. PNM/CNM functionality** | whatever the VTA negotiates | Trust Tasks throughout | **Sequenced** as P0–P6 in [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md), interleaved with Phase D rather than gated on Phase E (its §7) |
+
+**Stage 3 is worth stating explicitly, because the earlier argument for skipping
+it no longer holds.** The reasoning was that running Trust Tasks over DIDComm v2
+would mean standing up `vti-didcomm-js` as a second transport stack *for that hop
+alone*, where a swap straight to TSP costs nothing extra because the Carriage
+port is Credo-version-independent. That was sound when PNM sat after the ladder.
+It is not sound now: the PNM subplan's **P1 stands up exactly that stack** for
+the approver flow (its §2.3 — the live PNM transports at Cypress are REST and
+DIDComm v2), and **P4 already runs a peer-to-peer VRC exchange across it**,
+against `openvtc`, over that CLI's bespoke message types. So by the time the
+recast wants a new carriage, the v2 stack exists, is proven, and is already
+carrying VRCs between peers.
+
+That leaves stage 3 as a carriage swap on a proven stack — and it is the stage
+where the exchange becomes real, because **it is the only Trust-Task carriage
+with a live peer today**. TSP has no counterparty for this exchange until
+`vta-service` ships TSP enabled, so stage 4 cannot be reached by skipping stage
+3; skipping it only means waiting. P4's "foreseeable" and the sibling subplan's
+§9 step 6 already describe the swap; what was missing was naming it as the
+stage that follows the recast.
+
+**Recorded so it is not re-derived:** the stages are not a commitment to ship
+each one to users. Stage 3 may be exercised as a rung and held behind a flag if
+stage 4 arrives close behind it. What the ordering fixes is *dependency*, not
+release: each stage's carriage must work before the next is attempted, and the
+recast (stage 2) gates everything after it.
+
 ---
 
 ## 6. The reference-script ladder
@@ -366,7 +415,7 @@ OpenVTC is *ours to shape*: Glenn has offered npm-namespace access and direct ch
 | 2 | **docker-compose for the full local VTI + `local-dev.md`** (Level 3) | PR to vti-setup / verifiable-trust-infrastructure | Fills the documented gap (`local-dev.md` is an unwritten stub); every future implementor gets a local stack |
 | 3 | **Conformance fixtures & harness** (Levels 0/3/5) | vti repos + TSP spec issue #14 | The ecosystem has no test vectors; "conformant" is currently undefined at byte level |
 | 4 | **Functionality wishlist → Glenn's helper roadmap** (Level 2 exit) | Discussion + issues | He explicitly asked for it; steers upstream toward mobile needs |
-| 5 | **The RN/PNM mobile library itself** (Level 5 core) — detailed in [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md), which **proposes restating this row** (§3.2): measured against `pnm-core` 0.4.0 the browser coupling is narrow and isolated, so the contribution is better shaped as portability work on the existing package plus a thin RN adapter than as a parallel library. Pending review | New repo proposal, e.g. `OpenVTC/pnm-react-native` (or publish `@openvtc/pnm-mobile`) | pnm-core is "too browser-specific" (Glenn's words, recorded before 0.4.0); our pure-TS core + RN shims is the mobile answer; proposing new repos under the org is on the table |
+| 5 | **The RN/PNM mobile library itself** (Level 5 core) — no longer a roadmap entry only: sequenced as P0–P6 in [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md), each phase with acceptance criteria, and stage 5 of §5.4. That subplan **proposes restating this row** (§3.2): measured against `pnm-core` 0.4.0 the browser coupling is narrow and isolated, so the contribution is better shaped as portability work on the existing package plus a thin RN adapter than as a parallel library. Pending review | New repo proposal, e.g. `OpenVTC/pnm-react-native` (or publish `@openvtc/pnm-mobile`) | pnm-core is "too browser-specific" (Glenn's words, recorded before 0.4.0); our pure-TS core + RN shims is the mobile answer; proposing new repos under the org is on the table |
 | 6 | **Witnessed-exchange Trust Task spec** (+ CODEOWNERS for our namespace) | **Joint appendix in dtgwg-trust-tasks-tf — invited by the framework editor 2026-08-05** ([#173](https://github.com/trustoverip/dtgwg-trust-tasks-tf/issues/173#issuecomment-5189686547)); **drafted, staged as [Mickens-Lab#3](https://github.com/Mickens-Lab/dtgwg-trust-tasks-tf/pull/3)** pending internal review | DTG Core Credentials makes a qualifying Trust Task specification a **normative dependency** of the VWC's `taskContext` binding, and none exists — so this is a named, delegated gap, not a nice-to-have. The editor has asked for "a relationship-witnessing Trust Task specification satisfying the qualifying profile" as the test of whether that profile is satisfiable at all. See [`trust_tasks_subtask.md`](./openvtc-integration-plan/trust_tasks_subtask.md) §4 Layer C and §8.5 |
 | 7 | **Credo KMS-HPKE extension** (post-Level 4) | credo-ts fork → upstream RFC | The bridge between the OWF credo world and TSP; whoever writes it owns the lane |
 | 8 | **Continuous feedback** | Issues/discussions across the org | 0.x is intended; we are part of the design loop |
@@ -397,13 +446,36 @@ DTG Core Credentials §Outcome Interpretability is normative: a verifier **MUST 
 
 Keyring is the holder. Today our VWCs are standalone credentials and the witness ceremony's messages are transient, so we currently cannot present a VWC as proof a witnessing occurred. Closing that needs:
 
-1. **Persistence of both documents** — the exchange's **initiating** document *and* its terminal `#response` with its proof. Evidence is a pair under cred-spec [#18](https://github.com/trustoverip/dtgwg-cred-spec/pull/18): the terminal document is paired as `terminal.threadId == (initiating.threadId ?? initiating.id)`, so a holder that kept only the `#response` cannot complete the pairing when the initiator minted its own `threadId`.
+1. **Persistence of both documents** — the exchange's **initiating** document *and* its terminal `#response` with its proof. Evidence is a pair under cred-spec [#18](https://github.com/trustoverip/dtgwg-cred-spec/pull/18): the terminal document is paired as `terminal.threadId == (initiating.threadId ?? initiating.id)`, so a holder that kept only the `#response` cannot complete the pairing when the initiator minted its own `threadId`. **This is already normative and not waiting on #18**: the merged `witness/session/submit/0.1` specification requires a holder presenting a VWC to "retain this `#response` **and the `witness/session` document that opened the session**, and ship both with the presentation". #18 supplies the credential-side schema; the obligation on the holder exists now.
 2. **Indexing** by the **initiating document's `id`** — the value the credential's `taskContext` carries — so the pair is locatable from the credential.
 3. **Digest verification, not `id` equality.** The VWC's `taskDigestMultibase` is recomputed over the retained initiating document (JCS canonical form, top-level `proof` removed) and compared as decoded multihash bytes. `id` equality locates a candidate; only the digest confirms it.
 4. **Presentation assembly** — attaching the pair whenever a VWC is offered as completion evidence.
 5. **A retention policy** covering the VWC's useful life.
 
 This is storage, presentation and policy work — not spec work — and it lands wherever the wallet's credential store lives, not in `tsp-core`. **The failure mode is silent**: without it, our VWCs verify perfectly well as credentials and simply fail to prove the one thing a witnessed exchange exists to prove. Worth costing into a phase explicitly rather than discovering at demo time (milestone 3 depends on it).
+
+### 8.2 Live upstream inconsistency: a merged spec cites a member no schema defines
+
+`witness/session/submit/0.1` is **merged and in our pin**, and it normatively
+requires the delivered VWC to carry `taskDigestMultibase`. It also says plainly
+where the other half lives — "`taskDigestMultibase` is a member of the
+credential, whose schema belongs to DTG Core Credentials; this specification
+states only the obligation that the value pair with the session document" — and
+that schema lands only when [cred-spec #18](https://github.com/trustoverip/dtgwg-cred-spec/pull/18)
+merges.
+
+So upstream's witness specification currently obliges a credential member that
+has no published definition. The sequencing risk was flagged on
+[#236](https://github.com/trustoverip/dtgwg-trust-tasks-tf/pull/236) — hold the
+credential side, or land §4.9.3 alone first — and the merge went ahead anyway.
+
+**Why this belongs in our plan rather than only in a tracker:** we are the party
+that can close it. #18 is ours, its blocking review is answered, and merging it
+resolves the gap in someone else's shipped specification as well as unblocking
+our own §8.1 work. That makes reviewing #5/#18 a higher priority than its place
+in a queue suggests. It also means the retention work of §8.1 is **not**
+contingent on #18 — the holder obligation is already normative via the witness
+spec — so the two can proceed independently.
 
 ## 9. Sources
 
