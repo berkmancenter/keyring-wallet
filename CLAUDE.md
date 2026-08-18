@@ -71,7 +71,7 @@ Note: emulators/simulators cannot do hardware attestation — the app silently f
 
 `docs/plans/` holds plans for workstreams that are not yet in code. Each plan is one file plus a companion folder of dated, attributed review documents.
 
-The active one is **`docs/plans/openvtc-integration-plan.md`** — aligning Keyring with the OpenVTC / First Person Project ecosystem: TSP as transport, Trust Tasks as the operation layer, and the VRC/witness/attestation work moving onto both. Read it before touching TSP, Trust Tasks, or a VRC-exchange recast. Its `openvtc-integration-plan/trust_tasks_subtask.md` carries the VRC/witness detail and per-step acceptance criteria.
+The active one is **`docs/plans/openvtc-integration-plan.md`** — aligning Keyring with the OpenVTC / First Person Project ecosystem: TSP as transport, Trust Tasks as the operation layer, and the VRC/witness/attestation work moving onto both. Read it before touching TSP, Trust Tasks, a VRC-exchange recast, or PNM/CNM. It owns two subtask plans, both under `openvtc-integration-plan/`: `trust_tasks_subtask.md` carries the VRC/witness detail and per-step acceptance criteria, and `pnm_cnm_subtask.md` carries the PNM/CNM client — how PNM commands reach a VTA, the client architecture, and its phases.
 
 `docs/plans/CLAUDE.md` covers how these documents are written — read it before editing one, and note that plans state current design in the present tense while reasoning and superseded positions live in the dated companions.
 
