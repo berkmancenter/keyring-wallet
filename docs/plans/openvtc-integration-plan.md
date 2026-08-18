@@ -390,16 +390,17 @@ Posture rules: upstream-first (fork only to move fast, PR back immediately); eve
 
 ### 8.1 Unscoped work item: VWC outcome-evidence retention
 
-*Detail in the [Trust Tasks subtask](./openvtc-integration-plan/trust_tasks_subtask.md) §4 Layer C. **Not currently costed in any phase of §6.***
+*Detail in the [Trust Tasks subtask](./openvtc-integration-plan/trust_tasks_subtask.md) §4 Layer C, and in the [PNM/CNM subtask](./openvtc-integration-plan/pnm_cnm_subtask.md) §4.6, which carries the merged wire rules and folds the store requirement into its P3 acceptance criteria. **Not currently costed in any phase of §6.***
 
 DTG Core Credentials §Outcome Interpretability is normative: a verifier **MUST NOT** read a `taskContext`-bearing credential as proof its ceremony completed unless matching trust-task outcome evidence is present and verified, and the **holder MUST include that evidence with the presentation**. Discovery and retrieval are explicitly out of scope of that spec, so evidence a holder does not ship is evidence that does not exist.
 
 Keyring is the holder. Today our VWCs are standalone credentials and the witness ceremony's messages are transient, so we currently cannot present a VWC as proof a witnessing occurred. Closing that needs:
 
-1. **Persistence** of the ceremony's `#response` document with its proof.
-2. **Indexing** by the identifier the credential's `taskContext` carries, so it is locatable from the credential.
-3. **Presentation assembly** — attaching it whenever a VWC is offered as completion evidence.
-4. **A retention policy** covering the VWC's useful life.
+1. **Persistence of both documents** — the exchange's **initiating** document *and* its terminal `#response` with its proof. Evidence is a pair under cred-spec [#18](https://github.com/trustoverip/dtgwg-cred-spec/pull/18): the terminal document is paired as `terminal.threadId == (initiating.threadId ?? initiating.id)`, so a holder that kept only the `#response` cannot complete the pairing when the initiator minted its own `threadId`.
+2. **Indexing** by the **initiating document's `id`** — the value the credential's `taskContext` carries — so the pair is locatable from the credential.
+3. **Digest verification, not `id` equality.** The VWC's `taskDigestMultibase` is recomputed over the retained initiating document (JCS canonical form, top-level `proof` removed) and compared as decoded multihash bytes. `id` equality locates a candidate; only the digest confirms it.
+4. **Presentation assembly** — attaching the pair whenever a VWC is offered as completion evidence.
+5. **A retention policy** covering the VWC's useful life.
 
 This is storage, presentation and policy work — not spec work — and it lands wherever the wallet's credential store lives, not in `tsp-core`. **The failure mode is silent**: without it, our VWCs verify perfectly well as credentials and simply fail to prove the one thing a witnessed exchange exists to prove. Worth costing into a phase explicitly rather than discovering at demo time (milestone 3 depends on it).
 
