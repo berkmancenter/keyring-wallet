@@ -10,6 +10,7 @@ import {
   useStore,
   WalletSecret,
   setupVrcConnectionHandler,
+  setupTrustTasksInbound,
 } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
 import {
@@ -218,6 +219,9 @@ const useBCAgentSetup = () => {
 
       logger.info('Setting up VRC connection handler...')
       setupVrcConnectionHandler(newAgent)
+
+      logger.info('Setting up Trust Tasks inbound handler (binding 0.2)...')
+      setupTrustTasksInbound(newAgent)
 
       if (__DEV__) {
         // Level 2b probe: prove eddsa-rdfc-2022 sign/verify on-device
