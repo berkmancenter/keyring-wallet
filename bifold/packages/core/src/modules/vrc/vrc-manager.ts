@@ -1431,14 +1431,15 @@ export function setupVrcConnectionHandler(agent: Agent) {
     )
 
     // v4+ peers speak the Trust Task dialect: the deterministic proposer opens
-    // the formal exchange (lazy import breaks the module cycle with the
-    // trust-tasks ceremony, which reuses this module's DID helpers).
+    // the formal exchange. Lazy require breaks the module cycle with the
+    // trust-tasks ceremony (which reuses this module's DID helpers); a dynamic
+    // import() here becomes a Metro split-bundle fetch in dev builds, which
+    // fails at runtime ("Could not load bundle") — require stays in-bundle.
     if (record.connectionId) {
-      import('../trust-tasks/ceremony')
-        .then(({ maybeOpenRelationshipExchange }) =>
-          maybeOpenRelationshipExchange(agent, record.connectionId as string, counterpartyRceVersion, RCE_PROTOCOL_VERSION)
-        )
-        .catch((e) => logger.warn(`Trust-task exchange open failed: ${(e as Error).message}`))
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { maybeOpenRelationshipExchange } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+      maybeOpenRelationshipExchange(agent, record.connectionId as string, counterpartyRceVersion, RCE_PROTOCOL_VERSION)
+        .catch((e: Error) => logger.warn(`Trust-task exchange open failed: ${e.message}`))
     }
 
     // Store in persistent repository using counterpartyConnectionDid as key
@@ -1488,13 +1489,25 @@ export function setupVrcConnectionHandler(agent: Agent) {
               `Triggering ${mode} credential issuance from message handler for connection ${record.connectionId}`
             )
 
-            // Get my relationshipDid
+            // Get my relationshipDid. The connection handler may still be
+            // mid-creation when the peer's message lands (observed as a ~25 ms
+            // race in e2e that silently killed this side's issuance and left the
+            // peer waiting until flow timeout), so poll briefly rather than
+            // aborting. Deliberately NOT getOrCreateRelationshipDid here: its
+            // find-then-create is not concurrency-safe and a parallel call could
+            // mint a second, divergent DID for the same counterparty.
             const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
-            const myRecord = await repository.findByConnectionDid(agent.context, counterpartyConnectionDid)
-            const myRelationshipDid = myRecord?.myRelationshipDid
+            let myRelationshipDid: string | undefined
+            for (let attempt = 0; attempt < 20 && !myRelationshipDid; attempt++) {
+              if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 250))
+              const myRecord = await repository.findByConnectionDid(agent.context, counterpartyConnectionDid)
+              myRelationshipDid = myRecord?.myRelationshipDid
+            }
 
             if (!myRelationshipDid) {
-              issueLogger.error(`No myRelationshipDid found for counterpartyConnectionDid ${counterpartyConnectionDid}`)
+              issueLogger.error(
+                `No myRelationshipDid found for counterpartyConnectionDid ${counterpartyConnectionDid} (gave up after 5s)`
+              )
               return
             }
 
