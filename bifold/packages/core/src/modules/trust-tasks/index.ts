@@ -21,3 +21,11 @@ export { TrustTasksService, respondWith, refuse, extendedCode } from './services
 export type { ConsumeOptions, TrustTaskSpecPolicy } from './services/TrustTasksService'
 export { TrustTasksModule } from './module/TrustTasksModule'
 export { trustTaskPayloadValidator } from './validator'
+export {
+  setupTrustTasksInbound,
+  maybeOpenRelationshipExchange,
+  sendTrustTaskDocument,
+  getTrustTasksService,
+  isDeterministicProposer,
+  TRUST_TASKS_MIN_RCE_VERSION,
+} from './ceremony'

@@ -59,7 +59,7 @@ export class TrustTaskMessage extends DidCommMessage {
         new DidCommAttachment({
           id: TRUST_TASK_ATTACHMENT_ID,
           mimeType: 'application/json',
-          data: new DidCommAttachmentData({ json: options.document }),
+          data: new DidCommAttachmentData({ json: options.document as never }),
         }),
       ]
       const thid = options.threadId ?? (options.document.threadId as string | undefined) ?? (options.document.id as string | undefined)
@@ -69,8 +69,8 @@ export class TrustTaskMessage extends DidCommMessage {
     }
   }
 
-  public readonly type = TrustTaskMessage.type.messageTypeUri
   public static readonly type = parseMessageType(TRUST_TASK_ENVELOPE_TYPE)
+  public readonly type = TrustTaskMessage.type.messageTypeUri
 
   /** Extract the carried Trust Task document (the reserved attachment's inline JSON). */
   public get document(): Record<string, unknown> | undefined {

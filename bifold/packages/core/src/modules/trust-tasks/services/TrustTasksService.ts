@@ -80,11 +80,13 @@ export class TrustTasksService {
       spec: options.spec,
       proofPolicy: options.proofPolicy ?? { kind: 'acceptUnverified' },
       payloadPolicy: { kind: 'validate', validate: trustTaskPayloadValidator },
-      doc: options.document,
+      // The framework types documents as TrustTaskDocument<P>; this module
+      // deals in retained JSON verbatim, so the boundary is a cast, not a copy.
+      doc: options.document as never,
       myVid: options.myDid,
       now: Date.now(),
       newErrorId: () => `err-${Date.now()}-${++errorSequence}`,
-      handler: options.handler,
+      handler: options.handler as never,
     })
 
     // Retain the document regardless of outcome — rejected documents are

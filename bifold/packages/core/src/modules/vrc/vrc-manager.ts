@@ -116,12 +116,19 @@ async function logIssuedCredentialSnapshot(
  *       a v3 peer still accepts Ed25519Signature2018 proofs silently
  *       (docs/CRYPTO_SUITE_FOLLOWUP.md, Decisions 6 and 7).
  *
+ * - v4: the Trust Task dialect. The relationship exchange can additionally
+ *       run as Trust Task documents (`vrc/relationships/propose` and its
+ *       `#response`, per the merged upstream specifications) over the
+ *       binding-0.2 dedicated message type — see `modules/trust-tasks`.
+ *       v4 changes nothing about credentials; both dialects write the same
+ *       repository state, and peers below v4 never see a Trust Task message.
+ *
  * The version is announced in the relationshipDid handshake message
  * (`vrc:rceVersion:<n>`). A peer that doesn't announce one is treated as v1,
  * so exchanges with pre-VC-2.0 app versions still produce credentials the
  * old peer can validate.
  */
-export const RCE_PROTOCOL_VERSION = 3
+export const RCE_PROTOCOL_VERSION = 4
 
 /**
  * Default expiration time for VRC credentials (in days)
@@ -1422,6 +1429,17 @@ export function setupVrcConnectionHandler(agent: Agent) {
     logger.info(
       `Received relationshipDid via message: ${counterpartyRelationshipDid} (RCE v${counterpartyRceVersion})`
     )
+
+    // v4+ peers speak the Trust Task dialect: the deterministic proposer opens
+    // the formal exchange (lazy import breaks the module cycle with the
+    // trust-tasks ceremony, which reuses this module's DID helpers).
+    if (record.connectionId) {
+      import('../trust-tasks/ceremony')
+        .then(({ maybeOpenRelationshipExchange }) =>
+          maybeOpenRelationshipExchange(agent, record.connectionId as string, counterpartyRceVersion, RCE_PROTOCOL_VERSION)
+        )
+        .catch((e) => logger.warn(`Trust-task exchange open failed: ${(e as Error).message}`))
+    }
 
     // Store in persistent repository using counterpartyConnectionDid as key
     if (record.connectionId) {
