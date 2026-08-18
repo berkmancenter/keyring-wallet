@@ -392,13 +392,30 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
     await tapTestId(driver, "ScanQRCode", 15000);
   }
   await tapTestId(driver, "PasteUrlButton", 30000);
-  const input = await waitForTestId(driver, "PastedUrl", 15000);
-  await input.setValue(invitationUrl);
-  // multiline input: don't send \n — tap a neutral spot to dismiss the keyboard
-  await hideKeyboard(driver);
-  // the long URL grows the input; the button may be below the fold
-  const submit = await scrollToTestId(driver, "ScanPastedUrl");
-  await submit.click();
+  // XCUITest's simulated typing occasionally drops characters on ~1000-char
+  // strings, corrupting the base64 payload — the app then shows the
+  // "URL not recognized" ErrorModal. Clear, retype and resubmit until it takes.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const input = await waitForTestId(driver, "PastedUrl", 15000);
+    if (attempt > 0) await input.clearValue();
+    await input.setValue(invitationUrl);
+    // multiline input: don't send \n — tap a neutral spot to dismiss the keyboard
+    await hideKeyboard(driver);
+    // the long URL grows the input; the button may be below the fold
+    const submit = await scrollToTestId(driver, "ScanPastedUrl");
+    await submit.click();
+    // detect the rejection via the modal's CTA button — RN Modal testIDs
+    // (ErrorModal) don't reliably surface on iOS, but children do
+    if (!(await existsTestId(driver, "Try Again", 5000))) break;
+    if (attempt === 3) {
+      await screenshot(driver, "paste-url-rejected");
+      throw new Error("invitation URL rejected 4 times (ErrorModal persisted)");
+    }
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: URL not recognized (typing flake) — retrying`
+    );
+    await tapTestId(driver, "Try Again", 5000);
+  }
   console.log(`[e2e] ${driver.e2ePlatform}: invitation pasted & submitted`);
 }
 
