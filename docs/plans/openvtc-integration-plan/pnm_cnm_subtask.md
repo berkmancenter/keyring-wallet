@@ -4,6 +4,7 @@
 **Scope:** a new bifold package (`vti-client`, per parent §5.2) plus the RN edges it needs; no change to the VRC/witness stack except where §6 says so.
 **Parent:** [`openvtc-integration-plan.md`](../openvtc-integration-plan.md) — this document is item **§7 #5** of its contribution roadmap ("The RN/PNM mobile library") in detail, and the second consumer that makes its Phase D deliverables concrete.
 **Sibling:** [`trust_tasks_subtask.md`](./trust_tasks_subtask.md) — the VRC/witness recast. Where the two meet is §5 and §8.
+**Reasoning:** [`2026-08-17-bam.md`](./2026-08-17-bam.md) — the upstream corrections behind §2.2, §4.5–§4.8 and the phase scoping, and the positions each supersedes. This document states only the current design; see [`../CLAUDE.md`](../CLAUDE.md).
 **Baseline:** every claim is measured against the **Cypress release** — `verifiable-trust-infrastructure` 187ad9cd, `vta-browser-plugin` 89d70c4, `openvtc` 3797dd0, `dtgwg-trust-tasks-tf` 7e0d755 — and carries a file path. Re-verify after any pin advance ([`scripts/openvtc/README.md`](../../../scripts/openvtc/README.md)).
 
 **References:**
