@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"; mermaid.initialize({ startOnLoad: true });</script>
+<title>The Consent Flip</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+  :root {
+    --paper: #fafaf8;
+    --ink: #1c2330;
+    --muted: #5b6472;
+    --accent: #0f766e;
+    --before: #a8552e;
+    --panel: #f0efeb;
+    --line: #d9d7d0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #171a21;
+      --ink: #e8e6e1;
+      --muted: #9aa1ad;
+      --accent: #4fd1c5;
+      --before: #d98d68;
+      --panel: #20242e;
+      --line: #333845;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #171a21;
+    --ink: #e8e6e1;
+    --muted: #9aa1ad;
+    --accent: #4fd1c5;
+    --before: #d98d68;
+    --panel: #20242e;
+    --line: #333845;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Source Sans 3', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 3rem 1.25rem 4rem;
+  }
+  main { max-width: 46rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2rem; }
+  h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: 2.1rem;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .lede { color: var(--muted); font-size: 1.05rem; max-width: 62ch; margin: 0; }
+  h2 {
+    font-size: 0.8rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+  }
+  .before h2 { color: var(--before); }
+  .after h2 { color: var(--accent); }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1.25rem 1.25rem 0.75rem;
+  }
+  .diagram { overflow-x: auto; }
+  .panel p { color: var(--muted); font-size: 0.92rem; margin: 0.25rem 0 0.75rem; max-width: 65ch; }
+  .why { border-top: 1px solid var(--line); padding-top: 1.5rem; }
+  .why h2 { color: var(--ink); }
+  .why ol { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .why li { max-width: 65ch; }
+  .why strong { font-weight: 600; }
+</style>
+
+<main>
+  <h1>Where consent lives in the relationship exchange</h1>
+  <p class="lede">The 2026&#8209;08&#8209;18 authority flip moved the user's consent from
+  <em>each incoming credential</em> to <em>the relationship itself</em>. Same wallets,
+  same credentials, same mediator &mdash; one question instead of two, asked where it
+  actually means something.</p>
+
+  <section class="panel before">
+    <h2>Before — legacy issue-credential 2.0</h2>
+    <p>Consent was per-credential and implicit about the relationship: each user accepted
+    the credential they were <em>receiving</em>, in a four-message exchange per direction.
+    There was no way to decline the relationship — only to ignore an offer.</p>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    participant A as Alice's wallet
+    participant B as Bob's wallet
+    Note over A,B: connection established (didexchange)
+    A->>B: VRC offer
+    Note over B: Bob taps Accept (on Alice's credential)
+    B->>A: request
+    A->>B: credential -> Bob stores
+    B->>A: ack
+    B->>A: VRC offer
+    Note over A: Alice taps Accept (on Bob's credential)
+    A->>B: request
+    B->>A: credential -> Alice stores
+    A->>B: ack
+</pre>
+    </div>
+  </section>
+
+  <section class="panel after">
+    <h2>After — trust-task propose + issue</h2>
+    <p>Consent is answering the proposal, once, on the wallet that didn't propose
+    (the proposer's user already consented by creating or accepting the invitation).
+    On Accept, both signed credentials flow, are verified, stored, and receipted
+    automatically. Decline is a first-class protocol answer.</p>
+    <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+    participant P as Proposer's wallet
+    participant R as Responder's wallet
+    Note over P,R: connection established (didexchange)
+    P->>R: propose { my relationship DID }
+    Note over R: ONE prompt - "wants to form a relationship" - Accept / Decline
+    R->>P: #35;response { accept, my relationship DID }
+    P->>R: issue { signed VRC + proof } -> verified, stored
+    R->>P: receipt { digest of what was stored }
+    R->>P: issue { signed VRC + proof } -> verified, stored
+    P->>R: receipt { digest of what was stored }
+</pre>
+    </div>
+  </section>
+
+  <section class="why">
+    <h2>Why the flip was necessary, not just nicer</h2>
+    <ol>
+      <li><strong>One leg had to own the credential.</strong> Once the trust-task issue leg
+      carried the signed VRC, keeping the legacy leg too meant every credential delivered
+      twice and the user asked twice. Suppressing legacy removed the offer &mdash; and with
+      it the old Accept button. Consent had to move somewhere.</li>
+      <li><strong>The old consent was semantically misplaced.</strong> Users were accepting
+      <em>credentials</em>, but the thing being agreed to is the <em>relationship</em> &mdash;
+      the credential is just its record. The plan makes this the design gain: who issues
+      stops being inferred from transport artifacts and becomes a stated question with a
+      stated answer.</li>
+      <li><strong>Atomicity.</strong> Two independent accepts allowed a half-formed state:
+      one side stored, the other not. One answer now decides the whole exchange.</li>
+      <li><strong>Decline exists now.</strong> Legacy had no way to refuse a relationship,
+      only to ignore an offer. The flip gives refusal a protocol shape:
+      a trust-task-error, <code>vrc/relationships/propose:declined</code>.</li>
+    </ol>
+  </section>
+</main>
