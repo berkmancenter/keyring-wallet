@@ -974,6 +974,22 @@ On `tsp-core`'s task model, including **outcome-evidence retention** (§4, Layer
 C). Retention is the item with a silent failure mode: without it the VWCs still
 verify as credentials and simply fail to prove what they exist to prove.
 
+**In progress, both halves built and unit-proven (Keyring,
+`feat/trust-tasks-integration`).** The wallet runs its per-party session
+(`witnessCeremony.ts`): own thread nested via `parentThreadId`, the
+challenge's REQUIRED proof verified under the witness's DID, the
+challenge-bound VP submitted under our REQUIRED proof, and the VWC's
+`taskContext` + `taskDigestMultibase` validated against the session document
+before storage — the `submit#response` retained as the outcome-evidence
+pair, retrievable by session id. The witness-server speaks the dialect
+beside its legacy JSON flow (`WitnessTaskSessions`): per-party sessions with
+unique challenges (the published spec forbids the legacy shared challenge),
+VP verification against this session's `{challenge, domain}`, and VWC
+issuance carrying the two task-binding fields, responses signed. Activated
+by the propose's `witnessed` flag when a witness is connected; additive,
+never a precondition. Reasoning:
+[`2026-08-18-al.md`](./2026-08-18-al.md) §F.
+
 **Done when:** a witnessed exchange completes over the new tasks; the issued VWC
 carries `taskContext` equal to the ceremony's initiating document `id`; the
 ceremony's `#response` is persisted with its proof and retrievable by that
@@ -1011,12 +1027,20 @@ is suppressed for the VRC on v4 pairs; the RCard (a VDS) still travels it. A
 decline is a `trust-task-error` (`propose:declined`) — never
 `accept: false`.
 
-**Remaining delta to done:** capability negotiation runs through
-`supportedTypes` rather than an ordinal version; a legacy peer still
-completes an exchange via the dual-send path (§7.2) — true by construction
-(sub-v4 peers keep the untouched legacy flow) but not yet evidenced against
-an actual v3 build; and the witnessed path from step 5 still passes once
-step 5 exists.
+**Capability negotiation runs through `supportedTypes`** (e2e-proven,
+marker-gated): the proposer's `trust-task-discovery` query precedes the
+propose, which opens only when the peer's response lists it. The legacy
+`rceVersion` marker remains the bootstrap beneath it — it is what says the
+peer can parse a Trust Task message at all (§7.2's chicken-and-egg), so
+sub-v4 peers never see even the query; the marker itself retires with the
+legacy dialect.
+
+**Remaining delta to done:** a legacy peer still completes an exchange via
+the dual-send path (§7.2) — true by construction (sub-v4 peers keep the
+untouched legacy flow) but not yet evidenced against an actual v3 build;
+and the witnessed path (step 5) passes live — both halves are built and
+unit-proven (see [`2026-08-18-al.md`](./2026-08-18-al.md) §F), with the
+witnessed run against a live witness-server the remaining verification.
 
 
 ## 10. Open questions
