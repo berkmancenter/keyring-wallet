@@ -979,9 +979,13 @@ witnessed exchange completed over the new tasks against a running
 witness-server — both per-party sessions, challenge-bound VPs, VWCs with
 `taskContext` bound and `taskDigestMultibase` binding the session document,
 outcome evidence retained — under an e2e gate requiring the ceremony
-markers. Remaining from the done-list: presentation assembly of credential
-plus outcome evidence, and `e2e:vrc:devices` green (attended, M4). Interop
-findings and reasoning: [`2026-08-18-al.md`](./2026-08-18-al.md) §G.** The wallet runs its per-party session
+markers. Presentation assembly is also done and live-proven: the holder
+assembles the VWC with its retained outcome pair and the verifier's pairing
+algorithm (`outcomeEvidence.ts`) confirms it, gated by a per-run self-check
+marker in the witnessed e2e. Remaining from the done-list:
+`e2e:vrc:devices` green (attended, M4). Interop findings and reasoning:
+[`2026-08-18-al.md`](./2026-08-18-al.md) §G,
+[`2026-08-19-al.md`](./2026-08-19-al.md).** The wallet runs its per-party session
 (`witnessCeremony.ts`): own thread nested via `parentThreadId`, the
 challenge's REQUIRED proof verified under the witness's DID, the
 challenge-bound VP submitted under our REQUIRED proof, and the VWC's

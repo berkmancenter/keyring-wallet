@@ -42,6 +42,7 @@ async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
     [/\[TrustTasks:Witness\] challenge received/, "challenge received"],
     [/\[TrustTasks:Witness\] presentation submitted/, "presentation submitted"],
     [/\[TrustTasks:Witness\] VWC stored/, "VWC stored"],
+    [/\[TrustTasks:Ceremony\] outcome evidence assembled and verified/, "outcome evidence self-check"],
   ];
   const deadline = Date.now() + timeout;
   let missing = required;
@@ -52,7 +53,7 @@ async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
     });
     missing = required.filter(([re]) => !re.test(log));
     if (missing.length === 0) {
-      console.log("[e2e] android: witness ceremony markers all present (session → challenge → VP → VWC)");
+      console.log("[e2e] android: witness ceremony markers all present (session → challenge → VP → VWC → evidence self-check)");
       return;
     }
     await new Promise((r) => setTimeout(r, 3000));
