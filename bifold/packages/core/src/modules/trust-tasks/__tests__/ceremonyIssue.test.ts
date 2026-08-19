@@ -51,6 +51,7 @@ const SIGNED_VRC = {
 
 jest.mock('../../vrc/vrc-manager', () => ({
   getOrCreateRelationshipDid: jest.fn(async () => 'did:peer:0zMyRel'),
+  getConnectedWitnessConnectionId: jest.fn(() => undefined),
   prepareVrcCredentialWithEvidence: jest.fn(async () => ({ credential: UNSIGNED_VRC, biometricSkipped: false })),
   getVrcJsonLdProofOptions: jest.fn(async () => ({ proofType: 'DataIntegrityProof', cryptosuite: 'eddsa-rdfc-2022' })),
 }))

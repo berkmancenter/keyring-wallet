@@ -91,6 +91,7 @@ import { DataIntegritySuiteModule, demoDocumentLoader, getMirroredJsonLdProofOpt
 import { vcLibraries } from '@credo-ts/core'
 
 import { ReportingGraph } from './ReportingGraph'
+import { WitnessTaskSessions } from './trustTasks/WitnessTaskSessions'
 
 // Session expiration time in minutes (default)
 const DEFAULT_SESSION_EXPIRATION_MINUTES = 30
@@ -393,6 +394,7 @@ export class WitnessService {
   private issuerVerificationMethodId?: string
   private activeSessions: Map<string, SessionData> = new Map()
   private outOfBandId?: string
+  private taskSessions?: WitnessTaskSessions
   private invitationUrl?: string
 
   // Registry: relationship DID → witness connection ID
@@ -518,6 +520,36 @@ export class WitnessService {
     this.reportingGraph = new ReportingGraph(reportingDir, this.name)
 
     this.registerMessageHandlers()
+
+    // The Trust Task dialect (witness/session + submit over binding-0.2),
+    // beside the legacy JSON-over-basicmessage flow — dual-dialect so old
+    // wallets keep working. Per-party sessions with unique challenges, VWCs
+    // bound to the session document (taskContext + taskDigestMultibase).
+    this.taskSessions = new WitnessTaskSessions({
+      agent: this.agent,
+      name: this.name,
+      domain: `witness-session-${this.port}`,
+      eventName: this.config.eventName,
+      getIssuer: async () => {
+        await this.ensureDedicatedIssuerDid()
+        if (!this.issuerDid || !this.issuerVerificationMethodId) {
+          throw new Error('witness issuer DID unavailable')
+        }
+        return { did: this.issuerDid, verificationMethodId: this.issuerVerificationMethodId }
+      },
+      buildVwcJson: (presentation, sessionId) => {
+        if (!this.issuerDid) throw new Error('witness issuer DID unavailable')
+        return buildWitnessCredentialJson(presentation, {
+          issuerDid: this.issuerDid,
+          witnessName: this.name,
+          sessionId,
+          verificationMethod: this.config.verificationMethod,
+          eventName: this.config.eventName,
+        })
+      },
+    })
+    this.taskSessions.register()
+
     this.startPendingRequestCleanup()
     this.startSessionCleanup()
 

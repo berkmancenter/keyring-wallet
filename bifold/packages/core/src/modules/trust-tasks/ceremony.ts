@@ -33,16 +33,20 @@ import {
 import * as discovery from '@openvtc/trust-tasks/trust-task-discovery/0.1/payload'
 import * as issue from '@openvtc/trust-tasks/vrc/relationships/issue/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
+import * as witnessSession from '@openvtc/trust-tasks/witness/session/0.1/payload'
+import * as witnessSubmit from '@openvtc/trust-tasks/witness/session/submit/0.1/payload'
 import {
   ClaimFormat,
   JsonTransformer,
   W3cCredential,
   W3cCredentialRecord,
   W3cJsonLdVerifiableCredential,
+  W3cPresentation,
   utils,
 } from '@credo-ts/core'
 
 import {
+  getConnectedWitnessConnectionId,
   getOrCreateRelationshipDid,
   getVrcJsonLdProofOptions,
   prepareVrcCredentialWithEvidence,
@@ -51,6 +55,7 @@ import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRe
 import { vrcFlowStore } from '../vrc/witnessStatusStore'
 
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
+import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import { TrustTaskMessage } from './messages/TrustTaskMessage'
 import { TrustTasksModule } from './module/TrustTasksModule'
 import { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
@@ -169,12 +174,61 @@ async function openRelationshipExchange(agent: Agent, connectionId: string): Pro
     issuer: connection.did,
     recipient: connection.theirDid,
     issuedAt: new Date().toISOString(),
-    payload: { relationshipDid, witnessed: false },
+    // Witnessed when this wallet has a witness connected; each side then runs
+    // its OWN witness session (the acceptance mirrors the flag). A side
+    // without a witness simply skips its session — witnessing is additive.
+    payload: { relationshipDid, witnessed: Boolean(getConnectedWitnessConnectionId()) },
   }
 
   await service.retain(agent.context, document, 'request', connectionId)
   await sendTrustTaskDocument(agent, connectionId, document)
   agent.config.logger.info(`${LOG_PREFIX} propose sent (exchange ${exchangeId}) on connection ${connectionId}`)
+}
+
+/**
+ * Build a signed Verifiable Presentation wrapping the signed VRC, bound to a
+ * witness session's {challenge, domain}. Mirrors the legacy witnessed flow's
+ * construction: the VP @context follows the wrapped credential's data model,
+ * and the VP proof stays Ed25519Signature2018 until the witness dual-verifies
+ * Data Integrity presentations (docs/CRYPTO_SUITE_FOLLOWUP.md).
+ */
+async function buildChallengeBoundVp(
+  agent: Agent,
+  signedVcJson: Record<string, unknown>,
+  verificationMethodId: string,
+  challenge: string,
+  domain: string
+): Promise<Record<string, unknown>> {
+  const holderDid = verificationMethodId.split('#')[0]
+  const contexts: unknown[] = Array.isArray(signedVcJson['@context'])
+    ? (signedVcJson['@context'] as unknown[])
+    : [signedVcJson['@context']]
+  const vpContext = contexts.includes('https://www.w3.org/ns/credentials/v2')
+    ? 'https://www.w3.org/ns/credentials/v2'
+    : 'https://www.w3.org/2018/credentials/v1'
+  const vpUnsigned = JsonTransformer.fromJSON(
+    {
+      '@context': [vpContext],
+      type: ['VerifiablePresentation'],
+      holder: holderDid,
+      verifiableCredential: [signedVcJson],
+    },
+    W3cPresentation
+  )
+  // proofPurpose deliberately omitted: credo 0.6 types it as a string but the
+  // runtime needs a ProofPurpose instance — omitting lets vc build an
+  // AuthenticationProofPurpose from challenge + domain (same note as the
+  // legacy witnessed-vrc-manager).
+  const signedVp = await agent.w3cCredentials.signPresentation({
+    format: ClaimFormat.LdpVp,
+    presentation: vpUnsigned,
+    verificationMethod: verificationMethodId,
+    proofType: 'Ed25519Signature2018',
+    challenge,
+    domain,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any)
+  return JsonTransformer.toJSON(signedVp) as Record<string, unknown>
 }
 
 /** Pack a document onto the binding-0.2 carriage and send it over a connection. */
@@ -261,6 +315,18 @@ export function setupTrustTasksInbound(agent: Agent): void {
         senderDid: context.senderDid,
         recipientDid: context.recipientDid,
       })
+      return
+    }
+
+    // Witness-leg responses route to the ceremony awaiting them (the wallet
+    // is the requester on both witness legs — inbound requests of these
+    // types are a witness-server concern, not ours). Retain regardless: the
+    // submit#response IS the outcome evidence.
+    if (type === `${witnessSession.TYPE_URI}#response` || type === `${witnessSubmit.TYPE_URI}#response`) {
+      await service.retain(agent.context, document, 'response', context.connectionId)
+      if (!resolveWitnessResponse(document)) {
+        logger.warn(`${LOG_PREFIX} witness response with no awaiting ceremony (thread ${document.threadId}) — retained`)
+      }
       return
     }
 
@@ -483,6 +549,7 @@ export async function deliverVrcViaTrustTaskForExchange(
   const connection = await agent.modules.didcomm.connections.getById(connectionId)
   if (!connection.did || !connection.theirDid) return
 
+  const service = getTrustTasksService(agent)
   const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
   const priorIssues = await documentRepository.findByQuery(agent.context, {
     typeUri: issue.TYPE_URI,
@@ -519,6 +586,40 @@ export async function deliverVrcViaTrustTaskForExchange(
   })
   const signedVc = JsonTransformer.toJSON(signedCredential) as Record<string, unknown>
 
+  // Witnessed exchange: run this party's witness session — its own nested
+  // thread under the exchange — before the issue leg. Additive, never a
+  // precondition: a ceremony failure logs and the exchange continues
+  // unwitnessed (the plan's stance, and the legacy flow's fallback behavior).
+  const witnessConnectionId = getConnectedWitnessConnectionId()
+  const proposeDocs = await documentRepository.findByQuery(agent.context, {
+    typeUri: propose.TYPE_URI,
+    connectionId,
+  })
+  const exchangeWitnessed = proposeDocs.some(
+    (r) =>
+      String(r.document.threadId ?? r.document.id) === exchangeId &&
+      (r.document as { payload?: { witnessed?: boolean } }).payload?.witnessed === true
+  )
+  if (exchangeWitnessed && witnessConnectionId) {
+    vrcFlowStore.setStatus(connectionId, 'witness-active', true)
+    try {
+      await runWitnessSession(agent, {
+        witnessConnectionId,
+        exchangeId,
+        parties: [record.myRelationshipDid, record.counterpartyRelationshipDid],
+        myRelationshipDid: record.myRelationshipDid,
+        buildPresentation: (challenge, domain) =>
+          buildChallengeBoundVp(agent, signedVc, verificationMethodId, challenge, domain),
+        sendDocument: sendTrustTaskDocument,
+        retain: (doc, role) => service.retain(agent.context, doc, role, witnessConnectionId),
+      })
+      logger.info(`${LOG_PREFIX} witness session complete — VWC bound and stored (exchange ${exchangeId})`)
+    } catch (e) {
+      logger.warn(`${LOG_PREFIX} witness ceremony failed — continuing unwitnessed: ${(e as Error).message}`)
+    }
+    vrcFlowStore.setStatus(connectionId, 'preparing-offer', true)
+  }
+
   const document: Record<string, unknown> = {
     id: utils.uuid(),
     type: issue.TYPE_URI,
@@ -530,7 +631,6 @@ export async function deliverVrcViaTrustTaskForExchange(
   }
   const signed = await signDocumentProof(agent, document, record.myRelationshipDid)
 
-  const service = getTrustTasksService(agent)
   await service.retain(agent.context, signed, 'request', connectionId)
   await sendTrustTaskDocument(agent, connectionId, signed)
   vrcFlowStore.setStatus(connectionId, 'offer-sent', false)
