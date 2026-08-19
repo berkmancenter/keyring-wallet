@@ -115,8 +115,18 @@ export async function completeOnboarding(driver, { firstName, lastName }) {
       await hideKeyboard(driver, last);
       await tapTestId(driver, "RCardSubmit");
       lastAction = "RCardSubmit";
-      // R-Card creation can take a while (key generation + signing)
-      await waitForTestId(driver, "Contacts", 120000);
+      // R-Card creation can take a while (key generation + signing) — and the
+      // app can be watchdog-killed and relaunched mid-creation under CPU
+      // contention (observed with a cold emulator boot running beside the
+      // simulator), landing on the unlock screen. Poll unlock-aware instead
+      // of staring at a screen that will never show Contacts.
+      const rcardDeadline = Date.now() + 120000;
+      for (;;) {
+        if (await existsTestId(driver, "Contacts", 3000)) break;
+        if (Date.now() > rcardDeadline)
+          throw new Error(`${driver.e2ePlatform}: Contacts did not appear within 120000ms after RCardSubmit`);
+        await unlockIfLocked(driver);
+      }
       console.log(`[e2e] ${driver.e2ePlatform}: onboarding complete`);
       return;
     }
@@ -292,6 +302,9 @@ async function openQrSheet(driver) {
 
 /** Open the QR bottom sheet from the center tab and show "my QR" for a relationship exchange. */
 export async function showRelationshipInvitation(driver) {
+  // The app can be watchdog-restarted between onboarding and this step under
+  // CPU contention, landing on the unlock screen — recover before tapping.
+  await unlockIfLocked(driver);
   await dismissTourIfPresent(driver);
   // A lingering tour overlay can swallow the first tab tap (older builds attach
   // tour steps to the tab bar) — retry until the bottom sheet actually shows.
