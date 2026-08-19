@@ -990,7 +990,11 @@ proposer, binding-0.2 carriage, gated on `rceVersion` v4 for now) and the
 issue leg in **shadow mode** — signed VRC delivered on the exchange thread
 with a real eddsa-jcs-2022 request proof (the REQUIRED declaration pulled
 this part of step 5's proof work forward), digest receipts recomputed and
-correlated both directions, refusals as `trust-task-error`. The legacy
+correlated both directions, refusals as `trust-task-error`, and the
+**eddsa-jcs-2022 verifier live on the issue legs**: proofs verify under the
+sender's relationship DID as the accepted proposal established it, so a
+valid signature under any other key fails; a delivery outside an accepted
+exchange still refuses `notAccepted` rather than `proofInvalid`. The legacy
 issue-credential 2.0 leg remains the storage authority, and the e2e suite
 gates on the ceremony markers. Evidence:
 [`docs/spikes/trust-task-propose-evidence.md`](../../spikes/trust-task-propose-evidence.md);
@@ -999,9 +1003,8 @@ reasoning: [`2026-08-18-al.md`](./2026-08-18-al.md).
 **Remaining delta to done:** two wallets complete an unwitnessed exchange over
 the new tasks and both **store** the counterparty's VRC from the task (the
 authority flip); capability negotiation runs through `supportedTypes` rather
-than an ordinal version; the proof *verifier* replaces `acceptUnverified`; a
-legacy peer still completes an exchange via the dual-send path (§7.2); and
-the witnessed path from step 5 still passes.
+than an ordinal version; a legacy peer still completes an exchange via the
+dual-send path (§7.2); and the witnessed path from step 5 still passes.
 
 
 ## 10. Open questions
