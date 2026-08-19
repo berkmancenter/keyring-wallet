@@ -24,6 +24,7 @@ import {
   DidCommCredentialPreviewAttribute,
   DidCommOutOfBandRole,
   DidCommBasicMessageRole,
+  DidCommDidExchangeState,
 } from '@credo-ts/didcomm'
 import { BrandingOverlay, CaptureBaseAttributeType } from '@bifold/oca'
 import { Attribute, CredentialOverlay, Predicate } from '@bifold/oca/build/legacy'
@@ -1219,6 +1220,43 @@ const waitForMediatorTransport = async (agent: BifoldAgent, logger: BifoldLogger
  * @param reuseConnection a boolean to determine if connection reuse should be allowed
  * @throws Error with message containing the primary and beta error messages if both fail
  */
+/**
+ * Watchdog for the silent-no-send failure mode: credo's `receiveInvitation`
+ * auto-accepts by OBSERVING connection-record state while the didexchange
+ * request itself is dispatched in the background — a send that dies quietly
+ * leaves a connection record, a chat screen, and an empty wire, with nothing
+ * logged anywhere (observed intermittently on iOS; see
+ * docs/spikes/e2e-vrc-connect-findings.md, "intermittent iOS no-send").
+ *
+ * Checks the connection's didexchange progress after the accept and logs at
+ * ERROR level — deliberately: on iOS only error-level JS logs reach the
+ * system log, and this breadcrumb exists precisely for that platform's
+ * otherwise-invisible failures. Silent when progress is normal.
+ */
+const watchDidExchangeProgress = (agent: BifoldAgent, oobRecordId: string, logger: BifoldLogger) => {
+  for (const delay of [12000, 30000]) {
+    setTimeout(async () => {
+      try {
+        const connections = await agent.modules.didcomm.connections.findAllByOutOfBandId(oobRecordId)
+        const connection = connections[0]
+        const stalled =
+          !connection ||
+          connection.state === DidCommDidExchangeState.Start ||
+          connection.state === DidCommDidExchangeState.InvitationReceived
+        if (stalled) {
+          logger.error(
+            `[VRC:ConnectWatchdog] didexchange has not progressed ${delay}ms after invitation accept — ` +
+              `oob=${oobRecordId} connection=${connection?.id ?? 'none'} state=${connection?.state ?? 'no-record'}. ` +
+              `The request may never have been sent (background send died silently).`
+          )
+        }
+      } catch (error) {
+        logger.error(`[VRC:ConnectWatchdog] progress check failed: ${(error as Error).message}`)
+      }
+    }, delay)
+  }
+}
+
 export const connectFromScanOrDeepLink = async (
   uri: string,
   agent: BifoldAgent | undefined,
@@ -1269,6 +1307,7 @@ export const connectFromScanOrDeepLink = async (
     const receivedInvitation = await connectFromInvitation(aUrl, agent, implicitInvitations, reuseConnection)
 
     if (receivedInvitation?.id) {
+      watchDidExchangeProgress(agent, receivedInvitation.id, logger)
       navigation.navigate(Stacks.ConnectionStack as any, {
         screen: Screens.Connection,
         params: { oobRecordId: receivedInvitation.id },
