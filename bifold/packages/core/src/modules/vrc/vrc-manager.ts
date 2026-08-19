@@ -636,7 +636,18 @@ async function issueVrcCredential(
   const relationshipRecordForGate = connectionRecord.theirDid
     ? await relationshipRepositoryForGate.findByConnectionDid(agent.context, connectionRecord.theirDid)
     : null
-  if (RCE_PROTOCOL_VERSION >= 4 && (relationshipRecordForGate?.counterpartyRceVersion ?? 1) >= 4) {
+  if (relationshipRecordForGate?.counterpartyRceVersion === undefined) {
+    // The peer's RCE version is not yet known — its relationshipDid
+    // announcement hasn't arrived (the connection-complete trigger can win
+    // that race). Guessing here is wrong in both directions: a v4 peer would
+    // get a stray legacy VRC offer and lose its RCard ("v1" skip). Defer —
+    // the announcement-triggered call decides the dialect, and every peer
+    // (v1 included) sends the announcement.
+    logger.info(`Peer RCE version unknown yet — deferring issuance | Connection: ${connectionId}`)
+    connectionCredentialOffers.delete(connectionId)
+    return { biometricSkipped: false }
+  }
+  if (RCE_PROTOCOL_VERSION >= 4 && relationshipRecordForGate.counterpartyRceVersion >= 4) {
     logger.info(`v4 pair — VRC rides the trust-task issue leg; issuing RCard only | Connection: ${connectionId}`)
     connectionCredentialOffers.set(connectionId, 'offered')
     try {
@@ -859,6 +870,14 @@ let witnessStateGetter: (() => WitnessConnectionState) | undefined
  */
 export function registerWitnessStateGetter(callback: () => WitnessConnectionState): void {
   witnessStateGetter = callback
+}
+
+/**
+ * The currently connected witness's connection id, if any — how the
+ * trust-task ceremony decides whether an exchange can run witnessed.
+ */
+export function getConnectedWitnessConnectionId(): string | undefined {
+  return witnessStateGetter?.().connectedWitness?.connectionId
 }
 
 /**
