@@ -201,6 +201,8 @@ afterEach(() => {
   vrcFlowStore.clearProposalPrompt('conn-1')
 })
 
+const flushDelivery = () => new Promise((resolve) => setTimeout(resolve, 50))
+
 describe('the proposer side (auto-delivery on acceptance)', () => {
   test('consuming the acceptance delivers the signed VRC on the exchange thread, exactly once', async () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
@@ -235,6 +237,7 @@ describe('the proposer side (auto-delivery on acceptance)', () => {
       },
       { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' }
     )
+    await flushDelivery() // delivery is fire-and-forget off the inbound handler
 
     expect(fake.sentMessages).toHaveLength(3) // discovery, propose, then our issue
     const doc = fake.sentMessages[2].document as {
@@ -293,6 +296,7 @@ describe('the responder side (consent gates everything)', () => {
     })
 
     await respondToRelationshipProposal(fake.agent, fake.connectionId, true)
+    await flushDelivery() // delivery is fire-and-forget off the consent path
 
     expect(fake.relationshipRepo.updateCounterpartyRelationshipDid).toHaveBeenCalledWith(
       expect.anything(),

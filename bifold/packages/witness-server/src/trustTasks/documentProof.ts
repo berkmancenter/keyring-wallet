@@ -55,6 +55,37 @@ export function digestMultibase(value: unknown): string {
 }
 
 /**
+ * The framework's §4.9.3 TASK DIGEST of a Trust Task document: the
+ * DigestMultibase computed over the document EXCLUDING its top-level `proof`
+ * member — well-defined for unproofed documents and identical across proofed
+ * and unproofed forms of the same document (cred-spec, Trust Task Context
+ * Binding).
+ */
+export function taskDigestMultibase(document: Record<string, unknown>): string {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { proof: _proof, ...unproofed } = document
+  return digestMultibase(unproofed)
+}
+
+/**
+ * Digest equality per the spec: compared as DECODED multihash bytes, never as
+ * encoded strings — `z` and `u` encodings of one digest are different strings
+ * (cred-spec Outcome Interpretability; framework §4.9.3).
+ */
+export function digestBytesEqual(a: string, b: string): boolean {
+  try {
+    const bytesA = MultiBaseEncoder.decode(a).data
+    const bytesB = MultiBaseEncoder.decode(b).data
+    if (bytesA.length !== bytesB.length) return false
+    let diff = 0
+    for (let i = 0; i < bytesA.length; i++) diff |= bytesA[i] ^ bytesB[i]
+    return diff === 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Attach a DataIntegrityProof (eddsa-jcs-2022) to a Trust Task document,
  * signing as `controllerDid` — for our use, the sender's relationship DID
  * (did:peer:0…), whose single Ed25519 key the wallet's KMS holds.

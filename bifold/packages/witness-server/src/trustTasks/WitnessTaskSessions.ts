@@ -27,7 +27,7 @@ import { randomBytes } from 'node:crypto'
 
 import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
-import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
+import { digestMultibase, signDocumentProof, taskDigestMultibase, verifyDocumentProof } from './documentProof'
 import { consume, errorDocument, respondWith } from './framework'
 import { TrustTaskMessage } from './TrustTaskMessage'
 
@@ -205,7 +205,7 @@ export class WitnessTaskSessions {
         const subject = (vwcJson.credentialSubject ?? {}) as Record<string, unknown>
         subject.parties = session.parties
         subject.taskContext = session.sessionId
-        subject.taskDigestMultibase = digestMultibase(session.sessionDoc)
+        subject.taskDigestMultibase = taskDigestMultibase(session.sessionDoc)
         vwcJson.credentialSubject = subject
 
         // Sign it, mirroring the observed VRC's proof family.

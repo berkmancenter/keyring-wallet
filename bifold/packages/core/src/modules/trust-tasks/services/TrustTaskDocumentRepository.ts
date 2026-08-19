@@ -38,7 +38,13 @@ export class TrustTaskDocumentRepository extends Repository<TrustTaskDocumentRec
   ): Promise<{ initiating?: TrustTaskDocumentRecord; terminal?: TrustTaskDocumentRecord }> {
     const records = await this.findByExchangeId(agentContext, exchangeId)
     const initiating = records.find((r) => r.role === 'request' && String(r.document.id) === exchangeId)
-    const terminal = records.find((r) => r.role === 'response' && String(r.document.type ?? '').endsWith('#response'))
+    // An exchange can carry several replies on one thread (a witness session
+    // holds the challenge #response AND the submit #response); the terminal
+    // document is the LATEST reply — the one that closed the exchange.
+    const terminal = records
+      .filter((r) => r.role === 'response' && String(r.document.type ?? '').endsWith('#response'))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .pop()
     return { initiating, terminal }
   }
 }

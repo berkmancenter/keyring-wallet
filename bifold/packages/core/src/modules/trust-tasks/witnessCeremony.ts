@@ -30,7 +30,7 @@ import { W3cCredentialRecord, utils } from '@credo-ts/core'
 import * as submit from '@openvtc/trust-tasks/witness/session/submit/0.1/payload'
 import * as session from '@openvtc/trust-tasks/witness/session/0.1/payload'
 
-import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
+import { digestBytesEqual, digestMultibase, signDocumentProof, taskDigestMultibase, verifyDocumentProof } from './documentProof'
 
 const LOG_PREFIX = '[TrustTasks:Witness]'
 
@@ -162,7 +162,7 @@ export async function runWitnessSession(agent: Agent, options: RunWitnessSession
   const vwcPayload = (vwcDoc as { payload?: { vwc?: Record<string, unknown>; vwcDigestMultibase?: string } }).payload
   const vwc = vwcPayload?.vwc
   if (!vwc) throw new Error('submit#response carries no VWC')
-  if (vwcPayload.vwcDigestMultibase !== digestMultibase(vwc)) {
+  if (!vwcPayload.vwcDigestMultibase || !digestBytesEqual(vwcPayload.vwcDigestMultibase, digestMultibase(vwc))) {
     throw new Error('vwcDigestMultibase does not match the delivered VWC')
   }
   const subject = Array.isArray(vwc.credentialSubject) ? vwc.credentialSubject[0] : vwc.credentialSubject
@@ -171,7 +171,9 @@ export async function runWitnessSession(agent: Agent, options: RunWitnessSession
     throw new Error(`VWC taskContext ${taskContext ?? 'absent'} does not name this session (${sessionId})`)
   }
   const taskDigest = (subject as { taskDigestMultibase?: string } | undefined)?.taskDigestMultibase
-  if (taskDigest !== digestMultibase(sessionDoc)) {
+  // §4.9.3: the task digest excludes the document's top-level proof, and
+  // digests compare as decoded multihash bytes, never encoded strings.
+  if (!taskDigest || !digestBytesEqual(taskDigest, taskDigestMultibase(sessionDoc))) {
     throw new Error('VWC taskDigestMultibase does not bind this session document')
   }
 

@@ -611,7 +611,7 @@ export async function deliverVrcViaTrustTaskForExchange(
   if (exchangeWitnessed && witnessConnectionId && (await isWitnessingPreferred())) {
     vrcFlowStore.setStatus(connectionId, 'witness-active', true)
     try {
-      await runWitnessSession(agent, {
+      const witnessOutcome = await runWitnessSession(agent, {
         witnessConnectionId,
         exchangeId,
         parties: [record.myRelationshipDid, record.counterpartyRelationshipDid],
@@ -622,6 +622,38 @@ export async function deliverVrcViaTrustTaskForExchange(
         retain: (doc, role) => service.retain(agent.context, doc, role, witnessConnectionId),
       })
       logger.info(`${LOG_PREFIX} witness session complete — VWC bound and stored (exchange ${exchangeId})`)
+
+      // Self-check the presentation path (step 5's last done-item): assemble
+      // the VWC with its retained outcome pair and run the verifier's pairing
+      // algorithm against a self-minted challenge. Proves the holder can ship
+      // what a verifier will demand — logged as a gateable marker.
+      try {
+        // Inline require: a static import would cycle (outcomeEvidence imports
+        // getTrustTasksService from here) and a dynamic import() makes Metro
+        // split the bundle — the "Could not load bundle" failure mode.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { assembleVwcPresentation, verifyVwcPresentationBundle } =
+          require('./outcomeEvidence') as typeof import('./outcomeEvidence')
+        const selfChallenge = utils.uuid()
+        const bundle = await assembleVwcPresentation(agent, {
+          vwc: witnessOutcome.vwc,
+          verificationMethodId,
+          challenge: selfChallenge,
+          domain: 'self-check.keyring',
+        })
+        const verdict = await verifyVwcPresentationBundle(agent, {
+          bundle,
+          challenge: selfChallenge,
+          domain: 'self-check.keyring',
+        })
+        if (verdict.completionEvidenced) {
+          logger.info(`${LOG_PREFIX} outcome evidence assembled and verified (session ${witnessOutcome.sessionId})`)
+        } else {
+          logger.warn(`${LOG_PREFIX} outcome-evidence self-check failed: ${verdict.failures.join('; ')}`)
+        }
+      } catch (e) {
+        logger.warn(`${LOG_PREFIX} outcome-evidence self-check errored: ${(e as Error).message}`)
+      }
     } catch (e) {
       logger.warn(`${LOG_PREFIX} witness ceremony failed — continuing unwitnessed: ${(e as Error).message}`)
     }
