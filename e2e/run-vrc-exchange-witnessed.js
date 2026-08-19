@@ -25,6 +25,7 @@ import {
   acceptInvitationViaPaste,
   acceptRelationshipProposalIfPrompted,
   assertTrustTaskExchangeMarkers,
+  assertWitnessCeremonyMarkers,
   assertVrcReceived,
   completeOnboarding,
   connectToWitness,
@@ -32,36 +33,6 @@ import {
 } from "./lib/flows.js";
 import { startWitness } from "./lib/witness.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { execSync } from "node:child_process";
-
-/** The witness-session markers, from Android's run-scoped logcat. */
-async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
-  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
-  const required = [
-    [/\[TrustTasks:Witness\] session opened/, "session opened"],
-    [/\[TrustTasks:Witness\] challenge received/, "challenge received"],
-    [/\[TrustTasks:Witness\] presentation submitted/, "presentation submitted"],
-    [/\[TrustTasks:Witness\] VWC stored/, "VWC stored"],
-    [/\[TrustTasks:Ceremony\] outcome evidence assembled and verified/, "outcome evidence self-check"],
-  ];
-  const deadline = Date.now() + timeout;
-  let missing = required;
-  while (Date.now() < deadline) {
-    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    missing = required.filter(([re]) => !re.test(log));
-    if (missing.length === 0) {
-      console.log("[e2e] android: witness ceremony markers all present (session → challenge → VP → VWC → evidence self-check)");
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 3000));
-  }
-  throw new Error(
-    `android: witness ceremony markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
-  );
-}
 
 let a, b, witness;
 try {

@@ -832,6 +832,43 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
 }
 
 /**
+ * The witness-session markers of a witnessed exchange (§9 step 5), from
+ * Android's run-scoped logcat: session → challenge → VP → VWC, plus the
+ * outcome-evidence self-check (presentation assembled from the retained pair
+ * and verified). No-op on iOS drivers.
+ */
+export async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:Witness\] session opened/, "session opened"],
+    [/\[TrustTasks:Witness\] challenge received/, "challenge received"],
+    [/\[TrustTasks:Witness\] presentation submitted/, "presentation submitted"],
+    [/\[TrustTasks:Witness\] VWC stored/, "VWC stored"],
+    [/\[TrustTasks:Ceremony\] outcome evidence assembled and verified/, "outcome evidence self-check"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(
+        "[e2e] android: witness ceremony markers all present (session → challenge → VP → VWC → evidence self-check)"
+      );
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: witness ceremony markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
+  );
+}
+
+/**
  * v4 pairs: consent is the RELATIONSHIP PROPOSAL, not per-credential offers.
  * One side (whichever wallet did not deterministically propose) gets the
  * "wants to form a relationship" bottom-sheet — find and accept it. Returns

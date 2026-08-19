@@ -982,8 +982,12 @@ outcome evidence retained — under an e2e gate requiring the ceremony
 markers. Presentation assembly is also done and live-proven: the holder
 assembles the VWC with its retained outcome pair and the verifier's pairing
 algorithm (`outcomeEvidence.ts`) confirms it, gated by a per-run self-check
-marker in the witnessed e2e. Remaining from the done-list:
-`e2e:vrc:devices` green (attended, M4). Interop findings and reasoning:
+marker in the witnessed e2e. The attended device run (M4) is green with the
+hardware-attestation evidence block proven on-device — the done-when list
+below is met. Open UX item from that run: the contact's Witnessed badge
+needs VWC *sharing* (the v4 ceremony's VWC names the holder's own DID, and
+nothing delivers it to the peer) — mechanism undecided, see
+[`2026-08-19-al.md`](./2026-08-19-al.md) §E. Interop findings and reasoning:
 [`2026-08-18-al.md`](./2026-08-18-al.md) §G,
 [`2026-08-19-al.md`](./2026-08-19-al.md).** The wallet runs its per-party session
 (`witnessCeremony.ts`): own thread nested via `parentThreadId`, the
