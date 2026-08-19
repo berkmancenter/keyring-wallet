@@ -772,3 +772,46 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
     `${driver.e2ePlatform}: contact "${peerName}" did not appear within ${timeout}ms`
   );
 }
+
+/**
+ * Assert the Trust Task relationship exchange ran alongside the legacy flow
+ * (integration M2: propose + the issue leg in shadow mode), from the Android
+ * side's logcat. One android device sees the whole exchange regardless of
+ * which peer was the deterministic proposer:
+ *  - a propose marker (sent, accepted, or #response consumed),
+ *  - "issue sent"            — this side delivered its VRC on the exchange,
+ *  - "issue receipt sent"    — it receipted the peer's delivery,
+ *  - "issue receipt matched" — the peer's receipt correlated to our delivery.
+ * No-op on iOS drivers (no logcat; the Android log covers both directions).
+ */
+export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:Ceremony\] propose (sent|accepted|#response consumed)/, "propose"],
+    [/\[TrustTasks:Ceremony\] issue sent/, "issue sent"],
+    [/\[TrustTasks:Ceremony\] issue receipt sent/, "issue receipt sent"],
+    [/\[TrustTasks:Ceremony\] issue receipt matched/, "issue receipt matched"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(
+        "[e2e] android: trust-task exchange markers all present (propose + issue legs)"
+      );
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: trust-task markers missing after ${timeout}ms: ${missing
+      .map(([, name]) => name)
+      .join(", ")}`
+  );
+}

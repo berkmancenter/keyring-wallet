@@ -22,6 +22,7 @@ import {
 import {
   acceptCredentialOfferFromChat,
   acceptInvitationViaPaste,
+  assertTrustTaskExchangeMarkers,
   assertVrcReceived,
   completeOnboarding,
   showRelationshipInvitation,
@@ -75,6 +76,13 @@ try {
   await Promise.all([
     assertVrcReceived(a, "Bob Baker"),
     assertVrcReceived(b, "Alice Anderson"),
+  ]);
+
+  // v4 pairs also run the Trust Task relationship exchange (propose + issue
+  // shadow legs) — assert its markers from the Android side's logcat.
+  await Promise.all([
+    assertTrustTaskExchangeMarkers(a),
+    assertTrustTaskExchangeMarkers(b),
   ]);
 
   printSuccess("vrc-exchange");
