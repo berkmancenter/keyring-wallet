@@ -974,8 +974,14 @@ On `tsp-core`'s task model, including **outcome-evidence retention** (§4, Layer
 C). Retention is the item with a silent failure mode: without it the VWCs still
 verify as credentials and simply fail to prove what they exist to prove.
 
-**In progress, both halves built and unit-proven (Keyring,
-`feat/trust-tasks-integration`).** The wallet runs its per-party session
+**Core done, live-proven (Keyring, `feat/trust-tasks-integration`): a
+witnessed exchange completed over the new tasks against a running
+witness-server — both per-party sessions, challenge-bound VPs, VWCs with
+`taskContext` bound and `taskDigestMultibase` binding the session document,
+outcome evidence retained — under an e2e gate requiring the ceremony
+markers. Remaining from the done-list: presentation assembly of credential
+plus outcome evidence, and `e2e:vrc:devices` green (attended, M4). Interop
+findings and reasoning: [`2026-08-18-al.md`](./2026-08-18-al.md) §G.** The wallet runs its per-party session
 (`witnessCeremony.ts`): own thread nested via `parentThreadId`, the
 challenge's REQUIRED proof verified under the witness's DID, the
 challenge-bound VP submitted under our REQUIRED proof, and the VWC's
