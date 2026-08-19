@@ -1,0 +1,43 @@
+{
+  "note": "The JSON-LD terms witnessedExchangeContext.ts must define so the locality assertion is covered by — and selectively disclosable from — the credential's bbs-2023 proof. Mandatory, not conditional: an undefined term is not merely unsigned, it is undisclosable. Authored here; app and witness-server import one agreed list or canonicalization diverges between signer and verifier.",
+  "terms": {
+    "localityConfirmed": {
+      "@id": "https://trustoverip.org/credentials/witnessed-exchange#localityConfirmed",
+      "@type": "http://www.w3.org/2001/XMLSchema#boolean"
+    },
+    "localityMethod": "https://trustoverip.org/credentials/witnessed-exchange#localityMethod",
+    "localityTopology": "https://trustoverip.org/credentials/witnessed-exchange#localityTopology",
+    "localitySensor": {
+      "@id": "https://trustoverip.org/credentials/witnessed-exchange#localitySensor",
+      "@type": "@id"
+    },
+    "localityVenue": "https://trustoverip.org/credentials/witnessed-exchange#localityVenue",
+    "localityObservedAt": {
+      "@id": "https://trustoverip.org/credentials/witnessed-exchange#localityObservedAt",
+      "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+    },
+    "localityWindowSeconds": {
+      "@id": "https://trustoverip.org/credentials/witnessed-exchange#localityWindowSeconds",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "localityKeyMatchesCredentialSigner": {
+      "@id": "https://trustoverip.org/credentials/witnessed-exchange#localityKeyMatchesCredentialSigner",
+      "@type": "http://www.w3.org/2001/XMLSchema#boolean"
+    },
+    "localityHardwareAttestation": "https://trustoverip.org/credentials/witnessed-exchange#localityHardwareAttestation",
+    "localityEvidenceCommitment": "https://trustoverip.org/credentials/witnessed-exchange#localityEvidenceCommitment",
+    "localityRttMs": {
+      "@id": "https://trustoverip.org/credentials/witnessed-exchange#localityRttMs",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "localityRssiDbm": {
+      "@id": "https://trustoverip.org/credentials/witnessed-exchange#localityRssiDbm",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "localityRttBoundMs": {
+      "@id": "https://trustoverip.org/credentials/witnessed-exchange#localityRttBoundMs",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "localityReason": "https://trustoverip.org/credentials/witnessed-exchange#localityReason"
+  }
+}

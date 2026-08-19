@@ -1,0 +1,14 @@
+{
+  "name": "ref-06p-locality-binding",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node run.mjs --quiet",
+    "start": "node run.mjs"
+  },
+  "dependencies": {
+    "@openvtc/trust-tasks": "^0.9.0",
+    "ajv": "^8.20.0",
+    "jsonld": "^8.3.3"
+  }
+}
