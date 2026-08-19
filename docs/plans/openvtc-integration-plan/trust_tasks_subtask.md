@@ -378,21 +378,28 @@ administrator/community split — disappears.
 | Slug | Direction | Membership-exchange analogue | Payload |
 |---|---|---|---|
 | `vrc/relationship/propose/0.1` + `#response` | peer → peer | `solicit-vmc` + `request-vmc`, collapsed (no intermediary) | request: `{ relationshipDid, mode, capabilities? }` · response: `{ relationshipDid, accepted }` |
-| `vrc/relationship/issue/0.1` + `#response` | issuer → subject | `vtc/members/vmc` | request: `{ vc, requestId?, ext? }` — member names matched to `vtc/members/vmc` exactly (`vc`, **not** `credential`) · response: an `IssuedCredential` receipt from `credentials/_shared/0.1` |
+| `vrc/relationships/issue/0.1` + `#response` | issuer → subject | `vtc/members/vmc` | request: `{ vrc, vrcDigestMultibase?, ext? }` — the signed credential plus an optional digest over its RFC 8785 canonicalization · response: `{ vrcDigestMultibase }` **recomputed over the credential as stored**. The digest receipt, not a shared `IssuedCredential` component, because both directions share one `threadId` and a `#response` carries no `inResponseTo` — only a recomputed digest identifies *which* delivery a receipt answers, and a copied value attests nothing about what was stored (staged spec `vrc/relationships/issue` 0.1, "Both deliveries share one thread") |
 
 `propose` declarations: `proof: OPTIONAL` (DIDComm authcrypt already
 authenticates the sender); `sideEffects: mutating` (persists a
 `RelationshipDidRecord`); `exposure: { discloses: metadata, actsAsSubject: false }`.
 
-`issue` declarations: `proof: RECOMMENDED` — mirroring
-`credential-exchange/issue`'s rationale, the credential carries its own issuer
-signature, but a peer receiving an unexpected credential should be able to
-attribute *the delivery* as well as the credential; `sideEffects: mutating` (the
-credential enters the wallet; recoverable — re-issuance is an ordinary flow);
-`exposure: { discloses: secret, actsAsSubject: false }` (the body *is* signed
-claims about the subject). Error codes: `vrc/relationship/issue:subjectMismatch`
-(the `credentialSubject.id` is not the recipient) and
-`vrc/relationship/issue:unsupportedFormat`.
+`issue` declarations (as staged, `vrc/relationships/issue` 0.1): proof
+**request REQUIRED, response OPTIONAL** — the delivery is
+retained-and-relied-upon (the §4.7.1 condition), and the envelope proof
+attributes *the delivery* itself on a relayed path, independent of the
+credential's own issuer signature; the receipt is consumed inside the exchange
+by the connected peer under authcrypt. `sideEffects: mutating` (the credential
+enters the wallet; not compensatable by this exchange — revocation is the
+issuer's own act); `exposure: { discloses: none, actsAsSubject: false }` (the
+delivery carries the two relationship DIDs to the very party that already
+holds them from the accepted proposal — nothing reaches anyone who did not
+already have it, which is why `propose`, the document that *first* discloses a
+relationship DID, is `metadata` where this is `none`). One error code,
+`vrc/relationships/issue:notAccepted`: the accepted proposal is the
+authorization evidence, so a delivery that does not match it — wrong parties,
+wrong relationship DIDs, or no accepted exchange at all — is one and the same
+refusal.
 
 **Why `issue` exists rather than deferring to Credo.** Credo's
 `issue-credential` v2 already delivers credentials, so a dedicated task can look
@@ -977,11 +984,24 @@ and `e2e:vrc:devices` stays green.
 
 With `trust-task-discovery` replacing the `rceVersion` ladder.
 
-**Done when:** two wallets complete an unwitnessed exchange over the new tasks and
-both store the counterparty's VRC; capability negotiation runs through
-`supportedTypes` rather than an ordinal version; a legacy peer still completes an
-exchange via the dual-send path (§7.2); and the witnessed path from step 5 still
-passes.
+**In progress, sliced (Keyring, `feat/trust-tasks-integration`).** Landed and
+e2e-proven on the production mediator: the propose exchange (deterministic
+proposer, binding-0.2 carriage, gated on `rceVersion` v4 for now) and the
+issue leg in **shadow mode** — signed VRC delivered on the exchange thread
+with a real eddsa-jcs-2022 request proof (the REQUIRED declaration pulled
+this part of step 5's proof work forward), digest receipts recomputed and
+correlated both directions, refusals as `trust-task-error`. The legacy
+issue-credential 2.0 leg remains the storage authority, and the e2e suite
+gates on the ceremony markers. Evidence:
+[`docs/spikes/trust-task-propose-evidence.md`](../../spikes/trust-task-propose-evidence.md);
+reasoning: [`2026-08-18-al.md`](./2026-08-18-al.md).
+
+**Remaining delta to done:** two wallets complete an unwitnessed exchange over
+the new tasks and both **store** the counterparty's VRC from the task (the
+authority flip); capability negotiation runs through `supportedTypes` rather
+than an ordinal version; the proof *verifier* replaces `acceptUnverified`; a
+legacy peer still completes an exchange via the dual-send path (§7.2); and
+the witnessed path from step 5 still passes.
 
 
 ## 10. Open questions
