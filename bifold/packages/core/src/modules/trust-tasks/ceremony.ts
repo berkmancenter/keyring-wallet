@@ -30,6 +30,7 @@ import {
   DidCommMessageSender,
   DidCommOutboundMessageContext,
 } from '@credo-ts/didcomm'
+import * as discovery from '@openvtc/trust-tasks/trust-task-discovery/0.1/payload'
 import * as issue from '@openvtc/trust-tasks/vrc/relationships/issue/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
 import {
@@ -78,12 +79,35 @@ export function isDeterministicProposer(myConnectionDid: string, theirConnection
 }
 
 /**
- * Open the Trust Task relationship exchange toward a v4+ peer, if this side
- * is the deterministic proposer. Idempotent per connection: an exchange
- * already retained for this connection is not re-opened.
- *
- * Called from the legacy handshake handler at the moment the peer's
- * `rceVersion` becomes known — the two dialects share that trigger.
+ * The task types this wallet supports, as bare Type URIs — what our
+ * trust-task-discovery response advertises. Slugs derive from these for
+ * pattern matching.
+ */
+export const SUPPORTED_TASK_TYPES = [
+  propose.TYPE_URI,
+  issue.TYPE_URI,
+] as const
+
+/** The slug of a Type URI: authority and version stripped. */
+function slugOfTypeUri(typeUri: string): string {
+  return typeUri.replace(/^https:\/\/trusttasks\.org\/spec\//, '').replace(/\/\d+\.\d+$/, '')
+}
+
+/** Slug-glob match: '*' is the only metacharacter, matching any run. */
+function slugMatchesPattern(slug: string, pattern: string): boolean {
+  const regex = new RegExp(`^${pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`)
+  return regex.test(slug)
+}
+
+/**
+ * Begin the Trust Task relationship exchange toward a v4+ peer, if this side
+ * is the deterministic proposer — starting with capability NEGOTIATION:
+ * a trust-task-discovery query, with the propose gated on the peer actually
+ * listing `vrc/relationships/propose` in its `supportedTypes` (§9 step 6:
+ * negotiation through supportedTypes rather than an ordinal version). The
+ * legacy `rceVersion` marker remains the bootstrap — it is what tells us the
+ * peer can parse a Trust Task message at all, so a sub-v4 peer never sees
+ * even the discovery query. Idempotent per connection.
  */
 export async function maybeOpenRelationshipExchange(
   agent: Agent,
@@ -99,7 +123,36 @@ export async function maybeOpenRelationshipExchange(
 
   const service = getTrustTasksService(agent)
 
-  // Idempotence: one relationship exchange per connection.
+  // Idempotence: one discovery (and one exchange) per connection.
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  for (const typeUri of [discovery.TYPE_URI, propose.TYPE_URI]) {
+    const existing = await documentRepository.findByQuery(agent.context, { typeUri, connectionId })
+    if (existing.length > 0) return
+  }
+
+  const document: Record<string, unknown> = {
+    id: utils.uuid(),
+    type: discovery.TYPE_URI,
+    threadId: utils.uuid(),
+    issuer: connection.did,
+    recipient: connection.theirDid,
+    issuedAt: new Date().toISOString(),
+    payload: { patterns: ['vrc/relationships/*', 'witness/*'] },
+  }
+  await service.retain(agent.context, document, 'request', connectionId)
+  await sendTrustTaskDocument(agent, connectionId, document)
+  agent.config.logger.info(`${LOG_PREFIX} discovery sent on connection ${connectionId}`)
+}
+
+/**
+ * Open the relationship exchange itself — called once discovery confirms the
+ * peer supports the propose. Idempotent per connection.
+ */
+async function openRelationshipExchange(agent: Agent, connectionId: string): Promise<void> {
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.did || !connection.theirDid) return
+
+  const service = getTrustTasksService(agent)
   const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
   const existing = await documentRepository.findByQuery(agent.context, {
     typeUri: propose.TYPE_URI,
@@ -178,6 +231,22 @@ export function setupTrustTasksInbound(agent: Agent): void {
       return
     }
 
+    if (type === discovery.TYPE_URI) {
+      await handleInboundDiscovery(agent, service, document, {
+        connectionId: context.connectionId,
+        senderDid: context.senderDid,
+        recipientDid: context.recipientDid,
+      })
+      return
+    }
+    if (type === `${discovery.TYPE_URI}#response`) {
+      await handleInboundDiscoveryResponse(agent, service, document, {
+        connectionId: context.connectionId,
+        senderDid: context.senderDid,
+        recipientDid: context.recipientDid,
+      })
+      return
+    }
     if (type === issue.TYPE_URI) {
       await handleInboundIssue(agent, service, document, {
         connectionId: context.connectionId,
@@ -219,6 +288,74 @@ interface InboundContext {
   connectionId: string
   senderDid: string
   recipientDid: string
+}
+
+/**
+ * Answer a trust-task-discovery query with the task types we support,
+ * filtered by the query's slug-glob patterns. Discovery is read-only
+ * metadata, so it needs no consent and no proof.
+ */
+async function handleInboundDiscovery(
+  agent: Agent,
+  service: TrustTasksService,
+  document: Record<string, unknown>,
+  context: InboundContext
+): Promise<void> {
+  const outcome = await service.consume(agent.context, {
+    spec: discovery.SPEC as never,
+    document,
+    myDid: context.recipientDid,
+    senderDid: context.senderDid,
+    connectionId: context.connectionId,
+    handler: async (doc) => {
+      const patterns = (doc as { payload?: { patterns?: string[] } }).payload?.patterns
+      const effective = patterns && patterns.length > 0 ? patterns : ['*']
+      const supportedTypes = SUPPORTED_TASK_TYPES.filter((typeUri) =>
+        effective.some((pattern) => slugMatchesPattern(slugOfTypeUri(typeUri), pattern))
+      )
+      return respondWith(doc as never, utils.uuid(), { supportedTypes: [...supportedTypes] }, () =>
+        new Date().toISOString()
+      )
+    },
+  })
+
+  if (outcome.kind === 'handled' && outcome.response) {
+    await sendTrustTaskDocument(agent, context.connectionId, outcome.response as Record<string, unknown>)
+    const count = ((outcome.response as { payload?: { supportedTypes?: unknown[] } }).payload?.supportedTypes ?? []).length
+    agent.config.logger.info(`${LOG_PREFIX} discovery answered (${count} types) on connection ${context.connectionId}`)
+  }
+}
+
+/**
+ * The peer's discovery answer: open the relationship exchange only if it
+ * actually lists the propose among its supportedTypes.
+ */
+async function handleInboundDiscoveryResponse(
+  agent: Agent,
+  service: TrustTasksService,
+  document: Record<string, unknown>,
+  context: InboundContext
+): Promise<void> {
+  const outcome = await service.consume(agent.context, {
+    spec: discovery.RESPONSE_SPEC as never,
+    document,
+    myDid: context.recipientDid,
+    senderDid: context.senderDid,
+    connectionId: context.connectionId,
+    handler: async (doc) => doc,
+  })
+  if (outcome.kind !== 'handled') return
+
+  const entries = (document as { payload?: { supportedTypes?: (string | { type: string })[] } }).payload?.supportedTypes ?? []
+  const supportsPropose = entries.some((entry) => (typeof entry === 'string' ? entry : entry.type) === propose.TYPE_URI)
+  if (!supportsPropose) {
+    agent.config.logger.warn(
+      `${LOG_PREFIX} peer does not list ${propose.TYPE_URI} in supportedTypes — exchange not opened`
+    )
+    return
+  }
+  agent.config.logger.info(`${LOG_PREFIX} discovery confirmed propose support on connection ${context.connectionId}`)
+  await openRelationshipExchange(agent, context.connectionId)
 }
 
 /**

@@ -6,6 +6,7 @@
  */
 import { DidCommMessageSender, DidCommMessageHandlerRegistry } from '@credo-ts/didcomm'
 import { InjectionSymbols, EventEmitter } from '@credo-ts/core'
+import * as discovery from '@openvtc/trust-tasks/trust-task-discovery/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
 
 import {
@@ -124,14 +125,68 @@ describe('the capability gate', () => {
     expect(isDeterministicProposer('did:peer:4zzz', 'did:peer:4aaa')).toBe(false)
   })
 
-  test('the proposer sends propose exactly once (idempotent per connection)', async () => {
-    const { agent, sentMessages } = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
-    await maybeOpenRelationshipExchange(agent, 'conn-1', 4, 4)
-    await maybeOpenRelationshipExchange(agent, 'conn-1', 4, 4)
-    expect(sentMessages).toHaveLength(1)
-    const doc = sentMessages[0].document as { type: string; payload: { relationshipDid: string } }
+  test('the proposer negotiates via discovery, then proposes exactly once', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    setupTrustTasksInbound(fake.agent)
+    await maybeOpenRelationshipExchange(fake.agent, 'conn-1', 4, 4)
+    await maybeOpenRelationshipExchange(fake.agent, 'conn-1', 4, 4)
+
+    // capability negotiation first — no propose until the peer confirms support
+    expect(fake.sentMessages).toHaveLength(1)
+    const query = fake.sentMessages[0].document as { type: string; payload: { patterns: string[] } }
+    expect(query.type).toBe(discovery.TYPE_URI)
+    expect(query.payload.patterns).toContain('vrc/relationships/*')
+
+    await deliver(fake.capturedHandlerRef, {
+      id: 'dddd1111-0000-4000-8000-00000000000d',
+      type: `${discovery.TYPE_URI}#response`,
+      threadId: String((query as unknown as { threadId: string }).threadId ?? 'dddd'),
+      issuer: 'did:peer:4zzz',
+      recipient: 'did:peer:4aaa',
+      issuedAt: new Date().toISOString(),
+      payload: { supportedTypes: [propose.TYPE_URI] },
+    }, { id: 'conn-1', did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+
+    expect(fake.sentMessages).toHaveLength(2)
+    const doc = fake.sentMessages[1].document as { type: string; payload: { relationshipDid: string } }
     expect(doc.type).toBe(propose.TYPE_URI)
     expect(doc.payload.relationshipDid).toBe('did:peer:my-rel')
+  })
+
+  test('a peer whose supportedTypes omit the propose never receives one', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    setupTrustTasksInbound(fake.agent)
+    await maybeOpenRelationshipExchange(fake.agent, 'conn-1', 4, 4)
+    await deliver(fake.capturedHandlerRef, {
+      id: 'dddd2222-0000-4000-8000-00000000000d',
+      type: `${discovery.TYPE_URI}#response`,
+      threadId: 'dddd2222-0000-4000-8000-00000000000d',
+      issuer: 'did:peer:4zzz',
+      recipient: 'did:peer:4aaa',
+      issuedAt: new Date().toISOString(),
+      payload: { supportedTypes: ['https://trusttasks.org/spec/chat/message/0.1'] },
+    }, { id: 'conn-1', did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+
+    expect(fake.sentMessages).toHaveLength(1) // the discovery query only
+  })
+
+  test('an inbound discovery is answered with our supported types, pattern-filtered', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4peer' })
+    setupTrustTasksInbound(fake.agent)
+    await deliver(fake.capturedHandlerRef, {
+      id: 'dddd3333-0000-4000-8000-00000000000d',
+      type: discovery.TYPE_URI,
+      threadId: 'dddd3333-0000-4000-8000-00000000000d',
+      issuer: 'did:peer:4peer',
+      recipient: 'did:peer:4me',
+      issuedAt: new Date().toISOString(),
+      payload: { patterns: ['vrc/relationships/propose'] },
+    }, { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4peer' })
+
+    expect(fake.sentMessages).toHaveLength(1)
+    const response = fake.sentMessages[0].document as { type: string; payload: { supportedTypes: string[] } }
+    expect(response.type).toBe(`${discovery.TYPE_URI}#response`)
+    expect(response.payload.supportedTypes).toEqual([propose.TYPE_URI])
   })
 })
 

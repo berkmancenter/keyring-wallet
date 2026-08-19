@@ -17,6 +17,7 @@
 import { DidCommMessageSender, DidCommMessageHandlerRegistry } from '@credo-ts/didcomm'
 import { InjectionSymbols, EventEmitter } from '@credo-ts/core'
 import * as issue from '@openvtc/trust-tasks/vrc/relationships/issue/0.1/payload'
+import * as discovery from '@openvtc/trust-tasks/trust-task-discovery/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
 
 import {
@@ -204,7 +205,21 @@ describe('the proposer side (auto-delivery on acceptance)', () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
     setupTrustTasksInbound(fake.agent)
     await maybeOpenRelationshipExchange(fake.agent, fake.connectionId, 4, 4)
-    const proposeDoc = fake.sentMessages[0].document as { id: string }
+    // discovery hop: confirm propose support so the exchange opens
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'dddd1111-0000-4000-8000-00000000000d',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: 'dddd1111-0000-4000-8000-00000000000d',
+        issuer: 'did:peer:4zzz',
+        recipient: 'did:peer:4aaa',
+        issuedAt: new Date().toISOString(),
+        payload: { supportedTypes: [propose.TYPE_URI] },
+      },
+      { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' }
+    )
+    const proposeDoc = fake.sentMessages[1].document as { id: string }
 
     await deliver(
       fake.capturedHandlerRef,
@@ -220,8 +235,8 @@ describe('the proposer side (auto-delivery on acceptance)', () => {
       { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' }
     )
 
-    expect(fake.sentMessages).toHaveLength(2) // propose, then our issue
-    const doc = fake.sentMessages[1].document as {
+    expect(fake.sentMessages).toHaveLength(3) // discovery, propose, then our issue
+    const doc = fake.sentMessages[2].document as {
       type: string
       threadId: string
       proof: unknown
@@ -235,7 +250,7 @@ describe('the proposer side (auto-delivery on acceptance)', () => {
 
     // idempotent: a second delivery attempt for the same exchange is a no-op
     await deliverVrcViaTrustTaskForExchange(fake.agent, fake.connectionId, proposeDoc.id)
-    expect(fake.sentMessages).toHaveLength(2)
+    expect(fake.sentMessages).toHaveLength(3)
   })
 })
 
