@@ -301,22 +301,23 @@ region carries an identity of its own:
 
 ```mermaid
 sequenceDiagram
-    participant P as Party's wallet
-    participant W as Witness (task channel)
-    participant S as Witness's sensor (radio; sensorDid = witness DID in phase 1)
-    P->>W: witness/session { parties, ext: locality offered }
-    W->>P: #35;response { challenge, domain, ext: sensor directive } — proof REQUIRED
-    Note over P,S: the sensor directive names sensorDid, the service-UUID prefix,<br/>EID parameters and windowSeconds
+    participant P as Party wallet
+    participant W as Witness task channel
+    participant S as Witness BLE sensor
+    Note over S: sensorDid equals the witness DID in phase 1
+    P->>W: witness/session with ext locality offered
+    W->>P: #response with challenge, domain and the sensor directive - proof REQUIRED
+    Note over P,S: the directive names sensorDid, the service UUID prefix,<br/>the EID parameters and windowSeconds
     rect rgb(232, 232, 232)
-      Note over P,S: THE RADIO — bounded by physics, carrying no identity
-      P--)S: advertises EID = HKDF(challenge, info = taskDigest(session))   « locates »
-      S--)P: sensor matches an expected EID, connects, writes a fresh sensorNonce
-      P--)S: signs "keyring-locality-v1" ‖ taskDigest ‖ challenge ‖ sensorNonce ‖ sensorDid<br/>with the hardware attestation key   « binds »
-      Note over S: the sensor records the transcript and the bounded round trip
+        Note over P,S: THE RADIO - bounded by physics, carrying no identity
+        P--)S: advertises EID derived as HKDF of challenge with info taskDigest of session [locates]
+        S--)P: sensor matches an expected EID, connects, writes a fresh sensorNonce
+        P--)S: signs keyring-locality-v1 || taskDigest || challenge || sensorNonce || sensorDid<br/>with the hardware attestation key [binds]
+        Note over S: the sensor records the transcript and the bounded round trip
     end
-    P->>W: witness/session/submit { vp, ext: the device's half of the transcript } — proof REQUIRED
-    W->>P: #35;response { vwc, vwcDigestMultibase, ext: the signed observation } — proof REQUIRED
-    Note over P,W: the VWC's assertion summarizes the observation;<br/>the #35;response itself is retained as the outcome evidence (§7.2)
+    P->>W: witness/session/submit with the device half of the transcript in ext - proof REQUIRED
+    W->>P: #response with vwc, vwcDigestMultibase and the signed observation in ext - proof REQUIRED
+    Note over P,W: the VWC assertion summarizes the observation.<br/>the #response itself is retained as the outcome evidence per section 7.2
 ```
 
 ### 5.2 The device does not report; the witness observes
