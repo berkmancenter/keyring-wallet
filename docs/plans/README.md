@@ -6,6 +6,7 @@ protocol we use to agree on them.
 | Plan | Scope | Status |
 |---|---|---|
 | [openvtc-integration-plan.md](./openvtc-integration-plan.md) | Making Keyring interoperable with the OpenVTC / First Person Project infrastructure — TSP as the message envelope, Trust Tasks as the operation layer, the VTA as the server-side counterpart | Active. Phase A/B complete, Phase C in progress |
+| [locality-plan.md](./locality-plan.md) | Co-presence evidence a third party can trust: a venue-deployed witness observes the parties' devices on a short-range radio channel and attests to it in the VWC it already issues. Depends on the OpenVTC plan's Trust Task recast | Active. Design agreed; reference ladder (`ref-06p*`) not yet built |
 
 ## Why documents instead of only pull-request threads
 

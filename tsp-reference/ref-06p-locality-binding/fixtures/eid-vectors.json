@@ -1,0 +1,19 @@
+{
+  "note": "Frozen inputs → expected EIDs. HKDF-SHA256(ikm=challenge, salt=EID_SALT, info=taskDigest(sessionDoc), L=12).",
+  "salt": "keyring-locality-eid-v1",
+  "prefix": "4b524c31",
+  "sessions": {
+    "A": {
+      "challenge": "9f2c1d7e4a8b0c5f3e6d1a2b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+      "taskDigest": "zQmQG9ptEbacZu5N3YN4KRLJbZAG8yC9jso61duZQPXi2qn",
+      "eid": "acdeb9aedf36020d80d37868",
+      "serviceUuid": "4b524c31-acde-b9ae-df36-020d80d37868"
+    },
+    "B": {
+      "challenge": "0e1d2c3b4a59687776859403f2e1d0c9b8a7968554433221100ffeeddccbbaa9",
+      "taskDigest": "zQmYkGMC1VMcx6HqmfFhmv6L4FvdDQB3cEsPBwZcLBLK8Zv",
+      "eid": "085357537dc454a61f425bca",
+      "serviceUuid": "4b524c31-0853-5753-7dc4-54a61f425bca"
+    }
+  }
+}

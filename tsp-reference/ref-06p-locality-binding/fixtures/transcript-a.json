@@ -1,0 +1,10 @@
+{
+  "method": "ble-challenge-response/0.1",
+  "taskDigestMultibase": "zQmQG9ptEbacZu5N3YN4KRLJbZAG8yC9jso61duZQPXi2qn",
+  "challenge": "9f2c1d7e4a8b0c5f3e6d1a2b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+  "sensorNonce": "5a6b7c8d9e0f1a2b3c4d5e6f70819200",
+  "sensorDid": "did:peer:4wendy",
+  "keyId": "z6MktULudTtAsAhRegYPiZ6631RV3viv12qd4GQF8z1xB22S",
+  "signature": "mnqGuBsf5xrBnARZOPcGrVkeFJkvLO-5V_S_H_W-rjgQoCeDAE-y8bzf4VFfym4vHRzQ2D1ie3wVOMYdoDXLBQ",
+  "hardwareAttestation": "verified"
+}

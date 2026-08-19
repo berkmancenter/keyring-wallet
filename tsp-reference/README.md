@@ -27,6 +27,13 @@ step lives — every step is one `node run.mjs` away:
 | 3. …with Cypress VTA/VTI (affinidi mediator, webvh hosting) | ✅ **closed by measurement** — the literal form (v1 through the affinidi mediator) is impossible **by design**, permanently (v2-only, measured 404); the step's intent splits: webvh + VTA REST serve a v1 wallet directly ([`ref-06x`](./ref-06x-cypress-stack/)), and the mediator leg is the dual-stack's v2 half ([`ref-04`](./ref-04-mediator/), `vti-didcomm-js`) — never DIDComm 1 | [`ref-06x`](./ref-06x-cypress-stack/), [`ref-04`](./ref-04-mediator/), [`ref-05`](./ref-05-local-vta/) |
 | 4. Fallback to pinned version if needed | ✅ standing | [`scripts/openvtc/PINS.json`](../scripts/openvtc/PINS.json) + `sync-external.mjs` — pins are the fallback; advances are logged decisions ([`SYNC_LOG.md`](../scripts/openvtc/SYNC_LOG.md)) |
 
+The **locality line** (`ref-06p*`) sits on top of the witnessed exchange and
+belongs to [`docs/plans/locality-plan.md`](../docs/plans/locality-plan.md):
+[`ref-06p`](./ref-06p-locality-binding/) is the binding algebra (no radios,
+green); `ref-06p2` (real BLE, honest RTT distribution), `ref-06p3` (the
+third-party verifier), `ref-06p4` (a staged relay, detection threshold) and
+`ref-06p5` (attestation binding) follow.
+
 The witnessed-exchange evidence line (`ref-06w*`) sits on top of step 1:
 [`ref-06w4`](./ref-06w4-package-truth/) is the living exchange on the published
 `@openvtc/trust-tasks` package; [`ref-06w3`](./ref-06w3-taskcontext-binding/)
@@ -45,6 +52,7 @@ proposals since adopted upstream.
 | [`ref-04-mediator`](./ref-04-mediator/) | TSP through a real mediator: one socket per DID, TSP demuxed off the DIDComm pickup stream, routed **and** direct sends, bidirectional | network (a mediator) |
 | [`ref-05-local-vta`](./ref-05-local-vta/) | a local VTA serving **its own** `did:webvh`; service entries as the transport ladder; **capability change without key rotation** | a local VTA (native or its `docker compose`) |
 | `ref-06v1…w4` (nine rungs) | the DIDComm-v1 binding, task layer, carrier, witnessed exchange, taskContext binding, package truth — see the phasing map above | varies (see each README) |
+| [`ref-06p-locality-binding`](./ref-06p-locality-binding/) | the locality evidence algebra with no radios: the EID that **locates** vs the signed GATT transcript that **binds**, four forgeries each rejected by a named check, `ext` on all four witness documents through the published §7.2 pipeline, and the canonicalization split — Trust Task documents are `eddsa-jcs-2022` (every member covered) while the VWC is `eddsa-rdfc-2022` (**only defined JSON-LD terms are signed**; today's shipped `LocalityEvidence` members have none). 1,927 bytes/session, measured | nothing |
 | [`ref-06x-cypress-stack`](./ref-06x-cypress-stack/) | the stack composed joint-by-joint at the **Cypress release**: local release-binary VTA + webvh at the wallet (Credo can't resolve it natively — measured; 20-line workaround proven) + the mediator dialect (v1 refused, 404 — measured) + the witnessed exchange end-to-end on binding 0.2 × trust-tasks 0.9.0 | a local VTA; network for the mediator act |
 
 ## Running them
