@@ -434,7 +434,32 @@ export async function getVrcJsonLdProofOptions(
  * @param connectionId Optional connection ID to associate with this relationship
  * @returns My relationship DID for this counterparty
  */
+// In-flight creations keyed by counterparty DID: getOrCreateRelationshipDid's
+// find-then-create awaits between the find and the create, so two concurrent
+// callers (the connection handler, the trust-task proposer, the issuance
+// trigger) could each miss the other's find and mint DIVERGENT DIDs for one
+// counterparty — one announced to the peer, another baked into a credential.
+// Concurrent callers now share the first caller's promise; the map is cleared
+// on settle (the repository is the durable truth).
+const relationshipDidCreations = new Map<string, Promise<string>>()
+
 export async function getOrCreateRelationshipDid(
+  agent: Agent,
+  counterpartyConnectionDid: string,
+  connectionId?: string
+): Promise<string> {
+  const inFlight = relationshipDidCreations.get(counterpartyConnectionDid)
+  if (inFlight) return inFlight
+  const creation = createOrReuseRelationshipDid(agent, counterpartyConnectionDid, connectionId)
+  relationshipDidCreations.set(counterpartyConnectionDid, creation)
+  try {
+    return await creation
+  } finally {
+    relationshipDidCreations.delete(counterpartyConnectionDid)
+  }
+}
+
+async function createOrReuseRelationshipDid(
   agent: Agent,
   counterpartyConnectionDid: string,
   connectionId?: string
