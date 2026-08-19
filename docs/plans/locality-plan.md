@@ -295,6 +295,30 @@ vetted standards use — FIDO CTAP 2.2 hybrid derives its BLE advert from the
 tunnel secret carried in the QR; ISO/IEC 18013-5 binds device engagement to the
 session it opens — applied to a Trust Task exchange.
 
+The whole ceremony, with the two channels drawn as the separation they are —
+the task channel never touches the boxed region, and nothing in the boxed
+region carries an identity of its own:
+
+```mermaid
+sequenceDiagram
+    participant P as Party's wallet
+    participant W as Witness (task channel)
+    participant S as Witness's sensor (radio; sensorDid = witness DID in phase 1)
+    P->>W: witness/session { parties, ext: locality offered }
+    W->>P: #35;response { challenge, domain, ext: sensor directive } — proof REQUIRED
+    Note over P,S: the sensor directive names sensorDid, the service-UUID prefix,<br/>EID parameters and windowSeconds
+    rect rgb(232, 232, 232)
+      Note over P,S: THE RADIO — bounded by physics, carrying no identity
+      P--)S: advertises EID = HKDF(challenge, info = taskDigest(session))   « locates »
+      S--)P: sensor matches an expected EID, connects, writes a fresh sensorNonce
+      P--)S: signs "keyring-locality-v1" ‖ taskDigest ‖ challenge ‖ sensorNonce ‖ sensorDid<br/>with the hardware attestation key   « binds »
+      Note over S: the sensor records the transcript and the bounded round trip
+    end
+    P->>W: witness/session/submit { vp, ext: the device's half of the transcript } — proof REQUIRED
+    W->>P: #35;response { vwc, vwcDigestMultibase, ext: the signed observation } — proof REQUIRED
+    Note over P,W: the VWC's assertion summarizes the observation;<br/>the #35;response itself is retained as the outcome evidence (§7.2)
+```
+
 ### 5.2 The device does not report; the witness observes
 
 Per §1: a device's account of what it heard is a software claim and cannot be
