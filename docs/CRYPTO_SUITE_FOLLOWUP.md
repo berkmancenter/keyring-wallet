@@ -141,9 +141,9 @@ remembering, so the guard — expand every issued credential shape against the r
 context, fail on any dropped term — is part of the decision rather than a
 follow-up to it.
 
-*The extensibility argument is drafted as a comment for cred-spec #18
-([PR-CANDIDATE.md](../tsp-reference/ref-06p-locality-binding/PR-CANDIDATE.md)),
-not posted.*
+*The extensibility argument was [raised on cred-spec #18](https://github.com/trustoverip/dtgwg-cred-spec/pull/18#issuecomment-5336345589) —
+offered as a comment supporting the recommendation the PR already makes, with a
+suggested Security Considerations paragraph the editors can take or drop.*
 
 ### What is not decided
 

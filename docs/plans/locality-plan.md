@@ -957,16 +957,17 @@ free for the Credo adapter, RN, and the Keyring module.
 
 ### 10.4 Adjacent items, and their status
 
-- **`useHardwareAttestation`'s split default — fixed.** The store initialised
-  the preference to `false` while `vrc-manager.ts` read it from AsyncStorage with
-  `?? true`, so on any install whose preferences had never been persisted the
-  VRC flow ran hardware attestation while Settings showed it off. `e2e/lib/flows.js`
-  documents the intended behaviour (*"Enable the 'Hardware Attestation'
-  preference (OFF by default on fresh…)"*), as does
-  `docs/HARDWARE_ATTESTATION_FLOW.md` ("default **off** in store"), so the two
-  read sites now fall back to `false`. VRC module suite green (162 tests).
-  `useLocalityConfirmation` must not repeat the pattern: default `true` in the
-  store **and** in every read path.
+- **`useHardwareAttestation`'s split default — reported, not fixed here:**
+  [keyring-bifold#38](https://github.com/berkmancenter/keyring-bifold/issues/38). The store initialises the preference to `false`
+  while `vrc-manager.ts` reads it from AsyncStorage with `?? true`, so on any
+  install whose preferences have never been persisted the VRC flow runs hardware
+  attestation while Settings shows it off. `e2e/lib/flows.js` documents the
+  intended behaviour (*"Enable the 'Hardware Attestation' preference (OFF by
+  default on fresh…)"*), as does `docs/HARDWARE_ATTESTATION_FLOW.md` ("default
+  **off** in store"). It belongs to the VRC module, not to this plan, and a
+  one-line submodule fix riding a plan branch is how a real bug gets buried.
+  **`useLocalityConfirmation` must not repeat the pattern:** default `true` in
+  the store **and** in every read path.
 - **`dtgwg-cred-spec` — pinned.** Added to `scripts/openvtc/PINS.json` at
   `b89f389` (2026-08-12) and logged in `SYNC_LOG.md`, so the VWC schema half of
   §7.1 is now checkable locally. Pinning it immediately paid for itself twice:

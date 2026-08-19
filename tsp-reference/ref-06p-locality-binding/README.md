@@ -90,8 +90,8 @@ key that signs the credential.
   base. `bbs-2023` is RDF-canonicalized, so the vocabulary is **mandatory work,
   not conditional** — and an undefined term is worse than unsigned, it is
   *undisclosable*, because it is not in the dataset to disclose from. The
-  extensibility argument this act produced is drafted for #18 in
-  [`PR-CANDIDATE.md`](./PR-CANDIDATE.md).
+  extensibility argument this act produced was
+  [raised on #18](https://github.com/trustoverip/dtgwg-cred-spec/pull/18#issuecomment-5336345589).
 
   Run without term definitions and the assertion is *not signed*, in two ways:
   JSON-LD **safe mode — what the DI signing path uses — rejects the document
