@@ -788,8 +788,9 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
   if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
   const { execSync } = await import("node:child_process");
   const required = [
-    [/\[TrustTasks:Ceremony\] propose (sent|accepted|#response consumed)/, "propose"],
+    [/\[TrustTasks:Ceremony\] propose (sent|accepted|received|#response consumed)/, "propose"],
     [/\[TrustTasks:Ceremony\] issue sent/, "issue sent"],
+    [/\[TrustTasks:Ceremony\] issue (stored|already stored)/, "issue stored"],
     [/\[TrustTasks:Ceremony\] issue receipt sent/, "issue receipt sent"],
     [/\[TrustTasks:Ceremony\] issue receipt matched/, "issue receipt matched"],
   ];
@@ -814,4 +815,26 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
       .map(([, name]) => name)
       .join(", ")}`
   );
+}
+
+/**
+ * v4 pairs: consent is the RELATIONSHIP PROPOSAL, not per-credential offers.
+ * One side (whichever wallet did not deterministically propose) gets the
+ * "wants to form a relationship" bottom-sheet — find and accept it. Returns
+ * true if this driver was the one prompted. The un-prompted side returns
+ * false after the wait, which is expected.
+ */
+export async function acceptRelationshipProposalIfPrompted(driver, timeout = 90000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await existsTestId(driver, "ProposalAccept", 3000)) {
+      await tapTestId(driver, "ProposalAccept");
+      console.log(`[e2e] ${driver.e2ePlatform}: relationship proposal accepted`);
+      return true;
+    }
+    await unlockIfLocked(driver);
+    await sleep(2000);
+  }
+  console.log(`[e2e] ${driver.e2ePlatform}: no proposal prompt (peer side proposed)`);
+  return false;
 }
