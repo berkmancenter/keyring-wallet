@@ -2139,6 +2139,7 @@ __metadata:
     "@openwallet-foundation/askar-shared": "npm:0.6.0"
     "@types/base-64": "npm:^1.0.2"
     ajv: "npm:^8.17.1"
+    canonicalize: "npm:^1.0.8"
     unique-names-generator: "npm:^4.7.1"
   peerDependencies:
     "@animo-id/expo-secure-environment": 0.1.5
@@ -8673,7 +8674,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"canonicalize@npm:^1.0.1":
+"canonicalize@npm:^1.0.1, canonicalize@npm:^1.0.8":
   version: 1.0.8
   resolution: "canonicalize@npm:1.0.8"
   checksum: 10c0/6fafcfa73855a49c86eed26d2f23734713a542a3107a23a6ab16fb22b6cee6bb2d92ad32b2244d52594bd69bc08bec820413911cd566dcc5399048012ce26a83
