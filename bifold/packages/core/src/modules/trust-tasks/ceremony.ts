@@ -37,7 +37,7 @@ import { utils } from '@credo-ts/core'
 import { getOrCreateRelationshipDid } from '../vrc/vrc-manager'
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
 
-import { digestMultibase, signDocumentProof } from './documentProof'
+import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { TrustTaskMessage } from './messages/TrustTaskMessage'
 import { TrustTasksModule } from './module/TrustTasksModule'
 import { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
@@ -334,6 +334,31 @@ async function handleInboundPropose(
 }
 
 /**
+ * Proof policy for the issue legs: verify eddsa-jcs-2022 under the sender's
+ * relationship DID (milestone 3's verifier, replacing `acceptUnverified`).
+ * Without a relationship record there is no expected controller — accept
+ * unverified and let the handler's party-binding check refuse `notAccepted`.
+ * The propose legs stay on the service default: their proofs are OPTIONAL and
+ * unsigned today, and at propose time the counterparty's relationship DID —
+ * the would-be controller — is exactly what the document is delivering.
+ */
+async function issueProofPolicy(
+  agent: Agent,
+  senderDid: string
+): Promise<{ kind: 'verify'; verify: { verify: (doc: unknown) => Promise<boolean> } } | { kind: 'acceptUnverified' }> {
+  const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
+  const record = await repository.findByConnectionDid(agent.context, senderDid)
+  const expectedController = record?.counterpartyRelationshipDid
+  if (!expectedController) return { kind: 'acceptUnverified' }
+  return {
+    kind: 'verify',
+    verify: {
+      verify: (doc: unknown) => verifyDocumentProof(agent, doc as Record<string, unknown>, expectedController),
+    },
+  }
+}
+
+/**
  * Counterparty delivers their signed VRC (`vrc/relationships/issue`).
  *
  * Conformance (spec, receiving party): verify the credential's party bindings
@@ -355,6 +380,13 @@ async function handleInboundIssue(
     myDid: context.recipientDid,
     senderDid: context.senderDid,
     connectionId: context.connectionId,
+    // The eddsa-jcs-2022 verifier: the proof must verify under the sender's
+    // relationship DID as the accepted proposal established it. When no
+    // relationship record exists yet, fall through to the handler, whose
+    // party-binding check refuses with the spec's `notAccepted` — the more
+    // accurate error than `proofInvalid` for a delivery outside any accepted
+    // exchange.
+    proofPolicy: await issueProofPolicy(agent, context.senderDid),
     handler: async (doc) => {
       const payload = (doc as { payload: { vrc?: Record<string, unknown> } }).payload
       const vc = payload.vrc
@@ -419,6 +451,9 @@ async function handleInboundIssueReceipt(
     myDid: context.recipientDid,
     senderDid: context.senderDid,
     connectionId: context.connectionId,
+    // Receipt proofs are OPTIONAL (we send ours unsigned); the verify policy
+    // still checks one when a peer supplies it.
+    proofPolicy: await issueProofPolicy(agent, context.senderDid),
     handler: async (doc) => doc,
   })
   if (outcome.kind !== 'handled') return

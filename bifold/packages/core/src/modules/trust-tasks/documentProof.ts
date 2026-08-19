@@ -27,6 +27,7 @@
 
 import type { Agent } from '@credo-ts/core'
 import { Kms, MultiBaseEncoder, MultiHashEncoder, TypedArrayEncoder, getPublicJwkFromVerificationMethod } from '@credo-ts/core'
+import { ed25519 } from '@noble/curves/ed25519.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import canonicalize from 'canonicalize'
 
@@ -102,5 +103,55 @@ export async function signDocumentProof(
   return {
     ...document,
     proof: { ...proofConfig, proofValue: `z${TypedArrayEncoder.toBase58(signature)}` },
+  }
+}
+
+/**
+ * Verify a document's eddsa-jcs-2022 proof against an EXPECTED controller —
+ * for our profile, the sender's relationship DID as established by the
+ * accepted proposal. The framework's ProofVerifier contract leaves the
+ * attribution semantics to the consumer; ours is that the proof's
+ * verification method MUST belong to that expected controller, so a valid
+ * signature under some *other* key still fails. did:peer:0 resolves locally
+ * (the DID encodes the key), so verification needs no network.
+ *
+ * Returns false rather than throwing — the framework maps a false verdict to
+ * `proofInvalid`.
+ */
+export async function verifyDocumentProof(
+  agent: Agent,
+  document: Record<string, unknown>,
+  expectedController: string
+): Promise<boolean> {
+  try {
+    const { proof, ...unsecured } = document
+    if (!proof || typeof proof !== 'object') return false
+    const p = proof as Record<string, unknown>
+    if (p.type !== 'DataIntegrityProof' || p.cryptosuite !== 'eddsa-jcs-2022') return false
+    if (p.proofPurpose !== 'assertionMethod') return false
+    const verificationMethodId = String(p.verificationMethod ?? '')
+    if (!verificationMethodId.startsWith(`${expectedController}#`)) return false
+    const proofValue = String(p.proofValue ?? '')
+    if (!proofValue.startsWith('z')) return false
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { proofValue: _omitted, ...proofConfig } = p
+    const configHash = sha256(new TextEncoder().encode(jcsCanonicalize(proofConfig)))
+    const documentHash = sha256(new TextEncoder().encode(jcsCanonicalize(unsecured)))
+    const signedInput = new Uint8Array(configHash.length + documentHash.length)
+    signedInput.set(configHash, 0)
+    signedInput.set(documentHash, configHash.length)
+
+    const didDocument = await agent.dids.resolveDidDocument(expectedController)
+    const verificationMethod =
+      didDocument.verificationMethod?.find((m) => m.id === verificationMethodId) ??
+      didDocument.verificationMethod?.[0]
+    if (!verificationMethod) return false
+    const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
+    const publicKeyBytes = (publicJwk.publicKey as { publicKey: Uint8Array }).publicKey
+
+    return ed25519.verify(TypedArrayEncoder.fromBase58(proofValue.slice(1)), signedInput, publicKeyBytes)
+  } catch {
+    return false
   }
 }

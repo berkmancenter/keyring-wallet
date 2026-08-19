@@ -5,8 +5,10 @@
  * mocked into meaninglessness here; the digest math is pure and tested.
  */
 import { TypedArrayEncoder } from '@credo-ts/core'
+import { ed25519 } from '@noble/curves/ed25519.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 
-import { digestMultibase, jcsCanonicalize } from '../documentProof'
+import { digestMultibase, jcsCanonicalize, verifyDocumentProof } from '../documentProof'
 
 describe('jcsCanonicalize', () => {
   test('orders members lexicographically and strips insignificant whitespace', () => {
@@ -50,5 +52,84 @@ describe('digestMultibase', () => {
 
   test('changes when the credential changes', () => {
     expect(digestMultibase({ ...credential, issuer: 'did:peer:0zMallory' })).not.toBe(digestMultibase(credential))
+  })
+})
+
+describe('verifyDocumentProof', () => {
+  // A real Ed25519 keypair; the DID document resolves to its Multikey form
+  // (multicodec 0xed01 + raw key, base58btc) — the shape did:peer:0 yields.
+  const secretKey = new Uint8Array(32).fill(7)
+  const publicKey = ed25519.getPublicKey(secretKey)
+  const multikey = (() => {
+    const prefixed = new Uint8Array(2 + publicKey.length)
+    prefixed.set([0xed, 0x01], 0)
+    prefixed.set(publicKey, 2)
+    return `z${TypedArrayEncoder.toBase58(prefixed)}`
+  })()
+  const controller = `did:peer:0${multikey}`
+  const verificationMethodId = `${controller}#${multikey}`
+  const fakeAgent = {
+    dids: {
+      resolveDidDocument: async () => ({
+        verificationMethod: [
+          { id: verificationMethodId, type: 'Multikey', controller, publicKeyMultibase: multikey },
+        ],
+      }),
+    },
+  } as never
+
+  const signedDocument = (mutate?: (doc: Record<string, unknown>) => void) => {
+    const document: Record<string, unknown> = {
+      id: 'ffff1111-0000-4000-8000-00000000000f',
+      type: 'https://trusttasks.org/spec/vrc/relationships/issue/0.1',
+      threadId: 'ffff1111-0000-4000-8000-00000000000f',
+      issuer: 'did:peer:4aaa',
+      recipient: 'did:peer:4zzz',
+      issuedAt: '2026-08-18T00:00:00Z',
+      payload: { vrc: { hello: 'world' }, vrcDigestMultibase: digestMultibase({ hello: 'world' }) },
+    }
+    const proofConfig = {
+      type: 'DataIntegrityProof',
+      cryptosuite: 'eddsa-jcs-2022',
+      created: '2026-08-18T00:00:00Z',
+      verificationMethod: verificationMethodId,
+      proofPurpose: 'assertionMethod',
+    }
+    const configHash = sha256(new TextEncoder().encode(jcsCanonicalize(proofConfig)))
+    const documentHash = sha256(new TextEncoder().encode(jcsCanonicalize(document)))
+    const signedInput = new Uint8Array(configHash.length + documentHash.length)
+    signedInput.set(configHash, 0)
+    signedInput.set(documentHash, configHash.length)
+    const signature = ed25519.sign(signedInput, secretKey)
+    const signed = { ...document, proof: { ...proofConfig, proofValue: `z${TypedArrayEncoder.toBase58(signature)}` } }
+    if (mutate) mutate(signed)
+    return signed
+  }
+
+  test('a valid proof under the expected controller verifies', async () => {
+    expect(await verifyDocumentProof(fakeAgent, signedDocument(), controller)).toBe(true)
+  })
+
+  test('a tampered document fails', async () => {
+    const doc = signedDocument((d) => {
+      ;(d.payload as { vrc: Record<string, unknown> }).vrc = { hello: 'tampered' }
+    })
+    expect(await verifyDocumentProof(fakeAgent, doc, controller)).toBe(false)
+  })
+
+  test('a proof under a different controller fails even if the signature is valid', async () => {
+    expect(await verifyDocumentProof(fakeAgent, signedDocument(), 'did:peer:0zSomebodyElse')).toBe(false)
+  })
+
+  test('a proofless document fails', async () => {
+    const { proof: _proof, ...bare } = signedDocument()
+    expect(await verifyDocumentProof(fakeAgent, bare, controller)).toBe(false)
+  })
+
+  test('a wrong cryptosuite fails', async () => {
+    const doc = signedDocument((d) => {
+      ;(d.proof as Record<string, unknown>).cryptosuite = 'eddsa-rdfc-2022'
+    })
+    expect(await verifyDocumentProof(fakeAgent, doc, controller)).toBe(false)
   })
 })

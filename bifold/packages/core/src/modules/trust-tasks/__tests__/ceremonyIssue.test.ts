@@ -38,7 +38,13 @@ jest.mock('../documentProof', () => ({
     ...document,
     proof: STUB_PROOF,
   })),
+  // The real crypto is covered in documentProof.test.ts; here the verifier
+  // verdict is steered per-test (default: the proof verifies).
+  verifyDocumentProof: jest.fn(async () => true),
 }))
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { verifyDocumentProof: mockedVerify } = require('../documentProof') as { verifyDocumentProof: jest.Mock }
 
 const SIGNED_VRC = {
   '@context': ['https://www.w3.org/ns/credentials/v2'],
@@ -278,6 +284,20 @@ describe('the inbound issue leg', () => {
     const error = fake.sentMessages[0].document as { type: string; payload: { code: string } }
     expect(error.type).not.toBe(`${issue.TYPE_URI}#response`)
     expect(error.payload.code).toBe('vrc/relationships/issue:notAccepted')
+  })
+
+  test('a delivery whose proof fails verification is rejected as proofInvalid', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    setupTrustTasksInbound(fake.agent)
+    const { doc } = inboundIssue()
+    mockedVerify.mockResolvedValueOnce(false)
+
+    await deliver(fake.capturedHandlerRef, doc, { id: fake.connectionId, did: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+
+    expect(fake.sentMessages).toHaveLength(1)
+    const error = fake.sentMessages[0].document as { type: string; payload: { code: string } }
+    expect(error.type).not.toBe(`${issue.TYPE_URI}#response`)
+    expect(error.payload.code).toBe('proofInvalid')
   })
 
   test('a credential from an issuer that is not the proposal counterparty is refused', async () => {
