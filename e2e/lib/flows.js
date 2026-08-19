@@ -788,6 +788,7 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
   if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
   const { execSync } = await import("node:child_process");
   const required = [
+    [/\[TrustTasks:Ceremony\] discovery (sent|answered|confirmed propose support)/, "discovery"],
     [/\[TrustTasks:Ceremony\] propose (sent|accepted|received|#response consumed)/, "propose"],
     [/\[TrustTasks:Ceremony\] issue sent/, "issue sent"],
     [/\[TrustTasks:Ceremony\] issue (stored|already stored)/, "issue stored"],
