@@ -110,3 +110,27 @@ ceremony markers before declaring PASS:
 Shadow-mode boundaries in force: legacy issue-credential 2.0 remains the
 storage authority, proofs are produced but consumed under `acceptUnverified`
 until milestone 3 wires the verifier, and the RCard stays off the task.
+
+## The authority flip, live (same day, ~19:29 local — run 9)
+
+Same-day third stage: consent moved to the proposal (a bottom-sheet on the
+non-proposer's wallet; the e2e taps `ProposalAccept`), the legacy VRC offer
+suppressed for v4 pairs, and the receiver **stores from the task** after
+verifying the document proof (eddsa-jcs-2022, expected-controller), the
+credential's own proof, and the party bindings:
+
+```
+19:29:54.2  [issueVrcCredential] v4 pair — VRC rides the trust-task issue leg; issuing RCard only
+19:29:54.4  [TrustTasks:Ceremony] propose sent (exchange f2e55a34…)
+            (iOS consent sheet → Accept)
+19:29:58.4  [TrustTasks:Ceremony] propose#response consumed; relationship established
+19:29:58.8  [TrustTasks:Ceremony] issue sent
+19:29:59.5  [TrustTasks:Ceremony] issue stored — VRC in wallet
+19:29:59.7  [TrustTasks:Ceremony] issue receipt sent
+19:29:59.8  [TrustTasks:Ceremony] issue receipt matched — VRC delivery acknowledged
+```
+
+Consent → both signed deliveries → verified → stored → correlated receipts
+in ~5.5 s. `✅ E2E PASSED` with the marker gate extended to require
+"issue stored". The RCard still travels the legacy leg (auto-accepted), so
+contact naming is unchanged; sub-v4 peers keep the legacy flow entirely.

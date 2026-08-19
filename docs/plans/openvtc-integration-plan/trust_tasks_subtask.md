@@ -1000,11 +1000,23 @@ gates on the ceremony markers. Evidence:
 [`docs/spikes/trust-task-propose-evidence.md`](../../spikes/trust-task-propose-evidence.md);
 reasoning: [`2026-08-18-al.md`](./2026-08-18-al.md).
 
-**Remaining delta to done:** two wallets complete an unwitnessed exchange over
-the new tasks and both **store** the counterparty's VRC from the task (the
-authority flip); capability negotiation runs through `supportedTypes` rather
-than an ordinal version; a legacy peer still completes an exchange via the
-dual-send path (§7.2); and the witnessed path from step 5 still passes.
+**The authority flip is landed and e2e-proven**: for v4 pairs the VRC travels
+ONLY as the trust-task issue leg — consent is the accepted proposal (a
+bottom-sheet prompt on the non-proposer's wallet replaces the legacy
+per-credential accept), each side builds and signs its VRC standalone
+(evidence flow included), and the receiver verifies the document proof, the
+credential's own proof and the party bindings before **storing from the
+task** (digest-deduplicated) and receipting. The legacy issue-credential leg
+is suppressed for the VRC on v4 pairs; the RCard (a VDS) still travels it. A
+decline is a `trust-task-error` (`propose:declined`) — never
+`accept: false`.
+
+**Remaining delta to done:** capability negotiation runs through
+`supportedTypes` rather than an ordinal version; a legacy peer still
+completes an exchange via the dual-send path (§7.2) — true by construction
+(sub-v4 peers keep the untouched legacy flow) but not yet evidenced against
+an actual v3 build; and the witnessed path from step 5 still passes once
+step 5 exists.
 
 
 ## 10. Open questions
