@@ -2089,6 +2089,17 @@ export function setupVrcConnectionHandler(agent: Agent) {
       } else if (record.state === DidCommCredentialState.Done) {
         credLogger.info(`✓ Credential exchange completed successfully for exchange ${record.id}`)
         await logIssuedCredentialSnapshot(agent, record as any, side)
+        // v4 pairs additionally deliver the signed VRC as a trust-task `issue`
+        // on the relationship exchange thread (shadow of the legacy leg; the
+        // ceremony no-ops when no accepted exchange exists). Lazy require, same
+        // module-cycle break as the propose trigger above.
+        if (record.role === DidCommCredentialRole.Issuer && record.connectionId) {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { maybeDeliverVrcViaTrustTask } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+          maybeDeliverVrcViaTrustTask(agent, record.connectionId, record.id).catch((e: Error) =>
+            credLogger.warn(`Trust-task VRC delivery failed: ${e.message}`)
+          )
+        }
       }
     } catch (_error) {
       // Silently ignore - this is just logging

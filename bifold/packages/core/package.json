@@ -259,6 +259,7 @@
     "@openwallet-foundation/askar-shared": "0.6.0",
     "@types/base-64": "^1.0.2",
     "ajv": "^8.17.1",
+    "canonicalize": "^1.0.8",
     "unique-names-generator": "^4.7.1"
   }
 }

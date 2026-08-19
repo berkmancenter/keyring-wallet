@@ -20,6 +20,7 @@ import {
   consumeInbound,
   respondWith,
   refuse,
+  rejectWith,
   extendedCode,
   StaticTransport,
   UnauthenticatedTransport,
@@ -122,7 +123,7 @@ export class TrustTasksService {
 }
 
 /** Re-exported reply helpers so ceremony code needs one import site. */
-export { respondWith, refuse, extendedCode }
+export { respondWith, refuse, rejectWith, extendedCode }
 
 function roleOf(document: Record<string, unknown>): TrustTaskDocumentRole {
   const type = String(document.type ?? '')
