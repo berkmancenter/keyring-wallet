@@ -880,6 +880,12 @@ export function getConnectedWitnessConnectionId(): string | undefined {
   return witnessStateGetter?.().connectedWitness?.connectionId
 }
 
+/** The user's witnessing preference (default true), for the task ceremony's gating. */
+export async function isWitnessingPreferred(): Promise<boolean> {
+  const preferences = await PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences)
+  return preferences?.useWitnessing ?? true
+}
+
 /**
  * Callback for validating witness connection
  * This will be set by the WitnessConnectionProvider
@@ -1753,8 +1759,26 @@ export function setupVrcConnectionHandler(agent: Agent) {
             // 1. Full witness flow: useWitnessing=true → wait for VWC
             // 2. Reporting-only: useWitnessing=false, enableReporting=true → submit VP, issue VRC directly
             // 3. No witness: everything else → regular VRC directly
-            const shouldUseWitness = useWitnessing && witnessConnected
-            const shouldUseReporting = !useWitnessing && enableReporting && witnessConnected
+            //
+            // v4 pairs run the witness ceremony as TRUST TASKS (per-party
+            // sessions inside the relationship exchange — see
+            // trust-tasks/witnessCeremony.ts), so the legacy witnessed flow
+            // must stand down or the pair would be witnessed twice and hold
+            // two VWCs. Known gap, recorded in the plan companion: the task
+            // dialect does not carry the reporting edge yet, so v4 pairs
+            // skip witness-reporting until it does.
+            const relationshipRecordForDialect = connection.theirDid
+              ? await agent.dependencyManager
+                  .resolve(RelationshipDidRepository)
+                  .findByConnectionDid(agent.context, connection.theirDid)
+              : null
+            const v4Pair =
+              RCE_PROTOCOL_VERSION >= 4 && (relationshipRecordForDialect?.counterpartyRceVersion ?? 1) >= 4
+            if (v4Pair && witnessConnected) {
+              issueLogger.info(`v4 pair — witness ceremony rides the trust-task session; legacy witness flow stands down`)
+            }
+            const shouldUseWitness = useWitnessing && witnessConnected && !v4Pair
+            const shouldUseReporting = !useWitnessing && enableReporting && witnessConnected && !v4Pair
             
             issueLogger.info(`Flow decision | useWitnessing=${useWitnessing} | enableReporting=${enableReporting} | witnessConnected=${witnessConnected} | shouldUseWitness=${shouldUseWitness} | shouldUseReporting=${shouldUseReporting}`)
             

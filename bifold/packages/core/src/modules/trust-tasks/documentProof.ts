@@ -25,7 +25,7 @@
  * @module trust-tasks/documentProof
  */
 
-import type { Agent } from '@credo-ts/core'
+import type { Agent, VerificationMethod } from '@credo-ts/core'
 import { Kms, MultiBaseEncoder, MultiHashEncoder, TypedArrayEncoder, getPublicJwkFromVerificationMethod } from '@credo-ts/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { sha256 } from '@noble/hashes/sha2.js'
@@ -56,13 +56,30 @@ export function digestMultibase(value: unknown): string {
  *
  * Returns a NEW document object; the input is not mutated.
  */
+/**
+ * The DID document's first signing-capable verification method. did:peer:0
+ * documents list it under `verificationMethod`; did:peer:4 documents (credo's
+ * connection DIDs) EMBED it in `authentication`/`assertionMethod` instead —
+ * reading only `verificationMethod` finds nothing there.
+ */
+function firstSigningVerificationMethod(didDocument: {
+  verificationMethod?: unknown[]
+  authentication?: unknown[]
+  assertionMethod?: unknown[]
+}): VerificationMethod | undefined {
+  const embedded = (arr?: unknown[]) => (arr ?? []).find((entry) => typeof entry === 'object' && entry !== null)
+  return (embedded(didDocument.verificationMethod) ??
+    embedded(didDocument.assertionMethod) ??
+    embedded(didDocument.authentication)) as VerificationMethod | undefined
+}
+
 export async function signDocumentProof(
   agent: Agent,
   document: Record<string, unknown>,
   controllerDid: string
 ): Promise<Record<string, unknown>> {
   const didDocument = await agent.dids.resolveDidDocument(controllerDid)
-  const verificationMethod = didDocument.verificationMethod?.[0]
+  const verificationMethod = firstSigningVerificationMethod(didDocument as never)
   if (!verificationMethod) {
     throw new Error(`no verification method on ${controllerDid}`)
   }
@@ -130,7 +147,17 @@ export async function verifyDocumentProof(
     if (p.type !== 'DataIntegrityProof' || p.cryptosuite !== 'eddsa-jcs-2022') return false
     if (p.proofPurpose !== 'assertionMethod') return false
     const verificationMethodId = String(p.verificationMethod ?? '')
-    if (!verificationMethodId.startsWith(`${expectedController}#`)) return false
+    // The id must belong to the expected controller. did:peer:0 ids are
+    // absolute under the DID; did:peer:4 documents may carry RELATIVE ids
+    // (#key-N) and appear in long or short form (same 4zQm… hash base), so
+    // accept those shapes too — the key still comes from resolving
+    // expectedController, which is what binds the proof to the controller.
+    const controllerBase = expectedController.replace(/^(did:peer:4[^:]+).*$/, '$1')
+    const idBelongsToController =
+      verificationMethodId.startsWith('#') ||
+      verificationMethodId.startsWith(`${expectedController}#`) ||
+      (controllerBase !== expectedController && verificationMethodId.startsWith(`${controllerBase}#`))
+    if (!idBelongsToController) return false
     const proofValue = String(p.proofValue ?? '')
     if (!proofValue.startsWith('z')) return false
 
@@ -143,9 +170,10 @@ export async function verifyDocumentProof(
     signedInput.set(documentHash, configHash.length)
 
     const didDocument = await agent.dids.resolveDidDocument(expectedController)
+    const fragment = verificationMethodId.includes('#') ? verificationMethodId.slice(verificationMethodId.indexOf('#')) : ''
     const verificationMethod =
-      didDocument.verificationMethod?.find((m) => m.id === verificationMethodId) ??
-      didDocument.verificationMethod?.[0]
+      didDocument.verificationMethod?.find((m) => m.id === verificationMethodId || (fragment && m.id.endsWith(fragment))) ??
+      firstSigningVerificationMethod(didDocument as never)
     if (!verificationMethod) return false
     const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
     const publicKeyBytes = (publicJwk.publicKey as { publicKey: Uint8Array }).publicKey

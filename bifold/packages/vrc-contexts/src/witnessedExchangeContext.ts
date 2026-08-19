@@ -105,5 +105,17 @@ export const WITNESSED_EXCHANGE_CONTEXT_DOCUMENT = {
       '@id': 'https://trustoverip.org/credentials/witnessed-exchange#subject',
       '@type': '@id',
     },
+
+    // Trust Task Context Binding (DTG Core Credentials): the id of the
+    // witness/session document that opened this session — the innermost
+    // exchange attesting the witnessing (framework §4.9.1) — and the task
+    // digest binding that document (§4.9.3, promoted from cred-spec #229/#236).
+    taskContext: 'https://trustoverip.org/credentials/witnessed-exchange#taskContext',
+    taskDigestMultibase: 'https://trustoverip.org/credentials/witnessed-exchange#taskDigestMultibase',
+    // The two relationship DIDs of the witnessed exchange, as the session named them.
+    parties: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#parties',
+      '@container': '@set',
+    },
   },
 }

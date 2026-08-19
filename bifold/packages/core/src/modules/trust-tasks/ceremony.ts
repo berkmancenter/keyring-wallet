@@ -49,6 +49,7 @@ import {
   getConnectedWitnessConnectionId,
   getOrCreateRelationshipDid,
   getVrcJsonLdProofOptions,
+  isWitnessingPreferred,
   prepareVrcCredentialWithEvidence,
 } from '../vrc/vrc-manager'
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
@@ -174,10 +175,14 @@ async function openRelationshipExchange(agent: Agent, connectionId: string): Pro
     issuer: connection.did,
     recipient: connection.theirDid,
     issuedAt: new Date().toISOString(),
-    // Witnessed when this wallet has a witness connected; each side then runs
-    // its OWN witness session (the acceptance mirrors the flag). A side
-    // without a witness simply skips its session — witnessing is additive.
-    payload: { relationshipDid, witnessed: Boolean(getConnectedWitnessConnectionId()) },
+    // Witnessed when this wallet has a witness connected AND the user's
+    // witnessing preference allows it; each side then runs its OWN witness
+    // session (the acceptance mirrors the flag). A side without a witness
+    // simply skips its session — witnessing is additive.
+    payload: {
+      relationshipDid,
+      witnessed: Boolean(getConnectedWitnessConnectionId()) && (await isWitnessingPreferred()),
+    },
   }
 
   await service.retain(agent.context, document, 'request', connectionId)
@@ -527,7 +532,10 @@ export async function respondToRelationshipProposal(
   await sendTrustTaskDocument(agent, connectionId, response as unknown as Record<string, unknown>)
   logger.info(`${LOG_PREFIX} propose accepted; response sent (exchange ${exchangeId})`)
 
-  await deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId).catch((e: Error) =>
+  // Fire and forget for the same reason as the proposer side: the delivery
+  // may run the witness ceremony, and blocking the caller (the consent modal)
+  // for its duration serves nobody.
+  void deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId).catch((e: Error) =>
     logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
   )
 }
@@ -600,7 +608,7 @@ export async function deliverVrcViaTrustTaskForExchange(
       String(r.document.threadId ?? r.document.id) === exchangeId &&
       (r.document as { payload?: { witnessed?: boolean } }).payload?.witnessed === true
   )
-  if (exchangeWitnessed && witnessConnectionId) {
+  if (exchangeWitnessed && witnessConnectionId && (await isWitnessingPreferred())) {
     vrcFlowStore.setStatus(connectionId, 'witness-active', true)
     try {
       await runWitnessSession(agent, {
@@ -850,8 +858,12 @@ async function handleInboundProposeResponse(
   if (outcome.kind === 'handled') {
     agent.config.logger.info(`${LOG_PREFIX} propose#response consumed; relationship established (exchange ${document.threadId ?? document.id})`)
     // Proposer side of the authority flip: the exchange is accepted, deliver
-    // our VRC on its thread.
-    await deliverVrcViaTrustTaskForExchange(agent, context.connectionId, String(document.threadId ?? document.id)).catch(
+    // our VRC on its thread. FIRE AND FORGET — this handler runs inside
+    // credo's inbound message processing, and the delivery may await the
+    // witness ceremony, whose responses arrive through that same processing:
+    // awaiting here deadlocks the ceremony against its own transport (the
+    // challenge sits queued behind this very handler until timeout).
+    void deliverVrcViaTrustTaskForExchange(agent, context.connectionId, String(document.threadId ?? document.id)).catch(
       (e: Error) => agent.config.logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
     )
   }

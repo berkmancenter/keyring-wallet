@@ -13,43 +13,27 @@
  * value would let either party's presentation satisfy the other's session").
  * The issued VWC carries `taskContext` = the session document's id (§4.9.1)
  * and `taskDigestMultibase` binding that document by digest (§4.9.3).
+ *
+ * Consume runs through the local minimal pipeline (./framework.ts — the
+ * runtime package is ESM-only and this service is CommonJS); the wallet side
+ * uses the real framework runtime.
  */
 
 import type { Agent } from '@credo-ts/core'
-import { JsonTransformer, W3cCredential, W3cJsonLdVerifiablePresentation, ClaimFormat, utils } from '@credo-ts/core'
+import { JsonTransformer, W3cCredential, W3cJsonLdVerifiablePresentation, ClaimFormat } from '@credo-ts/core'
 import { DidCommMessageHandlerRegistry, DidCommMessageSender, DidCommOutboundMessageContext } from '@credo-ts/didcomm'
 import type { DidCommInboundMessageContext } from '@credo-ts/didcomm'
-import { consumeInbound, respondWith, rejectWith, extendedCode, StaticTransport } from '@openvtc/trust-tasks'
 import { randomBytes } from 'node:crypto'
 
 import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
-import { TrustTaskMessage, TRUST_TASK_BINDING_URI } from './TrustTaskMessage'
+import { consume, errorDocument, respondWith } from './framework'
+import { TrustTaskMessage } from './TrustTaskMessage'
 
-// Type URIs and §7.2 policies for the two witness legs, declared locally:
-// this package's classic module resolution cannot see the generated payload
-// modules behind @openvtc/trust-tasks' subpath exports. Values mirror the
-// published specs (witness/session 0.1, witness/session/submit 0.1) —
-// responses proof REQUIRED, submit request proof REQUIRED.
-const witnessSession = {
-  TYPE_URI: 'https://trusttasks.org/spec/witness/session/0.1',
-  SPEC: {
-    typeUri: 'https://trusttasks.org/spec/witness/session/0.1',
-    isBearer: false,
-    isProofRequired: false,
-    isRecipientRequired: true,
-  },
-} as const
-const witnessSubmit = {
-  TYPE_URI: 'https://trusttasks.org/spec/witness/session/submit/0.1',
-  SPEC: {
-    typeUri: 'https://trusttasks.org/spec/witness/session/submit/0.1',
-    isBearer: false,
-    isProofRequired: true,
-    isRecipientRequired: true,
-  },
-} as const
+const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
+const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
+const SUBMIT_NOT_BOUND = 'witness/session/submit:challengeMismatch'
 
 interface TaskSession {
   /** The session document's id — the VWC's taskContext. */
@@ -73,9 +57,6 @@ export interface WitnessTaskHost {
 }
 
 const SESSION_TTL_MS = 10 * 60 * 1000
-
-let errorSequence = 0
-const newErrorId = () => `err-${Date.now()}-${++errorSequence}`
 
 export class WitnessTaskSessions {
   private readonly sessions = new Map<string, TaskSession>()
@@ -109,101 +90,94 @@ export class WitnessTaskSessions {
     theirDid: string
   ): Promise<void> {
     const type = String(document.type ?? '')
-    if (type === witnessSession.TYPE_URI) {
-      await this.handleSession(document, connectionId, myDid, theirDid)
-    } else if (type === witnessSubmit.TYPE_URI) {
-      await this.handleSubmit(document, connectionId, myDid, theirDid)
+    let reply: Record<string, unknown> | undefined
+    if (type === SESSION_TYPE) {
+      reply = await this.handleSession(document, connectionId, theirDid)
+    } else if (type === SUBMIT_TYPE) {
+      reply = await this.handleSubmit(document, connectionId, theirDid)
     }
     // other trust-task types are the wallets' business, not the witness's
+    if (!reply) return
+
+    // Both witness responses declare proof REQUIRED — sign success replies
+    // with the witness's connection DID (what the wallet verifies under).
+    if (String(reply.type ?? '').endsWith('#response')) {
+      reply = await signDocumentProof(this.host.agent, reply, myDid)
+    }
+    const connection = await this.host.agent.modules.didcomm.connections.getById(connectionId)
+    const sender = this.host.agent.dependencyManager.container.resolve(DidCommMessageSender)
+    await sender.sendMessage(
+      new DidCommOutboundMessageContext(new TrustTaskMessage({ document: reply }), {
+        agentContext: this.host.agent.context,
+        connection,
+      })
+    )
   }
 
   /** witness/session → per-party session with a fresh single-use challenge. */
   private async handleSession(
     document: Record<string, unknown>,
     connectionId: string,
-    myDid: string,
     theirDid: string
-  ): Promise<void> {
-    const outcome = await consumeInbound({
-      transport: new StaticTransport({ issuer: theirDid, recipient: myDid }, TRUST_TASK_BINDING_URI),
-      spec: witnessSession.SPEC as never,
-      proofPolicy: { kind: 'acceptUnverified' },
-      payloadPolicy: { kind: 'acceptUnvalidated' },
-      doc: document as never,
-      myVid: myDid,
-      now: Date.now(),
-      newErrorId,
-      handler: (async (doc: { id: string; payload: { parties: [string, string] } }) => {
+  ): Promise<Record<string, unknown>> {
+    return consume({
+      document,
+      senderDid: theirDid,
+      proofRequired: false,
+      handler: async (doc) => {
+        const parties = (doc.payload as { parties?: [string, string] } | undefined)?.parties
+        if (!parties || parties.length !== 2) {
+          return errorDocument(doc, 'malformedRequest', 'session payload must name exactly two parties')
+        }
         const challenge = randomBytes(16).toString('hex')
-        const session: TaskSession = {
-          sessionId: doc.id,
+        this.sessions.set(String(doc.id), {
+          sessionId: String(doc.id),
           sessionDoc: document,
           connectionId,
-          parties: doc.payload.parties,
+          parties,
           challenge,
           domain: this.host.domain,
           createdAt: new Date(),
-        }
-        this.sessions.set(doc.id, session)
+        })
         this.expireSessionsOlderThan(SESSION_TTL_MS)
-        console.log(
-          `[${this.host.name}] Task session ${doc.id} opened for parties [${doc.payload.parties.join(', ')}]`
-        )
-        const response = respondWith(doc as never, utils.uuid(), { challenge, domain: this.host.domain }, () =>
-          new Date().toISOString()
-        ) as Record<string, unknown>
-        if (document.parentThreadId) response.parentThreadId = document.parentThreadId
-        return response
-      }) as never,
+        console.log(`[${this.host.name}] Task session ${doc.id} opened for parties [${parties.join(', ')}]`)
+        return respondWith(doc, { challenge, domain: this.host.domain })
+      },
     })
-    await this.reply(outcome as never, connectionId, myDid, /* signResponse */ true)
   }
 
   /** witness/session/submit → verify the VP against this session, issue the VWC. */
   private async handleSubmit(
     document: Record<string, unknown>,
     connectionId: string,
-    myDid: string,
     theirDid: string
-  ): Promise<void> {
-    const outcome = await consumeInbound({
-      transport: new StaticTransport({ issuer: theirDid, recipient: myDid }, TRUST_TASK_BINDING_URI),
-      spec: witnessSubmit.SPEC as never,
-      proofPolicy: {
-        kind: 'verify',
-        verify: {
-          verify: async (doc: unknown) => {
-            // The submit's proof must verify under one of the session's
-            // parties — the submitting wallet's relationship DID.
-            const threadId = String((doc as { threadId?: string }).threadId ?? '')
-            const session = this.sessions.get(threadId)
-            if (!session) return false
-            for (const party of session.parties) {
-              if (await verifyDocumentProof(this.host.agent, doc as Record<string, unknown>, party)) return true
-            }
-            return false
-          },
-        },
+  ): Promise<Record<string, unknown>> {
+    return consume({
+      document,
+      senderDid: theirDid,
+      proofRequired: true,
+      verifyProof: async (doc) => {
+        // The submit's proof must verify under one of the session's parties —
+        // the submitting wallet's relationship DID.
+        const session = this.sessions.get(String(doc.threadId ?? ''))
+        if (!session) return false
+        for (const party of session.parties) {
+          if (await verifyDocumentProof(this.host.agent, doc, party)) return true
+        }
+        return false
       },
-      payloadPolicy: { kind: 'acceptUnvalidated' },
-      doc: document as never,
-      myVid: myDid,
-      now: Date.now(),
-      newErrorId,
-      handler: (async (doc: { id: string; threadId?: string; payload: { vp: Record<string, unknown> } }) => {
+      handler: async (doc) => {
         const sessionId = String(doc.threadId ?? '')
         const session = this.sessions.get(sessionId)
         if (!session || session.connectionId !== connectionId) {
-          return rejectWith(doc as never, utils.uuid(), {
-            code: extendedCode(witnessSubmit.TYPE_URI, 'challengeMismatch'),
-            message: 'no session on this thread for this connection',
-            retryable: false,
-          })
+          return errorDocument(doc, SUBMIT_NOT_BOUND, 'no session on this thread for this connection')
         }
+
+        const vpJson = (doc.payload as { vp?: Record<string, unknown> } | undefined)?.vp
+        if (!vpJson) return errorDocument(doc, 'malformedRequest', 'submit payload carries no vp')
 
         // Verify the presentation cryptographically against THIS session's
         // challenge and domain.
-        const vpJson = doc.payload.vp
         let vpValid = false
         try {
           const vp = JsonTransformer.fromJSON(vpJson, W3cJsonLdVerifiablePresentation)
@@ -217,21 +191,13 @@ export class WitnessTaskSessions {
           vpValid = false
         }
         if (!vpValid) {
-          return rejectWith(doc as never, utils.uuid(), {
-            code: extendedCode(witnessSubmit.TYPE_URI, 'challengeMismatch'),
-            message: 'presentation not bound to this session',
-            retryable: false,
-          })
+          return errorDocument(doc, SUBMIT_NOT_BOUND, 'presentation not bound to this session')
         }
 
         // The VP holder must be one of the witnessed parties.
         const holder = String((vpJson as { holder?: string }).holder ?? '')
-        if (!session.parties.includes(holder as never)) {
-          return rejectWith(doc as never, utils.uuid(), {
-            code: extendedCode(witnessSubmit.TYPE_URI, 'challengeMismatch'),
-            message: 'presentation holder is not a party to this session',
-            retryable: false,
-          })
+        if (!session.parties.includes(holder as (typeof session.parties)[number])) {
+          return errorDocument(doc, SUBMIT_NOT_BOUND, 'presentation holder is not a party to this session')
         }
 
         // Build the VWC and bind it to THIS session (§4.9.1 + §4.9.3).
@@ -259,47 +225,9 @@ export class WitnessTaskSessions {
         this.sessions.delete(sessionId)
         console.log(`[${this.host.name}] Task session ${sessionId}: VWC issued (taskContext bound)`)
 
-        const response = respondWith(
-          doc as never,
-          utils.uuid(),
-          { vwc: signedVwcJson, vwcDigestMultibase: digestMultibase(signedVwcJson) },
-          () => new Date().toISOString()
-        ) as Record<string, unknown>
-        if (document.parentThreadId) response.parentThreadId = document.parentThreadId
-        return response
-      }) as never,
+        return respondWith(doc, { vwc: signedVwcJson, vwcDigestMultibase: digestMultibase(signedVwcJson) })
+      },
     })
-    await this.reply(outcome as never, connectionId, myDid, /* signResponse */ true)
-  }
-
-  /** Send a handler outcome back on the connection, signing success responses
-   * with the witness's connection DID (both witness responses declare proof
-   * REQUIRED — the wallet verifies under our connection DID). */
-  private async reply(
-    outcome: { kind: string; response?: unknown; error?: unknown },
-    connectionId: string,
-    myDid: string,
-    signResponse: boolean
-  ): Promise<void> {
-    let payload: Record<string, unknown> | undefined
-    if (outcome.kind === 'handled' && outcome.response) {
-      payload = outcome.response as Record<string, unknown>
-      const isError = String(payload.type ?? '').includes('/trust-task-error/')
-      if (signResponse && !isError) {
-        payload = await signDocumentProof(this.host.agent, payload, myDid)
-      }
-    } else if (outcome.kind === 'rejected' && outcome.error) {
-      payload = outcome.error as Record<string, unknown>
-    }
-    if (!payload) return
-    const connection = await this.host.agent.modules.didcomm.connections.getById(connectionId)
-    const sender = this.host.agent.dependencyManager.container.resolve(DidCommMessageSender)
-    await sender.sendMessage(
-      new DidCommOutboundMessageContext(new TrustTaskMessage({ document: payload }), {
-        agentContext: this.host.agent.context,
-        connection,
-      })
-    )
   }
 
   private expireSessionsOlderThan(ttlMs: number): void {
