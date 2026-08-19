@@ -826,6 +826,34 @@ mechanism to use rather than inferring it from a rejection.
 
 ---
 
+### 8.4 The user experience, end to end
+
+The governing principle comes from the exchange this rides in: as of the v4
+consent flip, a relationship exchange asks the user **one question** —
+accepting the proposal — and everything downstream is automatic. **Locality
+must not add a second question to the ceremony.** Its interactions belong at
+the edges: settings, the moment of joining an event, and the evidence a user
+can inspect afterwards. During the ceremony itself, locality is at most a
+line in the existing progress overlay.
+
+| Moment | What the user sees | What happens underneath |
+|---|---|---|
+| **Onboarding / Settings** | A single toggle: *"Confirm in-person meetings"* (default on), with one sentence: *"At participating events, lets the event confirm you and your contact met in person."* | `useLocalityConfirmation`, defined in one place (the [keyring-bifold#38](https://github.com/berkmancenter/keyring-bifold/issues/38) lesson). No permission is requested here. |
+| **Connecting to a witness** (scanning the event's QR) | This is the *"you are at an event"* moment, and the only new prompt surface. If the event **offers** locality: the OS Bluetooth permission request, primed by one app sheet first (*"⟨Event⟩ can confirm in-person meetings. Allow Bluetooth?"*). If the event **requires** it (known via the witness's discovery `requiredExt`) and the user declines or Bluetooth is off: say so **now** — *"This event requires in-person confirmation"* — with a settings deep-link, never mid-ceremony. | Permission requested once, at a moment with social context. The `required` refusal path surfaces here, before any exchange opens. |
+| **During the ceremony** | Nothing new to tap. The existing flow overlay gains at most one transient status line (*"Confirming you're here…"*) during the radio window. | The advert/transcript run inside the existing witnessed-exchange progress; the window is short and foreground-anchored. |
+| **Interrupted mid-window** (app backgrounded, locked, killed) | No error dialog. The exchange completes as it would have; the contact's witness record later shows *"in-person confirmation was interrupted"* rather than a failure. | The `window-lost` evidence state (§7.1 reason vocabulary): distinguishable from *declined* and from *not offered*, and read by a verifier as *try again*, not *suspicious*. |
+| **Afterwards** (contact detail / VWC view) | The witness record renders the tier as a plain badge with exactly three user-facing states: **Confirmed in person** (method shown on tap: BLE / kiosk), **Not confirmed** (with the reason: not offered / declined / interrupted), or nothing at all when the event ran with locality off. | `WitnessCredentialHandler` renders from the typed assertion — the three states of §7.1 mapped one-to-one, never collapsed into a boolean. |
+| **Gated event, refused entry** | If the witness policy is `required` and the ceremony proceeds anyway without locality, the refusal arrives as a task error — the wallet shows it as an event rule, not a technical fault: *"⟨Event⟩ requires in-person confirmation for exchanges here."* | The framework's `malformedRequest`-on-missing-namespace path (§8.2), translated to human language once, in one place. |
+
+**Two boundaries, stated so they hold:** the ceremony window never blocks on
+a human (no tap, no prompt, no modal inside it — if anything is missing, the
+exchange degrades per §8.3 and the evidence records why); and the Bluetooth
+permission dialog appears exactly once per install, at witness-connect,
+never later. Visual design is deliberately not specified here — this section
+fixes *when* and *what*, not *how it looks*.
+
+---
+
 ## 9. Privacy, permissions, threat model
 
 ### 9.1 Privacy
