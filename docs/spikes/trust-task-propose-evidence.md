@@ -83,3 +83,30 @@ Run verdict: `✅ E2E PASSED — vrc-exchange`, credentials in both wallets,
 contacts visible both sides. Raw logs: session scratchpad
 (`android-logcat.log`, `e2e-run3.log`) — logcat also archived the two earlier
 runs (16:25 pass without propose; 16:32 the race failure).
+
+## Second slice: the issue leg, live (same day, ~18:13 local, roles flipped)
+
+`PLATFORMS=ios,android` (Android pastes/sends; iOS was the deterministic
+proposer). The complete exchange on one thread, from Android's logcat:
+
+```
+18:13:03.098  didexchange/1.1/request created and packed (Android as invitee — clean send)
+18:13:04      didexchange response → complete   (connection in ~1.2 s)
+18:13:05.393  [TrustTasks:Ceremony] propose accepted; response sent (exchange d353d1f2…)
+18:13:10.744  [TrustTasks:Ceremony] issue sent (exchange d353d1f2…)
+18:13:10.898  [TrustTasks:Ceremony] issue receipt sent        (receipting iOS's delivery)
+18:13:11.063  [TrustTasks:Ceremony] issue receipt matched — VRC delivery acknowledged
+```
+
+Both directions' `vrc/relationships/issue/0.1` documents carried real
+`DataIntegrityProof / eddsa-jcs-2022` proofs (signed with each sender's
+relationship DID via the KMS; the spec declares the request proof REQUIRED and
+the framework enforces presence) and distinct `vrcDigestMultibase` values
+(e.g. `zQmQ3xjFCyC…` / `zQmYpENScrx…`), with receipts recomputing the digest
+over the credential as accepted. The e2e runner itself asserted all four
+ceremony markers before declaring PASS:
+`android: trust-task exchange markers all present (propose + issue legs)`.
+
+Shadow-mode boundaries in force: legacy issue-credential 2.0 remains the
+storage authority, proofs are produced but consumed under `acceptUnverified`
+until milestone 3 wires the verifier, and the RCard stays off the task.

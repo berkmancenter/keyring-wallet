@@ -109,6 +109,24 @@ at runtime in dev builds (~300 ms, request never reaches Metro). Fixed by
 switching to an inline lazy `require()` — same cycle-breaking, stays in the main
 bundle. Release builds were never affected (single bundle).
 
+### Correction: the "client-side one-off" recurred — intermittent iOS no-send
+
+The bwe4g97gc judgment above ("one-off at/before the OOB accept") did not
+hold: the same signature recurred in the evening runs (2 of 7 that day) with
+a crucial difference — this time iOS **did** create the connection record and
+navigate to chat, yet CFNetwork still shows zero HTTP attempts beyond pickup
+polls: no didexchange POST, no failed task, no cancelled task. The mechanism
+that makes this silent: bifold's `connectFromInvitation` → credo
+`receiveInvitation` auto-accepts by observing connection-record state; the
+didexchange send itself is dispatched in the background, and iOS surfaces
+only error-level JS logs to the system log (info/debug never reach os_log;
+Metro does not stream client logs in RN 0.81) — so a background send that
+dies quietly leaves a chat screen, a connection record, and an empty wire.
+Same-day control: with roles flipped (`PLATFORMS=ios,android`), Android's
+paste→didexchange send worked instantly and cleanly. OPEN — needs iOS-side
+JS observability (error-level breadcrumbs around the accept/send path, or an
+RCTLog forwarding change) before it can be root-caused.
+
 ### Fourth failure layer: relationshipDid race silently kills one issuance leg
 
 With the trust-task propose actually executing (post-`require()` fix), the next
