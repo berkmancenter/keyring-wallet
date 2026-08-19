@@ -10,6 +10,7 @@ import { EventTypes } from '../constants'
 import { TOKENS, useServices } from '../container-api'
 import { ActivityProvider } from '../contexts/activity'
 import { BiometricConfirmationProvider } from '../contexts/biometric-confirmation'
+import RelationshipProposalModal from '../modules/vrc/components/RelationshipProposalModal'
 import { useStore } from '../contexts/store'
 import { BifoldError } from '../types/error'
 import MainStack from './MainStack'
@@ -65,6 +66,7 @@ const RootStack: React.FC = () => {
               <WitnessConnectionProvider agent={agent}>
                 <ActivityProvider>
                   <MainStack />
+                  <RelationshipProposalModal />
                 </ActivityProvider>
               </WitnessConnectionProvider>
             </VrcNameCacheProvider>

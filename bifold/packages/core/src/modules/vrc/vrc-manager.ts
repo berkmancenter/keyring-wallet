@@ -525,6 +525,89 @@ export async function setRelationshipDidOnConnection(
  * @param preparedCredential - Optional pre-built credential (from witnessed exchange flow).
  *                             If provided, skips biometric confirmation since it was already done.
  */
+/**
+ * Build the unsigned VRC and run the hardware-attestation flow (biometric
+ * prompt → evidence block) when the preference allows and hardware supports
+ * it. Shared by the legacy issue-credential leg and the trust-task issue leg —
+ * the credential and its evidence are identical whichever leg delivers it.
+ */
+export async function prepareVrcCredentialWithEvidence(
+  agent: Agent,
+  connectionRecord: DidCommConnectionRecord,
+  myRelationshipDid: string,
+  counterpartyRelationshipDid: string
+): Promise<{ credential: any; biometricSkipped: boolean }> {
+  const logger = createVrcLogger(agent, { module: 'vrc', side: 'INVITER', component: 'prepareVrcCredential' })
+  let biometricSkipped = false
+
+  // Read useHardwareAttestation preference from AsyncStorage — callers are
+  // agent event handlers with no access to React context/useStore()
+  const preferences = await PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences)
+  const useHardwareAttestation = preferences?.useHardwareAttestation ?? true
+
+  logger.debug(`Hardware attestation preference: ${useHardwareAttestation}`)
+
+  const buildResult = await buildVrcCredential(agent, myRelationshipDid, counterpartyRelationshipDid)
+  const credential = buildResult.credential
+
+  logger.debug(`W3C credential: issuer=${myRelationshipDid}, subject=${counterpartyRelationshipDid}`)
+
+  const vrcContentForSigning = JSON.stringify(credential)
+  logger.info(`VRC content prepared for signing (${vrcContentForSigning.length} chars)`)
+
+  if (useHardwareAttestation) {
+    logger.info(`Step 3: Requesting biometric signing for ${connectionRecord.theirLabel || 'Unknown Contact'}...`)
+
+    const counterpartyName = connectionRecord.theirLabel || 'Unknown Contact'
+
+    const biometricResult = await requestBiometricWithHardwareSigning(
+      agent,
+      counterpartyName,
+      connectionRecord.id,
+      vrcContentForSigning
+    )
+
+    logger.info(`Biometric result: ${biometricResult.reason}`)
+
+    if (!biometricResult.success && biometricResult.reason !== 'not_available') {
+      biometricSkipped = true
+      logger.warn(`⚠️ Biometric ${biometricResult.reason} — proceeding without hardware attestation`)
+      vrcFlowStore.setStatus(connectionRecord.id, 'biometric-fallback', false)
+      await new Promise<void>((resolve) => setTimeout(resolve, 2000))
+      vrcFlowStore.setStatus(connectionRecord.id, 'preparing-offer', false)
+    }
+
+    if (biometricResult.reason === 'confirmed') {
+      logger.info(`✅ Biometric confirmed [${biometricResult.hardwareSignature?.platform}/${biometricResult.hardwareSignature?.keyStorage}]`)
+
+      if (biometricResult.hardwareSignature) {
+        const evidenceBuilder = createEvidenceBuilder(agent)
+        const evidenceResult = await evidenceBuilder.buildEvidenceFromSignature({
+          success: true,
+          signature: biometricResult.hardwareSignature,
+          reason: 'signed',
+        }, biometricResult.hardwareSignature.clientDataHash)
+
+        if (evidenceResult.success && evidenceResult.evidence) {
+          credential.evidence = [evidenceResult.evidence]
+          logger.info(`✅ Evidence block added [${evidenceResult.evidence.attestation.certificateChain.length} certs, source=${evidenceResult.attestationSource || 'none'}]`)
+        } else {
+          logger.warn(`⚠️ Could not build evidence block: ${evidenceResult.error || 'unknown error'}`)
+          logger.warn(`VRC will be issued without hardware attestation evidence`)
+        }
+      } else {
+        logger.info(`ℹ️ No hardware signature available`)
+      }
+    } else if (biometricResult.reason === 'not_available') {
+      logger.info(`ℹ️ Biometrics not available - proceeding without biometric confirmation`)
+    }
+  } else {
+    logger.info(`Hardware attestation disabled — skipping biometric evidence`)
+  }
+
+  return { credential, biometricSkipped }
+}
+
 async function issueVrcCredential(
   agent: Agent,
   connectionRecord: DidCommConnectionRecord,
@@ -545,6 +628,25 @@ async function issueVrcCredential(
   }
   connectionCredentialOffers.set(connectionId, 'pending')
 
+  // v4 pairs: the VRC rides the trust-task issue leg, and consent is the
+  // accepted proposal — the legacy VRC offer is suppressed so the user is not
+  // asked twice and the credential is not delivered twice. The RCard is a VDS
+  // with no task yet and still travels the legacy leg.
+  const relationshipRepositoryForGate = agent.dependencyManager.resolve(RelationshipDidRepository)
+  const relationshipRecordForGate = connectionRecord.theirDid
+    ? await relationshipRepositoryForGate.findByConnectionDid(agent.context, connectionRecord.theirDid)
+    : null
+  if (RCE_PROTOCOL_VERSION >= 4 && (relationshipRecordForGate?.counterpartyRceVersion ?? 1) >= 4) {
+    logger.info(`v4 pair — VRC rides the trust-task issue leg; issuing RCard only | Connection: ${connectionId}`)
+    connectionCredentialOffers.set(connectionId, 'offered')
+    try {
+      await issueRCardCredential(agent, connectionRecord, myRelationshipDid, counterpartyRelationshipDid)
+    } catch (rcardError) {
+      logger.warn(`RCard issuance failed (non-blocking): ${(rcardError as Error).message}`)
+    }
+    return { biometricSkipped: false }
+  }
+
   let credential: any
   let biometricSkipped = biometricAlreadySkipped ?? false
 
@@ -555,75 +657,15 @@ async function issueVrcCredential(
     credential = preparedCredential
     logger.info(`Credential already has evidence: ${!!credential.evidence}`)
   } else {
-    // Read useHardwareAttestation preference from AsyncStorage
-    // This is necessary because this function is called from agent event handlers
-    // that don't have access to React context/useStore()
-    const preferences = await PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences)
-    const useHardwareAttestation = preferences?.useHardwareAttestation ?? true
-    
-    logger.debug(`Hardware attestation preference: ${useHardwareAttestation}`)
-
-    // Build the credential using shared helper
-    const buildResult = await buildVrcCredential(agent, myRelationshipDid, counterpartyRelationshipDid)
-    credential = buildResult.credential
-
-    logger.debug(`W3C credential: issuer=${myRelationshipDid}, subject=${counterpartyRelationshipDid}`)
-
-    // Serialize credential content for signing
-    const vrcContentForSigning = JSON.stringify(credential)
-    logger.info(`VRC content prepared for signing (${vrcContentForSigning.length} chars)`)
-
-    // Conditionally perform biometric/attestation flow
-    if (useHardwareAttestation) {
-    logger.info(`Step 3: Requesting biometric signing for ${connectionRecord.theirLabel || 'Unknown Contact'}...`)
-    
-    const counterpartyName = connectionRecord.theirLabel || 'Unknown Contact'
-    
-    const biometricResult = await requestBiometricWithHardwareSigning(
+    const prepared = await prepareVrcCredentialWithEvidence(
       agent,
-      counterpartyName,
-      connectionRecord.id,
-      vrcContentForSigning
+      connectionRecord,
+      myRelationshipDid,
+      counterpartyRelationshipDid
     )
-    
-    logger.info(`Biometric result: ${biometricResult.reason}`)
-    
-    if (!biometricResult.success && biometricResult.reason !== 'not_available') {
-      biometricSkipped = true
-      logger.warn(`⚠️ Biometric ${biometricResult.reason} — proceeding without hardware attestation`)
-      vrcFlowStore.setStatus(connectionRecord.id, 'biometric-fallback', false)
-      await new Promise<void>((resolve) => setTimeout(resolve, 2000))
-      vrcFlowStore.setStatus(connectionRecord.id, 'preparing-offer', false)
-    }
-    
-    if (biometricResult.reason === 'confirmed') {
-      logger.info(`✅ Biometric confirmed [${biometricResult.hardwareSignature?.platform}/${biometricResult.hardwareSignature?.keyStorage}]`)
-      
-      if (biometricResult.hardwareSignature) {
-        const evidenceBuilder = createEvidenceBuilder(agent)
-        const evidenceResult = await evidenceBuilder.buildEvidenceFromSignature({
-          success: true,
-          signature: biometricResult.hardwareSignature,
-          reason: 'signed',
-        }, biometricResult.hardwareSignature.clientDataHash)
-        
-        if (evidenceResult.success && evidenceResult.evidence) {
-          credential.evidence = [evidenceResult.evidence]
-          logger.info(`✅ Evidence block added [${evidenceResult.evidence.attestation.certificateChain.length} certs, source=${evidenceResult.attestationSource || 'none'}]`)
-        } else {
-          logger.warn(`⚠️ Could not build evidence block: ${evidenceResult.error || 'unknown error'}`)
-          logger.warn(`VRC will be issued without hardware attestation evidence`)
-        }
-      } else {
-        logger.info(`ℹ️ No hardware signature available`)
-      }
-    } else if (biometricResult.reason === 'not_available') {
-      logger.info(`ℹ️ Biometrics not available - proceeding without biometric confirmation`)
-    }
-    } else {
-      logger.info(`Hardware attestation disabled — skipping biometric evidence`)
-    }
-  } // End of else (no preparedCredential) block
+    credential = prepared.credential
+    biometricSkipped = biometricSkipped || prepared.biometricSkipped
+  }
 
   logger.info(`Step 4: Offering credential [connection=${connectionRecord.id}]`)
 
@@ -2114,17 +2156,6 @@ export function setupVrcConnectionHandler(agent: Agent) {
       } else if (record.state === DidCommCredentialState.Done) {
         credLogger.info(`✓ Credential exchange completed successfully for exchange ${record.id}`)
         await logIssuedCredentialSnapshot(agent, record as any, side)
-        // v4 pairs additionally deliver the signed VRC as a trust-task `issue`
-        // on the relationship exchange thread (shadow of the legacy leg; the
-        // ceremony no-ops when no accepted exchange exists). Lazy require, same
-        // module-cycle break as the propose trigger above.
-        if (record.role === DidCommCredentialRole.Issuer && record.connectionId) {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { maybeDeliverVrcViaTrustTask } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
-          maybeDeliverVrcViaTrustTask(agent, record.connectionId, record.id).catch((e: Error) =>
-            credLogger.warn(`Trust-task VRC delivery failed: ${e.message}`)
-          )
-        }
       }
     } catch (_error) {
       // Silently ignore - this is just logging

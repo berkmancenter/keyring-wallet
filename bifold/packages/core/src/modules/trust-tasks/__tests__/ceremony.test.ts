@@ -10,10 +10,12 @@ import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/pay
 
 import {
   maybeOpenRelationshipExchange,
+  respondToRelationshipProposal,
   setupTrustTasksInbound,
   isDeterministicProposer,
   TRUST_TASKS_MIN_RCE_VERSION,
 } from '../ceremony'
+import { vrcFlowStore } from '../../vrc/witnessStatusStore'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 
@@ -134,7 +136,7 @@ describe('the capability gate', () => {
 })
 
 describe('inbound routing', () => {
-  test('an inbound propose stores the counterparty relationship DID and replies with acceptance', async () => {
+  test('an inbound propose awaits user consent; acceptance stores the DID and replies', async () => {
     const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4peer' })
     setupTrustTasksInbound(fake.agent)
 
@@ -148,17 +150,23 @@ describe('inbound routing', () => {
       payload: { relationshipDid: 'did:peer:peer-rel', witnessed: false },
     }, { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4peer' })
 
+    // Consent gate: nothing on the wire until the user answers.
+    expect(fake.sentMessages).toHaveLength(0)
+    expect(fake.relationshipRepo.updateCounterpartyRelationshipDid).not.toHaveBeenCalled()
+
+    await respondToRelationshipProposal(fake.agent, fake.connectionId, true)
+
     expect(fake.relationshipRepo.updateCounterpartyRelationshipDid).toHaveBeenCalledWith(
       expect.anything(),
       'did:peer:4peer',
       'did:peer:peer-rel',
       TRUST_TASKS_MIN_RCE_VERSION
     )
-    expect(fake.sentMessages).toHaveLength(1)
     const response = fake.sentMessages[0].document as { type: string; payload: { accept: boolean; relationshipDid: string } }
     expect(response.type).toBe(`${propose.TYPE_URI}#response`)
     expect(response.payload.accept).toBe(true)
     expect(response.payload.relationshipDid).toBe('did:peer:my-rel')
+    vrcFlowStore.clearFlow(fake.connectionId)
   })
 
   test('an inbound propose#response stores the counterparty relationship DID (proposer side closes)', async () => {

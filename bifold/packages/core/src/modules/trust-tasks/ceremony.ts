@@ -32,10 +32,22 @@ import {
 } from '@credo-ts/didcomm'
 import * as issue from '@openvtc/trust-tasks/vrc/relationships/issue/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
-import { utils } from '@credo-ts/core'
+import {
+  ClaimFormat,
+  JsonTransformer,
+  W3cCredential,
+  W3cCredentialRecord,
+  W3cJsonLdVerifiableCredential,
+  utils,
+} from '@credo-ts/core'
 
-import { getOrCreateRelationshipDid } from '../vrc/vrc-manager'
+import {
+  getOrCreateRelationshipDid,
+  getVrcJsonLdProofOptions,
+  prepareVrcCredentialWithEvidence,
+} from '../vrc/vrc-manager'
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
+import { vrcFlowStore } from '../vrc/witnessStatusStore'
 
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { TrustTaskMessage } from './messages/TrustTaskMessage'
@@ -112,102 +124,6 @@ export async function maybeOpenRelationshipExchange(
   agent.config.logger.info(`${LOG_PREFIX} propose sent (exchange ${exchangeId}) on connection ${connectionId}`)
 }
 
-/**
- * Milestone 2, second slice: the `issue` leg, shadow mode.
- *
- * Within an accepted relationship exchange, each party delivers its signed
- * VRC to the other as `vrc/relationships/issue` on the exchange thread, and
- * the receiver answers with the digest receipt (`#response`,
- * `vrcDigestMultibase` recomputed over the credential as accepted). The spec
- * declares the request proof REQUIRED, so the document is signed
- * (eddsa-jcs-2022) with the sender's relationship DID.
- *
- * Shadow mode: the legacy issue-credential 2.0 leg remains the storage
- * authority — this leg proves delivery and receipts it, and the receiver does
- * NOT store a second copy. Flipping authority (store from the task, retire
- * the legacy leg for v4 pairs) is the contract half of the migration and a
- * later slice.
- *
- * Called from the legacy credential handler when this side's ISSUER exchange
- * reaches Done — the signed VC exists at that moment. Idempotent per
- * direction: one issue request per exchange whose `issuer` is this side.
- */
-export async function maybeDeliverVrcViaTrustTask(
-  agent: Agent,
-  connectionId: string,
-  credentialExchangeId: string
-): Promise<void> {
-  const logger = agent.config.logger
-  const connection = await agent.modules.didcomm.connections.getById(connectionId)
-  if (!connection.did || !connection.theirDid) return
-
-  // Only within an ACCEPTED relationship exchange (which only v4↔v4 pairs open).
-  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
-  const proposeDocs = await documentRepository.findByQuery(agent.context, {
-    typeUri: propose.TYPE_URI,
-    connectionId,
-    role: 'request',
-  })
-  if (proposeDocs.length === 0) return
-  const exchangeId = String(proposeDocs[0].document.threadId ?? proposeDocs[0].document.id)
-  const responses = await documentRepository.findByQuery(agent.context, {
-    typeUri: propose.TYPE_URI,
-    connectionId,
-    role: 'response',
-  })
-  const accepted = responses.some((r) => (r.document as { payload?: { accept?: boolean } }).payload?.accept === true)
-  if (!accepted) {
-    logger.info(`${LOG_PREFIX} issue not sent — exchange ${exchangeId} has no accepted propose yet`)
-    return
-  }
-
-  // Idempotence per direction: both parties' requests are retained with
-  // role 'request', so discriminate by the document's issuer.
-  const priorIssues = await documentRepository.findByQuery(agent.context, {
-    typeUri: issue.TYPE_URI,
-    connectionId,
-    role: 'request',
-  })
-  if (priorIssues.some((r) => r.document.issuer === connection.did)) return
-
-  // The signed VRC this side just issued over the legacy leg.
-  const formatData = (await agent.modules.didcomm.credentials.getFormatData(credentialExchangeId)) as {
-    credential?: Record<string, unknown>
-  }
-  const byFormat = formatData.credential ?? {}
-  const signedVc = (byFormat.jsonld ?? Object.values(byFormat)[0]) as Record<string, unknown> | undefined
-  if (!signedVc) {
-    logger.warn(`${LOG_PREFIX} issue not sent — no issued credential on exchange record ${credentialExchangeId}`)
-    return
-  }
-  const typeArray = Array.isArray(signedVc.type) ? (signedVc.type as unknown[]) : [signedVc.type]
-  if (!typeArray.includes('RelationshipCredential')) return // the RCard is a VDS and never rides this task
-
-  const relationshipRepository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
-  const myRecord = await relationshipRepository.findByConnectionDid(agent.context, connection.theirDid)
-  const myRelationshipDid = myRecord?.myRelationshipDid
-  if (!myRelationshipDid) {
-    logger.warn(`${LOG_PREFIX} issue not sent — no relationshipDid for ${connection.theirDid}`)
-    return
-  }
-
-  const document: Record<string, unknown> = {
-    id: utils.uuid(),
-    type: issue.TYPE_URI,
-    threadId: exchangeId,
-    issuer: connection.did,
-    recipient: connection.theirDid,
-    issuedAt: new Date().toISOString(),
-    payload: { vrc: signedVc, vrcDigestMultibase: digestMultibase(signedVc) },
-  }
-  const signed = await signDocumentProof(agent, document, myRelationshipDid)
-
-  const service = getTrustTasksService(agent)
-  await service.retain(agent.context, signed, 'request', connectionId)
-  await sendTrustTaskDocument(agent, connectionId, signed)
-  logger.info(`${LOG_PREFIX} issue sent (exchange ${exchangeId}) on connection ${connectionId}`)
-}
-
 /** Pack a document onto the binding-0.2 carriage and send it over a connection. */
 export async function sendTrustTaskDocument(
   agent: Agent,
@@ -279,6 +195,17 @@ export function setupTrustTasksInbound(agent: Agent): void {
       return
     }
 
+    if (type.includes('/trust-task-error/')) {
+      // The counterparty refused a leg of the exchange — the notable case
+      // being a declined proposal. Retain the error (it is outcome evidence)
+      // and stand the flow down.
+      await service.retain(agent.context, document, 'error', context.connectionId)
+      const code = (document as { payload?: { code?: string } }).payload?.code ?? 'unknown'
+      logger.warn(`${LOG_PREFIX} trust-task-error received (${code}) on exchange ${document.threadId ?? document.id}`)
+      vrcFlowStore.clearFlow(context.connectionId)
+      return
+    }
+
     // Future legs (witness/session…) land in later milestones —
     // retain so nothing is lost, complain so nothing is silent.
     logger.info(`${LOG_PREFIX} unhandled trust-task type ${type} — retained`)
@@ -294,7 +221,19 @@ interface InboundContext {
   recipientDid: string
 }
 
-/** Counterparty proposes: validate, store their relationship DID, accept with ours. */
+/**
+ * Pending proposals awaiting the user's consent, keyed by connection id.
+ * The user's Accept/Decline (via `respondToRelationshipProposal`) resolves
+ * them; the prompt itself is surfaced through `vrcFlowStore`.
+ */
+const pendingProposals = new Map<string, { document: Record<string, unknown>; context: InboundContext }>()
+
+/**
+ * Counterparty proposes: validate through the pipeline, then surface the
+ * proposal for USER CONSENT — accepting the proposal is the trust-task
+ * dialect's consent moment (it replaces the legacy per-credential accept),
+ * so no response leaves until the user answers.
+ */
 async function handleInboundPropose(
   agent: Agent,
   service: TrustTasksService,
@@ -307,30 +246,158 @@ async function handleInboundPropose(
     myDid: context.recipientDid,
     senderDid: context.senderDid,
     connectionId: context.connectionId,
-    handler: async (doc) => {
-      const payload = (doc as { payload: { relationshipDid: string } }).payload
-      const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
-      await repository.updateCounterpartyRelationshipDid(
-        agent.context,
-        context.senderDid,
-        payload.relationshipDid,
-        TRUST_TASKS_MIN_RCE_VERSION
-      )
-      const myRelationshipDid = await getOrCreateRelationshipDid(agent, context.senderDid, context.connectionId)
-      return respondWith(doc as never, utils.uuid(), {
-        accept: true,
-        relationshipDid: myRelationshipDid,
-        witnessed: (doc as { payload: { witnessed?: boolean } }).payload.witnessed === true,
-      }, () => new Date().toISOString())
-    },
+    // Defer the answer to the user: a handler returning nothing is an
+    // 'accepted' outcome with no reply on the wire.
+    handler: async () => undefined,
   })
 
-  if (outcome.kind === 'handled' && outcome.response) {
-    await sendTrustTaskDocument(agent, context.connectionId, outcome.response as Record<string, unknown>)
-    agent.config.logger.info(`${LOG_PREFIX} propose accepted; response sent (exchange ${document.threadId ?? document.id})`)
-  } else if (outcome.kind === 'rejected') {
+  if (outcome.kind === 'rejected') {
     agent.config.logger.warn(`${LOG_PREFIX} propose rejected: ${JSON.stringify((outcome as { error?: { payload?: unknown } }).error?.payload)}`)
+    return
   }
+
+  const connection = await agent.modules.didcomm.connections.getById(context.connectionId)
+  pendingProposals.set(context.connectionId, { document, context })
+  vrcFlowStore.setProposalPrompt({
+    connectionId: context.connectionId,
+    exchangeId: String(document.threadId ?? document.id),
+    counterpartyLabel: connection.theirLabel ?? 'Unknown Contact',
+  })
+  agent.config.logger.info(
+    `${LOG_PREFIX} propose received — awaiting user consent (exchange ${document.threadId ?? document.id})`
+  )
+}
+
+/**
+ * The user's answer to a pending relationship proposal.
+ *
+ * Accept: store the counterparty's relationship DID, answer with ours
+ * (`accept: true`), then deliver our VRC on the exchange thread. Decline: a
+ * `trust-task-error` with `vrc/relationships/propose:declined` — the spec is
+ * explicit that a decline is never a response with `accept: false`.
+ */
+export async function respondToRelationshipProposal(
+  agent: Agent,
+  connectionId: string,
+  accept: boolean
+): Promise<void> {
+  const logger = agent.config.logger
+  const pending = pendingProposals.get(connectionId)
+  pendingProposals.delete(connectionId)
+  vrcFlowStore.clearProposalPrompt(connectionId)
+  if (!pending) {
+    logger.warn(`${LOG_PREFIX} no pending proposal for connection ${connectionId}`)
+    return
+  }
+  const { document, context } = pending
+  const exchangeId = String(document.threadId ?? document.id)
+  const service = getTrustTasksService(agent)
+
+  if (!accept) {
+    const error = rejectWith(document as never, utils.uuid(), {
+      code: extendedCode(propose.TYPE_URI, 'declined'),
+      message: 'The user declined the relationship',
+      retryable: false,
+    })
+    await service.retain(agent.context, error as never, 'error', connectionId)
+    await sendTrustTaskDocument(agent, connectionId, error as unknown as Record<string, unknown>)
+    vrcFlowStore.clearFlow(connectionId)
+    logger.info(`${LOG_PREFIX} propose declined by user (exchange ${exchangeId})`)
+    return
+  }
+
+  const payload = (document as { payload: { relationshipDid: string; witnessed?: boolean } }).payload
+  const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
+  await repository.updateCounterpartyRelationshipDid(
+    agent.context,
+    context.senderDid,
+    payload.relationshipDid,
+    TRUST_TASKS_MIN_RCE_VERSION
+  )
+  const myRelationshipDid = await getOrCreateRelationshipDid(agent, context.senderDid, connectionId)
+  const response = respondWith(document as never, utils.uuid(), {
+    accept: true,
+    relationshipDid: myRelationshipDid,
+    witnessed: payload.witnessed === true,
+  }, () => new Date().toISOString())
+  await service.retain(agent.context, response as never, 'response', connectionId)
+  await sendTrustTaskDocument(agent, connectionId, response as unknown as Record<string, unknown>)
+  logger.info(`${LOG_PREFIX} propose accepted; response sent (exchange ${exchangeId})`)
+
+  await deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId).catch((e: Error) =>
+    logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
+  )
+}
+
+/**
+ * Deliver this side's VRC on an accepted exchange thread: build the
+ * credential (with hardware-attestation evidence where available), sign it
+ * standalone (DataIntegrityProof via the registered suite), wrap it in a
+ * proof-bearing `vrc/relationships/issue` document, and send. Idempotent per
+ * direction. This is the authority-flip delivery path — for v4 pairs the
+ * legacy issue-credential leg no longer carries the VRC.
+ */
+export async function deliverVrcViaTrustTaskForExchange(
+  agent: Agent,
+  connectionId: string,
+  exchangeId: string
+): Promise<void> {
+  const logger = agent.config.logger
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.did || !connection.theirDid) return
+
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  const priorIssues = await documentRepository.findByQuery(agent.context, {
+    typeUri: issue.TYPE_URI,
+    connectionId,
+    role: 'request',
+  })
+  if (priorIssues.some((r) => r.document.issuer === connection.did)) return
+
+  const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
+  const record = await repository.findByConnectionDid(agent.context, connection.theirDid)
+  if (!record?.myRelationshipDid || !record.counterpartyRelationshipDid) {
+    logger.warn(`${LOG_PREFIX} VRC delivery skipped — relationship DIDs incomplete for ${connectionId}`)
+    return
+  }
+
+  vrcFlowStore.setStatus(connectionId, 'preparing-offer', false)
+  const { credential } = await prepareVrcCredentialWithEvidence(
+    agent,
+    connection,
+    record.myRelationshipDid,
+    record.counterpartyRelationshipDid
+  )
+
+  const proofOptions = await getVrcJsonLdProofOptions(agent, record.counterpartyRelationshipDid)
+  const didDocument = await agent.dids.resolveDidDocument(record.myRelationshipDid)
+  const verificationMethodId = didDocument.verificationMethod?.[0]?.id
+  if (!verificationMethodId) throw new Error(`no verification method on ${record.myRelationshipDid}`)
+
+  const signedCredential = await agent.w3cCredentials.signCredential({
+    format: ClaimFormat.LdpVc,
+    credential: JsonTransformer.fromJSON(credential, W3cCredential),
+    proofType: proofOptions.proofType,
+    verificationMethod: verificationMethodId,
+  })
+  const signedVc = JsonTransformer.toJSON(signedCredential) as Record<string, unknown>
+
+  const document: Record<string, unknown> = {
+    id: utils.uuid(),
+    type: issue.TYPE_URI,
+    threadId: exchangeId,
+    issuer: connection.did,
+    recipient: connection.theirDid,
+    issuedAt: new Date().toISOString(),
+    payload: { vrc: signedVc, vrcDigestMultibase: digestMultibase(signedVc) },
+  }
+  const signed = await signDocumentProof(agent, document, record.myRelationshipDid)
+
+  const service = getTrustTasksService(agent)
+  await service.retain(agent.context, signed, 'request', connectionId)
+  await sendTrustTaskDocument(agent, connectionId, signed)
+  vrcFlowStore.setStatus(connectionId, 'offer-sent', false)
+  logger.info(`${LOG_PREFIX} issue sent (exchange ${exchangeId}) on connection ${connectionId}`)
 }
 
 /**
@@ -412,7 +479,46 @@ async function handleInboundIssue(
         return notAccepted('credential subject is not this party relationship DID')
       }
 
-      return respondWith(doc as never, utils.uuid(), { vrcDigestMultibase: digestMultibase(vc) }, () =>
+      // Spec conformance (receiving party item 2): verify the credential's
+      // OWN proof before storing it or returning a receipt. A credential that
+      // does not even parse as a verifiable credential is the same refusal.
+      let credentialInstance: W3cJsonLdVerifiableCredential
+      try {
+        credentialInstance = JsonTransformer.fromJSON(vc, W3cJsonLdVerifiableCredential)
+      } catch {
+        return notAccepted('payload is not a well-formed verifiable credential')
+      }
+      const verification = await agent.w3cCredentials.verifyCredential({ credential: credentialInstance })
+      if (!verification.isValid) {
+        return notAccepted('credential proof did not verify')
+      }
+
+      // Authority flip: store the delivered VRC (deduplicated by digest —
+      // idempotent against redelivery and against a legacy-stored copy).
+      const deliveredDigest = digestMultibase(vc)
+      const existing = await agent.w3cCredentials.getAll()
+      const alreadyStored = existing.some((r) => {
+        try {
+          return digestMultibase(JsonTransformer.toJSON(r.firstCredential)) === deliveredDigest
+        } catch {
+          return false
+        }
+      })
+      if (!alreadyStored) {
+        await agent.w3cCredentials.store({
+          record: new W3cCredentialRecord({
+            credentialInstances: [{ credential: vc as never }],
+          }),
+        })
+        agent.config.logger.info(`${LOG_PREFIX} issue stored — VRC in wallet (exchange ${doc.threadId ?? doc.id})`)
+      } else {
+        agent.config.logger.info(`${LOG_PREFIX} issue already stored — receipting (exchange ${doc.threadId ?? doc.id})`)
+      }
+      vrcFlowStore.setStatus(context.connectionId, 'offer-received', false)
+
+      // The receipt digest is computed over the credential AS STORED — here
+      // byte-identical to the delivery we just accepted.
+      return respondWith(doc as never, utils.uuid(), { vrcDigestMultibase: deliveredDigest }, () =>
         new Date().toISOString()
       )
     },
@@ -506,5 +612,10 @@ async function handleInboundProposeResponse(
 
   if (outcome.kind === 'handled') {
     agent.config.logger.info(`${LOG_PREFIX} propose#response consumed; relationship established (exchange ${document.threadId ?? document.id})`)
+    // Proposer side of the authority flip: the exchange is accepted, deliver
+    // our VRC on its thread.
+    await deliverVrcViaTrustTaskForExchange(agent, context.connectionId, String(document.threadId ?? document.id)).catch(
+      (e: Error) => agent.config.logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
+    )
   }
 }

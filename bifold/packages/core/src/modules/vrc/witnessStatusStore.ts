@@ -78,12 +78,43 @@ export type VrcFlowStatus =
   | 'offer-sent'
   | 'offer-received'
 
+/**
+ * A pending relationship proposal awaiting the user's consent (the trust-task
+ * dialect's consent moment: accepting the proposal, not each credential).
+ */
+export interface RelationshipProposalPrompt {
+  connectionId: string
+  exchangeId: string
+  counterpartyLabel: string
+}
+
 class VrcFlowStore extends EventEmitter {
   private flowStatus: Map<string, VrcFlowStatus> = new Map()
   private isWitnessed: Map<string, boolean> = new Map()
   private hasReceivedOffer: Map<string, boolean> = new Map()
   private hasSentOffer: Map<string, boolean> = new Map()
   private flowErrors: Map<string, VrcFlowError> = new Map()
+  private proposalPrompts: Map<string, RelationshipProposalPrompt> = new Map()
+
+  /** Surface a relationship proposal for user consent ('proposalPrompt' event). */
+  setProposalPrompt(prompt: RelationshipProposalPrompt): void {
+    this.proposalPrompts.set(prompt.connectionId, prompt)
+    this.emit('proposalPrompt', prompt)
+  }
+
+  getProposalPrompt(connectionId: string): RelationshipProposalPrompt | undefined {
+    return this.proposalPrompts.get(connectionId)
+  }
+
+  /** The first pending prompt, if any — what a global consent modal renders. */
+  getAnyProposalPrompt(): RelationshipProposalPrompt | undefined {
+    return this.proposalPrompts.values().next().value
+  }
+
+  clearProposalPrompt(connectionId: string): void {
+    this.proposalPrompts.delete(connectionId)
+    this.emit('proposalPromptCleared', { connectionId })
+  }
 
   setStatus(connectionId: string, status: VrcFlowStatus, witnessed: boolean = false): void {
     this.flowStatus.set(connectionId, status)
