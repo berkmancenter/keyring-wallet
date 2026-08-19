@@ -15,13 +15,13 @@ specifically, so the coupling can be checked rather than assumed:
 
 | What locality needs | Owner | Status at the pin |
 |---|---|---|
-| The witnessed exchange as Trust Tasks — `witness/session`, `witness/session/submit`, request and `#response` | openvtc §5.4 **stage 2** | Designed and proven (ref-06w4, ref-06x). **Hard prerequisite** (§10.0) |
+| The witnessed exchange as Trust Tasks — `witness/session`, `witness/session/submit`, request and `#response` | openvtc §5.4 **stage 2** | **Implemented and live-proved**: two wallets + a witness-server complete the full ceremony under an e2e gate requiring the ceremony markers (§10.0). No longer a forward dependency |
 | The `ext` extension member on those four documents | Trust Tasks framework SPEC.md §4.5.1 | Merged upstream; verified in the pinned schemas (§6) |
 | `taskDigest(sessionDoc)` — the §4.9.3 digest over the session document | framework facility, shipped in trust-tasks 0.9.0 | Available. **Not** dependent on cred-spec #18 (§3) |
-| Trust Task document proofs — `eddsa-jcs-2022` | openvtc §4.5, Phase D item 2 | **Not yet implemented**; all rungs stub task proofs, and `ref-06p` does too (§6.1) |
+| Trust Task document proofs — `eddsa-jcs-2022` | openvtc §4.5, Phase D item 2 | **Implemented, both directions**: production (KMS-signed) and verification (expected-controller semantics). `ref-06p` still stubs task proofs for its own scope (§6.1); the framework facility itself is live |
 | Credential proofs — a **proof set**: `eddsa-jcs-2022` + `bbs-2023` | `docs/CRYPTO_SUITE_FOLLOWUP.md` Decisions 10–13 (2026-08-18), cred-spec #18 | Decided, not built. Supersedes the shipped `eddsa-rdfc-2022`. Drives the vocabulary requirement in §7.1 and the member layout in §7.1 |
 | BBS+ tooling (BLS12-381, on Hermes) | this plan, §11-Q5 | **Unsurveyed.** Does not block: the member layout is what must be right, and the second proof is additive |
-| Outcome-evidence retention of the `witness/session` + `submit#response` pair | openvtc §8.1 | Unscoped in any phase there; locality adds bytes to it but no new mechanism (§7.2) |
+| Outcome-evidence retention of the `witness/session` + `submit#response` pair | openvtc §8.1 | **Shipped**: the initiating-document + terminal-`#response` pair is retrievable by exchange id, which for a witness session is the VWC's `taskContext` (§7.2) |
 | Member-level selective disclosure (`bbs-2023` / `ecdsa-sd-2023`) | `CRYPTO_SUITE_FOLLOWUP.md` "still open" | Not available. Bounds what §9.1 can offer a holder |
 | Witness identity legible to a verifier (agent names, registry endorsement) | openvtc naming work | Future; bounds `venueClaim` (§11-Q4) |
 
@@ -31,6 +31,8 @@ specifically, so the coupling can be checked rather than assumed:
 |---|---|
 | [2026-07-20-bam.md](./locality-plan/2026-07-20-bam.md) | Mechanism survey, the honest-ceiling analysis, the standards ladder, and the first module sketch. The source material for this plan |
 | [2026-08-18-bam.md](./locality-plan/2026-08-18-bam.md) | **The reasoning behind everything in this plan**, in three parts: the design decisions that turn the survey into a plan (evidence direction inverted, `ext` as the wire seam, the ladder scoped); the review decisions (namespace root, venue-hosted witness, annotate-over-gate, witness-free locality closed, NFC as phase 2); and the ZKP revision (the proof set, the six assertion rules and the failures each prevents, the key-id correlation correction, the evidence-vs-unlinkability trade, and what was deferred). Read it before changing anything here |
+| [2026-08-19-al.md](./locality-plan/2026-08-19-al.md) | Review: the §10.0 prerequisites landed the night the plan went up (pin table refreshed here in its favor); the §8.2 policy mechanism is already implementable on shipped discovery; three ceremony-window edges from a day of live runs. Also the §5.1 two-channel figure and the §8.4 end-to-end UX section, contributed directly |
+| [2026-08-19-bam.md](./locality-plan/2026-08-19-bam.md) | Dispositions on the three 2026-08-19-al.md findings: all three adopted, with the `windowSeconds` anchor narrowed to a sensor-side-only trust parameter, separated from the device's own (non-normative) advertise timeout |
 
 ---
 
@@ -458,6 +460,26 @@ false-rejection rate stated. A bound that rejects honest devices is worse than
 no bound, because it converts a probabilistic security gain into a reliable
 availability loss.
 
+**A second, distinct bound: `windowSeconds` is the sensor's own trust
+parameter, not the device's.** It is easy to conflate two different things
+under one name: how long the *device* keeps advertising before giving up, and
+how long the *sensor* will still credit a connection as belonging to the
+session it opened. Only the second is load-bearing. The device's own patience
+is an app-level UX choice — it decides when to show "interrupted" (§7.1's
+`windowLost` reason) and does not travel in any credential — so it is not
+specified here and does not need to be. `windowSeconds` in the directive
+(§5.3, §6) is the sensor's bound: it is anchored to **the sensor's own
+clock, from the moment it starts scanning for the session's expected EID to
+the moment it first observes a matching advert**, not to when the directive
+was minted. Both ends of that measurement are the witness's own — it mints
+the challenge that derives the EID and it does the scanning — so the bound
+never depends on the device's clock or on how long the directive took to
+reach the device over the task channel. Anchoring it at mint time instead
+would fold task-channel delivery latency (mediator dial-out, pickup-poll
+cadence) into a security parameter that has nothing to do with delivery,
+and would shrink the honest device's real window unpredictably as that
+latency varies. `ref-06p2` measures against this anchor.
+
 ### 5.6 Where the sensor runs — decided: the witness is on location
 
 **The witness server runs at the venue**, on a small Linux machine with a BLE
@@ -646,7 +668,14 @@ Six rules, each stopping a specific failure:
 5. **`localityConfirmed: false` is emitted, not omitted**, with a
    `localityReason`. A verifier must be able to distinguish *"attempted and did
    not succeed"* from *"this witness does not do locality"* — and the only signal
-   for the latter is the **absence of the members entirely**.
+   for the latter is the **absence of the members entirely**. The reason
+   vocabulary itself must distinguish *declined* from *interrupted*, because a
+   verifier should treat them differently — one is a choice, the other says
+   *try again*, not *suspicious*: `declinedByHolder` (the §8.1 setting was off)
+   and `windowLost` (the ceremony window closed before the radio phase
+   completed — the app backgrounded, locked, or was watchdog-killed mid-window,
+   the common case at a real event) are both first-class values, not a shared
+   catch-all.
 6. **No `residuals` member.** What a method cannot exclude is a deterministic
    function of `localityMethod`, so a verifier who reads the method knows them.
    Carried as a disclosable set it would let a holder reveal the flattering half
@@ -810,6 +839,20 @@ deployment decision with a visible cost, made per event, not a default.
 a wallet can tell the user what this witness requires *before* the ceremony
 rather than after a refusal (§8.3).
 
+**The publication mechanism is shipped, not aspirational.**
+`trust-task-discovery` (framework 0.1) carries it: a wallet queries before
+proposing, and any v4 witness answers with its `supportedTypes`. The tiers
+above map onto that response directly:
+
+- **`off`** — the response lists `witness/session` bare, or omits it.
+- **`offered`** — bare listing; the witness annotates the outcome when the
+  wallet offers.
+- **`required`** — the **expanded** `supportedTypes` entry,
+  `{ "type": ".../witness/session/0.1", "requiredExt": ["edu.harvard.seas.atl.keyring"] }`
+  — the framework's own rejection rule (`malformedRequest` on a listed
+  namespace the producer did not populate) enforces it without locality
+  writing any gating logic of its own.
+
 ### 8.3 The cross-product, resolved
 
 | Wallet | Witness `off` | Witness `offered` | Witness `required` |
@@ -841,7 +884,7 @@ line in the existing progress overlay.
 | **Onboarding / Settings** | A single toggle: *"Confirm in-person meetings"* (default on), with one sentence: *"At participating events, lets the event confirm you and your contact met in person."* | `useLocalityConfirmation`, defined in one place (the [keyring-bifold#38](https://github.com/berkmancenter/keyring-bifold/issues/38) lesson). No permission is requested here. |
 | **Connecting to a witness** (scanning the event's QR) | This is the *"you are at an event"* moment, and the only new prompt surface. If the event **offers** locality: the OS Bluetooth permission request, primed by one app sheet first (*"⟨Event⟩ can confirm in-person meetings. Allow Bluetooth?"*). If the event **requires** it (known via the witness's discovery `requiredExt`) and the user declines or Bluetooth is off: say so **now** — *"This event requires in-person confirmation"* — with a settings deep-link, never mid-ceremony. | Permission requested once, at a moment with social context. The `required` refusal path surfaces here, before any exchange opens. |
 | **During the ceremony** | Nothing new to tap. The existing flow overlay gains at most one transient status line (*"Confirming you're here…"*) during the radio window. | The advert/transcript run inside the existing witnessed-exchange progress; the window is short and foreground-anchored. |
-| **Interrupted mid-window** (app backgrounded, locked, killed) | No error dialog. The exchange completes as it would have; the contact's witness record later shows *"in-person confirmation was interrupted"* rather than a failure. | The `window-lost` evidence state (§7.1 reason vocabulary): distinguishable from *declined* and from *not offered*, and read by a verifier as *try again*, not *suspicious*. |
+| **Interrupted mid-window** (app backgrounded, locked, killed) | No error dialog. The exchange completes as it would have; the contact's witness record later shows *"in-person confirmation was interrupted"* rather than a failure. | The `windowLost` reason (§7.1 reason vocabulary): distinguishable from *declined* and from *not offered*, and read by a verifier as *try again*, not *suspicious*. |
 | **Afterwards** (contact detail / VWC view) | The witness record renders the tier as a plain badge with exactly three user-facing states: **Confirmed in person** (method shown on tap: BLE / kiosk), **Not confirmed** (with the reason: not offered / declined / interrupted), or nothing at all when the event ran with locality off. | `WitnessCredentialHandler` renders from the typed assertion — the three states of §7.1 mapped one-to-one, never collapsed into a boolean. |
 | **Gated event, refused entry** | If the witness policy is `required` and the ceremony proceeds anyway without locality, the refusal arrives as a task error — the wallet shows it as an event rule, not a technical fault: *"⟨Event⟩ requires in-person confirmation for exchanges here."* | The framework's `malformedRequest`-on-missing-namespace path (§8.2), translated to human language once, in one place. |
 
@@ -918,11 +961,15 @@ fixes *when* and *what*, not *how it looks*.
 
 ### 10.0 Prerequisites (from the OpenVTC plan)
 
-The witnessed exchange must be running as Trust Tasks (`openvtc-integration-plan`
-§5.4 stage 2) and the outcome-evidence retention of §8.1 must exist. Locality is
-**not** retrofitted onto the legacy chat-message ceremony: the `ext` seam, the
-`taskContext` digest, and the retained pair are all task-layer facilities, and
-building it twice is exactly the "second task spine" the parent plan forbids.
+The witnessed exchange runs as Trust Tasks (`openvtc-integration-plan` §5.4
+stage 2, live since 2026-08-18 — see
+[2026-08-19-al.md](./locality-plan/2026-08-19-al.md) Finding 1) and the
+outcome-evidence retention of §8.1 exists. Locality is **not** retrofitted onto
+the legacy chat-message ceremony — that path is itself standing down for v4
+pairs in favor of the task ceremony — so the `ext` seam, the `taskContext`
+digest, and the retained pair are all task-layer facilities. A locality-specific
+path built alongside them, rather than on them, would be exactly the "second
+task spine" the parent plan forbids.
 
 ### 10.1 The reference ladder — `tsp-reference/ref-06p*`
 
@@ -944,13 +991,15 @@ free for the Credo adapter, RN, and the Keyring module.
 
 ### 10.2 Witness server
 
-1. **Rework `LocalityService` to the observer direction** (§5.2). The rotating
-   broadcast challenge and `verifyLocality`'s presence-only signature check go
-   away; the session challenge already issued by `witness/session#response`
-   becomes the input, and signature verification becomes real (resolve the key,
-   verify the transcript). *Done when:* no code path records a proof the sensor
-   did not itself observe, and a transcript with a valid-looking but wrong
-   signature is rejected.
+1. **Add the observer direction to `WitnessTaskSessions`** (§5.2) — the module
+   that hosts the live witnessed ceremony
+   (`witness-server/src/trustTasks/WitnessTaskSessions.ts`), not the legacy
+   `LocalityService`, which is standing down for v4 pairs and is not worth
+   reworking. The session challenge already issued by `witness/session#response`
+   becomes the transcript's input, and signature verification is real (resolve
+   the key, verify the transcript). *Done when:* no code path records a proof
+   the sensor did not itself observe, and a transcript with a valid-looking but
+   wrong signature is rejected.
 2. **`BleLocalityProvider`** implementing the (revised) `LocalityProvider` port
    over BlueZ — scan for expected EIDs, connect, run the transcript, report
    observations with `rttMs`/`rssi`. `NullLocalityProvider` stays as the default.
@@ -959,9 +1008,10 @@ free for the Credo adapter, RN, and the Keyring module.
    witness DID in phase 1 (§4.2). *Done when:* a second sensor can be added by
    configuration alone, proven by running two in-process sensors with distinct
    DIDs.
-4. **Policy configuration** — `off | offered | required`, published via
-   discovery (§8.2). *Done when:* the cross-product table of §8.3 is exercised
-   end-to-end, including the refusal path.
+4. **Policy configuration** — `off | offered | required`; `required` published
+   as the expanded `supportedTypes` entry carrying `requiredExt` on the
+   witness's discovery responder (§8.2). *Done when:* the cross-product table
+   of §8.3 is exercised end-to-end, including the refusal path.
 5. **VWC assembly** — `buildWitnessCredentialJson` emits the typed assertion,
    including explicit negatives. *Done when:* `confirmed:false` appears with a
    reason on every failure path, and the member is absent only when policy is
@@ -976,15 +1026,22 @@ free for the Credo adapter, RN, and the Keyring module.
 7. **`useLocalityConfirmation` setting**, default true in store and in the
    AsyncStorage read path (§8.1). *Done when:* a fresh install defaults on, the
    toggle round-trips, and off produces no Bluetooth permission prompt.
-8. **Device-side peripheral** — advertise the EID as a service UUID, serve the
+8. **Read `requiredExt` on the witness row of a discovery response**, not just
+   the propose row, and surface it at witness-connect (§8.4's "Connecting to a
+   witness" moment) — before Bluetooth permission is requested and before any
+   session opens. *Done when:* a `required` witness's discovery response drives
+   the pre-flight "this event requires in-person confirmation" sheet, and the
+   `malformedRequest` refusal (§8.2) is never the first the user hears of it in
+   the run where discovery already told the wallet.
+9. **Device-side peripheral** — advertise the EID as a service UUID, serve the
    GATT characteristic, sign with the existing hardware-attestation key, all
    inside the ceremony window and foreground only. *Done when:* the app's
    transcript verifies in the `ref-06p3` verifier unchanged.
-9. **`ext` on the two request documents**, and the wallet-side cross-check that
+10. **`ext` on the two request documents**, and the wallet-side cross-check that
    the `#response` assertion matches what the device actually did. *Done when:* a
    witness claiming an observation the device did not make is detected and
    surfaced.
-10. **Display and consent** — `WitnessCredentialHandler` renders the tier
+11. **Display and consent** — `WitnessCredentialHandler` renders the tier
    honestly (venue-scale, not "verified together"), and the pre-ceremony sheet
    explains what will be shared. Note this is a **shape** change on the consumer
    side too: `witnessCredentialUtils.ts` and the handler read
@@ -992,17 +1049,17 @@ free for the Credo adapter, RN, and the Keyring module.
    with flat `locality*` members. *Done when:* `localityConfirmed:false`,
    `localityMethod:"none"`, and absent-members all render as three visibly
    different states, and the reader no longer looks for a nested object.
-11. **`e2e:vrc:devices` covers locality** on physical phones with a real sensor —
+12. **`e2e:vrc:devices` covers locality** on physical phones with a real sensor —
     the same rule that already makes hardware attestation provable only there.
     *Done when:* the suite fails if the locality assertion is missing or
     unconfirmed on a run where it should be confirmed.
-12. **A vocabulary guard in CI**, not a discipline. A test in the bifold suite
+13. **A vocabulary guard in CI**, not a discipline. A test in the bifold suite
     expands **every credential shape we issue** against the real context document
     and fails on any dropped term — `ref-06p` act 6 promoted from a rung
     demonstration to a standing check. *Done when:* deleting one term from
     `witnessedExchangeContext.ts` turns the suite red. This is what stops the
     §7.1 defect recurring on the next evidence member somebody adds.
-13. **Selective-disclosure presentation**, once BBS+ tooling exists (§11-Q5): the
+14. **Selective-disclosure presentation**, once BBS+ tooling exists (§11-Q5): the
     holder discloses tier 1 by default and opts into tier 2/3. *Done when:* a
     derived proof carrying tier 1 alone verifies, and the wallet's presentation
     UI names what each tier costs. Additive — it does not change §7.1's layout,
@@ -1071,7 +1128,7 @@ composes with our Data Integrity path, and **whether BLS12-381 runs on Hermes** 
 the same class of problem the noble HPKE work solved for TSP, and plausibly the
 same answer. Deferred on purpose: the member layout is the part that cannot be
 retrofitted, and it is fixed without any of this. *Check before the
-selective-disclosure step (§10.3 item 13), not before the rest.*
+selective-disclosure step (§10.3 item 14), not before the rest.*
 
 **Q6 — the issuer's second key.** BBS+ runs over BLS12-381, so every issuer of a
 DTG credential needs a BLS key alongside its Ed25519 one — the witness server,
