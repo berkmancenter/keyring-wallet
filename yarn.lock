@@ -2256,6 +2256,15 @@ __metadata:
   languageName: node
   linkType: soft
 
+"@bifold/react-native-locality-peripheral@portal:bifold/packages/react-native-locality-peripheral::locator=keyring-wallet%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@bifold/react-native-locality-peripheral@portal:bifold/packages/react-native-locality-peripheral::locator=keyring-wallet%40workspace%3A."
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  languageName: node
+  linkType: soft
+
 "@bifold/remote-logs@portal:bifold/packages/remote-logs::locator=keyring-wallet%40workspace%3A.":
   version: 0.0.0-use.local
   resolution: "@bifold/remote-logs@portal:bifold/packages/remote-logs::locator=keyring-wallet%40workspace%3A."
@@ -14246,6 +14255,7 @@ __metadata:
     "@bifold/oca": "npm:3.0.16"
     "@bifold/react-hooks": "npm:3.0.16"
     "@bifold/react-native-attestation": "npm:3.0.16"
+    "@bifold/react-native-locality-peripheral": "npm:0.1.0"
     "@bifold/remote-logs": "npm:3.0.16"
     "@bifold/verifier": "npm:3.0.16"
     "@bifold/vrc-contexts": "npm:0.1.0-alpha.1"
