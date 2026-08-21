@@ -24,8 +24,10 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource } from 
 import {
   acceptInvitationViaPaste,
   acceptRelationshipProposalIfPrompted,
+  assertContactShields,
   assertTrustTaskExchangeMarkers,
   assertWitnessCeremonyMarkers,
+  assertWitnessShareMarkers,
   assertVrcReceived,
   completeOnboarding,
   connectToWitness,
@@ -77,6 +79,15 @@ try {
     assertWitnessCeremonyMarkers(a),
     assertWitnessCeremonyMarkers(b),
   ]);
+  await Promise.all([
+    assertWitnessShareMarkers(a),
+    assertWitnessShareMarkers(b),
+  ]);
+
+  // The user-visible payoff: the Witnessed badge on BOTH contact screens,
+  // earned by each wallet verifying the peer's shared bundle.
+  await assertContactShields(a, "Bob Baker", 120000, { requireSecureExchange: false });
+  await assertContactShields(b, "Alice Anderson", 120000, { requireSecureExchange: false });
 
   printSuccess("vrc-exchange-witnessed");
   process.exitCode = 0;

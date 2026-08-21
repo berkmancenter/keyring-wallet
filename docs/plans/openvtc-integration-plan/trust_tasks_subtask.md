@@ -1051,11 +1051,65 @@ legacy dialect.
 
 **Remaining delta to done:** a legacy peer still completes an exchange via
 the dual-send path (§7.2) — true by construction (sub-v4 peers keep the
-untouched legacy flow) but not yet evidenced against an actual v3 build;
-and the witnessed path (step 5) passes live — both halves are built and
-unit-proven (see [`2026-08-18-al.md`](./2026-08-18-al.md) §F), with the
-witnessed run against a live witness-server the remaining verification.
+untouched legacy flow) but not yet evidenced against an actual v3 build.
+The witnessed path (step 5) passes live, simulator and attended devices
+both (see [`2026-08-19-al.md`](./2026-08-19-al.md) §E).
 
+### 7. VWC sharing — counterparty visibility of the witnessing
+
+A witnessed exchange leaves each wallet holding a VWC about its **own**
+issuance (`witness/session` is per-party; the `submit#response` returns the
+credential to the submitter), and nothing carries it to the counterparty —
+so the contact screen's Witnessed indicator, which keys on a stored VWC
+whose subject is the *peer's* relationship DID, stays dark
+([`2026-08-19-al.md`](./2026-08-19-al.md) §E). The legacy flow solved this
+by witness-side cross-distribution — the witness pushed each VWC to the
+other party unbidden. That mechanism does not return: the holder controls
+disclosure (cred-spec, Outcome Interpretability — a holder presenting a
+`taskContext`-bearing credential MUST include matching outcome evidence),
+and a witness volunteering a credential about your exchange to a third
+party is exactly what the per-party model removes.
+
+**`vrc/relationships/witness-share/0.1`** closes the gap holder-side: after
+its witness session completes and its issue leg is sent, each party sends
+the peer its **presentation bundle** — the VWC wrapped in a signed VP plus
+the retained outcome-evidence pair (the §9-step-5 assembly), on the
+exchange thread, proof REQUIRED under the sender's relationship DID. The
+VP's challenge is the exchange thread id and its domain a fixed
+`vrc:witness-share` — freshness within the DIDComm channel comes from the
+channel and the thread binding, and replay across exchanges fails the
+challenge check. A bare VWC on the issue leg is rejected as the
+alternative: it would deliver a credential stripped of the evidence that
+makes it mean anything, re-creating the silent failure retention exists to
+prevent, and it would leave the verifier path (`verifyVwcPresentationBundle`)
+without a production consumer.
+
+The receiver runs the full pairing algorithm before anything is stored:
+document proof under the sender's relationship DID, presentation verified
+against the expected challenge/domain, credential valid AND completion
+evidenced, the VWC's subject equal to the sender's relationship DID as the
+accepted proposal established it, and its `parties` naming both
+relationship DIDs. Only then is the VWC stored (digest-deduplicated) and
+receipted — the Witnessed indicator is *earned by verification*, never
+granted on receipt. Any failure refuses with a `trust-task-error` and
+stores nothing. The type is advertised through `supportedTypes`; a sender
+whose peer does not list it skips the share silently (earlier v4 peers).
+The spec module is local until the `vrc/*` batch upstreams (step 2 owns
+that), where it joins as a third relationship task.
+
+**Built and live-proven on the simulator pair (Keyring,
+`feat/trust-tasks-integration`): both contact screens show the Witnessed
+indicator from a bundle each wallet verified itself, gated by markers and
+UI assertion; reasoning and the e2e findings in
+[`2026-08-20-al.md`](./2026-08-20-al.md).**
+
+**Done when:** on a witnessed exchange between two current wallets, both
+contact screens show the Witnessed indicator, gated in the witnessed e2e
+by UI assertion plus `witness-share sent` / `witness-share verified and
+stored` markers; a tampered bundle (wrong subject, missing or error-typed
+evidence, failed VP challenge) is refused with nothing stored, unit-proven;
+and an exchange with a peer that does not advertise the type completes
+exactly as today.
 
 ## 10. Open questions
 

@@ -1,6 +1,6 @@
 # TSP / OpenVTC Integration — Analysis, Architecture & Phased Plan
 
-*Living plan for the OpenVTC infrastructure-compatibility workstream, at **Rev 14**. Supporting research (TSP/DIDComm learning notes, engineering brief) is kept out of the repo for now; ask if you want it.*
+*Living plan for the OpenVTC infrastructure-compatibility workstream, at **Rev 15**. Supporting research (TSP/DIDComm learning notes, engineering brief) is kept out of the repo for now; ask if you want it.*
 
 **Subtask plans** — each owned by this plan, each stating current design for one workstream in detail:
 
@@ -24,6 +24,7 @@
 | 12 (08-17) | [`2026-08-17-bam.md`](./openvtc-integration-plan/2026-08-17-bam.md) — Brendan. The PNM/CNM subplan's upstream-alignment sweep (seven corrections, one of which — outcome evidence is a *pair* — rewrote §8.1 here) and the four scope gaps closed against it: the CLI counterparty, backup/restore and mnemonic export brought in scope, P6's two-service split, approvals management. Generates roadmap items 11 and 12 |
 | 13 (08-18) | [`2026-08-18-bam.md`](./openvtc-integration-plan/2026-08-18-bam.md) — Brendan. §4.5: JCS is a **credential** question now, not only an auth one. §4.6's three open questions **decided** — VRC/VWC move to a `eddsa-jcs-2022` + `bbs-2023` proof set, evidence summaries become commitments (cred-spec's `digest` stays), and the session binding is shaped for the canonical transcript additively. Driven by treating ZKP presentation as a requirement; recorded as `CRYPTO_SUITE_FOLLOWUP.md` Decisions 10–13, which supersede 3, 6 and 7. A third argument for JCS — RDF canonicalization leaves undefined extension members **unsigned and undisclosable**, measured in `ref-06p` — drafted as a comment for #18, unposted. Spun out of the [locality plan](./locality-plan.md) |
 | 14 (08-19) | [`2026-08-19-al.md`](./openvtc-integration-plan/2026-08-19-al.md) — Alberto. Step 5's done-when met: presentation assembly of VWC + retained outcome evidence with the verifier's pairing algorithm, live-proven under a self-check gate in the witnessed e2e; three conformance corrections to the shipped witness path (proof-excluding task digest, decoded-byte digest comparison, latest-response terminal pairing); the attended device run (M4) green with the hardware-attestation evidence block proven, surfacing the VWC-sharing gap (the Witnessed badge stays dark under v4 — mechanism undecided) |
+| 15 (08-20) | [`2026-08-20-al.md`](./openvtc-integration-plan/2026-08-20-al.md) — Alberto. Step 7 (VWC sharing) built and live-proven: `vrc/relationships/witness-share` carries the holder's presentation bundle, the counterparty runs the full pairing before storing, and the Witnessed indicator lights on both contact screens in the witnessed e2e; discovery made symmetric; two retention/schema subtleties recorded; the R-Card legacy-trigger starvation finding with a backlog hardening |
 
 ---
 

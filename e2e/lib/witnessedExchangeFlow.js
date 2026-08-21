@@ -23,6 +23,7 @@ import {
   assertVrcReceived,
   assertContactShields,
   assertWitnessCeremonyMarkers,
+  assertWitnessShareMarkers,
   completeOnboarding,
   connectToWitness,
   enableHardwareAttestation,
@@ -220,27 +221,18 @@ export async function runWitnessedExchange({
       assertHardwareEvidenceMarker(sessionB),
     ]);
 
-    // OBSERVATION, not a gate: under v4 each wallet's VWC names its OWN
-    // relationship DID as subject (the witness attests the submitter), and
-    // nothing delivers it to the peer — so the contact's Witnessed badge
-    // (keyed on a VWC whose subject is the PEER's DID) is not expected to
-    // light up until VWC sharing lands (issue-leg carriage or the
-    // presentation flow). Record what actually shows.
-    for (const [session, peer] of [
-      [sessionA, IDENTITY_B],
-      [sessionB, IDENTITY_A],
-    ]) {
-      try {
-        await assertContactShields(session, `${peer.firstName} ${peer.lastName}`, 45000, {
-          requireSecureExchange: false,
-        });
-        console.log(`[e2e] ${session.e2ePlatform}: Witnessed badge IS shown (v4)`);
-      } catch {
-        console.log(
-          `[e2e] ${session.e2ePlatform}: OBSERVATION — Witnessed badge not shown (expected under v4; VWC subject is the holder's own DID)`
-        );
-      }
-    }
+    // Step 7: each wallet verifies the peer's shared bundle before the
+    // Witnessed badge lights — gate the markers, then the badge itself.
+    await Promise.all([
+      assertWitnessShareMarkers(sessionA),
+      assertWitnessShareMarkers(sessionB),
+    ]);
+    await assertContactShields(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`, 120000, {
+      requireSecureExchange: false,
+    });
+    await assertContactShields(sessionB, `${IDENTITY_A.firstName} ${IDENTITY_A.lastName}`, 120000, {
+      requireSecureExchange: false,
+    });
 
     printSuccess(name);
     process.exitCode = 0;

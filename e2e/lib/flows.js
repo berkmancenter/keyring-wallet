@@ -653,23 +653,40 @@ export async function returnToContacts(driver) {
   );
 }
 
-/** Open a stored contact's detail screen by tapping its row in the Contacts list. */
+/**
+ * Open a stored contact's DETAIL screen. Tapping a Contacts row either opens
+ * the CHAT (then the VRC ContactDetails screen — shields, Witness Records —
+ * sits behind the chat header's ContactMenu → "View Contact") or opens
+ * Contact Details directly; the helper detects which. If the chat is already
+ * open for this peer, it starts from the menu.
+ */
 export async function openContactDetail(driver, peerName) {
-  let onTab = false;
-  for (let backs = 0; backs < 3 && !onTab; backs++) {
-    if (await existsTestId(driver, "Contacts", 3000)) {
-      await tapTestIdReliable(driver, "Contacts", () => leftStackedScreen(driver));
-      onTab = true;
-      break;
+  // Already on the peer's chat? (header menu present + peer name visible)
+  if (!(await existsTestId(driver, "ContactMenu", 2000))) {
+    let onTab = false;
+    for (let backs = 0; backs < 3 && !onTab; backs++) {
+      if (await existsTestId(driver, "Contacts", 3000)) {
+        await tapTestId(driver, "Contacts");
+        onTab = true;
+        break;
+      }
+      await unlockIfLocked(driver);
+      if (await existsTestId(driver, "BackButton", 2000)) {
+        await tapTestIdReliable(driver, "BackButton", () => leftStackedScreen(driver)).catch(() => {});
+      }
     }
-    await unlockIfLocked(driver);
-    if (await existsTestId(driver, "BackButton", 2000)) {
-      await tapTestIdReliable(driver, "BackButton", () => leftStackedScreen(driver)).catch(() => {});
-    }
+    const row = byTextContains(driver, peerName);
+    await row.waitForExist({ timeout: 30000 });
+    await row.click();
   }
-  const row = byTextContains(driver, peerName);
-  await row.waitForExist({ timeout: 30000 });
-  await row.click();
+  // Two shapes: the row opens the CHAT (header ContactMenu → View Contact),
+  // or it opens Contact Details directly — detect which, don't assume.
+  if (await existsTestId(driver, "ContactMenu", 5000)) {
+    await tapTestId(driver, "ContactMenu", 5000);
+    const viewContact = byTextContains(driver, "View Contact");
+    await viewContact.waitForExist({ timeout: 10000 });
+    await viewContact.click();
+  }
 }
 
 /**
@@ -691,6 +708,20 @@ export async function openContactDetail(driver, peerName) {
  * at all), so re-requiring it here would fail the run over the same
  * uncontrollable hardware/root-expiry fact already accepted upstream.
  */
+/** A testID declared WITHOUT the com.ariesbifold:id/ prefix (raw accessibility id / resource-id). */
+async function existsRawId(driver, key, timeout = 2000) {
+  const el =
+    driver.e2ePlatform === "android"
+      ? driver.$(`android=new UiSelector().resourceId("${key}")`)
+      : driver.$(`~${key}`);
+  try {
+    await el.waitForExist({ timeout });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function assertContactShields(driver, peerName, timeout = 240000, options = {}) {
   const requireSecureExchange = options.requireSecureExchange ?? true;
   const deadline = Date.now() + timeout;
@@ -698,11 +729,18 @@ export async function assertContactShields(driver, peerName, timeout = 240000, o
   let sawWitness = false;
   while (Date.now() < deadline) {
     await openContactDetail(driver, peerName);
+    // ContactDetails declares these testIDs BARE (no com.ariesbifold:id/
+    // prefix), so check the raw accessibility id too — the prefixed lookup
+    // misses them on iOS, and the text fallback fails there because the
+    // section header renders uppercased ("WITNESS RECORDS").
     sawAttestation =
       (await existsTestId(driver, "SecureExchangeBadge", 3000)) ||
+      (await existsRawId(driver, "SecureExchangeBadge", 2000)) ||
       (await byTextContains(driver, "Secure Exchange").isExisting());
     sawWitness =
       (await existsTestId(driver, "WitnessSection", 3000)) ||
+      (await existsRawId(driver, "WitnessSection", 2000)) ||
+      (await existsRawId(driver, "WitnessedBadge", 2000)) ||
       (await byTextContains(driver, "Witness Records").isExisting());
     if ((sawAttestation || !requireSecureExchange) && sawWitness) {
       console.log(
@@ -865,6 +903,40 @@ export async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
   }
   throw new Error(
     `android: witness ceremony markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
+  );
+}
+
+/**
+ * The witness-share markers (step 7), from Android's run-scoped logcat.
+ * Android's log covers all four directions: its own share sent, the peer's
+ * share verified AND stored, our receipt sent, and the peer's receipt
+ * matched back to our share. No-op on iOS drivers.
+ */
+export async function assertWitnessShareMarkers(driver, timeout = 120000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:Ceremony\] witness-share sent/, "witness-share sent"],
+    [/\[TrustTasks:Ceremony\] witness-share verified and stored/, "witness-share verified and stored"],
+    [/\[TrustTasks:Ceremony\] witness-share receipt sent/, "witness-share receipt sent"],
+    [/\[TrustTasks:Ceremony\] witness-share receipt matched/, "witness-share receipt matched"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log("[e2e] android: witness-share markers all present (shared → verified → stored → receipted)");
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: witness-share markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
   );
 }
 
