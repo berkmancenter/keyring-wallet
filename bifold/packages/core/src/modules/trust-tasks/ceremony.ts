@@ -50,6 +50,7 @@ import {
   getOrCreateRelationshipDid,
   getVrcJsonLdProofOptions,
   isWitnessingPreferred,
+  issueRCardForAcceptedExchange,
   prepareVrcCredentialWithEvidence,
 } from '../vrc/vrc-manager'
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
@@ -616,6 +617,11 @@ export async function respondToRelationshipProposal(
   // for its duration serves nobody.
   void deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId).catch((e: Error) =>
     logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
+  )
+  // The R-Card (still on the legacy leg) rides this acceptance as its trigger
+  // too — the basic-message announcement it used to depend on can be lost.
+  void issueRCardForAcceptedExchange(agent, connectionId).catch((e: Error) =>
+    logger.warn(`${LOG_PREFIX} R-Card issuance after acceptance failed: ${e.message}`)
   )
 }
 
@@ -1188,6 +1194,10 @@ async function handleInboundProposeResponse(
     // challenge sits queued behind this very handler until timeout).
     void deliverVrcViaTrustTaskForExchange(agent, context.connectionId, String(document.threadId ?? document.id)).catch(
       (e: Error) => agent.config.logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
+    )
+    // And the R-Card, on the legacy leg, with the acceptance as its trigger.
+    void issueRCardForAcceptedExchange(agent, context.connectionId).catch((e: Error) =>
+      agent.config.logger.warn(`${LOG_PREFIX} R-Card issuance after acceptance failed: ${e.message}`)
     )
   }
 }

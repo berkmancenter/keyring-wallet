@@ -23,6 +23,7 @@ import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDi
 jest.mock('../../vrc/vrc-manager', () => ({
   getOrCreateRelationshipDid: jest.fn(async () => 'did:peer:my-rel'),
   getConnectedWitnessConnectionId: jest.fn(() => undefined),
+  issueRCardForAcceptedExchange: jest.fn(async () => undefined),
 }))
 
 // ---- a minimal fake agent ---------------------------------------------------

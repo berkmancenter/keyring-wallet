@@ -803,6 +803,50 @@ async function issueRCardCredential(
 }
 
 /**
+ * Issue the R-Card on a connection whose relationship exchange the Trust Task
+ * dialect has just ACCEPTED (both relationship DIDs and the peer's RCE
+ * version are on the record). Called by the ceremony from both the responder's
+ * acceptance and the proposer's consumption of it.
+ *
+ * Why a second trigger: the legacy trigger (the peer's
+ * `vrc:relationshipDid … rceVersion` basic-message announcement) can be lost
+ * — observed live: the connection-complete trigger deferred ("Peer RCE version
+ * unknown yet") and nothing resumed it, so the task exchange completed while
+ * the R-Card never went out and the contact showed as "Unknown …DID". The
+ * accepted proposal is processed reliably by both sides and carries the same
+ * facts, so it triggers the R-Card too. Duplicate-safe: issueRCardCredential's
+ * own per-connection lock makes whichever trigger runs second a no-op. The
+ * invitation's mode flag is respected exactly as the legacy triggers do
+ * (bidirectional: both sides; unidirectional: the INVITER only).
+ */
+export async function issueRCardForAcceptedExchange(agent: Agent, connectionId: string): Promise<void> {
+  const logger = createVrcLogger(agent, { module: 'vrc', side: 'INVITER', component: 'issueRCardForAcceptedExchange' })
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.theirDid) return
+  const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
+  const record = await repository.findByConnectionDid(agent.context, connection.theirDid)
+  if (!record?.myRelationshipDid || !record.counterpartyRelationshipDid) {
+    logger.debug(`R-Card trigger skipped — relationship DIDs incomplete | Connection: ${connectionId}`)
+    return
+  }
+
+  if (connection.outOfBandId) {
+    const outOfBandRecord = await agent.modules.didcomm.oob.findById(connection.outOfBandId)
+    const goalCode = outOfBandRecord?.outOfBandInvitation?.goalCode
+    const isBidirectional = goalCode === 'relationship.credential.bidirectional'
+    const isUnidirectional = goalCode === 'relationship.credential'
+    const isInviter = outOfBandRecord?.role === DidCommOutOfBandRole.Sender
+    if (!(isBidirectional || (isUnidirectional && isInviter))) {
+      logger.debug(`R-Card trigger skipped — invitation mode ${goalCode ?? 'unknown'} | Connection: ${connectionId}`)
+      return
+    }
+  }
+
+  logger.info(`Triggering R-Card issuance from the accepted relationship exchange | Connection: ${connectionId}`)
+  await issueRCardCredential(agent, connection, record.myRelationshipDid, record.counterpartyRelationshipDid)
+}
+
+/**
  * Callback for witness session updates
  * This will be set by the WitnessConnectionProvider
  */

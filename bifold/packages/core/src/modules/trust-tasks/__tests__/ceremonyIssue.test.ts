@@ -52,6 +52,7 @@ const SIGNED_VRC = {
 jest.mock('../../vrc/vrc-manager', () => ({
   getOrCreateRelationshipDid: jest.fn(async () => 'did:peer:0zMyRel'),
   getConnectedWitnessConnectionId: jest.fn(() => undefined),
+  issueRCardForAcceptedExchange: jest.fn(async () => undefined),
   prepareVrcCredentialWithEvidence: jest.fn(async () => ({ credential: UNSIGNED_VRC, biometricSkipped: false })),
   getVrcJsonLdProofOptions: jest.fn(async () => ({ proofType: 'DataIntegrityProof', cryptosuite: 'eddsa-rdfc-2022' })),
 }))
@@ -239,6 +240,9 @@ describe('the proposer side (auto-delivery on acceptance)', () => {
     )
     await flushDelivery() // delivery is fire-and-forget off the inbound handler
 
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { issueRCardForAcceptedExchange } = require('../../vrc/vrc-manager') as { issueRCardForAcceptedExchange: jest.Mock }
+    expect(issueRCardForAcceptedExchange).toHaveBeenCalledWith(fake.agent, fake.connectionId)
     expect(fake.sentMessages).toHaveLength(3) // discovery, propose, then our issue
     const doc = fake.sentMessages[2].document as {
       type: string
@@ -318,6 +322,11 @@ describe('the responder side (consent gates everything)', () => {
       .find((d) => d.type === issue.TYPE_URI)
     expect(issueDoc?.threadId).toBe('aaaa1111-1111-4111-8111-111111111111')
     expect(vrcFlowStore.getProposalPrompt(fake.connectionId)).toBeUndefined()
+    // The acceptance also triggers the R-Card (legacy leg) — the basic-message
+    // announcement it used to depend on can be lost.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { issueRCardForAcceptedExchange } = require('../../vrc/vrc-manager') as { issueRCardForAcceptedExchange: jest.Mock }
+    expect(issueRCardForAcceptedExchange).toHaveBeenCalledWith(fake.agent, fake.connectionId)
   })
 
   test('user decline sends a trust-task-error (propose:declined), never accept:false', async () => {

@@ -27,6 +27,7 @@ import * as witnessShare from '../witnessShareSpec'
 jest.mock('../../vrc/vrc-manager', () => ({
   getOrCreateRelationshipDid: jest.fn(async () => 'did:peer:0zMyRel'),
   getConnectedWitnessConnectionId: jest.fn(() => undefined),
+  issueRCardForAcceptedExchange: jest.fn(async () => undefined),
   isWitnessingPreferred: jest.fn(async () => false),
   prepareVrcCredentialWithEvidence: jest.fn(async () => ({ credential: {}, biometricSkipped: false })),
   getVrcJsonLdProofOptions: jest.fn(async () => ({ proofType: 'DataIntegrityProof', cryptosuite: 'eddsa-rdfc-2022' })),
