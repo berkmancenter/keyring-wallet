@@ -38,6 +38,15 @@ message, in addition to the existing screenshot/log dumps.
 
 ## One-time setup
 
+> **After pulling `feat/trust-tasks-integration`:** run `yarn install` at the
+> repo root (the lockfile and the `@bifold/*` portals changed — the app now
+> bundles `@bifold/trust-tasks`), `git submodule update --init` (the bifold
+> pointer advanced), restart Metro with `yarn start --reset-cache`, and
+> **rebuild the iOS device app** before any device run (it bundles its JS —
+> see "Real devices"). Android debug builds load JS from Metro and need no
+> rebuild for JS-only changes.
+
+
 ```bash
 cd e2e
 npm install                      # webdriverio
@@ -344,6 +353,18 @@ adb devices                                      # list connected serials
 ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
   yarn e2e:vrc:witnessed:android-only
 ```
+
+## The Trust Task dialect (v4) — what the runs assert now
+
+Since the relationship exchange moved onto Trust Tasks (plan: `docs/plans/openvtc-integration-plan/trust_tasks_subtask.md` §9), the VRC runs drive and assert a different flow than the legacy offer/accept one:
+
+- **Consent is the relationship proposal, not per-credential offers.** One bottom-sheet appears on the *non-proposer* wallet (the proposer is deterministic — lower connection DID); `acceptRelationshipProposalIfPrompted` taps it. There is no VRC credential-offer to accept (the R-Card, still on the legacy leg, auto-accepts and is hidden). `acceptCredentialOfferFromChat` remains for legacy runners only.
+- **The gates are log markers, read from Android's run-scoped logcat** (`adb logcat -c` at session start; iOS has no logcat, Android's log covers both directions): `assertTrustTaskExchangeMarkers` (discovery → propose → issue sent/stored → receipts), `assertWitnessCeremonyMarkers` (session → challenge → VP → VWC → outcome-evidence self-check), `assertWitnessShareMarkers` (witness-share sent → verified and stored → receipted), and on devices the hardware-evidence marker (`Evidence block added […]` — the run fails loudly if the exchange downgrades to unattested).
+- **UI gates:** `assertVrcReceived` (contact with the peer's name — the name comes from the R-Card), and `assertContactShields` (the **Witnessed** indicator, plus Secure Exchange on devices). `openContactDetail` handles both navigation shapes (Contacts row → chat → header `ContactMenu` → View Contact, or straight to Contact Details) and checks ContactDetails' *bare* testIDs (`WitnessSection`, `WitnessedBadge`, `SecureExchangeBadge` — no `com.ariesbifold:id/` prefix).
+- **Runners:** `yarn e2e:vrc:witnessed` — simulator + emulator, unattended, the full witnessed exchange with a local witness behind a cloudflared tunnel (run from repo root; `APPIUM_PORT=4750 WDA_LOCAL_PORT=8101 ANDROID_AVD=<your AVD> yarn e2e:vrc:witnessed` is the known-good invocation on a Mac with an iPhone simulator); `yarn e2e:vrc:witnessed:devices` — the attended real-device version (the demo path; see `docs/DEMO_RUNBOOK_WITNESSED_EXCHANGE.md`).
+- **Env that matters:** `APPIUM_PORT` (default 4723 — set another port if something else already listens there), `WDA_LOCAL_PORT` (iOS simulator WebDriverAgent; 8101 known good), `ANDROID_AVD` (default `Pixel_8_API_33`). The Android 16 / API 36 PIN-modal fix (`waitForKeyboardGone` in `enableHardwareAttestation`) is in place and unchanged by the v4 work.
+- **Known intermittents on simulators, not regressions:** one wallet occasionally misses the witness connection ("only 1/2 participants connected") or iOS never sends the didexchange request (the open "iOS no-send"); the witness agent init can hang under heavy machine load. Re-run. None has been seen on real devices so far.
+- **Between runs:** free ports 4750/9002/9003 and kill stray `cloudflared`; cold-reboot an emulator that has been up for hours (its host network path degrades).
 
 ## Troubleshooting
 

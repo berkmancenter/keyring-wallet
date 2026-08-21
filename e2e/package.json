@@ -13,7 +13,8 @@
     "store-migration:android-only": "node run-store-migration-android-only.js",
     "onboarding-smoke": "node run-onboarding-smoke.js",
     "vrc-exchange:witnessed:devices": "node run-vrc-exchange-witnessed-devices.js",
-    "vrc-exchange:witnessed:android-only": "node run-vrc-exchange-witnessed-android-only-devices.js"
+    "vrc-exchange:witnessed:android-only": "node run-vrc-exchange-witnessed-android-only-devices.js",
+    "vrc-exchange:witnessed": "node run-vrc-exchange-witnessed.js"
   },
   "dependencies": {
     "webdriverio": "^9.12.0"

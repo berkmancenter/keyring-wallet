@@ -144,6 +144,9 @@ export function iosCaps() {
     "appium:enforceAppInstall": true,
     "appium:newCommandTimeout": 300,
     "appium:autoAcceptAlerts": true,
+    // WDA defaults to :8100, which collides with anything else on that port
+    // (e.g. a local VTA); override with WDA_LOCAL_PORT
+    "appium:wdaLocalPort": Number(process.env.WDA_LOCAL_PORT || 8100),
     "appium:wdaLaunchTimeout": 180000,
     "appium:simulatorStartupTimeout": 300000,
   };

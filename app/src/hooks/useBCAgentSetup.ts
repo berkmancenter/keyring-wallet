@@ -10,6 +10,7 @@ import {
   useStore,
   WalletSecret,
   setupVrcConnectionHandler,
+  setupTrustTasksInbound,
 } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
 import {
@@ -28,6 +29,24 @@ import { CachesDirectoryPath } from 'react-native-fs'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
 import { BCState, BCLocalStorageKeys } from '@/store'
 
+/**
+ * NSURLSession (iOS) reuses idle keep-alive sockets the mediator side has
+ * already reset (~45-50s idle); the POST then fails with "Network request
+ * failed" and CFNetwork never retries non-idempotent requests, so a single
+ * stale socket kills a DIDComm exchange. OkHttp on Android retries stale
+ * pooled connections transparently — this restores parity by retrying the
+ * send once on a fresh connection. See docs/spikes/e2e-vrc-connect-findings.md.
+ */
+class RetryingHttpOutboundTransport extends DidCommHttpOutboundTransport {
+  public async sendMessage(outboundPackage: Parameters<DidCommHttpOutboundTransport['sendMessage']>[0]) {
+    try {
+      return await super.sendMessage(outboundPackage)
+    } catch {
+      return await super.sendMessage(outboundPackage)
+    }
+  }
+}
+
 const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cachedTransactions = await PersistentStorage.fetchValueForKey<any>(BCLocalStorageKeys.GenesisTransactions)
@@ -37,14 +56,18 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
   }
 }
 
-// Live mode holds a WebSocket open to the mediator, which pushes messages as
-// they arrive (upstream bc-wallet-mobile approach). This replaced the previous
-// batch-pickup + 5s trust-ping polling loop; our hosted mediator advertises a
-// wss endpoint so the socket-based delivery works without polling.
+// Pickup V2 periodic polling (10s, set in bc-agent-modules). Live mode held a
+// WebSocket open for mediator push, but a socket that dies silently (NAT/proxy
+// idle reaping) leaves the wallet deaf for minutes AND the mediator live-pushes
+// into the dead socket without requeueing — the message is lost outright
+// (measured 2026-08-18: mediator reported message_count:0 after such a window;
+// docs/spikes/e2e-vrc-connect-findings.md). Polling makes every delivery
+// request/ack'd against the mediator's queue and each poll self-heals a dead
+// socket. Revisit live mode once the mediator requeues unacked live deliveries.
 const configureMessagePickup = async (agent: Agent): Promise<void> => {
   await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
     undefined,
-    DidCommMediatorPickupStrategy.PickUpV2LiveMode
+    DidCommMediatorPickupStrategy.PickUpV2
   )
 }
 
@@ -102,7 +125,7 @@ const useBCAgentSetup = () => {
 
       const newAgent = new Agent(options)
       const wsTransport = new DidCommWsOutboundTransport()
-      const httpTransport = new DidCommHttpOutboundTransport()
+      const httpTransport = new RetryingHttpOutboundTransport()
 
       newAgent.modules.didcomm.registerOutboundTransport(wsTransport)
       newAgent.modules.didcomm.registerOutboundTransport(httpTransport)
@@ -218,6 +241,9 @@ const useBCAgentSetup = () => {
 
       logger.info('Setting up VRC connection handler...')
       setupVrcConnectionHandler(newAgent)
+
+      logger.info('Setting up Trust Tasks inbound handler (binding 0.2)...')
+      setupTrustTasksInbound(newAgent)
 
       if (__DEV__) {
         // Level 2b probe: prove eddsa-rdfc-2022 sign/verify on-device

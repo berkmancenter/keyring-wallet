@@ -378,21 +378,28 @@ administrator/community split — disappears.
 | Slug | Direction | Membership-exchange analogue | Payload |
 |---|---|---|---|
 | `vrc/relationship/propose/0.1` + `#response` | peer → peer | `solicit-vmc` + `request-vmc`, collapsed (no intermediary) | request: `{ relationshipDid, mode, capabilities? }` · response: `{ relationshipDid, accepted }` |
-| `vrc/relationship/issue/0.1` + `#response` | issuer → subject | `vtc/members/vmc` | request: `{ vc, requestId?, ext? }` — member names matched to `vtc/members/vmc` exactly (`vc`, **not** `credential`) · response: an `IssuedCredential` receipt from `credentials/_shared/0.1` |
+| `vrc/relationships/issue/0.1` + `#response` | issuer → subject | `vtc/members/vmc` | request: `{ vrc, vrcDigestMultibase?, ext? }` — the signed credential plus an optional digest over its RFC 8785 canonicalization · response: `{ vrcDigestMultibase }` **recomputed over the credential as stored**. The digest receipt, not a shared `IssuedCredential` component, because both directions share one `threadId` and a `#response` carries no `inResponseTo` — only a recomputed digest identifies *which* delivery a receipt answers, and a copied value attests nothing about what was stored (staged spec `vrc/relationships/issue` 0.1, "Both deliveries share one thread") |
 
 `propose` declarations: `proof: OPTIONAL` (DIDComm authcrypt already
 authenticates the sender); `sideEffects: mutating` (persists a
 `RelationshipDidRecord`); `exposure: { discloses: metadata, actsAsSubject: false }`.
 
-`issue` declarations: `proof: RECOMMENDED` — mirroring
-`credential-exchange/issue`'s rationale, the credential carries its own issuer
-signature, but a peer receiving an unexpected credential should be able to
-attribute *the delivery* as well as the credential; `sideEffects: mutating` (the
-credential enters the wallet; recoverable — re-issuance is an ordinary flow);
-`exposure: { discloses: secret, actsAsSubject: false }` (the body *is* signed
-claims about the subject). Error codes: `vrc/relationship/issue:subjectMismatch`
-(the `credentialSubject.id` is not the recipient) and
-`vrc/relationship/issue:unsupportedFormat`.
+`issue` declarations (as staged, `vrc/relationships/issue` 0.1): proof
+**request REQUIRED, response OPTIONAL** — the delivery is
+retained-and-relied-upon (the §4.7.1 condition), and the envelope proof
+attributes *the delivery* itself on a relayed path, independent of the
+credential's own issuer signature; the receipt is consumed inside the exchange
+by the connected peer under authcrypt. `sideEffects: mutating` (the credential
+enters the wallet; not compensatable by this exchange — revocation is the
+issuer's own act); `exposure: { discloses: none, actsAsSubject: false }` (the
+delivery carries the two relationship DIDs to the very party that already
+holds them from the accepted proposal — nothing reaches anyone who did not
+already have it, which is why `propose`, the document that *first* discloses a
+relationship DID, is `metadata` where this is `none`). One error code,
+`vrc/relationships/issue:notAccepted`: the accepted proposal is the
+authorization evidence, so a delivery that does not match it — wrong parties,
+wrong relationship DIDs, or no accepted exchange at all — is one and the same
+refusal.
 
 **Why `issue` exists rather than deferring to Credo.** Credo's
 `issue-credential` v2 already delivers credentials, so a dedicated task can look
@@ -908,6 +915,25 @@ reading that code or naming our slugs.
 Each step names what makes it **done**. A step without a completion test is a
 step an implementer either stops short of or gold-plates.
 
+**Where this stands (Keyring, `feat/trust-tasks-integration`):** the
+relationship-and-witness recast — steps 5, 6 and 7 — is **complete for
+current wallets and proven on attended real devices**: one-tap proposal
+consent, hardware-attested signed issue legs with digest receipts, per-party
+witness sessions with task-bound VWCs and retained outcome evidence,
+presentation assembly with the verifier's pairing algorithm, and the
+witness-record share that earns the Witnessed indicator on both contact
+screens. Both sides run the same pipeline from the same library
+(`@bifold/trust-tasks`; the witness on the real `@openvtc/trust-tasks`
+runtime). Step 3's carriage ships as binding 0.2 (the dedicated `@type`, not
+a basic message). Step 2's specifications are the upstream `vrc/*` /
+`witness/*` batch, with `witness-share` and a future R-Card task to join it.
+Outside this milestone: step 6's evidence against an older build (the
+legacy dual-accept path is true by construction, not yet e2e'd), step 4
+(credential-exchange with a VTA), step 1 (the `tsp-core` dependency
+direction — TSP-side), and the proof-set migration (parent §4.6, parked on
+the working group). Reasoning and evidence per day: the dated companions,
+latest [`2026-08-20-al.md`](./2026-08-20-al.md).
+
 ### 1. Resolve review A1 — `tsp-core`'s dependency direction
 
 Precondition for everything below. The trust-task model must depend on a carriage
@@ -967,6 +993,36 @@ On `tsp-core`'s task model, including **outcome-evidence retention** (§4, Layer
 C). Retention is the item with a silent failure mode: without it the VWCs still
 verify as credentials and simply fail to prove what they exist to prove.
 
+**Core done, live-proven (Keyring, `feat/trust-tasks-integration`): a
+witnessed exchange completed over the new tasks against a running
+witness-server — both per-party sessions, challenge-bound VPs, VWCs with
+`taskContext` bound and `taskDigestMultibase` binding the session document,
+outcome evidence retained — under an e2e gate requiring the ceremony
+markers. Presentation assembly is also done and live-proven: the holder
+assembles the VWC with its retained outcome pair and the verifier's pairing
+algorithm (`outcomeEvidence.ts`) confirms it, gated by a per-run self-check
+marker in the witnessed e2e. The attended device run (M4) is green with the
+hardware-attestation evidence block proven on-device — the done-when list
+below is met. Open UX item from that run: the contact's Witnessed badge
+needs VWC *sharing* (the v4 ceremony's VWC names the holder's own DID, and
+nothing delivers it to the peer) — mechanism undecided, see
+[`2026-08-19-al.md`](./2026-08-19-al.md) §E. Interop findings and reasoning:
+[`2026-08-18-al.md`](./2026-08-18-al.md) §G,
+[`2026-08-19-al.md`](./2026-08-19-al.md).** The wallet runs its per-party session
+(`witnessCeremony.ts`): own thread nested via `parentThreadId`, the
+challenge's REQUIRED proof verified under the witness's DID, the
+challenge-bound VP submitted under our REQUIRED proof, and the VWC's
+`taskContext` + `taskDigestMultibase` validated against the session document
+before storage — the `submit#response` retained as the outcome-evidence
+pair, retrievable by session id. The witness-server speaks the dialect
+beside its legacy JSON flow (`WitnessTaskSessions`): per-party sessions with
+unique challenges (the published spec forbids the legacy shared challenge),
+VP verification against this session's `{challenge, domain}`, and VWC
+issuance carrying the two task-binding fields, responses signed. Activated
+by the propose's `witnessed` flag when a witness is connected; additive,
+never a precondition. Reasoning:
+[`2026-08-18-al.md`](./2026-08-18-al.md) §F.
+
 **Done when:** a witnessed exchange completes over the new tasks; the issued VWC
 carries `taskContext` equal to the ceremony's initiating document `id`; the
 ceremony's `#response` is persisted with its proof and retrievable by that
@@ -977,12 +1033,102 @@ and `e2e:vrc:devices` stays green.
 
 With `trust-task-discovery` replacing the `rceVersion` ladder.
 
-**Done when:** two wallets complete an unwitnessed exchange over the new tasks and
-both store the counterparty's VRC; capability negotiation runs through
-`supportedTypes` rather than an ordinal version; a legacy peer still completes an
-exchange via the dual-send path (§7.2); and the witnessed path from step 5 still
-passes.
+**In progress, sliced (Keyring, `feat/trust-tasks-integration`).** Landed and
+e2e-proven on the production mediator: the propose exchange (deterministic
+proposer, binding-0.2 carriage, gated on `rceVersion` v4 for now) and the
+issue leg in **shadow mode** — signed VRC delivered on the exchange thread
+with a real eddsa-jcs-2022 request proof (the REQUIRED declaration pulled
+this part of step 5's proof work forward), digest receipts recomputed and
+correlated both directions, refusals as `trust-task-error`, and the
+**eddsa-jcs-2022 verifier live on the issue legs**: proofs verify under the
+sender's relationship DID as the accepted proposal established it, so a
+valid signature under any other key fails; a delivery outside an accepted
+exchange still refuses `notAccepted` rather than `proofInvalid`. The legacy
+issue-credential 2.0 leg remains the storage authority, and the e2e suite
+gates on the ceremony markers. Evidence:
+[`docs/spikes/trust-task-propose-evidence.md`](../../spikes/trust-task-propose-evidence.md);
+reasoning: [`2026-08-18-al.md`](./2026-08-18-al.md).
 
+**The authority flip is landed and e2e-proven**: for v4 pairs the VRC travels
+ONLY as the trust-task issue leg — consent is the accepted proposal (a
+bottom-sheet prompt on the non-proposer's wallet replaces the legacy
+per-credential accept), each side builds and signs its VRC standalone
+(evidence flow included), and the receiver verifies the document proof, the
+credential's own proof and the party bindings before **storing from the
+task** (digest-deduplicated) and receipting. The legacy issue-credential leg
+is suppressed for the VRC on v4 pairs; the RCard (a VDS) still travels it. A
+decline is a `trust-task-error` (`propose:declined`) — never
+`accept: false`.
+
+**Capability negotiation runs through `supportedTypes`** (e2e-proven,
+marker-gated): the proposer's `trust-task-discovery` query precedes the
+propose, which opens only when the peer's response lists it. The legacy
+`rceVersion` marker remains the bootstrap beneath it — it is what says the
+peer can parse a Trust Task message at all (§7.2's chicken-and-egg), so
+sub-v4 peers never see even the query; the marker itself retires with the
+legacy dialect.
+
+**Remaining delta to done:** a legacy peer still completes an exchange via
+the dual-send path (§7.2) — true by construction (sub-v4 peers keep the
+untouched legacy flow) but not yet evidenced against an actual v3 build.
+The witnessed path (step 5) passes live, simulator and attended devices
+both (see [`2026-08-19-al.md`](./2026-08-19-al.md) §E).
+
+### 7. VWC sharing — counterparty visibility of the witnessing
+
+A witnessed exchange leaves each wallet holding a VWC about its **own**
+issuance (`witness/session` is per-party; the `submit#response` returns the
+credential to the submitter), and nothing carries it to the counterparty —
+so the contact screen's Witnessed indicator, which keys on a stored VWC
+whose subject is the *peer's* relationship DID, stays dark
+([`2026-08-19-al.md`](./2026-08-19-al.md) §E). The legacy flow solved this
+by witness-side cross-distribution — the witness pushed each VWC to the
+other party unbidden. That mechanism does not return: the holder controls
+disclosure (cred-spec, Outcome Interpretability — a holder presenting a
+`taskContext`-bearing credential MUST include matching outcome evidence),
+and a witness volunteering a credential about your exchange to a third
+party is exactly what the per-party model removes.
+
+**`vrc/relationships/witness-share/0.1`** closes the gap holder-side: after
+its witness session completes and its issue leg is sent, each party sends
+the peer its **presentation bundle** — the VWC wrapped in a signed VP plus
+the retained outcome-evidence pair (the §9-step-5 assembly), on the
+exchange thread, proof REQUIRED under the sender's relationship DID. The
+VP's challenge is the exchange thread id and its domain a fixed
+`vrc:witness-share` — freshness within the DIDComm channel comes from the
+channel and the thread binding, and replay across exchanges fails the
+challenge check. A bare VWC on the issue leg is rejected as the
+alternative: it would deliver a credential stripped of the evidence that
+makes it mean anything, re-creating the silent failure retention exists to
+prevent, and it would leave the verifier path (`verifyVwcPresentationBundle`)
+without a production consumer.
+
+The receiver runs the full pairing algorithm before anything is stored:
+document proof under the sender's relationship DID, presentation verified
+against the expected challenge/domain, credential valid AND completion
+evidenced, the VWC's subject equal to the sender's relationship DID as the
+accepted proposal established it, and its `parties` naming both
+relationship DIDs. Only then is the VWC stored (digest-deduplicated) and
+receipted — the Witnessed indicator is *earned by verification*, never
+granted on receipt. Any failure refuses with a `trust-task-error` and
+stores nothing. The type is advertised through `supportedTypes`; a sender
+whose peer does not list it skips the share silently (earlier v4 peers).
+The spec module is local until the `vrc/*` batch upstreams (step 2 owns
+that), where it joins as a third relationship task.
+
+**Built and live-proven — simulator pair and attended real devices
+(Keyring, `feat/trust-tasks-integration`): both contact screens show the
+Witnessed indicator (and, on devices, Secure Exchange) from a bundle each
+wallet verified itself, gated by markers and UI assertion; reasoning and
+the e2e findings in [`2026-08-20-al.md`](./2026-08-20-al.md).**
+
+**Done when:** on a witnessed exchange between two current wallets, both
+contact screens show the Witnessed indicator, gated in the witnessed e2e
+by UI assertion plus `witness-share sent` / `witness-share verified and
+stored` markers; a tampered bundle (wrong subject, missing or error-typed
+evidence, failed VP challenge) is refused with nothing stored, unit-proven;
+and an exchange with a peer that does not advertise the type completes
+exactly as today.
 
 ## 10. Open questions
 
