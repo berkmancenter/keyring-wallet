@@ -40,6 +40,7 @@
     "canonicalize": "^1.0.8",
     "dotenv": "^17.2.3",
     "langchain": "^0.3.6",
+    "node-ble": "^1.13.0",
     "qrcode": "^1.5.3",
     "selfsigned": "^5.5.0",
     "three": "^0.183.2",

@@ -27,13 +27,39 @@ import { randomBytes } from 'node:crypto'
 
 import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
+import { TaskLocalityProvider, LocalityObservationResult } from './BleLocalityProvider'
 import { digestMultibase, signDocumentProof, taskDigestMultibase, verifyDocumentProof } from './documentProof'
 import { consume, errorDocument, respondWith } from './framework'
+import {
+  LocalityAssertion,
+  LocalityMethod,
+  LocalityObservation,
+  LocalityTranscript,
+  LOCALITY_EXT_NAMESPACE,
+  assertionFromObservation,
+  transcriptDigestMultibase,
+  transcriptKeyMatchesVrcSigner,
+  verifyTranscript,
+} from './locality'
 import { TrustTaskMessage } from './TrustTaskMessage'
 
 const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
 const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
+const DISCOVERY_TYPE = 'https://trusttasks.org/spec/trust-task-discovery/0.1'
 const SUBMIT_NOT_BOUND = 'witness/session/submit:challengeMismatch'
+const LOCALITY_METHOD: LocalityMethod = 'ble-challenge-response/0.1'
+const LOCALITY_WINDOW_SECONDS = 120
+/**
+ * Provisional — ref-06p4 measured a real bound's first-fully-caught point
+ * at 100ms against a 224.7ms honest-p95 bound on ONE adapter/phone pairing
+ * (docs/plans/locality-plan.md §11-Q1). Not yet calibrated against venue
+ * hardware; recorded here as a single named constant so replacing it later
+ * is a one-line change, not a search-and-replace.
+ */
+const PROVISIONAL_RTT_BOUND_MS = 400
+
+/** off: no locality leg. offered: attempt it, annotate either way. required: refuse without a confirmed observation (plan §8.2). */
+export type LocalityPolicy = 'off' | 'offered' | 'required'
 
 interface TaskSession {
   /** The session document's id — the VWC's taskContext. */
@@ -45,6 +71,8 @@ interface TaskSession {
   challenge: string
   domain: string
   createdAt: Date
+  /** Kicked off in handleSession, awaited in handleSubmit — the radio phase runs concurrently with VP assembly (plan §5.1). */
+  localityObservation?: Promise<LocalityObservationResult | null>
 }
 
 export interface WitnessTaskHost {
@@ -52,8 +80,15 @@ export interface WitnessTaskHost {
   name: string
   domain: string
   eventName?: string
+  /** off | offered | required (plan §8.2). Defaults to 'off' if omitted. */
+  localityPolicy?: LocalityPolicy
+  /** The witness's claim about itself — plan §7.1's `localityVenue`, unverified in v1 (§11-Q4). */
+  venueClaim?: string
+  localityProvider?: TaskLocalityProvider
   getIssuer(): Promise<{ did: string; verificationMethodId: string }>
-  buildVwcJson(presentation: Record<string, unknown>, sessionId: string): Record<string, unknown>
+  buildVwcJson(presentation: Record<string, unknown>, sessionId: string, localityAssertion?: LocalityAssertion): Record<string, unknown>
+  /** The observed VRC's hardware-attestation public key (base64), if any — for the §7.3 step-6 key-match check. */
+  vrcHardwareAttestationPublicKey(presentation: Record<string, unknown>): string | undefined
 }
 
 const SESSION_TTL_MS = 10 * 60 * 1000
@@ -95,6 +130,8 @@ export class WitnessTaskSessions {
       reply = await this.handleSession(document, connectionId, theirDid)
     } else if (type === SUBMIT_TYPE) {
       reply = await this.handleSubmit(document, connectionId, theirDid)
+    } else if (type === DISCOVERY_TYPE) {
+      reply = await this.handleDiscovery(document, theirDid)
     }
     // other trust-task types are the wallets' business, not the witness's
     if (!reply) return
@@ -114,23 +151,60 @@ export class WitnessTaskSessions {
     )
   }
 
+  /**
+   * trust-task-discovery → this witness's supportedTypes. Plan §8.2: the
+   * witness publishes its locality policy here rather than a wallet
+   * discovering it from a refusal. `required` carries the framework's own
+   * `requiredExt` entry, which is what makes `handleSession`'s
+   * `requiredExtNamespaces` check (SPEC.md §7.2) meaningful — a wallet that
+   * ignores this and proposes without the namespace gets `malformedRequest`
+   * from the framework rule itself, not from locality-specific logic.
+   */
+  private async handleDiscovery(document: Record<string, unknown>, theirDid: string): Promise<Record<string, unknown>> {
+    return consume({
+      document,
+      senderDid: theirDid,
+      proofRequired: false,
+      handler: async (doc) => {
+        const policy = this.host.localityPolicy ?? 'off'
+        const supportedTypes: unknown[] =
+          policy === 'required'
+            ? [{ type: SESSION_TYPE, requiredExt: [LOCALITY_EXT_NAMESPACE] }, SUBMIT_TYPE]
+            : [SESSION_TYPE, SUBMIT_TYPE]
+        return respondWith(doc, { supportedTypes })
+      },
+    })
+  }
+
   /** witness/session → per-party session with a fresh single-use challenge. */
   private async handleSession(
     document: Record<string, unknown>,
     connectionId: string,
     theirDid: string
   ): Promise<Record<string, unknown>> {
+    const policy = this.host.localityPolicy ?? 'off'
     return consume({
       document,
       senderDid: theirDid,
       proofRequired: false,
+      // SPEC.md §7.2's own enforcement, per plan §8.2: a `required` policy
+      // publishes the expanded supportedTypes entry with `requiredExt`
+      // (handled by the discovery responder), and the framework's OWN rule
+      // rejects a document missing that namespace — locality writes no
+      // gating logic of its own.
+      requiredExtNamespaces: policy === 'required' ? [LOCALITY_EXT_NAMESPACE] : undefined,
       handler: async (doc) => {
         const parties = (doc.payload as { parties?: [string, string] } | undefined)?.parties
         if (!parties || parties.length !== 2) {
           return errorDocument(doc, 'malformedRequest', 'session payload must name exactly two parties')
         }
         const challenge = randomBytes(16).toString('hex')
-        this.sessions.set(String(doc.id), {
+        const sessionDigest = taskDigestMultibase(document)
+        const localityOffer = (
+          (doc.payload as { ext?: Record<string, { locality?: { offered?: boolean } }> } | undefined)?.ext ?? {}
+        )[LOCALITY_EXT_NAMESPACE]?.locality
+
+        const session: TaskSession = {
           sessionId: String(doc.id),
           sessionDoc: document,
           connectionId,
@@ -138,10 +212,36 @@ export class WitnessTaskSessions {
           challenge,
           domain: this.host.domain,
           createdAt: new Date(),
-        })
+        }
+
+        let responseExt: Record<string, unknown> | undefined
+        if (policy !== 'off' && localityOffer?.offered && this.host.localityProvider) {
+          // §4.2: the sensor DID equals the witness DID in phase 1 — a
+          // single sensor-DID field from the first implementation, so a
+          // second sensor later is a deployment change, not a schema one.
+          const sensorDid = (await this.host.getIssuer()).did
+          session.localityObservation = this.host.localityProvider.observeSession({
+            sessionTaskDigestMultibase: sessionDigest,
+            challenge,
+            sensorDid,
+            windowSeconds: LOCALITY_WINDOW_SECONDS,
+          })
+          responseExt = {
+            [LOCALITY_EXT_NAMESPACE]: {
+              locality: {
+                policy,
+                method: LOCALITY_METHOD,
+                sensorDid,
+                windowSeconds: LOCALITY_WINDOW_SECONDS,
+              },
+            },
+          }
+        }
+
+        this.sessions.set(session.sessionId, session)
         this.expireSessionsOlderThan(SESSION_TTL_MS)
         console.log(`[${this.host.name}] Task session ${doc.id} opened for parties [${parties.join(', ')}]`)
-        return respondWith(doc, { challenge, domain: this.host.domain })
+        return respondWith(doc, { challenge, domain: this.host.domain, ...(responseExt ? { ext: responseExt } : {}) })
       },
     })
   }
@@ -200,8 +300,61 @@ export class WitnessTaskSessions {
           return errorDocument(doc, SUBMIT_NOT_BOUND, 'presentation holder is not a party to this session')
         }
 
+        // ---- locality: resolve the observation, if this session has one ----
+        const policy = this.host.localityPolicy ?? 'off'
+        let observation: LocalityObservation | undefined
+        let keyMatches: boolean | undefined
+        let observedTranscript: LocalityTranscript | undefined
+        if (policy !== 'off') {
+          const sensorDid = (await this.host.getIssuer()).did
+          if (!session.localityObservation) {
+            // The party's own session request didn't offer locality (or
+            // offered it with no provider configured) — §7.1's second
+            // explicit state, a choice, not a failure.
+            observation = {
+              method: 'none', sensorDid, observedAt: new Date().toISOString(), confirmed: false, reason: 'declinedByHolder',
+            }
+          } else {
+            const result = await session.localityObservation
+            if (!result) {
+              // §5.5: the sensor's own window elapsed with no matching
+              // advert — the app backgrounded, locked, or the ceremony
+              // moved on before the radio phase completed.
+              observation = {
+                method: 'none', sensorDid, observedAt: new Date().toISOString(), confirmed: false, reason: 'windowLost',
+              }
+            } else {
+              observedTranscript = result.transcript
+              const verdict = verifyTranscript(result.transcript, {
+                taskDigestMultibase: taskDigestMultibase(session.sessionDoc),
+                challenge: session.challenge,
+                sensorNonce: result.sensorNonce,
+                sensorDid,
+              })
+              if (!verdict.ok) {
+                return errorDocument(doc, 'malformedRequest', `locality transcript failed verification: ${verdict.reason}`)
+              }
+              keyMatches = transcriptKeyMatchesVrcSigner(result.transcript, this.host.vrcHardwareAttestationPublicKey(vpJson))
+              observation = {
+                method: LOCALITY_METHOD,
+                sensorDid,
+                venueClaim: this.host.venueClaim,
+                observedAt: new Date().toISOString(),
+                windowSeconds: LOCALITY_WINDOW_SECONDS,
+                confirmed: true,
+                deviceKeyId: result.transcript.devicePublicKey, // artifact side only — never enters the assertion (rule 3)
+                transcriptDigestMultibase: transcriptDigestMultibase(result.transcript),
+                corroboration: { rttMs: result.rttMs, rssiDbm: result.rssiDbm, rttBoundMs: PROVISIONAL_RTT_BOUND_MS },
+              }
+            }
+          }
+        }
+
         // Build the VWC and bind it to THIS session (§4.9.1 + §4.9.3).
-        const vwcJson = this.host.buildVwcJson(vpJson, session.sessionId)
+        const localityAssertion = observation
+          ? assertionFromObservation(observation, keyMatches, observedTranscript?.hardwareAttestation)
+          : undefined
+        const vwcJson = this.host.buildVwcJson(vpJson, session.sessionId, localityAssertion)
         const subject = (vwcJson.credentialSubject ?? {}) as Record<string, unknown>
         subject.parties = session.parties
         subject.taskContext = session.sessionId
@@ -225,7 +378,14 @@ export class WitnessTaskSessions {
         this.sessions.delete(sessionId)
         console.log(`[${this.host.name}] Task session ${sessionId}: VWC issued (taskContext bound)`)
 
-        return respondWith(doc, { vwc: signedVwcJson, vwcDigestMultibase: digestMultibase(signedVwcJson) })
+        const responseExt = observation
+          ? { [LOCALITY_EXT_NAMESPACE]: { locality: { observation } } }
+          : undefined
+        return respondWith(doc, {
+          vwc: signedVwcJson,
+          vwcDigestMultibase: digestMultibase(signedVwcJson),
+          ...(responseExt ? { ext: responseExt } : {}),
+        })
       },
     })
   }

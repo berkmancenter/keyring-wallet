@@ -74,17 +74,26 @@ export interface ConsumeOptions {
   proofRequired: boolean
   /** Verify the document's proof; consulted when a proof is present. */
   verifyProof?: (document: Record<string, unknown>) => Promise<boolean>
+  /**
+   * SPEC.md §7.2: "a *consumer* MAY require one or more specific namespaces
+   * under `ext` as a matter of local policy and MUST reject a document
+   * missing a required namespace with `malformedRequest`." Framework-level,
+   * not locality-specific — used by the witness's `required` policy
+   * (locality-plan.md §8.2) but not particular to it.
+   */
+  requiredExtNamespaces?: string[]
   /** Business handler; returns the reply document (success or error). */
   handler: (document: Record<string, unknown>) => Promise<Record<string, unknown>>
 }
 
 /**
  * The witness's consume: identity cross-check, proof presence for REQUIRED
- * specs, proof verification when present, then the handler. Every failure
- * produces an error document to send back — nothing goes silent.
+ * specs, proof verification when present, required-`ext`-namespace
+ * enforcement, then the handler. Every failure produces an error document
+ * to send back — nothing goes silent.
  */
 export async function consume(options: ConsumeOptions): Promise<Record<string, unknown>> {
-  const { document, senderDid, proofRequired, verifyProof, handler } = options
+  const { document, senderDid, proofRequired, verifyProof, requiredExtNamespaces, handler } = options
 
   // Binding §4.8.1: never trust the in-band issuer over the transport identity.
   if (String(document.issuer ?? '') !== senderDid) {
@@ -96,6 +105,13 @@ export async function consume(options: ConsumeOptions): Promise<Record<string, u
   if (document.proof !== undefined && verifyProof) {
     if (!(await verifyProof(document))) {
       return errorDocument(document, 'proofInvalid', 'the document proof did not verify')
+    }
+  }
+  if (requiredExtNamespaces?.length) {
+    const ext = (document.payload as { ext?: Record<string, unknown> } | undefined)?.ext ?? {}
+    const missing = requiredExtNamespaces.filter((ns) => !(ns in ext))
+    if (missing.length > 0) {
+      return errorDocument(document, 'malformedRequest', `required ext namespace(s) not populated: ${missing.join(', ')}`)
     }
   }
   return handler(document)

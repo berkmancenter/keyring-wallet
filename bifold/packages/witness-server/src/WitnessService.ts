@@ -77,6 +77,8 @@ import {
 
 import { LocalityService, LocalityEvidence } from './LocalityService'
 import { LLMService, createLLMService } from './LLMService'
+import { LocalityAssertion } from './trustTasks/locality'
+import { BleLocalityProvider, TaskLocalityProvider } from './trustTasks/BleLocalityProvider'
 
 // Import shared modules from @bifold/vrc-contexts and @bifold/vrc-shared
 import {
@@ -210,7 +212,17 @@ export interface WitnessCredentialBuildContext {
   sessionId: string
   verificationMethod: string
   eventName?: string
+  /** The LEGACY basic-message ceremony's nested evidence shape — untouched; that path is standing down for v4 pairs. */
   localityEvidence?: LocalityEvidence
+  /**
+   * The Trust Tasks ceremony's locality assertion (locality-plan.md §7.1) —
+   * flat `locality*` members, never nested (bbs-2023 discloses at the
+   * RDF-quad level; a nested object is a blank node whose path must be
+   * revealed to disclose anything under it). Absent entirely when the
+   * witness's locality policy is `off` — that absence IS the third,
+   * explicit state (§7.1 rule 5), not something this function infers.
+   */
+  localityAssertion?: LocalityAssertion
 }
 
 /**
@@ -227,7 +239,7 @@ export function buildWitnessCredentialJson(
   observedPresentation: any,
   buildContext: WitnessCredentialBuildContext
 ): any {
-  const { issuerDid, witnessName, sessionId, verificationMethod, eventName, localityEvidence } = buildContext
+  const { issuerDid, witnessName, sessionId, verificationMethod, eventName, localityEvidence, localityAssertion } = buildContext
 
   const vwcId = `urn:uuid:${utils.uuid()}`
 
@@ -262,6 +274,12 @@ export function buildWitnessCredentialJson(
   // Include locality verification evidence if available
   if (localityEvidence) {
     witnessContext.localityVerification = localityEvidence
+  }
+
+  // Trust Tasks ceremony: flat locality* members, spread directly into
+  // witnessContext (never nested — see WitnessCredentialBuildContext).
+  if (localityAssertion) {
+    Object.assign(witnessContext, localityAssertion)
   }
 
   const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
@@ -313,6 +331,25 @@ export function buildWitnessCredentialJson(
       witnessContext,
     },
   }
+}
+
+/**
+ * The observed VRC's hardware-attestation public key, if it carries one —
+ * for locality's §7.3 step-6 key-match check (does the key that answered on
+ * the radio match the key that signed this VRC?). Duck-typed rather than
+ * importing `@bifold/core`'s evidence types (that would drag React Native
+ * into this Node service, the same reason documentProof.ts/locality.ts are
+ * duplicated here rather than imported).
+ */
+function extractVrcHardwareAttestationPublicKey(presentation: Record<string, unknown>): string | undefined {
+  const credentials = (presentation as { verifiableCredential?: unknown[] }).verifiableCredential ?? []
+  const vrcJson = credentials[0] as { evidence?: unknown[] } | undefined
+  const evidence = Array.isArray(vrcJson?.evidence) ? vrcJson?.evidence : []
+  for (const entry of evidence ?? []) {
+    const publicKey = (entry as { hardwareBinding?: { publicKey?: string } } | undefined)?.hardwareBinding?.publicKey
+    if (typeof publicKey === 'string' && publicKey.length > 0) return publicKey
+  }
+  return undefined
 }
 
 function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationUrl }: GetWitnessModulesOptions) {
@@ -389,6 +426,7 @@ export class WitnessService {
   public readonly credentialRegistry: CredentialRegistry
   public localityService?: LocalityService
   public llmService?: LLMService
+  private taskLocalityProvider?: TaskLocalityProvider
 
   private issuerDid?: string
   private issuerVerificationMethodId?: string
@@ -521,6 +559,20 @@ export class WitnessService {
 
     this.registerMessageHandlers()
 
+    // The locality sensor (plan §5.6: the witness IS its own sensor). Best
+    // effort — a witness with no BLE adapter, or one where BlueZ isn't
+    // reachable, still runs; it just never confirms locality (§7.1's
+    // `windowLost`/absent path, not a crash).
+    if (this.config.localityPolicy !== 'off') {
+      const bleProvider = new BleLocalityProvider()
+      try {
+        await bleProvider.start()
+        this.taskLocalityProvider = bleProvider
+      } catch (error) {
+        console.warn(`[${this.name}] BLE locality sensor unavailable, continuing without it: ${(error as Error).message}`)
+      }
+    }
+
     // The Trust Task dialect (witness/session + submit over binding-0.2),
     // beside the legacy JSON-over-basicmessage flow — dual-dialect so old
     // wallets keep working. Per-party sessions with unique challenges, VWCs
@@ -530,6 +582,9 @@ export class WitnessService {
       name: this.name,
       domain: `witness-session-${this.port}`,
       eventName: this.config.eventName,
+      localityPolicy: this.config.localityPolicy,
+      venueClaim: this.config.localityVenueClaim,
+      localityProvider: this.taskLocalityProvider,
       getIssuer: async () => {
         await this.ensureDedicatedIssuerDid()
         if (!this.issuerDid || !this.issuerVerificationMethodId) {
@@ -537,7 +592,7 @@ export class WitnessService {
         }
         return { did: this.issuerDid, verificationMethodId: this.issuerVerificationMethodId }
       },
-      buildVwcJson: (presentation, sessionId) => {
+      buildVwcJson: (presentation, sessionId, localityAssertion) => {
         if (!this.issuerDid) throw new Error('witness issuer DID unavailable')
         return buildWitnessCredentialJson(presentation, {
           issuerDid: this.issuerDid,
@@ -545,8 +600,10 @@ export class WitnessService {
           sessionId,
           verificationMethod: this.config.verificationMethod,
           eventName: this.config.eventName,
+          localityAssertion,
         })
       },
+      vrcHardwareAttestationPublicKey: (presentation) => extractVrcHardwareAttestationPublicKey(presentation),
     })
     this.taskSessions.register()
 
@@ -2770,6 +2827,9 @@ export class WitnessService {
     }
     if (this.sessionCleanupInterval) {
       clearInterval(this.sessionCleanupInterval)
+    }
+    if (this.taskLocalityProvider) {
+      await this.taskLocalityProvider.stop()
     }
     await this.agent.shutdown()
   }

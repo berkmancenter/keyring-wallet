@@ -170,6 +170,30 @@ export interface WitnessServerConfig {
   localityVerificationRequired: boolean
 
   /**
+   * The Trust Tasks ceremony's locality policy (locality-plan.md §8.2) —
+   * distinct from `localityVerificationRequired` above, which gates the
+   * LEGACY basic-message ceremony's (never-wired-to-real-hardware) proof
+   * check and is left alone.
+   *
+   *   off      — no locality leg on this witness at all.
+   *   offered  — attempt it; annotate the outcome either way. DEFAULT.
+   *   required — refuse to issue a VWC without a confirmed observation;
+   *              published via discovery's `requiredExt` (§8.2).
+   *
+   * `offered`, not `required`, is the default: locality fails for boring
+   * reasons (Bluetooth off, permission denied, a phone at the far end of a
+   * hall), and gating punishes the honest majority for a control the
+   * dishonest minority isn't blocked by anyway (§8.2).
+   */
+  localityPolicy: 'off' | 'offered' | 'required'
+
+  /**
+   * The witness's claim about itself for the VWC's `localityVenue` member —
+   * unverified in v1 (§11-Q4). Only meaningful when `localityPolicy` !== 'off'.
+   */
+  localityVenueClaim?: string
+
+  /**
    * Whether to retain basic message records in the wallet after processing.
    * When false (default), messages are deleted after being processed to preserve user privacy.
    * When true, all messages are retained in the wallet for debugging/audit purposes.
@@ -350,6 +374,12 @@ export function loadConfig(): WitnessServerConfig {
   // Locality Verification Configuration
   const localityVerificationRequired = process.env.WITNESS_LOCALITY_REQUIRED !== 'false' // Default: true (required)
 
+  // Trust Tasks locality policy (locality-plan.md §8.2) — off | offered | required, default offered.
+  const rawLocalityPolicy = process.env.WITNESS_LOCALITY_POLICY
+  const localityPolicy: WitnessServerConfig['localityPolicy'] =
+    rawLocalityPolicy === 'off' || rawLocalityPolicy === 'required' ? rawLocalityPolicy : 'offered'
+  const localityVenueClaim = process.env.WITNESS_LOCALITY_VENUE_CLAIM
+
   // Message Retention Configuration
   const retainMessages = process.env.WITNESS_RETAIN_MESSAGES === 'true' // Default: false (delete after processing)
 
@@ -412,6 +442,8 @@ export function loadConfig(): WitnessServerConfig {
     tlsHostnames,
     reportingEnabled,
     localityVerificationRequired,
+    localityPolicy,
+    localityVenueClaim,
     retainMessages,
     llmEnabled,
     anthropicApiKey,
@@ -459,6 +491,8 @@ export const defaultConfig: WitnessServerConfig = {
   tlsHostnames: ['localhost'],
   reportingEnabled: true,
   localityVerificationRequired: true,
+  localityPolicy: 'offered',
+  localityVenueClaim: undefined,
   retainMessages: false,
   llmEnabled: false,
   anthropicApiKey: undefined,
