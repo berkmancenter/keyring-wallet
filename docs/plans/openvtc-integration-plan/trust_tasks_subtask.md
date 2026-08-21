@@ -915,6 +915,25 @@ reading that code or naming our slugs.
 Each step names what makes it **done**. A step without a completion test is a
 step an implementer either stops short of or gold-plates.
 
+**Where this stands (Keyring, `feat/trust-tasks-integration`):** the
+relationship-and-witness recast — steps 5, 6 and 7 — is **complete for
+current wallets and proven on attended real devices**: one-tap proposal
+consent, hardware-attested signed issue legs with digest receipts, per-party
+witness sessions with task-bound VWCs and retained outcome evidence,
+presentation assembly with the verifier's pairing algorithm, and the
+witness-record share that earns the Witnessed indicator on both contact
+screens. Both sides run the same pipeline from the same library
+(`@bifold/trust-tasks`; the witness on the real `@openvtc/trust-tasks`
+runtime). Step 3's carriage ships as binding 0.2 (the dedicated `@type`, not
+a basic message). Step 2's specifications are the upstream `vrc/*` /
+`witness/*` batch, with `witness-share` and a future R-Card task to join it.
+Outside this milestone: step 6's evidence against an older build (the
+legacy dual-accept path is true by construction, not yet e2e'd), step 4
+(credential-exchange with a VTA), step 1 (the `tsp-core` dependency
+direction — TSP-side), and the proof-set migration (parent §4.6, parked on
+the working group). Reasoning and evidence per day: the dated companions,
+latest [`2026-08-20-al.md`](./2026-08-20-al.md).
+
 ### 1. Resolve review A1 — `tsp-core`'s dependency direction
 
 Precondition for everything below. The trust-task model must depend on a carriage
