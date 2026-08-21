@@ -14,9 +14,9 @@
  * The issued VWC carries `taskContext` = the session document's id (§4.9.1)
  * and `taskDigestMultibase` binding that document by digest (§4.9.3).
  *
- * Consume runs through the local minimal pipeline (./framework.ts — the
- * runtime package is ESM-only and this service is CommonJS); the wallet side
- * uses the real framework runtime.
+ * Consume runs through the REAL `@openvtc/trust-tasks` runtime — the same
+ * §7.2 pipeline the wallet uses (schema validation, identity cross-check,
+ * proof policy), loaded via ./runtime.ts.
  */
 
 import type { Agent } from '@credo-ts/core'
@@ -27,13 +27,21 @@ import { randomBytes } from 'node:crypto'
 
 import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 
-import { digestMultibase, signDocumentProof, taskDigestMultibase, verifyDocumentProof } from './documentProof'
-import { consume, errorDocument, respondWith } from './framework'
-import { TrustTaskMessage } from './TrustTaskMessage'
+import {
+  TRUST_TASK_BINDING_URI,
+  TrustTaskMessage,
+  digestMultibase,
+  signDocumentProof,
+  taskDigestMultibase,
+  trustTaskPayloadValidator,
+  verifyDocumentProof,
+} from '@bifold/trust-tasks'
+import { randomUUID } from 'node:crypto'
+
+import { loadTrustTaskRuntime } from './runtime'
 
 const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
 const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
-const SUBMIT_NOT_BOUND = 'witness/session/submit:challengeMismatch'
 
 interface TaskSession {
   /** The session document's id — the VWC's taskContext. */
@@ -57,6 +65,13 @@ export interface WitnessTaskHost {
 }
 
 const SESSION_TTL_MS = 10 * 60 * 1000
+
+/** The document to send back for a pipeline outcome, if any (§7.2: rejections go back on the wire). */
+function replyOf(outcome: { kind: string; response?: unknown; error?: unknown }): Record<string, unknown> | undefined {
+  if (outcome.kind === 'handled' && outcome.response) return outcome.response as Record<string, unknown>
+  if (outcome.kind === 'rejected' && outcome.error) return outcome.error as Record<string, unknown>
+  return undefined
+}
 
 export class WitnessTaskSessions {
   private readonly sessions = new Map<string, TaskSession>()
@@ -92,9 +107,9 @@ export class WitnessTaskSessions {
     const type = String(document.type ?? '')
     let reply: Record<string, unknown> | undefined
     if (type === SESSION_TYPE) {
-      reply = await this.handleSession(document, connectionId, theirDid)
+      reply = await this.handleSession(document, connectionId, myDid, theirDid)
     } else if (type === SUBMIT_TYPE) {
-      reply = await this.handleSubmit(document, connectionId, theirDid)
+      reply = await this.handleSubmit(document, connectionId, myDid, theirDid)
     }
     // other trust-task types are the wallets' business, not the witness's
     if (!reply) return
@@ -118,16 +133,28 @@ export class WitnessTaskSessions {
   private async handleSession(
     document: Record<string, unknown>,
     connectionId: string,
+    myDid: string,
     theirDid: string
-  ): Promise<Record<string, unknown>> {
-    return consume({
-      document,
-      senderDid: theirDid,
-      proofRequired: false,
-      handler: async (doc) => {
+  ): Promise<Record<string, unknown> | undefined> {
+    const { runtime, session: sessionSpec } = await loadTrustTaskRuntime()
+    const outcome = await runtime.consumeInbound({
+      transport: new runtime.StaticTransport({ issuer: theirDid, recipient: myDid }, TRUST_TASK_BINDING_URI),
+      spec: sessionSpec.SPEC as never,
+      proofPolicy: { kind: 'acceptUnverified' },
+      payloadPolicy: { kind: 'validate', validate: trustTaskPayloadValidator },
+      doc: document as never,
+      myVid: myDid,
+      now: Date.now(),
+      newErrorId: () => randomUUID(),
+      handler: async (rawDoc) => {
+        const doc = rawDoc as unknown as Record<string, unknown>
         const parties = (doc.payload as { parties?: [string, string] } | undefined)?.parties
         if (!parties || parties.length !== 2) {
-          return errorDocument(doc, 'malformedRequest', 'session payload must name exactly two parties')
+          return runtime.rejectWith(rawDoc, randomUUID(), {
+            code: runtime.extendedCode(SESSION_TYPE, 'malformedRequest'),
+            message: 'session payload must name exactly two parties',
+            retryable: false,
+          })
         }
         const challenge = randomBytes(16).toString('hex')
         this.sessions.set(String(doc.id), {
@@ -141,40 +168,66 @@ export class WitnessTaskSessions {
         })
         this.expireSessionsOlderThan(SESSION_TTL_MS)
         console.log(`[${this.host.name}] Task session ${doc.id} opened for parties [${parties.join(', ')}]`)
-        return respondWith(doc, { challenge, domain: this.host.domain })
+        return runtime.respondWith(rawDoc, randomUUID(), { challenge, domain: this.host.domain })
       },
     })
+    return replyOf(outcome)
   }
 
   /** witness/session/submit → verify the VP against this session, issue the VWC. */
   private async handleSubmit(
     document: Record<string, unknown>,
     connectionId: string,
+    myDid: string,
     theirDid: string
-  ): Promise<Record<string, unknown>> {
-    return consume({
-      document,
-      senderDid: theirDid,
-      proofRequired: true,
-      verifyProof: async (doc) => {
-        // The submit's proof must verify under one of the session's parties —
-        // the submitting wallet's relationship DID.
-        const session = this.sessions.get(String(doc.threadId ?? ''))
-        if (!session) return false
-        for (const party of session.parties) {
-          if (await verifyDocumentProof(this.host.agent, doc, party)) return true
-        }
-        return false
+  ): Promise<Record<string, unknown> | undefined> {
+    const { runtime, submit: submitSpec } = await loadTrustTaskRuntime()
+    const notBound = (rawDoc: never, message: string) =>
+      runtime.rejectWith(rawDoc, randomUUID(), {
+        code: runtime.extendedCode(SUBMIT_TYPE, 'challengeMismatch'),
+        message,
+        retryable: false,
+      })
+    const outcome = await runtime.consumeInbound({
+      transport: new runtime.StaticTransport({ issuer: theirDid, recipient: myDid }, TRUST_TASK_BINDING_URI),
+      spec: submitSpec.SPEC as never,
+      // The submit's proof (REQUIRED by the spec) must verify under one of
+      // the session's parties — the submitting wallet's relationship DID.
+      proofPolicy: {
+        kind: 'verify',
+        verify: {
+          verify: async (raw: unknown) => {
+            const doc = raw as Record<string, unknown>
+            const session = this.sessions.get(String(doc.threadId ?? ''))
+            if (!session) return false
+            for (const party of session.parties) {
+              if (await verifyDocumentProof(this.host.agent, doc, party)) return true
+            }
+            return false
+          },
+        },
       },
-      handler: async (doc) => {
+      payloadPolicy: { kind: 'validate', validate: trustTaskPayloadValidator },
+      doc: document as never,
+      myVid: myDid,
+      now: Date.now(),
+      newErrorId: () => randomUUID(),
+      handler: async (rawDoc) => {
+        const doc = rawDoc as unknown as Record<string, unknown>
         const sessionId = String(doc.threadId ?? '')
         const session = this.sessions.get(sessionId)
         if (!session || session.connectionId !== connectionId) {
-          return errorDocument(doc, SUBMIT_NOT_BOUND, 'no session on this thread for this connection')
+          return notBound(rawDoc as never, 'no session on this thread for this connection')
         }
 
         const vpJson = (doc.payload as { vp?: Record<string, unknown> } | undefined)?.vp
-        if (!vpJson) return errorDocument(doc, 'malformedRequest', 'submit payload carries no vp')
+        if (!vpJson) {
+          return runtime.rejectWith(rawDoc, randomUUID(), {
+            code: runtime.extendedCode(SUBMIT_TYPE, 'malformedRequest'),
+            message: 'submit payload carries no vp',
+            retryable: false,
+          })
+        }
 
         // Verify the presentation cryptographically against THIS session's
         // challenge and domain.
@@ -191,13 +244,13 @@ export class WitnessTaskSessions {
           vpValid = false
         }
         if (!vpValid) {
-          return errorDocument(doc, SUBMIT_NOT_BOUND, 'presentation not bound to this session')
+          return notBound(rawDoc as never, 'presentation not bound to this session')
         }
 
         // The VP holder must be one of the witnessed parties.
         const holder = String((vpJson as { holder?: string }).holder ?? '')
         if (!session.parties.includes(holder as (typeof session.parties)[number])) {
-          return errorDocument(doc, SUBMIT_NOT_BOUND, 'presentation holder is not a party to this session')
+          return notBound(rawDoc as never, 'presentation holder is not a party to this session')
         }
 
         // Build the VWC and bind it to THIS session (§4.9.1 + §4.9.3).
@@ -225,9 +278,13 @@ export class WitnessTaskSessions {
         this.sessions.delete(sessionId)
         console.log(`[${this.host.name}] Task session ${sessionId}: VWC issued (taskContext bound)`)
 
-        return respondWith(doc, { vwc: signedVwcJson, vwcDigestMultibase: digestMultibase(signedVwcJson) })
+        return runtime.respondWith(rawDoc, randomUUID(), {
+          vwc: signedVwcJson,
+          vwcDigestMultibase: digestMultibase(signedVwcJson),
+        })
       },
     })
+    return replyOf(outcome)
   }
 
   private expireSessionsOlderThan(ttlMs: number): void {
