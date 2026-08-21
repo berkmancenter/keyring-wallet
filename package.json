@@ -80,7 +80,8 @@
     "@bifold/react-native-attestation": "portal:bifold/packages/react-native-attestation",
     "@bifold/remote-logs": "portal:bifold/packages/remote-logs",
     "@bifold/verifier": "portal:bifold/packages/verifier",
-    "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts"
+    "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
+    "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {
