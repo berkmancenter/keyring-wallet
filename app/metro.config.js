@@ -13,6 +13,7 @@ const packageDirs = [
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/core')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-locality-peripheral')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-hooks')),
 ]
@@ -23,6 +24,7 @@ const BIFOLD_SOURCE_PACKAGES = [
   '@bifold/verifier',
   '@bifold/vrc-contexts',
   '@bifold/react-native-attestation',
+  '@bifold/react-native-locality-peripheral',
   '@bifold/react-hooks',
 ]
 const bifoldSourceDirByPackage = {}
