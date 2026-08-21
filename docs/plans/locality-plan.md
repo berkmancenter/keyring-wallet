@@ -1074,10 +1074,10 @@ submodule, with the user's explicit sign-off, before any of this could start.**
 
 **Status: items 7, 10, 11, 13 implemented, typechecked, and unit-tested;
 item 8 implemented at the data layer only, with the pre-flight UI sheet its
-own "Done when" describes not yet built; item 9 (the native BLE peripheral)
-not started — iOS deferred outright (no Xcode in this environment), Android
-tooling confirmed present but the work itself is a substantial native
-undertaking scoped for later, not attempted unsupervised; item 12 needs
+own "Done when" describes not yet built; item 9's Android native module is
+real and compiles/autolinks (not a sketch — see its own entry below for
+what's still unverified on a real device before the ceremony wiring flips
+to it), iOS deferred outright (no Xcode in this environment); item 12 needs
 physical devices and has not been run; item 14 stays out of scope pending
 §11-Q5. See
 [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) for what was found
@@ -1116,97 +1116,94 @@ Android/iOS tooling asymmetry in this environment.**
    half is done and real:** `deviceLocality.ts` gained `deriveEid`,
    `serviceUuidFromEid`, `bindingFor`, cross-checked byte-for-byte against
    witness-server's `trustTasks/locality.ts` copy via a frozen fixture
-   (`__tests__/deviceLocality.test.ts`, 5 cases) — the first test in either
-   package that checks the two sides agree, rather than each side only
-   checking itself. **The native half is a reviewed interface sketch with
-   nothing behind it:** `@bifold/react-native-locality-peripheral`
-   (`NativeLocalityPeripheral.ts` Spec + `index.ts` wrapper) typechecks
-   standalone but has no Kotlin/Swift, no manifest changes, and is not a
-   workspace dependency of `core`/`app` yet — its own README says so and
-   lists what building the native side actually requires. A matching
-   `AndroidBleDeviceLocalityProvider` (in `core`, unit-tested against a
-   mocked bridge) exists but is **not wired into `ceremony.ts`**, which still
-   constructs `NullDeviceLocalityProvider()` at its one real call site. iOS
-   deferred outright (no Xcode available). Android tooling (`adb`, Android
-   Studio, a physical device) confirmed present, so the Android half is
-   buildable here once someone picks up the Kotlin — but three things below
-   make this a distinct native module, not an extension of
-   `@bifold/react-native-attestation`, and the scoping surfaced one real
-   design conflict that any implementation must resolve before it, not after:
-   - **The hardware-attestation key requires a fresh biometric prompt per
-     signing operation, and that cannot happen inside the GATT round trip.**
-     `AttestationModule.kt`'s key is created with
-     `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG or AUTH_DEVICE_CREDENTIAL)`
-     — per-operation auth, enforced via a `BiometricPrompt`-bound
-     `CryptoObject`. §5.5's RTT bound (witness-server's own provisional
-     400 ms) has no room for a human to look at a prompt mid-round-trip.
-     **Resolution: split authorization from signing.** Present the
-     biometric prompt once, when the sensor directive arrives — *before*
-     advertising starts, outside the timing-critical window — to obtain an
-     authorized `Signature` object bound to the same key via its
-     `CryptoObject`; hold that object in native memory for the ceremony
-     window; perform the actual `sign()` call synchronously inside the GATT
-     write callback, once `sensorNonce` is known, using the
-     already-authorized object. This needs two new native entry points
-     (`beginLocalityTranscriptSignature()` / `signLocalityTranscript(bytes)`)
-     alongside the existing `createSecureEnclaveKey`/`signWithHardwareBiometricAuth`
-     pair, not a reuse of the latter as-is — and it is worth a second review
-     specifically because it changes how the credential's signing key gets
-     authorized, not something to implement solo without another pair of
-     eyes on the KeyStore semantics.
-   - **The whole peripheral lifecycle needs to run natively, not per-event
-     over the RN bridge.** `ref-06p2` measured ~180 ms median for
-     connect+discover+write+read with no bridge hop at all; round-tripping
-     each GATT callback through the JS thread risks the RTT bound on JS
-     scheduling jank alone. The native side should own advertise → GATT
-     server → write → sign → serve-read → teardown as one internal state
-     machine, exposed to JS as a single promise-returning call matching
-     `DeviceLocalityProvider.respondToSensor()`'s existing contract exactly
-     (resolve with the transcript, or `null` on window-lost/backgrounded) —
-     one bridge call in, one result out, the same shape
-     `NullDeviceLocalityProvider` already establishes.
-   - **This is a new package** — `bifold/packages/react-native-locality-peripheral/`
-     exists now, Android-first, not an addition to
-     `@bifold/react-native-attestation` — that package's concern is
-     attestation/signing, and folding GATT-server/advertising Android APIs
-     into it conflates two things the monorepo otherwise keeps in separate
-     packages (witness-server, react-native-attestation, oca, verifier, …).
-     Its `NativeLocalityPeripheral.ts`/`index.ts` are a reviewed interface
-     sketch — typechecked standalone, no Kotlin/Swift behind them, not a
-     workspace dependency of `core`/`app` yet (see its own README). It reads
-     the *same* KeyStore alias `AttestationModule.kt` already creates, so
-     that alias constant needs to move somewhere both modules can reference
-     rather than staying private to one.
+   (`__tests__/deviceLocality.test.ts`, 5 cases). **The Android native module
+   is real, not a sketch:** `@bifold/react-native-locality-peripheral`'s
+   `LocalityPeripheralModule.kt` compiles against real TurboModule codegen
+   (`:bifold_react-native-locality-peripheral:compileDebugKotlin` green,
+   2026-08-21) and autolinks into the app — RN's own `config` command lists
+   it, and the app's generated `PackageList.java` includes
+   `new LocalityPeripheralPackage()`. `AndroidBleDeviceLocalityProvider` (in
+   `core`) now imports the real package rather than a hand-kept type copy,
+   and is unit-tested against a mocked bridge (4 cases). iOS has no native
+   implementation (deferred outright — no Xcode available in this
+   environment). **Still not done: `ceremony.ts`'s real call site stays on
+   `NullDeviceLocalityProvider`** — deliberately, until the two things below
+   are confirmed on a real device, not assumed from a green compile:
+   - **Whether the authorized `CryptoObject` actually survives being held
+     across an entire advertising window.** The resolution to the
+     biometric/timing conflict (present the `BiometricPrompt` once, before
+     advertising starts, hold the authorized `Signature` in native memory,
+     sign with it later inside the GATT write callback) is implemented
+     exactly as scoped — as one bridge method (`respondToSensor`) that
+     internally does the two-step authorize-then-sign in Kotlin, not two
+     separate JS-facing calls as first sketched. But Android's per-operation
+     `CryptoObject` auth has no *documented* hard expiry after a successful
+     prompt — this is empirical platform behavior
+     (`LocalityPeripheralModule.kt`'s own doc comment says so), not a
+     guaranteed contract, and holding it for `windowSeconds` (tens of
+     seconds) has not been run on a real device yet.
+   - **A live round trip against witness-server's real `BleLocalityProvider`.**
+     `ref-06p2`'s own README already names this as the acceptance path: its
+     nRF-Connect-as-peripheral stand-in "stays that way until the Keyring
+     app's own peripheral role ships … and can be pointed at this same
+     sensor script." Point the real `BleLocalityProvider` (§10.2 item 2, not
+     a reference-rung stand-in) at this native peripheral on the attached
+     physical device (`R5CN70Q6PDP`), before reaching for item 12's full
+     `e2e:vrc:devices` suite.
+
+   Other findings from actually building it, beyond the two gates above:
+   - **The public-key encoding is platform-specific, and the design notes
+     calling it "raw EC-P256 point" were wrong for Android.**
+     `BiometricSignatureVerifier.ts`'s own "platform asymmetries" note says
+     so: Android's `getHardwarePublicKey()` returns SPKI-wrapped bytes (from
+     `PublicKey.encoded`), not a raw 65-byte point — only iOS uses a raw
+     point. `transcriptKeyMatchesVrcSigner`'s plain `===` only holds if the
+     locality transcript's `devicePublicKey` matches the SAME platform's
+     existing VRC-evidence encoding byte-for-byte, so
+     `LocalityPeripheralModule.kt` uses `publicKey.encoded` directly — the
+     *correct* choice for Android, matching `AttestationModule.kt`'s own
+     convention, not a raw-point extraction. Comments in `deviceLocality.ts`
+     and the native Spec corrected to say so.
+   - **This is a new package**, `bifold/packages/react-native-locality-peripheral/`,
+     Android-first, not an addition to `@bifold/react-native-attestation` —
+     that package's concern is attestation/signing, and folding
+     GATT-server/advertising Android APIs into it conflates two things the
+     monorepo otherwise keeps separate. It reads the *same* KeyStore alias
+     `AttestationModule.kt` creates (`vrc_hardware_signing_key`) as a
+     **deliberate duplicate constant**, not a shared import — a real
+     cross-module Gradle dependency between two independent RN native
+     packages proved not worth the fragility for one string constant.
+     Wired into the workspace for real: `@bifold/react-native-locality-peripheral`
+     is now a dependency of both `core`'s `package.json` (`workspace:*`) and
+     `app`'s own `package.json` (autolinking specifically needs the direct
+     app-level dependency — a transitive one via `core` is not enough), with
+     matching `portal:` resolutions at the repo root, mirroring exactly how
+     `@bifold/react-native-attestation` is wired.
    - **The binding assembly is a third deliberate duplicate, not two.** Only
      the native side ever learns `sensorNonce` (the sensor writes it over
-     BLE), so it has to assemble the same JCS-canonicalized five-value
-     binding `deviceLocality.ts`'s `bindingFor()` computes, itself, in
-     Kotlin — joining the wallet (Hermes) and witness-server (Node) copies.
-     `deviceLocality.ts`'s own frozen fixture
-     (`__tests__/deviceLocality.test.ts`) now includes a known
-     `sensorNonce`/`sensorDid` and the exact resulting binding bytes
-     specifically so a Kotlin implementation has something to check itself
-     against, not just two files it can't easily import to compare with.
-   - **The manifest has no BLE-peripheral permissions yet.** The two
-     `BLUETOOTH*` entries already in `app/android/app/src/main/AndroidManifest.xml`
-     predate this work entirely — upstream boilerplate for call-audio
-     routing, confirmed by grep, unrelated to VRC. `BLUETOOTH_ADVERTISE`
-     (API 31+, dangerous, runtime-requested) is missing and must be added;
-     there is currently no runtime Bluetooth permission request flow
-     anywhere in the app (the legacy `LocalityService`'s scanning role lives
-     in `witness-server`, a separate Node process, never in the wallet) — this
-     is greenfield permission UX too, not a rewire of something existing.
-     `minSdkVersion` is 24, so a legacy pre-31 fallback (`BLUETOOTH_ADMIN`,
-     no runtime prompt) needs a manifest entry as well if pre-31 devices are
-     meant to work, though most devices in the field by the time this ships
-     will be 31+.
-   - **Acceptance path already exists, once this is built:** `ref-06p2`'s own
-     README says as much — its nRF-Connect-as-peripheral stand-in "stays that
-     way until the Keyring app's own peripheral role ships … and can be
-     pointed at this same sensor script." The real validation is running
-     witness-server's actual `BleLocalityProvider` (already built, real code,
-     §10.2 item 2) against this native peripheral on the attached physical
-     device (`R5CN70Q6PDP`) before item 12's full `e2e:vrc:devices` run.
+     BLE, as UTF-8 text of a hex string — traced against witness-server's
+     real `BleLocalityProvider.runTranscriptExchange()`, not assumed from
+     the reference ladder's bare-echo test), so `LocalityPeripheralModule.kt`
+     assembles the same JCS-canonicalized five-value binding
+     `deviceLocality.ts`'s `bindingFor()` computes, itself, in Kotlin —
+     joining the wallet (Hermes) and witness-server (Node) copies. Checked
+     against `deviceLocality.test.ts`'s frozen fixture's field ordering,
+     not just eyeballed for agreement. The GATT read response is the full
+     `JSON.stringify`'d `LocalityTranscript` (`method` included), matching
+     witness-server's own `JSON.parse(raw.toString('utf8'))` expectation —
+     not just the bare signature, which the reference ladder's echo test
+     never exercised either.
+   - **The manifest permissions are self-declared on the new package**, not
+     hand-added to `app/android/app/src/main/AndroidManifest.xml` —
+     `BLUETOOTH_ADVERTISE`/`BLUETOOTH_CONNECT` (API 31+) plus the legacy
+     `BLUETOOTH`/`BLUETOOTH_ADMIN` (`maxSdkVersion="30"`, `minSdkVersion` is
+     24) live in the library module's own manifest and merge into the app's
+     final manifest automatically. The actual OS permission-request UX is
+     still not built — `LocalityPeripheralModule.kt` defensively checks
+     `ContextCompat.checkSelfPermission` and resolves `null` (not a crash,
+     not a reject) if not yet granted, treating "not granted" the same as
+     §7.1's `declinedByHolder`/`windowLost` until item 8's still-unbuilt
+     pre-flight sheet is the thing that actually asks.
 10. ✅ **`ext` on the two request documents**, and the wallet-side cross-check that
    the `#response` assertion matches what the device actually did. *Done when:* a
    witness claiming an observation the device did not make is detected and
