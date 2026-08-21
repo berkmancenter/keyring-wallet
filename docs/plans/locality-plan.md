@@ -1072,14 +1072,18 @@ submodule, with the user's explicit sign-off, before any of this could start.**
 
 ### 10.3 Keyring app
 
-**Status: items 7, 10, 11, 13 implemented, typechecked, and unit-tested;
-item 8 implemented at the data layer only, with the pre-flight UI sheet its
-own "Done when" describes not yet built; item 9's Android native module is
-real and compiles/autolinks (not a sketch — see its own entry below for
-what's still unverified on a real device before the ceremony wiring flips
-to it), iOS deferred outright (no Xcode in this environment); item 12 needs
-physical devices and has not been run; item 14 stays out of scope pending
-§11-Q5. See
+**Status: items 7, 9, 10, 11, 13 implemented, typechecked, and unit-tested
+— item 9's Android peripheral is proven live end to end on a physical
+device (2026-08-21), not just compiling, with three real bugs found and
+fixed along the way (see its own entry below); iOS deferred outright (no
+Xcode in this environment). Item 8 implemented at the data layer only,
+with the pre-flight UI sheet its own "Done when" describes not yet built.
+`ceremony.ts`'s real call site still constructs `NullDeviceLocalityProvider()`
+— item 9 being proven doesn't by itself decide when the wallet should
+switch to the real Android provider in production, which is a rollout
+decision, not a verification gate. Item 12 (`e2e:vrc:devices`) can now
+build on a working peripheral rather than being blocked behind one, but
+has not been run. Item 14 stays out of scope pending §11-Q5. See
 [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) for what was found
 doing this slice, including why item 8 needed a new call site (the witness
 connection was never discovery-queried at all before this) and the
@@ -1109,49 +1113,78 @@ Android/iOS tooling asymmetry in this environment.**
    (`ceremony.test.ts`, 4 new cases). **Not done:** the pre-flight sheet itself
    — no design guidance was available for it in this session, so the reader
    exists for a future sheet to call rather than being wired to one yet.
-9. 🟡 **Device-side peripheral** — advertise the EID as a service UUID, serve the
+9. ✅ **Device-side peripheral** — advertise the EID as a service UUID, serve the
    GATT characteristic, sign with the existing hardware-attestation key, all
    inside the ceremony window and foreground only. *Done when:* the app's
-   transcript verifies in the `ref-06p3` verifier unchanged. — **The pure-TS
-   half is done and real:** `deviceLocality.ts` gained `deriveEid`,
-   `serviceUuidFromEid`, `bindingFor`, cross-checked byte-for-byte against
-   witness-server's `trustTasks/locality.ts` copy via a frozen fixture
-   (`__tests__/deviceLocality.test.ts`, 5 cases). **The Android native module
-   is real, not a sketch:** `@bifold/react-native-locality-peripheral`'s
-   `LocalityPeripheralModule.kt` compiles against real TurboModule codegen
-   (`:bifold_react-native-locality-peripheral:compileDebugKotlin` green,
-   2026-08-21) and autolinks into the app — RN's own `config` command lists
-   it, and the app's generated `PackageList.java` includes
-   `new LocalityPeripheralPackage()`. `AndroidBleDeviceLocalityProvider` (in
-   `core`) now imports the real package rather than a hand-kept type copy,
-   and is unit-tested against a mocked bridge (4 cases). iOS has no native
-   implementation (deferred outright — no Xcode available in this
-   environment). **Still not done: `ceremony.ts`'s real call site stays on
-   `NullDeviceLocalityProvider`** — deliberately, until the two things below
-   are confirmed on a real device, not assumed from a green compile:
-   - **Whether the authorized `CryptoObject` actually survives being held
-     across an entire advertising window.** The resolution to the
-     biometric/timing conflict (present the `BiometricPrompt` once, before
-     advertising starts, hold the authorized `Signature` in native memory,
-     sign with it later inside the GATT write callback) is implemented
-     exactly as scoped — as one bridge method (`respondToSensor`) that
-     internally does the two-step authorize-then-sign in Kotlin, not two
-     separate JS-facing calls as first sketched. But Android's per-operation
-     `CryptoObject` auth has no *documented* hard expiry after a successful
-     prompt — this is empirical platform behavior
-     (`LocalityPeripheralModule.kt`'s own doc comment says so), not a
-     guaranteed contract, and holding it for `windowSeconds` (tens of
-     seconds) has not been run on a real device yet.
-   - **A live round trip against witness-server's real `BleLocalityProvider`.**
-     `ref-06p2`'s own README already names this as the acceptance path: its
-     nRF-Connect-as-peripheral stand-in "stays that way until the Keyring
-     app's own peripheral role ships … and can be pointed at this same
-     sensor script." Point the real `BleLocalityProvider` (§10.2 item 2, not
-     a reference-rung stand-in) at this native peripheral on the attached
-     physical device (`R5CN70Q6PDP`), before reaching for item 12's full
-     `e2e:vrc:devices` suite.
+   transcript verifies in the `ref-06p3` verifier unchanged. — **Proven live,
+   end to end, on a physical Galaxy S20+ (2026-08-21):** the native
+   peripheral advertised, witness-server's real `BleLocalityProvider`
+   connected and wrote the nonce, the device signed and served the
+   transcript across both GATT characteristics, and `verifyTranscript()`
+   confirmed it — `RESULT: observed, rttMs=522`, `VERIFY: {"ok":true}`, on a
+   freshly-produced signature, not the frozen fixture. Both gates the
+   previous status held open are now closed: the authorized `CryptoObject`
+   does survive being held across the advertising window (confirmed by the
+   run completing at all), and the live round trip against the real
+   `BleLocalityProvider` succeeded. `deviceLocality.ts`'s `deriveEid`/
+   `serviceUuidFromEid`/`bindingFor` remain cross-checked byte-for-byte
+   against witness-server's copy (`__tests__/deviceLocality.test.ts`, 5
+   cases); `AndroidBleDeviceLocalityProvider` (in `core`) imports the real
+   `@bifold/react-native-locality-peripheral` package and is unit-tested
+   against a mocked bridge (4 cases). iOS has no native implementation
+   (deferred outright — no Xcode available in this environment).
 
-   Other findings from actually building it, beyond the two gates above:
+   Getting from "compiles" to "verified" surfaced three real bugs along the
+   way, each fixed and now covered by a permanent test using the actual
+   captured on-device data, not a synthetic fixture:
+   - **`verifyTranscript()` silently rejected every real Android signature**
+     — two independent format mismatches invisible to this file's own
+     noble-signed unit tests, because those tests signed with noble's own
+     convenient defaults instead of anything device-representative.
+     `devicePublicKey` is SPKI-wrapped DER on Android (91 bytes), not the
+     raw 65-byte point `@noble/curves`'s `verify()` expects (confirmed via
+     `BiometricSignatureVerifier.ts`'s own "platform asymmetries" note —
+     the design notes calling this field "raw EC-P256 point" were wrong for
+     Android, corrected in `deviceLocality.ts` and the native Spec too).
+     Separately, `java.security.Signature` produces DER, non-canonical
+     ("high-S") signatures; `@noble/curves` defaults to rejecting non-low-S
+     signatures in compact form. Fixed `verifyTranscript()` to unwrap SPKI
+     when present and to verify with `{format: 'der', prehash: true,
+     lowS: false}`; fixed the test helper to sign the same way a real
+     device does. Two new tests freeze a real captured signature as a
+     permanent regression fixture.
+   - **Android's `BluetoothGattCharacteristic.value` silently caps at 512
+     bytes** (`GATT_MAX_ATTR_LEN`) — the transcript JSON runs to ~630 bytes
+     with a real key and signature. Fixed by serving from the module's own
+     `ByteArray` instead, and by only completing a characteristic's read
+     once its actual last chunk has been served, not on the first read
+     regardless of length.
+   - **BLE's GATT protocol itself caps a single attribute value at 512
+     bytes** (Bluetooth Core Spec, Vol 3, Part F, §3.2.9, "Long Attribute
+     Values"), independent of the negotiated ATT MTU — confirmed via
+     logcat showing a real MTU of 517 alongside a transcript still
+     truncated at exactly 512, which is what made this look like an
+     MTU/chunking bug at first rather than a hard protocol ceiling the
+     previous fix couldn't actually clear. No single-characteristic fix
+     exists for a value this size. **The wire protocol now uses two GATT
+     characteristics**, not one: the existing one (write nonce, read the
+     non-crypto fields) plus a new read-only
+     `LOCALITY_SIGNATURE_CHARACTERISTIC_UUID` carrying just
+     `devicePublicKey`/`signature` — the two fields whose size scales with
+     the crypto primitives. `readFullValue()`'s long-read chaining (with a
+     pacing delay between reads — a real `le-connection-abort-by-local`
+     appeared without one — and an iteration cap raised from 20 to 80,
+     since 20 wasn't enough for a connection stuck at the ATT default MTU)
+     still applies per characteristic.
+
+   `runTranscriptExchange` was pulled out of `BleLocalityProvider` as a
+   standalone function (it never touched instance state) specifically so
+   the two-characteristic merge — proven live but previously untested —
+   could get a real unit test against a fake `BleDevice`
+   (`BleLocalityProvider.test.ts`, new, 7 cases covering `readFullValue`'s
+   chunking and the merge itself).
+
+   Other findings from building and verifying this, beyond the three bugs above:
    - **The public-key encoding is platform-specific, and the design notes
      calling it "raw EC-P256 point" were wrong for Android.**
      `BiometricSignatureVerifier.ts`'s own "platform asymmetries" note says
@@ -1189,10 +1222,11 @@ Android/iOS tooling asymmetry in this environment.**
      joining the wallet (Hermes) and witness-server (Node) copies. Checked
      against `deviceLocality.test.ts`'s frozen fixture's field ordering,
      not just eyeballed for agreement. The GATT read response is the full
-     `JSON.stringify`'d `LocalityTranscript` (`method` included), matching
-     witness-server's own `JSON.parse(raw.toString('utf8'))` expectation —
-     not just the bare signature, which the reference ladder's echo test
-     never exercised either.
+     `LocalityTranscript`, split across the two characteristics (§10.3
+     item 9's own status above) rather than one JSON blob — witness-server
+     merges both back into one object before `JSON.parse`-equivalent
+     consumption — not just the bare signature, which the reference
+     ladder's echo test never exercised either.
    - **The manifest permissions are self-declared on the new package**, not
      hand-added to `app/android/app/src/main/AndroidManifest.xml` —
      `BLUETOOTH_ADVERTISE`/`BLUETOOTH_CONNECT` (API 31+) plus the legacy
