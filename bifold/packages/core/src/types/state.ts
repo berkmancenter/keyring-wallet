@@ -42,6 +42,15 @@ export interface Preferences {
   bannerMessages: BannerMessage[]
   genericErrorMessages: boolean
   useWitnessing: boolean
+  /**
+   * Locality confirmation (docs/plans/locality-plan.md §8.1) — default TRUE,
+   * in the store default below AND everywhere this is read from
+   * AsyncStorage (vrc-manager.ts's `useHardwareAttestation` reads it with
+   * `?? true` while the store here defaults it to `false` — two different
+   * defaults for the same flag, reported as keyring-bifold#38. Do not repeat
+   * that pattern for this flag.)
+   */
+  useLocalityConfirmation: boolean
 }
 
 export interface Tours {
