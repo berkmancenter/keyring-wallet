@@ -223,6 +223,10 @@ describe('witnessCredentialUtils', () => {
         witnessName: 'Test Witness Server',
         issuanceDate: '2026-01-21T10:00:00Z',
         credentialId: 'credential-123',
+        // No locality* members and no legacy localityVerification on this
+        // fixture's witnessContext — the honest read is 'not-offered', not
+        // an inferred false (locality-plan.md §7.1 rule 5).
+        locality: { outcome: 'not-offered' },
       })
     })
 
@@ -361,6 +365,71 @@ describe('witnessCredentialUtils', () => {
       expect(result).not.toBeNull()
       expect(result?.witnessDid).toBe('did:example:witness')
       expect(result?.event).toBeUndefined()
+    })
+
+    describe('locality (locality-plan.md §7.1) — three states', () => {
+      const vwcWith = (witnessContext: Record<string, unknown>) =>
+        ({
+          id: 'credential-locality',
+          encoded: {
+            type: ['VerifiableCredential', 'WitnessCredential'],
+            issuer: 'did:example:witness',
+            credentialSubject: { id: 'did:example:subject', witnessContext },
+          },
+        }) as unknown as W3cCredentialRecord
+
+      it("reads a confirmed observation's flat members", () => {
+        const result = extractWitnessInfo(
+          vwcWith({
+            localityConfirmed: true,
+            localityMethod: 'ble-challenge-response/0.1',
+            localityVenue: 'ATL, Room 2',
+            localityObservedAt: '2026-08-21T00:00:00Z',
+          })
+        )
+        expect(result?.locality).toEqual({
+          outcome: 'confirmed',
+          method: 'ble-challenge-response/0.1',
+          reason: undefined,
+          venue: 'ATL, Room 2',
+          observedAt: '2026-08-21T00:00:00Z',
+        })
+      })
+
+      it('distinguishes declinedByHolder (a choice) from windowLost (an interruption)', () => {
+        const declined = extractWitnessInfo(vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'declinedByHolder' }))
+        const interrupted = extractWitnessInfo(vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'windowLost' }))
+        expect(declined?.locality).toEqual({ outcome: 'declined', method: 'none', reason: 'declinedByHolder', venue: undefined, observedAt: undefined })
+        expect(interrupted?.locality?.reason).toBe('windowLost')
+        expect(declined?.locality?.outcome).toBe(interrupted?.locality?.outcome) // both 'declined' — the DISPLAY layer reads `reason` to tell them apart
+      })
+
+      it("reads 'not-offered' from total absence of any locality member — never inferred from a false value", () => {
+        const result = extractWitnessInfo(vwcWith({ event: 'EthDenver 2024', method: 'ble' }))
+        expect(result?.locality).toEqual({ outcome: 'not-offered' })
+      })
+
+      it('the three outcomes are pairwise distinct', () => {
+        const outcomes = [
+          extractWitnessInfo(vwcWith({ localityConfirmed: true, localityMethod: 'ble-challenge-response/0.1' }))?.locality?.outcome,
+          extractWitnessInfo(vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'windowLost' }))?.locality?.outcome,
+          extractWitnessInfo(vwcWith({ event: 'no locality here' }))?.locality?.outcome,
+        ]
+        expect(new Set(outcomes).size).toBe(3)
+      })
+
+      it('falls back to the legacy nested shape only when no flat members exist', () => {
+        const result = extractWitnessInfo(vwcWith({ localityVerification: { confirmed: true, type: 'proximity' } }))
+        expect(result?.locality).toEqual({ outcome: 'confirmed' })
+        expect(result?.localityVerification).toEqual({ confirmed: true, type: 'proximity', details: undefined })
+      })
+
+      it('the flat shape takes priority over a legacy nested one if both are somehow present', () => {
+        const result = extractWitnessInfo(
+          vwcWith({ localityConfirmed: false, localityMethod: 'none', localityReason: 'declinedByHolder', localityVerification: { confirmed: true } })
+        )
+        expect(result?.locality?.outcome).toBe('declined')
+      })
     })
   })
 })
