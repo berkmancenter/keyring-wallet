@@ -16,7 +16,13 @@
 
 import { bridge as realNativeLocalityPeripheralBridge, type NativeRespondToSensorParams, type NativeLocalityTranscriptResult } from '@bifold/react-native-locality-peripheral'
 
-import { deriveEid, serviceUuidFromEid, LOCALITY_CHARACTERISTIC_UUID, LOCALITY_BINDING_CONTEXT } from './deviceLocality'
+import {
+  deriveEid,
+  serviceUuidFromEid,
+  LOCALITY_CHARACTERISTIC_UUID,
+  LOCALITY_SIGNATURE_CHARACTERISTIC_UUID,
+  LOCALITY_BINDING_CONTEXT,
+} from './deviceLocality'
 import type { DeviceLocalityProvider, LocalitySensorDirective, LocalityTranscript, HardwareAttestationState } from './deviceLocality'
 
 export type { NativeRespondToSensorParams, NativeLocalityTranscriptResult }
@@ -62,6 +68,7 @@ export class AndroidBleDeviceLocalityProvider implements DeviceLocalityProvider 
     const result = await this.bridge.respondToSensor({
       serviceUuid,
       characteristicUuid: LOCALITY_CHARACTERISTIC_UUID,
+      signatureCharacteristicUuid: LOCALITY_SIGNATURE_CHARACTERISTIC_UUID,
       contextString: LOCALITY_BINDING_CONTEXT,
       method: params.directive.method,
       taskDigestMultibase: params.taskDigestMultibase,

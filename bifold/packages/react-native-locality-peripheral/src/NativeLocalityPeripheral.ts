@@ -28,8 +28,19 @@ import { TurboModuleRegistry } from 'react-native';
 export type NativeRespondToSensorParams = {
   /** From `serviceUuidFromEid(deriveEid(challenge, taskDigestMultibase))` — computed in JS, passed down ready-made. */
   serviceUuid: string;
-  /** `LOCALITY_CHARACTERISTIC_UUID` — the one characteristic, write-then-read. */
+  /**
+   * `LOCALITY_CHARACTERISTIC_UUID` — write-then-read, carries every field
+   * except `devicePublicKey`/`signature`. Split from a single characteristic
+   * after a real, live-on-device finding (2026-08-21): BLE's GATT protocol
+   * caps a single attribute value at 512 bytes (Bluetooth Core Spec, Vol 3,
+   * Part F, §3.2.9), independent of the negotiated ATT MTU (517 in
+   * testing) — the full transcript runs to ~630 bytes once it carries a
+   * real key and signature, over that ceiling regardless of how the reads
+   * are chunked. See `signatureCharacteristicUuid` below.
+   */
   characteristicUuid: string;
+  /** `LOCALITY_SIGNATURE_CHARACTERISTIC_UUID` — read-only, carries just `devicePublicKey`/`signature` (see `characteristicUuid`'s comment for why these are split out). */
+  signatureCharacteristicUuid: string;
   /** `'keyring-locality-v1'` today; versioned per plan §5.4, passed rather than hardcoded natively. */
   contextString: string;
   /**

@@ -15,7 +15,13 @@ jest.mock('@bifold/react-native-locality-peripheral', () => ({
 }))
 
 import { AndroidBleDeviceLocalityProvider, type NativeLocalityPeripheralBridge } from '../AndroidBleDeviceLocalityProvider'
-import { deriveEid, serviceUuidFromEid, LOCALITY_CHARACTERISTIC_UUID, LOCALITY_BINDING_CONTEXT } from '../deviceLocality'
+import {
+  deriveEid,
+  serviceUuidFromEid,
+  LOCALITY_CHARACTERISTIC_UUID,
+  LOCALITY_SIGNATURE_CHARACTERISTIC_UUID,
+  LOCALITY_BINDING_CONTEXT,
+} from '../deviceLocality'
 import type { LocalitySensorDirective } from '../deviceLocality'
 
 const DIRECTIVE: LocalitySensorDirective = {
@@ -60,6 +66,7 @@ describe('AndroidBleDeviceLocalityProvider (design sketch â€” locality-plan.md Â
     const nativeParams = respondToSensor.mock.calls[0][0]
     expect(nativeParams.serviceUuid).toBe(serviceUuidFromEid(deriveEid('a-fresh-challenge', 'sha256:deadbeef')))
     expect(nativeParams.characteristicUuid).toBe(LOCALITY_CHARACTERISTIC_UUID)
+    expect(nativeParams.signatureCharacteristicUuid).toBe(LOCALITY_SIGNATURE_CHARACTERISTIC_UUID)
     expect(nativeParams.contextString).toBe(LOCALITY_BINDING_CONTEXT)
     expect(nativeParams.method).toBe(DIRECTIVE.method)
     expect(nativeParams.sensorDid).toBe(DIRECTIVE.sensorDid)

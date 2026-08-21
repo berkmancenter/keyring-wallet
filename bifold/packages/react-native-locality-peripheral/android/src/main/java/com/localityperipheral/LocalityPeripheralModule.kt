@@ -127,6 +127,21 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     var settled: Boolean = false,
     var timeoutRunnable: Runnable? = null,
     var pendingResult: WritableMap? = null,
+    // NOT `characteristic.value` — Android's BluetoothGattCharacteristic
+    // silently caps that field at 512 bytes (GATT_MAX_ATTR_LEN), which
+    // https://www.bluetooth.com specifies as the maximum length of ANY
+    // GATT attribute value, independent of the negotiated ATT MTU (Vol 3,
+    // Part F, §3.2.9, "Long Attribute Values") — confirmed live
+    // (2026-08-21) via logcat showing a real 517-byte negotiated MTU
+    // alongside a transcript truncated at exactly 512 regardless. That
+    // ceiling is why the transcript is split across two characteristics
+    // (see `startAdvertisingAndServe`'s own comment) — each buffer here
+    // owns its own full bytes and its own "have I served all of it yet"
+    // flag, since finishing the call needs BOTH to be true.
+    var pendingCoreResponseBytes: ByteArray? = null,
+    var pendingSignatureResponseBytes: ByteArray? = null,
+    var coreFullyServed: Boolean = false,
+    var signatureFullyServed: Boolean = false,
   )
 
   @Volatile private var activeCall: ActiveCall? = null
@@ -167,6 +182,7 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
 
     val serviceUuidStr = params.getString("serviceUuid")
     val characteristicUuidStr = params.getString("characteristicUuid")
+    val signatureCharacteristicUuidStr = params.getString("signatureCharacteristicUuid")
     val contextString = params.getString("contextString")
     val method = params.getString("method")
     val taskDigestMultibase = params.getString("taskDigestMultibase")
@@ -175,9 +191,9 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     val hardwareAttestation = params.getString("hardwareAttestation")
     val windowSeconds = if (params.hasKey("windowSeconds")) params.getDouble("windowSeconds") else Double.NaN
 
-    if (serviceUuidStr == null || characteristicUuidStr == null || contextString == null || method == null ||
-      taskDigestMultibase == null || challenge == null || sensorDid == null || hardwareAttestation == null ||
-      windowSeconds.isNaN()
+    if (serviceUuidStr == null || characteristicUuidStr == null || signatureCharacteristicUuidStr == null ||
+      contextString == null || method == null || taskDigestMultibase == null || challenge == null ||
+      sensorDid == null || hardwareAttestation == null || windowSeconds.isNaN()
     ) {
       promise.reject("error", "respondToSensor: missing or malformed params")
       return
@@ -185,9 +201,11 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
 
     val serviceUuid: UUID
     val characteristicUuid: UUID
+    val signatureCharacteristicUuid: UUID
     try {
       serviceUuid = UUID.fromString(serviceUuidStr)
       characteristicUuid = UUID.fromString(characteristicUuidStr)
+      signatureCharacteristicUuid = UUID.fromString(signatureCharacteristicUuidStr)
     } catch (e: IllegalArgumentException) {
       promise.reject("error", "respondToSensor: malformed UUID: ${e.message}")
       return
@@ -228,7 +246,7 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
         return@authorizeSignature
       }
       try {
-        startAdvertisingAndServe(serviceUuid, characteristicUuid, windowSeconds, call)
+        startAdvertisingAndServe(serviceUuid, characteristicUuid, signatureCharacteristicUuid, windowSeconds, call)
       } catch (e: Exception) {
         Log.e(TAG, "Failed to start advertising/GATT server: ${e.message}")
         finishCallWithError(call, "Failed to start BLE peripheral: ${e.message}")
@@ -342,6 +360,7 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
   private fun startAdvertisingAndServe(
     serviceUuid: UUID,
     characteristicUuid: UUID,
+    signatureCharacteristicUuid: UUID,
     windowSeconds: Double,
     call: ActiveCall,
   ) {
@@ -350,15 +369,41 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     val adapter = bluetoothManager.adapter ?: throw IllegalStateException("no Bluetooth adapter")
     val advertiser = adapter.bluetoothLeAdvertiser ?: throw IllegalStateException("no BLE advertiser (adapter off?)")
 
+    // TWO characteristics, not one — a real, live-on-device finding
+    // (2026-08-21): BLE's GATT protocol caps a single attribute value at
+    // 512 bytes, independent of the negotiated ATT MTU (517 in testing —
+    // comfortably large, which is exactly why this first looked like an
+    // MTU/chunking bug rather than a hard protocol ceiling). The full
+    // transcript runs to ~630 bytes once it carries a real SPKI public key
+    // and DER signature. `characteristic` keeps the write side and carries
+    // everything except the two crypto-sized fields; `signatureCharacteristic`
+    // is read-only and carries just `devicePublicKey`/`signature`. See
+    // `deviceLocality.ts`'s matching constants for the full writeup.
     val characteristic = BluetoothGattCharacteristic(
       characteristicUuid,
       BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_READ,
       BluetoothGattCharacteristic.PERMISSION_WRITE or BluetoothGattCharacteristic.PERMISSION_READ,
     )
+    val signatureCharacteristic = BluetoothGattCharacteristic(
+      signatureCharacteristicUuid,
+      BluetoothGattCharacteristic.PROPERTY_READ,
+      BluetoothGattCharacteristic.PERMISSION_READ,
+    )
     val service = BluetoothGattService(serviceUuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
     service.addCharacteristic(characteristic)
+    service.addCharacteristic(signatureCharacteristic)
+
+    // ATT default (23-byte MTU, 3-byte header) until onMtuChanged fires. Only
+    // matters for how much of the transcript we can hand back in a single
+    // read response — see the long comment on onCharacteristicReadRequest
+    // below for why this exists at all.
+    var negotiatedMtu = 23
 
     val gattServerCallback = object : BluetoothGattServerCallback() {
+      override fun onMtuChanged(device: BluetoothDevice, mtu: Int) {
+        negotiatedMtu = mtu
+      }
+
       override fun onCharacteristicWriteRequest(
         device: BluetoothDevice,
         requestId: Int,
@@ -390,17 +435,20 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
             Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
           )
 
-          val transcriptJson = transcriptJson(
+          val coreJson = coreTranscriptJson(
             method = call.method,
             taskDigestMultibase = call.taskDigestMultibase,
             challenge = call.challenge,
             sensorNonce = sensorNonce,
             sensorDid = call.sensorDid,
-            devicePublicKeyBase64 = call.devicePublicKeyBase64,
-            signatureBase64Url = signatureBase64Url,
             hardwareAttestation = call.hardwareAttestation,
           )
-          characteristic.value = transcriptJson.toByteArray(StandardCharsets.UTF_8)
+          val signatureJson = signatureTranscriptJson(
+            devicePublicKeyBase64 = call.devicePublicKeyBase64,
+            signatureBase64Url = signatureBase64Url,
+          )
+          call.pendingCoreResponseBytes = coreJson.toByteArray(StandardCharsets.UTF_8)
+          call.pendingSignatureResponseBytes = signatureJson.toByteArray(StandardCharsets.UTF_8)
 
           val resultMap = Arguments.createMap()
           resultMap.putString("sensorNonceHex", sensorNonce)
@@ -425,19 +473,43 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
         offset: Int,
         char: BluetoothGattCharacteristic,
       ) {
-        if (char.uuid != characteristicUuid) return
-        val fullValue = char.value
+        val isSignature = char.uuid == signatureCharacteristicUuid
+        if (char.uuid != characteristicUuid && !isSignature) return
+        // NOT char.value — see ActiveCall's own field comments: Android
+        // caps that field at 512 bytes, silently, well under either
+        // characteristic's real size once both are combined (the whole
+        // reason there are two characteristics now).
+        val fullValue = if (isSignature) call.pendingSignatureResponseBytes else call.pendingCoreResponseBytes
         if (fullValue == null || offset > fullValue.size) {
           call.gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_INVALID_OFFSET, offset, null)
           return
         }
-        // Long-read support: the central may re-request at increasing
-        // offsets if the transcript exceeds the negotiated MTU.
-        val slice = fullValue.copyOfRange(offset, fullValue.size)
+        // Long-read support: even split across two characteristics, each
+        // JSON blob can still exceed the ATT default MTU (23 bytes), so
+        // the central re-requests at increasing offsets — BLE's own
+        // long-read procedure, which the CENTRAL drives, not BlueZ
+        // transparently. `sendResponse`'s own truncation behavior is not
+        // something to rely on here: this file previously handed back the
+        // WHOLE remainder every time and then finished the call on the
+        // very first read request, closing the GATT server before the
+        // central's continuation reads at higher offsets could ever land —
+        // confirmed live (2026-08-21) as a real hang, not a timeout, once
+        // witness-server's own read loop was fixed to actually chain reads.
+        // Truncating to the negotiated MTU ourselves is what lets this
+        // file know, unambiguously, when THIS response is the last one.
+        val maxChunk = (negotiatedMtu - 1).coerceAtLeast(1)
+        val end = (offset + maxChunk).coerceAtMost(fullValue.size)
+        val slice = fullValue.copyOfRange(offset, end)
         call.gattServer?.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, slice)
 
-        // The sensor has now read the transcript — the round trip this
-        // call exists to run is complete.
+        // Only the read that actually carried the last byte of THIS
+        // characteristic marks it served — an earlier chunk means the
+        // central has more reads of this same characteristic coming, and
+        // closing the GATT server now would strand them. The ceremony as a
+        // whole only completes once BOTH characteristics are fully served.
+        if (end < fullValue.size) return
+        if (isSignature) call.signatureFullyServed = true else call.coreFullyServed = true
+        if (!call.coreFullyServed || !call.signatureFullyServed) return
         val pending = call.pendingResult
         if (pending != null && !call.settled) {
           finishCall(call, result = pending)
@@ -568,15 +640,20 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     return json.toByteArray(StandardCharsets.UTF_8)
   }
 
-  /** The full `LocalityTranscript` (plan §5.3), as the GATT read response — see the Spec's own comment for why this is the wire shape, not just the signature. */
-  private fun transcriptJson(
+  /**
+   * The CORE half of `LocalityTranscript` (plan §5.3) — everything except
+   * `devicePublicKey`/`signature`, served from the write-then-read
+   * characteristic. See `startAdvertisingAndServe`'s own comment for why
+   * the transcript is split across two characteristics at all; the two
+   * JSON objects here merge into one `LocalityTranscript` on the witness
+   * side (`BleLocalityProvider.runTranscriptExchange()`), not on this one.
+   */
+  private fun coreTranscriptJson(
     method: String,
     taskDigestMultibase: String,
     challenge: String,
     sensorNonce: String,
     sensorDid: String,
-    devicePublicKeyBase64: String,
-    signatureBase64Url: String,
     hardwareAttestation: String,
   ): String {
     return "{" +
@@ -585,9 +662,18 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
       "\"challenge\":${jsonEscape(challenge)}," +
       "\"sensorNonce\":${jsonEscape(sensorNonce)}," +
       "\"sensorDid\":${jsonEscape(sensorDid)}," +
-      "\"devicePublicKey\":${jsonEscape(devicePublicKeyBase64)}," +
-      "\"signature\":${jsonEscape(signatureBase64Url)}," +
       "\"hardwareAttestation\":${jsonEscape(hardwareAttestation)}" +
+      "}"
+  }
+
+  /** The SIGNATURE half of `LocalityTranscript` — see `coreTranscriptJson`'s own comment. */
+  private fun signatureTranscriptJson(
+    devicePublicKeyBase64: String,
+    signatureBase64Url: String,
+  ): String {
+    return "{" +
+      "\"devicePublicKey\":${jsonEscape(devicePublicKeyBase64)}," +
+      "\"signature\":${jsonEscape(signatureBase64Url)}" +
       "}"
   }
 }

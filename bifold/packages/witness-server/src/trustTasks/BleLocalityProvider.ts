@@ -87,18 +87,88 @@ export class NullTaskLocalityProvider implements TaskLocalityProvider {
   }
 }
 
-type BleDevice = {
+export type BleDevice = {
   connect: () => Promise<void>
   disconnect: () => Promise<void>
   gatt: () => Promise<{ getPrimaryService: (uuid: string) => Promise<{ getCharacteristic: (uuid: string) => Promise<BleCharacteristic> }> }>
   helper: { prop: (name: string) => Promise<string[]> }
 }
-type BleCharacteristic = {
+export type BleCharacteristic = {
   writeValue: (value: Buffer, options: { type: 'request' }) => Promise<void>
-  readValue: () => Promise<Buffer>
+  readValue: (offset?: number) => Promise<Buffer>
 }
 
-const GATT_CHARACTERISTIC_UUID = '4b524c32-0000-1000-8000-2a2b3c4d5e6f'
+/**
+ * `node-ble`'s `readValue(offset)` is ONE ATT read at that offset, up to
+ * whatever the negotiated MTU allows — it does not chain BLE's own
+ * long-read procedure (repeated ATT_READ_BLOB_REQ) itself; the CENTRAL has
+ * to drive that by re-requesting at increasing offsets. A single un-offset
+ * call (this file's original code) got back only the first chunk of the
+ * transcript against a real device (2026-08-21's live verification — the
+ * JSON response is a few hundred bytes of base64 keys/signature,
+ * comfortably past the ATT default MTU), and the caller's own
+ * `.catch(() => null)` turned the resulting JSON.parse failure into a bare
+ * "windowLost" with no trace until logging was added. (A second, separate
+ * bug on the device side compounded this at first — Android's
+ * `BluetoothGattCharacteristic.value` silently caps at 512 bytes
+ * regardless of how the read side chains — fixed in
+ * `LocalityPeripheralModule.kt` to serve from its own byte array instead.)
+ * Reads in a loop, appending offsets, until a chunk comes back empty/short
+ * (end of value) or the accumulated bytes parse as complete JSON —
+ * whichever comes first — capped so a malformed response can't loop
+ * forever, with a short pause between reads: back-to-back ATT reads with
+ * no pacing at all triggered a real `le-connection-abort-by-local` in
+ * testing, not just a slow round trip. The iteration cap is sized for the
+ * WORST case, not the common one: nothing here forces an MTU exchange, so
+ * a connection that never negotiates past the ATT default (23 bytes, 22
+ * usable per read) needs ~29 reads for a ~630-byte transcript — a cap of
+ * 20 silently returned a truncated, unparseable buffer in testing.
+ */
+export async function readFullValue(characteristic: BleCharacteristic): Promise<Buffer> {
+  const chunks: Buffer[] = []
+  let offset = 0
+  for (let i = 0; i < 80; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 30)) // see this function's own comment on why
+    const chunk = await characteristic.readValue(offset)
+    if (chunk.length === 0) break
+    chunks.push(chunk)
+    offset += chunk.length
+    const soFar = Buffer.concat(chunks)
+    try {
+      JSON.parse(soFar.toString('utf8'))
+      return soFar // a complete, parseable value — stop even if more would follow
+    } catch {
+      // not yet complete; read the next chunk at the new offset
+    }
+  }
+  return Buffer.concat(chunks)
+}
+
+/**
+ * Two characteristics, not one — a real, live-on-device finding
+ * (2026-08-21): BLE's GATT protocol caps a SINGLE attribute value at 512
+ * bytes (Bluetooth Core Spec, Vol 3, Part F, §3.2.9, "Long Attribute
+ * Values"), independent of the negotiated ATT MTU (a real device
+ * negotiated 517 in testing — comfortably large, and exactly why this
+ * looked like an MTU/chunking bug at first, not a hard protocol ceiling).
+ * The full transcript runs to ~630 bytes once it carries a real base64
+ * SPKI public key and DER signature — over the ceiling regardless of how
+ * patiently either side chains long reads. `GATT_CORE_CHARACTERISTIC_UUID`
+ * carries everything except the two crypto-sized fields (method,
+ * taskDigestMultibase, challenge, sensorNonce, sensorDid,
+ * hardwareAttestation — comfortably under 512 bytes on its own);
+ * `GATT_SIGNATURE_CHARACTERISTIC_UUID` carries just `devicePublicKey` and
+ * `signature`, read-only, no write. Deriving `LocalityTranscript` needs
+ * both.
+ */
+const GATT_CORE_CHARACTERISTIC_UUID = '4b524c32-0000-1000-8000-2a2b3c4d5e6f'
+const GATT_SIGNATURE_CHARACTERISTIC_UUID = '4b524c33-0000-1000-8000-2a2b3c4d5e6f'
+
+type CoreTranscriptFields = Pick<
+  LocalityTranscript,
+  'method' | 'taskDigestMultibase' | 'challenge' | 'sensorNonce' | 'sensorDid' | 'hardwareAttestation'
+>
+type SignatureTranscriptFields = Pick<LocalityTranscript, 'devicePublicKey' | 'signature'>
 
 interface PendingObservation {
   serviceUuid: string
@@ -202,7 +272,17 @@ export class BleLocalityProvider implements TaskLocalityProvider {
           if (!waiter) continue
           this.pending.delete(matched)
           this.seenAddresses.add(address)
-          const observation = await this.runTranscriptExchange(device, waiter.serviceUuid).catch(() => null)
+          const observation = await runTranscriptExchange(device, waiter.serviceUuid).catch((error: Error) => {
+            // Swallowed as a windowLost-shaped null by design (a mid-exchange
+            // failure is still "no confirmed observation," not a crash the
+            // caller should see) — but silently, with zero trace, made a real
+            // BLE failure indistinguishable from an honest timeout. Logged
+            // here so the next person debugging a "sensor never observed it"
+            // report (2026-08-21's live on-device verification hit this
+            // exact silence) has something to look at.
+            console.warn(`[ble] transcript exchange with ${address} failed: ${error.message}`)
+            return null
+          })
           waiter.resolve(observation)
         }
         await new Promise((r) => setTimeout(r, 500))
@@ -212,27 +292,44 @@ export class BleLocalityProvider implements TaskLocalityProvider {
     }
   }
 
-  /** Connect, discover the characteristic, mint and write the sensor nonce, and read back the signed transcript. */
-  private async runTranscriptExchange(device: BleDevice, serviceUuid: string): Promise<LocalityObservationResult | null> {
-    await device.connect()
-    try {
-      const gattServer = await device.gatt()
-      const service = await gattServer.getPrimaryService(serviceUuid)
-      const characteristic = await service.getCharacteristic(GATT_CHARACTERISTIC_UUID)
+}
 
-      // §5.3: the sensor mints the nonce, fresh, on the radio link — it
-      // never travels the task channel. Writing it is what starts the
-      // bounded round trip §5.5's timing bound measures; the device signs
-      // the transcript over THIS nonce once it has received it.
-      const sensorNonce = randomBytes(32).toString('hex')
-      const t0 = Date.now()
-      await characteristic.writeValue(Buffer.from(sensorNonce, 'utf8'), { type: 'request' })
-      const raw = await characteristic.readValue()
-      const rttMs = Date.now() - t0
-      const transcript = JSON.parse(raw.toString('utf8')) as LocalityTranscript
-      return { transcript, rttMs, sensorNonce }
-    } finally {
-      await device.disconnect().catch(() => {})
-    }
+/**
+ * Connect, discover both characteristics, mint and write the sensor
+ * nonce, and read back the signed transcript — assembled from the two
+ * characteristics' JSON, not one. See `GATT_CORE_CHARACTERISTIC_UUID`'s
+ * own comment for why there are two. A standalone function, not a method —
+ * it never touches `BleLocalityProvider`'s own instance state, and pulling
+ * it out is what makes the two-characteristic merge (the exact thing a
+ * live on-device run proved live on 2026-08-21, but this file had no unit
+ * test for) directly testable against a fake `BleDevice`.
+ */
+export async function runTranscriptExchange(device: BleDevice, serviceUuid: string): Promise<LocalityObservationResult | null> {
+  await device.connect()
+  try {
+    const gattServer = await device.gatt()
+    const service = await gattServer.getPrimaryService(serviceUuid)
+    const coreCharacteristic = await service.getCharacteristic(GATT_CORE_CHARACTERISTIC_UUID)
+    const signatureCharacteristic = await service.getCharacteristic(GATT_SIGNATURE_CHARACTERISTIC_UUID)
+
+    // §5.3: the sensor mints the nonce, fresh, on the radio link — it
+    // never travels the task channel. Writing it is what starts the
+    // bounded round trip §5.5's timing bound measures; the device signs
+    // the transcript over THIS nonce once it has received it. Only the
+    // core characteristic is written to — the signature characteristic
+    // is read-only and becomes valid once the device has finished
+    // signing in response to this same write.
+    const sensorNonce = randomBytes(32).toString('hex')
+    const t0 = Date.now()
+    await coreCharacteristic.writeValue(Buffer.from(sensorNonce, 'utf8'), { type: 'request' })
+    const coreRaw = await readFullValue(coreCharacteristic)
+    const signatureRaw = await readFullValue(signatureCharacteristic)
+    const rttMs = Date.now() - t0
+    const core = JSON.parse(coreRaw.toString('utf8')) as CoreTranscriptFields
+    const signature = JSON.parse(signatureRaw.toString('utf8')) as SignatureTranscriptFields
+    const transcript: LocalityTranscript = { ...core, ...signature }
+    return { transcript, rttMs, sensorNonce }
+  } finally {
+    await device.disconnect().catch(() => {})
   }
 }

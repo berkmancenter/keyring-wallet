@@ -22,7 +22,7 @@
  * importing @bifold/core here would drag React Native into a Node service.
  */
 
-import { createHash, hkdfSync } from 'node:crypto'
+import { createHash, createPublicKey, hkdfSync } from 'node:crypto'
 import { p256 } from '@noble/curves/nist.js'
 
 import { jcsCanonicalize } from './documentProof'
@@ -113,10 +113,41 @@ export function bindingFor(t: {
 export type TranscriptVerdict = { ok: true } | { ok: false; reason: string }
 
 /**
+ * `devicePublicKey` is whatever THIS PLATFORM's `getHardwarePublicKey()`
+ * already returns (see the `LocalityTranscript.devicePublicKey` doc above)
+ * — a raw 65-byte point on iOS, SPKI-wrapped DER on Android. `@noble/curves`'s
+ * `p256.verify()` needs a raw point either way, so detect and unwrap SPKI
+ * here rather than assuming one platform's shape. Verified against a real
+ * on-device capture (2026-08-21): a naive byte-length-91 pass-through to
+ * `p256.verify()` doesn't throw, it just silently fails verification.
+ */
+function rawPointFromDevicePublicKey(bytes: Uint8Array): Uint8Array {
+  // Already a raw point (iOS: uncompressed 65 bytes; also accepted compressed
+  // 33 bytes, which @noble/curves' verify() decompresses natively — only
+  // Android's SPKI-DER (91 bytes for P-256) needs unwrapping below.
+  if (bytes.length === 65 && bytes[0] === 0x04) return bytes
+  if (bytes.length === 33 && (bytes[0] === 0x02 || bytes[0] === 0x03)) return bytes
+  const key = createPublicKey({ key: Buffer.from(bytes), format: 'der', type: 'spki' })
+  const jwk = key.export({ format: 'jwk' }) as { x: string; y: string }
+  return Buffer.concat([Buffer.from([0x04]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')])
+}
+
+/**
  * §7.3 step 5: recompute the binding and verify the device's P-256
  * signature over it. `expected` is what the WITNESS itself issued/observed
  * (its own challenge, its own sensor nonce, its own sensorDid) — never
  * trust the transcript's own copies of these over the witness's.
+ *
+ * Two real bugs found and fixed here via a live on-device capture
+ * (2026-08-21), not caught by the reference ladder's Ed25519 stand-in or
+ * this file's own noble-signed unit tests: (1) `devicePublicKey`'s SPKI
+ * wrapping on Android, above; (2) Android's `java.security.Signature`
+ * produces DER-encoded, non-canonical ("high-S") ECDSA signatures —
+ * `@noble/curves` defaults to rejecting those (`lowS` strict mode) and to
+ * expecting a raw compact signature, not DER. Both must be told explicitly.
+ * See docs/plans/locality-plan/2026-08-21-bam.md for the full trail,
+ * including why a naive fix attempt (pre-hashing manually, matching the
+ * verify call this replaced) silently failed rather than throwing.
  */
 export function verifyTranscript(
   transcript: LocalityTranscript,
@@ -128,7 +159,7 @@ export function verifyTranscript(
   if (transcript.sensorDid !== expected.sensorDid) return { ok: false, reason: 'sensorMismatch' }
   let publicKeyBytes: Uint8Array
   try {
-    publicKeyBytes = Buffer.from(transcript.devicePublicKey, 'base64')
+    publicKeyBytes = rawPointFromDevicePublicKey(Buffer.from(transcript.devicePublicKey, 'base64'))
   } catch {
     return { ok: false, reason: 'malformedPublicKey' }
   }
@@ -139,10 +170,9 @@ export function verifyTranscript(
     return { ok: false, reason: 'malformedSignature' }
   }
   const message = bindingFor(transcript)
-  const digest = createHash('sha256').update(message).digest()
   let valid: boolean
   try {
-    valid = p256.verify(signatureBytes, digest, publicKeyBytes)
+    valid = p256.verify(signatureBytes, message, publicKeyBytes, { format: 'der', prehash: true, lowS: false })
   } catch {
     valid = false
   }

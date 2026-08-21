@@ -51,8 +51,33 @@ const EID_SALT = 'keyring-locality-eid-v1'
 const EID_BYTES = 12
 /** "KRL1" — the fixed prefix that survives 128-bit-service-UUID formatting on iOS. */
 export const EID_UUID_PREFIX = '4b524c31'
-/** The one GATT characteristic (write nonce, then read transcript) the device's peripheral role serves. */
+/**
+ * The GATT characteristic the sensor writes its nonce to, and reads the
+ * CORE transcript fields back from (method, taskDigestMultibase, challenge,
+ * sensorNonce, sensorDid, hardwareAttestation — everything except the
+ * cryptographic evidence).
+ *
+ * Split from the signature/key characteristic below because of a real,
+ * live-on-device finding (2026-08-21): BLE's GATT protocol caps a SINGLE
+ * attribute value at 512 bytes (Bluetooth Core Spec, Vol 3, Part F, §3.2.9,
+ * "Long Attribute Values") — independent of the negotiated ATT MTU, which
+ * a real Android device negotiated to 517 in testing, comfortably large
+ * enough to make it look like an MTU/chunking problem before logcat showed
+ * the actual attribute value itself was being rejected past 512 bytes. The
+ * full transcript (including a base64 SPKI public key and a DER signature)
+ * runs to ~630 bytes — over the ceiling regardless of how patiently either
+ * side chains long reads. No single-characteristic fix exists; the value
+ * itself has to be smaller, hence two characteristics instead of one.
+ */
 export const LOCALITY_CHARACTERISTIC_UUID = '4b524c32-0000-1000-8000-2a2b3c4d5e6f'
+/**
+ * The GATT characteristic serving ONLY `devicePublicKey` and `signature` —
+ * the two fields whose size scales with the crypto primitives (a base64
+ * SPKI-wrapped EC key, a DER ECDSA signature) rather than with protocol
+ * bookkeeping, split out for the reason `LOCALITY_CHARACTERISTIC_UUID`'s
+ * own comment explains. Read-only — nothing is ever written to it.
+ */
+export const LOCALITY_SIGNATURE_CHARACTERISTIC_UUID = '4b524c33-0000-1000-8000-2a2b3c4d5e6f'
 /** Versioned per plan §5.4 — bump this, not the shape, if the binding ever needs to change. */
 export const LOCALITY_BINDING_CONTEXT = 'keyring-locality-v1'
 
