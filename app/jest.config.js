@@ -68,12 +68,19 @@ module.exports = {
     // Expo modules used by bifold core - reuse bifold's jest mocks
     'expo-crypto': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-crypto.js',
     '@expo/app-integrity': '<rootDir>/../bifold/packages/core/__mocks__/@expo/app-integrity.js',
+    // @openvtc/trust-tasks is ESM-only with an import-condition exports map,
+    // which Jest's CJS resolver can't follow — same fix as bifold/core's own
+    // jest.config.js, pointed at the root-hoisted copy (this package isn't
+    // nested under app/node_modules; modulePaths above only searches app's
+    // own node_modules, so the mapping has to name the root path explicitly).
+    '^@openvtc/trust-tasks$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/index.js',
+    '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/$1.js',
   },
   transform: {
     '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(.*react-native.*|@credo-ts|@openwallet-foundation|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|expo(nent)?|@expo(nent)?/.*)/)',
+    'node_modules/(?!(.*react-native.*|@credo-ts|@openwallet-foundation|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|@openvtc|expo(nent)?|@expo(nent)?/.*)/)',
   ],
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]sx?$',
   testPathIgnorePatterns: ['\\.snap$', '<rootDir>/node_modules/', '<rootDir>/lib', '<rootDir>/__tests__/contexts/'],

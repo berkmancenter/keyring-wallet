@@ -18,7 +18,9 @@
       "@utils/*": ["src/utils/*"],
       "react-native": ["node_modules/react-native"],
       "react-native-svg": ["node_modules/react-native-svg"],
-      "@react-navigation/*": ["node_modules/@react-navigation/*"]
+      "@react-navigation/*": ["node_modules/@react-navigation/*"],
+      "@openvtc/trust-tasks": ["../node_modules/@openvtc/trust-tasks/dist/index.d.ts"],
+      "@openvtc/trust-tasks/*": ["../node_modules/@openvtc/trust-tasks/dist/*"]
     }
   },
   "exclude": ["node_modules", "metro.config.js", "babel.config.js", "jest.config.js", "jestSetup.js"]
