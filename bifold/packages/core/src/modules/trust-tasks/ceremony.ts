@@ -57,6 +57,8 @@ import { vrcFlowStore } from '../vrc/witnessStatusStore'
 
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
+import * as witnessShare from './witnessShareSpec'
+import type { VwcPresentationBundle } from './outcomeEvidence'
 import { TrustTaskMessage } from './messages/TrustTaskMessage'
 import { TrustTasksModule } from './module/TrustTasksModule'
 import { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
@@ -92,6 +94,7 @@ export function isDeterministicProposer(myConnectionDid: string, theirConnection
 export const SUPPORTED_TASK_TYPES = [
   propose.TYPE_URI,
   issue.TYPE_URI,
+  witnessShare.TYPE_URI,
 ] as const
 
 /** The slug of a Type URI: authority and version stripped. */
@@ -127,15 +130,33 @@ export async function maybeOpenRelationshipExchange(
   if (!connection.did || !connection.theirDid) return
   if (!isDeterministicProposer(connection.did, connection.theirDid)) return
 
-  const service = getTrustTasksService(agent)
-
-  // Idempotence: one discovery (and one exchange) per connection.
+  // Idempotence: one exchange per connection (the discovery query has its
+  // own issuer-aware idempotence inside sendDiscoveryQuery).
   const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
-  for (const typeUri of [discovery.TYPE_URI, propose.TYPE_URI]) {
-    const existing = await documentRepository.findByQuery(agent.context, { typeUri, connectionId })
-    if (existing.length > 0) return
-  }
+  const existing = await documentRepository.findByQuery(agent.context, { typeUri: propose.TYPE_URI, connectionId })
+  if (existing.length > 0) return
 
+  await sendDiscoveryQuery(agent, connectionId)
+}
+
+/**
+ * Send our trust-task-discovery query on a connection, once per side —
+ * idempotent on OUR OWN query (the peer's inbound query is also retained
+ * under the same type URI, so the check is issuer-aware). Both parties run
+ * this: the proposer to gate the propose, the responder (at acceptance) to
+ * learn the proposer's supportedTypes for the witness-share gate.
+ */
+async function sendDiscoveryQuery(agent: Agent, connectionId: string): Promise<void> {
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.did || !connection.theirDid) return
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  const existing = await documentRepository.findByQuery(agent.context, { typeUri: discovery.TYPE_URI, connectionId })
+  // Base-URI tagging: our ANSWER to the peer's query shares this typeUri tag,
+  // so match on the document's own type too — else answering first forever
+  // masquerades as having queried.
+  if (existing.some((r) => r.document.type === discovery.TYPE_URI && r.document.issuer === connection.did)) return
+
+  const service = getTrustTasksService(agent)
   const document: Record<string, unknown> = {
     id: utils.uuid(),
     type: discovery.TYPE_URI,
@@ -148,6 +169,33 @@ export async function maybeOpenRelationshipExchange(
   await service.retain(agent.context, document, 'request', connectionId)
   await sendTrustTaskDocument(agent, connectionId, document)
   agent.config.logger.info(`${LOG_PREFIX} discovery sent on connection ${connectionId}`)
+}
+
+/**
+ * Whether the peer's retained discovery answer lists a task type.
+ * Returns null when no answer from the peer has arrived yet — callers that
+ * can wait should distinguish "not yet known" from "known unsupported".
+ */
+async function peerSupportsTaskType(agent: Agent, connectionId: string, typeUri: string): Promise<boolean | null> {
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.theirDid) return null
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  // Retention tags records by the BASE type URI (TrustTaskDocumentRecord
+  // strips the #response fragment) — query the base and filter on the
+  // document's own type.
+  const responses = await documentRepository.findByQuery(agent.context, {
+    typeUri: discovery.TYPE_URI,
+    connectionId,
+    role: 'response',
+  })
+  const fromPeer = responses.filter(
+    (r) => r.document.type === `${discovery.TYPE_URI}#response` && r.document.issuer === connection.theirDid
+  )
+  if (fromPeer.length === 0) return null
+  return fromPeer.some((r) => {
+    const entries = (r.document as { payload?: { supportedTypes?: (string | { type: string })[] } }).payload?.supportedTypes ?? []
+    return entries.some((entry) => (typeof entry === 'string' ? entry : entry.type) === typeUri)
+  })
 }
 
 /**
@@ -323,6 +371,23 @@ export function setupTrustTasksInbound(agent: Agent): void {
       return
     }
 
+    if (type === witnessShare.TYPE_URI) {
+      await handleInboundWitnessShare(agent, service, document, {
+        connectionId: context.connectionId,
+        senderDid: context.senderDid,
+        recipientDid: context.recipientDid,
+      })
+      return
+    }
+    if (type === witnessShare.RESPONSE_TYPE_URI) {
+      await handleInboundWitnessShareReceipt(agent, service, document, {
+        connectionId: context.connectionId,
+        senderDid: context.senderDid,
+        recipientDid: context.recipientDid,
+      })
+      return
+    }
+
     // Witness-leg responses route to the ceremony awaiting them (the wallet
     // is the requester on both witness legs — inbound requests of these
     // types are a witness-server concern, not ours). Retain regardless: the
@@ -418,6 +483,14 @@ async function handleInboundDiscoveryResponse(
   if (outcome.kind !== 'handled') return
 
   const entries = (document as { payload?: { supportedTypes?: (string | { type: string })[] } }).payload?.supportedTypes ?? []
+  // Only the deterministic proposer acts on the answer by opening the
+  // exchange; the responder's own query (sent at acceptance) exists to
+  // learn the peer's types — the retained answer is the record.
+  const connection = await agent.modules.didcomm.connections.getById(context.connectionId)
+  if (!connection.did || !connection.theirDid || !isDeterministicProposer(connection.did, connection.theirDid)) {
+    agent.config.logger.info(`${LOG_PREFIX} discovery answered by peer recorded (${entries.length} types) on connection ${context.connectionId}`)
+    return
+  }
   const supportsPropose = entries.some((entry) => (typeof entry === 'string' ? entry : entry.type) === propose.TYPE_URI)
   if (!supportsPropose) {
     agent.config.logger.warn(
@@ -532,6 +605,12 @@ export async function respondToRelationshipProposal(
   await sendTrustTaskDocument(agent, connectionId, response as unknown as Record<string, unknown>)
   logger.info(`${LOG_PREFIX} propose accepted; response sent (exchange ${exchangeId})`)
 
+  // Symmetric discovery: the responder queries too, so it holds the
+  // proposer's supportedTypes by the time its witness-share gate runs.
+  void sendDiscoveryQuery(agent, connectionId).catch((e: Error) =>
+    logger.warn(`${LOG_PREFIX} responder discovery query failed: ${e.message}`)
+  )
+
   // Fire and forget for the same reason as the proposer side: the delivery
   // may run the witness ceremony, and blocking the caller (the consent modal)
   // for its duration serves nobody.
@@ -623,10 +702,12 @@ export async function deliverVrcViaTrustTaskForExchange(
       })
       logger.info(`${LOG_PREFIX} witness session complete — VWC bound and stored (exchange ${exchangeId})`)
 
-      // Self-check the presentation path (step 5's last done-item): assemble
-      // the VWC with its retained outcome pair and run the verifier's pairing
-      // algorithm against a self-minted challenge. Proves the holder can ship
-      // what a verifier will demand — logged as a gateable marker.
+      // Assemble the presentation bundle (step 5's assembly), self-verify it,
+      // and — on a passing verdict — SHARE it with the counterparty (step 7):
+      // the peer verifies the same bundle before treating this side's
+      // witnessing as real. The VP binds to {challenge: exchange id, domain:
+      // vrc:witness-share}; a failed self-check withholds the share rather
+      // than shipping a bundle the peer would refuse.
       try {
         // Inline require: a static import would cycle (outcomeEvidence imports
         // getTrustTasksService from here) and a dynamic import() makes Metro
@@ -634,22 +715,22 @@ export async function deliverVrcViaTrustTaskForExchange(
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { assembleVwcPresentation, verifyVwcPresentationBundle } =
           require('./outcomeEvidence') as typeof import('./outcomeEvidence')
-        const selfChallenge = utils.uuid()
         const bundle = await assembleVwcPresentation(agent, {
           vwc: witnessOutcome.vwc,
           verificationMethodId,
-          challenge: selfChallenge,
-          domain: 'self-check.keyring',
+          challenge: exchangeId,
+          domain: witnessShare.WITNESS_SHARE_DOMAIN,
         })
         const verdict = await verifyVwcPresentationBundle(agent, {
           bundle,
-          challenge: selfChallenge,
-          domain: 'self-check.keyring',
+          challenge: exchangeId,
+          domain: witnessShare.WITNESS_SHARE_DOMAIN,
         })
         if (verdict.completionEvidenced) {
           logger.info(`${LOG_PREFIX} outcome evidence assembled and verified (session ${witnessOutcome.sessionId})`)
+          await sendWitnessShareForExchange(agent, connectionId, exchangeId, record.myRelationshipDid, bundle)
         } else {
-          logger.warn(`${LOG_PREFIX} outcome-evidence self-check failed: ${verdict.failures.join('; ')}`)
+          logger.warn(`${LOG_PREFIX} outcome-evidence self-check failed — witness-share withheld: ${verdict.failures.join('; ')}`)
         }
       } catch (e) {
         logger.warn(`${LOG_PREFIX} outcome-evidence self-check errored: ${(e as Error).message}`)
@@ -858,6 +939,216 @@ async function handleInboundIssueReceipt(
     logger.warn(
       `${LOG_PREFIX} issue receipt digest matches no delivery of ours (exchange ${document.threadId ?? document.id}) — not acknowledged`
     )
+  }
+}
+
+/**
+ * Send the counterparty our witness-share (subtask §9 step 7): the assembled
+ * presentation bundle, on the exchange thread, proof REQUIRED under our
+ * relationship DID. Gated on the peer advertising the type — with a bounded
+ * wait for its discovery answer, which (responder side) was queried only at
+ * acceptance and may still be in flight when the ceremony completes.
+ * Idempotent per direction.
+ */
+async function sendWitnessShareForExchange(
+  agent: Agent,
+  connectionId: string,
+  exchangeId: string,
+  myRelationshipDid: string,
+  bundle: VwcPresentationBundle
+): Promise<void> {
+  const logger = agent.config.logger
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.did || !connection.theirDid) return
+
+  let supports = await peerSupportsTaskType(agent, connectionId, witnessShare.TYPE_URI)
+  for (let attempt = 0; supports === null && attempt < 6; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000))
+    supports = await peerSupportsTaskType(agent, connectionId, witnessShare.TYPE_URI)
+  }
+  if (supports !== true) {
+    logger.info(
+      `${LOG_PREFIX} witness-share skipped — peer ${supports === null ? 'discovery answer never arrived' : 'does not advertise the type'} (exchange ${exchangeId})`
+    )
+    return
+  }
+
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  const prior = await documentRepository.findByQuery(agent.context, {
+    typeUri: witnessShare.TYPE_URI,
+    connectionId,
+    role: 'request',
+  })
+  if (prior.some((r) => r.document.issuer === connection.did)) return
+
+  const service = getTrustTasksService(agent)
+  const document: Record<string, unknown> = {
+    id: utils.uuid(),
+    type: witnessShare.TYPE_URI,
+    threadId: exchangeId,
+    issuer: connection.did,
+    recipient: connection.theirDid,
+    issuedAt: new Date().toISOString(),
+    payload: { presentation: bundle.presentation, outcomeEvidence: bundle.outcomeEvidence },
+  }
+  const signed = await signDocumentProof(agent, document, myRelationshipDid)
+  await service.retain(agent.context, signed, 'request', connectionId)
+  await sendTrustTaskDocument(agent, connectionId, signed)
+  logger.info(`${LOG_PREFIX} witness-share sent (exchange ${exchangeId})`)
+}
+
+/**
+ * The counterparty's witness-share: run the FULL pairing algorithm before
+ * anything is stored — the Witnessed indicator is earned by verification,
+ * never granted on receipt. Any failure refuses with a trust-task-error and
+ * stores nothing.
+ */
+async function handleInboundWitnessShare(
+  agent: Agent,
+  service: TrustTasksService,
+  document: Record<string, unknown>,
+  context: InboundContext
+): Promise<void> {
+  const logger = agent.config.logger
+  const outcome = await service.consume(agent.context, {
+    spec: witnessShare.SPEC as never,
+    document,
+    myDid: context.recipientDid,
+    senderDid: context.senderDid,
+    connectionId: context.connectionId,
+    // Same expected-controller policy as the issue leg: the document proof
+    // must verify under the sender's relationship DID as accepted.
+    proofPolicy: await issueProofPolicy(agent, context.senderDid),
+    handler: async (doc) => {
+      const payload = (doc as {
+        payload: { presentation?: Record<string, unknown>; outcomeEvidence?: { initiating?: Record<string, unknown>; terminal?: Record<string, unknown> } }
+      }).payload
+      const notAccepted = (message: string) =>
+        rejectWith(doc as never, utils.uuid(), {
+          code: extendedCode(witnessShare.TYPE_URI, 'notAccepted'),
+          message,
+          retryable: false,
+        })
+      if (!payload.presentation || !payload.outcomeEvidence?.initiating || !payload.outcomeEvidence.terminal) {
+        return notAccepted('payload is not a presentation bundle')
+      }
+
+      const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
+      const record = await repository.findByConnectionDid(agent.context, context.senderDid)
+      if (!record?.myRelationshipDid || !record.counterpartyRelationshipDid) {
+        return notAccepted('no accepted relationship exchange with this sender')
+      }
+
+      // The Outcome Interpretability pairing over the whole bundle: VP under
+      // {challenge: exchange id, domain}, credential valid, evidence pairs.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { verifyVwcPresentationBundle } = require('./outcomeEvidence') as typeof import('./outcomeEvidence')
+      const expectedChallenge = String(doc.threadId ?? doc.id)
+      const verdict = await verifyVwcPresentationBundle(agent, {
+        bundle: {
+          presentation: payload.presentation,
+          outcomeEvidence: {
+            initiating: payload.outcomeEvidence.initiating,
+            terminal: payload.outcomeEvidence.terminal,
+          },
+        },
+        challenge: expectedChallenge,
+        domain: witnessShare.WITNESS_SHARE_DOMAIN,
+      })
+      if (!verdict.credentialValid || !verdict.completionEvidenced) {
+        return notAccepted(`bundle failed verification: ${verdict.failures.join('; ') || 'credential proof invalid'}`)
+      }
+
+      // Party bindings: the shared VWC must be ABOUT the sender (its subject
+      // is the sender's relationship DID — the value the contact keys on)
+      // and about THIS exchange (parties name both relationship DIDs).
+      const vwc = (payload.presentation as { verifiableCredential?: Record<string, unknown>[] }).verifiableCredential?.[0]
+      if (!vwc) return notAccepted('presentation carries no credential')
+      const subject = Array.isArray(vwc.credentialSubject) ? vwc.credentialSubject[0] : vwc.credentialSubject
+      const subjectId = (subject as { id?: string } | undefined)?.id
+      if (subjectId !== record.counterpartyRelationshipDid) {
+        return notAccepted('VWC subject is not the sender relationship DID')
+      }
+      const parties = ((subject as { parties?: string[] } | undefined)?.parties ?? []) as string[]
+      if (!parties.includes(record.myRelationshipDid) || !parties.includes(record.counterpartyRelationshipDid)) {
+        return notAccepted('VWC parties do not name this exchange relationship DIDs')
+      }
+
+      const sharedDigest = digestMultibase(vwc)
+      const existing = await agent.w3cCredentials.getAll()
+      const alreadyStored = existing.some((r) => {
+        try {
+          return digestMultibase(JsonTransformer.toJSON(r.firstCredential)) === sharedDigest
+        } catch {
+          return false
+        }
+      })
+      if (!alreadyStored) {
+        await agent.w3cCredentials.store({
+          record: new W3cCredentialRecord({ credentialInstances: [{ credential: vwc as never }] }),
+        })
+      }
+      logger.info(`${LOG_PREFIX} witness-share verified and stored (exchange ${doc.threadId ?? doc.id})`)
+      return respondWith(doc as never, utils.uuid(), { vwcDigestMultibase: sharedDigest }, () =>
+        new Date().toISOString()
+      )
+    },
+  })
+
+  if (outcome.kind === 'handled' && outcome.response) {
+    await sendTrustTaskDocument(agent, context.connectionId, outcome.response as Record<string, unknown>)
+    logger.info(`${LOG_PREFIX} witness-share receipt sent (exchange ${document.threadId ?? document.id})`)
+  } else if (outcome.kind === 'rejected') {
+    const error = (outcome as { error?: Record<string, unknown> }).error
+    if (error) await sendTrustTaskDocument(agent, context.connectionId, error)
+    logger.warn(
+      `${LOG_PREFIX} witness-share refused (exchange ${document.threadId ?? document.id}): ${JSON.stringify((error as { payload?: unknown } | undefined)?.payload)}`
+    )
+  }
+}
+
+/**
+ * The counterparty's receipt for OUR witness-share: correlate its digest
+ * against the bundle we sent, mirroring the issue-receipt idiom.
+ */
+async function handleInboundWitnessShareReceipt(
+  agent: Agent,
+  service: TrustTasksService,
+  document: Record<string, unknown>,
+  context: InboundContext
+): Promise<void> {
+  const logger = agent.config.logger
+  const outcome = await service.consume(agent.context, {
+    spec: witnessShare.RESPONSE_SPEC as never,
+    document,
+    myDid: context.recipientDid,
+    senderDid: context.senderDid,
+    connectionId: context.connectionId,
+    proofPolicy: await issueProofPolicy(agent, context.senderDid),
+    handler: async (doc) => doc,
+  })
+  if (outcome.kind !== 'handled') {
+    logger.warn(
+      `${LOG_PREFIX} witness-share receipt not consumed (${outcome.kind}): ${JSON.stringify((outcome as { error?: { payload?: unknown } }).error?.payload ?? null)}`
+    )
+    return
+  }
+
+  const receiptDigest = (document as { payload?: { vwcDigestMultibase?: string } }).payload?.vwcDigestMultibase
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  const requests = await documentRepository.findByQuery(agent.context, {
+    typeUri: witnessShare.TYPE_URI,
+    connectionId: context.connectionId,
+    role: 'request',
+  })
+  const mine = requests.find((r) => r.document.issuer === context.recipientDid)
+  const sharedVwc = ((mine?.document as { payload?: { presentation?: { verifiableCredential?: Record<string, unknown>[] } } } | undefined)
+    ?.payload?.presentation?.verifiableCredential ?? [])[0]
+  const myDigest = sharedVwc ? digestMultibase(sharedVwc) : undefined
+  if (receiptDigest && myDigest && receiptDigest === myDigest) {
+    logger.info(`${LOG_PREFIX} witness-share receipt matched (exchange ${document.threadId ?? document.id})`)
+  } else {
+    logger.warn(`${LOG_PREFIX} witness-share receipt digest matches no share of ours (exchange ${document.threadId ?? document.id})`)
   }
 }
 

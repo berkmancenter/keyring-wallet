@@ -304,13 +304,19 @@ describe('the responder side (consent gates everything)', () => {
       'did:peer:0zPeerRel',
       4
     )
-    expect(fake.sentMessages).toHaveLength(2)
+    // Three sends: the acceptance, the responder's own SYMMETRIC discovery
+    // query (step 7 — it must learn the proposer's supportedTypes for the
+    // witness-share gate), and the issue delivery.
+    const types = fake.sentMessages.map((m) => (m.document as { type: string }).type)
+    expect(types).toHaveLength(3)
+    expect(types).toContain('https://trusttasks.org/spec/trust-task-discovery/0.1')
     const response = fake.sentMessages[0].document as { type: string; payload: { accept: boolean } }
     expect(response.type).toBe(`${propose.TYPE_URI}#response`)
     expect(response.payload.accept).toBe(true)
-    const issueDoc = fake.sentMessages[1].document as { type: string; threadId: string }
-    expect(issueDoc.type).toBe(issue.TYPE_URI)
-    expect(issueDoc.threadId).toBe('aaaa1111-1111-4111-8111-111111111111')
+    const issueDoc = fake.sentMessages
+      .map((m) => m.document as { type: string; threadId: string })
+      .find((d) => d.type === issue.TYPE_URI)
+    expect(issueDoc?.threadId).toBe('aaaa1111-1111-4111-8111-111111111111')
     expect(vrcFlowStore.getProposalPrompt(fake.connectionId)).toBeUndefined()
   })
 
