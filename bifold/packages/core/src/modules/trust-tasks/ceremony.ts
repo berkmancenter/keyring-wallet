@@ -57,7 +57,8 @@ import {
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../vrc/witnessStatusStore'
 
-import { LOCALITY_EXT_NAMESPACE, NullDeviceLocalityProvider } from './deviceLocality'
+import { LOCALITY_EXT_NAMESPACE } from './deviceLocality'
+import { createDeviceLocalityProvider } from './AndroidBleDeviceLocalityProvider'
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
@@ -755,11 +756,14 @@ export async function deliverVrcViaTrustTaskForExchange(
         sendDocument: sendTrustTaskDocument,
         retain: (doc, role) => service.retain(agent.context, doc, role, witnessConnectionId),
         // locality-plan.md §8.1/§10.3 item 10: offer per the user's own
-        // setting. `NullDeviceLocalityProvider` until item 9's real BLE
-        // peripheral exists — the ext protocol and cross-check run for
-        // real regardless; they just never receive a transcript to attach.
+        // setting. `createDeviceLocalityProvider` resolves to the real
+        // Android BLE peripheral when the native module is linked (item 9,
+        // verified live end to end 2026-08-21) and falls back to
+        // `NullDeviceLocalityProvider` everywhere else (iOS, or Android
+        // without the module) — the ext protocol and cross-check still run
+        // for real in that case; they just never receive a transcript.
         localityOffered: await isLocalityConfirmationPreferred(),
-        deviceLocalityProvider: new NullDeviceLocalityProvider(),
+        deviceLocalityProvider: createDeviceLocalityProvider(agent),
       })
       logger.info(`${LOG_PREFIX} witness session complete — VWC bound and stored (exchange ${exchangeId})`)
 

@@ -1,7 +1,7 @@
 {
   "name": "@bifold/react-native-locality-peripheral",
   "version": "0.1.0",
-  "description": "Android/iOS BLE peripheral role for locality co-presence evidence (locality-plan.md §10.3 item 9) — DESIGN SKETCH, no native implementation yet. See README.md.",
+  "description": "Android/iOS BLE peripheral role for locality co-presence evidence (locality-plan.md §10.3 item 9) — Android is real and verified live end to end; iOS has no native implementation. See README.md.",
   "main": "src/index.ts",
   "module": "src/index.ts",
   "types": "src/index.ts",

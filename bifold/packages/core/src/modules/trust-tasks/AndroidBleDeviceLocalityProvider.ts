@@ -2,31 +2,33 @@
  * The wallet-side `DeviceLocalityProvider` implementation wrapping
  * `@bifold/react-native-locality-peripheral` (locality-plan.md §10.3 item 9).
  *
- * The native module is real now — Kotlin that compiles against real
- * codegen and autolinks into the app (verified 2026-08-21, see
- * `docs/plans/locality-plan/2026-08-21-bam.md`) — but two things are still
- * unverified on a real device: whether the authorized `CryptoObject`
- * genuinely survives being held across an entire advertising window
- * (`LocalityPeripheralModule.kt`'s own doc comment flags this), and a live
- * round trip against witness-server's real `BleLocalityProvider`. Until
- * both are confirmed, `ceremony.ts`'s real call site deliberately stays on
- * `NullDeviceLocalityProvider` — this class is real and tested but not yet
- * the production path.
+ * Proven live end to end on a physical device (2026-08-21, see
+ * `docs/plans/locality-plan/2026-08-21-bam.md`): the native peripheral
+ * advertised, witness-server's real `BleLocalityProvider` connected, wrote
+ * the nonce, read back the signed transcript, and `verifyTranscript()`
+ * confirmed it. `createDeviceLocalityProvider()` below is what
+ * `ceremony.ts`'s real call site now uses.
  */
 
-import { bridge as realNativeLocalityPeripheralBridge, type NativeRespondToSensorParams, type NativeLocalityTranscriptResult } from '@bifold/react-native-locality-peripheral'
+import { Agent } from '@credo-ts/core'
+import type {
+  NativeRespondToSensorParams,
+  NativeLocalityTranscriptResult,
+} from '@bifold/react-native-locality-peripheral'
 
+import { ensureHardwareSigningKey } from '../vrc/vrc-hardware-signing'
+import { createEvidenceBuilder } from '../vrc/services/EvidenceBuilder'
 import {
   deriveEid,
   serviceUuidFromEid,
   LOCALITY_CHARACTERISTIC_UUID,
   LOCALITY_SIGNATURE_CHARACTERISTIC_UUID,
   LOCALITY_BINDING_CONTEXT,
+  NullDeviceLocalityProvider,
 } from './deviceLocality'
 import type { DeviceLocalityProvider, LocalitySensorDirective, LocalityTranscript, HardwareAttestationState } from './deviceLocality'
 
 export type { NativeRespondToSensorParams, NativeLocalityTranscriptResult }
-export { realNativeLocalityPeripheralBridge }
 
 /** What this provider needs from the native module — the real Spec's shape, injectable so tests can mock it without a device. */
 export interface NativeLocalityPeripheralBridge {
@@ -90,4 +92,58 @@ export class AndroidBleDeviceLocalityProvider implements DeviceLocalityProvider 
       hardwareAttestation,
     }
   }
+}
+
+/**
+ * The mapping this class's own `GetHardwareAttestationState` doc comment
+ * proposed: `EvidenceBuilder.hasCachedAttestation` (a verified attestation
+ * chain is already on file for this exact key) beats mere key existence,
+ * which beats nothing at all. Mirrors `vrc-hardware-signing.ts`'s own
+ * `ensureHardwareSigningKey`/`isHardwareAttestationAvailable` pattern
+ * rather than introducing a new one — this is the SAME question the
+ * existing VRC evidence flow already answers for itself, asked here for
+ * the locality transcript's own `hardwareAttestation` field.
+ */
+export async function determineHardwareAttestationState(agent: Agent): Promise<HardwareAttestationState> {
+  try {
+    const { publicKey } = await ensureHardwareSigningKey(agent)
+    const hasCached = await createEvidenceBuilder(agent).hasCachedAttestation(publicKey)
+    if (hasCached) return 'verified'
+    // Lazy require: a static import evaluates `TurboModuleRegistry` at
+    // module load, which throws outside a real RN bridge (no bridge exists
+    // merely by virtue of importing this file's `ceremony.ts` caller) — see
+    // the identical concern and pattern below in `createDeviceLocalityProvider`.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { isHardwareAttestationAvailable } = require('@bifold/react-native-attestation') as {
+      isHardwareAttestationAvailable: () => Promise<boolean>
+    }
+    return (await isHardwareAttestationAvailable()) ? 'present-unverified' : 'absent'
+  } catch {
+    return 'absent'
+  }
+}
+
+/**
+ * What `ceremony.ts`'s real `runWitnessSession(...)` call site constructs.
+ * Android with the native module linked gets the real peripheral; every
+ * other case (iOS — deferred outright, no Xcode in this environment; or
+ * Android without the module for some reason) gets the no-op, matching
+ * §7.1's `declinedByHolder`/`windowLost` outcome rather than throwing.
+ */
+export function createDeviceLocalityProvider(agent: Agent): DeviceLocalityProvider {
+  // Lazy require: a static import evaluates `TurboModuleRegistry` at module
+  // load, which throws outside a real RN bridge — and `ceremony.ts` imports
+  // this file at ITS module top level, so every test (or other context)
+  // that merely imports `ceremony.ts` would otherwise need a bridge too,
+  // regardless of whether it ever calls this factory.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getBridge, isSupportedPlatform, isNativeModuleLinked } = require('@bifold/react-native-locality-peripheral') as {
+    getBridge: () => NativeLocalityPeripheralBridge
+    isSupportedPlatform: () => boolean
+    isNativeModuleLinked: () => boolean
+  }
+  if (isSupportedPlatform() && isNativeModuleLinked()) {
+    return new AndroidBleDeviceLocalityProvider(getBridge(), () => determineHardwareAttestationState(agent))
+  }
+  return new NullDeviceLocalityProvider()
 }

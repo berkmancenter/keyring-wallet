@@ -10,11 +10,44 @@
  * throws), hence the module mock below, matching this codebase's own
  * existing convention for `@bifold/react-native-attestation`.
  */
+const mockBridge = { isSupported: jest.fn(), respondToSensor: jest.fn(), stopAdvertising: jest.fn() }
+const mockIsSupportedPlatform = jest.fn(() => true)
+const mockIsNativeModuleLinked = jest.fn(() => true)
+// NOTE: `getBridge` is a function, not a plain re-exported value, on
+// purpose — found live (2026-08-21) that mocking a named *plain-value*
+// export from this module resolves to `undefined` through the mock even
+// though the property is registered (ts-jest/Babel ESM-interop quirk,
+// not specific to any one export name); named *function* exports mock
+// correctly. See `@bifold/react-native-locality-peripheral`'s `getBridge`
+// doc comment for the same note from the other side of this boundary.
 jest.mock('@bifold/react-native-locality-peripheral', () => ({
-  bridge: { isSupported: jest.fn(), respondToSensor: jest.fn(), stopAdvertising: jest.fn() },
+  getBridge: () => mockBridge,
+  isSupportedPlatform: () => mockIsSupportedPlatform(),
+  isNativeModuleLinked: () => mockIsNativeModuleLinked(),
 }))
 
-import { AndroidBleDeviceLocalityProvider, type NativeLocalityPeripheralBridge } from '../AndroidBleDeviceLocalityProvider'
+const mockEnsureHardwareSigningKey = jest.fn()
+jest.mock('../../vrc/vrc-hardware-signing', () => ({
+  ensureHardwareSigningKey: (...args: unknown[]) => mockEnsureHardwareSigningKey(...args),
+}))
+
+const mockHasCachedAttestation = jest.fn()
+jest.mock('../../vrc/services/EvidenceBuilder', () => ({
+  createEvidenceBuilder: () => ({ hasCachedAttestation: (...args: unknown[]) => mockHasCachedAttestation(...args) }),
+}))
+
+const mockIsHardwareAttestationAvailable = jest.fn()
+jest.mock('@bifold/react-native-attestation', () => ({
+  isHardwareAttestationAvailable: (...args: unknown[]) => mockIsHardwareAttestationAvailable(...args),
+}))
+
+import {
+  AndroidBleDeviceLocalityProvider,
+  createDeviceLocalityProvider,
+  determineHardwareAttestationState,
+  type NativeLocalityPeripheralBridge,
+} from '../AndroidBleDeviceLocalityProvider'
+import { NullDeviceLocalityProvider } from '../deviceLocality'
 import {
   deriveEid,
   serviceUuidFromEid,
@@ -123,5 +156,57 @@ describe('AndroidBleDeviceLocalityProvider (design sketch — locality-plan.md �
     await expect(
       provider.respondToSensor({ taskDigestMultibase: 'sha256:00', challenge: 'c', directive: DIRECTIVE })
     ).rejects.toThrow('no hardware key exists yet')
+  })
+})
+
+const FAKE_AGENT = {} as import('@credo-ts/core').Agent
+
+describe('determineHardwareAttestationState', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  test('verified — a cached attestation exists for this exact key', async () => {
+    mockEnsureHardwareSigningKey.mockResolvedValue({ publicKey: 'abc123', storage: 'StrongBox' })
+    mockHasCachedAttestation.mockResolvedValue(true)
+
+    await expect(determineHardwareAttestationState(FAKE_AGENT)).resolves.toBe('verified')
+    expect(mockHasCachedAttestation).toHaveBeenCalledWith('abc123')
+  })
+
+  test('present-unverified — the key exists in hardware but no attestation is cached yet', async () => {
+    mockEnsureHardwareSigningKey.mockResolvedValue({ publicKey: 'abc123', storage: 'StrongBox' })
+    mockHasCachedAttestation.mockResolvedValue(false)
+    mockIsHardwareAttestationAvailable.mockResolvedValue(true)
+
+    await expect(determineHardwareAttestationState(FAKE_AGENT)).resolves.toBe('present-unverified')
+  })
+
+  test('absent — no cached attestation and the platform reports none available', async () => {
+    mockEnsureHardwareSigningKey.mockResolvedValue({ publicKey: 'abc123', storage: 'Software' })
+    mockHasCachedAttestation.mockResolvedValue(false)
+    mockIsHardwareAttestationAvailable.mockResolvedValue(false)
+
+    await expect(determineHardwareAttestationState(FAKE_AGENT)).resolves.toBe('absent')
+  })
+
+  test('absent — falls back safely if the hardware key flow throws rather than propagating', async () => {
+    mockEnsureHardwareSigningKey.mockRejectedValue(new Error('no key and creation failed'))
+
+    await expect(determineHardwareAttestationState(FAKE_AGENT)).resolves.toBe('absent')
+  })
+})
+
+describe('createDeviceLocalityProvider', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  test('returns the real Android provider when the platform is supported and the native module is linked', () => {
+    mockIsSupportedPlatform.mockReturnValue(true)
+    const provider = createDeviceLocalityProvider(FAKE_AGENT)
+    expect(provider).toBeInstanceOf(AndroidBleDeviceLocalityProvider)
+  })
+
+  test('falls back to NullDeviceLocalityProvider when the platform is not supported (iOS)', () => {
+    mockIsSupportedPlatform.mockReturnValue(false)
+    const provider = createDeviceLocalityProvider(FAKE_AGENT)
+    expect(provider).toBeInstanceOf(NullDeviceLocalityProvider)
   })
 })

@@ -82,5 +82,14 @@ export const isSupportedPlatform = (): boolean => Platform.OS === 'android';
  * `@bifold/core`'s `AndroidBleDeviceLocalityProvider` (and its
  * `NativeLocalityPeripheralBridge` injection port) expects — so that class
  * can take this module as a single import rather than three named ones.
+ *
+ * A FUNCTION, not a plain exported value — found live (2026-08-21) that
+ * mocking this module under Jest (`jest.mock('@bifold/react-native-locality-peripheral', ...)`)
+ * makes named *function* exports resolve correctly through the mock but
+ * silently returns `undefined` for named *plain-value* exports, even
+ * though the mock registers the property (it shows up in `Object.keys`,
+ * just not as a readable value) — a ts-jest/Babel ESM-interop quirk, not
+ * specific to the name `bridge`. Calling this returns a fresh object each
+ * time, sidestepping it.
  */
-export const bridge = { isSupported: isPeripheralSupported, respondToSensor, stopAdvertising };
+export const getBridge = () => ({ isSupported: isPeripheralSupported, respondToSensor, stopAdvertising });
