@@ -931,6 +931,17 @@ export async function isWitnessingPreferred(): Promise<boolean> {
 }
 
 /**
+ * The `useLocalityConfirmation` preference (locality-plan.md §8.1) — default
+ * TRUE, matching the store's own default. Deliberately `?? true` here, not
+ * `?? false`: the divergence between this read path and the store default
+ * is exactly the bug keyring-bifold#38 reports for `useHardwareAttestation`.
+ */
+export async function isLocalityConfirmationPreferred(): Promise<boolean> {
+  const preferences = await PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences)
+  return preferences?.useLocalityConfirmation ?? true
+}
+
+/**
  * Callback for validating witness connection
  * This will be set by the WitnessConnectionProvider
  */

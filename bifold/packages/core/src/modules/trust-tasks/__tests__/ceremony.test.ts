@@ -8,14 +8,18 @@ import { DidCommMessageSender, DidCommMessageHandlerRegistry } from '@credo-ts/d
 import { InjectionSymbols, EventEmitter } from '@credo-ts/core'
 import * as discovery from '@openvtc/trust-tasks/trust-task-discovery/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
+import * as witnessSession from '@openvtc/trust-tasks/witness/session/0.1/payload'
 
 import {
   maybeOpenRelationshipExchange,
   respondToRelationshipProposal,
   setupTrustTasksInbound,
   isDeterministicProposer,
+  queryWitnessDiscovery,
+  getWitnessLocalityRequirement,
   TRUST_TASKS_MIN_RCE_VERSION,
 } from '../ceremony'
+import { LOCALITY_EXT_NAMESPACE } from '../deviceLocality'
 import { vrcFlowStore } from '../../vrc/witnessStatusStore'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
@@ -189,6 +193,73 @@ describe('the capability gate', () => {
     const response = fake.sentMessages[0].document as { type: string; payload: { supportedTypes: string[] } }
     expect(response.type).toBe(`${discovery.TYPE_URI}#response`)
     expect(response.payload.supportedTypes).toEqual([propose.TYPE_URI])
+  })
+})
+
+describe('witness discovery (locality-plan.md §10.3 item 8)', () => {
+  test('queryWitnessDiscovery sends a discovery query on the witness connection, patterns including witness/*', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4witness' })
+    setupTrustTasksInbound(fake.agent)
+
+    await queryWitnessDiscovery(fake.agent, fake.connectionId)
+
+    expect(fake.sentMessages).toHaveLength(1)
+    const query = fake.sentMessages[0].document as { type: string; payload: { patterns: string[] } }
+    expect(query.type).toBe(discovery.TYPE_URI)
+    expect(query.payload.patterns).toContain('witness/*')
+  })
+
+  test('getWitnessLocalityRequirement is null before any discovery answer has arrived', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4witness' })
+    setupTrustTasksInbound(fake.agent)
+
+    await expect(getWitnessLocalityRequirement(fake.agent, fake.connectionId)).resolves.toBeNull()
+  })
+
+  test('getWitnessLocalityRequirement is true when the witness/session row lists requiredExt for the locality namespace', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4witness' })
+    setupTrustTasksInbound(fake.agent)
+    await queryWitnessDiscovery(fake.agent, fake.connectionId)
+
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'eeee1111-0000-4000-8000-00000000000e',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: 'eeee1111-0000-4000-8000-00000000000e',
+        issuer: 'did:peer:4witness',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: {
+          supportedTypes: [{ type: witnessSession.TYPE_URI, requiredExt: [LOCALITY_EXT_NAMESPACE] }],
+        },
+      },
+      { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4witness' }
+    )
+
+    await expect(getWitnessLocalityRequirement(fake.agent, fake.connectionId)).resolves.toBe(true)
+  })
+
+  test('getWitnessLocalityRequirement is false when witness/session is supported but not marked as requiring locality', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4witness' })
+    setupTrustTasksInbound(fake.agent)
+    await queryWitnessDiscovery(fake.agent, fake.connectionId)
+
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'eeee2222-0000-4000-8000-00000000000e',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: 'eeee2222-0000-4000-8000-00000000000e',
+        issuer: 'did:peer:4witness',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: { supportedTypes: [witnessSession.TYPE_URI] },
+      },
+      { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4witness' }
+    )
+
+    await expect(getWitnessLocalityRequirement(fake.agent, fake.connectionId)).resolves.toBe(false)
   })
 })
 

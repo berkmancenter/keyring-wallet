@@ -49,6 +49,7 @@ import {
   getConnectedWitnessConnectionId,
   getOrCreateRelationshipDid,
   getVrcJsonLdProofOptions,
+  isLocalityConfirmationPreferred,
   isWitnessingPreferred,
   issueRCardForAcceptedExchange,
   prepareVrcCredentialWithEvidence,
@@ -56,6 +57,7 @@ import {
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../vrc/witnessStatusStore'
 
+import { LOCALITY_EXT_NAMESPACE, NullDeviceLocalityProvider } from './deviceLocality'
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
@@ -196,6 +198,53 @@ async function peerSupportsTaskType(agent: Agent, connectionId: string, typeUri:
   return fromPeer.some((r) => {
     const entries = (r.document as { payload?: { supportedTypes?: (string | { type: string })[] } }).payload?.supportedTypes ?? []
     return entries.some((entry) => (typeof entry === 'string' ? entry : entry.type) === typeUri)
+  })
+}
+
+/**
+ * Send our trust-task-discovery query on a witness connection specifically
+ * (locality-plan.md §10.3 item 8) — `sendDiscoveryQuery` is connection-
+ * agnostic and its own patterns already include `witness/*`, so this is a
+ * thin, intention-revealing wrapper for the witness-connect call site.
+ * Fire-and-forget, same as the peer-connection callers of the underlying
+ * function.
+ */
+export async function queryWitnessDiscovery(agent: Agent, witnessConnectionId: string): Promise<void> {
+  await sendDiscoveryQuery(agent, witnessConnectionId)
+}
+
+/**
+ * Whether a connected witness's discovery answer marks `witness/session` as
+ * requiring the locality `ext` namespace (locality-plan.md §10.3 item 8:
+ * read `requiredExt` on the witness row of a discovery response, not just
+ * the propose row). Returns null when no answer has arrived yet — a caller
+ * gating on this (e.g. a future witness-connect pre-flight sheet, before
+ * Bluetooth permission is requested) must treat "not yet known" as distinct
+ * from "known not required", exactly as `peerSupportsTaskType` does above.
+ */
+export async function getWitnessLocalityRequirement(agent: Agent, witnessConnectionId: string): Promise<boolean | null> {
+  const connection = await agent.modules.didcomm.connections.getById(witnessConnectionId)
+  if (!connection.theirDid) return null
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  const responses = await documentRepository.findByQuery(agent.context, {
+    typeUri: discovery.TYPE_URI,
+    connectionId: witnessConnectionId,
+    role: 'response',
+  })
+  const fromWitness = responses.filter(
+    (r) => r.document.type === `${discovery.TYPE_URI}#response` && r.document.issuer === connection.theirDid
+  )
+  if (fromWitness.length === 0) return null
+  return fromWitness.some((r) => {
+    const entries =
+      (r.document as { payload?: { supportedTypes?: (string | { type: string; requiredExt?: string[] })[] } })
+        .payload?.supportedTypes ?? []
+    return entries.some(
+      (entry) =>
+        typeof entry !== 'string' &&
+        entry.type === witnessSession.TYPE_URI &&
+        (entry.requiredExt ?? []).includes(LOCALITY_EXT_NAMESPACE)
+    )
   })
 }
 
@@ -705,6 +754,12 @@ export async function deliverVrcViaTrustTaskForExchange(
           buildChallengeBoundVp(agent, signedVc, verificationMethodId, challenge, domain),
         sendDocument: sendTrustTaskDocument,
         retain: (doc, role) => service.retain(agent.context, doc, role, witnessConnectionId),
+        // locality-plan.md §8.1/§10.3 item 10: offer per the user's own
+        // setting. `NullDeviceLocalityProvider` until item 9's real BLE
+        // peripheral exists — the ext protocol and cross-check run for
+        // real regardless; they just never receive a transcript to attach.
+        localityOffered: await isLocalityConfirmationPreferred(),
+        deviceLocalityProvider: new NullDeviceLocalityProvider(),
       })
       logger.info(`${LOG_PREFIX} witness session complete — VWC bound and stored (exchange ${exchangeId})`)
 

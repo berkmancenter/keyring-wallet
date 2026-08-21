@@ -22,6 +22,7 @@ import {
   registerWitnessConnectionDetectedCallback,
   registerWitnessValidationCallback,
 } from '../vrc-manager'
+import { queryWitnessDiscovery } from '../../trust-tasks/ceremony'
 import { createVrcLogger } from '../vrc-logging'
 import { useStore } from '../../../contexts/store'
 import { DispatchAction } from '../../../contexts/reducers/store'
@@ -371,6 +372,15 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
         setRecentlyAutoActivatedWitness(newWitness)
 
         logger.current.info(`✓ Witness auto-activated: ${announcement.name} (${connectionId})`)
+
+        // Query this witness's Trust Task capabilities as soon as it's
+        // known, so a locality requirement (witness/session's `requiredExt`,
+        // locality-plan.md §10.3 item 8) is discoverable via
+        // `getWitnessLocalityRequirement` well before any BLE permission
+        // prompt or session — not just on the peer relationship connection.
+        void queryWitnessDiscovery(agent, connectionId).catch((e: Error) =>
+          logger.current.warn(`Witness discovery query failed: ${e.message}`)
+        )
 
         // ── Reporting DID registration ──────────────────────────────────────
         // If reporting is enabled and we have not yet registered a reporting
