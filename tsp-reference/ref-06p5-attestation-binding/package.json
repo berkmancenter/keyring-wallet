@@ -1,0 +1,13 @@
+{
+  "name": "ref-06p5-attestation-binding",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 06p5 — App Attest / Play Integrity binding to the locality transcript, verified against real Apple platform roots",
+  "scripts": {
+    "check": "node run.mjs --quiet",
+    "start": "node run.mjs"
+  },
+  "dependencies": {
+    "node-app-attest": "^1.0.1"
+  }
+}

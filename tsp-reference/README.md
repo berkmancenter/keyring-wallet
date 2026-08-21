@@ -30,9 +30,20 @@ step lives — every step is one `node run.mjs` away:
 The **locality line** (`ref-06p*`) sits on top of the witnessed exchange and
 belongs to [`docs/plans/locality-plan.md`](../docs/plans/locality-plan.md):
 [`ref-06p`](./ref-06p-locality-binding/) is the binding algebra (no radios,
-green); `ref-06p2` (real BLE, honest RTT distribution), `ref-06p3` (the
-third-party verifier), `ref-06p4` (a staged relay, detection threshold) and
-`ref-06p5` (attestation binding) follow.
+green); [`ref-06p2`](./ref-06p2-ble-observation/) is the same binding over a
+real BLE radio pair (discrimination against real ambient noise, honest RTT
+measured — median ≈180ms, p95 ≈224ms over 35 trials against a real phone);
+[`ref-06p3`](./ref-06p3-third-party-verify/) is the §7.3 third-party
+verifier (seven mechanical steps, each independently forgeable and caught);
+[`ref-06p4`](./ref-06p4-relay-trial/) is a staged relay measuring where
+§5.5's timing bound starts rejecting it (100ms, against a 224.7ms bound —
+5–20ms stays indistinguishable from honest, matching the plan's own claim);
+[`ref-06p5`](./ref-06p5-attestation-binding/) verifies a real App-Attest
+attestation object against Apple's real public root, offline — Play
+Integrity is shape-only, since its tokens have no offline-verifiable form
+at all, with a separate live script parked for when real access exists.
+**The locality reference ladder (`ref-06p` through `ref-06p5`) is
+complete.**
 
 The witnessed-exchange evidence line (`ref-06w*`) sits on top of step 1:
 [`ref-06w4`](./ref-06w4-package-truth/) is the living exchange on the published
@@ -53,6 +64,10 @@ proposals since adopted upstream.
 | [`ref-05-local-vta`](./ref-05-local-vta/) | a local VTA serving **its own** `did:webvh`; service entries as the transport ladder; **capability change without key rotation** | a local VTA (native or its `docker compose`) |
 | `ref-06v1…w4` (nine rungs) | the DIDComm-v1 binding, task layer, carrier, witnessed exchange, taskContext binding, package truth — see the phasing map above | varies (see each README) |
 | [`ref-06p-locality-binding`](./ref-06p-locality-binding/) | the locality evidence algebra with no radios: the EID that **locates** vs the signed GATT transcript that **binds**, four forgeries each rejected by a named check, `ext` on all four witness documents through the published §7.2 pipeline, and the canonicalization split — Trust Task documents are `eddsa-jcs-2022` (every member covered) while the VWC is `eddsa-rdfc-2022` (**only defined JSON-LD terms are signed**; today's shipped `LocalityEvidence` members have none). 1,927 bytes/session, measured | nothing |
+| [`ref-06p2-ble-observation`](./ref-06p2-ble-observation/) | the same EID/transcript scheme over a **real BLE radio pair**: discrimination against real ambient noise (8–11 genuine BLE devices per scan, correctly ignored), a full connect→discover→write→read round trip against a real phone's GATT server, and the honest RTT distribution measured (not asserted) — median ≈180ms, p95 ≈224ms over 35 trials. Runs over BlueZ's D-Bus interface (`node-ble`), not a raw HCI socket — a raw-socket attempt (`@abandonware/noble`) silently saw nothing, contending with `bluetoothd` for scan state | two BLE radios |
+| [`ref-06p3-third-party-verify`](./ref-06p3-third-party-verify/) | the §7.3 verification algorithm run cold, as a third party would: given only the VWC + retained session doc + retained submit#response (+ the raw transcript, opened only if the tier-3 check is requested), seven mechanical steps each independently forgeable and each caught at the step that should catch it — plus the two-mode step 6 (trust the credential's predicate vs. open the artifact and check the key directly), and a verdict that always names a step/reason/residual set, never a bare boolean | nothing |
+| [`ref-06p4-relay-trial`](./ref-06p4-relay-trial/) | a relay staged for real — one process doing the genuine BLE round trip against a phone, a second bridging it over a socket with injected latency, swept from 5ms to 1000ms — measuring where a bound set at the honest p95 (224.7ms) starts rejecting it (100ms) and confirming the plan's own claim that a 5–20ms local-relay-scale delay stays indistinguishable from honest. The false-rejection rate is checked against a second, independent honest sample rather than the one the bound was set from | two BLE radios (one leg — see README) |
+| [`ref-06p5-attestation-binding`](./ref-06p5-attestation-binding/) | a real, Apple-signed App Attest object (vendored, MIT) verified offline against Apple's real public root; four independent forgeries each caught by a different check; the locality transcript's binding shown to wire correctly into App Attest's `challenge` parameter (mutating any bound field changes the resulting hash); the `absent`/`present-unverified`/`verified` states never inferred. Play Integrity is shape-only — its tokens have no offline-verifiable form at all — with a separate live script parked for real Play Console/Google Cloud access | platform test credentials (App Attest: real, vendored; Play Integrity: none possible offline) |
 | [`ref-06x-cypress-stack`](./ref-06x-cypress-stack/) | the stack composed joint-by-joint at the **Cypress release**: local release-binary VTA + webvh at the wallet (Credo can't resolve it natively — measured; 20-line workaround proven) + the mediator dialect (v1 refused, 404 — measured) + the witnessed exchange end-to-end on binding 0.2 × trust-tasks 0.9.0 | a local VTA; network for the mediator act |
 
 ## Running them
