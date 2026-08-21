@@ -1993,6 +1993,20 @@ export function setupVrcConnectionHandler(agent: Agent) {
     // RelationshipCards (contact card accompanying an already-accepted relationship).
     // RelationshipCredentials remain manual (user should consciously accept contact)
     if (record.state === DidCommCredentialState.OfferReceived && record.role === DidCommCredentialRole.Holder) {
+      // Hold the offer out of the chat/notifications until classified: an
+      // R-Card (auto-accepted plumbing) would otherwise render as an
+      // actionable offer for the ~1 s getFormatData takes. Cleared below on
+      // every non-R-Card path BEFORE any acceptOffer, so this in-memory
+      // record is never written back over a state credo has since advanced.
+      record.metadata.set('offerClassifying', { since: Date.now() })
+      await agent.modules.didcomm.credentials.update(record)
+      let released = false
+      const release = async () => {
+        if (released) return
+        released = true
+        record.metadata.delete('offerClassifying')
+        await agent.modules.didcomm.credentials.update(record)
+      }
       try {
         const vwcAutoLogger = createVrcLogger(agent, { module: 'vrc', component: 'VWCAutoAccept' })
 
@@ -2012,6 +2026,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
             if (isWitnessCredential(types)) {
               vwcAutoLogger.info(`✓ Auto-accepting WitnessCredential offer: ${record.id}`)
 
+              await release()
               await agent.modules.didcomm.credentials.acceptOffer({
                 credentialExchangeRecordId: record.id,
               })
@@ -2025,6 +2040,8 @@ export function setupVrcConnectionHandler(agent: Agent) {
               vwcAutoLogger.info(`✓ Auto-accepting RelationshipCard offer: ${record.id}`)
 
               record.metadata.set('rcardExchange', { autoAccepted: true })
+              record.metadata.delete('offerClassifying')
+              released = true // the rcardExchange tag keeps it hidden for good
               await agent.modules.didcomm.credentials.update(record)
 
               await agent.modules.didcomm.credentials.acceptOffer({
@@ -2035,10 +2052,18 @@ export function setupVrcConnectionHandler(agent: Agent) {
             }
           }
         }
-        // RelationshipCredentials remain manual - user must accept
+        // RelationshipCredentials remain manual - user must accept: release
+        // the hold so the offer renders for them.
+        await release()
       } catch (error) {
-        // Log but don't fail - this is auto-accept logic
+        // Log but don't fail - this is auto-accept logic. Best-effort release
+        // (a no-op once an accept was attempted, see above).
         agent.config.logger.error(`[VRC] VWC/RCard auto-accept failed: ${(error as Error).message}`)
+        try {
+          await release()
+        } catch {
+          /* leave as is */
+        }
       }
     }
 

@@ -192,7 +192,10 @@ export const useNotifications = ({
     // Filter offers from excluded connections and RCard (contact card)
     // exchanges — those are auto-accepted plumbing, not user-actionable
     const filteredOffers = offers.filter(
-      (offer) => !isExcluded(offer.connectionId) && !offer.metadata.get('rcardExchange')
+      (offer) =>
+        !isExcluded(offer.connectionId) &&
+        !offer.metadata.get('rcardExchange') &&
+        !offer.metadata.get('offerClassifying')
     )
 
     // Filter proofs from excluded connections

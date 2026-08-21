@@ -64,6 +64,8 @@ export interface VrcFlowError {
  * - 'witness-fallback': Witness unavailable, falling back to direct issuance
  * - 'biometric-fallback': Biometric failed/cancelled, issuing without hardware attestation
  * - 'preparing-offer': Witness complete, preparing credential offer
+ * - 'sharing-witness-record': (trust-task dialect) sending the counterparty our
+ *   witness-record bundle for verification (subtask step 7)
  * - 'offer-sent': Credential offer sent by Issuer (overlay should clear on Inviter side)
  * - 'offer-received': Credential offer received by Holder (overlay should clear on Receiver side)
  * - 'idle': No active flow
@@ -75,8 +77,17 @@ export type VrcFlowStatus =
   | 'witness-fallback'
   | 'biometric-fallback'
   | 'preparing-offer'
+  | 'sharing-witness-record'
   | 'offer-sent'
   | 'offer-received'
+
+/**
+ * Which exchange dialect is driving a connection's flow — the overlay words
+ * the same status machine differently for the Trust Task ceremony (no
+ * "offers": a consent, a witness verification, a signed credential exchange,
+ * a witness-record share) than for the legacy offer/accept flow.
+ */
+export type VrcFlowDialect = 'legacy' | 'trust-tasks'
 
 /**
  * A pending relationship proposal awaiting the user's consent (the trust-task
@@ -95,6 +106,16 @@ class VrcFlowStore extends EventEmitter {
   private hasSentOffer: Map<string, boolean> = new Map()
   private flowErrors: Map<string, VrcFlowError> = new Map()
   private proposalPrompts: Map<string, RelationshipProposalPrompt> = new Map()
+  private dialects: Map<string, VrcFlowDialect> = new Map()
+
+  /** Record which dialect drives this connection's flow (overlay wording). */
+  setDialect(connectionId: string, dialect: VrcFlowDialect): void {
+    this.dialects.set(connectionId, dialect)
+  }
+
+  getDialect(connectionId: string): VrcFlowDialect {
+    return this.dialects.get(connectionId) ?? 'legacy'
+  }
 
   /** Surface a relationship proposal for user consent ('proposalPrompt' event). */
   setProposalPrompt(prompt: RelationshipProposalPrompt): void {
@@ -217,6 +238,7 @@ class VrcFlowStore extends EventEmitter {
   clearFlow(connectionId: string): void {
     this.flowStatus.delete(connectionId)
     this.isWitnessed.delete(connectionId)
+    this.dialects.delete(connectionId)
     this.hasReceivedOffer.delete(connectionId)
     this.hasSentOffer.delete(connectionId)
     const hadError = this.flowErrors.has(connectionId)
