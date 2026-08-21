@@ -1097,11 +1097,11 @@ whose peer does not list it skips the share silently (earlier v4 peers).
 The spec module is local until the `vrc/*` batch upstreams (step 2 owns
 that), where it joins as a third relationship task.
 
-**Built and live-proven on the simulator pair (Keyring,
-`feat/trust-tasks-integration`): both contact screens show the Witnessed
-indicator from a bundle each wallet verified itself, gated by markers and
-UI assertion; reasoning and the e2e findings in
-[`2026-08-20-al.md`](./2026-08-20-al.md).**
+**Built and live-proven — simulator pair and attended real devices
+(Keyring, `feat/trust-tasks-integration`): both contact screens show the
+Witnessed indicator (and, on devices, Secure Exchange) from a bundle each
+wallet verified itself, gated by markers and UI assertion; reasoning and
+the e2e findings in [`2026-08-20-al.md`](./2026-08-20-al.md).**
 
 **Done when:** on a witnessed exchange between two current wallets, both
 contact screens show the Witnessed indicator, gated in the witnessed e2e
