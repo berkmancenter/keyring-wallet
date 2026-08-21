@@ -1,11 +1,19 @@
 /**
  * Tests the JS-side glue only — param marshaling, EID/UUID derivation, and
- * transcript reassembly — against a mocked native bridge. There is no real
- * native module yet (locality-plan.md §10.3 item 9; see this class's own
- * header and `@bifold/react-native-locality-peripheral`'s README), so this
- * cannot and does not prove anything about real BLE, real signing, or real
- * biometric authorization.
+ * transcript reassembly — against a mocked native bridge injected directly
+ * into the class's constructor. The real native module (Android Kotlin,
+ * locality-plan.md §10.3 item 9) compiles and autolinks (verified
+ * 2026-08-21), but this suite proves none of that — no real BLE, no real
+ * signing, no real biometric authorization, no live device. It also can't
+ * even import `@bifold/react-native-locality-peripheral` for real under
+ * Jest (no RN bridge in this environment — `TurboModuleRegistry.get()`
+ * throws), hence the module mock below, matching this codebase's own
+ * existing convention for `@bifold/react-native-attestation`.
  */
+jest.mock('@bifold/react-native-locality-peripheral', () => ({
+  bridge: { isSupported: jest.fn(), respondToSensor: jest.fn(), stopAdvertising: jest.fn() },
+}))
+
 import { AndroidBleDeviceLocalityProvider, type NativeLocalityPeripheralBridge } from '../AndroidBleDeviceLocalityProvider'
 import { deriveEid, serviceUuidFromEid, LOCALITY_CHARACTERISTIC_UUID, LOCALITY_BINDING_CONTEXT } from '../deviceLocality'
 import type { LocalitySensorDirective } from '../deviceLocality'
@@ -53,6 +61,7 @@ describe('AndroidBleDeviceLocalityProvider (design sketch — locality-plan.md �
     expect(nativeParams.serviceUuid).toBe(serviceUuidFromEid(deriveEid('a-fresh-challenge', 'sha256:deadbeef')))
     expect(nativeParams.characteristicUuid).toBe(LOCALITY_CHARACTERISTIC_UUID)
     expect(nativeParams.contextString).toBe(LOCALITY_BINDING_CONTEXT)
+    expect(nativeParams.method).toBe(DIRECTIVE.method)
     expect(nativeParams.sensorDid).toBe(DIRECTIVE.sensorDid)
     expect(nativeParams.windowSeconds).toBe(DIRECTIVE.windowSeconds)
     expect(nativeParams.hardwareAttestation).toBe('verified')

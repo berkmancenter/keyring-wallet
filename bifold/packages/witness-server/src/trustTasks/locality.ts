@@ -73,7 +73,15 @@ export interface LocalityTranscript {
   challenge: string
   sensorNonce: string
   sensorDid: string
-  /** Base64, raw EC-P256 point — the device's hardware-attestation public key. */
+  /**
+   * Base64 — the device's hardware-attestation public key, in whatever
+   * encoding that platform's `getHardwarePublicKey()` already returns: a
+   * raw 65-byte EC point on iOS, SPKI-wrapped DER on Android (see
+   * `BiometricSignatureVerifier.ts`'s "platform asymmetries" note). NOT a
+   * raw point on both platforms — `transcriptKeyMatchesVrcSigner`'s plain
+   * `===` below only holds because both sides of that comparison come from
+   * the SAME platform's own convention, not because this is normalized.
+   */
   devicePublicKey: string
   /** Base64url, the P-256 ECDSA signature over `bindingFor(this)`. */
   signature: string

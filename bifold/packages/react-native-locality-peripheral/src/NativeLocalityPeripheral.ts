@@ -32,6 +32,16 @@ export type NativeRespondToSensorParams = {
   characteristicUuid: string;
   /** `'keyring-locality-v1'` today; versioned per plan §5.4, passed rather than hardcoded natively. */
   contextString: string;
+  /**
+   * Needed only so native can assemble the FULL `LocalityTranscript` JSON
+   * it writes back over the GATT characteristic on read — witness-server's
+   * `runTranscriptExchange()` does `JSON.parse(raw) as LocalityTranscript`
+   * and expects every field, `method` included, not just the signature.
+   * The JS-facing result below deliberately omits it: the caller already
+   * has `directive.method` and re-adds it when assembling its own
+   * `LocalityTranscript` from `NativeLocalityTranscriptResult`.
+   */
+  method: 'ble-challenge-response/0.1' | 'nfc-kiosk/0.1';
   taskDigestMultibase: string;
   challenge: string;
   /** The witness's own DID, from the directive — known before advertising starts. */
@@ -52,9 +62,26 @@ export type NativeRespondToSensorParams = {
 };
 
 export type NativeLocalityTranscriptResult = {
-  /** Hex — what the sensor actually wrote to the characteristic. */
+  /**
+   * Hex — what the sensor actually wrote to the characteristic. Traced
+   * against witness-server's real `BleLocalityProvider.runTranscriptExchange()`:
+   * the sensor mints `randomBytes(32).toString('hex')` and writes THAT
+   * string's UTF-8 bytes (ASCII text, not raw binary) — so the native
+   * write callback gets this value by decoding the write as UTF-8, no hex
+   * decoding needed. The read response native serves back is the full
+   * `JSON.stringify`'d `LocalityTranscript` (method included) as UTF-8
+   * bytes too — witness-server does `JSON.parse(raw.toString('utf8'))`
+   * and expects every field.
+   */
   sensorNonceHex: string;
-  /** Base64, raw EC-P256 point — the same hardware-attestation public key `@bifold/react-native-attestation` already exposes. */
+  /**
+   * Base64 — exactly `@bifold/react-native-attestation`'s own
+   * `getHardwarePublicKey()` output for this platform (SPKI-wrapped on
+   * Android, not a raw point — see `BiometricSignatureVerifier.ts`'s
+   * "platform asymmetries" note). `transcriptKeyMatchesVrcSigner`'s plain
+   * `===` against the VRC evidence's stored key only holds if this matches
+   * that encoding byte-for-byte.
+   */
   devicePublicKeyBase64: string;
   /** Base64url — SHA256withECDSA over the five-value JCS binding, using the already-authorized `CryptoObject` (see below). */
   signatureBase64Url: string;

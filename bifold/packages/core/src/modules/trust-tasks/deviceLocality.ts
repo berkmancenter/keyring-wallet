@@ -81,7 +81,16 @@ export interface LocalityTranscript {
   challenge: string
   sensorNonce: string
   sensorDid: string
-  /** Base64, raw EC-P256 point — the SAME hardware-attestation key that signs VRC evidence. */
+  /**
+   * Base64 — the SAME hardware-attestation key that signs VRC evidence, in
+   * whatever encoding THIS PLATFORM already uses for that key: SPKI-wrapped
+   * on Android (`getHardwarePublicKey()`'s own existing output — see
+   * `BiometricSignatureVerifier.ts`'s "platform asymmetries" note), raw
+   * 65-byte EC point on iOS. NOT necessarily a raw point on both platforms
+   * — `transcriptKeyMatchesVrcSigner`'s plain `===` only means anything if
+   * this matches the SAME platform's existing VRC-evidence encoding
+   * byte-for-byte, which is the actual requirement, not "raw point."
+   */
   devicePublicKey: string
   /** Base64url, the P-256 ECDSA signature over the five-value binding. */
   signature: string

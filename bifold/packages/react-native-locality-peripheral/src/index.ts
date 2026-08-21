@@ -1,19 +1,24 @@
 /**
- * React Native Locality Peripheral — DESIGN SKETCH, no native implementation.
+ * React Native Locality Peripheral.
  *
  * locality-plan.md §10.3 item 9: advertise the device's rendezvous EID as a
  * service UUID, serve one GATT characteristic (write nonce, then read the
  * signed transcript), all inside the ceremony window and foreground only.
- * See this package's README.md for what's here and what isn't, and
+ * See this package's README.md for what's here, and
  * `docs/plans/locality-plan/2026-08-21-bam.md` for the reasoning trail
  * (why the hardware-attestation key's per-operation biometric auth needs to
  * be split from the actual signing operation, why this had to be its own
  * package rather than an addition to `@bifold/react-native-attestation`).
  *
- * NATIVE MODULES: none exist yet. `android/` and `ios/` are intentionally
- * absent — this file and `NativeLocalityPeripheral.ts` are the interface
- * the native implementation needs to satisfy, written first so the shape
- * can be reviewed before any Kotlin/Swift exists.
+ * NATIVE MODULES: Android is real — `LocalityPeripheralModule.kt` compiles
+ * against real TurboModule codegen and autolinks into the app (verified
+ * 2026-08-21). Two things remain unverified on a real device before this
+ * should be trusted in production: whether the authorized `CryptoObject`
+ * genuinely survives being held across an entire advertising window (see
+ * that file's own doc comment), and a live round trip against
+ * witness-server's real `BleLocalityProvider`. iOS has no native
+ * implementation (out of scope for now — no Xcode available to build or
+ * verify it in this environment).
  */
 
 import { NativeModules, Platform } from 'react-native';
@@ -26,9 +31,9 @@ import NativeLocalityPeripheralSpec, {
 export type { NativeRespondToSensorParams, NativeLocalityTranscriptResult };
 
 const LINKING_ERROR =
-  `The package '@bifold/react-native-locality-peripheral' has no native implementation yet ` +
-  `(locality-plan.md §10.3 item 9 is not built) — this call cannot succeed on a real device. ` +
-  `Use NullDeviceLocalityProvider until it is.`;
+  `The package '@bifold/react-native-locality-peripheral' is not linked on this platform/build ` +
+  `(no native module answered 'LocalityPeripheral') — this call cannot succeed here. ` +
+  `Use NullDeviceLocalityProvider instead.`;
 
 // @ts-expect-error TurboModule proxy check, same pattern as react-native-attestation's index.ts
 const isTurboModuleEnabled = global.__turboModuleProxy != null;
@@ -71,3 +76,11 @@ export const stopAdvertising = async (): Promise<void> => {
 
 /** iOS is out of scope for now (locality-plan.md §10.3 — deferred, no Xcode available to build/verify it). */
 export const isSupportedPlatform = (): boolean => Platform.OS === 'android';
+
+/**
+ * The three functions above, bundled as one object matching the shape
+ * `@bifold/core`'s `AndroidBleDeviceLocalityProvider` (and its
+ * `NativeLocalityPeripheralBridge` injection port) expects — so that class
+ * can take this module as a single import rather than three named ones.
+ */
+export const bridge = { isSupported: isPeripheralSupported, respondToSensor, stopAdvertising };

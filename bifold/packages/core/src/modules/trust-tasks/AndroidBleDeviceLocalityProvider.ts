@@ -1,42 +1,28 @@
 /**
- * The wallet-side `DeviceLocalityProvider` implementation that would wrap
- * `@bifold/react-native-locality-peripheral` (locality-plan.md §10.3 item 9)
- * — DESIGN SKETCH, not wired into `ceremony.ts`'s real
- * `runWitnessSession(...)` call site, which stays on `NullDeviceLocalityProvider`
- * until a real native module exists. See that package's README.md and
- * `docs/plans/locality-plan/2026-08-21-bam.md` for why.
+ * The wallet-side `DeviceLocalityProvider` implementation wrapping
+ * `@bifold/react-native-locality-peripheral` (locality-plan.md §10.3 item 9).
  *
- * `NativeLocalityPeripheralBridge`/`NativeRespondToSensorParams`/
- * `NativeLocalityTranscriptResult` below are a HAND-KEPT copy of
- * `@bifold/react-native-locality-peripheral`'s `NativeLocalityPeripheral.ts`
- * Spec, not an import — that package is not a dependency of `@bifold/core`
- * yet (its own README explains why: nothing to depend on until native code
- * exists to back it). Keep the two in sync until it is wired in for real.
+ * The native module is real now — Kotlin that compiles against real
+ * codegen and autolinks into the app (verified 2026-08-21, see
+ * `docs/plans/locality-plan/2026-08-21-bam.md`) — but two things are still
+ * unverified on a real device: whether the authorized `CryptoObject`
+ * genuinely survives being held across an entire advertising window
+ * (`LocalityPeripheralModule.kt`'s own doc comment flags this), and a live
+ * round trip against witness-server's real `BleLocalityProvider`. Until
+ * both are confirmed, `ceremony.ts`'s real call site deliberately stays on
+ * `NullDeviceLocalityProvider` — this class is real and tested but not yet
+ * the production path.
  */
+
+import { bridge as realNativeLocalityPeripheralBridge, type NativeRespondToSensorParams, type NativeLocalityTranscriptResult } from '@bifold/react-native-locality-peripheral'
 
 import { deriveEid, serviceUuidFromEid, LOCALITY_CHARACTERISTIC_UUID, LOCALITY_BINDING_CONTEXT } from './deviceLocality'
 import type { DeviceLocalityProvider, LocalitySensorDirective, LocalityTranscript, HardwareAttestationState } from './deviceLocality'
 
-// ---- hand-kept copy of the native Spec (see file header) -------------------
+export type { NativeRespondToSensorParams, NativeLocalityTranscriptResult }
+export { realNativeLocalityPeripheralBridge }
 
-export type NativeRespondToSensorParams = {
-  serviceUuid: string
-  characteristicUuid: string
-  contextString: string
-  taskDigestMultibase: string
-  challenge: string
-  sensorDid: string
-  hardwareAttestation: HardwareAttestationState
-  windowSeconds: number
-}
-
-export type NativeLocalityTranscriptResult = {
-  sensorNonceHex: string
-  devicePublicKeyBase64: string
-  signatureBase64Url: string
-}
-
-/** What this provider needs from the native module — satisfied today only by a mock; no real bridge exists. */
+/** What this provider needs from the native module — the real Spec's shape, injectable so tests can mock it without a device. */
 export interface NativeLocalityPeripheralBridge {
   isSupported(): Promise<boolean>
   respondToSensor(params: NativeRespondToSensorParams): Promise<NativeLocalityTranscriptResult | null>
@@ -77,6 +63,7 @@ export class AndroidBleDeviceLocalityProvider implements DeviceLocalityProvider 
       serviceUuid,
       characteristicUuid: LOCALITY_CHARACTERISTIC_UUID,
       contextString: LOCALITY_BINDING_CONTEXT,
+      method: params.directive.method,
       taskDigestMultibase: params.taskDigestMultibase,
       challenge: params.challenge,
       sensorDid: params.directive.sensorDid,

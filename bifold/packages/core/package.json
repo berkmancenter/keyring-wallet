@@ -53,6 +53,7 @@
     "@bifold/oca": "3.0.16",
     "@bifold/react-hooks": "3.0.16",
     "@bifold/react-native-attestation": "3.0.16",
+    "@bifold/react-native-locality-peripheral": "workspace:*",
     "@bifold/verifier": "3.0.16",
     "@bifold/vrc-contexts": "workspace:*",
     "@credo-ts/anoncreds": "0.6.3",
