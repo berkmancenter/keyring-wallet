@@ -241,7 +241,14 @@ export async function runWitnessSession(agent: Agent, options: RunWitnessSession
   // the "task → physical" binding direction §5.4 describes, checked from the
   // holder's side of the exchange.
   const observation = (
-    vwcDoc as { payload?: { ext?: Record<string, { locality?: { observation?: { confirmed?: boolean; transcriptDigestMultibase?: string } } } >} }
+    vwcDoc as {
+      payload?: {
+        ext?: Record<
+          string,
+          { locality?: { observation?: { confirmed?: boolean; method?: string; reason?: string; transcriptDigestMultibase?: string } } }
+        >
+      }
+    }
   ).payload?.ext?.[LOCALITY_EXT_NAMESPACE]?.locality?.observation
   if (observation?.confirmed === true) {
     if (!transcript) {
@@ -255,6 +262,16 @@ export async function runWitnessSession(agent: Agent, options: RunWitnessSession
       )
     }
   }
+  // A dedicated, greppable marker distinct from the "transcript produced"
+  // line above (which only reports the DEVICE's own radio-phase outcome,
+  // not what the witness ultimately confirmed) — e2e's device runs assert
+  // on this line (item 12), since the UI badge it otherwise depends on is
+  // slower to poll for over Appium than a logcat marker.
+  logger.info(
+    observation?.confirmed === true
+      ? `${LOG_PREFIX} locality confirmed for session ${sessionId} (${observation.method})`
+      : `${LOG_PREFIX} locality not confirmed for session ${sessionId}${observation?.reason ? ` (${observation.reason})` : ' (no observation)'}`
+  )
 
   await agent.w3cCredentials.store({
     record: new W3cCredentialRecord({ credentialInstances: [{ credential: vwc as never }] }),
