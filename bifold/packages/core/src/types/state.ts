@@ -51,6 +51,14 @@ export interface Preferences {
    * that pattern for this flag.)
    */
   useLocalityConfirmation: boolean
+  /**
+   * Whether the witness-connect pre-flight sheet (docs/plans/locality-plan.md
+   * §8.4 row 2, §10.3 item 8) has already been shown once this install.
+   * Default false everywhere — no split-default risk here, unlike
+   * `useLocalityConfirmation` above, because both the store default and
+   * every read of this flag agree it starts false.
+   */
+  hasSeenLocalityPreflight: boolean
 }
 
 export interface Tours {

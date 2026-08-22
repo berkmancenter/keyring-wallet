@@ -64,6 +64,7 @@ export const defaultState: State = {
     genericErrorMessages: true,
     useWitnessing: true,
     useLocalityConfirmation: true,
+    hasSeenLocalityPreflight: false,
   },
   tours: {
     seenToursPrompt: false,

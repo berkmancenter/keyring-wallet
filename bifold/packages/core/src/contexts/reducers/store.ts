@@ -73,6 +73,7 @@ enum PreferencesDispatchAction {
   REMOVE_BANNER_MESSAGE = 'REMOVE_BANNER_MESSAGE',
   USE_WITNESSING = 'preferences/useWitnessing',
   USE_LOCALITY_CONFIRMATION = 'preferences/useLocalityConfirmation',
+  MARK_LOCALITY_PREFLIGHT_SEEN = 'preferences/markLocalityPreflightSeen',
 }
 
 enum ToursDispatchAction {
@@ -378,6 +379,23 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       const preferences = {
         ...state.preferences,
         useLocalityConfirmation: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.MARK_LOCALITY_PREFLIGHT_SEEN: {
+      // One-way: the witness-connect pre-flight sheet (§8.4 row 2, §10.3
+      // item 8) fires at most once per install, whichever way the user
+      // answers it — there is no un-seeing it.
+      const preferences = {
+        ...state.preferences,
+        hasSeenLocalityPreflight: true,
       }
       const newState = {
         ...state,
