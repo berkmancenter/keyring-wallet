@@ -941,6 +941,43 @@ export async function assertWitnessShareMarkers(driver, timeout = 120000) {
 }
 
 /**
+ * The locality co-presence marker (locality-plan.md §10.3 item 12), from
+ * Android's run-scoped logcat: `witnessCeremony.ts` logs a dedicated
+ * "locality confirmed"/"locality not confirmed" line once it has processed
+ * the witness's `#response` — distinct from the earlier "radio phase
+ * produced a transcript" line, which only reports what the DEVICE itself
+ * produced, not what the witness ultimately confirmed. No-op on iOS drivers
+ * (no native peripheral exists there; see locality-plan.md §10.3 item 9).
+ *
+ * Fails loudly on a "not confirmed" line rather than merely on a missing
+ * one — a silent fallback to unconfirmed is exactly the failure mode this
+ * assertion exists to catch, not something to wait out.
+ */
+export async function assertLocalityConfirmedMarker(driver, timeout = 60000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const confirmed = /\[TrustTasks:Witness\] locality confirmed for session/;
+  const notConfirmed = /\[TrustTasks:Witness\] locality not confirmed for session[^\n]*/;
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (confirmed.test(log)) {
+      console.log(`[e2e] android: locality confirmed`);
+      return;
+    }
+    const failure = log.match(notConfirmed);
+    if (failure) {
+      throw new Error(`android: locality was NOT confirmed — "${failure[0]}"`);
+    }
+    await sleep(3000);
+  }
+  throw new Error(`android: no locality marker (confirmed or not) appeared within ${timeout}ms`);
+}
+
+/**
  * v4 pairs: consent is the RELATIONSHIP PROPOSAL, not per-credential offers.
  * One side (whichever wallet did not deterministically propose) gets the
  * "wants to form a relationship" bottom-sheet — find and accept it. Returns

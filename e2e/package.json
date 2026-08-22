@@ -14,6 +14,7 @@
     "onboarding-smoke": "node run-onboarding-smoke.js",
     "vrc-exchange:witnessed:devices": "node run-vrc-exchange-witnessed-devices.js",
     "vrc-exchange:witnessed:android-only": "node run-vrc-exchange-witnessed-android-only-devices.js",
+    "vrc-exchange:witnessed:locality:android-only": "node run-vrc-exchange-witnessed-locality-android-only-devices.js",
     "vrc-exchange:witnessed": "node run-vrc-exchange-witnessed.js"
   },
   "dependencies": {
