@@ -25,7 +25,7 @@
 import { createHash, createPublicKey, hkdfSync } from 'node:crypto'
 import { p256 } from '@noble/curves/nist.js'
 
-import { jcsCanonicalize } from './documentProof'
+import { jcsCanonicalize } from '@bifold/trust-tasks'
 
 // ------------------------------------------------------------- the namespace
 
