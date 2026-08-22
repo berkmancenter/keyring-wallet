@@ -8,6 +8,11 @@ module.exports = {
   // This is necessary when using portal: with a submodule that has its own node_modules
   modulePaths: ['<rootDir>/node_modules'],
   moduleNameMapper: {
+    // @openvtc/trust-tasks is ESM-only with an import-condition exports map
+    // (reached through @bifold/core's portal source) — map to dist, as the
+    // core package's own jest config does.
+    '^@openvtc/trust-tasks$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/index.js',
+    '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/$1.js',
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       '<rootDir>/__mocks__/file.js',
     '\\.(css|less)$': '<rootDir>/__mocks__/style.js',
