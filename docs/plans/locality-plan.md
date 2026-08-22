@@ -1034,9 +1034,15 @@ submodule, with the user's explicit sign-off, before any of this could start.**
    from scratch rather than reusing a cached `Device` object (`ref-06p4`,
    [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md)). *Done when:* the
    `ref-06p2` transcript runs against the real witness process —
-   **not yet run live; this class's own write-nonce-then-read protocol
-   (distinct from `ref-06p2`'s bare echo test) has not been exercised
-   against real hardware.**
+   **run live (2026-08-21), via item 9's verification pass: a temporary
+   script reused this exact class's real `runTranscriptExchange` (not
+   `ref-06p2`'s bare echo test) as the sensor side against a physical
+   Android peripheral, and it completed the write-nonce-then-read round
+   trip for real —
+   `RESULT: observed after 12555ms, rttMs=522`. That harness bypassed
+   `WitnessTaskSessions` itself, so this closes only this class's own gap;
+   the full DIDComm session flow (items 1/3/4/5 below) is still not
+   exercised end-to-end.**
 3. ✅ **Sensor identity** — `sensorDid` is the witness's own DID (§4.2),
    resolved once per session via `getIssuer()` and threaded through the
    directive, the observation, and the transcript's `expected` binding.
@@ -1048,8 +1054,16 @@ submodule, with the user's explicit sign-off, before any of this could start.**
    `localityVerificationRequired` flag), plus a new discovery responder
    (`handleDiscovery`) answering `trust-task-discovery` with the expanded
    `supportedTypes` entry carrying `requiredExt` when `required`. *Done
-   when:* the §8.3 cross-product is exercised end-to-end — **not yet; this
-   needs the same live run as item 1.**
+   when:* the §8.3 cross-product is exercised end-to-end — **not yet
+   live-run (needs the same live run as item 1), but a real gap in
+   `required`'s own enforcement was found and fixed while merging in
+   `feat/trust-tasks-integration` (2026-08-21, see the dated companion):
+   `handleSubmit` checked only that the session request had POPULATED the
+   ext namespace (which `{offered: false}` satisfies), never that the radio
+   phase actually SUCCEEDED — a `required` witness would still issue a VWC
+   carrying `localityConfirmed: false` on `declinedByHolder`/`windowLost`.
+   `handleSubmit` now refuses to issue in that case, matching §8.3's
+   "refuse on failure" cell for real.**
 5. ✅ **VWC assembly** — `buildWitnessCredentialJson` gained a
    `localityAssertion` parameter (additive; the legacy `localityEvidence`
    parameter and its nested `witnessContext.localityVerification` shape are
@@ -1072,18 +1086,34 @@ submodule, with the user's explicit sign-off, before any of this could start.**
 
 ### 10.3 Keyring app
 
-**Status: items 7, 9, 10, 11, 13 implemented, typechecked, and unit-tested
+**Status: items 7, 8, 9, 10, 11, 13 implemented, typechecked, and unit-tested
 — item 9's Android peripheral is proven live end to end on a physical
 device (2026-08-21), not just compiling, with three real bugs found and
 fixed along the way (see its own entry below); iOS deferred outright (no
-Xcode in this environment). Item 8 implemented at the data layer only,
-with the pre-flight UI sheet its own "Done when" describes not yet built.
-`ceremony.ts`'s real call site still constructs `NullDeviceLocalityProvider()`
-— item 9 being proven doesn't by itself decide when the wallet should
-switch to the real Android provider in production, which is a rollout
-decision, not a verification gate. Item 12 (`e2e:vrc:devices`) can now
-build on a working peripheral rather than being blocked behind one, but
-has not been run. Item 14 stays out of scope pending §11-Q5. See
+Xcode in this environment). Item 8's pre-flight sheet is now built —
+`LocalityPreflightModal`, merged with item 11's remaining "what will be
+shared" sheet into one, per §8.4's own "only one new prompt surface"
+language — with one known, stated gap: it requests the Android 31+
+Bluetooth permissions the native manifest declares, not pre-API-31
+`ACCESS_FINE_LOCATION`, which the manifest doesn't declare at all yet.
+`ceremony.ts`'s real call site now constructs `createDeviceLocalityProvider(agent)`
+in place of `NullDeviceLocalityProvider()` (2026-08-21) — the wiring itself
+is done, typechecked, and covered by the full `core` suite (174 suites,
+1574 tests) with no regressions; what this does *not* establish is the
+same thing item 9 never claimed to establish, restated so it isn't
+overread here either: no test exercises the real `WitnessTaskSessions`
+DIDComm session flow end-to-end against a live Android peripheral (§10.2
+items 1/3/4/5's own caveats still hold), and neither this wiring nor item
+9 has landed on `main` in either repository — both sit in open,
+unmerged PRs ([keyring-bifold#40](https://github.com/berkmancenter/keyring-bifold/pull/40),
+[keyring-wallet#21](https://github.com/berkmancenter/keyring-wallet/pull/21)),
+with keyring-bifold#40 itself cut from `feat/trust-tasks-integration`'s tip
+and not yet mergeable into `main` until that branch lands first. Item 12
+(`e2e:vrc:devices`) can now build on a working peripheral rather than
+being blocked behind one, but has not been run — `e2e/lib/witness.js`
+still hard-codes `WITNESS_LOCALITY_REQUIRED=false` because Appium-driven
+phones can't produce a locality proof, which is exactly this item's gap,
+not yet closed. Item 14 stays out of scope pending §11-Q5. See
 [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) for what was found
 doing this slice, including why item 8 needed a new call site (the witness
 connection was never discovery-queried at all before this) and the
@@ -1098,21 +1128,46 @@ Android/iOS tooling asymmetry in this environment.**
    produces no Bluetooth permission prompt — **the store/reducer/screen
    round-trip is unit- and snapshot-tested; "off produces no Bluetooth
    prompt" is an item 9/12 claim and can't be proven until that exists.**
-8. 🟡 **Read `requiredExt` on the witness row of a discovery response**, not just
+8. ✅ **Read `requiredExt` on the witness row of a discovery response**, not just
    the propose row, and surface it at witness-connect (§8.4's "Connecting to a
    witness" moment) — before Bluetooth permission is requested and before any
    session opens. *Done when:* a `required` witness's discovery response drives
    the pre-flight "this event requires in-person confirmation" sheet, and the
    `malformedRequest` refusal (§8.2) is never the first the user hears of it in
-   the run where discovery already told the wallet. — **Data layer done:**
-   `queryWitnessDiscovery` (`trust-tasks/ceremony.ts`) fires at witness-connect
-   from `WitnessConnectionProvider.tsx`'s `handleWitnessAnnouncement`, and
-   `getWitnessLocalityRequirement` reads the retained answer's `witness/session`
-   row for `requiredExt`, three-state (`true`/`false`/`null`-not-yet-known)
-   exactly like the existing `peerSupportsTaskType`. Unit-tested
-   (`ceremony.test.ts`, 4 new cases). **Not done:** the pre-flight sheet itself
-   — no design guidance was available for it in this session, so the reader
-   exists for a future sheet to call rather than being wired to one yet.
+   the run where discovery already told the wallet. — **Data layer** (as
+   before): `queryWitnessDiscovery` (`trust-tasks/ceremony.ts`) fires at
+   witness-connect from `WitnessConnectionProvider.tsx`'s
+   `handleWitnessAnnouncement`, and `getWitnessLocalityRequirement` reads the
+   retained answer's `witness/session` row for `requiredExt`, three-state
+   (`true`/`false`/`null`-not-yet-known) exactly like the existing
+   `peerSupportsTaskType`. **The sheet is now built**: `LocalityPreflightModal`
+   (mounted at root beside `RelationshipProposalModal`), shown at most once
+   per install — a new `hasSeenLocalityPreflight` preference, one-way once
+   set, sibling to `useLocalityConfirmation`'s own store/reducer pattern —
+   Android only, only while `useLocalityConfirmation` is on. It merges items 8
+   and 11's remaining sheet into one (see item 11's own entry for why: §8.4's
+   own "only new prompt surface" language settles this as one sheet, not two).
+   `WitnessConnectionProvider` schedules it from `handleWitnessAnnouncement`
+   right after firing discovery, polling `getWitnessLocalityRequirement` for
+   up to 5s (failing open to `required: false` on timeout or a thrown error,
+   never blocking) so a `required` answer that arrives in time drives the
+   harder copy rather than the sheet only ever showing the generic offer.
+   Declining reuses the existing `useLocalityConfirmation` setting (no new
+   per-session gate invented) — `resolveLocalityPreflight(false)` flips it off
+   through the same dispatch action Settings uses, which
+   `isLocalityConfirmationPreferred()` already reads. Allowing requests the
+   two Android 31+ permissions the native module's manifest actually declares
+   (`BLUETOOTH_ADVERTISE`, `BLUETOOTH_SCAN`, via `react-native-permissions`)
+   regardless of the OS grant outcome — a denial surfaces later as
+   `windowLost`, not as a second prompt. **Known gap, stated rather than
+   papered over:** pre-API-31 `ACCESS_FINE_LOCATION` is not requested — the
+   manifest doesn't declare it at all (item 9's own write-up), so requesting
+   it here would silently no-op; closing this is a manifest change first, not
+   a sheet change. Unit-tested: `WitnessConnectionProvider`'s scheduling logic
+   (`witnessConnectionProvider.test.tsx`, 8 new cases — Android gating, the
+   one-shot flag, the required-vs-not-required race, both `resolveLocalityPreflight`
+   outcomes) and the sheet component itself (`LocalityPreflightModal.test.tsx`,
+   9 cases — both sheet states, both buttons in each, the settings deep-link).
 9. ✅ **Device-side peripheral** — advertise the EID as a service UUID, serve the
    GATT characteristic, sign with the existing hardware-attestation key, all
    inside the ceremony window and foreground only. *Done when:* the app's
@@ -1256,13 +1311,35 @@ Android/iOS tooling asymmetry in this environment.**
    different states, and the reader no longer looks for a nested object. —
    **The three-state reader/renderer half is done** (`getLocalityField`,
    `formatDeclineReason`, flat-members-first with legacy-nested fallback) and
-   unit-tested. **The pre-ceremony "what will be shared" sheet is not built** —
-   out of scope for the same reason as item 8's sheet.
-12. ⬜ **`e2e:vrc:devices` covers locality** on physical phones with a real sensor —
+   unit-tested. **The pre-ceremony "what will be shared" sheet is now built —
+   merged into item 8's `LocalityPreflightModal`, not a second sheet.**
+   §8.4's own table names exactly one new prompt surface at witness-connect;
+   building a separate second sheet for "what will be shared" would itself
+   be the second question §8.4's governing principle rules out. The offer
+   sheet's body names what the assertion discloses if confirmed — venue, a
+   time window, and the witness — before the ceremony, not after. See item
+   8's entry for the sheet's full detail and test coverage.
+12. 🟡 **`e2e:vrc:devices` covers locality** on physical phones with a real sensor —
     the same rule that already makes hardware attestation provable only there.
     *Done when:* the suite fails if the locality assertion is missing or
-    unconfirmed on a run where it should be confirmed. — **Not started;**
-    blocked behind item 9 (there is nothing for a real sensor to observe yet).
+    unconfirmed on a run where it should be confirmed. — **Written, not yet
+    run live.** A new script, `run-vrc-exchange-witnessed-locality-android-only-devices.js`
+    (`yarn e2e:vrc:witnessed:locality:android-only`), extends the existing
+    android-only witnessed-exchange flow: sets `WITNESS_LOCALITY_REQUIRED=true`
+    before the witness starts (so it refuses to issue a VWC without a
+    confirmed observation — §8.2's `required` policy, whose own issuance-side
+    enforcement gap this session also found and fixed, see the dated
+    companion), and asserts a new dedicated logcat marker
+    (`witnessCeremony.ts` now logs "locality confirmed"/"locality not
+    confirmed" once it processes the witness's response — distinct from the
+    existing "radio phase produced a transcript" line, which only reports
+    the device's own half). Fails loudly on a "not confirmed" line, not just
+    on a missing one. Android-only for two independent reasons: item 9 has
+    no iOS peripheral, AND the witness's own BLE sensor (`node-ble`/BlueZ)
+    only runs on Linux — this is the one witnessed-exchange variant where the
+    machine running the test needs its own real Bluetooth adapter, not just
+    the phones. **Not run**: no two physical Android phones plus a
+    BLE-capable Linux host were available in this session to run it against.
 13. ✅ **A vocabulary guard in CI**, not a discipline. A test in the bifold suite
     expands **every credential shape we issue** against the real context document
     and fails on any dropped term — `ref-06p` act 6 promoted from a rung
