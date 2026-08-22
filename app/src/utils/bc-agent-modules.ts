@@ -128,6 +128,11 @@ export function getBCAgentModules({
       mediationRecipient: {
         mediatorInvitationUrl: mediatorInvitationUrl,
         mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+        // Pickup V2 polling cadence (see configureMessagePickup): each poll is
+        // a status-request the mediator answers from its queue, so delivery is
+        // request/ack'd instead of live-pushed into a websocket that may have
+        // died silently (docs/spikes/e2e-vrc-connect-findings.md).
+        mediatorPollingInterval: 10_000,
       },
     }),
     dids: new DidsModule({

@@ -33,6 +33,8 @@ specifically, so the coupling can be checked rather than assumed:
 | [2026-08-18-bam.md](./locality-plan/2026-08-18-bam.md) | **The reasoning behind everything in this plan**, in three parts: the design decisions that turn the survey into a plan (evidence direction inverted, `ext` as the wire seam, the ladder scoped); the review decisions (namespace root, venue-hosted witness, annotate-over-gate, witness-free locality closed, NFC as phase 2); and the ZKP revision (the proof set, the six assertion rules and the failures each prevents, the key-id correlation correction, the evidence-vs-unlinkability trade, and what was deferred). Read it before changing anything here |
 | [2026-08-19-al.md](./locality-plan/2026-08-19-al.md) | Review: the §10.0 prerequisites landed the night the plan went up (pin table refreshed here in its favor); the §8.2 policy mechanism is already implementable on shipped discovery; three ceremony-window edges from a day of live runs. Also the §5.1 two-channel figure and the §8.4 end-to-end UX section, contributed directly |
 | [2026-08-19-bam.md](./locality-plan/2026-08-19-bam.md) | Dispositions on the three 2026-08-19-al.md findings: all three adopted, with the `windowSeconds` anchor narrowed to a sensor-side-only trust parameter, separated from the device's own (non-normative) advertise timeout |
+| [2026-08-20-bam.md](./locality-plan/2026-08-20-bam.md) | `ref-06p2` built and run against a real phone: why a raw-HCI-socket BLE library (`@abandonware/noble`) failed silently on the dev machine it was first run on, and why BlueZ's D-Bus interface (`node-ble`) is the right default for `witness-server`'s own `BleLocalityProvider` (§10.2 item 2), not just this rung's workaround |
+| [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) | `ref-06p3`, `ref-06p4`, and `ref-06p5` built and run: the §7.3 verifier's three-state coverage, the one-real-leg simplification `ref-06p4` uses for the relay trial and why, the measured numbers (100ms first fully caught against a 224.7ms bound), a reconnect-retry bug (stale `Device` object across retries) that feeds back into §10.2 item 2, the App-Attest-vs-Play-Integrity offline-verifiability asymmetry behind new Q7, and why a summarizing web fetch is unsafe for pinning cryptographic material |
 
 ---
 
@@ -980,10 +982,10 @@ a README stating what it proves and what it does not.
 | Rung | What it does | Needs | Done when |
 |---|---|---|---|
 | [**`ref-06p-locality-binding`**](../../tsp-reference/ref-06p-locality-binding/) ✅ | The binding and evidence algebra with **no radios**: EID derivation, GATT transcript construction and verification, the `ext` payloads on all four documents through the published `@openvtc/trust-tasks` 0.9.0 §7.2 pipeline, VWC assertion assembly, the canonicalization split of §6.1, and four staged forgeries | nothing | **Done — 26 checks green.** All four forgeries rejected by their named checks; `ext` survives byte-identically and a locality-blind peer ignores it; the assertion is flat, carries no key id, and a tier-1-only show canonicalizes on its own; the three evidence states are distinguishable; **1,887 bytes per session measured** (transcript 523, observation 515, assertion 511, directive 235). Found: without term definitions the assertion is not signed *in two ways* — safe mode rejects the document outright, unsafe mode drops it to zero quads (§7.1). Terms authored as the rung's `fixtures/locality-context-terms.json` |
-| **`ref-06p2-ble-observation`** | The same transcript over **real BLE** between two processes with real adapters: device advertises the EID as a service UUID, sensor scans for the expected set, connects, runs the round trip | two BLE radios | Round trip completes over the air; the sensor matches the correct session out of ≥3 open sessions; **the honest RTT distribution is measured and published** (n, median, p95, worst) as the input to the bound |
-| **`ref-06p3-third-party-verify`** | §7.3 executed: a verifier given VWC + retained pair + assertion emits a verdict and a named residual set; run against a genuine bundle and against tampered ones | nothing | Every step 1–7 fails independently when its input is tampered; the genuine bundle passes; the verdict names `residuals` rather than returning a bare boolean |
-| **`ref-06p4-relay-trial`** | A relay staged for real: two processes bridge the GATT exchange over a socket with injected latency, sweeping added delay | two BLE radios | Relay succeeds with no bound (**the attack is demonstrated, not assumed**); the delay at which the bound starts rejecting is measured; the bound is chosen from p95-honest and relay-detection together, with the **false-rejection rate at that bound stated in the README** |
-| **`ref-06p5-attestation-binding`** | App Attest / Play Integrity `clientDataHash` / `requestHash` set to the transcript binding and verified against the platform roots | platform test credentials | Verification passes for a genuine assertion, fails when the binding differs by one byte, and the `absent` path completes the exchange with the flag recorded |
+| [**`ref-06p2-ble-observation`**](../../tsp-reference/ref-06p2-ble-observation/) ✅ | The same transcript over **real BLE** between two independent radios: a phone advertises the EID as a service UUID (nRF Connect's GATT-server test app), this box's sensor script scans for the expected set, connects, runs the round trip | two BLE radios | **Done — round trip completes over the air.** The sensor correctly discriminated the target EID against 8–11 real ambient BLE devices per scan; two runs (35 trials total) against a real phone measured **median ≈180ms, p95 ≈224ms**, appended to `fixtures/measured-rtt.jsonl` as the input `ref-06p4` needs. Runs over BlueZ's D-Bus interface (`node-ble`), not a raw HCI socket — see [2026-08-20-bam.md](./locality-plan/2026-08-20-bam.md) for why `@abandonware/noble` failed silently on this box and what it means for §10.2's `BleLocalityProvider`. Only one of the three candidate sessions was actually advertised (the other two exercised matching against real noise, not two more live advertisers); no signature (nRF Connect can't sign) — that binding stays ref-06p's, proven with no radios |
+| [**`ref-06p3-third-party-verify`**](../../tsp-reference/ref-06p3-third-party-verify/) ✅ | §7.3 executed: a verifier given VWC + retained pair + assertion emits a verdict and a named residual set; run against a genuine bundle and against tampered ones | nothing | **Done — 16 checks green.** All seven mechanical steps fail independently under a targeted forgery built consistent-up-to-the-flaw (a naive clone-and-mutate kept tripping an earlier step, since the artifacts chain — recorded as the rung's main finding); the genuine bundle passes and matches a frozen fixture; the verdict always names `failedAtStep` + `reason`, or `residuals`, never a bare boolean; step 6 is exposed as two modes (trust the credential's predicate vs. open the artifact and check the key), and forgery 6 shows the trust-only default passing a witness that lies about the predicate — documented as the cost §9.1 already named, not a defect found here; the §7.1 rule-5 "emit `confirmed:false`, never omit" rule this section already promises is exercised as three pairwise-distinguishable outcomes (`confirmed`/`declined`/`not-offered`), including that a declined claim still fails integrity checks if its documents are tampered |
+| [**`ref-06p4-relay-trial`**](../../tsp-reference/ref-06p4-relay-trial/) ✅ | A relay staged for real: two processes bridge the GATT exchange over a socket with injected latency, sweeping added delay | two BLE radios (one leg — see the rung's README for the honest simplification: only one radio is real, the second is a socket-injected delay standing in for the missing physical hop) | **Done — two real runs, 5 checks each.** The relay succeeds unconditionally at every swept delay (5–1000ms); a bound set at the honest sample's p95 (**224.7ms** both runs) is not reliably exceeded by 5–20ms of injected delay, measuring §5.5's "sub-10ms local relays are indistinguishable" claim rather than restating it; the first delay fully caught was **100ms**; the false-rejection rate is checked against a second, independent honest sample (which landed within 0.2ms of the first — the bound is measuring a stable percentile, not noise) |
+| [**`ref-06p5-attestation-binding`**](../../tsp-reference/ref-06p5-attestation-binding/) ✅ | App Attest / Play Integrity `clientDataHash` / `requestHash` set to the transcript binding and verified against the platform roots | platform test credentials — **App Attest**: real, vendored (a genuine captured attestation object, MIT-licensed, from an open-source verifier; Apple's real root fetched directly). **Play Integrity**: none exist and none can — its tokens are encrypted and only decodable via a live call to Google's backend, not an offline-verifiable format at all | **Done — 15 checks green, for App Attest.** A real Apple-signed attestation verifies against Apple's real public root, offline, in both environments; four independent forgeries (the object, the challenge, the keyId, the App ID) each caught by a different named check; the transcript binding is shown to wire correctly into App Attest's `challenge` parameter (mutating any of the five bound fields changes the resulting hash, and substituting our binding into the real fixture correctly fails, proving the check reads bytes rather than shape) — though no real device has signed *our* binding, which this rung cannot produce without one; the `absent`/`present-unverified`/`verified` states are explicit and never inferred. **Play Integrity is shape-only here** (§7.3-step-7-style consistency, not a signature/root check) with a separate, explicitly parked live script (`live-play-integrity-optional.mjs`) ready to run once real Play Console + Google Cloud access exists |
 
 Naming follows the house convention — a lettered line under `ref-06` for one
 topic (`v1`, `w`, `x` already), numbered within it — and `ref-07`…`ref-09` stay
@@ -991,79 +993,368 @@ free for the Credo adapter, RN, and the Keyring module.
 
 ### 10.2 Witness server
 
-1. **Add the observer direction to `WitnessTaskSessions`** (§5.2) — the module
-   that hosts the live witnessed ceremony
-   (`witness-server/src/trustTasks/WitnessTaskSessions.ts`), not the legacy
-   `LocalityService`, which is standing down for v4 pairs and is not worth
-   reworking. The session challenge already issued by `witness/session#response`
-   becomes the transcript's input, and signature verification is real (resolve
-   the key, verify the transcript). *Done when:* no code path records a proof
-   the sensor did not itself observe, and a transcript with a valid-looking but
-   wrong signature is rejected.
-2. **`BleLocalityProvider`** implementing the (revised) `LocalityProvider` port
-   over BlueZ — scan for expected EIDs, connect, run the transcript, report
-   observations with `rttMs`/`rssi`. `NullLocalityProvider` stays as the default.
-   *Done when:* the `ref-06p2` transcript runs against the real witness process.
-3. **Sensor identity** — observations signed by a sensor DID, equal to the
-   witness DID in phase 1 (§4.2). *Done when:* a second sensor can be added by
-   configuration alone, proven by running two in-process sensors with distinct
-   DIDs.
-4. **Policy configuration** — `off | offered | required`; `required` published
-   as the expanded `supportedTypes` entry carrying `requiredExt` on the
-   witness's discovery responder (§8.2). *Done when:* the cross-product table
-   of §8.3 is exercised end-to-end, including the refusal path.
-5. **VWC assembly** — `buildWitnessCredentialJson` emits the typed assertion,
-   including explicit negatives. *Done when:* `confirmed:false` appears with a
-   reason on every failure path, and the member is absent only when policy is
-   `off`.
-6. **Vocabulary** — add `ref-06p`'s `fixtures/locality-context-terms.json` to
-   `witnessedExchangeContext.ts`, imported identically by app and witness
-   server. *Done when:* `ref-06p`'s dataset-coverage assertions hold against the
-   real context document, and a tier-1 subset still canonicalizes on its own.
+**Status: items 1–6 implemented and typechecked, unit-tested where the logic
+is pure; the DIDComm/BLE integration claims each item's own "Done when" makes
+are not yet proven end-to-end — that needs a live two-wallet e2e run (or a
+dedicated Credo-agent integration test), the same gate `e2e:vrc:devices`
+already applies to hardware attestation. See
+[2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) for what was found
+building this slice, including one real blocker resolved along the way: the
+bifold submodule pin didn't carry the Trust Tasks witnessed-exchange code
+these items depend on at all (it lived on `feat/trust-tasks-integration`,
+2281 commits past what `.gitmodules` tracked) — fixed by repointing the
+submodule, with the user's explicit sign-off, before any of this could start.**
+
+1. ✅ **Observer direction in `WitnessTaskSessions`** (§5.2) —
+   `witness-server/src/trustTasks/WitnessTaskSessions.ts`, not the legacy
+   `LocalityService` (untouched; still serves the old basic-message
+   ceremony, which the plan leaves alone). `handleSession` reads the party's
+   locality offer from `payload.ext`, kicks off the BLE observation
+   concurrently with VP assembly, and emits the sensor directive;
+   `handleSubmit` awaits that observation, verifies the transcript for real
+   (`trustTasks/locality.ts`'s `verifyTranscript`, real P-256 ECDSA via
+   `@noble/curves`, not the reference ladder's Ed25519 stand-in — see the
+   companion for why), and refuses with `malformedRequest` on a bad
+   signature. *Done when:* no code path records a proof the sensor did not
+   itself observe, and a transcript with a valid-looking but wrong signature
+   is rejected — **the crypto-level half of this is unit-tested
+   (`__tests__/unit/locality.test.ts`, 19 cases); the full DIDComm path
+   (session offer → directive → BLE → submit → refusal) is not yet exercised
+   end-to-end.**
+2. ✅ **`BleLocalityProvider`** (`trustTasks/BleLocalityProvider.ts`) — a
+   **deliberately separate port** from `../LocalityProvider.ts`'s
+   `LocalityProvider`/`NullLocalityProvider` (reworking that shared interface
+   in place would have broken the legacy ceremony's still-serving, if
+   never-real, locality gate for no benefit). Over BlueZ's D-Bus interface
+   (`node-ble`), not a raw HCI socket — `ref-06p2` measured the latter
+   producing zero discover events against a live advert while `bluetoothd`
+   was running, silently, on the same box D-Bus scanning worked on
+   ([2026-08-20-bam.md](./locality-plan/2026-08-20-bam.md)). One shared scan
+   loop serves every concurrent `observeSession` call; reconnect re-scans
+   from scratch rather than reusing a cached `Device` object (`ref-06p4`,
+   [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md)). *Done when:* the
+   `ref-06p2` transcript runs against the real witness process —
+   **run live (2026-08-21), via item 9's verification pass: a temporary
+   script reused this exact class's real `runTranscriptExchange` (not
+   `ref-06p2`'s bare echo test) as the sensor side against a physical
+   Android peripheral, and it completed the write-nonce-then-read round
+   trip for real —
+   `RESULT: observed after 12555ms, rttMs=522`. That harness bypassed
+   `WitnessTaskSessions` itself, so this closes only this class's own gap;
+   the full DIDComm session flow (items 1/3/4/5 below) is still not
+   exercised end-to-end.**
+3. ✅ **Sensor identity** — `sensorDid` is the witness's own DID (§4.2),
+   resolved once per session via `getIssuer()` and threaded through the
+   directive, the observation, and the transcript's `expected` binding.
+   *Done when:* a second sensor can be added by configuration alone — the
+   design supports it (a distinct sensor DID is just a different value at
+   this one call site), but a second sensor has not actually been run.
+4. ✅ **Policy configuration** — `off | offered | required`
+   (`WITNESS_LOCALITY_POLICY`, default `offered`, distinct from the legacy
+   `localityVerificationRequired` flag), plus a new discovery responder
+   (`handleDiscovery`) answering `trust-task-discovery` with the expanded
+   `supportedTypes` entry carrying `requiredExt` when `required`. *Done
+   when:* the §8.3 cross-product is exercised end-to-end — **not yet
+   live-run (needs the same live run as item 1), but a real gap in
+   `required`'s own enforcement was found and fixed while merging in
+   `feat/trust-tasks-integration` (2026-08-21, see the dated companion):
+   `handleSubmit` checked only that the session request had POPULATED the
+   ext namespace (which `{offered: false}` satisfies), never that the radio
+   phase actually SUCCEEDED — a `required` witness would still issue a VWC
+   carrying `localityConfirmed: false` on `declinedByHolder`/`windowLost`.
+   `handleSubmit` now refuses to issue in that case, matching §8.3's
+   "refuse on failure" cell for real.**
+5. ✅ **VWC assembly** — `buildWitnessCredentialJson` gained a
+   `localityAssertion` parameter (additive; the legacy `localityEvidence`
+   parameter and its nested `witnessContext.localityVerification` shape are
+   untouched) that spreads the flat `locality*` members directly into
+   `witnessContext`. *Done when:* `confirmed:false` appears with a reason on
+   every failure path (unit-tested via `assertionFromObservation` in
+   `locality.test.ts`), and the member is absent only when policy is `off`
+   (implemented in `WitnessTaskSessions`; not yet integration-tested).
+6. ✅ **Vocabulary** — the 14 `locality*` terms from `ref-06p`'s
+   `fixtures/locality-context-terms.json` added to `@bifold/vrc-contexts`'s
+   `witnessedExchangeContext.ts` — the actual single source of truth (the
+   `vrc-reference` and `core/modules/vrc/types` copies are re-exports).
+   *Done when:* the dataset-coverage assertions hold against the real
+   context document and a tier-1 subset canonicalizes on its own —
+   **done, real check**: `core/src/modules/vrc/__tests__/unit/localityVocabulary.test.ts`
+   imports `@bifold/vrc-contexts` live and runs real `jsonld.canonize()`
+   over it, 4 cases green. Found along the way: `vrc-contexts` publishes
+   from `build/`, not `src/` — a source edit with no `yarn build` silently
+   keeps serving the old context to every consumer, portal-linked or not.
 
 ### 10.3 Keyring app
 
-7. **`useLocalityConfirmation` setting**, default true in store and in the
-   AsyncStorage read path (§8.1). *Done when:* a fresh install defaults on, the
-   toggle round-trips, and off produces no Bluetooth permission prompt.
-8. **Read `requiredExt` on the witness row of a discovery response**, not just
+**Status: items 7, 8, 9, 10, 11, 13 implemented, typechecked, and unit-tested
+— item 9's Android peripheral is proven live end to end on a physical
+device (2026-08-21), not just compiling, with three real bugs found and
+fixed along the way (see its own entry below); iOS deferred outright (no
+Xcode in this environment). Item 8's pre-flight sheet is now built —
+`LocalityPreflightModal`, merged with item 11's remaining "what will be
+shared" sheet into one, per §8.4's own "only one new prompt surface"
+language — with one known, stated gap: it requests the Android 31+
+Bluetooth permissions the native manifest declares, not pre-API-31
+`ACCESS_FINE_LOCATION`, which the manifest doesn't declare at all yet.
+`ceremony.ts`'s real call site now constructs `createDeviceLocalityProvider(agent)`
+in place of `NullDeviceLocalityProvider()` (2026-08-21) — the wiring itself
+is done, typechecked, and covered by the full `core` suite (174 suites,
+1574 tests) with no regressions; what this does *not* establish is the
+same thing item 9 never claimed to establish, restated so it isn't
+overread here either: no test exercises the real `WitnessTaskSessions`
+DIDComm session flow end-to-end against a live Android peripheral (§10.2
+items 1/3/4/5's own caveats still hold), and neither this wiring nor item
+9 has landed on `main` in either repository — both sit in open,
+unmerged PRs ([keyring-bifold#40](https://github.com/berkmancenter/keyring-bifold/pull/40),
+[keyring-wallet#21](https://github.com/berkmancenter/keyring-wallet/pull/21)),
+with keyring-bifold#40 itself cut from `feat/trust-tasks-integration`'s tip
+and not yet mergeable into `main` until that branch lands first. Item 12
+(`e2e:vrc:devices`) can now build on a working peripheral rather than
+being blocked behind one, but has not been run — `e2e/lib/witness.js`
+still hard-codes `WITNESS_LOCALITY_REQUIRED=false` because Appium-driven
+phones can't produce a locality proof, which is exactly this item's gap,
+not yet closed. Item 14 stays out of scope pending §11-Q5. See
+[2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) for what was found
+doing this slice, including why item 8 needed a new call site (the witness
+connection was never discovery-queried at all before this) and the
+Android/iOS tooling asymmetry in this environment.**
+
+7. ✅ **`useLocalityConfirmation` setting**, default true in store and in the
+   AsyncStorage read path (§8.1) — `types/state.ts`, `contexts/store.tsx`,
+   `contexts/reducers/store.ts` (`?? true` on read, matching the *fixed*
+   pattern, not keyring-bifold#38's split-default bug), plus a
+   `ToggleLocalityConfirmation` settings screen mirroring `ToggleWitnessing`.
+   *Done when:* a fresh install defaults on, the toggle round-trips, and off
+   produces no Bluetooth permission prompt — **the store/reducer/screen
+   round-trip is unit- and snapshot-tested; "off produces no Bluetooth
+   prompt" is an item 9/12 claim and can't be proven until that exists.**
+8. ✅ **Read `requiredExt` on the witness row of a discovery response**, not just
    the propose row, and surface it at witness-connect (§8.4's "Connecting to a
    witness" moment) — before Bluetooth permission is requested and before any
    session opens. *Done when:* a `required` witness's discovery response drives
    the pre-flight "this event requires in-person confirmation" sheet, and the
    `malformedRequest` refusal (§8.2) is never the first the user hears of it in
-   the run where discovery already told the wallet.
-9. **Device-side peripheral** — advertise the EID as a service UUID, serve the
+   the run where discovery already told the wallet. — **Data layer** (as
+   before): `queryWitnessDiscovery` (`trust-tasks/ceremony.ts`) fires at
+   witness-connect from `WitnessConnectionProvider.tsx`'s
+   `handleWitnessAnnouncement`, and `getWitnessLocalityRequirement` reads the
+   retained answer's `witness/session` row for `requiredExt`, three-state
+   (`true`/`false`/`null`-not-yet-known) exactly like the existing
+   `peerSupportsTaskType`. **The sheet is now built**: `LocalityPreflightModal`
+   (mounted at root beside `RelationshipProposalModal`), shown at most once
+   per install — a new `hasSeenLocalityPreflight` preference, one-way once
+   set, sibling to `useLocalityConfirmation`'s own store/reducer pattern —
+   Android only, only while `useLocalityConfirmation` is on. It merges items 8
+   and 11's remaining sheet into one (see item 11's own entry for why: §8.4's
+   own "only new prompt surface" language settles this as one sheet, not two).
+   `WitnessConnectionProvider` schedules it from `handleWitnessAnnouncement`
+   right after firing discovery, polling `getWitnessLocalityRequirement` for
+   up to 5s (failing open to `required: false` on timeout or a thrown error,
+   never blocking) so a `required` answer that arrives in time drives the
+   harder copy rather than the sheet only ever showing the generic offer.
+   Declining reuses the existing `useLocalityConfirmation` setting (no new
+   per-session gate invented) — `resolveLocalityPreflight(false)` flips it off
+   through the same dispatch action Settings uses, which
+   `isLocalityConfirmationPreferred()` already reads. Allowing requests the
+   two Android 31+ permissions the native module's manifest actually declares
+   (`BLUETOOTH_ADVERTISE`, `BLUETOOTH_SCAN`, via `react-native-permissions`)
+   regardless of the OS grant outcome — a denial surfaces later as
+   `windowLost`, not as a second prompt. **Known gap, stated rather than
+   papered over:** pre-API-31 `ACCESS_FINE_LOCATION` is not requested — the
+   manifest doesn't declare it at all (item 9's own write-up), so requesting
+   it here would silently no-op; closing this is a manifest change first, not
+   a sheet change. Unit-tested: `WitnessConnectionProvider`'s scheduling logic
+   (`witnessConnectionProvider.test.tsx`, 8 new cases — Android gating, the
+   one-shot flag, the required-vs-not-required race, both `resolveLocalityPreflight`
+   outcomes) and the sheet component itself (`LocalityPreflightModal.test.tsx`,
+   9 cases — both sheet states, both buttons in each, the settings deep-link).
+9. ✅ **Device-side peripheral** — advertise the EID as a service UUID, serve the
    GATT characteristic, sign with the existing hardware-attestation key, all
    inside the ceremony window and foreground only. *Done when:* the app's
-   transcript verifies in the `ref-06p3` verifier unchanged.
-10. **`ext` on the two request documents**, and the wallet-side cross-check that
+   transcript verifies in the `ref-06p3` verifier unchanged. — **Proven live,
+   end to end, on a physical Galaxy S20+ (2026-08-21):** the native
+   peripheral advertised, witness-server's real `BleLocalityProvider`
+   connected and wrote the nonce, the device signed and served the
+   transcript across both GATT characteristics, and `verifyTranscript()`
+   confirmed it — `RESULT: observed, rttMs=522`, `VERIFY: {"ok":true}`, on a
+   freshly-produced signature, not the frozen fixture. Both gates the
+   previous status held open are now closed: the authorized `CryptoObject`
+   does survive being held across the advertising window (confirmed by the
+   run completing at all), and the live round trip against the real
+   `BleLocalityProvider` succeeded. `deviceLocality.ts`'s `deriveEid`/
+   `serviceUuidFromEid`/`bindingFor` remain cross-checked byte-for-byte
+   against witness-server's copy (`__tests__/deviceLocality.test.ts`, 5
+   cases); `AndroidBleDeviceLocalityProvider` (in `core`) imports the real
+   `@bifold/react-native-locality-peripheral` package and is unit-tested
+   against a mocked bridge (4 cases). iOS has no native implementation
+   (deferred outright — no Xcode available in this environment).
+
+   Getting from "compiles" to "verified" surfaced three real bugs along the
+   way, each fixed and now covered by a permanent test using the actual
+   captured on-device data, not a synthetic fixture:
+   - **`verifyTranscript()` silently rejected every real Android signature**
+     — two independent format mismatches invisible to this file's own
+     noble-signed unit tests, because those tests signed with noble's own
+     convenient defaults instead of anything device-representative.
+     `devicePublicKey` is SPKI-wrapped DER on Android (91 bytes), not the
+     raw 65-byte point `@noble/curves`'s `verify()` expects (confirmed via
+     `BiometricSignatureVerifier.ts`'s own "platform asymmetries" note —
+     the design notes calling this field "raw EC-P256 point" were wrong for
+     Android, corrected in `deviceLocality.ts` and the native Spec too).
+     Separately, `java.security.Signature` produces DER, non-canonical
+     ("high-S") signatures; `@noble/curves` defaults to rejecting non-low-S
+     signatures in compact form. Fixed `verifyTranscript()` to unwrap SPKI
+     when present and to verify with `{format: 'der', prehash: true,
+     lowS: false}`; fixed the test helper to sign the same way a real
+     device does. Two new tests freeze a real captured signature as a
+     permanent regression fixture.
+   - **Android's `BluetoothGattCharacteristic.value` silently caps at 512
+     bytes** (`GATT_MAX_ATTR_LEN`) — the transcript JSON runs to ~630 bytes
+     with a real key and signature. Fixed by serving from the module's own
+     `ByteArray` instead, and by only completing a characteristic's read
+     once its actual last chunk has been served, not on the first read
+     regardless of length.
+   - **BLE's GATT protocol itself caps a single attribute value at 512
+     bytes** (Bluetooth Core Spec, Vol 3, Part F, §3.2.9, "Long Attribute
+     Values"), independent of the negotiated ATT MTU — confirmed via
+     logcat showing a real MTU of 517 alongside a transcript still
+     truncated at exactly 512, which is what made this look like an
+     MTU/chunking bug at first rather than a hard protocol ceiling the
+     previous fix couldn't actually clear. No single-characteristic fix
+     exists for a value this size. **The wire protocol now uses two GATT
+     characteristics**, not one: the existing one (write nonce, read the
+     non-crypto fields) plus a new read-only
+     `LOCALITY_SIGNATURE_CHARACTERISTIC_UUID` carrying just
+     `devicePublicKey`/`signature` — the two fields whose size scales with
+     the crypto primitives. `readFullValue()`'s long-read chaining (with a
+     pacing delay between reads — a real `le-connection-abort-by-local`
+     appeared without one — and an iteration cap raised from 20 to 80,
+     since 20 wasn't enough for a connection stuck at the ATT default MTU)
+     still applies per characteristic.
+
+   `runTranscriptExchange` was pulled out of `BleLocalityProvider` as a
+   standalone function (it never touched instance state) specifically so
+   the two-characteristic merge — proven live but previously untested —
+   could get a real unit test against a fake `BleDevice`
+   (`BleLocalityProvider.test.ts`, new, 7 cases covering `readFullValue`'s
+   chunking and the merge itself).
+
+   Other findings from building and verifying this, beyond the three bugs above:
+   - **The public-key encoding is platform-specific, and the design notes
+     calling it "raw EC-P256 point" were wrong for Android.**
+     `BiometricSignatureVerifier.ts`'s own "platform asymmetries" note says
+     so: Android's `getHardwarePublicKey()` returns SPKI-wrapped bytes (from
+     `PublicKey.encoded`), not a raw 65-byte point — only iOS uses a raw
+     point. `transcriptKeyMatchesVrcSigner`'s plain `===` only holds if the
+     locality transcript's `devicePublicKey` matches the SAME platform's
+     existing VRC-evidence encoding byte-for-byte, so
+     `LocalityPeripheralModule.kt` uses `publicKey.encoded` directly — the
+     *correct* choice for Android, matching `AttestationModule.kt`'s own
+     convention, not a raw-point extraction. Comments in `deviceLocality.ts`
+     and the native Spec corrected to say so.
+   - **This is a new package**, `bifold/packages/react-native-locality-peripheral/`,
+     Android-first, not an addition to `@bifold/react-native-attestation` —
+     that package's concern is attestation/signing, and folding
+     GATT-server/advertising Android APIs into it conflates two things the
+     monorepo otherwise keeps separate. It reads the *same* KeyStore alias
+     `AttestationModule.kt` creates (`vrc_hardware_signing_key`) as a
+     **deliberate duplicate constant**, not a shared import — a real
+     cross-module Gradle dependency between two independent RN native
+     packages proved not worth the fragility for one string constant.
+     Wired into the workspace for real: `@bifold/react-native-locality-peripheral`
+     is now a dependency of both `core`'s `package.json` (`workspace:*`) and
+     `app`'s own `package.json` (autolinking specifically needs the direct
+     app-level dependency — a transitive one via `core` is not enough), with
+     matching `portal:` resolutions at the repo root, mirroring exactly how
+     `@bifold/react-native-attestation` is wired.
+   - **The binding assembly is a third deliberate duplicate, not two.** Only
+     the native side ever learns `sensorNonce` (the sensor writes it over
+     BLE, as UTF-8 text of a hex string — traced against witness-server's
+     real `BleLocalityProvider.runTranscriptExchange()`, not assumed from
+     the reference ladder's bare-echo test), so `LocalityPeripheralModule.kt`
+     assembles the same JCS-canonicalized five-value binding
+     `deviceLocality.ts`'s `bindingFor()` computes, itself, in Kotlin —
+     joining the wallet (Hermes) and witness-server (Node) copies. Checked
+     against `deviceLocality.test.ts`'s frozen fixture's field ordering,
+     not just eyeballed for agreement. The GATT read response is the full
+     `LocalityTranscript`, split across the two characteristics (§10.3
+     item 9's own status above) rather than one JSON blob — witness-server
+     merges both back into one object before `JSON.parse`-equivalent
+     consumption — not just the bare signature, which the reference
+     ladder's echo test never exercised either.
+   - **The manifest permissions are self-declared on the new package**, not
+     hand-added to `app/android/app/src/main/AndroidManifest.xml` —
+     `BLUETOOTH_ADVERTISE`/`BLUETOOTH_CONNECT` (API 31+) plus the legacy
+     `BLUETOOTH`/`BLUETOOTH_ADMIN` (`maxSdkVersion="30"`, `minSdkVersion` is
+     24) live in the library module's own manifest and merge into the app's
+     final manifest automatically. The actual OS permission-request UX is
+     still not built — `LocalityPeripheralModule.kt` defensively checks
+     `ContextCompat.checkSelfPermission` and resolves `null` (not a crash,
+     not a reject) if not yet granted, treating "not granted" the same as
+     §7.1's `declinedByHolder`/`windowLost` until item 8's still-unbuilt
+     pre-flight sheet is the thing that actually asks.
+10. ✅ **`ext` on the two request documents**, and the wallet-side cross-check that
    the `#response` assertion matches what the device actually did. *Done when:* a
    witness claiming an observation the device did not make is detected and
-   surfaced.
-11. **Display and consent** — `WitnessCredentialHandler` renders the tier
+   surfaced. — `witnessCeremony.ts`'s `runWitnessSession` conditionally carries
+   the locality offer/transcript in `payload.ext` and throws if the VWC claims
+   confirmed observation with no matching device-produced transcript, or a
+   digest mismatch. Unit-tested (`witnessCeremony.test.ts`, 7 new cases,
+   including both refusal paths named in this item's own "Done when").
+11. ✅ **Display and consent** — `WitnessCredentialHandler` renders the tier
    honestly (venue-scale, not "verified together"), and the pre-ceremony sheet
    explains what will be shared. Note this is a **shape** change on the consumer
    side too: `witnessCredentialUtils.ts` and the handler read
    `witnessContext.localityVerification` as a nested object, which §7.1 replaces
    with flat `locality*` members. *Done when:* `localityConfirmed:false`,
    `localityMethod:"none"`, and absent-members all render as three visibly
-   different states, and the reader no longer looks for a nested object.
-12. **`e2e:vrc:devices` covers locality** on physical phones with a real sensor —
+   different states, and the reader no longer looks for a nested object. —
+   **The three-state reader/renderer half is done** (`getLocalityField`,
+   `formatDeclineReason`, flat-members-first with legacy-nested fallback) and
+   unit-tested. **The pre-ceremony "what will be shared" sheet is now built —
+   merged into item 8's `LocalityPreflightModal`, not a second sheet.**
+   §8.4's own table names exactly one new prompt surface at witness-connect;
+   building a separate second sheet for "what will be shared" would itself
+   be the second question §8.4's governing principle rules out. The offer
+   sheet's body names what the assertion discloses if confirmed — venue, a
+   time window, and the witness — before the ceremony, not after. See item
+   8's entry for the sheet's full detail and test coverage.
+12. 🟡 **`e2e:vrc:devices` covers locality** on physical phones with a real sensor —
     the same rule that already makes hardware attestation provable only there.
     *Done when:* the suite fails if the locality assertion is missing or
-    unconfirmed on a run where it should be confirmed.
-13. **A vocabulary guard in CI**, not a discipline. A test in the bifold suite
+    unconfirmed on a run where it should be confirmed. — **Written, not yet
+    run live.** A new script, `run-vrc-exchange-witnessed-locality-android-only-devices.js`
+    (`yarn e2e:vrc:witnessed:locality:android-only`), extends the existing
+    android-only witnessed-exchange flow: sets `WITNESS_LOCALITY_REQUIRED=true`
+    before the witness starts (so it refuses to issue a VWC without a
+    confirmed observation — §8.2's `required` policy, whose own issuance-side
+    enforcement gap this session also found and fixed, see the dated
+    companion), and asserts a new dedicated logcat marker
+    (`witnessCeremony.ts` now logs "locality confirmed"/"locality not
+    confirmed" once it processes the witness's response — distinct from the
+    existing "radio phase produced a transcript" line, which only reports
+    the device's own half). Fails loudly on a "not confirmed" line, not just
+    on a missing one. Android-only for two independent reasons: item 9 has
+    no iOS peripheral, AND the witness's own BLE sensor (`node-ble`/BlueZ)
+    only runs on Linux — this is the one witnessed-exchange variant where the
+    machine running the test needs its own real Bluetooth adapter, not just
+    the phones. **Not run**: no two physical Android phones plus a
+    BLE-capable Linux host were available in this session to run it against.
+13. ✅ **A vocabulary guard in CI**, not a discipline. A test in the bifold suite
     expands **every credential shape we issue** against the real context document
     and fails on any dropped term — `ref-06p` act 6 promoted from a rung
     demonstration to a standing check. *Done when:* deleting one term from
     `witnessedExchangeContext.ts` turns the suite red. This is what stops the
-    §7.1 defect recurring on the next evidence member somebody adds.
+    §7.1 defect recurring on the next evidence member somebody adds. —
+    `core/src/modules/vrc/__tests__/unit/localityVocabulary.test.ts`, real
+    `jsonld.canonize()` against the real published context, 4 cases (see
+    §10.2 item 6 for the build-staleness gotcha this shares).
 14. **Selective-disclosure presentation**, once BBS+ tooling exists (§11-Q5): the
     holder discloses tier 1 by default and opts into tier 2/3. *Done when:* a
     derived proof carrying tier 1 alone verifies, and the wallet's presentation
     UI names what each tier costs. Additive — it does not change §7.1's layout,
-    which is why the layout ships first.
+    which is why the layout ships first. — **Out of scope**, per the plan's own
+    gate on §11-Q5.
 
 ### 10.4 Adjacent items, and their status
 
@@ -1136,6 +1427,28 @@ and the wallet itself, since VRCs are wallet-issued. A DID adds a key rather tha
 rotating one (openvtc §4.6), so this is a DID-document change rather than a
 migration, but it is a change with a shape someone must design. Same timing as
 Q5.
+
+**Q7 — Play Integrity verification is an online dependency, permanently, and
+§5.4 doesn't say so.** Building `ref-06p5` surfaced an asymmetry the plan
+doesn't currently name: App Attest's attestation object can be verified
+fully offline, against Apple's own public root, forever — but a Play
+Integrity token is encrypted, and decoding one is *always* a live call to
+Google's own backend (`playintegrity.googleapis.com`) with a registered
+Play Console app and Google Cloud service-account credentials. There is no
+future where a witness server verifies a Play Integrity–backed locality
+claim without a network call to Google, an API-availability dependency,
+and a credential to manage — none of which App Attest verification needs.
+This is a materially different operational cost between the two platforms
+that the design has treated symmetrically so far (`localityHardwareAttestation:
+verified | present-unverified | absent`, one field, same three states,
+implicitly the same verification story). *Worth deciding explicitly, not
+silently accepting: is the online dependency acceptable for Android's half
+of this feature, or does Android's existing (offline-verifiable) Key
+Attestation — already used elsewhere for VRC hardware evidence, per
+`docs/HARDWARE_ATTESTATION_FLOW.md` — belong here instead of Play
+Integrity?* Not resolved here; `ref-06p5`'s Play Integrity coverage is
+shape-only pending this decision, with a live round trip
+(`live-play-integrity-optional.mjs`) parked and ready either way.
 
 **Not open, recorded so it is not reopened:** witness-free peer-to-peer locality
 (§2.1). It cannot produce third-party evidence in any form, so there is nothing

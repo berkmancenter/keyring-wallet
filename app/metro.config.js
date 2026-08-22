@@ -13,8 +13,12 @@ const packageDirs = [
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/core')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/verifier')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-attestation')),
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-native-locality-peripheral')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/vrc-contexts')),
   fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/react-hooks')),
+  // @bifold/trust-tasks: platform-neutral trust-task plumbing shared with the
+  // witness-server (document proofs, carriage message, payload validator)
+  fs.realpathSync(path.join(__dirname, 'node_modules', '@bifold/trust-tasks')),
 ]
 
 // In development, resolve these to source for hot reload; CI/production uses built output.
@@ -23,7 +27,9 @@ const BIFOLD_SOURCE_PACKAGES = [
   '@bifold/verifier',
   '@bifold/vrc-contexts',
   '@bifold/react-native-attestation',
+  '@bifold/react-native-locality-peripheral',
   '@bifold/react-hooks',
+  '@bifold/trust-tasks',
 ]
 const bifoldSourceDirByPackage = {}
 for (const dir of packageDirs) {

@@ -86,3 +86,7 @@ release.keystore
 
 # External clones (OpenVTC ecosystem — untracked reference/build sources)
 external/
+
+# local run output and IDE state
+artifacts/
+.cursor/

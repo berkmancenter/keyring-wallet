@@ -16,6 +16,7 @@ this folder is a small standalone npm package.
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
 | `yarn e2e:vrc:witnessed:devices` | Witnessed + hardware-attested exchange on a **physical Android phone + iPhone**, routed through a locally-run witness server — both wallets end up with a Verifiable Witness Credential (VWC) in addition to the peer VRC | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
+| `yarn e2e:vrc:witnessed:locality:android-only` | Same witnessed + attested exchange on **two physical Android phones**, with BLE co-presence (locality) **required and asserted confirmed** — the one variant where the machine running the test needs its own real Bluetooth adapter (and a Linux host — see below), not just the phones | **Yes** |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
 `vrc-exchange:android-only`, `vrc-exchange:devices`,
@@ -37,6 +38,15 @@ Failures print the same box with `❌  E2E FAILED — <name>` plus the error
 message, in addition to the existing screenshot/log dumps.
 
 ## One-time setup
+
+> **After pulling `feat/trust-tasks-integration`:** run `yarn install` at the
+> repo root (the lockfile and the `@bifold/*` portals changed — the app now
+> bundles `@bifold/trust-tasks`), `git submodule update --init` (the bifold
+> pointer advanced), restart Metro with `yarn start --reset-cache`, and
+> **rebuild the iOS device app** before any device run (it bundles its JS —
+> see "Real devices"). Android debug builds load JS from Metro and need no
+> rebuild for JS-only changes.
+
 
 ```bash
 cd e2e
@@ -344,6 +354,64 @@ adb devices                                      # list connected serials
 ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
   yarn e2e:vrc:witnessed:android-only
 ```
+
+### Locality variant (`yarn e2e:vrc:witnessed:locality:android-only`) — BLE co-presence required
+
+Same Android-only witnessed + attested exchange, plus locality-plan.md
+§10.3 item 12: the witness runs with `WITNESS_LOCALITY_REQUIRED=true` (set
+automatically by this script), so it refuses to issue a VWC unless BOTH
+phones' co-presence is confirmed over a real BLE round trip — and the run
+asserts that confirmation happened, not merely that it was attempted
+(`assertLocalityConfirmedMarker`, reading a dedicated logcat line
+`witnessCeremony.ts` emits once it processes the witness's response).
+
+**Android-only for two independent reasons, not one:**
+
+- The native BLE peripheral (item 9 — advertise the rendezvous EID, serve
+  the GATT transcript, sign with the hardware-attestation key) has no iOS
+  implementation.
+- The witness's own BLE **sensor** — `witness-server`'s `BleLocalityProvider`,
+  over BlueZ's D-Bus interface via `node-ble` — only runs on **Linux**. See
+  `docs/plans/locality-plan/2026-08-20-bam.md` for why a raw-HCI-socket
+  library was tried and abandoned in favor of BlueZ.
+
+**This is the one witnessed-exchange variant where the machine running the
+script needs its own real hardware, not just the phones':**
+
+- A **Linux host** with a real Bluetooth adapter — not the macOS box the
+  plain witnessed-exchange variants assume for Xcode/WebDriverAgent. This
+  variant needs no Xcode either (Android-only), so it can run on the same
+  Linux machine (or CI runner) that already builds the Android APK.
+- Both phones physically near that machine's Bluetooth adapter for the
+  whole ceremony window, not just connected over USB for Appium — the BLE
+  round trip is a real radio exchange between the phone and this machine,
+  not something Appium drives.
+- Bluetooth **on** on both phones, and the OS Bluetooth permission prompt
+  (primed by the app's own pre-flight sheet, locality-plan.md §8.4)
+  accepted on each when it appears — a decline surfaces as `windowLost`,
+  which this run's assertion treats as a failure, not a soft downgrade.
+
+```sh
+adb devices                                      # list connected serials
+ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
+  yarn e2e:vrc:witnessed:locality:android-only
+```
+
+Everything else — invitation, hardware attestation, the Trust Task ceremony
+markers — is identical to the plain android-only witnessed variant above;
+see that section and "The Trust Task dialect" below for what those assert.
+
+## The Trust Task dialect (v4) — what the runs assert now
+
+Since the relationship exchange moved onto Trust Tasks (plan: `docs/plans/openvtc-integration-plan/trust_tasks_subtask.md` §9), the VRC runs drive and assert a different flow than the legacy offer/accept one:
+
+- **Consent is the relationship proposal, not per-credential offers.** One bottom-sheet appears on the *non-proposer* wallet (the proposer is deterministic — lower connection DID); `acceptRelationshipProposalIfPrompted` taps it. There is no VRC credential-offer to accept (the R-Card, still on the legacy leg, auto-accepts and is hidden). `acceptCredentialOfferFromChat` remains for legacy runners only.
+- **The gates are log markers, read from Android's run-scoped logcat** (`adb logcat -c` at session start; iOS has no logcat, Android's log covers both directions): `assertTrustTaskExchangeMarkers` (discovery → propose → issue sent/stored → receipts), `assertWitnessCeremonyMarkers` (session → challenge → VP → VWC → outcome-evidence self-check), `assertWitnessShareMarkers` (witness-share sent → verified and stored → receipted), on devices the hardware-evidence marker (`Evidence block added […]` — the run fails loudly if the exchange downgrades to unattested), and on the locality variant only, `assertLocalityConfirmedMarker` (fails loudly on a "not confirmed" line, not just on a missing one).
+- **UI gates:** `assertVrcReceived` (contact with the peer's name — the name comes from the R-Card), and `assertContactShields` (the **Witnessed** indicator, plus Secure Exchange on devices). `openContactDetail` handles both navigation shapes (Contacts row → chat → header `ContactMenu` → View Contact, or straight to Contact Details) and checks ContactDetails' *bare* testIDs (`WitnessSection`, `WitnessedBadge`, `SecureExchangeBadge` — no `com.ariesbifold:id/` prefix).
+- **Runners:** `yarn e2e:vrc:witnessed` — simulator + emulator, unattended, the full witnessed exchange with a local witness behind a cloudflared tunnel (run from repo root; `APPIUM_PORT=4750 WDA_LOCAL_PORT=8101 ANDROID_AVD=<your AVD> yarn e2e:vrc:witnessed` is the known-good invocation on a Mac with an iPhone simulator); `yarn e2e:vrc:witnessed:devices` — the attended real-device version (the demo path; see `docs/DEMO_RUNBOOK_WITNESSED_EXCHANGE.md`).
+- **Env that matters:** `APPIUM_PORT` (default 4723 — set another port if something else already listens there), `WDA_LOCAL_PORT` (iOS simulator WebDriverAgent; 8101 known good), `ANDROID_AVD` (default `Pixel_8_API_33`). The Android 16 / API 36 PIN-modal fix (`waitForKeyboardGone` in `enableHardwareAttestation`) is in place and unchanged by the v4 work.
+- **Known intermittents on simulators, not regressions:** one wallet occasionally misses the witness connection ("only 1/2 participants connected") or iOS never sends the didexchange request (the open "iOS no-send"); the witness agent init can hang under heavy machine load. Re-run. None has been seen on real devices so far.
+- **Between runs:** free ports 4750/9002/9003 and kill stray `cloudflared`; cold-reboot an emulator that has been up for hours (its host network path degrades).
 
 ## Troubleshooting
 
