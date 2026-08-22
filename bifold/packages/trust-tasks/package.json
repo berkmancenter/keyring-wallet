@@ -1,0 +1,39 @@
+{
+  "name": "@bifold/trust-tasks",
+  "version": "0.1.0-alpha.1",
+  "description": "Trust Task plumbing shared by the Keyring wallet (React Native) and the witness-server (Node): document proofs and digests, the binding-0.2 DIDComm carriage message, and the payload validator. Platform-neutral by contract.",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build"
+  ],
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "echo 'building trust-tasks 🏗️' && yarn run clean && yarn run compile && echo 'trust-tasks built ✅'",
+    "clean": "rimraf ./build",
+    "compile": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no package-local tests: covered by @bifold/core trust-tasks suites' && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
+    "directory": "packages/trust-tasks"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "dependencies": {
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
+    "@credo-ts/didcomm": "0.6.3",
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "ajv": "^8.17.1",
+    "canonicalize": "^1.0.8"
+  },
+  "devDependencies": {
+    "rimraf": "~5.0.10",
+    "typescript": "~5.5.4"
+  }
+}

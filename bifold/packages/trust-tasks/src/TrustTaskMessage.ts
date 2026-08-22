@@ -7,10 +7,7 @@
  * Adopted upstream from Keyring's own carrier measurement (binding 0.2 §2.1);
  * proven against Credo 0.6.3 in reference rungs ref-06v1c/ref-06x.
  *
- * DELIBERATE DUPLICATE of @bifold/core's TrustTaskMessage (see
- * documentProof.ts in this directory for the rationale).
- *
- * @module witness-server/trustTasks/TrustTaskMessage
+ * @module trust-tasks/messages/TrustTaskMessage
  */
 
 import {

@@ -638,6 +638,7 @@ export async function respondToRelationshipProposal(
     return
   }
 
+  vrcFlowStore.setDialect(connectionId, 'trust-tasks')
   const payload = (document as { payload: { relationshipDid: string; witnessed?: boolean } }).payload
   const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
   await repository.updateCounterpartyRelationshipDid(
@@ -708,6 +709,7 @@ export async function deliverVrcViaTrustTaskForExchange(
     return
   }
 
+  vrcFlowStore.setDialect(connectionId, 'trust-tasks')
   vrcFlowStore.setStatus(connectionId, 'preparing-offer', false)
   const { credential } = await prepareVrcCredentialWithEvidence(
     agent,
@@ -793,6 +795,7 @@ export async function deliverVrcViaTrustTaskForExchange(
         })
         if (verdict.completionEvidenced) {
           logger.info(`${LOG_PREFIX} outcome evidence assembled and verified (session ${witnessOutcome.sessionId})`)
+          vrcFlowStore.setStatus(connectionId, 'sharing-witness-record', true)
           await sendWitnessShareForExchange(agent, connectionId, exchangeId, record.myRelationshipDid, bundle)
         } else {
           logger.warn(`${LOG_PREFIX} outcome-evidence self-check failed — witness-share withheld: ${verdict.failures.join('; ')}`)

@@ -1,11 +1,8 @@
 /**
- * Document proofs and digests for Trust Task documents — witness-server copy.
- *
- * DELIBERATE DUPLICATE of @bifold/core's
- * src/modules/trust-tasks/documentProof.ts, following this package's existing
- * core⇄witness sharing pattern (the DI suite is duplicated the same way):
- * importing @bifold/core would drag React Native into a Node service. Keep
- * the two in sync; promoting both into @bifold/vrc-shared is recorded debt.
+ * Document proofs and digests for Trust Task documents — SHARED by the
+ * wallet (@bifold/core) and the witness-server, promoted here from two
+ * deliberate duplicates (2026-08-20): one implementation, both sides agree
+ * on every digest by construction.
  *
  * Two primitives, both anchored on RFC 8785 (JCS) canonicalization:
  *

@@ -25,6 +25,7 @@
     "docker:clear-reporting": "docker compose -f docker-compose.yml down -v"
   },
   "dependencies": {
+    "@bifold/trust-tasks": "workspace:*",
     "@bifold/vrc-contexts": "workspace:*",
     "@bifold/vrc-shared": "workspace:*",
     "@credo-ts/askar": "0.6.3",

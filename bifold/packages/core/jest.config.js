@@ -25,6 +25,7 @@ module.exports = {
     'react-i18next': '<rootDir>/__mocks__/react-i18next.ts',
     '^uuid$': require.resolve('uuid'),
     '^@bifold/oca$': '<rootDir>/../oca/src/index.ts',
+    '^@bifold/trust-tasks$': '<rootDir>/../trust-tasks/src/index.ts',
     '^@bifold/verifier$': '<rootDir>/../verifier/src/index.ts',
     'expo-crypto': '<rootDir>/__mocks__/@expo/expo-crypto.js',
     '@expo/app-integrity': '<rootDir>/__mocks__/@expo/app-integrity.js',

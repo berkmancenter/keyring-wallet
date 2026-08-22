@@ -255,12 +255,19 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         setProgressComplete(false)
         setInProgress(true)
 
+        const trustTasks = vrcFlowStore.getDialect(connectionId) === 'trust-tasks'
         switch (flowStatus) {
           case 'connecting':
             setStatusText('Establishing connection...')
             break
           case 'witness-active':
-            setStatusText(isWitnessed ? 'Witness verification in progress...' : 'Reporting in progress...')
+            setStatusText(
+              trustTasks
+                ? 'Verifying with witness...'
+                : isWitnessed
+                  ? 'Witness verification in progress...'
+                  : 'Reporting in progress...'
+            )
             break
           case 'witness-fallback':
             setStatusText('Witness unavailable. Issuing credential...')
@@ -269,10 +276,24 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
             setStatusText('Issuing credential without hardware attestation...')
             break
           case 'preparing-offer':
-            setStatusText(isWitnessed ? 'Witness verified. Preparing offer...' : 'Preparing credential offer...')
+            // Trust-task dialect: there is no "offer" — the first pass prepares
+            // and signs our relationship credential (the biometric prompt lands
+            // here); after the witness ceremony it is sent on the exchange.
+            setStatusText(
+              trustTasks
+                ? isWitnessed
+                  ? 'Witness verified. Sending your relationship credential...'
+                  : 'Preparing your relationship credential...'
+                : isWitnessed
+                  ? 'Witness verified. Preparing offer...'
+                  : 'Preparing credential offer...'
+            )
+            break
+          case 'sharing-witness-record':
+            setStatusText('Sharing witness record...')
             break
           case 'offer-sent':
-            setStatusText('Waiting for counterparty...')
+            setStatusText(trustTasks ? "Waiting for your contact's credential..." : 'Waiting for counterparty...')
             break
           default:
             setStatusText('Exchange in progress...')
@@ -660,6 +681,11 @@ export const useChatMessagesByConnection = (connection: DidCommConnectionRecord)
         // Detected via the metadata tag set by the auto-accept handler, or via
         // the bound W3C credential's type once the exchange is Done.
         if (record.metadata.get('rcardExchange')) {
+          return false
+        }
+        // Held while the auto-accept handler classifies a fresh offer (an
+        // R-Card would otherwise flash as an actionable offer for ~1 s).
+        if (record.metadata.get('offerClassifying')) {
           return false
         }
         const w3cBinding = record.credentials.find((cred) => cred.credentialRecordType === 'w3c')

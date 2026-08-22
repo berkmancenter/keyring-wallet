@@ -14,22 +14,34 @@
  * The issued VWC carries `taskContext` = the session document's id (§4.9.1)
  * and `taskDigestMultibase` binding that document by digest (§4.9.3).
  *
- * Consume runs through the local minimal pipeline (./framework.ts — the
- * runtime package is ESM-only and this service is CommonJS); the wallet side
- * uses the real framework runtime.
+ * Consume runs through the REAL `@openvtc/trust-tasks` runtime — the same
+ * §7.2 pipeline the wallet uses (schema validation, identity cross-check,
+ * proof policy), loaded via ./runtime.ts. The generic runtime enforces
+ * items 4–8 of §7.2 but knows nothing about any one consumer's LOCAL policy
+ * (SPEC.md §7.2: a consumer "MAY require one or more specific namespaces
+ * under `ext` as a matter of local policy and MUST reject a document
+ * missing a required namespace with `malformedRequest`") — that check, and
+ * the locality business logic generally, is this file's own.
  */
 
 import type { Agent } from '@credo-ts/core'
 import { JsonTransformer, W3cCredential, W3cJsonLdVerifiablePresentation, ClaimFormat } from '@credo-ts/core'
 import { DidCommMessageHandlerRegistry, DidCommMessageSender, DidCommOutboundMessageContext } from '@credo-ts/didcomm'
 import type { DidCommInboundMessageContext } from '@credo-ts/didcomm'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 
 import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
+import {
+  TRUST_TASK_BINDING_URI,
+  TrustTaskMessage,
+  digestMultibase,
+  signDocumentProof,
+  taskDigestMultibase,
+  trustTaskPayloadValidator,
+  verifyDocumentProof,
+} from '@bifold/trust-tasks'
 
 import { TaskLocalityProvider, LocalityObservationResult } from './BleLocalityProvider'
-import { digestMultibase, signDocumentProof, taskDigestMultibase, verifyDocumentProof } from './documentProof'
-import { consume, errorDocument, respondWith } from './framework'
 import {
   LocalityAssertion,
   LocalityMethod,
@@ -41,12 +53,11 @@ import {
   transcriptKeyMatchesVrcSigner,
   verifyTranscript,
 } from './locality'
-import { TrustTaskMessage } from './TrustTaskMessage'
+import { loadTrustTaskRuntime } from './runtime'
 
 const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
 const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
 const DISCOVERY_TYPE = 'https://trusttasks.org/spec/trust-task-discovery/0.1'
-const SUBMIT_NOT_BOUND = 'witness/session/submit:challengeMismatch'
 const LOCALITY_METHOD: LocalityMethod = 'ble-challenge-response/0.1'
 const LOCALITY_WINDOW_SECONDS = 120
 /**
@@ -93,6 +104,13 @@ export interface WitnessTaskHost {
 
 const SESSION_TTL_MS = 10 * 60 * 1000
 
+/** The document to send back for a pipeline outcome, if any (§7.2: rejections go back on the wire). */
+function replyOf(outcome: { kind: string; response?: unknown; error?: unknown }): Record<string, unknown> | undefined {
+  if (outcome.kind === 'handled' && outcome.response) return outcome.response as Record<string, unknown>
+  if (outcome.kind === 'rejected' && outcome.error) return outcome.error as Record<string, unknown>
+  return undefined
+}
+
 export class WitnessTaskSessions {
   private readonly sessions = new Map<string, TaskSession>()
 
@@ -127,11 +145,11 @@ export class WitnessTaskSessions {
     const type = String(document.type ?? '')
     let reply: Record<string, unknown> | undefined
     if (type === SESSION_TYPE) {
-      reply = await this.handleSession(document, connectionId, theirDid)
+      reply = await this.handleSession(document, connectionId, myDid, theirDid)
     } else if (type === SUBMIT_TYPE) {
-      reply = await this.handleSubmit(document, connectionId, theirDid)
+      reply = await this.handleSubmit(document, connectionId, myDid, theirDid)
     } else if (type === DISCOVERY_TYPE) {
-      reply = await this.handleDiscovery(document, theirDid)
+      reply = await this.handleDiscovery(document, myDid, theirDid)
     }
     // other trust-task types are the wallets' business, not the witness's
     if (!reply) return
@@ -155,54 +173,82 @@ export class WitnessTaskSessions {
    * trust-task-discovery → this witness's supportedTypes. Plan §8.2: the
    * witness publishes its locality policy here rather than a wallet
    * discovering it from a refusal. `required` carries the framework's own
-   * `requiredExt` entry, which is what makes `handleSession`'s
-   * `requiredExtNamespaces` check (SPEC.md §7.2) meaningful — a wallet that
-   * ignores this and proposes without the namespace gets `malformedRequest`
-   * from the framework rule itself, not from locality-specific logic.
+   * `requiredExt` entry, which is what makes `handleSession`'s own
+   * required-namespace check meaningful — a wallet that ignores this and
+   * proposes without the namespace gets rejected by that check, not by
+   * anything the generic runtime does automatically (it has no notion of
+   * any one consumer's local `ext` policy — see this file's own header).
    */
-  private async handleDiscovery(document: Record<string, unknown>, theirDid: string): Promise<Record<string, unknown>> {
-    return consume({
-      document,
-      senderDid: theirDid,
-      proofRequired: false,
-      handler: async (doc) => {
+  private async handleDiscovery(
+    document: Record<string, unknown>,
+    myDid: string,
+    theirDid: string
+  ): Promise<Record<string, unknown> | undefined> {
+    const { runtime, discovery: discoverySpec } = await loadTrustTaskRuntime()
+    const outcome = await runtime.consumeInbound({
+      transport: new runtime.StaticTransport({ issuer: theirDid, recipient: myDid }, TRUST_TASK_BINDING_URI),
+      spec: discoverySpec.SPEC as never,
+      proofPolicy: { kind: 'acceptUnverified' },
+      payloadPolicy: { kind: 'validate', validate: trustTaskPayloadValidator },
+      doc: document as never,
+      myVid: myDid,
+      now: Date.now(),
+      newErrorId: () => randomUUID(),
+      handler: async (rawDoc) => {
         const policy = this.host.localityPolicy ?? 'off'
         const supportedTypes: unknown[] =
           policy === 'required'
             ? [{ type: SESSION_TYPE, requiredExt: [LOCALITY_EXT_NAMESPACE] }, SUBMIT_TYPE]
             : [SESSION_TYPE, SUBMIT_TYPE]
-        return respondWith(doc, { supportedTypes })
+        return runtime.respondWith(rawDoc, randomUUID(), { supportedTypes })
       },
     })
+    return replyOf(outcome)
   }
 
   /** witness/session → per-party session with a fresh single-use challenge. */
   private async handleSession(
     document: Record<string, unknown>,
     connectionId: string,
+    myDid: string,
     theirDid: string
-  ): Promise<Record<string, unknown>> {
+  ): Promise<Record<string, unknown> | undefined> {
     const policy = this.host.localityPolicy ?? 'off'
-    return consume({
-      document,
-      senderDid: theirDid,
-      proofRequired: false,
-      // SPEC.md §7.2's own enforcement, per plan §8.2: a `required` policy
-      // publishes the expanded supportedTypes entry with `requiredExt`
-      // (handled by the discovery responder), and the framework's OWN rule
-      // rejects a document missing that namespace — locality writes no
-      // gating logic of its own.
-      requiredExtNamespaces: policy === 'required' ? [LOCALITY_EXT_NAMESPACE] : undefined,
-      handler: async (doc) => {
+    const { runtime, session: sessionSpec } = await loadTrustTaskRuntime()
+    const outcome = await runtime.consumeInbound({
+      transport: new runtime.StaticTransport({ issuer: theirDid, recipient: myDid }, TRUST_TASK_BINDING_URI),
+      spec: sessionSpec.SPEC as never,
+      proofPolicy: { kind: 'acceptUnverified' },
+      payloadPolicy: { kind: 'validate', validate: trustTaskPayloadValidator },
+      doc: document as never,
+      myVid: myDid,
+      now: Date.now(),
+      newErrorId: () => randomUUID(),
+      handler: async (rawDoc) => {
+        const doc = rawDoc as unknown as Record<string, unknown>
         const parties = (doc.payload as { parties?: [string, string] } | undefined)?.parties
         if (!parties || parties.length !== 2) {
-          return errorDocument(doc, 'malformedRequest', 'session payload must name exactly two parties')
+          return runtime.rejectWith(rawDoc, randomUUID(), {
+            code: runtime.extendedCode(SESSION_TYPE, 'malformedRequest'),
+            message: 'session payload must name exactly two parties',
+            retryable: false,
+          })
+        }
+        // SPEC.md §7.2's own local-policy clause, per plan §8.2: a
+        // `required` policy publishes the expanded supportedTypes entry
+        // with `requiredExt` (handled by handleDiscovery above), and THIS
+        // check enforces it — the generic runtime has no way to know it.
+        const ext = (doc.payload as { ext?: Record<string, unknown> } | undefined)?.ext ?? {}
+        if (policy === 'required' && !(LOCALITY_EXT_NAMESPACE in ext)) {
+          return runtime.rejectWith(rawDoc, randomUUID(), {
+            code: runtime.extendedCode(SESSION_TYPE, 'malformedRequest'),
+            message: `required ext namespace not populated: ${LOCALITY_EXT_NAMESPACE}`,
+            retryable: false,
+          })
         }
         const challenge = randomBytes(16).toString('hex')
         const sessionDigest = taskDigestMultibase(document)
-        const localityOffer = (
-          (doc.payload as { ext?: Record<string, { locality?: { offered?: boolean } }> } | undefined)?.ext ?? {}
-        )[LOCALITY_EXT_NAMESPACE]?.locality
+        const localityOffer = (ext as Record<string, { locality?: { offered?: boolean } }>)[LOCALITY_EXT_NAMESPACE]?.locality
 
         const session: TaskSession = {
           sessionId: String(doc.id),
@@ -241,40 +287,70 @@ export class WitnessTaskSessions {
         this.sessions.set(session.sessionId, session)
         this.expireSessionsOlderThan(SESSION_TTL_MS)
         console.log(`[${this.host.name}] Task session ${doc.id} opened for parties [${parties.join(', ')}]`)
-        return respondWith(doc, { challenge, domain: this.host.domain, ...(responseExt ? { ext: responseExt } : {}) })
+        return runtime.respondWith(rawDoc, randomUUID(), {
+          challenge,
+          domain: this.host.domain,
+          ...(responseExt ? { ext: responseExt } : {}),
+        })
       },
     })
+    return replyOf(outcome)
   }
 
   /** witness/session/submit → verify the VP against this session, issue the VWC. */
   private async handleSubmit(
     document: Record<string, unknown>,
     connectionId: string,
+    myDid: string,
     theirDid: string
-  ): Promise<Record<string, unknown>> {
-    return consume({
-      document,
-      senderDid: theirDid,
-      proofRequired: true,
-      verifyProof: async (doc) => {
-        // The submit's proof must verify under one of the session's parties —
-        // the submitting wallet's relationship DID.
-        const session = this.sessions.get(String(doc.threadId ?? ''))
-        if (!session) return false
-        for (const party of session.parties) {
-          if (await verifyDocumentProof(this.host.agent, doc, party)) return true
-        }
-        return false
+  ): Promise<Record<string, unknown> | undefined> {
+    const { runtime, submit: submitSpec } = await loadTrustTaskRuntime()
+    const notBound = (rawDoc: never, message: string) =>
+      runtime.rejectWith(rawDoc, randomUUID(), {
+        code: runtime.extendedCode(SUBMIT_TYPE, 'challengeMismatch'),
+        message,
+        retryable: false,
+      })
+    const outcome = await runtime.consumeInbound({
+      transport: new runtime.StaticTransport({ issuer: theirDid, recipient: myDid }, TRUST_TASK_BINDING_URI),
+      spec: submitSpec.SPEC as never,
+      // The submit's proof (REQUIRED by the spec) must verify under one of
+      // the session's parties — the submitting wallet's relationship DID.
+      proofPolicy: {
+        kind: 'verify',
+        verify: {
+          verify: async (raw: unknown) => {
+            const doc = raw as Record<string, unknown>
+            const session = this.sessions.get(String(doc.threadId ?? ''))
+            if (!session) return false
+            for (const party of session.parties) {
+              if (await verifyDocumentProof(this.host.agent, doc, party)) return true
+            }
+            return false
+          },
+        },
       },
-      handler: async (doc) => {
+      payloadPolicy: { kind: 'validate', validate: trustTaskPayloadValidator },
+      doc: document as never,
+      myVid: myDid,
+      now: Date.now(),
+      newErrorId: () => randomUUID(),
+      handler: async (rawDoc) => {
+        const doc = rawDoc as unknown as Record<string, unknown>
         const sessionId = String(doc.threadId ?? '')
         const session = this.sessions.get(sessionId)
         if (!session || session.connectionId !== connectionId) {
-          return errorDocument(doc, SUBMIT_NOT_BOUND, 'no session on this thread for this connection')
+          return notBound(rawDoc as never, 'no session on this thread for this connection')
         }
 
         const vpJson = (doc.payload as { vp?: Record<string, unknown> } | undefined)?.vp
-        if (!vpJson) return errorDocument(doc, 'malformedRequest', 'submit payload carries no vp')
+        if (!vpJson) {
+          return runtime.rejectWith(rawDoc, randomUUID(), {
+            code: runtime.extendedCode(SUBMIT_TYPE, 'malformedRequest'),
+            message: 'submit payload carries no vp',
+            retryable: false,
+          })
+        }
 
         // Verify the presentation cryptographically against THIS session's
         // challenge and domain.
@@ -291,13 +367,13 @@ export class WitnessTaskSessions {
           vpValid = false
         }
         if (!vpValid) {
-          return errorDocument(doc, SUBMIT_NOT_BOUND, 'presentation not bound to this session')
+          return notBound(rawDoc as never, 'presentation not bound to this session')
         }
 
         // The VP holder must be one of the witnessed parties.
         const holder = String((vpJson as { holder?: string }).holder ?? '')
         if (!session.parties.includes(holder as (typeof session.parties)[number])) {
-          return errorDocument(doc, SUBMIT_NOT_BOUND, 'presentation holder is not a party to this session')
+          return notBound(rawDoc as never, 'presentation holder is not a party to this session')
         }
 
         // ---- locality: resolve the observation, if this session has one ----
@@ -332,7 +408,11 @@ export class WitnessTaskSessions {
                 sensorDid,
               })
               if (!verdict.ok) {
-                return errorDocument(doc, 'malformedRequest', `locality transcript failed verification: ${verdict.reason}`)
+                return runtime.rejectWith(rawDoc, randomUUID(), {
+                  code: runtime.extendedCode(SUBMIT_TYPE, 'malformedRequest'),
+                  message: `locality transcript failed verification: ${verdict.reason}`,
+                  retryable: false,
+                })
               }
               keyMatches = transcriptKeyMatchesVrcSigner(result.transcript, this.host.vrcHardwareAttestationPublicKey(vpJson))
               observation = {
@@ -348,6 +428,24 @@ export class WitnessTaskSessions {
               }
             }
           }
+        }
+
+        // §8.2: `required` refuses to ISSUE without a confirmed observation —
+        // distinct from and in addition to the `handleSession` requiredExt
+        // check above, which only enforces that the session request
+        // POPULATED the namespace (e.g. `{offered: false}` satisfies it),
+        // not that the radio phase actually succeeded. Without this check a
+        // `required` witness would still issue a VWC carrying
+        // `localityConfirmed: false` whenever the observation came back
+        // `declinedByHolder`/`windowLost` — exactly the "refuse on failure"
+        // cell §8.3's cross-product table promises and the one this policy
+        // exists to enforce.
+        if (policy === 'required' && observation && !observation.confirmed) {
+          return runtime.rejectWith(rawDoc, randomUUID(), {
+            code: runtime.extendedCode(SUBMIT_TYPE, 'localityRequired'),
+            message: `locality confirmation required but not obtained: ${observation.reason}`,
+            retryable: false,
+          })
         }
 
         // Build the VWC and bind it to THIS session (§4.9.1 + §4.9.3).
@@ -381,13 +479,14 @@ export class WitnessTaskSessions {
         const responseExt = observation
           ? { [LOCALITY_EXT_NAMESPACE]: { locality: { observation } } }
           : undefined
-        return respondWith(doc, {
+        return runtime.respondWith(rawDoc, randomUUID(), {
           vwc: signedVwcJson,
           vwcDigestMultibase: digestMultibase(signedVwcJson),
           ...(responseExt ? { ext: responseExt } : {}),
         })
       },
     })
+    return replyOf(outcome)
   }
 
   private expireSessionsOlderThan(ttlMs: number): void {
