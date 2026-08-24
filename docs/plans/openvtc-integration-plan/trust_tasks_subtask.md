@@ -6,6 +6,7 @@
 **Premise:** we are moving to a new foundation and **updating Credo to support these flows**, rather than shaping the flows to fit Credo. Where this document weighs a design against "what Credo already does", that is a migration cost, not a constraint.
 **Scope:** `bifold/packages/core/src/modules/vrc`, `bifold/packages/witness-server`
 **Parent:** [`openvtc-integration-plan.md`](../openvtc-integration-plan.md) — this document is item **§7.6** of its contribution roadmap ("Witnessed-exchange Trust Task spec") in detail.
+**Sibling:** [`vta-carriage_subtask.md`](./vta-carriage_subtask.md) — owns the question this document leaves implicit: *which kind of party* answers `vrc/relationship/propose` (§4 Layer A) and the witness ceremony (§4 Layer C), and separates locality (a hard, optional, physical constraint) from credential custody (a soft, revisitable one) — witnessing itself, per §4 Layer C below, is already optional and carries no locality requirement of its own. This document's wire shapes are unchanged by that question and are topology-agnostic by construction; see its §3 for the one wire amendment it proposes (an optional `handoff` member on `propose#response`) and its §4/§5 for the discovery and authorization machinery.
 **Parent-plan review:** [`2026-08-05-bam.md`](./2026-08-05-bam.md) Part A — findings A1 and A4 constrain this document; see §8.
 **Normative references:**
 - **[[TT-SPEC]]** — [Trust Tasks framework SPEC.md](https://github.com/trustoverip/dtgwg-trust-tasks-tf/blob/main/SPEC.md), framework v0.2/0.3. Unqualified `§` references in this document are to this spec. (The header says 0.2 while Appendix B documents 0.3; the editor has confirmed this is stale and is fixing it.)
@@ -380,6 +381,21 @@ administrator/community split — disappears.
 | `vrc/relationship/propose/0.1` + `#response` | peer → peer | `solicit-vmc` + `request-vmc`, collapsed (no intermediary) | request: `{ relationshipDid, mode, capabilities? }` · response: `{ relationshipDid, accepted }` |
 | `vrc/relationship/issue/0.1` + `#response` | issuer → subject | `vtc/members/vmc` | request: `{ vc, requestId?, ext? }` — member names matched to `vtc/members/vmc` exactly (`vc`, **not** `credential`) · response: an `IssuedCredential` receipt from `credentials/_shared/0.1` |
 
+**"Peer" is deliberately unspecified as to *kind* of party — this is load-bearing, not an oversight.**
+`propose` carries no credential and needs no physical presence, so the party
+answering it can be either a Credo agent (today's model — see §5's reference
+run) or a counterparty's always-on VTA, deciding by saved policy or a DTTE
+consent prompt rather than requiring their device to be reachable. `issue`,
+by contrast, carries the signed credential itself and so stays bound (in
+[`vta-carriage_subtask.md`](./vta-carriage_subtask.md)'s v1 default) to
+whichever identity holds the Relationship DID — a custody choice to avoid
+duplicating credential-issuance logic, not a physical necessity like
+witnessing's locality option can be. See that document for the discovery
+mechanism that picks between the two for `propose`, the VTA-side
+authorization a cold `propose` needs, and the `handoff` member it proposes
+adding to `propose#response` for exactly the case where a VTA, not the
+persona, answered.
+
 `propose` declarations: `proof: OPTIONAL` (DIDComm authcrypt already
 authenticates the sender); `sideEffects: mutating` (persists a
 `RelationshipDidRecord`); `exposure: { discloses: metadata, actsAsSubject: false }`.
@@ -536,6 +552,20 @@ third-party pairing check. The rung's simplifications relative to the full
 design (single submitter, stub VWC shape, no `witness/announce`, no
 attestation evidence) are listed in its README and are the delta the
 specifications below must add.
+
+**"Three Credo agents" describes this reference rung, not a constraint the
+design imposes.** The exchange-thread leg (`propose`/`issue`) and the
+ceremony thread (`witness/session`/`submit`) are each Trust Task documents
+over a Carriage, addressed by `recipient`/`issuer` DIDs like any other Trust
+Task — nothing here requires those DIDs to belong to a Credo agent
+specifically, and nothing here requires the ceremony to be physically local
+either (that is [`../locality-plan.md`](../locality-plan.md)'s optional
+addition, not a property of this shape). [`vta-carriage_subtask.md`](./vta-carriage_subtask.md)
+proposes retargeting `propose` at a counterparty's VTA in exactly this
+topology-agnostic way, while keeping `issue` and the witness ceremony
+Credo-agent-to-Credo-agent (or PNM-to-service, for the witness leg) as they
+are here — a v1 custody default, not a hard requirement; see that document's
+§3 and open question 7.
 
 Failures anywhere are `trust-task-error` with `retryable` / `retryAfter`, and —
 on any leg a VWC's `taskContext` points at — carrying `proof`.
