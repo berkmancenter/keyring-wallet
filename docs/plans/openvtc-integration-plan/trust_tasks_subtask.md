@@ -932,7 +932,26 @@ legacy dual-accept path is true by construction, not yet e2e'd), step 4
 (credential-exchange with a VTA), step 1 (the `tsp-core` dependency
 direction — TSP-side), and the proof-set migration (parent §4.6, parked on
 the working group). Reasoning and evidence per day: the dated companions,
-latest [`2026-08-20-al.md`](./2026-08-20-al.md).
+latest [`2026-08-24-bam.md`](./2026-08-24-bam.md).
+
+**Regression (2026-08-24), root-caused and resolved — operational, not a
+wallet bug:** `yarn e2e:vrc:android-only` failed 4/4 against this exact
+commit — the peer's `didexchange/1.1/request` never reached the recipient's
+mediator mailbox. Root-caused two stacked operational issues on the shared
+production `credo-mediator`, neither a `keyring-wallet`/`bifold` code
+problem: (1) the deployed container was a **pre-credo-0.6 build** (`d9ff9cb`,
+2026-07-27) that predates the mediator repo's own `3a5ea51` migration, so its
+forward handler silently dropped every message; (2) after redeploying
+current `HEAD` (`375518d`), a second issue surfaced — the new image's
+*default* `messagePickup.forwardingStrategy` (`DirectDelivery`) only
+delivers to an already-open live session, which doesn't fit this wallet's
+deliberate polling-only (`PickUpV2`, non-live) pickup design. Fixed by
+setting `MESSAGE_PICKUP__FORWARDING_STRATEGY=QueueOnly`. Both fixes are live
+in production; `yarn e2e:vrc:android-only` now **passes clean** — both
+contacts visible, all trust-task ceremony markers present. Full diagnosis
+chain in [`2026-08-24-bam.md`](./2026-08-24-bam.md). "Complete for current
+wallets" above holds — the wallet/bifold protocol implementation was never
+the problem.
 
 ### 1. Resolve review A1 — `tsp-core`'s dependency direction
 
