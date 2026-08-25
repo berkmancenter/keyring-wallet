@@ -107,6 +107,11 @@ class VrcFlowStore extends EventEmitter {
   private flowErrors: Map<string, VrcFlowError> = new Map()
   private proposalPrompts: Map<string, RelationshipProposalPrompt> = new Map()
   private dialects: Map<string, VrcFlowDialect> = new Map()
+  // The inbound R-Card (the peer's contact card, what names them locally).
+  // Fired/tracked separately from the VRC completion flags above: the R-Card
+  // is best-effort and never gates isExchangeComplete — the overlay only uses
+  // this for a trailing "exchanging contact cards" beat after the VRC is done.
+  private rcardReceive: Map<string, 'pending' | 'complete'> = new Map()
 
   /** Record which dialect drives this connection's flow (overlay wording). */
   setDialect(connectionId: string, dialect: VrcFlowDialect): void {
@@ -190,6 +195,23 @@ class VrcFlowStore extends EventEmitter {
     return this.hasReceivedOffer.get(connectionId) || false
   }
 
+  /** An inbound R-Card offer arrived and is being auto-accepted. */
+  markRcardReceivePending(connectionId: string): void {
+    if (this.rcardReceive.get(connectionId) === 'complete') return
+    this.rcardReceive.set(connectionId, 'pending')
+    this.emit('flowUpdate', { connectionId, status: this.getStatus(connectionId) })
+  }
+
+  /** The peer's R-Card is stored — their real name is now resolvable. */
+  markRcardReceiveComplete(connectionId: string): void {
+    this.rcardReceive.set(connectionId, 'complete')
+    this.emit('flowUpdate', { connectionId, status: this.getStatus(connectionId) })
+  }
+
+  isRcardReceiveComplete(connectionId: string): boolean {
+    return this.rcardReceive.get(connectionId) === 'complete'
+  }
+
   /**
    * Set an error state for a connection's VRC flow.
    * This triggers the WitnessErrorDialog to display.
@@ -241,6 +263,7 @@ class VrcFlowStore extends EventEmitter {
     this.dialects.delete(connectionId)
     this.hasReceivedOffer.delete(connectionId)
     this.hasSentOffer.delete(connectionId)
+    this.rcardReceive.delete(connectionId)
     const hadError = this.flowErrors.has(connectionId)
     this.flowErrors.delete(connectionId)
     if (hadError) {

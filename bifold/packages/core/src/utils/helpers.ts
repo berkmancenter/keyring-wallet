@@ -1113,13 +1113,16 @@ export const removeExistingInvitationsById = async (
  * @param agent an Agent instance
  * @param implicitInvitations a boolean to determine if implicit invitation behavior should be used
  * @param reuseConnection a boolean to determine if connection reuse should be allowed
+ * @param walletLabel this wallet's display name, announced to the counterparty in the
+ *   didexchange request (their chat header shows it immediately, before any credential)
  * @returns an object containing an OOB record and, if not connectionless, a connection record
  */
 export const connectFromInvitation = async (
   uri: string,
   agent: BifoldAgent | undefined,
   implicitInvitations: boolean = false,
-  reuseConnection: boolean = false
+  reuseConnection: boolean = false,
+  walletLabel?: string
 ): Promise<DidCommOutOfBandRecord> => {
   const invitation = await agent?.modules.didcomm.oob.parseInvitation(uri)
 
@@ -1146,7 +1149,7 @@ export const connectFromInvitation = async (
 
   const record = await agent?.modules.didcomm.oob.receiveInvitation(invitation, {
     reuseConnection,
-    label: OOB_INVITATION_LABEL,
+    label: walletLabel || OOB_INVITATION_LABEL,
   })
   return record?.outOfBandRecord as DidCommOutOfBandRecord
 }
@@ -1266,7 +1269,8 @@ export const connectFromScanOrDeepLink = async (
   navigation: any,
   isDeepLink: boolean,
   implicitInvitations: boolean = false,
-  reuseConnection: boolean = false
+  reuseConnection: boolean = false,
+  walletLabel?: string
 ) => {
   if (!agent) {
     return
@@ -1306,7 +1310,7 @@ export const connectFromScanOrDeepLink = async (
     }
 
     const aUrl = processBetaUrlIfRequired(uri)
-    const receivedInvitation = await connectFromInvitation(aUrl, agent, implicitInvitations, reuseConnection)
+    const receivedInvitation = await connectFromInvitation(aUrl, agent, implicitInvitations, reuseConnection, walletLabel)
 
     if (receivedInvitation?.id) {
       watchDidExchangeProgress(agent, receivedInvitation.id, logger)

@@ -10,6 +10,7 @@ import { hitSlop } from '../constants'
 import InfoBox, { InfoBoxType } from '../components/misc/InfoBox'
 import SafeAreaModal from '../components/modals/SafeAreaModal'
 import { TOKENS, useServices } from '../container-api'
+import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { ConnectStackParams } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
@@ -24,6 +25,7 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
   const [errorMessage, setErrorMessage] = useState<{ title: string; message: string } | undefined>()
   const { t } = useTranslation()
   const { agent } = useAgent()
+  const [store] = useStore()
   const [logger, { enableImplicitInvitations, enableReuseConnections }] = useServices([
     TOKENS.UTIL_LOGGER,
     TOKENS.CONFIG,
@@ -61,7 +63,8 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
         navigation?.getParent(),
         false, // isDeepLink
         enableImplicitInvitations,
-        enableReuseConnections
+        enableReuseConnections,
+        store.preferences.walletName
       )
     } catch {
       setErrorMessage({ title: t('PasteUrl.ErrorInvalidUrl'), message: t('PasteUrl.ErrorInvalidUrlDescription') })

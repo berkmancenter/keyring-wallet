@@ -175,6 +175,11 @@ export interface VrcFlowOverlayState {
 export const FLOW_TIMEOUT_MS_NON_WITNESSED = 60000
 export const FLOW_TIMEOUT_MS_WITNESSED = 120000
 export const FLOW_HARD_TIMEOUT_MS = 180000
+// After the VRC exchange completes, the overlay lingers up to this long
+// narrating the (best-effort, fire-and-forget) R-Card exchange, then clears
+// regardless — the card finishing later still resolves the name in the
+// background; the overlay must never be hostage to it.
+export const RCARD_TRAILING_GRACE_MS = 30000
 
 export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState => {
   const [inProgress, setInProgress] = useState(false)
@@ -185,6 +190,8 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
   const progressStartedRef = useRef(false)
   const flowStartedAtRef = useRef<number | null>(null)
   const completionTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const rcardGraceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const rcardGraceExpiredRef = useRef(false)
 
   const onDismissTimeout = useCallback(() => {
     if (!connectionId) return
@@ -192,6 +199,11 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       clearTimeout(completionTimerRef.current)
       completionTimerRef.current = null
     }
+    if (rcardGraceTimerRef.current) {
+      clearTimeout(rcardGraceTimerRef.current)
+      rcardGraceTimerRef.current = null
+    }
+    rcardGraceExpiredRef.current = false
     setTimedOut(false)
     setInProgress(false)
     setStatusText('')
@@ -226,13 +238,25 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       // - 'offer-sent' AND hasReceivedOffer: Bidirectional exchange complete
       //   (This handles the case where party receives first, sends second - e.g., QR displayer)
       // - isExchangeComplete: Both sent and received offers
-      const shouldClearOverlay = 
-        flowStatus === 'idle' || 
+      const shouldClearOverlay =
+        flowStatus === 'idle' ||
         flowStatus === 'offer-received' ||
         (flowStatus === 'offer-sent' && hasReceivedOffer) ||
         isComplete
-      
+
       const shouldShowOverlay = !shouldClearOverlay
+
+      // The VRC exchange is done, but the peer's R-Card (their contact card —
+      // what names them) may still be in flight: the overlay lingers with a
+      // trailing beat, ending the moment the card lands or the grace passes.
+      // Only within an overlay session already showing (progressStartedRef) —
+      // a later R-Card event must not resurrect a dismissed overlay.
+      const showRcardTrailing =
+        shouldClearOverlay &&
+        flowStatus !== 'idle' &&
+        progressStartedRef.current &&
+        !vrcFlowStore.isRcardReceiveComplete(connectionId) &&
+        !rcardGraceExpiredRef.current
 
       if (shouldShowOverlay) {
         if (!flowStartedAtRef.current) {
@@ -305,8 +329,31 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           const timeoutMs = isWitnessed ? FLOW_TIMEOUT_MS_WITNESSED : FLOW_TIMEOUT_MS_NON_WITNESSED
           setProgressDurationMs(timeoutMs)
         }
+      } else if (showRcardTrailing) {
+        // Trailing beat: VRC done, R-Card still in flight. Keep the overlay up
+        // with honest wording; a one-shot grace timer bounds the wait so a
+        // lost card can never hang the dialog.
+        if (completionTimerRef.current) {
+          clearTimeout(completionTimerRef.current)
+          completionTimerRef.current = null
+        }
+        setProgressComplete(false)
+        setInProgress(true)
+        setTimedOut(false) // the VRC part finished — a stale stall-timeout no longer applies
+        setStatusText('Exchanging contact cards...')
+        if (!rcardGraceTimerRef.current) {
+          rcardGraceTimerRef.current = setTimeout(() => {
+            rcardGraceTimerRef.current = null
+            rcardGraceExpiredRef.current = true
+            checkStatus()
+          }, RCARD_TRAILING_GRACE_MS)
+        }
       } else {
         // Flow completed — if bar was running, fill to 100% then clear
+        if (rcardGraceTimerRef.current) {
+          clearTimeout(rcardGraceTimerRef.current)
+          rcardGraceTimerRef.current = null
+        }
         if (progressStartedRef.current) {
           setProgressComplete(true)
           completionTimerRef.current = setTimeout(() => {
@@ -318,6 +365,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
             setTimedOut(false)
             progressStartedRef.current = false
             flowStartedAtRef.current = null
+            rcardGraceExpiredRef.current = false
           }, 500)
         } else {
           setInProgress(false)
@@ -327,6 +375,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           setTimedOut(false)
           progressStartedRef.current = false
           flowStartedAtRef.current = null
+          rcardGraceExpiredRef.current = false
         }
       }
       
@@ -367,6 +416,10 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       if (completionTimerRef.current) {
         clearTimeout(completionTimerRef.current)
         completionTimerRef.current = null
+      }
+      if (rcardGraceTimerRef.current) {
+        clearTimeout(rcardGraceTimerRef.current)
+        rcardGraceTimerRef.current = null
       }
     }
   }, [connectionId])

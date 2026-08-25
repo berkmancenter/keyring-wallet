@@ -712,3 +712,48 @@ describe('WitnessStatusStore', () => {
     })
   })
 })
+
+describe('VrcFlowStore R-Card receive tracking', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { vrcFlowStore } = require('../../../src/modules/vrc/witnessStatusStore')
+
+  afterEach(() => {
+    vrcFlowStore.clearFlow('rc-1')
+    vrcFlowStore.removeAllListeners('flowUpdate')
+  })
+
+  it('starts unresolved, pending does not complete it', () => {
+    expect(vrcFlowStore.isRcardReceiveComplete('rc-1')).toBe(false)
+    vrcFlowStore.markRcardReceivePending('rc-1')
+    expect(vrcFlowStore.isRcardReceiveComplete('rc-1')).toBe(false)
+  })
+
+  it('complete resolves it and survives a later pending mark', () => {
+    vrcFlowStore.markRcardReceiveComplete('rc-1')
+    expect(vrcFlowStore.isRcardReceiveComplete('rc-1')).toBe(true)
+    // A duplicate/late offer event must not regress completion
+    vrcFlowStore.markRcardReceivePending('rc-1')
+    expect(vrcFlowStore.isRcardReceiveComplete('rc-1')).toBe(true)
+  })
+
+  it('emits flowUpdate on both marks so the overlay re-evaluates', () => {
+    const seen: string[] = []
+    vrcFlowStore.on('flowUpdate', ({ connectionId }: { connectionId: string }) => seen.push(connectionId))
+    vrcFlowStore.markRcardReceivePending('rc-1')
+    vrcFlowStore.markRcardReceiveComplete('rc-1')
+    expect(seen).toEqual(['rc-1', 'rc-1'])
+  })
+
+  it('does not gate isExchangeComplete (VRC-only semantics preserved)', () => {
+    vrcFlowStore.setStatus('rc-1', 'offer-sent')
+    vrcFlowStore.setStatus('rc-1', 'offer-received')
+    expect(vrcFlowStore.isExchangeComplete('rc-1')).toBe(true)
+    expect(vrcFlowStore.isRcardReceiveComplete('rc-1')).toBe(false)
+  })
+
+  it('clearFlow resets rcard state', () => {
+    vrcFlowStore.markRcardReceiveComplete('rc-1')
+    vrcFlowStore.clearFlow('rc-1')
+    expect(vrcFlowStore.isRcardReceiveComplete('rc-1')).toBe(false)
+  })
+})

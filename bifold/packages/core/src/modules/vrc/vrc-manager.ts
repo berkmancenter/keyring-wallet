@@ -2045,6 +2045,12 @@ export function setupVrcConnectionHandler(agent: Agent) {
               released = true // the rcardExchange tag keeps it hidden for good
               await agent.modules.didcomm.credentials.update(record)
 
+              // Let the exchange overlay narrate the card exchange (a trailing
+              // "exchanging contact cards" beat) — never a completion gate.
+              if (record.connectionId) {
+                vrcFlowStore.markRcardReceivePending(record.connectionId)
+              }
+
               await agent.modules.didcomm.credentials.acceptOffer({
                 credentialExchangeRecordId: record.id,
               })
@@ -2213,7 +2219,19 @@ export function setupVrcConnectionHandler(agent: Agent) {
 
       // Skip RCard exchanges: they piggyback on the VRC connection but must not
       // drive the exchange-flow overlay states (offer-sent / offer-received).
-      if (record.metadata.get('rcardExchange')) return
+      // The one signal they DO feed the overlay: the inbound card completing
+      // (the peer's name becomes resolvable) ends the trailing
+      // "exchanging contact cards" beat.
+      if (record.metadata.get('rcardExchange')) {
+        if (
+          record.state === DidCommCredentialState.Done &&
+          record.role === DidCommCredentialRole.Holder &&
+          record.connectionId
+        ) {
+          vrcFlowStore.markRcardReceiveComplete(record.connectionId)
+        }
+        return
+      }
       try {
         const formatData = await agent.modules.didcomm.credentials.getFormatData(record.id)
         const offer = (formatData?.offer as any)?.jsonld ?? (formatData?.offer as any)?.ldProof
