@@ -1811,13 +1811,14 @@ export function setupVrcConnectionHandler(agent: Agent) {
             // two VWCs. Known gap, recorded in the plan companion: the task
             // dialect does not carry the reporting edge yet, so v4 pairs
             // skip witness-reporting until it does.
-            const relationshipRecordForDialect = connection.theirDid
-              ? await agent.dependencyManager
-                  .resolve(RelationshipDidRepository)
-                  .findByConnectionDid(agent.context, connection.theirDid)
-              : null
-            const v4Pair =
-              RCE_PROTOCOL_VERSION >= 4 && (relationshipRecordForDialect?.counterpartyRceVersion ?? 1) >= 4
+            // Use the counterpartyRceVersion parsed from the triggering message
+            // itself (in scope from above), not a repository re-read: the DB
+            // write for it (updateCounterpartyRelationshipDid, above) is a no-op
+            // when my own RelationshipDidRecord hasn't been created yet, which
+            // races with this same handler (see the ~25ms race noted above) and
+            // silently drops the version, making a genuine v4 pair read back as
+            // v1 and skip this gate.
+            const v4Pair = RCE_PROTOCOL_VERSION >= 4 && counterpartyRceVersion >= 4
             if (v4Pair && witnessConnected) {
               issueLogger.info(`v4 pair — witness ceremony rides the trust-task session; legacy witness flow stands down`)
             }

@@ -274,17 +274,19 @@ export const getAttributeFormats = (bundle: any): Record<string, string | undefi
   }, {})
 }
 
+// The label this wallet announces on `receiveInvitation` (see
+// connectFromInvitation below) — a protocol placeholder, never a real
+// contact name. getConnectionName treats a counterparty's label equal to
+// this the same as "no label yet" rather than rendering it verbatim (seen in
+// the chat header before the RCard/VRC name arrives).
+const OOB_INVITATION_LABEL = 'didcomm-oob-invitation'
+
 export function getConnectionName(
   connection: DidCommConnectionRecord | undefined,
   alternateContactNames: Record<string, string>
 ): string {
-  return (
-    (connection?.id && alternateContactNames[connection?.id]) ||
-    connection?.theirLabel ||
-    connection?.alias ||
-    connection?.id ||
-    ''
-  )
+  const theirLabel = connection?.theirLabel !== OOB_INVITATION_LABEL ? connection?.theirLabel : undefined
+  return (connection?.id && alternateContactNames[connection?.id]) || theirLabel || connection?.alias || connection?.id || ''
 }
 
 export function useCredentialConnectionLabel(
@@ -1144,7 +1146,7 @@ export const connectFromInvitation = async (
 
   const record = await agent?.modules.didcomm.oob.receiveInvitation(invitation, {
     reuseConnection,
-    label: 'didcomm-oob-invitation',
+    label: OOB_INVITATION_LABEL,
   })
   return record?.outOfBandRecord as DidCommOutOfBandRecord
 }
