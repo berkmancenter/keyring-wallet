@@ -18,7 +18,7 @@ import { ChatMessage, ExtendedChatMessage } from '../components/chat/ChatMessage
 import { useNetwork } from '../contexts/network'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
-import { useChatMessagesByConnection, useVrcFlowInProgress } from '../hooks/chat-messages'
+import { useChatMessagesByConnection, useVrcFlowInProgress, PROGRESS_MILESTONES } from '../hooks/chat-messages'
 import { useConnectionDisplayName } from '../hooks/connections'
 import { useWitnessConnection } from '../modules/vrc/context/WitnessConnectionProvider'
 import { Role } from '../types/chat'
@@ -29,19 +29,32 @@ import { Animated, KeyboardAvoidingView, Platform, View, StyleSheet, Text, Touch
 
 const PROGRESS_BAR_WIDTH = 200
 
-const FlowProgressBar: React.FC<{ durationMs: number; color: string; complete?: boolean }> = ({ durationMs, color, complete }) => {
+const FlowProgressBar: React.FC<{ fraction: number; color: string; complete?: boolean }> = ({ fraction, color, complete }) => {
   const progress = useRef(new Animated.Value(0)).current
 
+  // Milestone-driven with creep: snap toward the flow's actual milestone,
+  // then drift slowly toward (never past) the next rung — the waits between
+  // milestones are real multi-second protocol round trips, and a frozen bar
+  // reads as a hang. Monotonic: the creep stops short of the next milestone,
+  // so the next real advance always lands ahead of the drift.
   useEffect(() => {
-    progress.setValue(0)
-    const animation = Animated.timing(progress, {
-      toValue: 1,
-      duration: durationMs,
-      useNativeDriver: false,
-    })
+    const next = PROGRESS_MILESTONES.find((m) => m > fraction) ?? 1
+    const creepTarget = fraction + (next - fraction) * 0.8
+    const animation = Animated.sequence([
+      Animated.timing(progress, {
+        toValue: fraction,
+        duration: 600,
+        useNativeDriver: false,
+      }),
+      Animated.timing(progress, {
+        toValue: creepTarget,
+        duration: 20000,
+        useNativeDriver: false,
+      }),
+    ])
     animation.start()
     return () => animation.stop()
-  }, [durationMs, progress])
+  }, [fraction, progress])
 
   useEffect(() => {
     if (complete) {
@@ -104,7 +117,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const { connectedWitness } = useWitnessConnection()
   
   // Track VRC flow in progress to show loading overlay during exchanges
-  const { inProgress: vrcFlowInProgress, statusText: vrcStatusText, timedOut: vrcTimedOut, progressDurationMs, progressComplete, onDismissTimeout } = useVrcFlowInProgress(connectionId)
+  const { inProgress: vrcFlowInProgress, statusText: vrcStatusText, timedOut: vrcTimedOut, progressFraction, progressComplete, onDismissTimeout } = useVrcFlowInProgress(connectionId)
 
   // Check if this connection is a witness connection by matching connectionId
   const _isWitnessConnection = connectedWitness?.connectionId === connectionId
@@ -232,8 +245,8 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
               ) : (
                 <>
                   <Text style={styles.flowOverlayText}>{vrcStatusText}</Text>
-                  {progressDurationMs > 0 && (
-                    <FlowProgressBar durationMs={progressDurationMs} color={ColorPalette.brand.primary} complete={progressComplete} />
+                  {progressFraction > 0 && (
+                    <FlowProgressBar fraction={progressFraction} color={ColorPalette.brand.primary} complete={progressComplete} />
                   )}
                 </>
               )}

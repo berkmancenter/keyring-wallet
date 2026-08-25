@@ -634,7 +634,38 @@ export async function respondToRelationshipProposal(
  * direction. This is the authority-flip delivery path — for v4 pairs the
  * legacy issue-credential leg no longer carries the VRC.
  */
+// In-flight delivery guard. Delivery fires from two triggers (the acceptance
+// path and the propose#response handler) and a REDELIVERED message can
+// re-fire either — observed live on devices (2026-08-25) as a second
+// biometric prompt, a duplicate witness session, and a third VWC. The
+// persisted prior-issue check inside only protects AFTER the issue document
+// is retained; the whole delivery (signing + ceremony) runs ~20s+ before
+// that, and this set closes that window. Claimed synchronously before the
+// first await; released on failure so a genuine retry stays possible.
+const inFlightVrcDeliveries = new Set<string>()
+
 export async function deliverVrcViaTrustTaskForExchange(
+  agent: Agent,
+  connectionId: string,
+  exchangeId: string
+): Promise<void> {
+  const deliveryKey = `${connectionId}:${exchangeId}`
+  if (inFlightVrcDeliveries.has(deliveryKey)) {
+    agent.config.logger.info(
+      `${LOG_PREFIX} VRC delivery already in flight for exchange ${exchangeId} — duplicate trigger ignored`
+    )
+    return
+  }
+  inFlightVrcDeliveries.add(deliveryKey)
+  try {
+    await deliverVrcViaTrustTaskForExchangeInner(agent, connectionId, exchangeId)
+  } catch (e) {
+    inFlightVrcDeliveries.delete(deliveryKey)
+    throw e
+  }
+}
+
+async function deliverVrcViaTrustTaskForExchangeInner(
   agent: Agent,
   connectionId: string,
   exchangeId: string

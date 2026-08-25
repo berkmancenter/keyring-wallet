@@ -22,7 +22,7 @@ import { OpenIDCredentialType } from '../modules/openid/types'
 import { isDTGCredential, isRCardTemplate, isRelationshipCredential } from '../modules/vrc/credentialTypes'
 import { credentialDisplayRegistry } from '../modules/vrc/display/displayRegistry'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
-import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore } from '../modules/vrc/witnessStatusStore'
+import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore, type VrcFlowStatus } from '../modules/vrc/witnessStatusStore'
 import { useStore } from '../contexts/store'
 import { Role } from '../types/chat'
 import { RootStackParams, ContactStackParams, Screens, Stacks } from '../types/navigators'
@@ -165,12 +165,42 @@ export interface VrcFlowOverlayState {
   inProgress: boolean
   statusText: string
   timedOut: boolean
-  /** Non-zero when a progress bar should be shown, value = animation duration in ms. */
-  progressDurationMs: number
+  /**
+   * Milestone-driven progress target in [0, 1] — non-zero when the bar should
+   * be shown. Advances with the flow's actual status transitions (monotonic:
+   * it never moves backwards) rather than animating a fixed timeout duration.
+   */
+  progressFraction: number
   /** True when the flow just completed — bar should snap to 100% before overlay clears. */
   progressComplete: boolean
   onDismissTimeout: () => void
 }
+
+// Milestones: how far along the exchange each flow status represents. The
+// same status can recur ('preparing-offer' runs before AND after the witness
+// ceremony), so the hook applies these monotonically — the bar only advances.
+const STATUS_PROGRESS: Record<VrcFlowStatus, number> = {
+  idle: 0,
+  connecting: 0.1,
+  'preparing-offer': 0.35,
+  'biometric-fallback': 0.35,
+  'witness-active': 0.55,
+  'witness-fallback': 0.55,
+  'sharing-witness-record': 0.75,
+  'offer-sent': 0.85,
+  'offer-received': 0.9,
+}
+// The trailing contact-card beat sits past every send milestone.
+const RCARD_TRAILING_PROGRESS = 0.92
+
+/**
+ * The milestone ladder, sorted — the bar creeps slowly toward (never past)
+ * the next rung while the flow waits on protocol round trips, so a static
+ * multi-second wait doesn't read as a hang.
+ */
+export const PROGRESS_MILESTONES: readonly number[] = [
+  ...new Set([...Object.values(STATUS_PROGRESS), RCARD_TRAILING_PROGRESS, 1]),
+].sort((a, b) => a - b)
 
 export const FLOW_TIMEOUT_MS_NON_WITNESSED = 60000
 export const FLOW_TIMEOUT_MS_WITNESSED = 120000
@@ -185,9 +215,10 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
   const [inProgress, setInProgress] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [timedOut, setTimedOut] = useState(false)
-  const [progressDurationMs, setProgressDurationMs] = useState(0)
+  const [progressFraction, setProgressFraction] = useState(0)
   const [progressComplete, setProgressComplete] = useState(false)
   const progressStartedRef = useRef(false)
+  const maxFractionRef = useRef(0)
   const flowStartedAtRef = useRef<number | null>(null)
   const completionTimerRef = useRef<NodeJS.Timeout | null>(null)
   const rcardGraceTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -207,9 +238,10 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     setTimedOut(false)
     setInProgress(false)
     setStatusText('')
-    setProgressDurationMs(0)
+    setProgressFraction(0)
     setProgressComplete(false)
     progressStartedRef.current = false
+    maxFractionRef.current = 0
     flowStartedAtRef.current = null
     vrcFlowStore.clearFlow(connectionId)
   }, [connectionId])
@@ -323,12 +355,11 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
             setStatusText('Exchange in progress...')
         }
 
-        // Start the progress bar once per overlay session, tied to the safety timeout.
-        if (!progressStartedRef.current) {
-          progressStartedRef.current = true
-          const timeoutMs = isWitnessed ? FLOW_TIMEOUT_MS_WITNESSED : FLOW_TIMEOUT_MS_NON_WITNESSED
-          setProgressDurationMs(timeoutMs)
-        }
+        // Advance the milestone bar — monotonically, since some statuses
+        // recur across passes and the bar must never move backwards.
+        progressStartedRef.current = true
+        maxFractionRef.current = Math.max(maxFractionRef.current, STATUS_PROGRESS[flowStatus] ?? 0.15)
+        setProgressFraction(maxFractionRef.current)
       } else if (showRcardTrailing) {
         // Trailing beat: VRC done, R-Card still in flight. Keep the overlay up
         // with honest wording; a one-shot grace timer bounds the wait so a
@@ -341,6 +372,8 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         setInProgress(true)
         setTimedOut(false) // the VRC part finished — a stale stall-timeout no longer applies
         setStatusText('Exchanging contact cards...')
+        maxFractionRef.current = Math.max(maxFractionRef.current, RCARD_TRAILING_PROGRESS)
+        setProgressFraction(maxFractionRef.current)
         if (!rcardGraceTimerRef.current) {
           rcardGraceTimerRef.current = setTimeout(() => {
             rcardGraceTimerRef.current = null
@@ -360,20 +393,22 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
             completionTimerRef.current = null
             setInProgress(false)
             setStatusText('')
-            setProgressDurationMs(0)
+            setProgressFraction(0)
             setProgressComplete(false)
             setTimedOut(false)
             progressStartedRef.current = false
+            maxFractionRef.current = 0
             flowStartedAtRef.current = null
             rcardGraceExpiredRef.current = false
           }, 500)
         } else {
           setInProgress(false)
           setStatusText('')
-          setProgressDurationMs(0)
+          setProgressFraction(0)
           setProgressComplete(false)
           setTimedOut(false)
           progressStartedRef.current = false
+          maxFractionRef.current = 0
           flowStartedAtRef.current = null
           rcardGraceExpiredRef.current = false
         }
@@ -424,7 +459,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
     }
   }, [connectionId])
   
-  return { inProgress, statusText, timedOut, progressDurationMs, progressComplete, onDismissTimeout }
+  return { inProgress, statusText, timedOut, progressFraction, progressComplete, onDismissTimeout }
 }
 
 // Keep legacy hook for backwards compatibility
