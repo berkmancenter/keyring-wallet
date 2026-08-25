@@ -132,6 +132,13 @@ export function getBCAgentModules({
         // a status-request the mediator answers from its queue, so delivery is
         // request/ack'd instead of live-pushed into a websocket that may have
         // died silently (docs/spikes/e2e-vrc-connect-findings.md).
+        // DO NOT shorten this without a mediator-side fix first: the
+        // production mediator intermittently answers "Error processing
+        // message", and the failure rate scales with request rate (measured
+        // 2026-08-25: a 2s imperative burst made it constant and killed all
+        // inbound delivery; 5s polling made it frequent enough to eat a
+        // propose mid-exchange; 10s has been reliable). The latency work
+        // (burst/5s) is parked on diagnosing that server-side error.
         mediatorPollingInterval: 10_000,
       },
     }),
