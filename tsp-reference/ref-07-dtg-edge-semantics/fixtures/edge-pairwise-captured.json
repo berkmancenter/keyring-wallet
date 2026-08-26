@@ -1,0 +1,73 @@
+{
+  "description": "A REAL Keyring edge, captured from the reference implementation (bifold/packages/vrc-reference) running the actual Credo-TS DIDComm exchange — both halves minted by the real code path and cryptographically verified at capture time by agent.w3cCredentials.verifyCredential (Keyring's own verifier); results frozen in captureMeta. Shape note: the wallet already emits VC 2.0 context + validFrom, but the proof suite is Ed25519Signature2018 (JWS) rather than the DataIntegrityProof/eddsa-jcs-2022 that cred-spec #17 / PR #18 recommend — that divergence is itself a finding.",
+  "captureMeta": {
+    "capturedAt": "2026-08-25T23:00:33.934Z",
+    "tool": "vrc-reference (@credo-ts/* 0.6.3), __tests__/integration/captureEdge.local-al.test.ts",
+    "verifiedAtCapture": {
+      "half1": {
+        "isValid": true,
+        "by": "alice.agent.w3cCredentials.verifyCredential"
+      },
+      "half2": {
+        "isValid": true,
+        "by": "bob.agent.w3cCredentials.verifyCredential"
+      }
+    }
+  },
+  "declaredScopes": {
+    "half1": "pairwise",
+    "half2": "pairwise"
+  },
+  "halves": [
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://www.firstperson.network/dtg/v1",
+        "https://www.firstperson.network/relationship/v1",
+        "https://w3id.org/security/suites/ed25519-2018/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:peer:0z6Mkm7Do7kQpJ8Gt7wT82mPnqZfyk4A7ufFgA13qWGdqAMVt",
+      "validFrom": "2026-08-25T23:00:33.388Z",
+      "credentialSubject": {
+        "id": "did:peer:0z6MktUjZjmK2iPfMfxTHtj8AzZrGXt8eUyGiLPjavAPq9vdP"
+      },
+      "proof": {
+        "verificationMethod": "did:peer:0z6Mkm7Do7kQpJ8Gt7wT82mPnqZfyk4A7ufFgA13qWGdqAMVt#z6Mkm7Do7kQpJ8Gt7wT82mPnqZfyk4A7ufFgA13qWGdqAMVt",
+        "type": "Ed25519Signature2018",
+        "created": "2026-08-25T23:00:33Z",
+        "proofPurpose": "assertionMethod",
+        "jws": "eyJhbGciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..xHlXa5TkPJMb1lKckGABW7R3xrDSgkfAD2wcWhtBydJxPu9RC4tZIro5QGLvR2JRufdRYjAxHHsPHV-RfgVhDA"
+      }
+    },
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://www.firstperson.network/dtg/v1",
+        "https://www.firstperson.network/relationship/v1",
+        "https://w3id.org/security/suites/ed25519-2018/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:peer:0z6MktUjZjmK2iPfMfxTHtj8AzZrGXt8eUyGiLPjavAPq9vdP",
+      "validFrom": "2026-08-25T23:00:33.678Z",
+      "credentialSubject": {
+        "id": "did:peer:0z6Mkm7Do7kQpJ8Gt7wT82mPnqZfyk4A7ufFgA13qWGdqAMVt"
+      },
+      "proof": {
+        "verificationMethod": "did:peer:0z6MktUjZjmK2iPfMfxTHtj8AzZrGXt8eUyGiLPjavAPq9vdP#z6MktUjZjmK2iPfMfxTHtj8AzZrGXt8eUyGiLPjavAPq9vdP",
+        "type": "Ed25519Signature2018",
+        "created": "2026-08-25T23:00:33Z",
+        "proofPurpose": "assertionMethod",
+        "jws": "eyJhbGciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..syXg801W0rlUEuUsINGq2AjflR_bMYeNJxN-hrcHAbetkScd4FF5zgQjSzgrMv8722B4R9gMP-v3e6aYAdSNBg"
+      }
+    }
+  ]
+}
