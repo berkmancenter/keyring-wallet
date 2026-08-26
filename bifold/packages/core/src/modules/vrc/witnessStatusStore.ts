@@ -213,6 +213,24 @@ class VrcFlowStore extends EventEmitter {
   }
 
   /**
+   * Connections whose exchange is in flight but whose VRC has not landed
+   * yet — the Contacts screen shows these as "exchange in progress" rows so
+   * a new contact is visible the moment the exchange starts rather than
+   * only once the credential arrives. A row retires when the exchange
+   * completes (the real credential-backed row takes over) or when the flow
+   * is cleared (the overlay's Dismiss).
+   */
+  getInFlightConnectionIds(): string[] {
+    const ids: string[] = []
+    for (const [connectionId, status] of this.flowStatus) {
+      if (status === 'idle') continue
+      if (this.isExchangeComplete(connectionId)) continue
+      ids.push(connectionId)
+    }
+    return ids
+  }
+
+  /**
    * Set an error state for a connection's VRC flow.
    * This triggers the WitnessErrorDialog to display.
    *

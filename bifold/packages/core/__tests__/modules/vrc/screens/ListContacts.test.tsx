@@ -3,6 +3,7 @@ import React from 'react'
 
 import { useNavigation as testUseNavigation } from '../../../../__mocks__/@react-navigation/native'
 import ListContacts from '../../../../src/modules/vrc/screens/ListContacts'
+import { vrcFlowStore } from '../../../../src/modules/vrc/witnessStatusStore'
 import { BasicAppContext } from '../../../helpers/app'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
 import {
@@ -80,6 +81,45 @@ describe('ListContacts Screen', () => {
     await waitFor(() => {
       expect(tree.getByText('Contacts.EmptyList')).toBeTruthy()
     })
+  })
+
+  test('Shows a pending row for an in-flight exchange, named from the connection', async () => {
+    // The mocked useConnections provides a record with this id/theirLabel.
+    const inFlightConnectionId = 'b4b1b9cd-a445-4bb3-9645-a2377471965a'
+    vrcFlowStore.setStatus(inFlightConnectionId, 'preparing-offer')
+    try {
+      const tree = render(
+        <BasicAppContext>
+          <ListContacts />
+        </BasicAppContext>
+      )
+
+      await waitFor(() => {
+        expect(tree.getByText('Exchange in progress...')).toBeTruthy()
+        expect(tree.getByText('BestBC College')).toBeTruthy()
+      })
+    } finally {
+      vrcFlowStore.clearFlow(inFlightConnectionId)
+    }
+  })
+
+  test('The pending row retires once the exchange completes', async () => {
+    const inFlightConnectionId = 'b4b1b9cd-a445-4bb3-9645-a2377471965a'
+    vrcFlowStore.setStatus(inFlightConnectionId, 'offer-sent')
+    vrcFlowStore.setStatus(inFlightConnectionId, 'offer-received')
+    try {
+      const tree = render(
+        <BasicAppContext>
+          <ListContacts />
+        </BasicAppContext>
+      )
+
+      await waitFor(() => {
+        expect(tree.queryByText('Exchange in progress...')).toBeNull()
+      })
+    } finally {
+      vrcFlowStore.clearFlow(inFlightConnectionId)
+    }
   })
 
   test('Displays contacts from DTG credentials', async () => {
