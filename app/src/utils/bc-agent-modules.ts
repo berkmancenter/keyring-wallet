@@ -132,14 +132,16 @@ export function getBCAgentModules({
         // a status-request the mediator answers from its queue, so delivery is
         // request/ack'd instead of live-pushed into a websocket that may have
         // died silently (docs/spikes/e2e-vrc-connect-findings.md).
-        // DO NOT shorten this without a mediator-side fix first: the
-        // production mediator intermittently answers "Error processing
-        // message", and the failure rate scales with request rate (measured
-        // 2026-08-25: a 2s imperative burst made it constant and killed all
-        // inbound delivery; 5s polling made it frequent enough to eat a
-        // propose mid-exchange; 10s has been reliable). The latency work
-        // (burst/5s) is parked on diagnosing that server-side error.
-        mediatorPollingInterval: 10_000,
+        // 5s halves the per-hop idle time (a witnessed exchange is five-plus
+        // inbound hops per side). Safe since 2026-08-25: the mediator's
+        // pickup queue moved off askar (MESSAGE_PICKUP__STORAGE__TYPE=
+        // postgres) after we root-caused rate-correlated "Error processing
+        // message" failures to askar lock contention under concurrent polls
+        // (duplicate queue deletes -> rollbacks -> inbound timeouts eating
+        // forwards). A 2s-cadence probe now passes clean against the fixed
+        // mediator; keep an eye on the server if this is ever shortened
+        // further.
+        mediatorPollingInterval: 5_000,
       },
     }),
     dids: new DidsModule({
