@@ -129,6 +129,31 @@ module.exports = (async () => {
         // Singleton packages: always resolve from the app's node_modules so
         // bifold sources never load a second copy (bifold/node_modules is on
         // nodeModulesPaths, which would otherwise win for react etc.)
+        //
+        // The native-binding families below are here for a sharper reason than
+        // react's: each registers its native implementation on a MODULE-LEVEL
+        // singleton as an import side effect (NativeAskar.register(...) in
+        // @openwallet-foundation/askar-react-native, and the anoncreds/indy-vdr
+        // equivalents). Two physical copies means two singletons, so the copy
+        // that gets registered is not necessarily the copy a consumer reads,
+        // and the consumer then throws "Native askar has not been registered
+        // yet" even though everything installed correctly.
+        //
+        // This is not hypothetical: it made every correct PIN be reported as
+        // wrong on device (2026-08-26). AuthProvider's checkWalletPIN opens the
+        // Askar store through @credo-ts/askar, which resolved into the bifold
+        // submodule's tree, while askar-react-native resolved to the app's —
+        // registration landed on one singleton and the store check read the
+        // other. It surfaced only after the credo 0.6 upgrade put openStore in
+        // that path, since nothing else needs native askar before the main
+        // agent exists.
+        //
+        // Two independent installs make the duplicates unavoidable: the root
+        // workspace, plus `yarn install` inside the bifold submodule (run by
+        // scripts/ensure-bifold-ready.js as preinstall). `resolutions` only
+        // dedupes within a single tree, so pinning has to happen here. Keep
+        // this list in sync when a new native-backed dependency reaches
+        // bifold/packages/*.
         const singletonPrefixes = [
           'react',
           'react-native',
@@ -136,6 +161,16 @@ module.exports = (async () => {
           '@credo-ts/core',
           '@credo-ts/didcomm',
           '@credo-ts/anoncreds',
+          '@credo-ts/askar',
+          '@credo-ts/indy-vdr',
+          '@credo-ts/react-native',
+          '@credo-ts/webvh',
+          '@openwallet-foundation/askar-shared',
+          '@openwallet-foundation/askar-react-native',
+          '@hyperledger/anoncreds-shared',
+          '@hyperledger/anoncreds-react-native',
+          '@hyperledger/indy-vdr-shared',
+          '@hyperledger/indy-vdr-react-native',
         ]
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
         if (isSingleton && !context.originModulePath.startsWith(__dirname)) {
