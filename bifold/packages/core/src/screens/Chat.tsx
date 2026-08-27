@@ -26,7 +26,6 @@ import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metad
 import { setActiveChatConnectionId } from '../utils/activeChatTracker'
 import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
 import { Animated, Easing, View, StyleSheet, Text, TouchableOpacity } from 'react-native'
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 
 const PROGRESS_BAR_WIDTH = 200
 
@@ -198,25 +197,24 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
       {/* Temporarily removed for cleaner witness chat UI */}
       {/* {isWitnessConnection && <WitnessChatBanner connectionId={connectionId} />} */}
       {/*
-       * KeyboardAvoidingView from react-native-keyboard-controller, NOT from
-       * react-native. Two bugs bracket this choice, both seen on device
-       * 2026-08-26: RN's version with iOS's default `behavior={undefined}` is
-       * inert, so the keyboard covered the composer and the message could not
-       * be sent; setting `behavior="padding"` fixed that but then raced the
-       * app-wide KeyboardProvider (mounted in app/App.tsx) — padding changed
-       * the layout, UIKit recomputed the keyboard frame, which re-rendered and
-       * recomputed the padding, ~133 UIKeyboardAutomatic frame events in a
-       * single second, and the composer lost keystrokes to the churn.
-       * The library's version reads the same animated keyboard values the
-       * provider already owns instead of racing UIKit, so there is exactly one
-       * source of truth for the offset.
+       * No KeyboardAvoidingView of our own here — gifted-chat v3 already
+       * mounts one (plus its own KeyboardProvider) internally, and wrapping it
+       * in a second one is what broke the composer on device 2026-08-26: two
+       * avoiders over nested providers produced ~135 UIKeyboardAutomatic frame
+       * events per second, tore the text input session down and rebuilt it on
+       * each keystroke, and the field cleared and re-asserted sentence
+       * capitalisation as a result.
+       *
+       * The original complaint (keyboard covering the composer, message
+       * unsendable) had the same single root cause seen from the other side:
+       * gifted-chat's internal avoider defaults to
+       * keyboardVerticalOffset={insets.top}, the safe-area inset, which is
+       * wrong for a screen inside a navigation header. Give it the real header
+       * height instead and it behaves.
        */}
-      <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: '#F5F5F5' }}
-        behavior={'padding'}
-        keyboardVerticalOffset={headerHeight}
-      >
+      <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
         <GiftedChat<ExtendedChatMessage>
+          keyboardAvoidingViewProps={{ keyboardVerticalOffset: headerHeight }}
           messages={chatMessages}
           isAvatarVisibleForEveryMessage={true}
           renderAvatar={() => null}
@@ -293,7 +291,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
             </View>
           </View>
         )}
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   )
 }
