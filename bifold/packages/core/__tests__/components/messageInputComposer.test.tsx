@@ -50,4 +50,37 @@ describe('renderComposer textInputProps', () => {
     expect(composer.props.textInputProps.editable).toBe(true)
     expect(composer.props.textInputProps.onChangeText).toBeUndefined()
   })
+
+  /**
+   * v3's Composer reads styling, placeholder and placeholder colour ONLY from
+   * textInputProps — the top-level textInputStyle / placeholder /
+   * placeholderTextColor props are v2 API and are silently dropped. Composer
+   * applies textInputProps.style last, which is what lets the theme colour
+   * beat its scheme default of textInput_dark: { color: '#fff' } against the
+   * toolbar's hardcoded white background.
+   */
+  test('carries the theme text colour through textInputProps.style', () => {
+    const themed = { inputText: { color: '#010B13', fontWeight: '500' } }
+    const tree = renderComposer({ textInputProps: {} }, themed, 'Type here', false) as React.ReactElement
+    const composer = (tree.props as { children: React.ReactElement[] }).children[1]
+
+    const styles = composer.props.textInputProps.style
+    expect(Array.isArray(styles)).toBe(true)
+    expect(styles[0]).toMatchObject({ color: '#010B13', fontWeight: '500' })
+  })
+
+  test('passes placeholder and its colour through textInputProps', () => {
+    const composer = composerFrom({ textInputProps: {} })
+
+    expect(composer.props.textInputProps.placeholder).toBe('Type here')
+    expect(composer.props.textInputProps.placeholderTextColor).toBe('#888888')
+  })
+
+  test('a caller-supplied style still wins over ours', () => {
+    const callerStyle = { color: 'rebeccapurple' }
+    const composer = composerFrom({ textInputProps: { style: callerStyle } })
+
+    const styles = composer.props.textInputProps.style
+    expect(styles[styles.length - 1]).toBe(callerStyle)
+  })
 })
