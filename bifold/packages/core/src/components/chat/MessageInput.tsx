@@ -31,10 +31,10 @@ export const renderInputToolbar = (props: any, _theme: any) => (
 
 export const renderComposer = (props: any, theme: any, placeholder: string, disabled?: boolean) => (
   <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-    <Icon 
-      name="message-text-outline" 
-      size={22} 
-      color="#888888" 
+    <Icon
+      name="message-text-outline"
+      size={22}
+      color="#888888"
       style={{ marginLeft: 12, marginRight: 4 }}
     />
   <Composer
@@ -51,7 +51,22 @@ export const renderComposer = (props: any, theme: any, placeholder: string, disa
     }}
     placeholder={placeholder}
       placeholderTextColor="#888888"
-    textInputProps={{ accessibilityLabel: '', maxFontSizeMultiplier: 1.2, editable: !disabled }}
+    // MERGE, never replace. gifted-chat's TextInput is fully controlled
+    // (value={text}), and the wiring that feeds that state back — onChangeText
+    // and the input ref — is handed down inside textInputProps itself. An
+    // object literal here lands after {...props} and so replaced it wholesale,
+    // leaving a controlled input with no change handler: every keystroke was
+    // reverted to '', and the keyboard re-asserted sentence capitalisation on
+    // the now-empty field. The composer had been unusable for as long as this
+    // has been here; it only became visible once the keyboard stopped covering
+    // it (device trace 2026-08-26 — Composer text="" on every render, with no
+    // remount).
+    textInputProps={{
+      ...props.textInputProps,
+      accessibilityLabel: '',
+      maxFontSizeMultiplier: 1.2,
+      editable: !disabled,
+    }}
   />
   </View>
 )
