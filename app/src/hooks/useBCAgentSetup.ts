@@ -22,7 +22,8 @@ import { IndyVdrPoolConfig, IndyVdrPoolService } from '@credo-ts/indy-vdr'
 import { agentDependencies } from '@credo-ts/react-native'
 import { GetCredentialDefinitionRequest, GetSchemaRequest } from '@hyperledger/indy-vdr-shared'
 import moment from 'moment'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { AppState } from 'react-native'
 import { CachesDirectoryPath } from 'react-native-fs'
 // DISABLED: Push notifications disabled — no server backend yet
 // import { activate } from '@/utils/PushNotificationsHelper'
@@ -285,6 +286,33 @@ const useBCAgentSetup = () => {
       }
     }
   }, [agent, logger])
+
+  // Restart message pickup when the app returns to the foreground.
+  //
+  // configureMessagePickup starts a PickUpV2 polling loop built on JS timers.
+  // The OS suspends those while the app is backgrounded, and nothing restarted
+  // them on resume — so inbound messages piled up in the mediator's queue and
+  // the wallet sat there ("Establishing connection…") until the app was killed
+  // and a fresh agent re-initiated pickup. Observed on device 2026-08-26; a
+  // 24-minute stall that drained instantly on restart.
+  //
+  // stopMessagePickup() first so a resumed loop never stacks on a stale one.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+      if (nextAppState !== 'active') return
+      const activeAgent = agentInstanceRef.current
+      if (!activeAgent?.isInitialized) return
+      try {
+        await activeAgent.modules.didcomm.mediationRecipient.stopMessagePickup()
+        await configureMessagePickup(activeAgent)
+        logger.info('Message pickup restarted after returning to the foreground')
+      } catch (error) {
+        logger.warn(`Could not restart message pickup on foreground: ${(error as Error).message}`)
+      }
+    })
+
+    return () => subscription.remove()
+  }, [logger])
 
   return { agent, initializeAgent, shutdownAndClearAgentIfExists }
 }
