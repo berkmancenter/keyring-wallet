@@ -60,6 +60,12 @@ export interface VrcFlowError {
  *
  * Tracks the entire VRC exchange flow for overlay display:
  * - 'connecting': DID exchange in progress
+ * - 'discovering': (trust-task dialect) capability query sent, awaiting the
+ *   peer's supportedTypes — one mediated round trip, so a real wait
+ * - 'proposed': (trust-task dialect) relationship proposal sent, awaiting the
+ *   peer's consent — another mediated round trip. Both exist so the progress
+ *   dialog can move during waits that previously sat on 'preparing-offer' for
+ *   20-30s with nothing to show (device logs 2026-08-26).
  * - 'witness-active': Witness verification in progress
  * - 'witness-fallback': Witness unavailable, falling back to direct issuance
  * - 'biometric-fallback': Biometric failed/cancelled, issuing without hardware attestation
@@ -73,6 +79,8 @@ export interface VrcFlowError {
 export type VrcFlowStatus =
   | 'idle'
   | 'connecting'
+  | 'discovering'
+  | 'proposed'
   | 'witness-active'
   | 'witness-fallback'
   | 'biometric-fallback'
@@ -193,6 +201,19 @@ class VrcFlowStore extends EventEmitter {
    */
   hasReceivedOfferFlag(connectionId: string): boolean {
     return this.hasReceivedOffer.get(connectionId) || false
+  }
+
+  /**
+   * Has THIS side finished delivering its own credential ('offer-sent')?
+   * In the trust-task dialect the counterparty's credential is auto-stored
+   * with nothing for the user to act on, so its arrival must not tear the
+   * progress dialog down while our own ceremony is still running — the
+   * dialog would vanish and then reappear for the remaining steps (observed
+   * on slower hardware, 2026-08-25). Legacy keeps clearing on 'offer-received':
+   * there the user has an actionable offer and needs the dialog out of the way.
+   */
+  hasSentOfferFlag(connectionId: string): boolean {
+    return this.hasSentOffer.get(connectionId) || false
   }
 
   /** An inbound R-Card offer arrived and is being auto-accepted. */

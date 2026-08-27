@@ -33,13 +33,16 @@ const FlowProgressBar: React.FC<{ fraction: number; color: string; complete?: bo
   const progress = useRef(new Animated.Value(0)).current
 
   // Milestone-driven with creep: snap toward the flow's actual milestone,
-  // then drift slowly toward (never past) the next rung — the waits between
+  // then drift toward (never past) the next rung — the waits between
   // milestones are real multi-second protocol round trips, and a frozen bar
-  // reads as a hang. Monotonic: the creep stops short of the next milestone,
-  // so the next real advance always lands ahead of the drift.
+  // reads as a hang. The creep runs long (60s, longer than any normal phase)
+  // with an ease-out curve, so motion is clearly visible early and only
+  // asymptotically slows — the bar never sits dead still mid-phase.
+  // Monotonic: the creep stops short of the next milestone, so the next real
+  // advance always lands ahead of the drift.
   useEffect(() => {
     const next = PROGRESS_MILESTONES.find((m) => m > fraction) ?? 1
-    const creepTarget = fraction + (next - fraction) * 0.8
+    const creepTarget = fraction + (next - fraction) * 0.9
     const animation = Animated.sequence([
       Animated.timing(progress, {
         toValue: fraction,
@@ -48,7 +51,8 @@ const FlowProgressBar: React.FC<{ fraction: number; color: string; complete?: bo
       }),
       Animated.timing(progress, {
         toValue: creepTarget,
-        duration: 20000,
+        duration: 60000,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: false,
       }),
     ])
@@ -117,7 +121,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const { connectedWitness } = useWitnessConnection()
   
   // Track VRC flow in progress to show loading overlay during exchanges
-  const { inProgress: vrcFlowInProgress, statusText: vrcStatusText, timedOut: vrcTimedOut, progressFraction, progressComplete, onDismissTimeout } = useVrcFlowInProgress(connectionId)
+  const { inProgress: vrcFlowInProgress, statusText: vrcStatusText, timedOut: vrcTimedOut, progressFraction, progressComplete, confirmed: vrcConfirmed, onDismissTimeout, onDismissConfirmation } = useVrcFlowInProgress(connectionId)
 
   // Check if this connection is a witness connection by matching connectionId
   const _isWitnessConnection = connectedWitness?.connectionId === connectionId
@@ -225,7 +229,28 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         {vrcFlowInProgress && (
           <View style={styles.flowOverlay} pointerEvents="auto">
             <View style={styles.flowOverlayContent}>
-              {vrcTimedOut ? (
+              {vrcConfirmed ? (
+                <>
+                  <Text style={styles.flowOverlayConfirmIcon}>✓</Text>
+                  <Text style={styles.flowOverlayText}>
+                    {theirLabel
+                      ? `Relationship confirmed — ${theirLabel} added to Contacts`
+                      : 'Relationship confirmed — contact added'}
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.flowOverlayDismissButton, { backgroundColor: ColorPalette.brand.primary }]}
+                    onPress={() => {
+                      onDismissConfirmation()
+                      const nav = navigation.getParent() ?? navigation
+                      ;(nav as any).navigate(TabStacks.ContactStack, { screen: Screens.Contacts })
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={'View contacts'}
+                  >
+                    <Text style={styles.flowOverlayDismissText}>View contacts</Text>
+                  </TouchableOpacity>
+                </>
+              ) : vrcTimedOut ? (
                 <>
                   <Text style={styles.flowOverlayTimeoutIcon}>⚠</Text>
                   <Text style={styles.flowOverlayText}>{vrcStatusText}</Text>
@@ -286,6 +311,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   flowOverlayTimeoutIcon: {
+    fontSize: 36,
+    marginBottom: 4,
+  },
+  flowOverlayConfirmIcon: {
     fontSize: 36,
     marginBottom: 4,
   },

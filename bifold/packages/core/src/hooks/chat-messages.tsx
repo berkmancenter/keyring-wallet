@@ -173,7 +173,15 @@ export interface VrcFlowOverlayState {
   progressFraction: number
   /** True when the flow just completed — bar should snap to 100% before overlay clears. */
   progressComplete: boolean
+  /**
+   * True for a short beat after a SUCCESSFUL exchange: the dialog stays up to
+   * say the relationship is confirmed and the contact is now in Contacts,
+   * rather than just vanishing and leaving the user wondering.
+   */
+  confirmed: boolean
   onDismissTimeout: () => void
+  /** Dismiss the confirmation beat early (e.g. the user tapped through). */
+  onDismissConfirmation: () => void
 }
 
 // Milestones: how far along the exchange each flow status represents. The
@@ -182,6 +190,8 @@ export interface VrcFlowOverlayState {
 const STATUS_PROGRESS: Record<VrcFlowStatus, number> = {
   idle: 0,
   connecting: 0.1,
+  discovering: 0.18,
+  proposed: 0.26,
   'preparing-offer': 0.35,
   'biometric-fallback': 0.35,
   'witness-active': 0.55,
@@ -210,6 +220,8 @@ export const FLOW_HARD_TIMEOUT_MS = 180000
 // regardless — the card finishing later still resolves the name in the
 // background; the overlay must never be hostage to it.
 export const RCARD_TRAILING_GRACE_MS = 30000
+// How long the success beat stays up before the dialog clears itself.
+export const CONFIRMATION_LINGER_MS = 4000
 
 export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState => {
   const [inProgress, setInProgress] = useState(false)
@@ -217,6 +229,8 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
   const [timedOut, setTimedOut] = useState(false)
   const [progressFraction, setProgressFraction] = useState(0)
   const [progressComplete, setProgressComplete] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const confirmTimerRef = useRef<NodeJS.Timeout | null>(null)
   const progressStartedRef = useRef(false)
   const maxFractionRef = useRef(0)
   const flowStartedAtRef = useRef<number | null>(null)
@@ -234,6 +248,11 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       clearTimeout(rcardGraceTimerRef.current)
       rcardGraceTimerRef.current = null
     }
+    if (confirmTimerRef.current) {
+      clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = null
+    }
+    setConfirmed(false)
     rcardGraceExpiredRef.current = false
     setTimedOut(false)
     setInProgress(false)
@@ -331,6 +350,12 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           case 'biometric-fallback':
             setStatusText('Issuing credential without hardware attestation...')
             break
+          case 'discovering':
+            setStatusText('Checking what your contact supports...')
+            break
+          case 'proposed':
+            setStatusText("Waiting for your contact to accept...")
+            break
           case 'preparing-offer':
             // Trust-task dialect: there is no "offer" — the first pass prepares
             // and signs our relationship credential (the biometric prompt lands
@@ -388,19 +413,24 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           rcardGraceTimerRef.current = null
         }
         if (progressStartedRef.current) {
+          // Success beat: snap the bar to 100%, then hold briefly with the
+          // confirmation (Chat renders the wording + a way through to
+          // Contacts) so the dialog does not simply vanish.
           setProgressComplete(true)
+          setTimedOut(false)
+          setStatusText('')
+          setConfirmed(true)
           completionTimerRef.current = setTimeout(() => {
             completionTimerRef.current = null
             setInProgress(false)
-            setStatusText('')
+            setConfirmed(false)
             setProgressFraction(0)
             setProgressComplete(false)
-            setTimedOut(false)
             progressStartedRef.current = false
             maxFractionRef.current = 0
             flowStartedAtRef.current = null
             rcardGraceExpiredRef.current = false
-          }, 500)
+          }, CONFIRMATION_LINGER_MS)
         } else {
           setInProgress(false)
           setStatusText('')
@@ -456,10 +486,40 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         clearTimeout(rcardGraceTimerRef.current)
         rcardGraceTimerRef.current = null
       }
+      if (confirmTimerRef.current) {
+        clearTimeout(confirmTimerRef.current)
+        confirmTimerRef.current = null
+      }
     }
   }, [connectionId])
   
-  return { inProgress, statusText, timedOut, progressFraction, progressComplete, onDismissTimeout }
+  const onDismissConfirmation = useCallback(() => {
+    if (completionTimerRef.current) {
+      clearTimeout(completionTimerRef.current)
+      completionTimerRef.current = null
+    }
+    setConfirmed(false)
+    setInProgress(false)
+    setStatusText('')
+    setProgressFraction(0)
+    setProgressComplete(false)
+    progressStartedRef.current = false
+    maxFractionRef.current = 0
+    flowStartedAtRef.current = null
+    rcardGraceExpiredRef.current = false
+    if (connectionId) vrcFlowStore.clearFlow(connectionId)
+  }, [connectionId])
+
+  return {
+    inProgress,
+    statusText,
+    timedOut,
+    progressFraction,
+    progressComplete,
+    confirmed,
+    onDismissTimeout,
+    onDismissConfirmation,
+  }
 }
 
 // Keep legacy hook for backwards compatibility

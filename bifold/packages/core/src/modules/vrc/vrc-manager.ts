@@ -2273,12 +2273,21 @@ export function setupVrcConnectionHandler(agent: Agent) {
         if (record.connectionId) {
           const currentStatus = vrcFlowStore.getStatus(record.connectionId)
 
-          // Don't clear the overlay if we're still in a witness flow.
-          // The other party's offer arriving early shouldn't interrupt our
-          // witness verification / fallback sequence.
+          // Don't tear the progress dialog down while OUR OWN side is still
+          // working. The witness states were guarded already, but the v4
+          // ceremony also passes through 'preparing-offer' and
+          // 'sharing-witness-record' — an inbound credential landing in one of
+          // those hid the dialog, and the ceremony's next status brought it
+          // back (the flicker seen on slower hardware, 2026-08-25). In the
+          // trust-task dialect nothing here is user-actionable (the credential
+          // is auto-stored), so the dialog stays until we've sent ours; legacy
+          // still clears, because there the user has an offer to accept.
           const inWitnessFlow = currentStatus === 'witness-active' || currentStatus === 'witness-fallback'
-          if (inWitnessFlow) {
-            credLogger.info(`[VRC Flow] Received offer but witness flow active (${currentStatus}) — keeping overlay, marking received`)
+          const ownDeliveryPending =
+            vrcFlowStore.getDialect(record.connectionId) === 'trust-tasks' &&
+            !vrcFlowStore.hasSentOfferFlag(record.connectionId)
+          if (inWitnessFlow || ownDeliveryPending) {
+            credLogger.info(`[VRC Flow] Received offer but own side still active (${currentStatus}) — keeping overlay, marking received`)
             vrcFlowStore.markOfferReceived(record.connectionId)
           } else {
             credLogger.info(`[VRC Flow] Setting 'offer-received' | Previous status: ${currentStatus}`)
