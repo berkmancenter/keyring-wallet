@@ -24,8 +24,9 @@ import { useWitnessConnection } from '../modules/vrc/context/WitnessConnectionPr
 import { Role } from '../types/chat'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { setActiveChatConnectionId } from '../utils/activeChatTracker'
-import { RootStackParams, ContactStackParams, Screens, Stacks } from '../types/navigators'
-import { Animated, KeyboardAvoidingView, Platform, View, StyleSheet, Text, TouchableOpacity } from 'react-native'
+import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
+import { Animated, Easing, View, StyleSheet, Text, TouchableOpacity } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 
 const PROGRESS_BAR_WIDTH = 200
 
@@ -196,9 +197,23 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     <SafeAreaView edges={['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
       {/* Temporarily removed for cleaner witness chat UI */}
       {/* {isWitnessConnection && <WitnessChatBanner connectionId={connectionId} />} */}
+      {/*
+       * KeyboardAvoidingView from react-native-keyboard-controller, NOT from
+       * react-native. Two bugs bracket this choice, both seen on device
+       * 2026-08-26: RN's version with iOS's default `behavior={undefined}` is
+       * inert, so the keyboard covered the composer and the message could not
+       * be sent; setting `behavior="padding"` fixed that but then raced the
+       * app-wide KeyboardProvider (mounted in app/App.tsx) — padding changed
+       * the layout, UIKit recomputed the keyboard frame, which re-rendered and
+       * recomputed the padding, ~133 UIKeyboardAutomatic frame events in a
+       * single second, and the composer lost keystrokes to the churn.
+       * The library's version reads the same animated keyboard values the
+       * provider already owns instead of racing UIKit, so there is exactly one
+       * source of truth for the offset.
+       */}
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: '#F5F5F5' }}
-        behavior={Platform.OS === 'ios' ? undefined : 'padding'}
+        behavior={'padding'}
         keyboardVerticalOffset={headerHeight}
       >
         <GiftedChat<ExtendedChatMessage>

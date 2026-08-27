@@ -18,7 +18,8 @@ exports[`Chat Screen Renders correctly 1`] = `
   }
 >
   <View
-    onLayout={[Function]}
+    behavior="padding"
+    keyboardVerticalOffset={100}
     style={
       Object {
         "backgroundColor": "#F5F5F5",
