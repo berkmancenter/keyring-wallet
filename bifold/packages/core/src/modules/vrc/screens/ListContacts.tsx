@@ -1,12 +1,11 @@
 import { W3cCredentialRecord } from '@credo-ts/core'
 
 import { isPeerVrcCredential } from '../credentialTypes'
-import { useConnections } from '@bifold/react-hooks'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useEffect, useMemo, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, FlatList, View, TouchableOpacity, StyleSheet, Platform } from 'react-native'
+import { FlatList, View, TouchableOpacity, StyleSheet, Platform } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -27,8 +26,6 @@ import {
 } from '../utils/witnessCredentialUtils'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
-import { vrcFlowStore } from '../witnessStatusStore'
-import { getConnectionName } from '../../../utils/helpers'
 
 const ListContacts: React.FC = () => {
   const { t: _t } = useTranslation()
@@ -41,35 +38,6 @@ const ListContacts: React.FC = () => {
   const {
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
-  const { records: connectionRecords } = useConnections()
-
-  // Exchanges in flight whose VRC hasn't landed yet: shown as pending rows so
-  // the new contact is visible immediately, not only once credentials arrive.
-  const [inFlightConnectionIds, setInFlightConnectionIds] = useState<string[]>(() =>
-    vrcFlowStore.getInFlightConnectionIds()
-  )
-  useEffect(() => {
-    const refresh = () => setInFlightConnectionIds(vrcFlowStore.getInFlightConnectionIds())
-    vrcFlowStore.on('flowUpdate', refresh)
-    return () => {
-      vrcFlowStore.off('flowUpdate', refresh)
-    }
-  }, [])
-
-  const pendingContacts = useMemo(
-    () =>
-      inFlightConnectionIds
-        .map((connectionId) => {
-          const connection = connectionRecords.find((r) => r.id === connectionId)
-          if (!connection) return undefined
-          return {
-            connectionId,
-            name: getConnectionName(connection, store.preferences.alternateContactNames ?? {}),
-          }
-        })
-        .filter((p): p is { connectionId: string; name: string } => p !== undefined),
-    [inFlightConnectionIds, connectionRecords, store.preferences.alternateContactNames]
-  )
 
   const CARD_BG = '#F5F5F5'
   const CARD_BORDER = 'rgba(170, 170, 170, 0.4)'
@@ -124,11 +92,6 @@ const ListContacts: React.FC = () => {
       fontSize: 16,
       color: NAME_COLOR,
       flex: 1,
-    },
-    pendingSubtitle: {
-      fontFamily: 'SourceSans3-Regular',
-      fontSize: 13,
-      color: '#666666',
     },
     badgeContainer: {
       flexDirection: 'row',
@@ -395,32 +358,6 @@ const ListContacts: React.FC = () => {
     )
   }
 
-  // Pending rows render above the credential-backed contacts. Same card
-  // styling; a spinner instead of badges, and not tappable — there is no
-  // contact detail to show until the credential lands.
-  const renderPendingRows = () =>
-    pendingContacts.length === 0 ? null : (
-      <View>
-        {pendingContacts.map((pending) => (
-          <View
-            key={`pending-${pending.connectionId}`}
-            style={styles.itemContainer}
-            accessible={true}
-            accessibilityLabel={`Contact exchange in progress: ${pending.name}`}
-          >
-            <View style={styles.avatarCircle}>
-              <Icon name="account-outline" size={22} color="#666666" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={styles.itemText}>{pending.name}</ThemedText>
-              <ThemedText style={styles.pendingSubtitle}>Exchange in progress...</ThemedText>
-            </View>
-            <ActivityIndicator size="small" color="#666666" />
-          </View>
-        ))}
-      </View>
-    )
-
   return (
     <View style={{ flex: 1 }}>
       <FlatList
@@ -429,8 +366,7 @@ const ListContacts: React.FC = () => {
         data={groupedContacts}
         keyExtractor={(item) => item.issuer.id}
         renderItem={renderContactItem}
-        ListHeaderComponent={renderPendingRows()}
-        ListEmptyComponent={pendingContacts.length === 0 ? EmptyContactsList : null}
+        ListEmptyComponent={EmptyContactsList}
         showsVerticalScrollIndicator={false}
       />
     </View>
