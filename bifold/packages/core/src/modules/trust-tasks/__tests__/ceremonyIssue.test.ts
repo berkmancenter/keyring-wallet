@@ -50,6 +50,7 @@ const SIGNED_VRC = {
 }
 
 jest.mock('../../vrc/vrc-manager', () => ({
+  RCE_PROTOCOL_VERSION: 4,
   getOrCreateRelationshipDid: jest.fn(async () => 'did:peer:0zMyRel'),
   getConnectedWitnessConnectionId: jest.fn(() => undefined),
   issueRCardForAcceptedExchange: jest.fn(async () => undefined),

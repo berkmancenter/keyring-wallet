@@ -46,6 +46,7 @@ import {
 } from '@credo-ts/core'
 
 import {
+  RCE_PROTOCOL_VERSION,
   getConnectedWitnessConnectionId,
   getOrCreateRelationshipDid,
   getVrcJsonLdProofOptions,
@@ -137,7 +138,56 @@ export async function maybeOpenRelationshipExchange(
   const existing = await documentRepository.findByQuery(agent.context, { typeUri: propose.TYPE_URI, connectionId })
   if (existing.length > 0) return
 
+  // Resume an exchange interrupted between "peer's discovery answer processed"
+  // and "propose sent". Both messages that normally drive the ceremony forward
+  // — the peer's rceVersion marker and its discovery response — are consumed
+  // exactly once, and openRelationshipExchange is otherwise only reachable
+  // from the response handler, so without this a restart in that window wedges
+  // the connection permanently: sendDiscoveryQuery below no-ops (our own query
+  // is already retained) and nothing ever sends the propose. Device logs
+  // 2026-08-26 showed the status stuck at 'connecting' through the 60s timeout
+  // after an app kill, repeatably. Safe to re-run: the negotiation gate is
+  // satisfied by the retained answer, and openRelationshipExchange is
+  // idempotent on the propose.
+  if ((await peerSupportsTaskType(agent, connectionId, propose.TYPE_URI)) === true) {
+    agent.config.logger.info(`${LOG_PREFIX} resuming exchange from retained discovery answer on ${connectionId}`)
+    await openRelationshipExchange(agent, connectionId)
+    return
+  }
+
   await sendDiscoveryQuery(agent, connectionId)
+}
+
+/**
+ * Re-drive Trust Task exchanges left in flight by an app restart.
+ *
+ * Nothing else can. The ceremony is opened by the peer's one-shot
+ * `vrc:relationshipDid:…vrc:rceVersion:N` basic message and advanced by its
+ * one-shot discovery response; both are consumed exactly once and never
+ * redelivered, while the progress state (vrcFlowStore) is in-memory and lost
+ * with the process. Called once at agent setup (setupVrcConnectionHandler).
+ *
+ * Keyed off persisted state only: RelationshipDidRecord carries the peer's
+ * announced rceVersion and its connectionId. Every step it reaches is
+ * idempotent, so a sweep on a fully-settled wallet is a no-op.
+ */
+export async function resumeInterruptedExchanges(agent: Agent): Promise<void> {
+  const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
+  const records = await repository.getAll(agent.context)
+  let resumed = 0
+  for (const record of records) {
+    const { connectionId, counterpartyRceVersion } = record
+    if (!connectionId || (counterpartyRceVersion ?? 1) < TRUST_TASKS_MIN_RCE_VERSION) continue
+    try {
+      await maybeOpenRelationshipExchange(agent, connectionId, counterpartyRceVersion as number, RCE_PROTOCOL_VERSION)
+      resumed += 1
+    } catch (e) {
+      agent.config.logger.warn(
+        `${LOG_PREFIX} resume check failed for connection ${connectionId}: ${(e as Error).message}`
+      )
+    }
+  }
+  agent.config.logger.info(`${LOG_PREFIX} resume sweep checked ${resumed} v4+ connection(s)`)
 }
 
 /**
@@ -170,6 +220,11 @@ async function sendDiscoveryQuery(agent: Agent, connectionId: string): Promise<v
   await service.retain(agent.context, document, 'request', connectionId)
   await sendTrustTaskDocument(agent, connectionId, document)
   agent.config.logger.info(`${LOG_PREFIX} discovery sent on connection ${connectionId}`)
+  // The peer's answer costs a mediated round trip; surface the wait.
+  if (vrcFlowStore.getStatus(connectionId) !== 'idle') {
+    vrcFlowStore.setDialect(connectionId, 'trust-tasks')
+    vrcFlowStore.setStatus(connectionId, 'discovering', vrcFlowStore.isWitnessedFlow(connectionId))
+  }
 }
 
 /**
@@ -237,6 +292,9 @@ async function openRelationshipExchange(agent: Agent, connectionId: string): Pro
   await service.retain(agent.context, document, 'request', connectionId)
   await sendTrustTaskDocument(agent, connectionId, document)
   agent.config.logger.info(`${LOG_PREFIX} propose sent (exchange ${exchangeId}) on connection ${connectionId}`)
+  // Waiting on the counterparty's consent — another mediated round trip.
+  vrcFlowStore.setDialect(connectionId, 'trust-tasks')
+  vrcFlowStore.setStatus(connectionId, 'proposed', vrcFlowStore.isWitnessedFlow(connectionId))
 }
 
 /**
@@ -912,7 +970,14 @@ async function handleInboundIssue(
       } else {
         agent.config.logger.info(`${LOG_PREFIX} issue already stored — receipting (exchange ${doc.threadId ?? doc.id})`)
       }
-      vrcFlowStore.setStatus(context.connectionId, 'offer-received', false)
+      // Their credential landed. If our own delivery is still running, only
+      // RECORD it — setting 'offer-received' here would hide the progress
+      // dialog mid-ceremony and the next step would pop it back up.
+      if (vrcFlowStore.hasSentOfferFlag(context.connectionId)) {
+        vrcFlowStore.setStatus(context.connectionId, 'offer-received', false)
+      } else {
+        vrcFlowStore.markOfferReceived(context.connectionId)
+      }
 
       // The receipt digest is computed over the credential AS STORED — here
       // byte-identical to the delivery we just accepted.

@@ -25,6 +25,7 @@ import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDi
 import * as witnessShare from '../witnessShareSpec'
 
 jest.mock('../../vrc/vrc-manager', () => ({
+  RCE_PROTOCOL_VERSION: 4,
   getOrCreateRelationshipDid: jest.fn(async () => 'did:peer:0zMyRel'),
   getConnectedWitnessConnectionId: jest.fn(() => undefined),
   issueRCardForAcceptedExchange: jest.fn(async () => undefined),

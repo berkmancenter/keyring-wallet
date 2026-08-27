@@ -10,8 +10,10 @@ import * as discovery from '@openvtc/trust-tasks/trust-task-discovery/0.1/payloa
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
 
 import {
+  getTrustTasksService,
   maybeOpenRelationshipExchange,
   respondToRelationshipProposal,
+  resumeInterruptedExchanges,
   setupTrustTasksInbound,
   isDeterministicProposer,
   TRUST_TASKS_MIN_RCE_VERSION,
@@ -21,6 +23,7 @@ import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
 
 jest.mock('../../vrc/vrc-manager', () => ({
+  RCE_PROTOCOL_VERSION: 4,
   getOrCreateRelationshipDid: jest.fn(async () => 'did:peer:my-rel'),
   getConnectedWitnessConnectionId: jest.fn(() => undefined),
   issueRCardForAcceptedExchange: jest.fn(async () => undefined),
@@ -32,7 +35,11 @@ function makeFakeAgent(options: { myDid: string; theirDid: string; connectionId?
   const connectionId = options.connectionId ?? 'conn-1'
   const stored: unknown[] = []
   const sentMessages: TrustTaskMessage[] = []
-  const relationshipRepo = { updateCounterpartyRelationshipDid: jest.fn(async () => null) }
+  const relationshipDidRecords: { connectionId?: string; counterpartyRceVersion?: number }[] = []
+  const relationshipRepo = {
+    updateCounterpartyRelationshipDid: jest.fn(async () => null),
+    getAll: jest.fn(async () => relationshipDidRecords),
+  }
   const registrations = new Map<unknown, { useFactory: (c: unknown) => unknown } | { instance: unknown }>()
   const singletons = new Map<unknown, unknown>()
 
@@ -98,7 +105,14 @@ function makeFakeAgent(options: { myDid: string; theirDid: string; connectionId?
     },
   }
   // Module.register(dependencyManager) accesses dependencyManager.container
-  return { agent: agent as never, sentMessages, relationshipRepo, connectionId, capturedHandlerRef: () => capturedHandler }
+  return {
+    agent: agent as never,
+    sentMessages,
+    relationshipRepo,
+    relationshipDidRecords,
+    connectionId,
+    capturedHandlerRef: () => capturedHandler,
+  }
 }
 
 const deliver = async (
@@ -265,5 +279,99 @@ describe('inbound routing', () => {
 
     expect(fake.relationshipRepo.updateCounterpartyRelationshipDid).not.toHaveBeenCalled()
     expect(fake.sentMessages).toHaveLength(0)
+  })
+})
+
+describe('resuming an exchange interrupted by a restart', () => {
+  /** A fake agent with the module registered, as real agent setup leaves it. */
+  const makeRestartedAgent = () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    setupTrustTasksInbound(fake.agent)
+    return fake
+  }
+
+  /**
+   * Retain the peer's discovery answer directly, bypassing the inbound handler
+   * — exactly the state a kill leaves behind when the answer was already
+   * processed but the propose never made it out. These tests never deliver()
+   * anything, so the registered handler stays dormant.
+   */
+  const retainPeerAnswer = async (fake: ReturnType<typeof makeFakeAgent>, theirDid: string, myDid: string) => {
+    const service = getTrustTasksService(fake.agent)
+    await service.retain(
+      (fake.agent as unknown as { context: unknown }).context as never,
+      {
+        id: 'eeee1111-0000-4000-8000-00000000000e',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: 'eeee1111-0000-4000-8000-00000000000e',
+        issuer: theirDid,
+        recipient: myDid,
+        issuedAt: new Date().toISOString(),
+        payload: { supportedTypes: [propose.TYPE_URI] },
+      } as never,
+      'response',
+      fake.connectionId
+    )
+  }
+
+  test('the propose is sent from the retained answer, not lost forever', async () => {
+    const fake = makeRestartedAgent()
+
+    // Pre-kill: our discovery query went out.
+    await maybeOpenRelationshipExchange(fake.agent, 'conn-1', 4, 4)
+    expect(fake.sentMessages).toHaveLength(1)
+    expect((fake.sentMessages[0].document as { type: string }).type).toBe(discovery.TYPE_URI)
+
+    // ...and the peer's answer was processed, but no propose was sent.
+    await retainPeerAnswer(fake, 'did:peer:4zzz', 'did:peer:4aaa')
+
+    // Post-restart sweep. Without the resume branch this sends nothing:
+    // sendDiscoveryQuery no-ops on our retained query and openRelationshipExchange
+    // is unreachable, so the connection stays wedged at 'connecting'.
+    fake.relationshipDidRecords.push({ connectionId: 'conn-1', counterpartyRceVersion: 4 })
+    await resumeInterruptedExchanges(fake.agent)
+
+    expect(fake.sentMessages).toHaveLength(2)
+    const doc = fake.sentMessages[1].document as { type: string; payload: { relationshipDid: string } }
+    expect(doc.type).toBe(propose.TYPE_URI)
+    expect(doc.payload.relationshipDid).toBe('did:peer:my-rel')
+  })
+
+  test('the sweep is idempotent — a second pass proposes nothing more', async () => {
+    const fake = makeRestartedAgent()
+    await maybeOpenRelationshipExchange(fake.agent, 'conn-1', 4, 4)
+    await retainPeerAnswer(fake, 'did:peer:4zzz', 'did:peer:4aaa')
+    fake.relationshipDidRecords.push({ connectionId: 'conn-1', counterpartyRceVersion: 4 })
+
+    await resumeInterruptedExchanges(fake.agent)
+    await resumeInterruptedExchanges(fake.agent)
+
+    // discovery + exactly one propose
+    expect(fake.sentMessages).toHaveLength(2)
+    expect(fake.sentMessages.filter((m) => (m.document as { type: string }).type === propose.TYPE_URI)).toHaveLength(1)
+  })
+
+  test('a sub-v4 peer is never swept', async () => {
+    const fake = makeRestartedAgent()
+    fake.relationshipDidRecords.push({ connectionId: 'conn-1', counterpartyRceVersion: 3 })
+    await resumeInterruptedExchanges(fake.agent)
+    expect(fake.sentMessages).toHaveLength(0)
+  })
+
+  test('a record with no announced version is never swept', async () => {
+    const fake = makeRestartedAgent()
+    fake.relationshipDidRecords.push({ connectionId: 'conn-1' })
+    await resumeInterruptedExchanges(fake.agent)
+    expect(fake.sentMessages).toHaveLength(0)
+  })
+
+  test('with no answer retained the sweep re-queries rather than proposing blind', async () => {
+    const fake = makeRestartedAgent()
+    // Nothing sent pre-kill at all: the sweep should open with discovery.
+    fake.relationshipDidRecords.push({ connectionId: 'conn-1', counterpartyRceVersion: 4 })
+    await resumeInterruptedExchanges(fake.agent)
+
+    expect(fake.sentMessages).toHaveLength(1)
+    expect((fake.sentMessages[0].document as { type: string }).type).toBe(discovery.TYPE_URI)
   })
 })

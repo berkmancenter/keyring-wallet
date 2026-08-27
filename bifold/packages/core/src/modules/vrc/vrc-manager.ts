@@ -1285,6 +1285,19 @@ async function handleSessionChallenge(
 export function setupVrcConnectionHandler(agent: Agent) {
   agent.config.logger.info('[VRC] Setting up automatic VRC connection handler')
 
+  // Re-drive any Trust Task exchange interrupted by a restart. The messages
+  // that drive the ceremony are consumed exactly once, so a kill mid-exchange
+  // otherwise leaves the connection wedged forever with no VRC (see
+  // resumeInterruptedExchanges). Lazy require for the same module-cycle reason
+  // as the call site below. Fire-and-forget: setup must not block on storage.
+  {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { resumeInterruptedExchanges } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+    resumeInterruptedExchanges(agent).catch((e: Error) =>
+      agent.config.logger.warn(`[VRC] Trust-task resume sweep failed: ${e.message}`)
+    )
+  }
+
   // Set up basic message handler to receive relationshipDid from counterparty AND witness protocol messages
   agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, async ({ payload }: any) => {
     const record = payload.basicMessageRecord as DidCommBasicMessageRecord
