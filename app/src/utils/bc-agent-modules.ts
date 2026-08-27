@@ -132,16 +132,32 @@ export function getBCAgentModules({
         // a status-request the mediator answers from its queue, so delivery is
         // request/ack'd instead of live-pushed into a websocket that may have
         // died silently (docs/spikes/e2e-vrc-connect-findings.md).
-        // 5s halves the per-hop idle time (a witnessed exchange is five-plus
-        // inbound hops per side). Safe since 2026-08-25: the mediator's
-        // pickup queue moved off askar (MESSAGE_PICKUP__STORAGE__TYPE=
-        // postgres) after we root-caused rate-correlated "Error processing
-        // message" failures to askar lock contention under concurrent polls
-        // (duplicate queue deletes -> rollbacks -> inbound timeouts eating
-        // forwards). A 2s-cadence probe now passes clean against the fixed
-        // mediator; keep an eye on the server if this is ever shortened
-        // further.
-        mediatorPollingInterval: 5_000,
+        // 1s, MEASURED. A non-witnessed v4 exchange is four mediated round
+        // trips (didexchange, discovery, propose, issue-receipt). A send is an
+        // immediate HTTP POST, but the peer only *discovers* it on its next
+        // poll and its reply only reaches us on ours, so one round trip costs
+        // up to TWO intervals and the exchange is bounded by ~8x the interval,
+        // not 4x. Device logs 2026-08-26, full exchange end to end:
+        //   10s interval → ~41s (four waits of 9.85 + 9.6 + 10.8 + 8.0s
+        //                        against <1s of local work)
+        //    2s interval → 16.1-19.4s, hops ~3-4s
+        //    1s interval → targets ~10-12s
+        // (An earlier reading that 5s "wasn't faster" came from witnessed
+        // runs, where the direct-HTTP witness ceremony dominated and masked
+        // this.) Hardware attestation adds ~2s on top, nearly all of it the
+        // passcode/biometric prompt, which is user time anyway.
+        //
+        // This is a FLAT interval for the life of the agent, not adaptive —
+        // at 1s that is ~86k mediator requests/day per idle wallet, which is
+        // fine for demo/testing but wants an idle/active split before it
+        // ships (see the parked adaptive-polling work).
+        //
+        // Safe since the mediator pickup queue moved off askar to postgres on
+        // 2026-08-26; before that a faster cadence tripped rate-correlated
+        // queue failures. Note mediatorPickupStrategy above is overridden at
+        // runtime by configureMessagePickup (useBCAgentSetup), which starts
+        // PickUpV2 explicitly — this interval is what governs.
+        mediatorPollingInterval: 1_000,
       },
     }),
     dids: new DidsModule({
