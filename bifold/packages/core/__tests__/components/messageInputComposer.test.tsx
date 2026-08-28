@@ -1,4 +1,4 @@
-import { renderComposer } from '../../src/components/chat/MessageInput'
+import { renderComposer, renderSend } from '../../src/components/chat/MessageInput'
 
 /**
  * gifted-chat's composer TextInput is fully controlled (value={text}), and the
@@ -82,5 +82,39 @@ describe('renderComposer textInputProps', () => {
 
     const styles = composer.props.textInputProps.style
     expect(styles[styles.length - 1]).toBe(callerStyle)
+  })
+})
+
+/**
+ * gifted-chat v3 ignores unknown props silently rather than erroring, so a v2
+ * prop name is invisible until someone notices the behaviour never happened.
+ * Pin the v3 names for Send (Send.d.ts accepts: children, containerStyle,
+ * isSendButtonAlwaysVisible, isTextOptional, label, sendButtonProps, text,
+ * textStyle — note there is no `alwaysShowSend` and no `disabled`).
+ */
+describe('renderSend uses v3 prop names', () => {
+  const theme = { sendEnabled: '#123456' }
+
+  test('asks for an always-visible send button by its v3 name', () => {
+    const send = renderSend({ text: 'hi' }, theme) as React.ReactElement
+
+    expect(send.props.isSendButtonAlwaysVisible).toBe(true)
+    expect(send.props).not.toHaveProperty('alwaysShowSend')
+  })
+
+  test('does not pass a `disabled` prop v3 would ignore', () => {
+    const send = renderSend({ text: '' }, theme) as React.ReactElement
+
+    // v3's Send already refuses to fire on empty text; `disabled` was v2-era
+    // and silently dropped, so passing it only misleads the reader.
+    expect(send.props).not.toHaveProperty('disabled')
+  })
+
+  test('still styles the button from the theme', () => {
+    const enabled = renderSend({ text: 'hi' }, theme) as React.ReactElement
+    const empty = renderSend({ text: '' }, theme) as React.ReactElement
+
+    expect(enabled.props.children.props.style.backgroundColor).toBe('#123456')
+    expect(empty.props.children.props.style.backgroundColor).toBe('#E0E0E0')
   })
 })

@@ -86,8 +86,13 @@ export const renderComposer = (props: any, theme: any, placeholder: string, disa
 export const renderSend = (props: any, theme: any) => (
   <Send
     {...props}
-    alwaysShowSend={true}
-    disabled={!props.text}
+    // v3 prop name. `alwaysShowSend` was v2 and is silently ignored, so the
+    // button was only rendered once text existed — which also made the grey
+    // "empty" state of the circle below unreachable. `disabled` is not part of
+    // v3's Send surface at all and was likewise dropped; it is unnecessary
+    // anyway, since Send already refuses to fire on empty text
+    // (onSend runs only when trimmedText.length || isTextOptional).
+    isSendButtonAlwaysVisible={true}
     containerStyle={{
       justifyContent: 'center',
       alignItems: 'center',
