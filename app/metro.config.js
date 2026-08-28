@@ -188,6 +188,35 @@ module.exports = (async () => {
         if (moduleName === 'js-sha256') {
           return context.resolveRequest(context, path.join(__dirname, 'node_modules', 'js-sha256'), platform)
         }
+        // @openvtc/trust-tasks subpaths (e.g. '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload')
+        //
+        // Its exports map declares only `types` and `import` conditions:
+        //   "./*": { "types": "./dist/*.d.ts", "import": "./dist/*.js" }
+        //
+        // There is no `require` and no `default`, so under CommonJS resolution
+        // nothing matches, Metro warns ("no match was resolved for this
+        // request"), falls back to file-based resolution, and fails — the
+        // subpath only exists under dist/. Dev bundles never hit this because
+        // BIFOLD_SOURCE_PACKAGES resolves core to ESM source; the release
+        // bundle resolves core to lib/commonjs, which is why `assembleRelease`
+        // broke while every debug build was fine.
+        // Mirror the map's `import` target explicitly. Adding `require` to
+        // unstable_conditionNames does not help: the package declares no such
+        // condition to match.
+        if (moduleName.startsWith('@openvtc/trust-tasks/')) {
+          const subPath = moduleName.slice('@openvtc/trust-tasks/'.length)
+          for (const base of [
+            path.join(__dirname, 'node_modules'),
+            path.join(__dirname, '..', 'bifold', 'packages', 'core', 'node_modules'),
+            path.join(__dirname, '..', 'bifold', 'node_modules'),
+            path.join(__dirname, '..', 'node_modules'),
+          ]) {
+            const candidate = path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)
+            if (fs.existsSync(candidate)) {
+              return { filePath: candidate, type: 'sourceFile' }
+            }
+          }
+        }
         // Intercept rdf-canonize package requests to ensure patched version is used
         if (moduleName === 'rdf-canonize' || moduleName.startsWith('rdf-canonize/')) {
           const subPath = moduleName.replace('rdf-canonize', '')
