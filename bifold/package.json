@@ -80,6 +80,7 @@
     "@animo-id/expo-secure-environment@npm:0.1.5": "patch:@animo-id/expo-secure-environment@npm%3A0.1.5#~/.yarn/patches/@animo-id-expo-secure-environment-npm-0.1.5-3c2a8f1b94.patch",
     "@sphereon/pex@npm:5.0.0-unstable.24": "patch:@sphereon/pex@npm%3A5.0.0-unstable.24#~/.yarn/patches/@sphereon-pex-npm-5.0.0-unstable.24-921df3a8ac.patch",
     "rdf-canonize": "^5.0.0",
-    "@credo-ts/didcomm": "patch:@credo-ts/didcomm@npm%3A0.6.3#~/.yarn/patches/@credo-ts-didcomm-npm-0.6.3-b3cbe5f2a8.patch"
+    "@credo-ts/didcomm": "patch:@credo-ts/didcomm@npm%3A0.6.3#~/.yarn/patches/@credo-ts-didcomm-npm-0.6.3-b3cbe5f2a8.patch",
+    "rxjs": "7.8.2"
   }
 }
