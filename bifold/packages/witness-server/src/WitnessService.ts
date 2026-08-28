@@ -1288,7 +1288,9 @@ export class WitnessService {
 
             const welcomeMessage =
               `Welcome to ${eventName}! 🎉\n\n` +
-              `I'm the ${this.name}. I am verifying credential exchanges during this event.\n\n` +
+              // No article before the name: WITNESS_NAME is a proper name, not a role.
+              // "I'm the keyring-demo-witness" read acceptably; "I'm the GDC - Day 2" does not.
+              `I'm ${this.name}. I am verifying credential exchanges during this event.\n\n` +
               `You're all set — go connect with others!`
 
             await new Promise((resolve) => setTimeout(resolve, 750))
@@ -1938,6 +1940,12 @@ export class WitnessService {
 
     // Create new invitation
     const outOfBand = await this.agent.modules.didcomm.oob.createInvitation({
+      // The wallet stores this as the connection's theirLabel and shows it as
+      // the contact name. Without it the invitation carries no label and the
+      // wallet falls back to the raw connection UUID, which is what the
+      // witness chat header displayed (device 2026-08-27). Note credo 0.6
+      // takes this on the invitation, not on the agent's InitConfig.
+      label: this.config.name,
       multiUseInvitation: true,
     })
 
@@ -2081,7 +2089,7 @@ export class WitnessService {
    * Create a single-use connection invitation
    */
   public async createConnectionInvitation(): Promise<string> {
-    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation()
+    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation({ label: this.config.name })
     const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
       domain: this.config.publicUrl,
     })
