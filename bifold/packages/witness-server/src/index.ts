@@ -58,8 +58,17 @@ async function main(): Promise<void> {
   if (config.llmEnabled) {
     const baseUrlInfo = config.anthropicBaseUrl ? ` (base URL: ${config.anthropicBaseUrl})` : ''
     console.log(`  LLM:          ENABLED${baseUrlInfo}`)
+    console.log(`                Provider: ${config.llmProvider}`)
     console.log(`                API key: ${config.anthropicApiKey ? 'present' : 'NOT SET'}`)
-    console.log(`                Model: ${config.anthropicModel || 'claude-sonnet-4-20250514 (default)'}`)
+    // Report the default for the provider actually selected — this line used to
+    // print the Anthropic default unconditionally, which read as "using Claude"
+    // on a DeepSeek run.
+    console.log(
+      `                Model: ${
+        config.anthropicModel ||
+        (config.llmProvider === 'deepseek' ? 'deepseek-chat (default)' : 'claude-sonnet-4-20250514 (default)')
+      }`
+    )
     console.log(`                Max tokens: ${config.anthropicMaxTokens || '500 (default)'}`)
   } else {
     console.log(`  LLM:          disabled`)
