@@ -267,7 +267,23 @@ export function buildWitnessCredentialJson(
   const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
   const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
   const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
-  const issuedTimestamp = new Date().toISOString()
+  // Backdate validFrom, exactly as the wallet already does when it builds a VRC
+  // ("Backdate issuance to tolerate clock skew between issuer and holder
+  // devices — the holder rejects credentials whose issuanceDate is in its
+  // future", vrc-manager.buildVrcCredential). The witness never got the same
+  // treatment, and it is the one issuer whose credential is verified within a
+  // second of being signed, so it is the most exposed:
+  //   "The current date time (…54.965Z) is before validFrom (…55.261Z)"
+  // — a 296 ms miss observed on device 2026-08-30. The holder's
+  // outcome-evidence self-check then failed and it withheld its witness-share,
+  // so the peer never received a VWC about them and their contact showed no
+  // witness badge. It presented as intermittent and platform-specific; it was
+  // neither, just clock skew.
+  //
+  // Safe: the credential attests an exchange that has already happened, and
+  // validUntil still runs from now. CLOCK_SKEW_ALLOWANCE_MS is the same
+  // allowance the freshness window above is already built around.
+  const issuedTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
   const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
 
   if (vrcIsVc20) {
