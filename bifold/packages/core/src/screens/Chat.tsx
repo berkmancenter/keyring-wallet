@@ -244,7 +244,6 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
             <View style={styles.flowOverlayContent}>
               {vrcConfirmed ? (
                 <>
-                  <Text style={styles.flowOverlayConfirmIcon}>✓</Text>
                   <Text style={styles.flowOverlayText}>
                     {theirLabel
                       ? `Relationship confirmed — ${theirLabel} added to Contacts`
@@ -324,10 +323,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   flowOverlayTimeoutIcon: {
-    fontSize: 36,
-    marginBottom: 4,
-  },
-  flowOverlayConfirmIcon: {
     fontSize: 36,
     marginBottom: 4,
   },
