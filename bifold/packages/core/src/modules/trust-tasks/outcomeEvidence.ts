@@ -137,6 +137,30 @@ export async function verifyVwcPresentationBundle(agent: Agent, options: VerifyB
   const failures: string[] = []
   const { bundle } = options
 
+  // Surface credo's own error detail when a proof fails. This function used to
+  // discard it — verifyPresentation/verifyCredential expose only isValid, and
+  // the credential path had a bare `catch {}` — so a failing self-check could
+  // only ever report "did not verify", and the witness-share was withheld with
+  // no way to learn why.
+  //
+  // That cost real time: the actual cause turned out to be a 296 ms clock skew
+  // making the VWC not-yet-valid ("current date time … is before validFrom"),
+  // which read as an intermittent, platform-specific crypto failure for weeks.
+  // Keep these: an unregistered cryptosuite, an unresolvable context, a stale
+  // clock and a genuinely bad signature are indistinguishable from isValid.
+  const logger = agent.config.logger
+  const detail = (r: unknown): string => {
+    try {
+      const anyR = r as { error?: unknown; validations?: unknown }
+      const parts: string[] = []
+      if (anyR?.error) parts.push(`error=${(anyR.error as Error)?.message ?? JSON.stringify(anyR.error)}`)
+      if (anyR?.validations) parts.push(`validations=${JSON.stringify(anyR.validations)}`)
+      return parts.join(' ') || JSON.stringify(r)
+    } catch {
+      return '<unserialisable>'
+    }
+  }
+
   // 1. The presentation verifies under the verifier's challenge and domain.
   let vwc: Record<string, unknown> | undefined
   try {
@@ -146,11 +170,18 @@ export async function verifyVwcPresentationBundle(agent: Agent, options: VerifyB
       challenge: options.challenge,
       domain: options.domain,
     })
-    if (!result.isValid) failures.push('presentation proof did not verify')
+    if (!result.isValid) {
+      failures.push('presentation proof did not verify')
+      logger.warn(
+        `[TrustTasks:Evidence] presentation verification failed — challenge=${options.challenge} ` +
+          `domain=${options.domain} ${detail(result)}`
+      )
+    }
     const credentials = (bundle.presentation as { verifiableCredential?: unknown[] }).verifiableCredential ?? []
     vwc = credentials[0] as Record<string, unknown> | undefined
   } catch (e) {
     failures.push(`presentation is not well-formed: ${(e as Error).message}`)
+    logger.warn(`[TrustTasks:Evidence] presentation threw: ${(e as Error).stack ?? (e as Error).message}`)
   }
   if (!vwc) failures.push('presentation carries no credential')
 
@@ -159,11 +190,32 @@ export async function verifyVwcPresentationBundle(agent: Agent, options: VerifyB
   if (vwc) {
     try {
       const instance = JsonTransformer.fromJSON(vwc, W3cJsonLdVerifiableCredential)
-      credentialValid = (await agent.w3cCredentials.verifyCredential({ credential: instance })).isValid
-    } catch {
+      const credResult = await agent.w3cCredentials.verifyCredential({ credential: instance })
+      credentialValid = credResult.isValid
+      if (!credentialValid) {
+        logger.warn(`[TrustTasks:Evidence] credential verification failed — ${detail(credResult)}`)
+      }
+    } catch (e) {
       credentialValid = false
+      logger.warn(`[TrustTasks:Evidence] credential threw: ${(e as Error).stack ?? (e as Error).message}`)
     }
     if (!credentialValid) failures.push('credential proof did not verify')
+  }
+
+  if (failures.length) {
+    // The proof types and issuers narrow it fast: a suite that is not
+    // registered, a context the loader cannot resolve, and a genuinely bad
+    // signature look identical from isValid alone.
+    try {
+      const vpProof = (bundle.presentation as { proof?: Record<string, unknown> })?.proof
+      const vcProof = (vwc as { proof?: Record<string, unknown> } | undefined)?.proof
+      logger.warn(
+        `[TrustTasks:Evidence] bundle shape — vpProof=${JSON.stringify(vpProof)} ` +
+          `vcIssuer=${JSON.stringify((vwc as { issuer?: unknown })?.issuer)} vcProof=${JSON.stringify(vcProof)}`
+      )
+    } catch {
+      /* diagnostics must never break the check */
+    }
   }
 
   // 3–7. The pairing checklist.
