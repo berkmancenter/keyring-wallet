@@ -221,7 +221,6 @@ export const FLOW_HARD_TIMEOUT_MS = 180000
 // background; the overlay must never be hostage to it.
 export const RCARD_TRAILING_GRACE_MS = 30000
 // How long the success beat stays up before the dialog clears itself.
-export const CONFIRMATION_LINGER_MS = 4000
 
 export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState => {
   const [inProgress, setInProgress] = useState(false)
@@ -420,17 +419,11 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           setTimedOut(false)
           setStatusText('')
           setConfirmed(true)
-          completionTimerRef.current = setTimeout(() => {
-            completionTimerRef.current = null
-            setInProgress(false)
-            setConfirmed(false)
-            setProgressFraction(0)
-            setProgressComplete(false)
-            progressStartedRef.current = false
-            maxFractionRef.current = 0
-            flowStartedAtRef.current = null
-            rcardGraceExpiredRef.current = false
-          }, CONFIRMATION_LINGER_MS)
+          // No auto-dismiss. The confirmation is the one moment the user is
+          // asked to act — it offers a way through to Contacts — and a timer
+          // was yanking it away mid-reach (device 2026-08-29). It now waits
+          // for onDismissConfirmation(), i.e. the button or an explicit
+          // dismissal.
         } else {
           setInProgress(false)
           setStatusText('')

@@ -4,7 +4,6 @@ import {
   useVrcFlowInProgress,
   FLOW_TIMEOUT_MS_NON_WITNESSED,
   FLOW_TIMEOUT_MS_WITNESSED,
-  CONFIRMATION_LINGER_MS,
 } from '../../src/hooks/chat-messages'
 import { vrcFlowStore } from '../../src/modules/vrc/witnessStatusStore'
 
@@ -133,9 +132,9 @@ describe('useVrcFlowInProgress - timeout behavior', () => {
       vrcFlowStore.setStatus('conn-1', 'offer-received', false)
     })
 
-    // A successful flow now holds a confirmation beat before clearing
+    // A successful flow holds the confirmation until the user dismisses it
     act(() => {
-      jest.advanceTimersByTime(CONFIRMATION_LINGER_MS)
+      result.current.onDismissConfirmation()
     })
 
     expect(result.current.inProgress).toBe(false)
@@ -205,9 +204,9 @@ describe('useVrcFlowInProgress - timeout behavior', () => {
       vrcFlowStore.setStatus('conn-1', 'offer-received', false)
     })
 
-    // A successful flow now holds a confirmation beat before clearing
+    // A successful flow holds the confirmation until the user dismisses it
     act(() => {
-      jest.advanceTimersByTime(CONFIRMATION_LINGER_MS)
+      result.current.onDismissConfirmation()
     })
 
     expect(result.current.timedOut).toBe(false)
@@ -245,7 +244,7 @@ describe('useVrcFlowInProgress - R-Card trailing beat', () => {
       vrcFlowStore.markRcardReceiveComplete('conn-1')
     })
     act(() => {
-      jest.advanceTimersByTime(CONFIRMATION_LINGER_MS)
+      result.current.onDismissConfirmation()
     })
 
     expect(result.current.inProgress).toBe(false)
@@ -270,7 +269,7 @@ describe('useVrcFlowInProgress - R-Card trailing beat', () => {
       jest.advanceTimersByTime(30000)
     })
     act(() => {
-      jest.advanceTimersByTime(CONFIRMATION_LINGER_MS)
+      result.current.onDismissConfirmation()
     })
 
     expect(result.current.inProgress).toBe(false)
@@ -288,7 +287,7 @@ describe('useVrcFlowInProgress - R-Card trailing beat', () => {
       vrcFlowStore.setStatus('conn-1', 'offer-received', false)
     })
     act(() => {
-      jest.advanceTimersByTime(CONFIRMATION_LINGER_MS)
+      result.current.onDismissConfirmation()
     })
 
     expect(result.current.inProgress).toBe(false)
@@ -305,7 +304,7 @@ describe('useVrcFlowInProgress - R-Card trailing beat', () => {
       vrcFlowStore.setStatus('conn-1', 'offer-received', false)
     })
     act(() => {
-      jest.advanceTimersByTime(CONFIRMATION_LINGER_MS)
+      result.current.onDismissConfirmation()
     })
     expect(result.current.inProgress).toBe(false)
 
@@ -379,7 +378,7 @@ describe('useVrcFlowInProgress - success confirmation beat', () => {
     jest.useRealTimers()
   })
 
-  it('holds a confirmation beat after a successful exchange, then clears', () => {
+  it('holds the confirmation after a successful exchange until dismissed', () => {
     const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
 
     act(() => {
@@ -396,7 +395,7 @@ describe('useVrcFlowInProgress - success confirmation beat', () => {
     expect(result.current.progressComplete).toBe(true)
 
     act(() => {
-      jest.advanceTimersByTime(CONFIRMATION_LINGER_MS)
+      result.current.onDismissConfirmation()
     })
 
     expect(result.current.confirmed).toBe(false)
