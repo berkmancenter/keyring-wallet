@@ -36,8 +36,10 @@ import {
   sleep,
 } from "./lib/driver.js";
 import {
-  acceptCredentialOfferFromChat,
   acceptInvitationViaPaste,
+  acceptRelationshipProposalIfPrompted,
+  assertSecureExchangeBadge,
+  assertTrustTaskExchangeMarkers,
   assertVrcReceived,
   completeOnboarding,
   enableHardwareAttestation,
@@ -247,8 +249,9 @@ try {
 
   console.log(
     "\n[e2e] ATTENDED RUN — keep both phones unlocked and within reach.\n" +
-      "[e2e] You will be asked to authenticate (biometric or device PIN) when\n" +
-      "[e2e] the OPERATOR banner appears in this console.\n"
+      "[e2e] A relationship proposal appears on one phone (auto-accepted); then\n" +
+      "[e2e] satisfy the BIOMETRIC prompt on EACH phone when the OPERATOR banner\n" +
+      "[e2e] appears in this console.\n"
   );
 
   android = await createSession("android", androidDeviceCaps(androidUdid));
@@ -269,18 +272,31 @@ try {
   const invitationUrl = await showRelationshipInvitation(android);
   await acceptInvitationViaPaste(ios, invitationUrl);
 
-  // Bidirectional exchange. expectAttestation makes each receiver REQUIRE the
-  // Secure Exchange banner (peer evidence chain-validated on-device).
-  // Longer timeout than emulators: two hardware signings + human auth in the loop.
+  // v4 consent: one bottom-sheet on the non-proposer wallet, no per-credential
+  // offers — both signed VRCs then flow automatically as trust tasks. The
+  // biometric prompts fire during the signed delivery that follows consent.
   await Promise.all([
-    acceptCredentialOfferFromChat(android, 600000, { expectAttestation: true }),
-    acceptCredentialOfferFromChat(ios, 600000, { expectAttestation: true }),
+    acceptRelationshipProposalIfPrompted(android),
+    acceptRelationshipProposalIfPrompted(ios),
   ]);
 
   await Promise.all([
     assertVrcReceived(android, "Bob Baker"),
     assertVrcReceived(ios, "Alice Anderson"),
   ]);
+
+  // The crypto gates, from Android's run-scoped logcat (no-op on iOS —
+  // Android's log covers both directions of the exchange).
+  await Promise.all([
+    assertTrustTaskExchangeMarkers(android),
+    assertTrustTaskExchangeMarkers(ios),
+  ]);
+
+  // Each receiver REQUIRES the Secure Exchange badge (peer evidence
+  // chain-validated on-device) — the device-attestation gate this test exists
+  // to prove.
+  await assertSecureExchangeBadge(android, "Bob Baker");
+  await assertSecureExchangeBadge(ios, "Alice Anderson");
 
   printSuccess("vrc-exchange:devices");
   process.exitCode = 0;
