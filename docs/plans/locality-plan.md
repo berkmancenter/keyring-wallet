@@ -35,6 +35,7 @@ specifically, so the coupling can be checked rather than assumed:
 | [2026-08-19-bam.md](./locality-plan/2026-08-19-bam.md) | Dispositions on the three 2026-08-19-al.md findings: all three adopted, with the `windowSeconds` anchor narrowed to a sensor-side-only trust parameter, separated from the device's own (non-normative) advertise timeout |
 | [2026-08-20-bam.md](./locality-plan/2026-08-20-bam.md) | `ref-06p2` built and run against a real phone: why a raw-HCI-socket BLE library (`@abandonware/noble`) failed silently on the dev machine it was first run on, and why BlueZ's D-Bus interface (`node-ble`) is the right default for `witness-server`'s own `BleLocalityProvider` (§10.2 item 2), not just this rung's workaround |
 | [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) | `ref-06p3`, `ref-06p4`, and `ref-06p5` built and run: the §7.3 verifier's three-state coverage, the one-real-leg simplification `ref-06p4` uses for the relay trial and why, the measured numbers (100ms first fully caught against a 224.7ms bound), a reconnect-retry bug (stale `Device` object across retries) that feeds back into §10.2 item 2, the App-Attest-vs-Play-Integrity offline-verifiability asymmetry behind new Q7, and why a summarizing web fetch is unsafe for pinning cryptographic material |
+| [2026-09-01-bam.md](./locality-plan/2026-09-01-bam.md) | Item 12 run live on real hardware, both witnessed e2e variants passing. Two bugs the run surfaced and fixed: the witness-connect pre-flight sheet (item 8) couldn't tell a witness's `offered` policy apart from `off`, so it fired for witnesses with no locality leg at all; and once gated correctly, the sheet had no operator cue, so an attended run stalled on it anyway. Supersedes item 8's "always shown first" text |
 
 ---
 
@@ -1137,10 +1138,18 @@ Android/iOS tooling asymmetry in this environment.**
    the run where discovery already told the wallet. — **Data layer** (as
    before): `queryWitnessDiscovery` (`trust-tasks/ceremony.ts`) fires at
    witness-connect from `WitnessConnectionProvider.tsx`'s
-   `handleWitnessAnnouncement`, and `getWitnessLocalityRequirement` reads the
-   retained answer's `witness/session` row for `requiredExt`, three-state
-   (`true`/`false`/`null`-not-yet-known) exactly like the existing
-   `peerSupportsTaskType`. **The sheet is now built**: `LocalityPreflightModal`
+   `handleWitnessAnnouncement`, and `getWitnessLocalitySupport` reads the
+   retained answer's `witness/session` row for `requiredExt`/`offeredExt`,
+   returning a tri-state (`required`/`offered`/`off`/`null`-not-yet-known)
+   — `off`, or a row with neither marker, means no locality leg at all.
+   **Superseded (2026-09-01-bam.md): the offer state is not "always shown
+   first" regardless of policy** — that language only reasoned about
+   telling `offered` apart from `required`, and missed that discovery
+   originally couldn't tell `offered` apart from `off` either (both produced
+   identical `supportedTypes`), so the sheet fired for witnesses with no
+   locality leg at all. Discovery now marks `offeredExt` distinctly, and the
+   sheet is scheduled only when support resolves to `offered` or `required`.
+   **The sheet is now built**: `LocalityPreflightModal`
    (mounted at root beside `RelationshipProposalModal`), shown at most once
    per install — a new `hasSeenLocalityPreflight` preference, one-way once
    set, sibling to `useLocalityConfirmation`'s own store/reducer pattern —
@@ -1148,10 +1157,12 @@ Android/iOS tooling asymmetry in this environment.**
    and 11's remaining sheet into one (see item 11's own entry for why: §8.4's
    own "only new prompt surface" language settles this as one sheet, not two).
    `WitnessConnectionProvider` schedules it from `handleWitnessAnnouncement`
-   right after firing discovery, polling `getWitnessLocalityRequirement` for
-   up to 5s (failing open to `required: false` on timeout or a thrown error,
-   never blocking) so a `required` answer that arrives in time drives the
-   harder copy rather than the sheet only ever showing the generic offer.
+   right after firing discovery, polling `getWitnessLocalitySupport` for
+   up to 5s (failing open to `offered` — i.e. still showing the sheet, just
+   without the harder required-refusal copy — on timeout or a thrown error,
+   never silently suppressing it) so a `required` answer that arrives in time
+   drives the harder copy rather than the sheet only ever showing the generic
+   offer.
    Declining reuses the existing `useLocalityConfirmation` setting (no new
    per-session gate invented) — `resolveLocalityPreflight(false)` flips it off
    through the same dispatch action Settings uses, which
@@ -1319,11 +1330,13 @@ Android/iOS tooling asymmetry in this environment.**
    sheet's body names what the assertion discloses if confirmed — venue, a
    time window, and the witness — before the ceremony, not after. See item
    8's entry for the sheet's full detail and test coverage.
-12. 🟡 **`e2e:vrc:devices` covers locality** on physical phones with a real sensor —
+12. ✅ **`e2e:vrc:devices` covers locality** on physical phones with a real sensor —
     the same rule that already makes hardware attestation provable only there.
     *Done when:* the suite fails if the locality assertion is missing or
-    unconfirmed on a run where it should be confirmed. — **Written, not yet
-    run live.** A new script, `run-vrc-exchange-witnessed-locality-android-only-devices.js`
+    unconfirmed on a run where it should be confirmed. — **Run live (2026-09-01),
+    passing: both phones' co-presence confirmed over a real BLE round trip,
+    VWC issued, on this Linux host's own Bluetooth adapter.** A script,
+    `run-vrc-exchange-witnessed-locality-android-only-devices.js`
     (`yarn e2e:vrc:witnessed:locality:android-only`), extends the existing
     android-only witnessed-exchange flow: sets `WITNESS_LOCALITY_REQUIRED=true`
     before the witness starts (so it refuses to issue a VWC without a
@@ -1338,8 +1351,10 @@ Android/iOS tooling asymmetry in this environment.**
     no iOS peripheral, AND the witness's own BLE sensor (`node-ble`/BlueZ)
     only runs on Linux — this is the one witnessed-exchange variant where the
     machine running the test needs its own real Bluetooth adapter, not just
-    the phones. **Not run**: no two physical Android phones plus a
-    BLE-capable Linux host were available in this session to run it against.
+    the phones. The first live run found the witness-connect sheet had no
+    operator cue (item 8's dated companion, 2026-09-01) — fixed with a loud
+    banner before either phone connects to the witness, same treatment as
+    the existing biometric banner. Second attempt passed clean.
 13. ✅ **A vocabulary guard in CI**, not a discipline. A test in the bifold suite
     expands **every credential shape we issue** against the real context document
     and fails on any dropped term — `ref-06p` act 6 promoted from a rung
