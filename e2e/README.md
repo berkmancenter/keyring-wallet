@@ -412,6 +412,53 @@ Since the relationship exchange moved onto Trust Tasks (plan: `docs/plans/openvt
 - **Known intermittents on simulators, not regressions:** one wallet occasionally misses the witness connection ("only 1/2 participants connected") or iOS never sends the didexchange request (the open "iOS no-send"); the witness agent init can hang under heavy machine load. Re-run. Distinct from a **deterministic 0/N** failure, seen on real devices through 2026-08-31: the witness silently running in mediator mode with a push-only pickup strategy against a mediator that only queues — fixed (see `docs/spikes/e2e-vrc-connect-findings.md`, "fourth failure layer"), and the harness no longer lets a local `.env` put the witness back into that mode by accident.
 - **Between runs:** free ports 4750/9002/9003 and kill stray `cloudflared`; cold-reboot an emulator that has been up for hours (its host network path degrades).
 
+## A local VTA for real-VTA testing (`lib/vta.js`)
+
+`startVta()` (`lib/vta.js`) brings up a real, disposable OpenVTC `vta` binary
+(https://firstperson.dev) for testing against — the piece
+`trust_tasks_subtask.md` §9 step 4 (credential-exchange against a live
+`vta-service`) needed and didn't have. Non-interactive end to end: `vta setup
+--from` (a generated TOML, no prompts), an offline-minted admin `did:key`, the
+daemon started and health-checked through its own HTTPS tunnel — same
+`cloudflared` quick-tunnel approach `startWitness` already uses, just applied
+to a second, independent process.
+
+```js
+import { startVta } from "./lib/vta.js";
+
+const vta = await startVta();
+// vta.vtaDid, vta.vtaUrl, vta.adminDid, vta.adminCredential (base64; decode
+// for { did, privateKeyMultibase, vtaDid, vtaUrl } — what a client needs to
+// authenticate as this admin)
+...
+await vta.stop();
+```
+
+**Prerequisites:**
+
+- [`cloudflared`](https://github.com/cloudflare/cloudflared) (already required
+  for the witnessed exchange above).
+- The `vta` binary — download it yourself, this harness doesn't fetch it:
+  `curl -O https://download.firstperson.dev/vta/latest/vta && chmod +x vta`.
+  Point `VTA_BIN` at it, or put it on `PATH`. See the [OpenVTC developer
+  tutorial](https://github.com/OpenVTC/vti-setup/tree/main/developer) for the
+  wider ecosystem (the `pnm`/`openvtc` CLIs, joining a community) — this
+  harness only automates the `vta` half.
+
+**Every call mints a brand-new VTA, never a persistent one.** `did:webvh`'s
+identifier is derived from its hosting domain, and a free cloudflared quick
+tunnel gets a random new hostname every run — so the DID this VTA gets is
+never resolvable again once `stop()` tears the tunnel down. That's the right
+shape for a spin-up-fresh-per-run test fixture (same as the witness server
+above) and the wrong shape for anything meant to persist across sessions —
+don't reach for this to stand up a long-lived dev VTA.
+
+Defaults: REST-only (no mediator — pass `mediatorDid` once a local/test
+mediator exists to point it at), ports 8180/8181 (chosen to avoid
+4723/8101/9002/9003, already used by Appium/WDA/the witness server above),
+plaintext seed storage (dev-only, matches upstream's own `"plaintext"`
+backend warning — never use this shape for anything real).
+
 ## Troubleshooting
 
 - **Isolating the witness-connect step**: `node debug-witness-connect.js` (run
