@@ -325,14 +325,15 @@ is not reachable from the mode observation alone.
   machine-specific," above), so `stop()`'s existing cleanup removes it
   automatically and no run can inherit another run's persisted mediation
   state. `yarn fresh` is no longer relevant to the e2e path at all.
-- **The mediator-mode fallback now has its own confirmable test**:
-  `yarn e2e:vrc:witnessed:android-only:mediator` (2026-09-01) runs the same
-  witnessed exchange with the witness deliberately put into MEDIATOR mode,
-  reusing `app/.env`'s own `MEDIATOR_URL` so it's a real test against actual
-  infrastructure rather than a stand-in. This is the direct answer to how this
-  bug survived: mediator mode was never exercised by anything, deterministic
-  or otherwise. See `e2e/README.md`, "Confirming the mediator-mode fallback."
-  No periodic/CI job runs it automatically yet — manual, on demand, for now.
+- **The mediator-mode fallback now has its own confirmable test, and it's been
+  run and passed** (see below): `yarn e2e:vrc:witnessed:android-only:mediator`
+  (2026-09-01) runs the same witnessed exchange with the witness deliberately
+  put into MEDIATOR mode, reusing `app/.env`'s own `MEDIATOR_URL` so it's a
+  real test against actual infrastructure rather than a stand-in. This is the
+  direct answer to how this bug survived: mediator mode was never exercised by
+  anything, deterministic or otherwise. See `e2e/README.md`, "Confirming the
+  mediator-mode fallback." No periodic/CI job runs it automatically yet —
+  manual, on demand, for now.
 
 **Open tuning question:** the witness sets no `mediatorPollingInterval`, so it
 polls at credo's 5 s default — previously it polled not at all, so this is new
@@ -344,9 +345,11 @@ value got, not a guess. Left open deliberately.
 
 ### Confirmed fixed on device (2026-09-01)
 
-`yarn e2e:vrc:witnessed:android-only`, two physical Android phones
-(SM_G986U1 / Android 13, SM_S936U / Android 16), against the same production
-mediator, with the applied fix and harness hardening above. First run after the
+Same two physical Android phones (SM_G986U1 / Android 13, SM_S936U / Android
+16) for both runs below, against the same production mediator, with the
+applied fix and harness hardening above.
+
+**DIRECT mode** (`yarn e2e:vrc:witnessed:android-only`) — first run after the
 fix: **passed**. Witness banner read `DIRECT (HTTP)` as requested (transport
 guard confirmed the override took effect); both phones got `🤝 NEW PARTICIPANT
 CONNECTED` / `✓ Sent witness-announcement` from the witness — the exact signal
@@ -355,6 +358,20 @@ badge; one landed **Secure Exchange** too, the other tolerated a hardware
 verification warning (a pre-existing, documented tolerance for an aging
 attestation root — see `assertSecureExchangeBadge` in `e2e/lib/flows.js` —
 unrelated to this bug). This closes the fourth failure layer.
+
+**MEDIATOR mode** (`yarn e2e:vrc:witnessed:android-only:mediator`, the new
+confirmable-fallback variant) — first run: also **passed**. Witness banner
+read `MEDIATOR (WebSocket)` as requested; both phones again got `🤝 NEW
+PARTICIPANT CONNECTED` / `✓ Sent witness-announcement`, this time actually
+delivered through the shared production mediator instead of direct HTTP; same
+badge outcome as the DIRECT run (one full `Witnessed` + `Secure Exchange`, one
+`Witnessed` with the same pre-existing hardware-verification tolerance). This
+is the first time mediator-mode witnessing has been confirmed working end to
+end on real devices — it was silently, completely broken from 2026-08-24
+until this fix, and nothing had exercised it before this run.
+
+Both transport modes the witness supports are now proven working on real
+hardware, not just by unit test or code inspection.
 
 ## Environment gotchas that cost debugging time but are not code bugs
 
