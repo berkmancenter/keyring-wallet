@@ -265,6 +265,13 @@ const ListCredentials: React.FC = () => {
     <View>
       <FlatList
         style={{ backgroundColor: ColorPalette.brand.primaryBackground }}
+        // flexGrow lets ListEmptyComponent fill the viewport. The empty state
+        // asks to be centred (flex: 1 + justifyContent: 'center'), but flex: 1
+        // collapses to the content's own height inside a FlatList whose content
+        // container does not grow — so it rendered top-anchored instead of
+        // centred, unlike Contacts, which has always passed flexGrow here.
+        // Latent until the wallet list legitimately became empty (2026-09-01).
+        contentContainerStyle={{ flexGrow: 1 }}
         data={credentials.sort((a, b) => new Date(b.createdAt).valueOf() - new Date(a.createdAt).valueOf())}
         keyExtractor={(credential) => credential.id}
         renderItem={({ item: credential, index }) => {
