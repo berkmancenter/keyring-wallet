@@ -16,12 +16,14 @@ this folder is a small standalone npm package.
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
 | `yarn e2e:vrc:witnessed:devices` | Witnessed + hardware-attested exchange on a **physical Android phone + iPhone**, routed through a locally-run witness server — both wallets end up with a Verifiable Witness Credential (VWC) in addition to the peer VRC | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
+| `yarn e2e:vrc:witnessed:android-only:mediator` | Same as above, but the witness runs in **MEDIATOR mode** (through the shared production mediator) instead of the default DIRECT mode — confirms the mediator-mode fallback still works, on demand, without hand-setting an env var. See "Confirming the mediator-mode fallback" below. | **Yes** |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
 `vrc-exchange:android-only`, `vrc-exchange:devices`,
 `vrc-exchange:devices:android-only`, `store-migration`,
 `store-migration:android-only`, `onboarding-smoke`,
-`vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`.
+`vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`,
+`vrc-exchange:witnessed:android-only:mediator`.
 
 Every script above ends by printing a bordered pass/fail banner
 (`lib/banner.js`) so a completed run is easy to spot when scrolled back
@@ -368,6 +370,35 @@ adb devices                                      # list connected serials
 ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
   yarn e2e:vrc:witnessed:android-only
 ```
+
+### Confirming the mediator-mode fallback (`yarn e2e:vrc:witnessed:android-only:mediator`)
+
+DIRECT (the default above) is the recommended architecture for a live
+witnessing ceremony — lower latency, and it keeps the witness's traffic off
+the same shared mediator that already sees the two wallets' own relationship
+(see `docs/plans/openvtc-integration-plan/trust_tasks_subtask.md` for why that
+matters). But a witness operator who can't or doesn't want to expose a public
+port needs MEDIATOR mode to actually work as a fallback — and it silently
+didn't, for over a week, because nothing exercised that path (see
+`docs/spikes/e2e-vrc-connect-findings.md`, "fourth failure layer"). This
+variant runs the exact same witnessed exchange with the witness deliberately
+put into MEDIATOR mode, so that fallback gets confirmed on demand instead of
+rotting unnoticed again.
+
+Same devices, same attended flow, same everything as
+`yarn e2e:vrc:witnessed:android-only` — the only difference is the witness's
+transport. It reuses `app/.env`'s own `MEDIATOR_URL` as the witness's mediator
+invitation (same production mediator the wallets already connect to, so this
+is a real test of the actual fallback, not a stand-in); override with
+`WITNESS_MEDIATOR_INVITATION_URL` if you need a different one. Fails fast,
+before touching any device, if neither is available.
+
+There's no periodic/CI job running this automatically yet — it's a manual
+confirmation step for now. Worth doing after any change to mediation setup
+(`@bifold/vrc-shared` `src/mediation.ts`, `WitnessService.ts`'s
+`mediationRecipient` config, or the app's own `configureMessagePickup`), and
+periodically otherwise so this doesn't silently break again between real
+uses of the fallback.
 
 ## The Trust Task dialect (v4) — what the runs assert now
 

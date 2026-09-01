@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,6 +7,30 @@ const repoRoot = path.resolve(
   "..",
   ".."
 );
+
+/**
+ * The witness's mediator invitation for the ":mediator" e2e variant (see
+ * run-vrc-exchange-witnessed-android-only-devices-mediator.js). Reuses
+ * app/.env's own MEDIATOR_URL rather than requiring a second, separately
+ * maintained value: it's the same production mediator the wallets already
+ * connect to, so this is what makes the variant a real test of "does
+ * mediator-mode witnessing work against our actual infrastructure" rather
+ * than a stand-in. Set WITNESS_MEDIATOR_INVITATION_URL to override.
+ */
+export function resolveWitnessMediatorInvitationUrl() {
+  if (process.env.WITNESS_MEDIATOR_INVITATION_URL) {
+    return process.env.WITNESS_MEDIATOR_INVITATION_URL;
+  }
+  const appEnvPath = path.join(repoRoot, "app", ".env");
+  if (existsSync(appEnvPath)) {
+    const match = readFileSync(appEnvPath, "utf-8").match(/^MEDIATOR_URL=(.+)$/m);
+    if (match) return match[1].trim();
+  }
+  throw new Error(
+    "no mediator invitation URL to run the witness against — set WITNESS_MEDIATOR_INVITATION_URL, " +
+      "or set MEDIATOR_URL in app/.env (reused as-is: same production mediator the wallets already use)."
+  );
+}
 
 export const APP_ID = "asml.bkc.harvard.wallet";
 export const TEST_ID_PREFIX = "com.ariesbifold:id/";

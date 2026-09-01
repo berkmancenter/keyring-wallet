@@ -325,6 +325,14 @@ is not reachable from the mode observation alone.
   machine-specific," above), so `stop()`'s existing cleanup removes it
   automatically and no run can inherit another run's persisted mediation
   state. `yarn fresh` is no longer relevant to the e2e path at all.
+- **The mediator-mode fallback now has its own confirmable test**:
+  `yarn e2e:vrc:witnessed:android-only:mediator` (2026-09-01) runs the same
+  witnessed exchange with the witness deliberately put into MEDIATOR mode,
+  reusing `app/.env`'s own `MEDIATOR_URL` so it's a real test against actual
+  infrastructure rather than a stand-in. This is the direct answer to how this
+  bug survived: mediator mode was never exercised by anything, deterministic
+  or otherwise. See `e2e/README.md`, "Confirming the mediator-mode fallback."
+  No periodic/CI job runs it automatically yet — manual, on demand, for now.
 
 **Open tuning question:** the witness sets no `mediatorPollingInterval`, so it
 polls at credo's 5 s default — previously it polled not at all, so this is new
