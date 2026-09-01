@@ -23,7 +23,7 @@
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource } from "./lib/driver.js";
 import {
   acceptInvitationViaPaste,
-  acceptRelationshipProposalIfPrompted,
+  acceptRelationshipProposalOnEitherSide,
   assertContactShields,
   assertTrustTaskExchangeMarkers,
   assertWitnessCeremonyMarkers,
@@ -61,10 +61,7 @@ try {
   const invitationUrl = await showRelationshipInvitation(a);
   await acceptInvitationViaPaste(b, invitationUrl);
 
-  await Promise.all([
-    acceptRelationshipProposalIfPrompted(a),
-    acceptRelationshipProposalIfPrompted(b),
-  ]);
+  await acceptRelationshipProposalOnEitherSide(a, b);
 
   await Promise.all([
     assertVrcReceived(a, "Bob Baker"),

@@ -21,7 +21,7 @@ import {
 } from "./lib/driver.js";
 import {
   acceptInvitationViaPaste,
-  acceptRelationshipProposalIfPrompted,
+  acceptRelationshipProposalOnEitherSide,
   assertTrustTaskExchangeMarkers,
   assertVrcReceived,
   completeOnboarding,
@@ -69,10 +69,7 @@ try {
   // v4 pairs: consent is the RELATIONSHIP PROPOSAL — one side gets the
   // "wants to form a relationship" prompt; on Accept both signed VRCs flow
   // automatically as trust tasks (no per-credential offers to accept).
-  await Promise.all([
-    acceptRelationshipProposalIfPrompted(a),
-    acceptRelationshipProposalIfPrompted(b),
-  ]);
+  await acceptRelationshipProposalOnEitherSide(a, b);
 
   await Promise.all([
     assertVrcReceived(a, "Bob Baker"),

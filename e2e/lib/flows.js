@@ -662,7 +662,10 @@ export async function returnToContacts(driver) {
  */
 export async function openContactDetail(driver, peerName) {
   // Already on the peer's chat? (header menu present + peer name visible)
-  if (!(await existsTestId(driver, "ContactMenu", 2000))) {
+  const alreadyOnPeerChat =
+    (await existsTestId(driver, "ContactMenu", 2000)) &&
+    (await byTextContains(driver, peerName).isExisting());
+  if (!alreadyOnPeerChat) {
     let onTab = false;
     for (let backs = 0; backs < 3 && !onTab; backs++) {
       if (await existsTestId(driver, "Contacts", 3000)) {
@@ -1042,4 +1045,24 @@ export async function acceptRelationshipProposalIfPrompted(driver, timeout = 900
   }
   console.log(`[e2e] ${driver.e2ePlatform}: no proposal prompt (peer side proposed)`);
   return false;
+}
+
+/**
+ * Run acceptRelationshipProposalIfPrompted on both sides of an exchange and
+ * assert that at least one of them actually saw the proposal. If discovery
+ * failed and neither side was ever prompted, both calls return false and the
+ * run would otherwise fall through into assertVrcReceived's generic
+ * "contact never appeared" timeout — fail loudly here instead, with the
+ * specific cause.
+ */
+export async function acceptRelationshipProposalOnEitherSide(driverA, driverB, timeout = 90000) {
+  const [acceptedA, acceptedB] = await Promise.all([
+    acceptRelationshipProposalIfPrompted(driverA, timeout),
+    acceptRelationshipProposalIfPrompted(driverB, timeout),
+  ]);
+  if (!acceptedA && !acceptedB) {
+    throw new Error(
+      `${driverA.e2ePlatform}/${driverB.e2ePlatform}: neither side saw a relationship proposal prompt within ${timeout}ms — discovery likely failed`
+    );
+  }
 }

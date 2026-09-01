@@ -37,12 +37,24 @@ import { BCState, BCLocalStorageKeys } from '@/store'
  * stale socket kills a DIDComm exchange. OkHttp on Android retries stale
  * pooled connections transparently — this restores parity by retrying the
  * send once on a fresh connection. See docs/spikes/e2e-vrc-connect-findings.md.
+ *
+ * Only that specific symptom is retried: CredoError wraps the fetch-layer
+ * failure as `cause`, and "Network request failed" is thrown before any
+ * response is received, so the POST body was never delivered. Any other
+ * failure (including one after a response came back, e.g. a body-parsing
+ * error) is rethrown as-is rather than resending an already-delivered,
+ * non-idempotent message.
  */
 class RetryingHttpOutboundTransport extends DidCommHttpOutboundTransport {
   public async sendMessage(outboundPackage: Parameters<DidCommHttpOutboundTransport['sendMessage']>[0]) {
     try {
       return await super.sendMessage(outboundPackage)
-    } catch {
+    } catch (error) {
+      const cause = error instanceof Error ? error.cause : undefined
+      const causeMessage = cause instanceof Error ? cause.message : undefined
+      if (causeMessage !== 'Network request failed') {
+        throw error
+      }
       return await super.sendMessage(outboundPackage)
     }
   }

@@ -37,7 +37,7 @@ import {
 } from "./lib/driver.js";
 import {
   acceptInvitationViaPaste,
-  acceptRelationshipProposalIfPrompted,
+  acceptRelationshipProposalOnEitherSide,
   assertSecureExchangeBadge,
   assertTrustTaskExchangeMarkers,
   assertVrcReceived,
@@ -207,10 +207,7 @@ try {
   // v4 consent: one bottom-sheet on the non-proposer wallet, no per-credential
   // offers — both signed VRCs then flow automatically as trust tasks. The
   // biometric prompts fire during the signed delivery that follows consent.
-  await Promise.all([
-    acceptRelationshipProposalIfPrompted(android),
-    acceptRelationshipProposalIfPrompted(android2),
-  ]);
+  await acceptRelationshipProposalOnEitherSide(android, android2);
 
   await Promise.all([
     assertVrcReceived(android, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`),
