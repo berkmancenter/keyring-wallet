@@ -10,6 +10,7 @@
  * compiles with no ambient Node types on purpose, so a stray Node import
  * fails the build. Server-only helpers belong in @bifold/vrc-shared.
  */
+export * from './carriage'
 export * from './documentProof'
 export * from './TrustTaskMessage'
 export * from './validator'

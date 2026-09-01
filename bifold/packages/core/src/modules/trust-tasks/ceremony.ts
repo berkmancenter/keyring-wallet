@@ -25,11 +25,6 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import {
-  DidCommMessageHandlerRegistry,
-  DidCommMessageSender,
-  DidCommOutboundMessageContext,
-} from '@credo-ts/didcomm'
 import * as discovery from '@openvtc/trust-tasks/trust-task-discovery/0.1/payload'
 import * as issue from '@openvtc/trust-tasks/vrc/relationships/issue/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
@@ -61,7 +56,7 @@ import { digestMultibase, signDocumentProof, verifyDocumentProof } from './docum
 import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
 import type { VwcPresentationBundle } from './outcomeEvidence'
-import { TrustTaskMessage } from './messages/TrustTaskMessage'
+import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
 import { TrustTasksModule } from './module/TrustTasksModule'
 import { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
 import { TrustTasksService, respondWith, rejectWith, extendedCode } from './services/TrustTasksService'
@@ -349,14 +344,7 @@ export async function sendTrustTaskDocument(
   connectionId: string,
   document: Record<string, unknown>
 ): Promise<void> {
-  const connection = await agent.modules.didcomm.connections.getById(connectionId)
-  const messageSender = agent.dependencyManager.container.resolve(DidCommMessageSender)
-  await messageSender.sendMessage(
-    new DidCommOutboundMessageContext(new TrustTaskMessage({ document }), {
-      agentContext: agent.context,
-      connection,
-    })
-  )
+  await createDidCommV1Carriage(agent).send(document, { connectionId })
 }
 
 /**
@@ -366,9 +354,8 @@ export async function sendTrustTaskDocument(
  */
 export function setupTrustTasksInbound(agent: Agent): void {
   const service = getTrustTasksService(agent)
-  const registry = agent.dependencyManager.container.resolve(DidCommMessageHandlerRegistry)
 
-  TrustTasksModule.registerMessageHandler(registry, async (document, context) => {
+  createDidCommV1Carriage(agent).onDocument(async (document, context) => {
     const type = String(document.type ?? '')
     const logger = agent.config.logger
 
