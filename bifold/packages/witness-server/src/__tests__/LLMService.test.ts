@@ -65,7 +65,9 @@ describe('LLMService', () => {
         rateLimitGlobalWindow: 60,
       }
 
-      expect(() => new LLMService(config)).toThrow('Anthropic API key is required')
+      // Provider-neutral since DeepSeek support landed: the message names the
+      // provider rather than assuming Anthropic.
+      expect(() => new LLMService(config)).toThrow('An API key is required when LLM is enabled')
     })
 
     it('should initialize successfully with valid config', () => {

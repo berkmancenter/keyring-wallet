@@ -72,7 +72,8 @@ const TabStack: React.FC = () => {
           navigation,
           true, // isDeepLink
           enableImplicitInvitations,
-          enableReuseConnections
+          enableReuseConnections,
+          store.preferences.walletName
         )
       } catch (err: unknown) {
         const error = new BifoldError(
@@ -89,7 +90,7 @@ const TabStack: React.FC = () => {
         })
       }
     },
-    [agent, enableImplicitInvitations, enableReuseConnections, logger, navigation, t, dispatch]
+    [agent, enableImplicitInvitations, enableReuseConnections, logger, navigation, store.preferences.walletName, t, dispatch]
   )
 
   useEffect(() => {

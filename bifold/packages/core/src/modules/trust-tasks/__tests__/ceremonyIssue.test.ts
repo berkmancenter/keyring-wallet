@@ -50,6 +50,7 @@ const SIGNED_VRC = {
 }
 
 jest.mock('../../vrc/vrc-manager', () => ({
+  RCE_PROTOCOL_VERSION: 4,
   getOrCreateRelationshipDid: jest.fn(async () => 'did:peer:0zMyRel'),
   getConnectedWitnessConnectionId: jest.fn(() => undefined),
   issueRCardForAcceptedExchange: jest.fn(async () => undefined),
@@ -259,6 +260,21 @@ describe('the proposer side (auto-delivery on acceptance)', () => {
     // idempotent: a second delivery attempt for the same exchange is a no-op
     await deliverVrcViaTrustTaskForExchange(fake.agent, fake.connectionId, proposeDoc.id)
     expect(fake.sentMessages).toHaveLength(3)
+  })
+
+  test('concurrent duplicate triggers deliver exactly once (in-flight guard)', async () => {
+    // The persisted prior-issue check only protects AFTER an issue document is
+    // retained; a redelivered trigger while the first delivery is still in
+    // flight must be swallowed by the in-flight guard (observed live as a
+    // second biometric prompt + a duplicate witness session, 2026-08-25).
+    const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz' })
+    const exchangeId = 'cccc1111-0000-4000-8000-00000000000c'
+    await Promise.all([
+      deliverVrcViaTrustTaskForExchange(fake.agent, fake.connectionId, exchangeId),
+      deliverVrcViaTrustTaskForExchange(fake.agent, fake.connectionId, exchangeId),
+    ])
+    const issues = fake.sentMessages.filter((m) => (m.document as { type?: string }).type === issue.TYPE_URI)
+    expect(issues).toHaveLength(1)
   })
 })
 

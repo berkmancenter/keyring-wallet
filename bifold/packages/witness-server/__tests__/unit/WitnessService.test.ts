@@ -36,6 +36,10 @@ import {
   WITNESSED_EXCHANGE_CONTEXT_URL,
 } from '@bifold/vrc-contexts'
 import { defaultConfig, isMediatorEnabled, WitnessServerConfig } from '../../src/config'
+import {
+  assertSupportedMediatorPickupStrategy,
+  SUPPORTED_MEDIATOR_PICKUP_STRATEGY,
+} from '@bifold/vrc-shared'
 
 describe('WitnessService - SessionData', () => {
   /**
@@ -652,23 +656,41 @@ describe('WitnessService - Transport Configuration', () => {
     })
   })
 
-  describe('Implicit pickup strategy', () => {
+  describe('Mediator pickup strategy', () => {
     /**
-     * When using a mediator, the WitnessService configures MediationRecipientModule
-     * with MediatorPickupStrategy.Implicit, which means:
-     * - Messages are delivered via WebSocket push
-     * - No explicit polling required
-     * - Real-time message delivery
+     * This block used to "document" MediatorPickupStrategy.Implicit as the intended
+     * behaviour, with an `expect(true).toBe(true)` body. Implicit is push-only and
+     * our mediator queues rather than pushes, so the witness received nothing at all
+     * while still sending fine — and the test asserted none of it, so nothing caught
+     * it. See docs/spikes/e2e-vrc-connect-findings.md ("fourth failure layer").
+     *
+     * These assertions are deliberately about the CONTRACT, not about credo's
+     * internals: a pull strategy is required, and push-only strategies must be
+     * rejected loudly rather than silently producing a deaf agent.
      */
-    it('documents that implicit pickup strategy is used', () => {
-      // This test documents the expected behavior:
-      // The MediationRecipientModule is configured with:
-      // - mediatorInvitationUrl: config.mediatorInvitationUrl
-      // - mediatorPickupStrategy: MediatorPickupStrategy.Implicit
-      //
-      // Implicit pickup means the mediator pushes messages to us
-      // over the WebSocket connection, rather than us polling.
-      expect(true).toBe(true)
+    it('uses a pull strategy, never a push-only one', () => {
+      expect(SUPPORTED_MEDIATOR_PICKUP_STRATEGY).toBe('PickUpV2')
+    })
+
+    it.each(['Implicit', 'PickUpV2LiveMode', 'None'])(
+      'rejects %s with an explanation, rather than failing silently at runtime',
+      (strategy) => {
+        expect(() => assertSupportedMediatorPickupStrategy(strategy, 'test')).toThrow(
+          /cannot receive messages/
+        )
+      }
+    )
+
+    it('rejects an unset strategy, since credo would fall back to persisted wallet state', () => {
+      expect(() => assertSupportedMediatorPickupStrategy(undefined, 'test')).toThrow(
+        /no mediator pickup strategy set/
+      )
+    })
+
+    it('accepts the supported strategy', () => {
+      expect(() =>
+        assertSupportedMediatorPickupStrategy(SUPPORTED_MEDIATOR_PICKUP_STRATEGY, 'test')
+      ).not.toThrow()
     })
   })
 

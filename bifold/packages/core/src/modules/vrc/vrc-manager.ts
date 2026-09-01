@@ -1296,6 +1296,19 @@ async function handleSessionChallenge(
 export function setupVrcConnectionHandler(agent: Agent) {
   agent.config.logger.info('[VRC] Setting up automatic VRC connection handler')
 
+  // Re-drive any Trust Task exchange interrupted by a restart. The messages
+  // that drive the ceremony are consumed exactly once, so a kill mid-exchange
+  // otherwise leaves the connection wedged forever with no VRC (see
+  // resumeInterruptedExchanges). Lazy require for the same module-cycle reason
+  // as the call site below. Fire-and-forget: setup must not block on storage.
+  {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { resumeInterruptedExchanges } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+    resumeInterruptedExchanges(agent).catch((e: Error) =>
+      agent.config.logger.warn(`[VRC] Trust-task resume sweep failed: ${e.message}`)
+    )
+  }
+
   // Set up basic message handler to receive relationshipDid from counterparty AND witness protocol messages
   agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, async ({ payload }: any) => {
     const record = payload.basicMessageRecord as DidCommBasicMessageRecord
@@ -1822,13 +1835,14 @@ export function setupVrcConnectionHandler(agent: Agent) {
             // two VWCs. Known gap, recorded in the plan companion: the task
             // dialect does not carry the reporting edge yet, so v4 pairs
             // skip witness-reporting until it does.
-            const relationshipRecordForDialect = connection.theirDid
-              ? await agent.dependencyManager
-                  .resolve(RelationshipDidRepository)
-                  .findByConnectionDid(agent.context, connection.theirDid)
-              : null
-            const v4Pair =
-              RCE_PROTOCOL_VERSION >= 4 && (relationshipRecordForDialect?.counterpartyRceVersion ?? 1) >= 4
+            // Use the counterpartyRceVersion parsed from the triggering message
+            // itself (in scope from above), not a repository re-read: the DB
+            // write for it (updateCounterpartyRelationshipDid, above) is a no-op
+            // when my own RelationshipDidRecord hasn't been created yet, which
+            // races with this same handler (see the ~25ms race noted above) and
+            // silently drops the version, making a genuine v4 pair read back as
+            // v1 and skip this gate.
+            const v4Pair = RCE_PROTOCOL_VERSION >= 4 && counterpartyRceVersion >= 4
             if (v4Pair && witnessConnected) {
               issueLogger.info(`v4 pair — witness ceremony rides the trust-task session; legacy witness flow stands down`)
             }
@@ -2055,6 +2069,12 @@ export function setupVrcConnectionHandler(agent: Agent) {
               released = true // the rcardExchange tag keeps it hidden for good
               await agent.modules.didcomm.credentials.update(record)
 
+              // Let the exchange overlay narrate the card exchange (a trailing
+              // "exchanging contact cards" beat) — never a completion gate.
+              if (record.connectionId) {
+                vrcFlowStore.markRcardReceivePending(record.connectionId)
+              }
+
               await agent.modules.didcomm.credentials.acceptOffer({
                 credentialExchangeRecordId: record.id,
               })
@@ -2223,7 +2243,19 @@ export function setupVrcConnectionHandler(agent: Agent) {
 
       // Skip RCard exchanges: they piggyback on the VRC connection but must not
       // drive the exchange-flow overlay states (offer-sent / offer-received).
-      if (record.metadata.get('rcardExchange')) return
+      // The one signal they DO feed the overlay: the inbound card completing
+      // (the peer's name becomes resolvable) ends the trailing
+      // "exchanging contact cards" beat.
+      if (record.metadata.get('rcardExchange')) {
+        if (
+          record.state === DidCommCredentialState.Done &&
+          record.role === DidCommCredentialRole.Holder &&
+          record.connectionId
+        ) {
+          vrcFlowStore.markRcardReceiveComplete(record.connectionId)
+        }
+        return
+      }
       try {
         const formatData = await agent.modules.didcomm.credentials.getFormatData(record.id)
         const offer = (formatData?.offer as any)?.jsonld ?? (formatData?.offer as any)?.ldProof
@@ -2252,12 +2284,21 @@ export function setupVrcConnectionHandler(agent: Agent) {
         if (record.connectionId) {
           const currentStatus = vrcFlowStore.getStatus(record.connectionId)
 
-          // Don't clear the overlay if we're still in a witness flow.
-          // The other party's offer arriving early shouldn't interrupt our
-          // witness verification / fallback sequence.
+          // Don't tear the progress dialog down while OUR OWN side is still
+          // working. The witness states were guarded already, but the v4
+          // ceremony also passes through 'preparing-offer' and
+          // 'sharing-witness-record' — an inbound credential landing in one of
+          // those hid the dialog, and the ceremony's next status brought it
+          // back (the flicker seen on slower hardware, 2026-08-25). In the
+          // trust-task dialect nothing here is user-actionable (the credential
+          // is auto-stored), so the dialog stays until we've sent ours; legacy
+          // still clears, because there the user has an offer to accept.
           const inWitnessFlow = currentStatus === 'witness-active' || currentStatus === 'witness-fallback'
-          if (inWitnessFlow) {
-            credLogger.info(`[VRC Flow] Received offer but witness flow active (${currentStatus}) — keeping overlay, marking received`)
+          const ownDeliveryPending =
+            vrcFlowStore.getDialect(record.connectionId) === 'trust-tasks' &&
+            !vrcFlowStore.hasSentOfferFlag(record.connectionId)
+          if (inWitnessFlow || ownDeliveryPending) {
+            credLogger.info(`[VRC Flow] Received offer but own side still active (${currentStatus}) — keeping overlay, marking received`)
             vrcFlowStore.markOfferReceived(record.connectionId)
           } else {
             credLogger.info(`[VRC Flow] Setting 'offer-received' | Previous status: ${currentStatus}`)

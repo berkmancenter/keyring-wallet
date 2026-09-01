@@ -24,6 +24,7 @@ export { trustTaskPayloadValidator } from './validator'
 export {
   setupTrustTasksInbound,
   maybeOpenRelationshipExchange,
+  resumeInterruptedExchanges,
   sendTrustTaskDocument,
   getTrustTasksService,
   isDeterministicProposer,

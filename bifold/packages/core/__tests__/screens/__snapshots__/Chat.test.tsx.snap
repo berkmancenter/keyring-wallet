@@ -18,7 +18,6 @@ exports[`Chat Screen Renders correctly 1`] = `
   }
 >
   <View
-    onLayout={[Function]}
     style={
       Object {
         "backgroundColor": "#F5F5F5",
@@ -56,7 +55,7 @@ exports[`Chat Screen Renders correctly 1`] = `
         >
           <View
             behavior="translate-with-padding"
-            keyboardVerticalOffset={0}
+            keyboardVerticalOffset={100}
             style={
               Object {
                 "flex": 1,

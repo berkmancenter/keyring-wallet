@@ -229,6 +229,20 @@ describe('getConnectionName', () => {
     const result = getConnectionName(connection as unknown as DidCommConnectionRecord, alternateContactNames)
     expect(result).toBe('')
   })
+  test('With theirLabel equal to the OOB-invitation placeholder, falls through to alias', async () => {
+    const connection = { id: '1', theirLabel: 'didcomm-oob-invitation', alias: 'Mikey' }
+    const alternateContactNames = {}
+
+    const result = getConnectionName(connection as DidCommConnectionRecord, alternateContactNames)
+    expect(result).toBe('Mikey')
+  })
+  test('With theirLabel equal to the OOB-invitation placeholder and no alias, falls through to id', async () => {
+    const connection = { id: '1', theirLabel: 'didcomm-oob-invitation' }
+    const alternateContactNames = {}
+
+    const result = getConnectionName(connection as DidCommConnectionRecord, alternateContactNames)
+    expect(result).toBe('1')
+  })
 })
 
 describe('credDefIdFromRestrictions', () => {

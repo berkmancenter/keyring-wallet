@@ -43,16 +43,52 @@ export type {
 
 const LOG_PREFIX = '[VRC:Sign]'
 
-const GOOGLE_ROOT_CA_EXPIRY = new Date('2026-05-24T16:45:52Z')
+/**
+ * The Google attestation roots actually embedded on the Android side —
+ * GoogleAttestationRoots.ROOT_PEM_BLOCKS. Dates are the certificates' own
+ * notAfter values, read out of those PEMs.
+ *
+ * Chain validation succeeds if ANY of these still verifies the chain, so one
+ * root lapsing is not a failure: only pre-RKP factory-keyed devices depend on
+ * the legacy root, and those chains re-verify against the re-signed RSA root
+ * that replaced it. Remote Key Provisioning devices chain to the ECDSA root
+ * instead. This check previously tracked the legacy root alone and so logged
+ * a hard "cross-device verification will fail" error from 2026-05-24 onward
+ * while verification was in fact working (Galaxy S25+ verified both
+ * directions, docs/HARDWARE_ATTESTATION_FLOW.md).
+ */
+const GOOGLE_ATTESTATION_ROOTS: readonly { name: string; expiry: Date }[] = [
+  { name: 'legacy RSA', expiry: new Date('2026-05-24T16:45:52Z') },
+  { name: 're-signed RSA', expiry: new Date('2042-03-15T18:07:48Z') },
+  { name: 'RKP ECDSA P-384', expiry: new Date('2035-07-15T22:32:18Z') },
+]
 
 function checkGoogleRootCaExpiry(logger: any): void {
-  const daysUntilExpiry = Math.floor((GOOGLE_ROOT_CA_EXPIRY.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-  if (daysUntilExpiry < 180 && daysUntilExpiry > 0) {
-    logger.warn(
-      `${LOG_PREFIX} ⚠ Embedded Google root CA expires in ${daysUntilExpiry} days (2026-05-24) — update required`
+  const now = Date.now()
+  const live = GOOGLE_ATTESTATION_ROOTS.filter((root) => root.expiry.getTime() > now)
+  const lapsed = GOOGLE_ATTESTATION_ROOTS.filter((root) => root.expiry.getTime() <= now)
+
+  if (live.length === 0) {
+    logger.error(
+      `${LOG_PREFIX} ⚠ ALL embedded Google roots have EXPIRED — Android cross-device verification will fail`
     )
-  } else if (daysUntilExpiry <= 0) {
-    logger.error(`${LOG_PREFIX} ⚠ Embedded Google root CA has EXPIRED — Android cross-device verification will fail`)
+    return
+  }
+
+  const soonest = live.reduce((a, b) => (a.expiry < b.expiry ? a : b))
+  const daysUntilExpiry = Math.floor((soonest.expiry.getTime() - now) / (1000 * 60 * 60 * 24))
+  if (daysUntilExpiry < 180) {
+    logger.warn(
+      `${LOG_PREFIX} ⚠ Google root "${soonest.name}" expires in ${daysUntilExpiry} days — update required`
+    )
+  }
+
+  if (lapsed.length > 0) {
+    logger.info(
+      `${LOG_PREFIX} ${lapsed.length}/${GOOGLE_ATTESTATION_ROOTS.length} embedded Google root(s) lapsed ` +
+        `(${lapsed.map((r) => r.name).join(', ')}); ${live.length} still valid — verification unaffected ` +
+        `except for pre-RKP factory-keyed devices`
+    )
   }
 }
 

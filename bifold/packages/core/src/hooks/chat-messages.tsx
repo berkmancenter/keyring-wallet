@@ -22,7 +22,7 @@ import { OpenIDCredentialType } from '../modules/openid/types'
 import { isDTGCredential, isRCardTemplate, isRelationshipCredential } from '../modules/vrc/credentialTypes'
 import { credentialDisplayRegistry } from '../modules/vrc/display/displayRegistry'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
-import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore } from '../modules/vrc/witnessStatusStore'
+import { witnessStatusStore, WitnessStatusMessage, vrcFlowStore, type VrcFlowStatus } from '../modules/vrc/witnessStatusStore'
 import { useStore } from '../contexts/store'
 import { Role } from '../types/chat'
 import { RootStackParams, ContactStackParams, Screens, Stacks } from '../types/navigators'
@@ -165,26 +165,77 @@ export interface VrcFlowOverlayState {
   inProgress: boolean
   statusText: string
   timedOut: boolean
-  /** Non-zero when a progress bar should be shown, value = animation duration in ms. */
-  progressDurationMs: number
+  /**
+   * Milestone-driven progress target in [0, 1] — non-zero when the bar should
+   * be shown. Advances with the flow's actual status transitions (monotonic:
+   * it never moves backwards) rather than animating a fixed timeout duration.
+   */
+  progressFraction: number
   /** True when the flow just completed — bar should snap to 100% before overlay clears. */
   progressComplete: boolean
+  /**
+   * True for a short beat after a SUCCESSFUL exchange: the dialog stays up to
+   * say the relationship is confirmed and the contact is now in Contacts,
+   * rather than just vanishing and leaving the user wondering.
+   */
+  confirmed: boolean
   onDismissTimeout: () => void
+  /** Dismiss the confirmation beat early (e.g. the user tapped through). */
+  onDismissConfirmation: () => void
 }
+
+// Milestones: how far along the exchange each flow status represents. The
+// same status can recur ('preparing-offer' runs before AND after the witness
+// ceremony), so the hook applies these monotonically — the bar only advances.
+const STATUS_PROGRESS: Record<VrcFlowStatus, number> = {
+  idle: 0,
+  connecting: 0.1,
+  discovering: 0.18,
+  proposed: 0.26,
+  'preparing-offer': 0.35,
+  'biometric-fallback': 0.35,
+  'witness-active': 0.55,
+  'witness-fallback': 0.55,
+  'sharing-witness-record': 0.75,
+  'offer-sent': 0.85,
+  'offer-received': 0.9,
+}
+// The trailing contact-card beat sits past every send milestone.
+const RCARD_TRAILING_PROGRESS = 0.92
+
+/**
+ * The milestone ladder, sorted — the bar creeps slowly toward (never past)
+ * the next rung while the flow waits on protocol round trips, so a static
+ * multi-second wait doesn't read as a hang.
+ */
+export const PROGRESS_MILESTONES: readonly number[] = [
+  ...new Set([...Object.values(STATUS_PROGRESS), RCARD_TRAILING_PROGRESS, 1]),
+].sort((a, b) => a - b)
 
 export const FLOW_TIMEOUT_MS_NON_WITNESSED = 60000
 export const FLOW_TIMEOUT_MS_WITNESSED = 120000
 export const FLOW_HARD_TIMEOUT_MS = 180000
+// After the VRC exchange completes, the overlay lingers up to this long
+// narrating the (best-effort, fire-and-forget) R-Card exchange, then clears
+// regardless — the card finishing later still resolves the name in the
+// background; the overlay must never be hostage to it.
+export const RCARD_TRAILING_GRACE_MS = 30000
+// How long the success beat stays up before the dialog clears itself.
 
 export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState => {
   const [inProgress, setInProgress] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [timedOut, setTimedOut] = useState(false)
-  const [progressDurationMs, setProgressDurationMs] = useState(0)
+  const [progressFraction, setProgressFraction] = useState(0)
   const [progressComplete, setProgressComplete] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const confirmTimerRef = useRef<NodeJS.Timeout | null>(null)
   const progressStartedRef = useRef(false)
+  const maxFractionRef = useRef(0)
   const flowStartedAtRef = useRef<number | null>(null)
   const completionTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const rcardGraceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const rcardGraceExpiredRef = useRef(false)
 
   const onDismissTimeout = useCallback(() => {
     if (!connectionId) return
@@ -192,12 +243,23 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       clearTimeout(completionTimerRef.current)
       completionTimerRef.current = null
     }
+    if (rcardGraceTimerRef.current) {
+      clearTimeout(rcardGraceTimerRef.current)
+      rcardGraceTimerRef.current = null
+    }
+    if (confirmTimerRef.current) {
+      clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = null
+    }
+    setConfirmed(false)
+    rcardGraceExpiredRef.current = false
     setTimedOut(false)
     setInProgress(false)
     setStatusText('')
-    setProgressDurationMs(0)
+    setProgressFraction(0)
     setProgressComplete(false)
     progressStartedRef.current = false
+    maxFractionRef.current = 0
     flowStartedAtRef.current = null
     vrcFlowStore.clearFlow(connectionId)
   }, [connectionId])
@@ -226,13 +288,25 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
       // - 'offer-sent' AND hasReceivedOffer: Bidirectional exchange complete
       //   (This handles the case where party receives first, sends second - e.g., QR displayer)
       // - isExchangeComplete: Both sent and received offers
-      const shouldClearOverlay = 
-        flowStatus === 'idle' || 
+      const shouldClearOverlay =
+        flowStatus === 'idle' ||
         flowStatus === 'offer-received' ||
         (flowStatus === 'offer-sent' && hasReceivedOffer) ||
         isComplete
-      
+
       const shouldShowOverlay = !shouldClearOverlay
+
+      // The VRC exchange is done, but the peer's R-Card (their contact card —
+      // what names them) may still be in flight: the overlay lingers with a
+      // trailing beat, ending the moment the card lands or the grace passes.
+      // Only within an overlay session already showing (progressStartedRef) —
+      // a later R-Card event must not resurrect a dismissed overlay.
+      const showRcardTrailing =
+        shouldClearOverlay &&
+        flowStatus !== 'idle' &&
+        progressStartedRef.current &&
+        vrcFlowStore.isRcardReceivePending(connectionId) &&
+        !rcardGraceExpiredRef.current
 
       if (shouldShowOverlay) {
         if (!flowStartedAtRef.current) {
@@ -275,6 +349,12 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
           case 'biometric-fallback':
             setStatusText('Issuing credential without hardware attestation...')
             break
+          case 'discovering':
+            setStatusText('Checking what your contact supports...')
+            break
+          case 'proposed':
+            setStatusText("Waiting for your contact to accept...")
+            break
           case 'preparing-offer':
             // Trust-task dialect: there is no "offer" — the first pass prepares
             // and signs our relationship credential (the biometric prompt lands
@@ -299,34 +379,61 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
             setStatusText('Exchange in progress...')
         }
 
-        // Start the progress bar once per overlay session, tied to the safety timeout.
-        if (!progressStartedRef.current) {
-          progressStartedRef.current = true
-          const timeoutMs = isWitnessed ? FLOW_TIMEOUT_MS_WITNESSED : FLOW_TIMEOUT_MS_NON_WITNESSED
-          setProgressDurationMs(timeoutMs)
+        // Advance the milestone bar — monotonically, since some statuses
+        // recur across passes and the bar must never move backwards.
+        progressStartedRef.current = true
+        maxFractionRef.current = Math.max(maxFractionRef.current, STATUS_PROGRESS[flowStatus] ?? 0.15)
+        setProgressFraction(maxFractionRef.current)
+      } else if (showRcardTrailing) {
+        // Trailing beat: VRC done, R-Card still in flight. Keep the overlay up
+        // with honest wording; a one-shot grace timer bounds the wait so a
+        // lost card can never hang the dialog.
+        if (completionTimerRef.current) {
+          clearTimeout(completionTimerRef.current)
+          completionTimerRef.current = null
+        }
+        setProgressComplete(false)
+        setInProgress(true)
+        setTimedOut(false) // the VRC part finished — a stale stall-timeout no longer applies
+        setStatusText('Exchanging contact cards...')
+        maxFractionRef.current = Math.max(maxFractionRef.current, RCARD_TRAILING_PROGRESS)
+        setProgressFraction(maxFractionRef.current)
+        if (!rcardGraceTimerRef.current) {
+          rcardGraceTimerRef.current = setTimeout(() => {
+            rcardGraceTimerRef.current = null
+            rcardGraceExpiredRef.current = true
+            checkStatus()
+          }, RCARD_TRAILING_GRACE_MS)
         }
       } else {
         // Flow completed — if bar was running, fill to 100% then clear
+        if (rcardGraceTimerRef.current) {
+          clearTimeout(rcardGraceTimerRef.current)
+          rcardGraceTimerRef.current = null
+        }
         if (progressStartedRef.current) {
+          // Success beat: snap the bar to 100%, then hold briefly with the
+          // confirmation (Chat renders the wording + a way through to
+          // Contacts) so the dialog does not simply vanish.
           setProgressComplete(true)
-          completionTimerRef.current = setTimeout(() => {
-            completionTimerRef.current = null
-            setInProgress(false)
-            setStatusText('')
-            setProgressDurationMs(0)
-            setProgressComplete(false)
-            setTimedOut(false)
-            progressStartedRef.current = false
-            flowStartedAtRef.current = null
-          }, 500)
+          setTimedOut(false)
+          setStatusText('')
+          setConfirmed(true)
+          // No auto-dismiss. The confirmation is the one moment the user is
+          // asked to act — it offers a way through to Contacts — and a timer
+          // was yanking it away mid-reach (device 2026-08-29). It now waits
+          // for onDismissConfirmation(), i.e. the button or an explicit
+          // dismissal.
         } else {
           setInProgress(false)
           setStatusText('')
-          setProgressDurationMs(0)
+          setProgressFraction(0)
           setProgressComplete(false)
           setTimedOut(false)
           progressStartedRef.current = false
+          maxFractionRef.current = 0
           flowStartedAtRef.current = null
+          rcardGraceExpiredRef.current = false
         }
       }
       
@@ -368,10 +475,44 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         clearTimeout(completionTimerRef.current)
         completionTimerRef.current = null
       }
+      if (rcardGraceTimerRef.current) {
+        clearTimeout(rcardGraceTimerRef.current)
+        rcardGraceTimerRef.current = null
+      }
+      if (confirmTimerRef.current) {
+        clearTimeout(confirmTimerRef.current)
+        confirmTimerRef.current = null
+      }
     }
   }, [connectionId])
   
-  return { inProgress, statusText, timedOut, progressDurationMs, progressComplete, onDismissTimeout }
+  const onDismissConfirmation = useCallback(() => {
+    if (completionTimerRef.current) {
+      clearTimeout(completionTimerRef.current)
+      completionTimerRef.current = null
+    }
+    setConfirmed(false)
+    setInProgress(false)
+    setStatusText('')
+    setProgressFraction(0)
+    setProgressComplete(false)
+    progressStartedRef.current = false
+    maxFractionRef.current = 0
+    flowStartedAtRef.current = null
+    rcardGraceExpiredRef.current = false
+    if (connectionId) vrcFlowStore.clearFlow(connectionId)
+  }, [connectionId])
+
+  return {
+    inProgress,
+    statusText,
+    timedOut,
+    progressFraction,
+    progressComplete,
+    confirmed,
+    onDismissTimeout,
+    onDismissConfirmation,
+  }
 }
 
 // Keep legacy hook for backwards compatibility

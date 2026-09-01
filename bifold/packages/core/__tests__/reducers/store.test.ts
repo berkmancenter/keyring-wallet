@@ -20,6 +20,26 @@ describe('Store reducer', () => {
     expect(returnedState.preferences.useBiometry).toBe(false)
   })
 
+  // Opting into biometrics during onboarding must also switch on hardware-backed
+  // signing. They were independent preferences, and useHardwareAttestation
+  // defaults to false, so users who enabled biometrics were still signing in
+  // software with nothing on screen to say so.
+  test('USE_BIOMETRY true also enables hardware attestation', () => {
+    expect(defaultState.preferences.useHardwareAttestation).toBe(false)
+    const returnedState = storeReducer(defaultState, { type: DispatchAction.USE_BIOMETRY, payload: [true] })
+    expect(returnedState.preferences.useHardwareAttestation).toBe(true)
+  })
+
+  test('USE_BIOMETRY false leaves hardware attestation alone', () => {
+    // The hardware key needs a secure lock screen, not biometrics specifically
+    // (iOS signs with the device passcode), so turning biometrics off must not
+    // silently downgrade signing. Settings keeps its own toggle for that.
+    const enabled = storeReducer(defaultState, { type: DispatchAction.USE_BIOMETRY, payload: [true] })
+    const disabled = storeReducer(enabled, { type: DispatchAction.USE_BIOMETRY, payload: [false] })
+    expect(disabled.preferences.useBiometry).toBe(false)
+    expect(disabled.preferences.useHardwareAttestation).toBe(true)
+  })
+
   test('USE_VERIFIER_CAPABILITY sets to true', () => {
     const returnedState = storeReducer(defaultState, { type: DispatchAction.USE_VERIFIER_CAPABILITY, payload: [true] })
     expect(returnedState.preferences.useVerifierCapability).toBe(true)

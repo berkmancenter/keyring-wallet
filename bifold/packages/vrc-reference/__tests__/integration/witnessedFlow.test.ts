@@ -472,8 +472,22 @@ describe('Witnessed Flow Integration', () => {
       console.log('  relationship was established in a witnessed session at')
       console.log('  [event/location], as verified by [Witness]."\n')
 
-      // Verify that credentials were received
-      // Note: In the current implementation, Alice and Bob auto-accept credentials
+      // Accept the VWC offers the witness distributed. Participants do NOT
+      // auto-accept, so without this both wallets stay empty and the VWC
+      // validation below never runs.
+      await waitForCondition(async () => {
+        const a = await alice.agent.modules.didcomm.credentials.getAll()
+        const b = await bob.agent.modules.didcomm.credentials.getAll()
+        return a.some((r) => r.state === 'offer-received') && b.some((r) => r.state === 'offer-received')
+      }, 20000)
+      await alice.acceptPendingCredentialOffers()
+      await bob.acceptPendingCredentialOffers()
+      await waitForCondition(async () => {
+        const a = await alice.agent.w3cCredentials.getAll()
+        const b = await bob.agent.w3cCredentials.getAll()
+        return a.some((r) => (r as any).firstCredential) && b.some((r) => (r as any).firstCredential)
+      }, 30000)
+
       const aliceCredentials = await alice.agent.w3cCredentials.getAll()
       const bobCredentials = await bob.agent.w3cCredentials.getAll()
 
@@ -489,10 +503,13 @@ describe('Witnessed Flow Integration', () => {
         expect(witnessIssuerDid).toBeDefined()
 
         // Check Alice's VWC
-        const aliceVWC = aliceCredentials.find((c) => c.credential?.type?.includes('WitnessedCredential'))
+        const aliceVWC = aliceCredentials.find((c) => {
+          const cred = (c as any).firstCredential
+          return cred ? (JsonTransformer.toJSON(cred) as any).type?.includes('WitnessCredential') : false
+        })
 
-        if (aliceVWC?.credential) {
-          const aliceVWCJson = JsonTransformer.toJSON(aliceVWC.credential) as any
+        if (aliceVWC) {
+          const aliceVWCJson = JsonTransformer.toJSON((aliceVWC as any).firstCredential) as any
 
           console.log('  ✓ Alice received VWC:')
           console.log('    - Types:', aliceVWCJson.type)
@@ -502,10 +519,13 @@ describe('Witnessed Flow Integration', () => {
         }
 
         // Check Bob's VWC
-        const bobVWC = bobCredentials.find((c) => c.credential?.type?.includes('WitnessedCredential'))
+        const bobVWC = bobCredentials.find((c) => {
+          const cred = (c as any).firstCredential
+          return cred ? (JsonTransformer.toJSON(cred) as any).type?.includes('WitnessCredential') : false
+        })
 
-        if (bobVWC?.credential) {
-          const bobVWCJson = JsonTransformer.toJSON(bobVWC.credential) as any
+        if (bobVWC) {
+          const bobVWCJson = JsonTransformer.toJSON((bobVWC as any).firstCredential) as any
 
           console.log('  ✓ Bob received VWC:')
           console.log('    - Types:', bobVWCJson.type)

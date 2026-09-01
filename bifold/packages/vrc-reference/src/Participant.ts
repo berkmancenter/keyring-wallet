@@ -193,6 +193,24 @@ export class Participant extends BaseAgent {
     return values.length > 0 ? values[0] : undefined
   }
 
+  /**
+   * Get OUR R-DID for the relationship with a given counterparty R-DID.
+   *
+   * A participant holds one R-DID per connection, so "which of my R-DIDs do I
+   * issue this VRC under?" is answered by the counterparty, not by whichever
+   * connection happens to be current. Reverse-looks-up the connection whose
+   * exchanged counterparty R-DID matches, then returns our DID for it.
+   */
+  private getDIDForCounterparty(counterpartyDid: string): ConnectionDIDData | undefined {
+    for (const [connectionId, rDid] of this.counterpartyRDidByConnection.entries()) {
+      if (rDid === counterpartyDid) {
+        const own = this.didByConnection.get(connectionId)
+        if (own) return own
+      }
+    }
+    return undefined
+  }
+
   // ============================================
   // Connection Management
   // ============================================
@@ -764,9 +782,12 @@ export class Participant extends BaseAgent {
     challenge: string,
     domain: string
   ): Promise<{ vrc: any; vp: any }> {
-    // Get DID for the counterparty connection (not the witness connection)
-    // We need the DID we use for our relationship with the counterparty
-    const currentDid = this.getCurrentDID()
+    // Get DID for the counterparty connection (not the witness connection).
+    // Resolved FROM the counterparty's R-DID: getCurrentDID() returns whichever
+    // connection was accepted last — for a witnessed exchange that is usually
+    // the witness connection, which would issue the half under the wrong R-DID
+    // and leave the two halves not naming each other (not a complete DTG edge).
+    const currentDid = this.getDIDForCounterparty(counterpartyDid) ?? this.getCurrentDID()
     if (!currentDid) {
       throw new Error(redText('No R-DID available for presentation. Establish a connection first.'))
     }
