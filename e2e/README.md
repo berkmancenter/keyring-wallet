@@ -326,6 +326,21 @@ banners and authenticate on both phones. Override the witness's name with
 `WITNESS_NAME`, or its ports with `WITNESS_PORT`/`WITNESS_WEB_PORT`, if the
 defaults collide with something else running locally.
 
+**The run is deterministic regardless of your local
+`bifold/packages/witness-server/.env`.** That file is gitignored and
+per-developer, and can (harmlessly, for interactive/manual witness use) commit
+to a mediator or a different transport. The harness always overrides the
+witness's transport (`MEDIATOR_INVITATION_URL`, forced to DIRECT unless you set
+`WITNESS_MEDIATOR_INVITATION_URL` to deliberately test mediator mode) and gives
+it a genuinely fresh, isolated wallet per run (`VRC_WALLET_PATH` inside the
+run's own temp dir, torn down with everything else at the end) — so nothing in
+your `.env`, and no state left over from a previous run, can change what this
+run actually exercises. If the witness's observed transport ever doesn't match
+what was requested, the harness fails immediately with a clear error rather
+than a mysterious participant-connect timeout minutes later. See
+`docs/spikes/e2e-vrc-connect-findings.md` ("fourth failure layer") for the
+incident this closes.
+
 **Locality verification is disabled by default.** The harness launches the
 witness with `WITNESS_LOCALITY_REQUIRED=false`: Appium-driven phones can't
 produce a co-location (BLE proximity) proof, and with the check enforced the
@@ -362,8 +377,8 @@ Since the relationship exchange moved onto Trust Tasks (plan: `docs/plans/openvt
 - **The gates are log markers, read from Android's run-scoped logcat** (`adb logcat -c` at session start; iOS has no logcat, Android's log covers both directions): `assertTrustTaskExchangeMarkers` (discovery → propose → issue sent/stored → receipts), `assertWitnessCeremonyMarkers` (session → challenge → VP → VWC → outcome-evidence self-check), `assertWitnessShareMarkers` (witness-share sent → verified and stored → receipted), and on devices the hardware-evidence marker (`Evidence block added […]` — the run fails loudly if the exchange downgrades to unattested).
 - **UI gates:** `assertVrcReceived` (contact with the peer's name — the name comes from the R-Card), and `assertContactShields` (the **Witnessed** indicator, plus Secure Exchange on devices). `openContactDetail` handles both navigation shapes (Contacts row → chat → header `ContactMenu` → View Contact, or straight to Contact Details) and checks ContactDetails' *bare* testIDs (`WitnessSection`, `WitnessedBadge`, `SecureExchangeBadge` — no `com.ariesbifold:id/` prefix).
 - **Runners:** `yarn e2e:vrc:witnessed` — simulator + emulator, unattended, the full witnessed exchange with a local witness behind a cloudflared tunnel (run from repo root; `APPIUM_PORT=4750 WDA_LOCAL_PORT=8101 ANDROID_AVD=<your AVD> yarn e2e:vrc:witnessed` is the known-good invocation on a Mac with an iPhone simulator); `yarn e2e:vrc:witnessed:devices` — the attended real-device version (the demo path; see `docs/DEMO_RUNBOOK_WITNESSED_EXCHANGE.md`).
-- **Env that matters:** `APPIUM_PORT` (default 4723 — set another port if something else already listens there), `WDA_LOCAL_PORT` (iOS simulator WebDriverAgent; 8101 known good), `ANDROID_AVD` (default `Pixel_8_API_33`). The Android 16 / API 36 PIN-modal fix (`waitForKeyboardGone` in `enableHardwareAttestation`) is in place and unchanged by the v4 work.
-- **Known intermittents on simulators, not regressions:** one wallet occasionally misses the witness connection ("only 1/2 participants connected") or iOS never sends the didexchange request (the open "iOS no-send"); the witness agent init can hang under heavy machine load. Re-run. None has been seen on real devices so far.
+- **Env that matters:** `APPIUM_PORT` (default 4723 — set another port if something else already listens there), `WDA_LOCAL_PORT` (iOS simulator WebDriverAgent; 8101 known good), `ANDROID_AVD` (default `Pixel_8_API_33`), `WITNESS_MEDIATOR_INVITATION_URL` (unset by default, forcing the witness into DIRECT mode regardless of local `.env` — set it to deliberately test mediator mode instead). The Android 16 / API 36 PIN-modal fix (`waitForKeyboardGone` in `enableHardwareAttestation`) is in place and unchanged by the v4 work.
+- **Known intermittents on simulators, not regressions:** one wallet occasionally misses the witness connection ("only 1/2 participants connected") or iOS never sends the didexchange request (the open "iOS no-send"); the witness agent init can hang under heavy machine load. Re-run. Distinct from a **deterministic 0/N** failure, seen on real devices through 2026-08-31: the witness silently running in mediator mode with a push-only pickup strategy against a mediator that only queues — fixed (see `docs/spikes/e2e-vrc-connect-findings.md`, "fourth failure layer"), and the harness no longer lets a local `.env` put the witness back into that mode by accident.
 - **Between runs:** free ports 4750/9002/9003 and kill stray `cloudflared`; cold-reboot an emulator that has been up for hours (its host network path degrades).
 
 ## Troubleshooting
@@ -374,6 +389,16 @@ Since the relationship exchange moved onto Trust Tasks (plan: `docs/plans/openvt
   device or biometrics needed, so it cheaply isolates witness connectivity from
   the rest of the witnessed flow. Diagnostic tool only — not part of the
   maintained suite.
+- **Witness fails immediately with "port N is already in use by another
+  process on this machine (not one this harness started or can
+  identify/kill…)"**: something outside the harness's control already holds
+  `WITNESS_PORT`/`WITNESS_WEB_PORT` (default 9002/9003) — possibly invisible
+  to `lsof` (e.g. a process this user can't enumerate; `ss -ltn` will still
+  show it LISTENing). Pick different ports:
+  `WITNESS_PORT=9202 WITNESS_WEB_PORT=9203 yarn e2e:vrc:witnessed:android-only`.
+  This check runs before the tunnel or witness process even start, specifically
+  so this shows up in seconds instead of as a confusing `EADDRINUSE` stack
+  trace at the bottom of the witness's full startup banner ~15s in.
 - **Real device: "Unable to launch WebDriverAgent … xcodebuild failed with
   code 65"**: WDA has never been provisioned for the team on this machine
   (appium doesn't pass `-allowProvisioningUpdates`). Prime it once:

@@ -1,8 +1,13 @@
 // Witness-server lifecycle for the witnessed VRC exchange e2e.
 //
 // Spawns bifold/packages/witness-server (ts-node) with a fresh temp wallet +
-// invitation per run, waits for its "READY" banner, reads the persisted
-// invitation URL, and tears it down. See e2e/README.md for usage.
+// invitation per run (VRC_WALLET_PATH points the wallet itself into the same
+// per-run temp dir as the invitation file, so both are wiped together by
+// stop() — no separate `yarn fresh` needed, and no run can inherit another
+// run's persisted mediation state; see docs/spikes/e2e-vrc-connect-findings.md
+// "the part that made this look machine-specific"), waits for its "READY"
+// banner, reads the persisted invitation URL, and tears it down. See
+// e2e/README.md for usage.
 import { spawn, execSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
@@ -181,6 +186,23 @@ export async function startWitness({
       WITNESS_PUBLIC_URL: publicUrl,
       WITNESS_INVITATION_FILE: invitationFile,
       WITNESS_VERBOSE: process.env.WITNESS_VERBOSE || "false",
+      // Wallet lives in the per-run temp dir — see the file header. Also makes
+      // this run immune to `bifold/packages/witness-server/.env`'s own wallet
+      // location, if it sets one.
+      VRC_WALLET_PATH: join(dir, "wallets"),
+      // DIRECT mode by default, regardless of what a developer's local
+      // bifold/packages/witness-server/.env has committed to
+      // MEDIATOR_INVITATION_URL. That file is gitignored and per-developer, and
+      // dotenv (`import 'dotenv/config'` in witness-server/src/index.ts) never
+      // overrides a variable already present in the environment — so without
+      // this line, an uncommented MEDIATOR_INVITATION_URL there silently
+      // switches this run's transport out from under it. This is the exact
+      // divergence that made "works on my machine" true for one developer and
+      // false for another: see docs/spikes/e2e-vrc-connect-findings.md ("why
+      // Alberto"). Explicit empty string by default (not just omission, so it
+      // can't be inherited from the calling shell's own environment either);
+      // set WITNESS_MEDIATOR_INVITATION_URL to deliberately test mediator mode.
+      MEDIATOR_INVITATION_URL: process.env.WITNESS_MEDIATOR_INVITATION_URL || "",
       // Disable the co-location (BLE proximity) requirement: the witness
       // otherwise rejects the VP with a "locality-verification" error and the
       // exchange auto-falls back to a plain UNwitnessed VRC (no VWC / witness
@@ -196,6 +218,11 @@ export async function startWitness({
   // authoritative "a wallet connected" signal (the app shows no banner on
   // connect; witness participation only surfaces as a VWC after an exchange).
   let participantConnections = 0;
+  // The banner's own report of what it actually started as — read back below
+  // to confirm the MEDIATOR_INVITATION_URL override above took effect, instead
+  // of assuming it did. A silent transport mismatch is exactly the bug this
+  // harness spent a day chasing (docs/spikes/e2e-vrc-connect-findings.md).
+  let observedTransport;
   const onData = (buf) => {
     const s = buf.toString();
     // Surface witness lines (prefixed) so a stuck run is diagnosable
@@ -206,6 +233,8 @@ export async function startWitness({
     // "✓ Sent witness-announcement" fires once per completed participant
     const sent = s.match(/Sent witness-announcement/g);
     if (sent) participantConnections += sent.length;
+    const transportMatch = s.match(/Transport:\s+(DIRECT \(HTTP\)|MEDIATOR \(WebSocket\))/);
+    if (transportMatch) observedTransport = transportMatch[1];
   };
   proc.stdout.on("data", onData);
   proc.stderr.on("data", onData);
@@ -267,7 +296,27 @@ export async function startWitness({
     if (existsSync(invitationFile)) {
       const { invitationUrl } = JSON.parse(readFileSync(invitationFile, "utf-8"));
       if (invitationUrl) {
-        console.log(`[e2e] witness ready${readyLogged ? "" : " (invitation file present)"} — invitation captured`);
+        // Confirm the transport we asked for (via MEDIATOR_INVITATION_URL above)
+        // is the transport that actually started, from the witness's own banner —
+        // not assumed. Fail loudly here, in seconds, rather than as a mysterious
+        // participant-connect timeout 2+ minutes into an attended device run.
+        const expectMediator = Boolean(process.env.WITNESS_MEDIATOR_INVITATION_URL);
+        const expectedTransport = expectMediator ? "MEDIATOR (WebSocket)" : "DIRECT (HTTP)";
+        if (observedTransport && observedTransport !== expectedTransport) {
+          await stop();
+          throw new Error(
+            `witness started in ${observedTransport} mode, expected ${expectedTransport} ` +
+              `(requested via MEDIATOR_INVITATION_URL=${JSON.stringify(
+                process.env.WITNESS_MEDIATOR_INVITATION_URL || ""
+              )}). This should be impossible — the harness sets MEDIATOR_INVITATION_URL ` +
+              `explicitly precisely so a local .env can't override it; if this fires, something ` +
+              `upstream of that env var changed. See docs/spikes/e2e-vrc-connect-findings.md.`
+          );
+        }
+        console.log(
+          `[e2e] witness ready${readyLogged ? "" : " (invitation file present)"} — invitation captured` +
+            (observedTransport ? ` (${observedTransport})` : "")
+        );
         return { invitationUrl, publicUrl, name, stop, waitForParticipants };
       }
     }

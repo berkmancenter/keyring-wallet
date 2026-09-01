@@ -284,29 +284,52 @@ is not reachable from the mode observation alone.
 
 ### Remedies
 
-**Applied:** `startMediatorMessagePickup` / `assertSupportedMediatorPickupStrategy`
-in `@bifold/vrc-shared` (`src/mediation.ts`), called by the witness-server after
-`agent.initialize()`. It passes the strategy explicitly, which bypasses both the
-module config and any value pinned on the MediationRecord, and logs the effective
-strategy plus any pinned value it overrode. `vrc-reference/src/BaseAgent.ts` and
-`bifold/packages/core/src/utils/agent.ts` still declare `Implicit` and want the
-same treatment.
+**Applied, everywhere the codebase talks to a mediator:**
+- `startMediatorMessagePickup` / `assertSupportedMediatorPickupStrategy` in
+  `@bifold/vrc-shared` (`src/mediation.ts`) — passes the pickup strategy
+  explicitly, which bypasses both the module config and any value pinned on
+  the MediationRecord, and logs the effective strategy plus any pinned value
+  it overrode. Called by the witness-server (`WitnessService.ts`, after
+  `agent.initialize()`) and `vrc-reference/src/BaseAgent.ts`.
+  `bifold/packages/core/src/utils/agent.ts`'s module config now declares
+  `PickUpV2` directly (it has no runtime override of its own, unlike the app,
+  so the declared config is what consumers of `@bifold/core` actually get).
+  `core/src/contexts/activity.tsx`'s foreground-resume path now stops the
+  running pickup loop before restarting it with an explicit strategy — it had
+  been leaking a duplicate polling loop on every resume, doubling the wallet's
+  request rate against shared infrastructure for the life of the process; see
+  the `startMediatorMessagePickup` doc comment for where the same shape of bug
+  was caught a second time.
+- A repo-wide static-analysis guard,
+  `witness-server/__tests__/unit/mediatorPickupStrategy.guard.test.ts` and its
+  app-side twin `app/src/utils/mediatorPickupStrategy.guard.test.ts` — fails
+  the build if any file declares an unreceivable strategy, or calls
+  `initiateMessagePickup()` without one. A shared constant doesn't prevent the
+  next agent from typing `Implicit` in a new file (that's exactly how this
+  happened); the guard reads the source tree so it can't be bypassed by not
+  importing the helper.
+- The `WitnessService.test.ts` test that used to *document* `Implicit` as
+  intended behaviour with an `expect(true).toBe(true)` body now asserts the
+  actual contract (a pull strategy is required; push-only strategies throw
+  with an explanation) — prose enshrining the bug is gone.
+- `e2e/lib/witness.js` no longer lets a developer's `bifold/packages/witness-server/.env`
+  decide this run's transport: `MEDIATOR_INVITATION_URL` is passed explicitly
+  (forced empty → DIRECT, unless `WITNESS_MEDIATOR_INVITATION_URL` is set to
+  deliberately test mediator mode), and the witness's own startup banner is
+  read back and asserted against what was requested — a mismatch fails in
+  seconds with a clear message instead of as a mysterious participant-connect
+  timeout. The wallet is now genuinely temporary too: `VRC_WALLET_PATH` points
+  it into the same per-run temp dir as the invitation file (previously only
+  the invitation file was temporary; the wallet was a persistent, named
+  directory reused across every run — see "the part that made this look
+  machine-specific," above), so `stop()`'s existing cleanup removes it
+  automatically and no run can inherit another run's persisted mediation
+  state. `yarn fresh` is no longer relevant to the e2e path at all.
 
-**Open tuning question:** the witness sets no `mediatorPollingInterval`, so it now
+**Open tuning question:** the witness sets no `mediatorPollingInterval`, so it
 polls at credo's 5 s default — previously it polled not at all, so this is new
 behaviour rather than a regression, but each inbound hop of the witness ceremony
 now costs up to 5 s. The wallet deliberately runs 1 s (`bc-agent-modules.ts`, with
 the measured justification). Matching that would cut ceremony latency at the cost
 of load on shared infrastructure; it wants the same kind of measurement the wallet
-value got, not a guess.
-
-**Also worth fixing (not the cause, but what hid it):**
-- The witness's transport mode is decided by an untracked `.env`
-  (`MEDIATOR_INVITATION_URL`), which `e2e/lib/witness.js` cannot override even
-  though its header asserts DIRECT mode. Pass the variable explicitly from the
-  harness and assert the banner's `Transport:` line.
-- `e2e/lib/witness.js` claims "a fresh temp wallet per run"; only the invitation
-  file is temporary.
-- `witness-server/__tests__/unit/WitnessService.test.ts` had a test that
-  *documented* Implicit as intended behaviour with an `expect(true).toBe(true)`
-  body — prose enshrining the bug while asserting nothing.
+value got, not a guess. Left open deliberately.
