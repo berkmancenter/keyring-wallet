@@ -206,6 +206,22 @@ export async function runWitnessedExchange({
     // exchange silently falls back to direct (no VWC). Confirm BOTH connections
     // completed via the witness's own log (no "connected" banner exists in the
     // app — witness participation only surfaces as a VWC after the exchange).
+    if (assertLocality) {
+      // The witness-connect locality pre-flight sheet (locality-plan.md §8.4)
+      // fires on EACH phone right after ITS OWN connectToWitness resolves —
+      // no automation taps it, and while it's up it blocks the rest of the
+      // UI, so an operator who misses it stalls the whole run downstream
+      // (surfacing much later as a confusing "could not land on Contacts").
+      // Loud and up front, same as the biometric banner below, so the
+      // operator is watching BOTH phones before either connects.
+      console.log(
+        "\n████████████████████████████████████████████████████████████\n" +
+          "█  OPERATOR: a Bluetooth pre-flight sheet appears on EACH\n" +
+          "█  phone right after it connects to the witness — tap Allow\n" +
+          "█  on BOTH as soon as they appear, before continuing.\n" +
+          "████████████████████████████████████████████████████████████\n"
+      );
+    }
     await connectToWitness(sessionA, witness.invitationUrl);
     await connectToWitness(sessionB, witness.invitationUrl);
     await witness.waitForParticipants(2, 120000);
