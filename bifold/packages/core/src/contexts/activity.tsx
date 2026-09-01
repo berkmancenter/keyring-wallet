@@ -9,6 +9,7 @@ import React, {
   useState,
 } from 'react'
 import { AppState, AppStateStatus, PanResponder, View } from 'react-native'
+import { DidCommMediatorPickupStrategy } from '@credo-ts/didcomm'
 import { TOKENS, useServices } from '../container-api'
 import { LockoutReason, useAuth } from './auth'
 import { useStore } from './store'
@@ -95,7 +96,19 @@ export const ActivityProvider: React.FC<PropsWithChildren> = ({ children }) => {
         } else {
           // otherwise restart message pickup
           try {
-            await agent.modules.didcomm.mediationRecipient.initiateMessagePickup()
+            // Stop before starting, and name the strategy explicitly. Both matter:
+            // initiateMessagePickup SUBSCRIBES A NEW polling loop rather than
+            // replacing the running one, so without the stop every foreground
+            // resume accumulates another loop for the life of the process; and
+            // without an explicit strategy credo resolves
+            // `mediationRecord.pickupStrategy ?? moduleConfig`, letting a value
+            // persisted in the wallet decide whether this agent can receive at
+            // all. See docs/spikes/e2e-vrc-connect-findings.md.
+            await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
+            await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
+              undefined,
+              DidCommMediatorPickupStrategy.PickUpV2
+            )
             logger.info('Restarted agent message pickup')
           } catch (err) {
             logger.error(`Error restarting agent message pickup, ${err}`)

@@ -6,6 +6,7 @@
  */
 
 export * from './config'
+export * from './mediation'
 export * from './walletUtils'
 export * from './documentLoader'
 export * from './dataIntegritySuite'
