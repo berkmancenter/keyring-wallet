@@ -46,9 +46,14 @@ import { runWitnessedExchange, dumpAndroidWitnessLogs } from "./lib/witnessedExc
 
 // This variant's whole point is a required, real BLE round trip — set
 // before any of this module's other imports call startWitness (which reads
-// this at call time, not at its own module-load time, so setting it here,
+// these at call time, not at its own module-load time, so setting them here,
 // before runWitnessedExchange runs below, is early enough regardless of
-// import order).
+// import order). WITNESS_LOCALITY_POLICY drives both the Trust Tasks
+// discovery answer (what makes the app's witness-connect pre-flight sheet
+// show at all — startWitness defaults this to "off" for every other e2e
+// variant) and the witness's own BLE sensor startup; WITNESS_LOCALITY_REQUIRED
+// is the separate, legacy basic-message-ceremony gate.
+process.env.WITNESS_LOCALITY_POLICY = "required";
 process.env.WITNESS_LOCALITY_REQUIRED = "true";
 
 // ---------- device discovery ----------
