@@ -233,6 +233,11 @@ class VrcFlowStore extends EventEmitter {
     return this.rcardReceive.get(connectionId) === 'complete'
   }
 
+  /** An inbound R-Card was expected and has not landed yet. `false` when none was ever expected. */
+  isRcardReceivePending(connectionId: string): boolean {
+    return this.rcardReceive.get(connectionId) === 'pending'
+  }
+
   /**
    * Set an error state for a connection's VRC flow.
    * This triggers the WitnessErrorDialog to display.

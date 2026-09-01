@@ -229,6 +229,7 @@ describe('useVrcFlowInProgress - R-Card trailing beat', () => {
 
     act(() => {
       vrcFlowStore.setStatus('conn-1', 'connecting', false)
+      vrcFlowStore.markRcardReceivePending('conn-1')
     })
     // VRC completes — R-Card still in flight
     act(() => {
@@ -256,6 +257,7 @@ describe('useVrcFlowInProgress - R-Card trailing beat', () => {
 
     act(() => {
       vrcFlowStore.setStatus('conn-1', 'connecting', false)
+      vrcFlowStore.markRcardReceivePending('conn-1')
     })
     act(() => {
       vrcFlowStore.setStatus('conn-1', 'offer-received', false)
@@ -274,6 +276,24 @@ describe('useVrcFlowInProgress - R-Card trailing beat', () => {
 
     expect(result.current.inProgress).toBe(false)
     expect(result.current.timedOut).toBe(false)
+  })
+
+  it('does not linger when no R-Card was ever expected (e.g. unidirectional inviter)', () => {
+    const { result } = renderHook(() => useVrcFlowInProgress('conn-1'))
+
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'connecting', false)
+    })
+    // VRC completes; rcardReceive was never set to 'pending' — nothing to wait on.
+    act(() => {
+      vrcFlowStore.setStatus('conn-1', 'offer-received', false)
+    })
+    act(() => {
+      result.current.onDismissConfirmation()
+    })
+
+    expect(result.current.inProgress).toBe(false)
+    expect(result.current.statusText).toBe('')
   })
 
   it('does not linger when the card already landed before VRC completion', () => {
