@@ -85,13 +85,17 @@ export function isPeerVrcCredential(input: CredentialTypeInput): boolean {
 /**
  * Any credential belonging to the VRC module's surfaces (Contacts, R-Card
  * management) rather than the generic wallet credential list:
- * DTGCredential, RelationshipCredential, RCardTemplate, RelationshipCard.
+ * DTGCredential, RelationshipCredential, WitnessCredential, RCardTemplate,
+ * RelationshipCard.
  * Used to filter these out of generic credential lists.
  */
 export function isVrcModuleCredential(input: CredentialTypeInput): boolean {
   return (
     isDTGCredential(input) ||
     isRelationshipCredential(input) ||
+    // A VWC also carries DTGCredential, so this is already covered — named
+    // explicitly so the set does not depend on that overlap holding.
+    isWitnessCredential(input) ||
     isRCardTemplate(input) ||
     hasCredentialTypeName(input, RELATIONSHIP_CARD_TYPE)
   )
