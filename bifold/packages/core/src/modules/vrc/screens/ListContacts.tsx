@@ -45,6 +45,7 @@ const ListContacts: React.FC = () => {
   const NAME_COLOR = '#010B13'
   const BADGE_HW_TEAL = '#4D7A8B'
   const BADGE_WITNESS_PURPLE = '#A349A4'
+  const BADGE_LOCALITY_GREEN = '#2E8540'
 
   const styles = StyleSheet.create({
     listContainer: {
@@ -108,6 +109,17 @@ const ListContacts: React.FC = () => {
     (contactIssuerId: string): boolean => {
       const vwcs = getWitnessCredentialsForSubject(w3cCredentialRecords, contactIssuerId)
       return vwcs.length > 0
+    },
+    [w3cCredentialRecords]
+  )
+
+  // Helper function to check if any of this contact's VWCs confirmed locality
+  // (BLE co-presence) — locality-plan.md §8.2/§9.1. Any confirmed VWC is
+  // enough, same "any, not all" rule as hasWitnessCredential above.
+  const hasLocalityConfirmed = useCallback(
+    (contactIssuerId: string): boolean => {
+      const vwcs = getWitnessCredentialsForSubject(w3cCredentialRecords, contactIssuerId)
+      return vwcs.some((vwc) => extractWitnessInfo(vwc)?.locality?.outcome === 'confirmed')
     },
     [w3cCredentialRecords]
   )
@@ -273,12 +285,13 @@ const ListContacts: React.FC = () => {
           },
           hasWitnessCredentials: hasWitnessCredential(id),
           hasHardwareAttestation: hasHardwareAttestationCredential(id),
+          hasLocalityConfirmed: hasLocalityConfirmed(id),
         })
       }
     })
 
     return contactDetails.sort((a, b) => a.issuer.name.localeCompare(b.issuer.name))
-  }, [w3cCredentialRecords, hasWitnessCredential, hasHardwareAttestationCredential])
+  }, [w3cCredentialRecords, hasWitnessCredential, hasHardwareAttestationCredential, hasLocalityConfirmed])
 
   // Run cryptographic verification for contacts that claim HW attestation
   useEffect(() => {
@@ -352,6 +365,16 @@ const ListContacts: React.FC = () => {
           )}
           {item.hasWitnessCredentials && (
             <Icon name="check-decagram" size={18} color={BADGE_WITNESS_PURPLE} style={styles.badgeIcon} />
+          )}
+          {item.hasLocalityConfirmed && (
+            <Icon
+              name="map-marker-check"
+              size={18}
+              color={BADGE_LOCALITY_GREEN}
+              style={styles.badgeIcon}
+              testID="LocalityConfirmedBadge"
+              accessibilityLabel="Locality confirmed"
+            />
           )}
         </View>
       </TouchableOpacity>

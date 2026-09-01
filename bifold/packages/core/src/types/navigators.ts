@@ -148,6 +148,7 @@ export interface ContactCredentialDetails {
   }
   hasWitnessCredentials?: boolean
   hasHardwareAttestation?: boolean
+  hasLocalityConfirmed?: boolean
 }
 
 export type ContactStackParams = {
