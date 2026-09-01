@@ -5,6 +5,7 @@
 // invitation URL, and tears it down. See e2e/README.md for usage.
 import { spawn, execSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,37 @@ import { sleep } from "./driver.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const witnessDir = join(repoRoot, "bifold", "packages", "witness-server");
+
+/**
+ * Authoritative "is this port actually free" check via a real bind attempt.
+ * `lsof`-based freeing (below) can miss a listener it has no permission to
+ * enumerate — e.g. a root-owned process — in which case `lsof -tiTCP:<port>`
+ * silently returns nothing even though the port is occupied, and the witness
+ * only finds out ~15s later via a raw EADDRINUSE stack trace at the bottom of
+ * its full startup banner. Bind-testing here fails fast, before the tunnel
+ * and witness process even start, with a message that names the actual port
+ * and how to work around it.
+ */
+async function assertPortFree(port) {
+  await new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.once("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        reject(
+          new Error(
+            `port ${port} is already in use by another process on this machine (not one this harness ` +
+              `started or can identify/kill — e.g. \`lsof -tiTCP:${port}\` may show nothing even though ` +
+              `\`ss -ltn\` shows it LISTENing, which happens for a process this user can't enumerate). ` +
+              `Set WITNESS_PORT/WITNESS_WEB_PORT to an unused port and retry.`
+          )
+        );
+      } else {
+        reject(err);
+      }
+    });
+    srv.listen(port, () => srv.close(() => resolve()));
+  });
+}
 
 /**
  * Start a cloudflared quick tunnel to a local port and return its public
@@ -96,7 +128,8 @@ export async function startWitness({
   readyTimeoutMs = 180000,
 } = {}) {
   // Free the ports first — a prior run's witness whose shutdown hung would
-  // otherwise EADDRINUSE this one.
+  // otherwise EADDRINUSE this one. Best-effort: only catches processes this
+  // user can see/kill via lsof (see assertPortFree below for the case it can't).
   for (const p of [port, webPort]) {
     try {
       const pids = execSync(`lsof -tiTCP:${p} -sTCP:LISTEN`).toString().trim();
@@ -105,8 +138,16 @@ export async function startWitness({
         console.log(`[e2e] freed leftover process on :${p}`);
       }
     } catch {
-      /* nothing listening — good */
+      /* nothing listening (visible to lsof) — good */
     }
+  }
+
+  // Verify both ports actually ended up free — authoritative, unlike the
+  // lsof-based freeing above — and fail fast with a clear, actionable error
+  // instead of a confusing EADDRINUSE stack trace after the witness has
+  // already spent ~15s spinning up its agent and printing its full banner.
+  for (const p of [port, webPort]) {
+    await assertPortFree(p);
   }
 
   // Bring up the HTTPS tunnel to the witness's inbound port first, so its

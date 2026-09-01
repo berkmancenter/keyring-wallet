@@ -191,3 +191,122 @@ second, divergent DID for the same counterparty (worth hardening separately).
   `IOS_DEVICE_NAME="iPhone 17 Pro"`. The `API36_S25_A` AVD refuses to launch the
   app ("Error type 3: Activity class does not exist") despite a clean install —
   environment quirk, avoid it for e2e.
+
+## Fourth failure layer: the witness never picks up its mail (2026-08-31, bam)
+
+Session context: `yarn e2e:vrc:witnessed:android-only` on `feat/trust-tasks-integration`,
+two physical Android phones, witness-server run by the e2e harness against the same
+production mediator. Failed 4/4 identically at
+`witness.waitForParticipants(2, 120000)` — *"only 0/2 participant(s) connected"* —
+including once fully attended with both phones unlocked, which rules out Doze.
+
+### Symptom
+
+Both wallets accepted the witness's reusable OOB invitation, created a connection
+record with `theirLabel: "e2e-witness"`, and sent their `didexchange/1.1/request`.
+The witness logged **nothing at all** afterwards — no connection-state-changed, no
+message-received, no problem-report — so the `state === 'completed'` gate in
+`WitnessService.registerMessageHandlers` never opened and no `witness-announcement`
+was ever sent. Meanwhile the witness's own outbound traffic worked throughout:
+mediation request, `keylist-update` (ACKed), locality heartbeats, WebSocket
+teardown at shutdown. Sending fine, receiving nothing, no error on either side.
+
+### Diagnosis
+
+The witness ran `MediatorPickupStrategy.Implicit`. Implicit is **push-only** — per
+credo's own doc comment it "consists simply on initiating a long-lived session to a
+mediator and wait for the messages to arrive automatically", and it issues no
+pickup requests at all. Our mediator queues rather than pushes (it has run
+`MESSAGE_PICKUP__FORWARDING_STRATEGY=QueueOnly` since the 2026-08-24 fix in
+`docs/plans/openvtc-integration-plan/2026-08-24-bam.md`, which was applied to make
+the *wallet-to-wallet* run pass). A push-only recipient against a queue-only
+mediator receives nothing, permanently.
+
+The wallet was moved off exactly this failure on 2026-08-18 (second layer, above)
+and now calls `initiateMessagePickup(undefined, PickUpV2)` at runtime in
+`useBCAgentSetup.ts`. The witness-server was never given the equivalent, so the
+08-24 mediator fix that made the wallet reliable is the same change that made the
+witness deaf.
+
+Evidence, from the witness's own verbose log across the whole failing run
+(13,194 lines): exactly **one** inbound message, a `keylist-update-response`
+returned on the HTTP response body of the witness's own POST — i.e. return-route,
+not mediator delivery — and **zero** message-pickup protocol messages of any kind.
+
+### Confirmed by A/B, one phone, unattended (`e2e/debug-witness-connect.js`)
+
+| Witness wallet | Transport | Strategy observed at runtime | pickup msgs | Result |
+|---|---|---|---|---|
+| persistent | MEDIATOR | `implicit` | 0 | FAIL 0/2 |
+| persistent | DIRECT | n/a | — | **PASS** |
+| persistent (mutated, see below) | MEDIATOR | `explicit v2` | 175 | **PASS** |
+| **fresh** | MEDIATOR | `implicit` | 0 | **FAIL 0/1** |
+
+The last row reproduces the original failure deterministically in ~5 minutes with
+one phone. The third row matters just as much: through the *same* mediator, with
+PickUpV2, `messagepickup/2.0/delivery` carried the phone's `didexchange/1.1/request`
+and `/complete`, the connection completed, and the announcement went out. **The
+mediator was never the problem** — it queues and delivers on request. The witness
+simply never asked.
+
+### The part that made this look machine-specific
+
+Setting `mediatorPickupStrategy` in module config is **not sufficient**. credo
+resolves it as `mediationRecord.pickupStrategy ?? moduleConfig.mediatorPickupStrategy`
+(`DidCommMediationRecipientApi.getPickupStrategyForMediator`): a value persisted on
+the MediationRecord **in the agent's wallet outranks the config**, and credo writes
+one there itself whenever the config leaves the strategy unset — which is what
+happens in DIRECT mode, where `mediationRecipient` is `undefined` but a leftover
+default-mediator record is still found and triggers feature discovery.
+
+So the effective strategy depends on hidden per-wallet state. A witness whose
+wallet ever got `PickUpV2` pinned works forever after and looks fine; a fresh
+wallet is dead on arrival. This is why the failure appeared to be
+environment-specific rather than a deterministic bug, and why it survived: the
+witness-server's own wallet is persistent (`.wallets/<name>-wallet/`, *not* the
+e2e's temp dir despite the harness comment), and `yarn fresh` cleans
+`${WITNESS_NAME}-wallet` — the wrong wallet unless `WITNESS_NAME` is exported to
+match the run.
+
+Observed live: running the DIRECT-mode probe silently pinned `PickUpV2` onto the
+e2e wallet's record, after which the very next MEDIATOR-mode run passed. Any
+"it works now" result on a reused witness wallet should be treated as suspect
+until confirmed on a fresh one.
+
+### Superseded position
+
+An earlier reading of this session's evidence was "the witness is silently in
+MEDIATOR mode when the harness assumes DIRECT, and mediator mode is broken". The
+mode confusion is real and worth fixing (below), but it is not the defect: mediator
+mode works fine with a pull strategy. Recording this because the narrower true
+cause — push-only pickup, plus a config value that loses to persisted wallet state —
+is not reachable from the mode observation alone.
+
+### Remedies
+
+**Applied:** `startMediatorMessagePickup` / `assertSupportedMediatorPickupStrategy`
+in `@bifold/vrc-shared` (`src/mediation.ts`), called by the witness-server after
+`agent.initialize()`. It passes the strategy explicitly, which bypasses both the
+module config and any value pinned on the MediationRecord, and logs the effective
+strategy plus any pinned value it overrode. `vrc-reference/src/BaseAgent.ts` and
+`bifold/packages/core/src/utils/agent.ts` still declare `Implicit` and want the
+same treatment.
+
+**Open tuning question:** the witness sets no `mediatorPollingInterval`, so it now
+polls at credo's 5 s default — previously it polled not at all, so this is new
+behaviour rather than a regression, but each inbound hop of the witness ceremony
+now costs up to 5 s. The wallet deliberately runs 1 s (`bc-agent-modules.ts`, with
+the measured justification). Matching that would cut ceremony latency at the cost
+of load on shared infrastructure; it wants the same kind of measurement the wallet
+value got, not a guess.
+
+**Also worth fixing (not the cause, but what hid it):**
+- The witness's transport mode is decided by an untracked `.env`
+  (`MEDIATOR_INVITATION_URL`), which `e2e/lib/witness.js` cannot override even
+  though its header asserts DIRECT mode. Pass the variable explicitly from the
+  harness and assert the banner's `Transport:` line.
+- `e2e/lib/witness.js` claims "a fresh temp wallet per run"; only the invitation
+  file is temporary.
+- `witness-server/__tests__/unit/WitnessService.test.ts` had a test that
+  *documented* Implicit as intended behaviour with an `expect(true).toBe(true)`
+  body — prose enshrining the bug while asserting nothing.

@@ -66,6 +66,18 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
 // request/ack'd against the mediator's queue and each poll self-heals a dead
 // socket. Revisit live mode once the mediator requeues unacked live deliveries.
 const configureMessagePickup = async (agent: Agent): Promise<void> => {
+  // Stop the pickup credo already started during agent.initialize() before
+  // starting ours. initiateMessagePickup SUBSCRIBES A NEW polling interval on
+  // every call — it does not replace the previous one — so without this we run
+  // two concurrent loops and double this wallet's request rate against the
+  // shared mediator (at the 1s interval below, ~172k requests/day per idle
+  // wallet instead of ~86k). Observed on the witness-server 2026-08-31.
+  await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
+
+  // Pass the strategy EXPLICITLY: credo otherwise resolves it as
+  // `mediationRecord.pickupStrategy ?? moduleConfig`, and a value persisted in
+  // the wallet outranks the config — which is how the same code ends up
+  // receiving messages on one wallet and deaf on another.
   await agent.modules.didcomm.mediationRecipient.initiateMessagePickup(
     undefined,
     DidCommMediatorPickupStrategy.PickUpV2

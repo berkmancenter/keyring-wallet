@@ -60,7 +60,7 @@ Note: emulators/simulators cannot do hardware attestation — the app silently f
 ## Commit conventions
 
 - Conventional commits enforced by commitlint: `feat|fix|docs|style|refactor|perf|test|chore|revert`, lower-case type.
-- Commits in the `bifold/` submodule require `Signed-off-by: Alberto L <aleon@law.harvard.edu>` as the **last line** of the message (commitlint rejects anything after it). Do not add agent co-author trailers to bifold commits.
+- Commits in the `bifold/` submodule require a `Signed-off-by:` trailer as the **last line** of the message (commitlint rejects anything after it), naming the commit's own author — i.e. your configured `user.name` / `user.email`, the same as `git commit -s` produces. A sign-off is an attestation by whoever made the commit, so never sign off as another contributor. Do not add agent co-author trailers to bifold commits.
 - For message-only rewrites in bifold, use `git commit-tree -S` (SSH signing) to keep commits Verified; fallback `git commit -S -F msg.txt` with `HUSKY=0`.
 
 ## Ongoing upgrade work
