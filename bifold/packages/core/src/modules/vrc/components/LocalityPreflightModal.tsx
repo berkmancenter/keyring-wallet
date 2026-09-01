@@ -15,12 +15,13 @@
  * 11 already exists in `WitnessCredentialHandler.ts`).
  *
  * Two states, matching §8.4's sequencing exactly:
- *  - Offer: always shown first, regardless of whether this witness's policy
- *    is `offered` or `required` (the wallet can't reliably tell those apart
- *    from discovery alone — see the plan's §8.2; only `required` is
- *    distinguishable, via `requiredExt`).
+ *  - Offer: shown for a witness whose discovery answer declares locality
+ *    `offered` or `required` (`getWitnessLocalitySupport` — §8.2's
+ *    `offeredExt`/`requiredExt` markers). A witness that declares `off`, or
+ *    never answers, is skipped: there is nothing for Bluetooth permission to
+ *    enable behind it.
  *  - Required-refusal: shown only if the user declines AND
- *    `getWitnessLocalityRequirement` confirmed `required` — "say so now...
+ *    `getWitnessLocalitySupport` confirmed `required` — "say so now...
  *    never mid-ceremony."
  *
  * Declining reuses the SAME `useLocalityConfirmation` setting Settings →
@@ -179,11 +180,12 @@ const LocalityPreflightModal: React.FC = () => {
                   testID={testIdWithKey('LocalityPreflightTitle')}
                   accessibilityRole="header"
                 >
-                  {`${eventLabel} can confirm in-person meetings. Allow Bluetooth?`}
+                  {`Allow Bluetooth to confirm you're at ${eventLabel}?`}
                 </ThemedText>
                 <ThemedText style={styles.body}>
-                  If you allow it, exchanges here can be confirmed as in-person. The confirmation names the venue,
-                  a time window, and this witness — not your exact location or who else you meet.
+                  Exchanges here can use Bluetooth to confirm you were physically present. If you allow it, that
+                  confirmation records the venue, a time window, and this witness — never your exact location or
+                  who else you meet.
                 </ThemedText>
                 <Button
                   title="Allow"

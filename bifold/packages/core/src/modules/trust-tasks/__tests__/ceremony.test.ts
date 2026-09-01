@@ -19,6 +19,7 @@ import {
   isDeterministicProposer,
   queryWitnessDiscovery,
   getWitnessLocalityRequirement,
+  getWitnessLocalitySupport,
   TRUST_TASKS_MIN_RCE_VERSION,
 } from '../ceremony'
 import { LOCALITY_EXT_NAMESPACE } from '../deviceLocality'
@@ -274,6 +275,86 @@ describe('witness discovery (locality-plan.md §10.3 item 8)', () => {
     )
 
     await expect(getWitnessLocalityRequirement(fake.agent, fake.connectionId)).resolves.toBe(false)
+  })
+
+  test('getWitnessLocalitySupport is null before any discovery answer has arrived', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4witness' })
+    setupTrustTasksInbound(fake.agent)
+
+    await expect(getWitnessLocalitySupport(fake.agent, fake.connectionId)).resolves.toBeNull()
+  })
+
+  test('getWitnessLocalitySupport is "required" when witness/session lists requiredExt for the locality namespace', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4witness' })
+    setupTrustTasksInbound(fake.agent)
+    await queryWitnessDiscovery(fake.agent, fake.connectionId)
+
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'eeee3333-0000-4000-8000-00000000000e',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: 'eeee3333-0000-4000-8000-00000000000e',
+        issuer: 'did:peer:4witness',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: {
+          supportedTypes: [{ type: witnessSession.TYPE_URI, requiredExt: [LOCALITY_EXT_NAMESPACE] }],
+        },
+      },
+      { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4witness' }
+    )
+
+    await expect(getWitnessLocalitySupport(fake.agent, fake.connectionId)).resolves.toBe('required')
+  })
+
+  test('getWitnessLocalitySupport is "offered" when witness/session lists offeredExt for the locality namespace', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4witness' })
+    setupTrustTasksInbound(fake.agent)
+    await queryWitnessDiscovery(fake.agent, fake.connectionId)
+
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'eeee4444-0000-4000-8000-00000000000e',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: 'eeee4444-0000-4000-8000-00000000000e',
+        issuer: 'did:peer:4witness',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: {
+          supportedTypes: [{ type: witnessSession.TYPE_URI, offeredExt: [LOCALITY_EXT_NAMESPACE] }],
+        },
+      },
+      { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4witness' }
+    )
+
+    await expect(getWitnessLocalitySupport(fake.agent, fake.connectionId)).resolves.toBe('offered')
+
+    // getWitnessLocalityRequirement's boolean projection must not conflate "offered" with "required".
+    await expect(getWitnessLocalityRequirement(fake.agent, fake.connectionId)).resolves.toBe(false)
+  })
+
+  test('getWitnessLocalitySupport is "off" when witness/session carries neither requiredExt nor offeredExt', async () => {
+    const fake = makeFakeAgent({ myDid: 'did:peer:4me', theirDid: 'did:peer:4witness' })
+    setupTrustTasksInbound(fake.agent)
+    await queryWitnessDiscovery(fake.agent, fake.connectionId)
+
+    await deliver(
+      fake.capturedHandlerRef,
+      {
+        id: 'eeee5555-0000-4000-8000-00000000000e',
+        type: `${discovery.TYPE_URI}#response`,
+        threadId: 'eeee5555-0000-4000-8000-00000000000e',
+        issuer: 'did:peer:4witness',
+        recipient: 'did:peer:4me',
+        issuedAt: new Date().toISOString(),
+        payload: { supportedTypes: [witnessSession.TYPE_URI] },
+      },
+      { id: fake.connectionId, did: 'did:peer:4me', theirDid: 'did:peer:4witness' }
+    )
+
+    await expect(getWitnessLocalitySupport(fake.agent, fake.connectionId)).resolves.toBe('off')
   })
 })
 

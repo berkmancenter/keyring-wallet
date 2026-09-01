@@ -30,11 +30,16 @@ jest.mock('../../vrc-manager', () => ({
   registerWitnessValidationCallback: jest.fn(),
 }))
 
+type WitnessLocalitySupport = 'off' | 'offered' | 'required'
+
 const mockQueryWitnessDiscovery = jest.fn(async () => undefined)
-const mockGetWitnessLocalityRequirement = jest.fn(async () => false as boolean | null)
+// Defaults to 'offered' — the common case of a witness that supports
+// locality but doesn't require it — so existing "a preflight is scheduled"
+// tests below keep exercising that path unless they override it.
+const mockGetWitnessLocalitySupport = jest.fn(async () => 'offered' as WitnessLocalitySupport | null)
 jest.mock('../../../trust-tasks/ceremony', () => ({
   queryWitnessDiscovery: (...args: unknown[]) => mockQueryWitnessDiscovery(...args),
-  getWitnessLocalityRequirement: (...args: unknown[]) => mockGetWitnessLocalityRequirement(...args),
+  getWitnessLocalitySupport: (...args: unknown[]) => mockGetWitnessLocalitySupport(...args),
 }))
 
 // Capture the mock dispatch so we can assert on calls
@@ -422,7 +427,7 @@ describe('WitnessConnectionProvider', () => {
 
     it('carries required:true through when discovery confirms it', async () => {
       Platform.OS = 'android'
-      mockGetWitnessLocalityRequirement.mockResolvedValueOnce(true)
+      mockGetWitnessLocalitySupport.mockResolvedValueOnce('required')
       const result = await announceWitness()
 
       expect(result.current.localityPreflight?.required).toBe(true)
@@ -430,10 +435,18 @@ describe('WitnessConnectionProvider', () => {
 
     it('fails open to required:false if the discovery check throws', async () => {
       Platform.OS = 'android'
-      mockGetWitnessLocalityRequirement.mockRejectedValueOnce(new Error('no answer'))
+      mockGetWitnessLocalitySupport.mockRejectedValueOnce(new Error('no answer'))
       const result = await announceWitness()
 
       expect(result.current.localityPreflight?.required).toBe(false)
+    })
+
+    it('does not schedule a prompt when the witness discovery-declares no locality leg at all', async () => {
+      Platform.OS = 'android'
+      mockGetWitnessLocalitySupport.mockResolvedValueOnce('off')
+      const result = await announceWitness()
+
+      expect(result.current.localityPreflight).toBeUndefined()
     })
 
     it('resolveLocalityPreflight(true) marks it seen without touching the locality setting', async () => {

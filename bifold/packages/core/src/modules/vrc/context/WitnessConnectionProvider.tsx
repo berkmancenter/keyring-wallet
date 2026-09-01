@@ -23,7 +23,7 @@ import {
   registerWitnessConnectionDetectedCallback,
   registerWitnessValidationCallback,
 } from '../vrc-manager'
-import { queryWitnessDiscovery, getWitnessLocalityRequirement } from '../../trust-tasks/ceremony'
+import { queryWitnessDiscovery, getWitnessLocalitySupport, WitnessLocalitySupport } from '../../trust-tasks/ceremony'
 import { createVrcLogger } from '../vrc-logging'
 import { useStore } from '../../../contexts/store'
 import { DispatchAction } from '../../../contexts/reducers/store'
@@ -140,19 +140,24 @@ const LOCALITY_REQUIREMENT_WAIT_MS = 5000
 const LOCALITY_REQUIREMENT_POLL_MS = 250
 
 /**
- * Poll `getWitnessLocalityRequirement` for a bounded window rather than
- * showing the pre-flight sheet immediately on a bare `null` (not-yet-known) —
- * the discovery round trip is normally fast, and item 8's own "Done when"
- * is specifically that a `required` answer drives the sheet's copy, not
- * just its existence. Failing open to `false` after the window keeps this
- * from blocking the sheet indefinitely on a slow or silent witness.
+ * Poll `getWitnessLocalitySupport` for a bounded window rather than deciding
+ * the pre-flight sheet immediately on a bare `null` (not-yet-known) — the
+ * discovery round trip is normally fast, and item 8's own "Done when" is
+ * specifically that a `required` answer drives the sheet's copy, not just
+ * its existence. Failing open to `offered` after the window keeps this from
+ * blocking the sheet indefinitely on a slow or silent witness — same posture
+ * as before this could distinguish `off`, just now expressed as a policy
+ * value instead of a bare boolean.
  */
-async function resolveLocalityPreflightRequirement(agent: Agent, witnessConnectionId: string): Promise<boolean> {
+async function resolveLocalityPreflightSupport(
+  agent: Agent,
+  witnessConnectionId: string
+): Promise<WitnessLocalitySupport> {
   const deadline = Date.now() + LOCALITY_REQUIREMENT_WAIT_MS
   for (;;) {
-    const required = await getWitnessLocalityRequirement(agent, witnessConnectionId)
-    if (required !== null) return required
-    if (Date.now() >= deadline) return false
+    const support = await getWitnessLocalitySupport(agent, witnessConnectionId)
+    if (support !== null) return support
+    if (Date.now() >= deadline) return 'offered'
     await new Promise((resolve) => setTimeout(resolve, LOCALITY_REQUIREMENT_POLL_MS))
   }
 }
@@ -438,7 +443,9 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
         // is still on (off means "never request Bluetooth permission" per
         // §8.1 — nothing to prime). One `localityPreflightPendingRef` guard
         // keeps two witnesses connecting in quick succession from both
-        // scheduling a prompt.
+        // scheduling a prompt. A witness that discovery-declares no locality
+        // leg at all (`off`) skips the sheet entirely — there is nothing for
+        // Bluetooth permission to enable behind this witness.
         if (
           Platform.OS === 'android' &&
           !preferencesRef.current?.hasSeenLocalityPreflight &&
@@ -446,9 +453,16 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
           !localityPreflightPendingRef.current
         ) {
           localityPreflightPendingRef.current = true
-          void resolveLocalityPreflightRequirement(agent, connectionId)
-            .then((required) => {
-              setLocalityPreflight({ witness: newWitness, required })
+          void resolveLocalityPreflightSupport(agent, connectionId)
+            .then((support) => {
+              if (support === 'off') {
+                // No sheet to answer, so nothing will ever call
+                // `resolveLocalityPreflight` to clear this guard — clear it
+                // here instead, so a later witness connection isn't blocked.
+                localityPreflightPendingRef.current = false
+                return
+              }
+              setLocalityPreflight({ witness: newWitness, required: support === 'required' })
             })
             .catch((e: Error) => {
               logger.current.warn(`Locality pre-flight requirement check failed: ${e.message}`)

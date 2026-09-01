@@ -57,14 +57,14 @@ describe('LocalityPreflightModal', () => {
     withPreflight({ eventName: 'IIW Fall 2026' })
 
     const { getByText } = render(<LocalityPreflightModal />)
-    expect(getByText('IIW Fall 2026 can confirm in-person meetings. Allow Bluetooth?')).toBeTruthy()
+    expect(getByText("Allow Bluetooth to confirm you're at IIW Fall 2026?")).toBeTruthy()
   })
 
   it('falls back to the witness name when no eventName is set', () => {
     withPreflight()
 
     const { getByText } = render(<LocalityPreflightModal />)
-    expect(getByText('e2e-witness can confirm in-person meetings. Allow Bluetooth?')).toBeTruthy()
+    expect(getByText("Allow Bluetooth to confirm you're at e2e-witness?")).toBeTruthy()
   })
 
   it('Allow requests both BLE permissions and resolves with allow:true', async () => {

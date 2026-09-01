@@ -178,6 +178,11 @@ export class WitnessTaskSessions {
    * proposes without the namespace gets rejected by that check, not by
    * anything the generic runtime does automatically (it has no notion of
    * any one consumer's local `ext` policy — see this file's own header).
+   * `offered` carries its own `offeredExt` entry so a wallet can tell it
+   * apart from `off` — neither is enforced by `handleSession`, but the
+   * distinction is what lets the wallet's witness-connect pre-flight sheet
+   * skip witnesses with no locality leg at all instead of asking for
+   * Bluetooth permission it can never use.
    */
   private async handleDiscovery(
     document: Record<string, unknown>,
@@ -199,7 +204,9 @@ export class WitnessTaskSessions {
         const supportedTypes: unknown[] =
           policy === 'required'
             ? [{ type: SESSION_TYPE, requiredExt: [LOCALITY_EXT_NAMESPACE] }, SUBMIT_TYPE]
-            : [SESSION_TYPE, SUBMIT_TYPE]
+            : policy === 'offered'
+              ? [{ type: SESSION_TYPE, offeredExt: [LOCALITY_EXT_NAMESPACE] }, SUBMIT_TYPE]
+              : [SESSION_TYPE, SUBMIT_TYPE]
         return runtime.respondWith(rawDoc, randomUUID(), { supportedTypes })
       },
     })

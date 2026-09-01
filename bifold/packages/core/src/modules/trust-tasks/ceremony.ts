@@ -269,16 +269,22 @@ export async function queryWitnessDiscovery(agent: Agent, witnessConnectionId: s
   await sendDiscoveryQuery(agent, witnessConnectionId)
 }
 
+export type WitnessLocalitySupport = 'required' | 'offered' | 'off'
+
 /**
- * Whether a connected witness's discovery answer marks `witness/session` as
- * requiring the locality `ext` namespace (locality-plan.md §10.3 item 8:
- * read `requiredExt` on the witness row of a discovery response, not just
- * the propose row). Returns null when no answer has arrived yet — a caller
- * gating on this (e.g. a future witness-connect pre-flight sheet, before
- * Bluetooth permission is requested) must treat "not yet known" as distinct
- * from "known not required", exactly as `peerSupportsTaskType` does above.
+ * A connected witness's discovery-declared locality policy (locality-plan.md
+ * §8.2): `required` marks `witness/session` with `requiredExt` for the
+ * locality namespace, `offered` marks it with `offeredExt`, and `off` (or a
+ * row with neither marker) means this witness has no locality leg at all.
+ * Returns null when no discovery answer has arrived yet — a caller gating on
+ * this (e.g. the witness-connect pre-flight sheet, before Bluetooth
+ * permission is requested) must treat "not yet known" as distinct from
+ * "known off", exactly as `peerSupportsTaskType` does above.
  */
-export async function getWitnessLocalityRequirement(agent: Agent, witnessConnectionId: string): Promise<boolean | null> {
+export async function getWitnessLocalitySupport(
+  agent: Agent,
+  witnessConnectionId: string
+): Promise<WitnessLocalitySupport | null> {
   const connection = await agent.modules.didcomm.connections.getById(witnessConnectionId)
   if (!connection.theirDid) return null
   const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
@@ -291,17 +297,33 @@ export async function getWitnessLocalityRequirement(agent: Agent, witnessConnect
     (r) => r.document.type === `${discovery.TYPE_URI}#response` && r.document.issuer === connection.theirDid
   )
   if (fromWitness.length === 0) return null
-  return fromWitness.some((r) => {
-    const entries =
-      (r.document as { payload?: { supportedTypes?: (string | { type: string; requiredExt?: string[] })[] } })
-        .payload?.supportedTypes ?? []
-    return entries.some(
-      (entry) =>
-        typeof entry !== 'string' &&
-        entry.type === witnessSession.TYPE_URI &&
-        (entry.requiredExt ?? []).includes(LOCALITY_EXT_NAMESPACE)
-    )
-  })
+
+  const entries = fromWitness.flatMap(
+    (r) =>
+      (
+        r.document as {
+          payload?: { supportedTypes?: (string | { type: string; requiredExt?: string[]; offeredExt?: string[] })[] }
+        }
+      ).payload?.supportedTypes ?? []
+  )
+  const sessionEntries = entries.filter(
+    (entry): entry is { type: string; requiredExt?: string[]; offeredExt?: string[] } =>
+      typeof entry !== 'string' && entry.type === witnessSession.TYPE_URI
+  )
+  if (sessionEntries.some((entry) => (entry.requiredExt ?? []).includes(LOCALITY_EXT_NAMESPACE))) return 'required'
+  if (sessionEntries.some((entry) => (entry.offeredExt ?? []).includes(LOCALITY_EXT_NAMESPACE))) return 'offered'
+  return 'off'
+}
+
+/**
+ * Whether a connected witness's discovery answer marks `witness/session` as
+ * requiring the locality `ext` namespace. Returns null when no answer has
+ * arrived yet — see `getWitnessLocalitySupport`, which this is a thin
+ * boolean projection of, kept for callers that only care about `required`.
+ */
+export async function getWitnessLocalityRequirement(agent: Agent, witnessConnectionId: string): Promise<boolean | null> {
+  const support = await getWitnessLocalitySupport(agent, witnessConnectionId)
+  return support === null ? null : support === 'required'
 }
 
 /**
