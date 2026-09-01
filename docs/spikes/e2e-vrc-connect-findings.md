@@ -333,3 +333,54 @@ now costs up to 5 s. The wallet deliberately runs 1 s (`bc-agent-modules.ts`, wi
 the measured justification). Matching that would cut ceremony latency at the cost
 of load on shared infrastructure; it wants the same kind of measurement the wallet
 value got, not a guess. Left open deliberately.
+
+### Confirmed fixed on device (2026-09-01)
+
+`yarn e2e:vrc:witnessed:android-only`, two physical Android phones
+(SM_G986U1 / Android 13, SM_S936U / Android 16), against the same production
+mediator, with the applied fix and harness hardening above. First run after the
+fix: **passed**. Witness banner read `DIRECT (HTTP)` as requested (transport
+guard confirmed the override took effect); both phones got `🤝 NEW PARTICIPANT
+CONNECTED` / `✓ Sent witness-announcement` from the witness — the exact signal
+that was silent across all four pre-fix failures; both landed the **Witnessed**
+badge; one landed **Secure Exchange** too, the other tolerated a hardware
+verification warning (a pre-existing, documented tolerance for an aging
+attestation root — see `assertSecureExchangeBadge` in `e2e/lib/flows.js` —
+unrelated to this bug). This closes the fourth failure layer.
+
+## Environment gotchas that cost debugging time but are not code bugs
+
+Two more things burned real time this session, worth naming so a future
+session recognizes them immediately instead of re-diagnosing from scratch.
+
+**A phantom, root-owned listener can occupy the witness's default web port
+(9003) on some machines**, invisible to `lsof -tiTCP:9003` (returns nothing)
+but real per `ss -ltn` (shows `LISTEN`) and per an actual bind attempt (fails
+`EADDRINUSE`). Observed present even immediately after a full machine reboot,
+before any e2e process had run — so it is some other persistent
+service/listener on that particular machine, not anything this repo's tooling
+starts or can identify. Root cause not identified; out of scope to chase
+further here. Symptom if hit: the witness's full startup banner prints, then
+`Error: listen EADDRINUSE ... port: 9003` right at the end, ~15s in.
+**Fix:** `e2e/lib/witness.js`'s `assertPortFree` now bind-tests the port
+directly (not via `lsof`) before starting anything, and fails in under a
+second with a message naming the port and the `WITNESS_PORT`/`WITNESS_WEB_PORT`
+override — see the "Witness fails immediately with 'port N is already in
+use...'" entry in `e2e/README.md`'s Troubleshooting section. If you hit this,
+just pick different ports; don't spend time trying to find the offending
+process.
+
+**`e2e/debug-witness-connect.js` has no lock-screen preflight**, unlike the
+maintained witnessed runners (which got one in `90a7b62` — see
+`ensureLockScreenEnabled` in `e2e/lib/driver.js`). If the single phone it
+drives falls asleep mid-run (e.g. left unattended — it's meant to be
+unattended, that's the point of the script, but the phone still needs to stay
+awake), the app never receives the paste-invitation input at all and the
+script times out at `completeOnboarding` with a screen dump containing just
+the lock-screen clock (`mWakefulness=Dozing`, `isKeyguardShowing=true` via
+`adb shell dumpsys power` / `dumpsys activity activities`) — which reads
+exactly like a genuine onboarding-flow hang if you don't check the screen
+state first. It is a throwaway diagnostic script (README: "not part of the
+maintained suite"), so this wasn't fixed; just know to check `adb shell
+dumpsys power | grep mWakefulness` before assuming a `debug-witness-connect.js`
+timeout is a real bug.
