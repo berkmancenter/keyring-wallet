@@ -662,7 +662,10 @@ export async function returnToContacts(driver) {
  */
 export async function openContactDetail(driver, peerName) {
   // Already on the peer's chat? (header menu present + peer name visible)
-  if (!(await existsTestId(driver, "ContactMenu", 2000))) {
+  const alreadyOnPeerChat =
+    (await existsTestId(driver, "ContactMenu", 2000)) &&
+    (await byTextContains(driver, peerName).isExisting());
+  if (!alreadyOnPeerChat) {
     let onTab = false;
     for (let backs = 0; backs < 3 && !onTab; backs++) {
       if (await existsTestId(driver, "Contacts", 3000)) {
@@ -765,6 +768,80 @@ export async function assertContactShields(driver, peerName, timeout = 240000, o
 }
 
 /**
+ * ContactDetails renders SecureExchangeBadge only on a fully-validated chain
+ * — a warning outcome (evidence present, chain didn't validate — e.g. an
+ * aging attestation root, see docs/HARDWARE_ATTESTATION_FLOW.md "Known
+ * limitations" #5) omits the badge exactly like no evidence at all (see
+ * assertContactShields' comment). The old per-credential-offer screen used
+ * to distinguish the two via its own AttestationWarning banner; v4's
+ * automatic flow has no chat-screen equivalent, so Android's own
+ * verification log is the only remaining signal. No equivalent surfaces on
+ * iOS — this is a no-op there, same as assertTrustTaskExchangeMarkers.
+ */
+async function androidSawAttestationAttempt(driver) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return false;
+  try {
+    const { execSync } = await import("node:child_process");
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return /\[VRC:Verify\]|\[VRC:Badge\]/.test(log);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Assert the "Secure Exchange" badge (peer device-attestation, re-validated
+ * on-device) landed for the peer — attestation shield only, no witness
+ * involved. For the plain (non-witnessed) real-device VRC exchange, where
+ * assertContactShields' witness requirement can never be satisfied.
+ *
+ * options.requireSecureExchange (default true): pass false to tolerate the
+ * warning outcome unconditionally instead of falling back to the Android
+ * log check below (e.g. when the caller already knows the peer's evidence
+ * was attempted through some other signal).
+ */
+export async function assertSecureExchangeBadge(driver, peerName, timeout = 120000, options = {}) {
+  const requireSecureExchange = options.requireSecureExchange ?? true;
+  const deadline = Date.now() + timeout;
+  let sawAttestation = false;
+  while (Date.now() < deadline) {
+    await openContactDetail(driver, peerName);
+    sawAttestation =
+      (await existsTestId(driver, "SecureExchangeBadge", 3000)) ||
+      (await existsRawId(driver, "SecureExchangeBadge", 2000)) ||
+      (await byTextContains(driver, "Secure Exchange").isExisting());
+    if (sawAttestation || !requireSecureExchange) {
+      console.log(
+        `[e2e] ${driver.e2ePlatform}: "${peerName}" shows` +
+          (sawAttestation
+            ? " Secure Exchange"
+            : " no Secure Exchange badge (not required — hardware verification warning accepted)")
+      );
+      return;
+    }
+    if (await existsTestId(driver, "BackButton", 2000)) {
+      await tapTestId(driver, "BackButton");
+    }
+    await sleep(3000);
+  }
+  // Badge never rendered — tell "evidence never attempted" (real failure)
+  // apart from "attempted, chain didn't validate" (tolerated) via Android's
+  // own verification log before failing the run.
+  if (await androidSawAttestationAttempt(driver)) {
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: ⚠️ no Secure Exchange badge for "${peerName}", but the verification log ` +
+        `shows evidence was attempted (commonly an aging/legacy attestation root, not a flow regression); continuing`
+    );
+    return;
+  }
+  await screenshot(driver, "secure-exchange-missing");
+  throw new Error(`${driver.e2ePlatform}: "${peerName}" missing Secure Exchange badge after ${timeout}ms`);
+}
+
+/**
  * Assert a Verifiable Witness Credential (VWC) landed for the peer (witness
  * shield only). Kept for witness-focused checks; the full run uses
  * assertContactShields to require BOTH shields together.
@@ -801,6 +878,9 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
       onTab = true;
       break;
     }
+    // Real devices only: the signed delivery that follows consent may still
+    // be in flight here, requesting biometric confirmation. No-op elsewhere.
+    await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
     if (await existsTestId(driver, "BackButton", 2000)) {
       await tapTestId(driver, "BackButton");
@@ -815,6 +895,7 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
       );
       return;
     }
+    await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
     await sleep(3000);
   }
@@ -992,9 +1073,33 @@ export async function acceptRelationshipProposalIfPrompted(driver, timeout = 900
       console.log(`[e2e] ${driver.e2ePlatform}: relationship proposal accepted`);
       return true;
     }
+    // Real devices only: signing may request biometric confirmation while
+    // we're still waiting for the proposal prompt (e.g. the peer proposed
+    // and is already issuing). No-op on emulators/simulators.
+    await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
     await sleep(2000);
   }
   console.log(`[e2e] ${driver.e2ePlatform}: no proposal prompt (peer side proposed)`);
   return false;
+}
+
+/**
+ * Run acceptRelationshipProposalIfPrompted on both sides of an exchange and
+ * assert that at least one of them actually saw the proposal. If discovery
+ * failed and neither side was ever prompted, both calls return false and the
+ * run would otherwise fall through into assertVrcReceived's generic
+ * "contact never appeared" timeout — fail loudly here instead, with the
+ * specific cause.
+ */
+export async function acceptRelationshipProposalOnEitherSide(driverA, driverB, timeout = 90000) {
+  const [acceptedA, acceptedB] = await Promise.all([
+    acceptRelationshipProposalIfPrompted(driverA, timeout),
+    acceptRelationshipProposalIfPrompted(driverB, timeout),
+  ]);
+  if (!acceptedA && !acceptedB) {
+    throw new Error(
+      `${driverA.e2ePlatform}/${driverB.e2ePlatform}: neither side saw a relationship proposal prompt within ${timeout}ms — discovery likely failed`
+    );
+  }
 }

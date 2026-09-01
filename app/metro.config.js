@@ -131,6 +131,31 @@ module.exports = (async () => {
         // Singleton packages: always resolve from the app's node_modules so
         // bifold sources never load a second copy (bifold/node_modules is on
         // nodeModulesPaths, which would otherwise win for react etc.)
+        //
+        // The native-binding families below are here for a sharper reason than
+        // react's: each registers its native implementation on a MODULE-LEVEL
+        // singleton as an import side effect (NativeAskar.register(...) in
+        // @openwallet-foundation/askar-react-native, and the anoncreds/indy-vdr
+        // equivalents). Two physical copies means two singletons, so the copy
+        // that gets registered is not necessarily the copy a consumer reads,
+        // and the consumer then throws "Native askar has not been registered
+        // yet" even though everything installed correctly.
+        //
+        // This is not hypothetical: it made every correct PIN be reported as
+        // wrong on device (2026-08-26). AuthProvider's checkWalletPIN opens the
+        // Askar store through @credo-ts/askar, which resolved into the bifold
+        // submodule's tree, while askar-react-native resolved to the app's —
+        // registration landed on one singleton and the store check read the
+        // other. It surfaced only after the credo 0.6 upgrade put openStore in
+        // that path, since nothing else needs native askar before the main
+        // agent exists.
+        //
+        // Two independent installs make the duplicates unavoidable: the root
+        // workspace, plus `yarn install` inside the bifold submodule (run by
+        // scripts/ensure-bifold-ready.js as preinstall). `resolutions` only
+        // dedupes within a single tree, so pinning has to happen here. Keep
+        // this list in sync when a new native-backed dependency reaches
+        // bifold/packages/*.
         const singletonPrefixes = [
           'react',
           'react-native',
@@ -138,6 +163,16 @@ module.exports = (async () => {
           '@credo-ts/core',
           '@credo-ts/didcomm',
           '@credo-ts/anoncreds',
+          '@credo-ts/askar',
+          '@credo-ts/indy-vdr',
+          '@credo-ts/react-native',
+          '@credo-ts/webvh',
+          '@openwallet-foundation/askar-shared',
+          '@openwallet-foundation/askar-react-native',
+          '@hyperledger/anoncreds-shared',
+          '@hyperledger/anoncreds-react-native',
+          '@hyperledger/indy-vdr-shared',
+          '@hyperledger/indy-vdr-react-native',
         ]
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
         if (isSingleton && !context.originModulePath.startsWith(__dirname)) {
@@ -154,6 +189,43 @@ module.exports = (async () => {
         // no longer needs it — its RN SHA-256 shim uses expo-crypto)
         if (moduleName === 'js-sha256') {
           return context.resolveRequest(context, path.join(__dirname, 'node_modules', 'js-sha256'), platform)
+        }
+        // @openvtc/trust-tasks subpaths (e.g. '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload')
+        //
+        // Its exports map declares only `types` and `import` conditions:
+        //   "./*": { "types": "./dist/*.d.ts", "import": "./dist/*.js" }
+        //
+        // There is no `require` and no `default`, so under CommonJS resolution
+        // nothing matches, Metro warns ("no match was resolved for this
+        // request"), falls back to file-based resolution, and fails — the
+        // subpath only exists under dist/. Dev bundles never hit this because
+        // BIFOLD_SOURCE_PACKAGES resolves core to ESM source; the release
+        // bundle resolves core to lib/commonjs, which is why `assembleRelease`
+        // broke while every debug build was fine.
+        // Mirror the map's `import` target explicitly. Adding `require` to
+        // unstable_conditionNames does not help: the package declares no such
+        // condition to match.
+        if (moduleName.startsWith('@openvtc/trust-tasks/')) {
+          const subPath = moduleName.slice('@openvtc/trust-tasks/'.length)
+          const bases = [
+            path.join(__dirname, 'node_modules'),
+            path.join(__dirname, '..', 'bifold', 'packages', 'core', 'node_modules'),
+            path.join(__dirname, '..', 'bifold', 'node_modules'),
+            path.join(__dirname, '..', 'node_modules'),
+          ]
+          for (const base of bases) {
+            const candidate = path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)
+            if (fs.existsSync(candidate)) {
+              return { filePath: candidate, type: 'sourceFile' }
+            }
+          }
+          // No dist/<subPath>.js in any base — falling through to Metro's default
+          // resolution would just reproduce the "no match was resolved" failure
+          // this block exists to work around. Fail loudly instead.
+          throw new Error(
+            `[metro.config] Could not resolve '${moduleName}': no dist/${subPath}.js found under any of:\n` +
+              bases.map((base) => `  ${path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)}`).join('\n')
+          )
         }
         // Intercept rdf-canonize package requests to ensure patched version is used
         if (moduleName === 'rdf-canonize' || moduleName.startsWith('rdf-canonize/')) {

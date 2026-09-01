@@ -18,8 +18,8 @@ import net from "node:net";
 import { ensureAppium, stopAppium, screenshot, dumpSource, sleep } from "./driver.js";
 import {
   acceptInvitationViaPaste,
-  acceptRelationshipProposalIfPrompted,
   assertLocalityConfirmedMarker,
+  acceptRelationshipProposalOnEitherSide,
   assertTrustTaskExchangeMarkers,
   assertVrcReceived,
   assertContactShields,
@@ -221,10 +221,7 @@ export async function runWitnessedExchange({
       "\n[e2e] OPERATOR: a relationship proposal appears on one phone (auto-accepted);\n" +
         "[e2e] OPERATOR: then satisfy the BIOMETRIC prompt on EACH phone when it appears.\n"
     );
-    await Promise.all([
-      acceptRelationshipProposalIfPrompted(sessionA),
-      acceptRelationshipProposalIfPrompted(sessionB),
-    ]);
+    await acceptRelationshipProposalOnEitherSide(sessionA, sessionB);
 
     await Promise.all([
       assertVrcReceived(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`),

@@ -932,7 +932,28 @@ legacy dual-accept path is true by construction, not yet e2e'd), step 4
 (credential-exchange with a VTA), step 1 (the `tsp-core` dependency
 direction — TSP-side), and the proof-set migration (parent §4.6, parked on
 the working group). Reasoning and evidence per day: the dated companions,
-latest [`2026-08-20-al.md`](./2026-08-20-al.md).
+latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
+**Mediator delivery.** The shared production `credo-mediator` must run a
+post-`3a5ea51` (credo-0.6+) build and
+`MESSAGE_PICKUP__FORWARDING_STRATEGY=QueueOnly` to match this wallet's
+deliberate polling-only (`PickUpV2`, non-live) pickup design — a pre-migration
+build silently drops every forwarded message, and the *default*
+`DirectDelivery` strategy only delivers to an already-open live session rather
+than queuing for pickup. `yarn e2e:vrc:android-only` passes clean against this
+configuration. Reasoning: [`2026-08-24-bam.md`](./2026-08-24-bam.md).
+
+**Witness transport.** The witness reaches participants over DIRECT HTTP by
+default — lower latency than a mediated round-trip, and it keeps the
+witness's traffic off the same shared mediator that already sees the two
+wallets' own relationship — or over the shared MEDIATOR as a supported
+fallback, for an operator who can't expose a public port or to recover from a
+direct-endpoint outage without cancelling a live event. Both transports are
+proven end-to-end: `yarn e2e:vrc:witnessed:android-only` (DIRECT) and
+`yarn e2e:vrc:witnessed:android-only:mediator` (MEDIATOR) — the latter exists
+specifically so the fallback keeps getting exercised rather than rotting
+silently between real uses. Reasoning:
+[`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
 ### 1. Resolve review A1 — `tsp-core`'s dependency direction
 

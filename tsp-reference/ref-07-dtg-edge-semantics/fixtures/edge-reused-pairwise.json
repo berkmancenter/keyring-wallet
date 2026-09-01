@@ -1,0 +1,57 @@
+{
+  "description": "The uniqueness violation: Alice uses the SAME identifier, declared pairwise, with two different counterparties (Bob and Carol). Under the four-type model this needs a normative MUST in prose (spec/body.md:237) plus a Privacy Consideration (spec/body.md:576) to forbid. Under declared scope it is definitionally false: an identifier known to two counterparties is not pairwise.",
+  "declaredScopes": {
+    "half1": "pairwise",
+    "half2": "pairwise"
+  },
+  "halves": [
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:peer:2.Ez6LSbysKZAliceReused111111111111111111111111",
+      "validFrom": "2026-08-20T10:00:00Z",
+      "credentialSubject": {
+        "id": "did:peer:2.Ez6LSpSrLxnBobToAlice1111111111111111111111111"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T10:00:00Z",
+        "verificationMethod": "did:peer:2.Ez6LSbysKZAliceReused111111111111111111111111#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z63xWSzYtoQ7jHfZ4BBd8D2NRBLGSUv6Fts1SRWDdjXiEUKwE7eHF164wviTeRkpEt1X1pVrYUX8dy3u17hhyciwJ"
+      }
+    },
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:peer:2.Ez6LSbysKZAliceReused111111111111111111111111",
+      "validFrom": "2026-08-21T09:00:00Z",
+      "credentialSubject": {
+        "id": "did:peer:2.Ez6LSqCarolToAlice111111111111111111111111111"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-21T09:00:00Z",
+        "verificationMethod": "did:peer:2.Ez6LSbysKZAliceReused111111111111111111111111#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z4QfwrJ371iEAJqMXGzkw6gvFvuLjBYt4E2LsCsUpfmjyGNZwVruRxW4dPcRfPEbqM3EMKPoQRPFhr3Kf2iL3m5XF"
+      }
+    }
+  ]
+}

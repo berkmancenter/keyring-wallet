@@ -45,7 +45,8 @@
     "e2e:vrc:witnessed": "cd e2e && npm run vrc-exchange:witnessed",
     "e2e:vrc:witnessed:devices": "cd e2e && npm run vrc-exchange:witnessed:devices",
     "e2e:vrc:witnessed:android-only": "cd e2e && npm run vrc-exchange:witnessed:android-only",
-    "e2e:vrc:witnessed:locality:android-only": "cd e2e && npm run vrc-exchange:witnessed:locality:android-only"
+    "e2e:vrc:witnessed:locality:android-only": "cd e2e && npm run vrc-exchange:witnessed:locality:android-only",
+    "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator"
   },
   "devDependencies": {
     "@commitlint/cli": "~19.8.1",

@@ -1,0 +1,57 @@
+{
+  "description": "A bootstrapping-era edge: both halves issued under community-known membership DIDs (M-DIDs), backed by VMCs from a C-DID that is anchored in a VTN — the only construction the glossary's edge-verifiability conditions accept. Registry context lives in registry.json.",
+  "declaredScopes": {
+    "half1": "community",
+    "half2": "community"
+  },
+  "halves": [
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:web:community.example:members:alice",
+      "validFrom": "2026-08-20T10:00:00Z",
+      "credentialSubject": {
+        "id": "did:web:community.example:members:bob"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T10:00:00Z",
+        "verificationMethod": "did:web:community.example:members:alice#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z5kDj2j1kk2f2EPTTiH1mNgieNjNWeSiksFUd1w2mZFjr2zhLTF677mu2Uwk3BDaQxyEWUGoxhXs75M1uvgm7NEHe"
+      }
+    },
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:web:community.example:members:bob",
+      "validFrom": "2026-08-20T10:00:05Z",
+      "credentialSubject": {
+        "id": "did:web:community.example:members:alice"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T10:00:05Z",
+        "verificationMethod": "did:web:community.example:members:bob#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z3hxw7uruxVcCxcdFuAFnEdxWYfAU5kf9ZsKCinPSh8CdKzweBsa5EWLxL1ZA65z9aguDk8inguTu5My2YTAHkvnB"
+      }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "description": "The ambiguity cred-spec #22 opens with: an M-DID placed inside a VRC — which §VRC explicitly permits. A community member halfway through the recommended bootstrap-to-pairwise migration: their half is still issued under the community-known M-DID, the counterparty's half under a fresh R-DID. Same community, one edge, two identifier kinds. Is it a membership DID or a relationship DID? The four-type taxonomy has to answer and cannot; declared scope never asks.",
+  "declaredScopes": {
+    "half1": "community",
+    "half2": "pairwise"
+  },
+  "halves": [
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:web:community.example:members:alice",
+      "validFrom": "2026-08-20T11:00:00Z",
+      "credentialSubject": {
+        "id": "did:peer:2.Ez6LSmigBobToAliceM11111111111111111111111111"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T11:00:00Z",
+        "verificationMethod": "did:web:community.example:members:alice#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z2vZvqaRTMLyCpC7CwPpZGTcrBUUPRo9btcz6TiUBWiJHb6Tn6a47WM99u2DMngBzMqdNDdAd2sKF9Cn8UxkqoJ6k"
+      }
+    },
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:peer:2.Ez6LSmigBobToAliceM11111111111111111111111111",
+      "validFrom": "2026-08-20T11:00:05Z",
+      "credentialSubject": {
+        "id": "did:web:community.example:members:alice"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T11:00:05Z",
+        "verificationMethod": "did:peer:2.Ez6LSmigBobToAliceM11111111111111111111111111#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z4LpatYEkq27e6ghj7R2UdXa4kyxeqcuURueFXtef2Xb2rokpPTtEPNZKRk5AyZAq8QdC8LgTfnprMDWAnybmsghr"
+      }
+    }
+  ]
+}
