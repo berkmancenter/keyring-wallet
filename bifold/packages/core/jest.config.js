@@ -18,6 +18,10 @@ module.exports = {
     // in transformIgnorePatterns).
     '^@openvtc/trust-tasks$': '<rootDir>/node_modules/@openvtc/trust-tasks/dist/index.js',
     '^@openvtc/trust-tasks/(.*)$': '<rootDir>/node_modules/@openvtc/trust-tasks/dist/$1.js',
+    // Same reason as @openvtc/trust-tasks above: ESM-only, import-condition-only exports map.
+    // Only @bifold/trust-tasks depends on it, so yarn hoists it to the bifold
+    // workspace root rather than into this package's own node_modules.
+    '^@openvtc/vti-tsp-js$': '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/index.js',
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       '<rootDir>/__mocks__/file.js',
     '\\.(css|less)$': '<rootDir>/__mocks__/style.js',

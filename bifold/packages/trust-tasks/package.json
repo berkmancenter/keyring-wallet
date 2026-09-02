@@ -27,8 +27,10 @@
   "dependencies": {
     "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
     "@credo-ts/didcomm": "0.6.3",
+    "@noble/ciphers": "^2.0.0",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
+    "@openvtc/vti-tsp-js": "0.1.0",
     "ajv": "^8.17.1",
     "canonicalize": "^1.0.8"
   },
