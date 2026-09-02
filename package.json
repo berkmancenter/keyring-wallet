@@ -83,7 +83,8 @@
     "@bifold/remote-logs": "portal:bifold/packages/remote-logs",
     "@bifold/verifier": "portal:bifold/packages/verifier",
     "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
-    "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks"
+    "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks",
+    "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {
