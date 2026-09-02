@@ -33,6 +33,36 @@ const VTA_BIN = process.env.VTA_BIN || (existsSync(cachedVtaBin) ? cachedVtaBin 
 
 const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
+/**
+ * Grant an ACL role to a DID on a stopped VTA — `vta import-did` needs
+ * exclusive access to the store, so the caller must `pauseDaemon()` first and
+ * `resumeDaemon()` after. Pairs with `startVta`'s returned `configPath`.
+ */
+export async function importDid(configPath, did, role) {
+  await runVta(["--config", configPath, "import-did", "--did", did, "--role", role]);
+}
+
+/**
+ * Mint a did:key the VTA itself manages (derived from its own seed) in
+ * `context` — needed as a credential's `credentialSubject.id` before the VTA
+ * can sign a holder-bound presentation for it (`resolve_holder_keys` refuses
+ * any subject that isn't a did:key this VTA holds the derived private key
+ * for). Same offline/exclusive-store-access constraint as `importDid`: pause
+ * the daemon first. `context` must already exist — `startVta`'s own admin
+ * did:key uses `"vta"`, created implicitly by `vta setup --from`, so that's
+ * the safe default to reuse (an unknown context makes the CLI prompt
+ * interactively, which will error rather than hang against this fixture's
+ * `stdio: ["ignore", ...]`, but is still worth avoiding).
+ */
+export async function createDidKey(configPath, context, label) {
+  const args = ["--config", configPath, "create-did-key", "--context", context];
+  if (label) args.push("--label", label);
+  const out = await runVta(args);
+  const match = out.match(/^DID:\s+(\S+)/m);
+  if (!match) throw new Error(`vta create-did-key did not report a DID:\n${out}`);
+  return match[1];
+}
+
 function runVta(args, { cwd } = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn(VTA_BIN, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
@@ -90,10 +120,13 @@ function startStaticHost(dir, port) {
  * `mediatorDid` for a messaging-enabled VTA once a local/test mediator
  * exists to point it at.
  *
- * Returns { vtaDid, vtaUrl, adminDid, adminCredential, stop }.
- * `adminCredential` is the base64 blob `vta create-did-key` prints — decode
- * with `Buffer.from(x, "base64").toString()` for { did, privateKeyMultibase,
- * vtaDid, vtaUrl }, the shape a client needs to authenticate as this admin.
+ * Returns { vtaDid, vtaUrl, adminDid, adminCredential, configPath, pauseDaemon,
+ * resumeDaemon, stop }. `adminCredential` is the base64 blob `vta
+ * create-did-key` prints — decode with `Buffer.from(x, "base64").toString()`
+ * for { did, privateKeyMultibase, vtaDid, vtaUrl }, the shape a client needs
+ * to authenticate as this admin. `configPath` + `pauseDaemon`/`resumeDaemon`
+ * are for offline store-exclusive commands (`importDid`, `createDidKey`)
+ * against an already-running VTA — stop the daemon, run them, restart.
  */
 export async function startVta({
   name = process.env.VTA_NAME || "e2e-vta",
@@ -158,23 +191,32 @@ export async function startVta({
   const adminDid = adminDidMatch[1];
   const adminCredential = adminCredMatch[1];
 
-  const proc = spawn(VTA_BIN, ["--config", configPath], {
-    detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let exited = false;
-  proc.on("exit", (code) => {
-    exited = true;
-    if (code) console.error(`[e2e] vta process exited (code ${code})`);
-  });
-  proc.stdout.on("data", (b) => {
-    for (const line of b.toString().split("\n")) if (line.trim()) console.log(`[vta] ${stripAnsi(line).trimEnd()}`);
-  });
-  proc.stderr.on("data", (b) => {
-    for (const line of b.toString().split("\n")) if (line.trim()) console.log(`[vta] ${stripAnsi(line).trimEnd()}`);
-  });
+  // The daemon process handle is mutable — `pauseDaemon`/`resumeDaemon` (below)
+  // swap it out so an ACL grant (`vta import-did`, which needs exclusive
+  // access to the store) can run between a stop and a fresh spawn, without
+  // tearing down the tunnels or state dir the way `stop()` does.
+  let proc;
+  let exited;
 
-  const stop = async () => {
+  function spawnDaemon() {
+    exited = false;
+    proc = spawn(VTA_BIN, ["--config", configPath], {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    proc.on("exit", (code) => {
+      exited = true;
+      if (code) console.error(`[e2e] vta process exited (code ${code})`);
+    });
+    proc.stdout.on("data", (b) => {
+      for (const line of b.toString().split("\n")) if (line.trim()) console.log(`[vta] ${stripAnsi(line).trimEnd()}`);
+    });
+    proc.stderr.on("data", (b) => {
+      for (const line of b.toString().split("\n")) if (line.trim()) console.log(`[vta] ${stripAnsi(line).trimEnd()}`);
+    });
+  }
+
+  async function killDaemon() {
     if (!exited) {
       try {
         process.kill(-proc.pid, "SIGINT");
@@ -190,6 +232,42 @@ export async function startVta({
         }
       }
     }
+  }
+
+  async function waitHealthy() {
+    const deadline = Date.now() + readyTimeoutMs;
+    let lastErr;
+    while (Date.now() < deadline) {
+      if (exited) throw new Error("vta process exited before becoming ready");
+      try {
+        const res = await fetch(`${vtaTunnel.url}/health`);
+        if (res.ok) return;
+        lastErr = new Error(`health check returned ${res.status}`);
+      } catch (err) {
+        lastErr = err;
+      }
+      await sleep(1000);
+    }
+    throw new Error(`vta not healthy within ${readyTimeoutMs}ms: ${lastErr?.message}`);
+  }
+
+  /**
+   * Stop the daemon (tunnels/state untouched) so an offline command needing
+   * exclusive store access — `vta import-did`, granting an ACL role to a
+   * caller minted after this VTA came up — can run. Pair with `resumeDaemon`.
+   */
+  async function pauseDaemon() {
+    await killDaemon();
+  }
+
+  /** Respawn the daemon after `pauseDaemon` and wait for `/health` again. */
+  async function resumeDaemon() {
+    spawnDaemon();
+    await waitHealthy();
+  }
+
+  const stop = async () => {
+    await killDaemon();
     didHostStop();
     didHostTunnel.stop();
     vtaTunnel.stop();
@@ -197,25 +275,13 @@ export async function startVta({
     console.log(`[e2e] vta stopped`);
   };
 
-  const deadline = Date.now() + readyTimeoutMs;
-  let lastErr;
-  while (Date.now() < deadline) {
-    if (exited) {
-      await stop();
-      throw new Error("vta process exited before becoming ready");
-    }
-    try {
-      const res = await fetch(`${vtaTunnel.url}/health`);
-      if (res.ok) {
-        console.log(`[e2e] vta ready — ${vtaDid}`);
-        return { vtaDid, vtaUrl: vtaTunnel.url, adminDid, adminCredential, stop };
-      }
-      lastErr = new Error(`health check returned ${res.status}`);
-    } catch (err) {
-      lastErr = err;
-    }
-    await sleep(1000);
+  spawnDaemon();
+  try {
+    await waitHealthy();
+  } catch (err) {
+    await stop();
+    throw err;
   }
-  await stop();
-  throw new Error(`vta not healthy within ${readyTimeoutMs}ms: ${lastErr?.message}`);
+  console.log(`[e2e] vta ready — ${vtaDid}`);
+  return { vtaDid, vtaUrl: vtaTunnel.url, adminDid, adminCredential, configPath, pauseDaemon, resumeDaemon, stop };
 }
