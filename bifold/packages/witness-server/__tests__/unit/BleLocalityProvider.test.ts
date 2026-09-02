@@ -284,3 +284,213 @@ describe('BleLocalityProvider — retry on a mid-exchange GATT failure', () => {
     expect(getDevice).toHaveBeenCalledTimes(3)
   })
 })
+
+describe('BleLocalityProvider — runScanLoop branch coverage', () => {
+  const address = 'AA:BB:CC:DD:EE:FF'
+  const otherAddress = '11:22:33:44:55:66'
+  const params = {
+    sessionTaskDigestMultibase: 'sha256:deadbeef',
+    challenge: 'a-challenge',
+    sensorDid: 'did:peer:4witness',
+  }
+  const matchingUuid = serviceUuidFromEid(deriveEid(params.challenge, params.sessionTaskDigestMultibase)).toLowerCase()
+
+  function fakeAdapter(overrides: { devices?: jest.Mock; getDevice?: jest.Mock } = {}) {
+    return {
+      isDiscovering: jest.fn(async () => false),
+      startDiscovery: jest.fn(async () => undefined),
+      stopDiscovery: jest.fn(async () => undefined),
+      devices: overrides.devices ?? jest.fn(async () => []),
+      getDevice:
+        overrides.getDevice ??
+        jest.fn(async () => {
+          throw new Error('unexpected getDevice call')
+        }),
+    }
+  }
+
+  function transcriptFor(challenge: string, taskDigestMultibase: string) {
+    return {
+      method: 'ble-challenge-response/0.1',
+      taskDigestMultibase,
+      challenge,
+      sensorNonce: 'ignored-here',
+      sensorDid: params.sensorDid,
+      hardwareAttestation: 'present-unverified',
+      devicePublicKey: 'ZmFrZS1wdWJsaWMta2V5',
+      signature: 'ZmFrZS1zaWduYXR1cmU',
+    }
+  }
+
+  function workingDevice(uuid: string, challenge: string, taskDigestMultibase: string): BleDevice {
+    return {
+      connect: jest.fn(async () => undefined),
+      disconnect: jest.fn(async () => undefined),
+      helper: { prop: jest.fn(async () => [uuid]) },
+      gatt: jest.fn(async () => ({
+        getPrimaryService: jest.fn(async () => ({
+          getCharacteristic: jest.fn(
+            async (): Promise<BleCharacteristic> => ({
+              writeValue: jest.fn(async () => undefined),
+              readValue: jest.fn(async () => Buffer.from(JSON.stringify(transcriptFor(challenge, taskDigestMultibase)))),
+            })
+          ),
+        })),
+      })),
+    }
+  }
+
+  function nonMatchingDevice(): BleDevice {
+    return {
+      connect: jest.fn(async () => undefined),
+      disconnect: jest.fn(async () => undefined),
+      helper: { prop: jest.fn(async () => ['00000000-0000-0000-0000-000000000000']) },
+      gatt: jest.fn(async () => {
+        throw new Error('should never connect to a non-matching device')
+      }),
+    }
+  }
+
+  let provider: InstanceType<typeof BleLocalityProvider>
+
+  afterEach(async () => {
+    await provider?.stop()
+  })
+
+  test('resolves null when the window elapses with no matching advert seen (windowLost)', async () => {
+    mockCreateBluetooth.mockReturnValue({
+      bluetooth: { defaultAdapter: async () => fakeAdapter({ devices: jest.fn(async () => []) }) },
+      destroy: jest.fn(),
+    })
+
+    provider = new BleLocalityProvider()
+    await provider.start()
+    const result = await provider.observeSession({ ...params, windowSeconds: 0.05 })
+
+    expect(result).toBeNull()
+  })
+
+  test('stop() resolves a pending observation with null even mid-scan', async () => {
+    mockCreateBluetooth.mockReturnValue({
+      bluetooth: { defaultAdapter: async () => fakeAdapter({ devices: jest.fn(async () => []) }) },
+      destroy: jest.fn(),
+    })
+
+    provider = new BleLocalityProvider()
+    await provider.start()
+    const observePromise = provider.observeSession({ ...params, windowSeconds: 30 })
+    await provider.stop()
+
+    await expect(observePromise).resolves.toBeNull()
+  })
+
+  test('skips an address whose adapter.getDevice() throws and still finds the matching device', async () => {
+    const getDevice = jest.fn(async (addr: string) => {
+      if (addr === otherAddress) throw new Error('dbus GetManagedObjects boom')
+      return workingDevice(matchingUuid, params.challenge, params.sessionTaskDigestMultibase)
+    })
+    mockCreateBluetooth.mockReturnValue({
+      bluetooth: {
+        defaultAdapter: async () => fakeAdapter({ devices: jest.fn(async () => [otherAddress, address]), getDevice }),
+      },
+      destroy: jest.fn(),
+    })
+
+    provider = new BleLocalityProvider()
+    await provider.start()
+    const result = await provider.observeSession({ ...params, windowSeconds: 5 })
+
+    expect(result).not.toBeNull()
+    expect(getDevice).toHaveBeenCalledTimes(2)
+  })
+
+  test('skips a non-matching device without ever connecting to it, then resolves on the matching one', async () => {
+    const skipped = nonMatchingDevice()
+    const matched = workingDevice(matchingUuid, params.challenge, params.sessionTaskDigestMultibase)
+    const getDevice = jest.fn(async (addr: string) => (addr === otherAddress ? skipped : matched))
+    mockCreateBluetooth.mockReturnValue({
+      bluetooth: {
+        defaultAdapter: async () => fakeAdapter({ devices: jest.fn(async () => [otherAddress, address]), getDevice }),
+      },
+      destroy: jest.fn(),
+    })
+
+    provider = new BleLocalityProvider()
+    await provider.start()
+    const result = await provider.observeSession({ ...params, windowSeconds: 5 })
+
+    expect(result).not.toBeNull()
+    expect(skipped.connect).not.toHaveBeenCalled()
+  })
+
+  test('a device whose UUIDs prop() throws on the first tick is retried on a later tick, reusing the cached device rather than refetching', async () => {
+    let propCalls = 0
+    const device: BleDevice = {
+      connect: jest.fn(async () => undefined),
+      disconnect: jest.fn(async () => undefined),
+      helper: {
+        prop: jest.fn(async () => {
+          propCalls += 1
+          if (propCalls === 1) throw new Error('not yet resolved by BlueZ')
+          return [matchingUuid]
+        }),
+      },
+      gatt: jest.fn(async () => ({
+        getPrimaryService: jest.fn(async () => ({
+          getCharacteristic: jest.fn(
+            async (): Promise<BleCharacteristic> => ({
+              writeValue: jest.fn(async () => undefined),
+              readValue: jest.fn(async () =>
+                Buffer.from(JSON.stringify(transcriptFor(params.challenge, params.sessionTaskDigestMultibase)))
+              ),
+            })
+          ),
+        })),
+      })),
+    }
+    const getDevice = jest.fn(async () => device)
+    mockCreateBluetooth.mockReturnValue({
+      bluetooth: { defaultAdapter: async () => fakeAdapter({ devices: jest.fn(async () => [address]), getDevice }) },
+      destroy: jest.fn(),
+    })
+
+    provider = new BleLocalityProvider()
+    await provider.start()
+    const result = await provider.observeSession({ ...params, windowSeconds: 5 })
+
+    expect(result).not.toBeNull()
+    expect(propCalls).toBeGreaterThanOrEqual(2)
+    // Cached after the very first fetch — never refetched despite prop()
+    // failing on the first tick (the `if (!device)` false branch).
+    expect(getDevice).toHaveBeenCalledTimes(1)
+  })
+
+  test('one shared scan loop serves two concurrent observeSession calls for different sessions', async () => {
+    const paramsB = { ...params, challenge: 'another-challenge' }
+    const uuidB = serviceUuidFromEid(deriveEid(paramsB.challenge, paramsB.sessionTaskDigestMultibase)).toLowerCase()
+    const addressB = '99:88:77:66:55:44'
+
+    const deviceA = workingDevice(matchingUuid, params.challenge, params.sessionTaskDigestMultibase)
+    const deviceB = workingDevice(uuidB, paramsB.challenge, paramsB.sessionTaskDigestMultibase)
+    const getDevice = jest.fn(async (addr: string) => (addr === addressB ? deviceB : deviceA))
+    const defaultAdapter = jest.fn(async () =>
+      fakeAdapter({ devices: jest.fn(async () => [address, addressB]), getDevice })
+    )
+    mockCreateBluetooth.mockReturnValue({
+      bluetooth: { defaultAdapter },
+      destroy: jest.fn(),
+    })
+
+    provider = new BleLocalityProvider()
+    await provider.start()
+    const [resultA, resultB] = await Promise.all([
+      provider.observeSession({ ...params, windowSeconds: 5 }),
+      provider.observeSession({ ...paramsB, windowSeconds: 5 }),
+    ])
+
+    expect(resultA?.transcript.challenge).toBe(params.challenge)
+    expect(resultB?.transcript.challenge).toBe(paramsB.challenge)
+    // A single shared scan loop serving both waiters — not one per observeSession call.
+    expect(defaultAdapter).toHaveBeenCalledTimes(1)
+  })
+})
