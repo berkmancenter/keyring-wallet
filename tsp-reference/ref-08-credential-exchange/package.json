@@ -1,0 +1,15 @@
+{
+  "name": "ref-08-credential-exchange",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 08 — credential-exchange/{query,present,pending/*} (trust_tasks_subtask.md §9 step 4) against a real, locally-provisioned vta-service over its REST binding: DID-auth handshake (auth/challenge + eddsa-jcs-2022-signed auth/authenticate), then the DCQL query/defer/pending/approve/present round trip.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "canonicalize": "^1.0.8"
+  }
+}

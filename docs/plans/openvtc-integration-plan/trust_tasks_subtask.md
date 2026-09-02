@@ -928,13 +928,14 @@ runtime). Step 3's carriage ships as binding 0.2 (the dedicated `@type`, not
 a basic message). Step 2's specifications are the upstream `vrc/*` /
 `witness/*` batch, with `witness-share` and a future R-Card task to join it.
 Outside this milestone: step 6's evidence against an older build (the
-legacy dual-accept path is true by construction, not yet e2e'd), step 4
-(credential-exchange with a VTA), and the proof-set migration (parent §4.6,
-parked on the working group). Reasoning and evidence per day: the dated
-companions, latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+legacy dual-accept path is true by construction, not yet e2e'd), and the
+proof-set migration (parent §4.6, parked on the working group). Reasoning and
+evidence per day: the dated companions, latest
+[`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
-**Step 1 is now resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`,
-forked from `fix/mediator-pickup-strategy`) — see step 1 below and
+**Step 1 is now resolved in code, and step 4 is started** (Keyring,
+`feat/trust-tasks-over-didcomm-v1`, forked from `fix/mediator-pickup-strategy`)
+— see steps 1 and 4 below and
 [`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
@@ -1030,6 +1031,20 @@ basic message; the receiving side derives peer identity from the connection's
 Over that binding, against `vta-service`. No spec authorship and a genuinely live
 counterparty, so a failure is unambiguously ours. Also the consent-gating path
 the parent plan's Phase E demo depends on.
+
+**Started** (Keyring, `feat/trust-tasks-over-didcomm-v1`) — the "needs a running
+VTA" blocker this step carried is gone: `e2e/lib/vta.js` (new) non-interactively
+provisions a real, disposable `vta-service` behind a cloudflared tunnel.
+Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). Against that live VTA,
+[`tsp-reference/ref-08-credential-exchange`](../../../tsp-reference/ref-08-credential-exchange/)
+proves the DID-auth handshake byte-compatible (`@bifold/trust-tasks`'s
+`eddsa-jcs-2022` proof construction, verified against the real
+`vta-service`'s verifier, not assumed) and finds — by reading the live
+dispatch table, not guessing — that `credential-exchange/query` is
+messaging-only (DIDComm/TSP) in this build, absent from the REST dispatch
+table entirely. **Not done**: the messaging-enabled VTA + counterparty needed
+to actually reach the query/defer/approve/present round trip, and the Node
+reference-adapter fixtures.
 
 **Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
 approval, approved, and answered with a `vp_token` that `vta-service` accepts —
