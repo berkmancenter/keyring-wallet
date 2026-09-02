@@ -1032,19 +1032,27 @@ Over that binding, against `vta-service`. No spec authorship and a genuinely liv
 counterparty, so a failure is unambiguously ours. Also the consent-gating path
 the parent plan's Phase E demo depends on.
 
-**Started** (Keyring, `feat/trust-tasks-over-didcomm-v1`) — the "needs a running
-VTA" blocker this step carried is gone: `e2e/lib/vta.js` (new) non-interactively
-provisions a real, disposable `vta-service` behind a cloudflared tunnel.
-Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). Against that live VTA,
-[`tsp-reference/ref-08-credential-exchange`](../../../tsp-reference/ref-08-credential-exchange/)
-proves the DID-auth handshake byte-compatible (`@bifold/trust-tasks`'s
+**Started, query round-trip proven** (Keyring, `feat/trust-tasks-over-didcomm-v1`)
+— the "needs a running VTA" blocker this step carried is gone: `e2e/lib/vta.js`
+(new) non-interactively provisions a real, disposable `vta-service` behind a
+cloudflared tunnel. Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+Against that live VTA (REST-only),
+[`tsp-reference/ref-08-credential-exchange`](../../../tsp-reference/ref-08-credential-exchange/)'s
+`run.mjs` proves the DID-auth handshake byte-compatible (`@bifold/trust-tasks`'s
 `eddsa-jcs-2022` proof construction, verified against the real
 `vta-service`'s verifier, not assumed) and finds — by reading the live
 dispatch table, not guessing — that `credential-exchange/query` is
 messaging-only (DIDComm/TSP) in this build, absent from the REST dispatch
-table entirely. **Not done**: the messaging-enabled VTA + counterparty needed
-to actually reach the query/defer/approve/present round trip, and the Node
-reference-adapter fixtures.
+table entirely. Against a **messaging-enabled** VTA (a locally-run mediator,
+stood up by hand this session — no `e2e/lib/mediator.js` yet), `run-messaging.mjs`
+reaches the query directly over DIDComm-via-mediator
+(`@openvtc/vti-didcomm-js`'s `connectVtaViaMediator`/`sendAndWait`): the VTA
+receives, processes, and correctly answers with `report-problem/2.0`
+(`e.p.msg.not-found` — no held credential satisfies the query, correct since
+this VTA holds none). **Not done**: a held credential to reach the
+defer/pending-list/approve/present half, `e2e/lib/mediator.js` (the manual
+recipe is proven, scripting it is not), and the Node reference-adapter
+fixtures.
 
 **Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
 approval, approved, and answered with a `vp_token` that `vta-service` accepts —
