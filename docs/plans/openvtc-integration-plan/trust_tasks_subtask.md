@@ -1119,9 +1119,16 @@ legacy dialect.
 
 **Remaining delta to done:** a legacy peer still completes an exchange via
 the dual-send path (§7.2) — true by construction (sub-v4 peers keep the
-untouched legacy flow) but not yet evidenced against an actual v3 build.
-The witnessed path (step 5) passes live, simulator and attended devices
-both (see [`2026-08-19-al.md`](./2026-08-19-al.md) §E).
+untouched legacy flow), and now unit-evidenced for the parsing and
+capability-gate half: `parseLegacyRelationshipAnnouncement` (extracted from
+the basic-message handler) round-trips every RCE generation's real wire
+format, and a real v1–v3 announcement string, run through it, never opens
+the Trust Task dialect (`maybeOpenRelationshipExchange` no-ops downstream).
+**Still not evidenced against an actual v3 build** — that requires an older
+app binary on a device, which unit tests cannot substitute for; see
+[`2026-09-01-bam.md`](./2026-09-01-bam.md). The witnessed path (step 5)
+passes live, simulator and attended devices both (see
+[`2026-08-19-al.md`](./2026-08-19-al.md) §E).
 
 ### 7. VWC sharing — counterparty visibility of the witnessing
 
