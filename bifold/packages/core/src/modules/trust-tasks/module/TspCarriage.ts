@@ -38,6 +38,13 @@ import { TspEnvelopeMessage } from '../messages/TspEnvelopeMessage'
 const utf8 = new TextEncoder()
 const fromUtf8 = new TextDecoder('utf-8', { fatal: true })
 
+/** Distinct from ceremony.ts's `[TrustTasks:Ceremony]` markers — this
+ *  confirms the TSP envelope path specifically ran, not just that a
+ *  document arrived (which either carriage would show). Read via
+ *  `adb logcat`, same convention as `e2e/lib/flows.js`'s
+ *  `assertTrustTaskExchangeMarkers`. */
+const LOG_PREFIX = '[TrustTasks:TspCarriage]'
+
 export function createTspCarriage(agent: Agent): Carriage {
   const resolver = createCredoVidResolver(agent)
 
@@ -61,6 +68,7 @@ export function createTspCarriage(agent: Agent): Carriage {
           connection,
         })
       )
+      agent.config.logger.info(`${LOG_PREFIX} envelope sent on connection ${peer.connectionId}`)
     },
 
     onDocument(handler: CarriageDocumentHandler): void {
@@ -81,6 +89,7 @@ export function createTspCarriage(agent: Agent): Carriage {
           }
 
           const document = JSON.parse(fromUtf8.decode(unpacked.payload)) as Record<string, unknown>
+          agent.config.logger.info(`${LOG_PREFIX} envelope received on connection ${connection.id}`)
           await handler(document, {
             connectionId: connection.id,
             senderDid: connection.theirDid,

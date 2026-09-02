@@ -84,6 +84,7 @@ function makeFakeAgent(connections: Record<string, { did: string; theirDid: stri
   }
 
   const agent = {
+    config: { logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() } },
     dependencyManager: { container },
     modules: {
       didcomm: {
