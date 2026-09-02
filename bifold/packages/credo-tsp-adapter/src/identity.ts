@@ -19,7 +19,7 @@
  *
  * @module credo-tsp-adapter/identity
  */
-import { Kms, TypedArrayEncoder, type Agent } from '@credo-ts/core'
+import { getPublicJwkFromVerificationMethod, Kms, TypedArrayEncoder, type Agent, type VerificationMethod } from '@credo-ts/core'
 import { AskarStoreManager } from '@credo-ts/askar'
 import { Key, KeyAlgorithm } from '@openwallet-foundation/askar-shared'
 import { convertPublicKeyToX25519 } from '@stablelib/ed25519'
@@ -75,6 +75,50 @@ export function identityFromEd25519Key(agent: Agent, signingKeyId: string, publi
     signingKey: signingKeyFromEd25519Key(agent, signingKeyId, publicKey),
     keyAgreement: keyAgreementFromEd25519Key(agent, signingKeyId, publicKey),
   }
+}
+
+/** Same embedded-verification-method fallback order as `@bifold/trust-tasks`'s
+ *  `documentProof.ts` (`firstSigningVerificationMethod`) and this package's
+ *  own `vidResolver.ts`: did:peer:0 documents list a signing key under
+ *  `verificationMethod`; did:peer:4 documents (Credo's connection DIDs) embed
+ *  it in `authentication`/`assertionMethod` instead. */
+function firstSigningVerificationMethod(didDocument: {
+  verificationMethod?: VerificationMethod[]
+  authentication?: Array<string | VerificationMethod>
+  assertionMethod?: Array<string | VerificationMethod>
+}): VerificationMethod | undefined {
+  const embedded = (arr?: Array<string | VerificationMethod>) => (arr ?? []).find((entry): entry is VerificationMethod => typeof entry === 'object' && entry !== null)
+  return embedded(didDocument.verificationMethod) ?? embedded(didDocument.assertionMethod) ?? embedded(didDocument.authentication)
+}
+
+/**
+ * The `TspIdentity` for one of the WALLET'S OWN existing DIDs — e.g. a
+ * DIDComm connection's own DID — reusing that DID's already-existing
+ * signing key rather than minting a new one. This is the shape a
+ * `Carriage` implementation needs: derive TSP identity from the same
+ * relationship the DIDComm connection already represents, with no separate
+ * pairing/bootstrap step. Same KMS key id lookup
+ * `@bifold/trust-tasks`'s `documentProof.ts`'s `signDocumentProof` uses (the
+ * key id is not derivable from the JWK alone; it lives in the DidRecord's
+ * key mapping, with the pre-0.6 fingerprint id as fallback).
+ */
+export async function identityFromDid(agent: Agent, did: string): Promise<tsp.TspIdentity> {
+  const didDocument = await agent.dids.resolveDidDocument(did)
+  const verificationMethod = firstSigningVerificationMethod(didDocument)
+  if (!verificationMethod) {
+    throw new Error(`credo-tsp-adapter: no signing verification method on ${did}`)
+  }
+
+  const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
+  const relativeKeyId = verificationMethod.id.startsWith(did) ? verificationMethod.id.slice(did.length) : verificationMethod.id
+  const [didRecord] = await agent.dids.getCreatedDids({ did })
+  const keyId = didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ?? publicJwk.legacyKeyId
+  if (!keyId) {
+    throw new Error(`credo-tsp-adapter: no KMS key id resolvable for ${did}`)
+  }
+
+  const publicKey = (publicJwk.publicKey as { publicKey: Uint8Array }).publicKey
+  return identityFromEd25519Key(agent, keyId, publicKey)
 }
 
 /**
