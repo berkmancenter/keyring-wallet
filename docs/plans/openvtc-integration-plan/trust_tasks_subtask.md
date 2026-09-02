@@ -937,16 +937,24 @@ evidence per day: the dated companions, latest
 reference-adapter fixtures, which are blocked on Phase D** (Keyring,
 `feat/trust-tasks-over-didcomm-v1`, forked from `fix/mediator-pickup-strategy`)
 — see steps 1 and 4 below, [`2026-09-01-bam.md`](./2026-09-01-bam.md), and
-[`2026-09-02-bam.md`](./2026-09-02-bam.md). Phase D's own remaining scope is
-narrower than first written: the `eddsa-jcs-2022` signer and the DIDComm-v1
-trust-task client it names as still-needed already ship (this step's own
-`vta-service` proof above, and step 1's `Carriage` resolution, respectively)
-— what's left is a `VidResolver` port, a `direct.ts` CESR-framing port, and
-assembling the actual `credo-tsp-adapter` package. And the parent plan's
-stage-4 "gated on `vta-service`" note applies to ecosystem interop, not to a
-wallet-to-wallet TSP carriage between two Keyring wallets, which is buildable
-and live-e2e-provable now — in progress, see
-[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections.
+[`2026-09-02-bam.md`](./2026-09-02-bam.md). **Phase D's core deliverable is
+now built**, not just scoped: the `VidResolver` port and `direct.ts`'s
+`pack`/`unpack` (both named as remaining in earlier entries) are done, the
+`eddsa-jcs-2022` signer and DIDComm-v1 trust-task client it once also named
+already shipped (this step's own `vta-service` proof above, and step 1's
+`Carriage` resolution, respectively), and a real `bifold/packages/
+credo-tsp-adapter` package plus a `TspCarriage` now exist — the parent plan's
+stage-4 "gated on `vta-service`" note applies to ecosystem interop, not to
+this wallet-to-wallet carriage between two Keyring wallets, which is built,
+dev-flag-gated, and unit/integration-tested against real Askar custody.
+Still open: an actual e2e run confirming the Developer-toggle navigation on
+a real device/emulator (written, unverified — no device was available when
+it was written), and re-running `ref-08-credential-exchange`'s fixture suite
+through the new port-based reference adapter (this step's own remaining
+"done when" item below). See
+[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections for the full
+build and the real bug it caught (an independently-derived `KeyAgreement`
+resolves to the wrong key once a real `VidResolver` is involved).
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
 post-`3a5ea51` (credo-0.6+) build and
