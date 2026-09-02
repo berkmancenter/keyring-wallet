@@ -83,9 +83,13 @@ is the one above: keep the sender on `ref-09`'s raw-key port instead.
 This closes the `VidResolver` half of what ref-09/ref-10's READMEs left open.
 Still open:
 
-- **`direct.ts`'s `pack`/`unpack` CESR-framing port** — now unblocked: it can
-  use this rung's `VidResolver` to resolve a peer's keys, plus ref-09/ref-10's
-  `SigningKey`/`KeyAgreement`. See `ref-12-direct-ts-port` (next rung).
+- ~~`direct.ts`'s `pack`/`unpack` CESR-framing port~~ — **done**, see
+  [`ref-12-direct-ts-port`](../ref-12-direct-ts-port/) — which also found a
+  real bug in the naive way to combine this rung with ref-10's: a
+  `KeyAgreement` derived from an independent X25519 key (ref-10's own
+  pattern) resolves to the WRONG public key once a real `VidResolver` is in
+  the loop, because a `did:key`'s keyAgreement entry is always derived from
+  the identity's Ed25519 key, never independent.
 - Assembling the actual `credo-tsp-adapter` package (§5.2) — everything so
   far, across ref-09/ref-10/ref-11, is `tsp-reference` proof, not the
   production Credo Module.
