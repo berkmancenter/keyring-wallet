@@ -935,7 +935,16 @@ companions, latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
 **Step 1 is now resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`,
 forked from `fix/mediator-pickup-strategy`) — see step 1 below and
-[`2026-09-01-bam.md`](./2026-09-01-bam.md).
+[`2026-09-01-bam.md`](./2026-09-01-bam.md). Phase D's own remaining scope is
+narrower than first written: the `eddsa-jcs-2022` signer and the DIDComm-v1
+trust-task client it names as still-needed already ship (step 1's `Carriage`
+resolution) — what's left is a `VidResolver` port, a `direct.ts` CESR-framing
+port, and assembling the actual `credo-tsp-adapter` package. A wallet-to-wallet
+TSP carriage between two Keyring wallets is buildable and live-e2e-provable
+now, independent of any ecosystem `vta-service` counterparty — see
+[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections. (Step 4,
+credential-exchange against a live `vta-service`, is tracked on a separate
+branch and out of scope here.)
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
 post-`3a5ea51` (credo-0.6+) build and

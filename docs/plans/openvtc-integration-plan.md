@@ -284,8 +284,25 @@ is why the recast comes first and everything else is carriage.
 | **1. DIDComm v1 via Credo** | Credo's Aries stack, existing connections | today's regex-in-a-chat-message | **Shipping.** The legacy baseline, untouched — §8 keeps it non-negotiable throughout |
 | **2. Trust Tasks over DIDComm v1** | same Credo connection, `bindings/didcomm-v1/0.2` | `vrc/relationships/*`, `witness/*` Trust Tasks | **Designed and proven.** [`trust_tasks_subtask.md`](./openvtc-integration-plan/trust_tasks_subtask.md) §6 and §9 steps 1–6, each with acceptance criteria; ref-06v1/06v1b/06v1c ran it, and binding 0.2 is upstream (#216, #238) |
 | **3. Trust Tasks over DIDComm v2** | `@openvtc/vti-didcomm-js` beside Credo | the same task documents, unchanged | **Reachable, not yet named as a stage.** See below |
-| **4. Trust Tasks over TSP** | `tsp-core`'s Carriage port | the same task documents, unchanged | Ecosystem phase — gated on `vta-service` shipping TSP enabled, which it does not at Cypress ([`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) §2.3) |
+| **4. Trust Tasks over TSP** | `tsp-core`'s Carriage port | the same task documents, unchanged | Split by counterparty, see below — wallet-to-wallet is buildable now; ecosystem interop is gated on `vta-service` shipping TSP enabled, which it does not at Cypress ([`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) §2.3) |
 | **5. PNM/CNM functionality** | whatever the VTA negotiates | Trust Tasks throughout | **Sequenced** as P0–P6 in [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md), interleaved with Phase D rather than gated on Phase E (its §7) |
+
+**Stage 4 splits by counterparty, and only one half is ecosystem-gated.**
+Wallet-to-wallet VRC/witness exchange never talks to `vta-service` — both
+ends are Keyring wallets. `vta-service`'s TSP feature being off by default at
+Cypress blocks *ecosystem interop* (a client speaking TSP to `vta-service`,
+`openvtc`, or `pnm-cli` gets no counterparty that understands this flow over
+TSP — and per `pnm_cnm_subtask.md` §5.2, none of those implement peer-to-peer
+relationship exchange over TSP today regardless of `vta-service`'s feature
+flags). It does not block two Keyring wallets exchanging a real TSP envelope
+(HPKE-sealed, Askar-backed, CESR-framed) as the payload physically delivered
+over the *existing* DIDComm-v1 mediator connection — mediators relay opaque
+encrypted bytes regardless of content, so this needs no new transport work.
+That gets a genuine, live, two-device, e2e-testable proof of the real TSP
+crypto stack without waiting on `vta-service`; it does not get ecosystem
+interop, which stays gated exactly as below. See
+[`2026-09-02-bam.md`](./openvtc-integration-plan/2026-09-02-bam.md) for the
+full reasoning.
 
 **Stage 3 is worth stating explicitly, because the earlier argument for skipping
 it no longer holds.** The reasoning was that running Trust Tasks over DIDComm v2
