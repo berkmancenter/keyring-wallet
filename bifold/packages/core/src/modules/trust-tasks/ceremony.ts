@@ -52,16 +52,37 @@ import {
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../vrc/witnessStatusStore'
 
+import type { CarriageDocumentHandler } from '@bifold/trust-tasks'
+
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
 import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
+import { createTspCarriage } from './module/TspCarriage'
 import { TrustTasksModule } from './module/TrustTasksModule'
 import { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
 import { TrustTasksService, respondWith, rejectWith, extendedCode } from './services/TrustTasksService'
 
 const LOG_PREFIX = '[TrustTasks:Ceremony]'
+
+/**
+ * Dev/test-only carriage selection — no auto-negotiation yet (the ladder
+ * TSP > DIDComm v2 > REST from the parent plan's §4.2 is separate follow-on
+ * work). Defaults to false so production behavior is unchanged; e2e and
+ * tests opt in explicitly via {@link setTspCarriageEnabled}. See
+ * docs/plans/openvtc-integration-plan/2026-09-02-bam.md for why a
+ * wallet-to-wallet TSP carriage doesn't need to wait on ecosystem interop.
+ */
+let tspCarriageEnabled = false
+
+export function setTspCarriageEnabled(enabled: boolean): void {
+  tspCarriageEnabled = enabled
+}
+
+export function isTspCarriageEnabled(): boolean {
+  return tspCarriageEnabled
+}
 
 /** The first RCE protocol version whose peers speak the Trust Task dialect. */
 export const TRUST_TASKS_MIN_RCE_VERSION = 4
@@ -338,24 +359,31 @@ async function buildChallengeBoundVp(
   return JsonTransformer.toJSON(signedVp) as Record<string, unknown>
 }
 
-/** Pack a document onto the binding-0.2 carriage and send it over a connection. */
+/**
+ * Pack a document onto a carriage and send it over a connection —
+ * binding-0.2 (DIDComm-v1) by default, or the real TSP envelope carriage
+ * when {@link setTspCarriageEnabled} has opted in.
+ */
 export async function sendTrustTaskDocument(
   agent: Agent,
   connectionId: string,
   document: Record<string, unknown>
 ): Promise<void> {
-  await createDidCommV1Carriage(agent).send(document, { connectionId })
+  const carriage = tspCarriageEnabled ? createTspCarriage(agent) : createDidCommV1Carriage(agent)
+  await carriage.send(document, { connectionId })
 }
 
 /**
- * Register the inbound side: the binding-0.2 message handler, routing
+ * Register the inbound side: the binding-0.2 message handler (and, when
+ * {@link setTspCarriageEnabled} has opted in, the TSP envelope carriage's
+ * handler too — both route to the same ceremony logic below), routing
  * documents to the ceremony logic. Call once per agent, beside
  * `setupVrcConnectionHandler`.
  */
 export function setupTrustTasksInbound(agent: Agent): void {
   const service = getTrustTasksService(agent)
 
-  createDidCommV1Carriage(agent).onDocument(async (document, context) => {
+  const handleInboundDocument: CarriageDocumentHandler = async (document, context) => {
     const type = String(document.type ?? '')
     const logger = agent.config.logger
 
@@ -461,9 +489,14 @@ export function setupTrustTasksInbound(agent: Agent): void {
     // retain so nothing is lost, complain so nothing is silent.
     logger.info(`${LOG_PREFIX} unhandled trust-task type ${type} — retained`)
     await service.retain(agent.context, document, 'request', context.connectionId)
-  })
+  }
 
-  agent.config.logger.info(`${LOG_PREFIX} inbound carriage handler registered (binding 0.2)`)
+  createDidCommV1Carriage(agent).onDocument(handleInboundDocument)
+  if (tspCarriageEnabled) {
+    createTspCarriage(agent).onDocument(handleInboundDocument)
+  }
+
+  agent.config.logger.info(`${LOG_PREFIX} inbound carriage handler registered (binding 0.2${tspCarriageEnabled ? ' + TSP envelope' : ''})`)
 }
 
 interface InboundContext {
