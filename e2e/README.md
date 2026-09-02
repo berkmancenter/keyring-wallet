@@ -438,9 +438,11 @@ await vta.stop();
 
 - [`cloudflared`](https://github.com/cloudflare/cloudflared) (already required
   for the witnessed exchange above).
-- The `vta` binary — download it yourself, this harness doesn't fetch it:
-  `curl -O https://download.firstperson.dev/vta/latest/vta && chmod +x vta`.
-  Point `VTA_BIN` at it, or put it on `PATH`. See the [OpenVTC developer
+- The `vta` binary, cached and pinned by
+  [`scripts/openvtc/fetch-binaries.mjs`](../scripts/openvtc/README.md) (run
+  `node scripts/openvtc/fetch-binaries.mjs vta` once — `startVta` finds the
+  cached copy automatically). Point `VTA_BIN` at a different binary instead if
+  you need to. See the [OpenVTC developer
   tutorial](https://github.com/OpenVTC/vti-setup/tree/main/developer) for the
   wider ecosystem (the `pnm`/`openvtc` CLIs, joining a community) — this
   harness only automates the `vta` half.

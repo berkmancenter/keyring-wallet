@@ -5,9 +5,11 @@
 // everything down.
 //
 // Unlike the witness (an Aries/Credo agent this repo already runs), `vta` is
-// an external Rust binary from https://firstperson.dev — download it
-// yourself (see e2e/README.md) and point VTA_BIN at it, or put it on PATH.
-// This harness does not fetch it.
+// an external Rust binary from https://firstperson.dev. Run
+// `node scripts/openvtc/fetch-binaries.mjs vta` once to cache a pinned copy
+// (see scripts/openvtc/README.md) — VTA_BIN below finds it there
+// automatically; override VTA_BIN to point elsewhere (a system install, a
+// different pin) instead.
 //
 // did:webvh's DID identifier is DERIVED FROM its hosting domain, and a free
 // cloudflared quick tunnel gets a random new hostname every run — so every
@@ -17,14 +19,17 @@
 // sessions; this module intentionally does not support the latter.
 import { spawn } from "node:child_process";
 import { createServer as createHttpServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, sep } from "node:path";
+import { join, resolve, sep, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { assertPortFree, startTunnel } from "./witness.js";
 import { sleep } from "./driver.js";
 
-const VTA_BIN = process.env.VTA_BIN || "vta";
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const cachedVtaBin = join(repoRoot, "external", "bin", "vta");
+const VTA_BIN = process.env.VTA_BIN || (existsSync(cachedVtaBin) ? cachedVtaBin : "vta");
 
 const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
 
