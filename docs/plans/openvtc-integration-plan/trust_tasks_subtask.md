@@ -933,10 +933,11 @@ proof-set migration (parent §4.6, parked on the working group). Reasoning and
 evidence per day: the dated companions, latest
 [`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
-**Step 1 is now resolved in code, and step 4 is done except for the Node
-reference-adapter fixtures** (Keyring, `feat/trust-tasks-over-didcomm-v1`,
-forked from `fix/mediator-pickup-strategy`) — see steps 1 and 4 below and
-[`2026-09-01-bam.md`](./2026-09-01-bam.md).
+**Step 1 is now resolved in code, and step 4 is done except for the
+reference-adapter fixtures, which are blocked on Phase D** (Keyring,
+`feat/trust-tasks-over-didcomm-v1`, forked from `fix/mediator-pickup-strategy`)
+— see steps 1 and 4 below, [`2026-09-01-bam.md`](./2026-09-01-bam.md), and
+[`2026-09-02-bam.md`](./2026-09-02-bam.md).
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
 post-`3a5ea51` (credo-0.6+) build and
@@ -1061,13 +1062,19 @@ holder-bound `vp_token`. Two non-obvious constraints found and fixed along the
 way: a presentation's `credentialSubject.id` must be a did:key the VTA itself
 manages (`resolve_holder_keys`), and a DCQL query's `claims` must be
 non-empty (`vta-vault`'s consent record is default-deny on an empty reveal
-set). Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). **Not done**: the
-Node reference-adapter fixtures — the only remaining item for this step.
+set). Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). **Not done, and
+blocked, not standalone**: "the reference adapter" the parent plan's own
+"done when" names is `ref-07-credo-adapter`'s raw-key implementation (§4.4,
+Phase D) — this step's remaining item cannot be built ahead of that rung,
+which extracts the `SigningKey`/`KeyAgreement`/`VidResolver` ports no
+`tsp-core` package defines yet anywhere in this codebase. Reasoning:
+[`2026-09-02-bam.md`](./2026-09-02-bam.md).
 
 **Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
 approval, approved, and answered with a `vp_token` that `vta-service` accepts
 — **met** — and the same fixtures pass in Node against the reference adapter
-— **outstanding**. Interop evidence for parent §7.9 falls out of this.
+— **blocked on Phase D** (`ref-07-credo-adapter`, below). Interop evidence for
+parent §7.9 falls out of this.
 
 ### 5. Implement layer C — `witness/*`
 
