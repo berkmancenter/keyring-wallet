@@ -937,7 +937,16 @@ evidence per day: the dated companions, latest
 reference-adapter fixtures, which are blocked on Phase D** (Keyring,
 `feat/trust-tasks-over-didcomm-v1`, forked from `fix/mediator-pickup-strategy`)
 — see steps 1 and 4 below, [`2026-09-01-bam.md`](./2026-09-01-bam.md), and
-[`2026-09-02-bam.md`](./2026-09-02-bam.md).
+[`2026-09-02-bam.md`](./2026-09-02-bam.md). Phase D's own remaining scope is
+narrower than first written: the `eddsa-jcs-2022` signer and the DIDComm-v1
+trust-task client it names as still-needed already ship (this step's own
+`vta-service` proof above, and step 1's `Carriage` resolution, respectively)
+— what's left is a `VidResolver` port, a `direct.ts` CESR-framing port, and
+assembling the actual `credo-tsp-adapter` package. And the parent plan's
+stage-4 "gated on `vta-service`" note applies to ecosystem interop, not to a
+wallet-to-wallet TSP carriage between two Keyring wallets, which is buildable
+and live-e2e-provable now — in progress, see
+[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections.
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
 post-`3a5ea51` (credo-0.6+) build and

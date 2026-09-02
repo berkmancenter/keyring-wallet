@@ -101,11 +101,22 @@ the raw-key case only. Still open, in roughly this order:
   byte-identical against `a256gcm`).
 - **A `VidResolver` port** — resolving a VID string to the keys/DID document
   it names. A simpler concern than the crypto above (no custody boundary
-  involved), not attempted here to keep this rung to one question.
-- **The `eddsa-jcs-2022` signer for `auth/authenticate`** (§4.5) and **the
-  Credo trust-task client for `bindings/didcomm-v1/0.1`** (§7.9) — the parent
-  plan's remaining `ref-07-credo-adapter` scope, both downstream of the ports
-  above existing.
+  involved), not attempted here to keep this rung to one question. Still
+  open as of 2026-09-02.
+- ~~The `eddsa-jcs-2022` signer for `auth/authenticate` (§4.5) and the Credo
+  trust-task client for `bindings/didcomm-v1/0.1` (§7.9)~~ — **already ship**,
+  checked against production code rather than assumed: `@bifold/trust-tasks`'s
+  `documentProof.ts` (`signDocumentProof`/`verifyDocumentProof`, proven
+  against a real `vta-service` verifier by `ref-08-credential-exchange`) and
+  `@bifold/core`'s `DidCommV1Carriage.ts` + `ceremony.ts`, live-proven on
+  attended devices. This list was written before anyone checked whether
+  `@bifold/trust-tasks` already covered them. See
+  [`2026-09-02-bam.md`](../../docs/plans/openvtc-integration-plan/2026-09-02-bam.md).
+- **`direct.ts`'s `pack`/`unpack` CESR-framing port** — needs the `VidResolver`
+  above (to resolve a peer's keys) plus production-grade `SigningKey`/
+  `KeyAgreement` beyond this rung's proof script. The actual remaining gap
+  for `ref-07-credo-adapter`, along with assembling the `credo-tsp-adapter`
+  package itself.
 - Renumbering: this rung claimed `ref-09` because `ref-07` and `ref-08` are
   both already taken on disk by unrelated rungs (`ref-07-dtg-edge-semantics`,
   `ref-08-credential-exchange`) — the parent plan's ladder table predates
