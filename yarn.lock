@@ -2130,6 +2130,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@bifold/core@portal:bifold/packages/core::locator=keyring-wallet%40workspace%3A."
   dependencies:
+    "@bifold/credo-tsp-adapter": "workspace:*"
     "@bifold/trust-tasks": "workspace:*"
     "@digitalcredentials/data-integrity": "npm:^2.6.0"
     "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "npm:^1.3.0"
@@ -2217,6 +2218,18 @@ __metadata:
     uuid: ~9.0.1
   bin:
     bifold: bin/bifold
+  languageName: node
+  linkType: soft
+
+"@bifold/credo-tsp-adapter@portal:bifold/packages/credo-tsp-adapter::locator=keyring-wallet%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@bifold/credo-tsp-adapter@portal:bifold/packages/credo-tsp-adapter::locator=keyring-wallet%40workspace%3A."
+  dependencies:
+    "@bifold/trust-tasks": "workspace:*"
+    "@credo-ts/askar": "npm:0.6.3"
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch"
+    "@openwallet-foundation/askar-shared": "npm:0.6.0"
+    "@stablelib/ed25519": "npm:^2.0.2"
   languageName: node
   linkType: soft
 
@@ -14319,6 +14332,7 @@ __metadata:
     "@babel/preset-env": "npm:~7.28.6"
     "@babel/runtime": "npm:~7.28.6"
     "@bifold/core": "npm:3.0.16"
+    "@bifold/credo-tsp-adapter": "npm:0.1.0-alpha.1"
     "@bifold/oca": "npm:3.0.16"
     "@bifold/react-hooks": "npm:3.0.16"
     "@bifold/react-native-attestation": "npm:3.0.16"
