@@ -191,6 +191,7 @@ const translation = {
     "AttestationSupport": "Attestation support (PT-BR)",
     "EnableProxy": "Enable proxy (PT-BR)",
     "EnableAppToAppPersonFlow": "App-to-app Person flow (PT-BR)",
+    "EnableTspCarriage": "Enable TSP envelope carriage (PT-BR)",
   },
   "Tips": {
     "Header": "Tips (PT-BR)",

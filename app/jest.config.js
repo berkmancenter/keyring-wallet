@@ -13,6 +13,12 @@ module.exports = {
     // core package's own jest config does.
     '^@openvtc/trust-tasks$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/index.js',
     '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/$1.js',
+    // Same reason as @openvtc/trust-tasks above: ESM-only, import-condition-only
+    // exports map (reached through @bifold/trust-tasks, itself reached through
+    // @bifold/core's portal source). Only @bifold/trust-tasks depends on it, so
+    // it's hoisted to the outer repo root rather than into any package's own
+    // node_modules.
+    '^@openvtc/vti-tsp-js$': '<rootDir>/../node_modules/@openvtc/vti-tsp-js/dist/index.js',
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       '<rootDir>/__mocks__/file.js',
     '\\.(css|less)$': '<rootDir>/__mocks__/style.js',
