@@ -1,13 +1,23 @@
 # ref-09 — `tsp-core`'s SigningKey/KeyAgreement ports
 
 Resolves the design question `ref-07-credo-adapter` (parent plan §4.4, Phase
-D) hit before any Credo/Askar code was written: `vti-tsp-js`'s `pack`/`unpack`
-and `hpke-js`'s `CipherSuite` both require a raw private key handed over
-directly, with no entry point that accepts a pre-computed Diffie-Hellman
-result instead. Askar's `Key.fromKeyExchange` exposes exactly a raw X25519
-ECDH shared secret and nothing more — the private key never leaves Askar —
-so neither library can be driven by an Askar-backed identity as-is. Full
-investigation: `docs/plans/openvtc-integration-plan/2026-09-02-bam.md`.
+D) hit before any Credo/Askar code was written: `@openvtc/vti-tsp-js`'s
+`pack`/`unpack`, and the crypto layer underneath it, all require a raw
+private key handed over directly, with no entry point that accepts a
+pre-computed Diffie-Hellman result instead. Askar's `Key.fromKeyExchange`
+exposes exactly a raw X25519 ECDH shared secret and nothing more — the
+private key never leaves Askar — so it cannot drive either as-is. Full
+investigation, including a correction worth reading (an earlier pass in this
+same investigation checked a stale local clone and misattributed which
+library enforces this): `docs/plans/openvtc-integration-plan/2026-09-02-bam.md`.
+
+**This rung's real destination is [`PR-CANDIDATE.md`](./PR-CANDIDATE.md)** —
+an additive patch proposed against `vta-browser-plugin`'s actual pinned
+source (`packages/tsp-js/src/crypto/{hpke-noble,sign}.ts`), not a permanent
+fork living only here. The files below are the local, dependency-free proof
+that the patch is correct, mirroring `ref-03-noble-crypto`'s own precedent
+(a rung plus a `PR-CANDIDATE.md`) — this repo has no writable fork of
+`vta-browser-plugin` to build the real `.ts` patch against directly.
 
 ## What this proves
 
@@ -34,25 +44,31 @@ investigation: `docs/plans/openvtc-integration-plan/2026-09-02-bam.md`.
    evidence available without an actual Askar instance: the interface is
    exercised exactly the way a real KMS-backed adapter would exercise it.
 
-## Why `@noble` and not `hpke-js`
+## Why `@noble`, and why this is a small addition, not new crypto
 
-`hpke-js`'s own `CipherSuite.createSenderContext` imports the raw private key
-into its KEM internally (`s.kem.importKey("raw", ...)`) — it has the same
-gap as `vti-tsp-js`, one layer down, and is itself backed by WebCrypto, not
-`@noble`. `ref-03-noble-crypto/hpke-noble.mjs` already reimplements RFC
-9180's `AuthEncap`/`AuthDecap`/`KeySchedule` from `@noble/curves`,
-`@noble/hashes`, and `@noble/ciphers` alone (built for React Native, whose
-Hermes engine has no `crypto.subtle` at all) — vector-verified and
-interop-verified against `hpke-js` across four runtimes. This rung's only
-change to that implementation is *where* the two static-key DH calls happen:
-`hpke-noble.mjs` computes `dh(staticSk, peerPk)` directly;
-`hpke-ports.mjs` asks a `KeyAgreement` port to do it
-(`keyAgreement.agree(peerPk)`) instead. Everything downstream — `kemContext`,
-`LabeledExtract`/`LabeledExpand`, the key schedule, the AEAD — is pure
-symmetric crypto over public inputs and needed no change at all. The
-ephemeral half of the DH (`skE`/`enc`) is never custody-sensitive (minted
-fresh per message, discarded after) and stays a plain local variable, exactly
-as in `hpke-noble.mjs`.
+Production `@openvtc/vti-tsp-js` (pinned commit `89d70c4`, `vti-tsp-js`
+0.2.0) **already runs entirely on `@noble/curves`/`@noble/hashes`/
+`@noble/ciphers`** — `crypto/hpke.ts` is a thin re-export over
+`crypto/hpke-noble.ts`, and `hpke-js` survives only as a dev-dependency for
+the test suite's byte-identity cross-check, never called at runtime. That
+noble implementation is, in substance, this same effort's own earlier
+contribution (`ref-03-noble-crypto`, merged as `vta-browser-plugin#116`) —
+built for React Native, whose Hermes engine has no `crypto.subtle` at all,
+and already vector- and interop-verified across four runtimes.
+
+`ref-03-noble-crypto/hpke-noble.mjs` (this repo's local copy of that same
+construction) is this rung's starting point. The only change
+`hpke-ports.mjs` makes is *where* the two static-key DH calls happen:
+`hpke-noble.mjs` computes `dh(staticSk, peerPk)` directly; `hpke-ports.mjs`
+asks a `KeyAgreement` port to do it (`keyAgreement.agree(peerPk)`) instead.
+Everything downstream — `kemContext`, `LabeledExtract`/`LabeledExpand`, the
+key schedule, the AEAD — is pure symmetric crypto over public inputs and
+needed no change at all. The ephemeral half of the DH (`skE`/`enc`) is never
+custody-sensitive (minted fresh per message, discarded after) and stays a
+plain local variable, exactly as in `hpke-noble.mjs`. Because the real
+upstream file this patches is one we already got merged, proposing this as a
+follow-up PR is lower-friction than a cold-start contribution — see
+`PR-CANDIDATE.md`.
 
 ## Files
 
@@ -65,6 +81,9 @@ as in `hpke-noble.mjs`.
 - `hpke-ports.mjs` — HPKE-Auth (`AuthEncap`/`AuthDecap`/`seal`/`open`) and the
   outer Ed25519 `sign`, built on the ports instead of raw keys.
 - `run.mjs` — the four levels of proof above.
+- `PR-CANDIDATE.md` — the actual patch proposed against `vta-browser-plugin`'s
+  real, current source, with the same content as the `.mjs` files above
+  translated to the upstream file's TypeScript shape.
 
 ## What's still needed for `ref-07-credo-adapter` itself
 
