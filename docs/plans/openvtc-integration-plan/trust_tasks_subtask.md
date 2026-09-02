@@ -1043,16 +1043,15 @@ Against that live VTA (REST-only),
 `vta-service`'s verifier, not assumed) and finds — by reading the live
 dispatch table, not guessing — that `credential-exchange/query` is
 messaging-only (DIDComm/TSP) in this build, absent from the REST dispatch
-table entirely. Against a **messaging-enabled** VTA (a locally-run mediator,
-stood up by hand this session — no `e2e/lib/mediator.js` yet), `run-messaging.mjs`
-reaches the query directly over DIDComm-via-mediator
-(`@openvtc/vti-didcomm-js`'s `connectVtaViaMediator`/`sendAndWait`): the VTA
-receives, processes, and correctly answers with `report-problem/2.0`
-(`e.p.msg.not-found` — no held credential satisfies the query, correct since
-this VTA holds none). **Not done**: a held credential to reach the
-defer/pending-list/approve/present half, `e2e/lib/mediator.js` (the manual
-recipe is proven, scripting it is not), and the Node reference-adapter
-fixtures.
+table entirely. Against a **messaging-enabled** VTA (`e2e/lib/mediator.js`'s
+`startMediator()`, new — a disposable local `did:peer` mediator, same
+tunneled/disposable shape as `startVta()`), `run-messaging.mjs` reaches the
+query directly over DIDComm-via-mediator (`@openvtc/vti-didcomm-js`'s
+`connectVtaViaMediator`/`sendAndWait`): the VTA receives, processes, and
+correctly answers with `report-problem/2.0` (`e.p.msg.not-found` — no held
+credential satisfies the query, correct since this VTA holds none). **Not
+done**: a held credential to reach the defer/pending-list/approve/present
+half, and the Node reference-adapter fixtures.
 
 **Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
 approval, approved, and answered with a `vp_token` that `vta-service` accepts —

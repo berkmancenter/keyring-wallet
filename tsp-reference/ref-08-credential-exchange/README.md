@@ -43,28 +43,18 @@ VERIFIER_SECRET_KEY=<the hex printed> node run.mjs <vtaUrl> <vtaDid>
 ## Phase 2 — the query, over DIDComm via a mediator (`run-messaging.mjs`)
 
 Needs a messaging-enabled VTA (`startVta({ mediatorDid })`) and a running
-mediator. There's no `e2e/lib/mediator.js` yet (see "What's still needed") —
-stand one up by hand:
+mediator — `e2e/lib/mediator.js`'s `startMediator()` (new) does both: a
+disposable local `did:peer` mediator behind its own cloudflared tunnel,
+needs a local redis reachable at `MEDIATOR_REDIS_URL` (default
+`redis://127.0.0.1/`).
 
-```bash
-# generate + run a local did:peer mediator (needs redis running locally)
-mediator-setup --non-interactive --deployment local --protocol didcomm \
-  --did-method peer --admin generate --secret-storage file \
-  --listen-address 0.0.0.0:7037 --config ./mediator.toml
-# mediator-setup writes atm-functions.lua next to mediator.toml, but
-# mediator.toml points at ./conf/atm-functions.lua — copy it there:
-cp ./atm-functions.lua ./conf/atm-functions.lua
-mediator --config ./mediator.toml &
+```js
+import { startMediator } from "../../e2e/lib/mediator.js";
+import { startVta } from "../../e2e/lib/vta.js";
 
-# tunnel it, then REGENERATE with --public-url so the did:peer's service
-# entry (and mediator.toml's local_endpoints, uncomment + set by hand —
-# mediator-setup leaves it commented) both carry the real tunnel URL:
-cloudflared tunnel --url http://localhost:7037   # note the URL
-mediator-setup --non-interactive ... --public-url <tunnel-url> ...  # regenerate
-# edit mediator.toml: local_endpoints = ["<tunnel-url>"]
-# restart `mediator`, note its printed mediator_did (did:peer:2....)
-
-node ../../e2e/lib/vta.js   # or your own driver — startVta({ mediatorDid })
+const mediator = await startMediator();
+const vta = await startVta({ mediatorDid: mediator.mediatorDid });
+// vta.vtaDid, mediator.mediatorDid — pass to run-messaging.mjs below
 ```
 
 Then, same ACL dance as phase 1 but for a fresh **X25519** `did:key` (the
@@ -133,9 +123,5 @@ VERIFIER_X25519_SECRET_KEY=<the hex printed> node run-messaging.mjs <vtaConfigPa
   `vp_token`), and `run.mjs`'s REST admin surface actually exercised against a
   live pending record instead of only cross-checked against the dispatch
   table.
-- **`e2e/lib/mediator.js`** — the manual mediator recipe above, scripted the
-  same way `e2e/lib/vta.js` scripted the VTA recipe (fresh `did:peer` + tunnel
-  + `local_endpoints` wiring, one call, disposable). Not built this session;
-  the manual steps are proven, reuse is what's missing.
 - **The Node reference-adapter fixtures** the parent step's "done when" also
   requires.
