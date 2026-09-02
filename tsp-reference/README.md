@@ -55,6 +55,7 @@ proposals since adopted upstream.
 | [`ref-06p-locality-binding`](./ref-06p-locality-binding/) | the locality evidence algebra with no radios: the EID that **locates** vs the signed GATT transcript that **binds**, four forgeries each rejected by a named check, `ext` on all four witness documents through the published §7.2 pipeline, and the canonicalization split — Trust Task documents are `eddsa-jcs-2022` (every member covered) while the VWC is `eddsa-rdfc-2022` (**only defined JSON-LD terms are signed**; today's shipped `LocalityEvidence` members have none). 1,927 bytes/session, measured | nothing |
 | [`ref-06x-cypress-stack`](./ref-06x-cypress-stack/) | the stack composed joint-by-joint at the **Cypress release**: local release-binary VTA + webvh at the wallet (Credo can't resolve it natively — measured; 20-line workaround proven) + the mediator dialect (v1 refused, 404 — measured) + the witnessed exchange end-to-end on binding 0.2 × trust-tasks 0.9.0 | a local VTA; network for the mediator act |
 | [`ref-07-dtg-edge-semantics`](./ref-07-dtg-edge-semantics/) | the DTG cred-spec edge-verifiability semantics tested from Keyring-shaped fixtures: the #21 glossary-vs-body contradiction reproduced (opposite answers on the same edge; the spec's own example fails its own glossary; condition (b) unsatisfiable as written), the #22 declared-scope model yielding one deterministic rule set (uniqueness becomes a check, not prose), and the #23 asymmetric edge unnameable under four types but computable under scope (effective disclosure = max of halves). Fixtures are real: one edge captured from the actual Credo exchange (verified by Keyring's verifier at capture), the rest signed eddsa-jcs-2022 and verified in-run | nothing |
+| [`ref-09-tsp-core-ports`](./ref-09-tsp-core-ports/) | `tsp-core`'s `SigningKey`/`KeyAgreement` ports (the design blocker `ref-07-credo-adapter`, Phase D, hit before any Credo code was written — see the parent plan's §4.4): `vti-tsp-js`/`hpke-js` both require a raw private key with no injection point for a pre-computed DH result, which an Askar-backed identity never exposes. Ports the two DH call sites in a copy of `ref-03`'s already vector-verified HPKE-Auth onto a `KeyAgreement.agree()` operation instead — proven byte-identical to the unported implementation, still RFC 9180-vector-correct, and satisfiable by a fully opaque, async-only identity (the shape a real Askar RPC would have) | nothing |
 
 ## Running them
 
@@ -81,9 +82,10 @@ Worth stating plainly, since the point of the corpus is honest evidence:
   mediator; ref-05's VTA runs with no mediator attached, so it is REST-only.
   Closing that seam needs a local mediator — the tractable path is the
   `affinidi-messaging-test-mediator` harness the VTI's own e2e tests use.
-- **Trust Tasks** over any transport (next rung; needs `eddsa-jcs-2022`
-  signing for the authentication document).
-- **Credo integration** — nothing here touches Credo yet.
+- **A real Askar-backed adapter for the `SigningKey`/`KeyAgreement` ports**
+  (`ref-09`) — proven so far only against a raw in-memory key and a
+  simulated opaque/async identity, not real Askar.
+- **A `VidResolver` port** — not yet attempted.
 - ref-05's `docker-compose.yml` brings up the VTA only, and its recipe uses a
   plaintext seed backend: fine for disposable local testing, never for
   anything real.
