@@ -1,14 +1,25 @@
 # PR candidate — pluggable `KeyAgreement`/`SigningKey` for `@openvtc/vti-tsp-js`
 
-*Status: **drafted, not staged**. Not pushed to a fork, not reviewed. Base:
-`OpenVTC/vta-browser-plugin` commit `89d70c4` (the pinned SHA in
-`scripts/openvtc/PINS.json`, shipped as `vti-tsp-js` 0.2.0) — verify against
-that exact commit, not `main`, before staging; see the "how this was found"
-note below. Target: `packages/tsp-js/src/crypto/{hpke-noble,sign}.ts`.
-Standalone proof: [`ports.mjs`](./ports.mjs) + [`hpke-ports.mjs`](./hpke-ports.mjs) +
-[`run.mjs`](./run.mjs) in this rung (13 checks green) — same algorithm,
-`.mjs`/JSDoc instead of the real `.ts` files, since this repo has no writable
-fork of `vta-browser-plugin` to build the actual patch against.*
+*Status: **staged as a draft PR for internal review**:
+[`Mickens-Lab/vta-browser-plugin#1`](https://github.com/Mickens-Lab/vta-browser-plugin/pull/1)
+(2026-09-02), `feat/pluggable-key-agreement` → that fork's own `main` —
+not against `OpenVTC/vta-browser-plugin`, and not yet requested for
+official upstream review; Alberto flagged for a look. Base: `main` at
+`3c15d6e` (2026-09-01), confirmed identical to the pinned `89d70c4` for
+every file this patch touches (`gh api .../compare/89d70c4...3c15d6e` —
+zero changes under `packages/tsp-js/src/crypto/`). Target:
+`packages/tsp-js/src/crypto/{hpke-noble,sign}.ts`. The community-value
+framing below was corrected before staging — see
+`docs/plans/openvtc-integration-plan/2026-09-02-bam.md`'s closing
+section for the evidence and the reasoning behind scoping this as the
+first of two increments. Standalone proof this candidate is built from:
+[`ports.mjs`](./ports.mjs) + [`hpke-ports.mjs`](./hpke-ports.mjs) +
+[`run.mjs`](./run.mjs) in this rung (13 checks) plus
+[`ref-10-credo-askar-adapter`](../ref-10-credo-askar-adapter/) (17
+checks, a real Askar-backed adapter, not simulated) — the actual `.ts`
+diff staged in the PR mirrors this file's code blocks below, verified
+against the real package's own build + 51-test suite (all passing,
+unchanged) before pushing.*
 
 ## Why this is a natural follow-up, not a cold-start proposal
 
@@ -146,17 +157,31 @@ export async function signWithSigningKey(data: Uint8Array, signingKey: SigningKe
 
 ## Why this serves the community, not just our use case
 
-- **Every HSM/KMS-backed wallet hits this wall, not just Askar.** Any
-  implementer whose signing/key-agreement keys live in a secure enclave,
-  hardware token, or remote KMS needs exactly this shape — a raw-key-only
-  interface makes `vti-tsp-js` unusable for that entire class of custody
-  design, which is the norm for production wallets, not an edge case.
+- **Not hypothetical — the same wall exists, independently, in this
+  ecosystem's own Rust reference implementation.**
+  `verifiable-trust-infrastructure/vta-mobile-core/src/keys.rs` defines a
+  `Signer` trait explicitly so a private key can live in the Secure
+  Enclave (iOS) / StrongBox / Android Keystore and never cross the FFI
+  boundary — used throughout consent, session, step-up, and push. But
+  `vta-mobile-core/src/tsp.rs`'s `TspMediatorSession::connect` — the
+  TSP-transport connect path, the direct analogue of what this PR
+  addresses — still takes a raw Ed25519 seed
+  (`holder_signing_private_ed25519: Vec<u8>`), because the layer
+  underneath (`vta-sdk::session::TspSession::connect`, wrapping
+  `affinidi_tdk::messaging`) has no `Signer`-shaped alternative either.
+  Its own doc comment reads as an acknowledged compromise: "It stays in
+  the engine; only derived TSP secrets reach the client." Two
+  independent language ports of the TSP client (Rust and TS), same gap.
+  (Checked, not assumed — no GitHub issue or PR anywhere in the
+  `OpenVTC`/`trustoverip` orgs currently names this; the evidence is
+  structural, in the pinned source itself.)
 - **No behavioral fork, proven.** `ref-09-tsp-core-ports`'s `run.mjs`
   reproduces the official CFRG vector through the ported call sites, and
   proves the ported `seal`/`open` byte-identical to the existing
-  `authEncap`/`authDecap`/`seal`/`open` for the same keys — this is a pure
-  refactor of the DH call sites, not a new implementation or protocol
-  variant.
+  `authEncap`/`authDecap`/`seal`/`open` for the same keys —
+  `ref-10-credo-askar-adapter` repeats the same proof against a real
+  Askar-backed identity, not a raw key. This is a pure refactor of the DH
+  call sites, not a new implementation or protocol variant.
 - **Additive only.** Every existing export keeps its exact current
   signature; the new functions are opt-in.
 
@@ -181,15 +206,20 @@ its own schedule can silently drift behind (or diverge from) the pin
 
 ## Not done
 
-- No fork pushed, no PR opened — per this repo's own contribution workflow
-  (`openvtc-integration-plan.md` §7's "Contribution review workflow"),
-  staging happens on a personal fork (Alberto's, historically, for this
-  exact file) with review before any official PR, which is not this
-  session's call to initiate unilaterally.
+- **No official PR opened against `OpenVTC/vta-browser-plugin`.** Per this
+  repo's own contribution workflow (`openvtc-integration-plan.md` §7's
+  "Contribution review workflow"), staging happens on an internal fork
+  first, reviewed before any official PR — done, as of 2026-09-02:
+  [`Mickens-Lab/vta-browser-plugin#1`](https://github.com/Mickens-Lab/vta-browser-plugin/pull/1),
+  draft, Alberto flagged. Opening an official PR upstream is a later,
+  separate decision, not this session's to make unilaterally.
 - `message/direct.ts`'s `pack`/`unpack` themselves are not ported in this
   candidate — only the crypto layer underneath. A `packWithKeys`/
   `unpackWithKeys` pair (or an overload) accepting `KeyAgreement`/
   `SigningKey` instead of `PackKeys`/`UnpackKeys` is the natural next
-  increment, once this layer is reviewed.
+  increment, once this layer is reviewed — **deliberately not bundled into
+  the staged PR**: it doesn't exist yet (no proof, no ref-NN rung), and
+  the crypto-layer half is fully proven and reviewable on its own. See the
+  2026-09-02 companion for the full reasoning behind the split.
 - `mode_base` (VTA sealed bundles) is not ported — not needed for
   `bindings/didcomm-v1/0.1`, and this candidate stays to what's tested.
