@@ -1,15 +1,19 @@
 # ref-08 — credential-exchange/{query,present,pending/*} against a real vta-service
 
-> **Status (2026-09-02): the query round trip works end to end over
-> DIDComm-via-mediator.** `run.mjs` (REST) proves the DID-auth handshake but
-> hits `422 unsupportedType` on the query itself — it's not in the REST
-> dispatch table. `run-messaging.mjs` (DIDComm, via `@openvtc/vti-didcomm-js`
-> and a locally-run mediator) reaches it: the VTA receives, processes, and
-> correctly answers `credential-exchange/query/0.1` with a
-> `report-problem/2.0` (`e.p.msg.not-found` — no held credential satisfies the
-> query, which is correct: this VTA holds none). See "What this proves" for
-> both scripts' findings; "What's still needed" for what's left (a held
-> credential, to reach the defer/approve/present half).
+> **Status (2026-09-02): the full round trip is proven, end to end.**
+> `run.mjs` (REST) proves the DID-auth handshake but hits `422
+> unsupportedType` on the query itself — it's not in the REST dispatch table.
+> `run-messaging.mjs` (DIDComm, via `@openvtc/vti-didcomm-js` and a
+> locally-run mediator) reaches it: the VTA receives, processes, and correctly
+> answers `credential-exchange/query/0.1` with a `report-problem/2.0`
+> (`e.p.msg.not-found` — no held credential satisfies the query, since that
+> run's VTA holds none). `run-pending.mjs` closes the loop: it mints and
+> receives a held credential, sends the same query from a not-pre-trusted
+> verifier (now correctly *deferred*, not `not-found`), then reads the
+> deferral back and approves it as the VTA's own admin — a real `vp_token`
+> comes back. See "What this proves" for all three scripts' findings; the
+> parent step's "done when" is met except for the Node reference-adapter
+> fixtures (see "What's still needed").
 
 `trust_tasks_subtask.md` §9 step 4 ("Adopt `credential-exchange/{query,present,
 pending/*}`... against `vta-service`") was blocked on "needs a running VTA" —
@@ -67,6 +71,23 @@ node run-messaging.mjs <vtaConfigPath> <vtaDid> <mediatorDid>   # prints VERIFIE
 VERIFIER_X25519_SECRET_KEY=<the hex printed> node run-messaging.mjs <vtaConfigPath> <vtaDid> <mediatorDid>
 ```
 
+## Phase 3 — the defer/pending-list/pending-approve/present path (`run-pending.mjs`)
+
+Self-contained — brings up its own disposable mediator + messaging-enabled VTA
+rather than taking them as args:
+
+```bash
+node run-pending.mjs
+```
+
+Mints a Data-Integrity membership VC, receives it via REST
+(`vault/credentials/receive/0.1` — also REST-dispatchable, so no `pnm cred-
+vault receive`/local-config plumbing needed), queries it over DIDComm from a
+fresh not-pre-trusted verifier (deferred this time, not `not-found`), then
+approves the deferral as a fresh `admin`-role identity and prints the returned
+`vp_token`. See "What this proves" #6-#7 below for the two non-obvious
+constraints it took a live 400 to find.
+
 ## What this proves
 
 1. **`@bifold/trust-tasks`'s `eddsa-jcs-2022` Data-Integrity proof construction
@@ -116,12 +137,29 @@ VERIFIER_X25519_SECRET_KEY=<the hex printed> node run-messaging.mjs <vtaConfigPa
    `not-found` is a fast-path refusal when nothing held could ever match,
    checked before deferral logic runs at all.
 
+6. **A held credential matching the query defers, and the deferral resolves
+   through REST.** `run-pending.mjs`: receiving a Data-Integrity membership VC
+   via `vault/credentials/receive/0.1`, then re-sending the query from a fresh
+   verifier, now gets `report-problem/2.0` (`e.p.msg.bad-request`,
+   "presentation requires holder consent... an out-of-band approval is
+   needed") instead of `not-found` — confirming the two are genuinely
+   different code paths, as #5 predicted. `pending/list/0.1` and
+   `pending/approve/0.1` (also REST-dispatchable — same dispatch-table
+   cross-check as #3) then read the deferral back and approve it, returning a
+   real, holder-bound `vp_token`.
+7. **A presentation's `credentialSubject.id` must be a did:key the VTA itself
+   manages, and a DCQL query's `claims` must be non-empty.** Two independent
+   400s, not documented anywhere obvious: `resolve_holder_keys`
+   (`vta-service/src/operations/holder_keys.rs`) needs the private key for the
+   credential's subject, which only exists for a did:key minted via `vta
+   create-did-key` (not an externally-generated one, and not the VTA's own
+   did:webvh identity); and `vta-vault/src/consent.rs`'s consent-record
+   builder refuses to authorize an empty reveal set, so a DCQL query
+   requesting "the credential as a whole" (no `claims`) matches fine but can
+   never be approved.
+
 ## What's still needed
 
-- **A held credential matching the DCQL query**, to reach `not-found`'s
-  sibling path — deferred, `pending-list`, `pending-approve` (returning a real
-  `vp_token`), and `run.mjs`'s REST admin surface actually exercised against a
-  live pending record instead of only cross-checked against the dispatch
-  table.
 - **The Node reference-adapter fixtures** the parent step's "done when" also
-  requires.
+  requires. This is the only remaining item for `trust_tasks_subtask.md` §9
+  step 4.
