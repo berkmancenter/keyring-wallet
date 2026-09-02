@@ -2449,6 +2449,7 @@ __metadata:
     "@credo-ts/node": "npm:0.6.3"
     "@langchain/anthropic": "npm:^1.3.25"
     "@langchain/core": "npm:^1.1.36"
+    "@langchain/openai": "npm:^0.6.17"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
     "@openvtc/trust-tasks": "npm:^0.9.0"
@@ -4673,7 +4674,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@langchain/openai@npm:>=0.1.0 <0.7.0":
+"@langchain/openai@npm:>=0.1.0 <0.7.0, @langchain/openai@npm:^0.6.17":
   version: 0.6.17
   resolution: "@langchain/openai@npm:0.6.17"
   dependencies:
@@ -17207,7 +17208,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rxjs@npm:^7.2.0, rxjs@npm:^7.5.5, rxjs@npm:^7.8.2":
+"rxjs@npm:7.8.2":
   version: 7.8.2
   resolution: "rxjs@npm:7.8.2"
   dependencies:
