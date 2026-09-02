@@ -928,24 +928,26 @@ runtime). Step 3's carriage ships as binding 0.2 (the dedicated `@type`, not
 a basic message). Step 2's specifications are the upstream `vrc/*` /
 `witness/*` batch, with `witness-share` and a future R-Card task to join it.
 Outside this milestone: step 6's evidence against an older build (the
-legacy dual-accept path is true by construction, not yet e2e'd), step 4
-(credential-exchange with a VTA), and the proof-set migration (parent §4.6,
-parked on the working group). Reasoning and evidence per day: the dated
-companions, latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+legacy dual-accept path is true by construction, not yet e2e'd), and the
+proof-set migration (parent §4.6, parked on the working group). Reasoning and
+evidence per day: the dated companions, latest
+[`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
 **Step 1 is now resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`,
-forked from `fix/mediator-pickup-strategy`) — see step 1 below and
-[`2026-09-01-bam.md`](./2026-09-01-bam.md). **Phase D's core deliverable is
-now built**, not just scoped: the `VidResolver` port and `direct.ts`'s
-`pack`/`unpack` (both named as remaining in earlier entries) are done, the
-`eddsa-jcs-2022` signer and DIDComm-v1 trust-task client it once also named
-already shipped (step 1's `Carriage` resolution), and a real `bifold/packages/
-credo-tsp-adapter` package plus a `TspCarriage` now exist — the parent plan's
-stage-4 "gated on `vta-service`" note applies to ecosystem interop, not to
-this wallet-to-wallet carriage between two Keyring wallets, which is built,
-dev-flag-gated, and unit/integration-tested against real Askar custody.
-**Now verified** (2026-09-03): `yarn e2e:vrc:tsp` passes clean on a real
-device, including the Developer-toggle navigation. Getting there required
+forked from `fix/mediator-pickup-strategy`; the Carriage/TSP-envelope portion
+of that branch is split out and PR'd separately, `feat/trust-tasks-carriage-vrc-witnessed`,
+[PR #27](https://github.com/berkmancenter/keyring-wallet/pull/27)) — see step 1
+below and [`2026-09-01-bam.md`](./2026-09-01-bam.md). **Phase D's core
+deliverable is now built**, not just scoped: the `VidResolver` port and
+`direct.ts`'s `pack`/`unpack` (both named as remaining in earlier entries) are
+done, the `eddsa-jcs-2022` signer and DIDComm-v1 trust-task client it once also
+named already shipped (step 1's `Carriage` resolution), and a real
+`bifold/packages/credo-tsp-adapter` package plus a `TspCarriage` now exist —
+the parent plan's stage-4 "gated on `vta-service`" note applies to ecosystem
+interop, not to this wallet-to-wallet carriage between two Keyring wallets,
+which is built, dev-flag-gated, and unit/integration-tested against real Askar
+custody. **Now verified** (2026-09-03): `yarn e2e:vrc:tsp` passes clean on a
+real device, including the Developer-toggle navigation. Getting there required
 fixing a second real bug beyond the one `ref-12` caught: Askar's native
 `Key.fromPublicBytes` rejected a peer's public key as "Invalid key data"
 whenever it arrived as a `Buffer` view sliced from a larger message
@@ -957,8 +959,11 @@ Fixed with a defensive `Uint8Array.from(...)` copy at the FFI boundary. See
 build and the `ref-12` bug it caught (an independently-derived `KeyAgreement`
 resolves to the wrong key once a real `VidResolver` is involved), and
 [`2026-09-03-bam.md`](./2026-09-03-bam.md) for this bug and the
-witness-over-TSP work below. (Step 4, credential-exchange against a live
-`vta-service`, is tracked on a separate branch and out of scope here.)
+witness-over-TSP work below.
+
+**Step 4 is started** (Keyring, `feat/trust-tasks-vta-credential-exchange`,
+forked from the Carriage branch above) — see step 4 below and
+[`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
 post-`3a5ea51` (credo-0.6+) build and
@@ -1068,6 +1073,20 @@ controller; and a `trust-task-error` returns on the same connection — **met**,
 Over that binding, against `vta-service`. No spec authorship and a genuinely live
 counterparty, so a failure is unambiguously ours. Also the consent-gating path
 the parent plan's Phase E demo depends on.
+
+**Started** (Keyring, `feat/trust-tasks-over-didcomm-v1`) — the "needs a running
+VTA" blocker this step carried is gone: `e2e/lib/vta.js` (new) non-interactively
+provisions a real, disposable `vta-service` behind a cloudflared tunnel.
+Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). Against that live VTA,
+[`tsp-reference/ref-08-credential-exchange`](../../../tsp-reference/ref-08-credential-exchange/)
+proves the DID-auth handshake byte-compatible (`@bifold/trust-tasks`'s
+`eddsa-jcs-2022` proof construction, verified against the real
+`vta-service`'s verifier, not assumed) and finds — by reading the live
+dispatch table, not guessing — that `credential-exchange/query` is
+messaging-only (DIDComm/TSP) in this build, absent from the REST dispatch
+table entirely. **Not done**: the messaging-enabled VTA + counterparty needed
+to actually reach the query/defer/approve/present round trip, and the Node
+reference-adapter fixtures.
 
 **Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
 approval, approved, and answered with a `vp_token` that `vta-service` accepts —
