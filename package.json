@@ -42,8 +42,11 @@
     "e2e:migration": "cd e2e && npm run store-migration",
     "e2e:migration:android-only": "cd e2e && npm run store-migration:android-only",
     "e2e:smoke": "cd e2e && npm run onboarding-smoke",
+    "e2e:vrc:witnessed": "cd e2e && npm run vrc-exchange:witnessed",
     "e2e:vrc:witnessed:devices": "cd e2e && npm run vrc-exchange:witnessed:devices",
-    "e2e:vrc:witnessed:android-only": "cd e2e && npm run vrc-exchange:witnessed:android-only"
+    "e2e:vrc:witnessed:android-only": "cd e2e && npm run vrc-exchange:witnessed:android-only",
+    "e2e:vrc:witnessed:locality:android-only": "cd e2e && npm run vrc-exchange:witnessed:locality:android-only",
+    "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator"
   },
   "devDependencies": {
     "@commitlint/cli": "~19.8.1",
@@ -78,9 +81,11 @@
     "@bifold/oca": "portal:bifold/packages/oca",
     "@bifold/react-hooks": "portal:bifold/packages/react-hooks",
     "@bifold/react-native-attestation": "portal:bifold/packages/react-native-attestation",
+    "@bifold/react-native-locality-peripheral": "portal:bifold/packages/react-native-locality-peripheral",
     "@bifold/remote-logs": "portal:bifold/packages/remote-logs",
     "@bifold/verifier": "portal:bifold/packages/verifier",
-    "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts"
+    "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
+    "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {

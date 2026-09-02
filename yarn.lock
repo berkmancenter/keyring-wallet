@@ -2130,13 +2130,17 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@bifold/core@portal:bifold/packages/core::locator=keyring-wallet%40workspace%3A."
   dependencies:
+    "@bifold/trust-tasks": "workspace:*"
     "@digitalcredentials/data-integrity": "npm:^2.6.0"
     "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "npm:^1.3.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
+    "@openvtc/trust-tasks": "npm:^0.9.0"
     "@openwallet-foundation/askar-react-native": "npm:0.6.0"
     "@openwallet-foundation/askar-shared": "npm:0.6.0"
     "@types/base-64": "npm:^1.0.2"
+    ajv: "npm:^8.17.1"
+    canonicalize: "npm:^1.0.8"
     unique-names-generator: "npm:^4.7.1"
   peerDependencies:
     "@animo-id/expo-secure-environment": 0.1.5
@@ -2253,6 +2257,15 @@ __metadata:
   languageName: node
   linkType: soft
 
+"@bifold/react-native-locality-peripheral@portal:bifold/packages/react-native-locality-peripheral::locator=keyring-wallet%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@bifold/react-native-locality-peripheral@portal:bifold/packages/react-native-locality-peripheral::locator=keyring-wallet%40workspace%3A."
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  languageName: node
+  linkType: soft
+
 "@bifold/remote-logs@portal:bifold/packages/remote-logs::locator=keyring-wallet%40workspace%3A.":
   version: 0.0.0-use.local
   resolution: "@bifold/remote-logs@portal:bifold/packages/remote-logs::locator=keyring-wallet%40workspace%3A."
@@ -2271,6 +2284,19 @@ __metadata:
     react: ~19.1.4
     react-native: 0.81.5
     react-native-logs: ~5.1.0
+  languageName: node
+  linkType: soft
+
+"@bifold/trust-tasks@portal:bifold/packages/trust-tasks::locator=keyring-wallet%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@bifold/trust-tasks@portal:bifold/packages/trust-tasks::locator=keyring-wallet%40workspace%3A."
+  dependencies:
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch"
+    "@credo-ts/didcomm": "npm:0.6.3"
+    "@noble/curves": "npm:^2.0.1"
+    "@noble/hashes": "npm:^2.0.1"
+    ajv: "npm:^8.17.1"
+    canonicalize: "npm:^1.0.8"
   languageName: node
   linkType: soft
 
@@ -5310,6 +5336,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openvtc/trust-tasks@npm:^0.9.0":
+  version: 0.9.0
+  resolution: "@openvtc/trust-tasks@npm:0.9.0"
+  checksum: 10c0/ee6b4aa1c3c3709e4262922cdacb2d2063bdcc3a871bce678694800d5e6fc11c237e151ca0740ad9b31ba1093659d204f3bcc0c32bb7c150d0754e7254b7e343
+  languageName: node
+  linkType: hard
+
 "@openwallet-foundation/askar-react-native@npm:0.6.0":
   version: 0.6.0
   resolution: "@openwallet-foundation/askar-react-native@npm:0.6.0"
@@ -7533,6 +7566,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ajv@npm:^8.17.1":
+  version: 8.20.0
+  resolution: "ajv@npm:8.20.0"
+  dependencies:
+    fast-deep-equal: "npm:^3.1.3"
+    fast-uri: "npm:^3.0.1"
+    json-schema-traverse: "npm:^1.0.0"
+    require-from-string: "npm:^2.0.2"
+  checksum: 10c0/5df9a1c8f83863cde1bd3a9ddb426f599718f88e3dc9153616c79fb28e0be455335830d7f21d745576519f057b371352daa31047b6a33d7036fe08777d60cf2a
+  languageName: node
+  linkType: hard
+
 "anser@npm:^1.4.9":
   version: 1.4.10
   resolution: "anser@npm:1.4.10"
@@ -8652,7 +8697,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"canonicalize@npm:^1.0.1":
+"canonicalize@npm:^1.0.1, canonicalize@npm:^1.0.8":
   version: 1.0.8
   resolution: "canonicalize@npm:1.0.8"
   checksum: 10c0/6fafcfa73855a49c86eed26d2f23734713a542a3107a23a6ab16fb22b6cee6bb2d92ad32b2244d52594bd69bc08bec820413911cd566dcc5399048012ce26a83
@@ -11421,6 +11466,13 @@ __metadata:
   version: 1.0.6
   resolution: "fast-text-encoding@npm:1.0.6"
   checksum: 10c0/e1d0381bda229c92c7906f63308f3b9caca8c78b732768b1ee16f560089ed21bc159bbe1434138ccd3815931ec8d4785bdade1ad1c45accfdf27ac6606ac67d2
+  languageName: node
+  linkType: hard
+
+"fast-uri@npm:^3.0.1":
+  version: 3.1.5
+  resolution: "fast-uri@npm:3.1.5"
+  checksum: 10c0/2bf60eb800dd610c65e17be436425dcb21c92aff3a87d442a8bccab0b7b071e88cf1a5d7d1ea946370b937e6fc0375c405c0296c10587e57de4f78be4646d1d0
   languageName: node
   linkType: hard
 
@@ -14217,7 +14269,9 @@ __metadata:
     "@bifold/oca": "npm:3.0.16"
     "@bifold/react-hooks": "npm:3.0.16"
     "@bifold/react-native-attestation": "npm:3.0.16"
+    "@bifold/react-native-locality-peripheral": "npm:0.1.0"
     "@bifold/remote-logs": "npm:3.0.16"
+    "@bifold/trust-tasks": "npm:0.1.0-alpha.1"
     "@bifold/verifier": "npm:3.0.16"
     "@bifold/vrc-contexts": "npm:0.1.0-alpha.1"
     "@commitlint/cli": "npm:~11.0.0"

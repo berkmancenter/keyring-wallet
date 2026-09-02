@@ -1,0 +1,120 @@
+{
+  "vwc": {
+    "@context": [
+      "https://www.w3.org/ns/credentials/v2"
+    ],
+    "id": "urn:uuid:11111111-2222-4333-8444-555555555555",
+    "type": [
+      "VerifiableCredential",
+      "DTGCredential",
+      "WitnessCredential"
+    ],
+    "issuer": "did:peer:4wendy",
+    "taskContext": "bbbb2222-2222-4222-8222-222222222222",
+    "taskDigestMultibase": "zQmThPAfpiEuXaQYikrEdvtWJbtJSCcwYPrh9vWe2pTaoWZ",
+    "credentialSubject": {
+      "id": "did:peer:4alice"
+    },
+    "witnessContext": {
+      "localityConfirmed": true,
+      "localityMethod": "ble-challenge-response/0.1",
+      "localityTopology": "witness-anchored",
+      "localitySensor": "did:peer:4wendy",
+      "localityVenue": "Applied Technology Lab, Cambridge MA — Room 2",
+      "localityObservedAt": "2026-08-21T15:04:05Z",
+      "localityWindowSeconds": 120,
+      "localityKeyMatchesCredentialSigner": true,
+      "localityHardwareAttestation": "verified",
+      "localityEvidenceCommitment": "zQme3owi6AisJ2XbP3BaETSRiPnmek6fp3j4YdJWLcLejK3",
+      "localityRttMs": 180,
+      "localityRssiDbm": -58,
+      "localityRttBoundMs": 400
+    },
+    "proof": {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "eddsa-jcs-2022",
+      "verificationMethod": "did:peer:4wendy#key-1",
+      "created": "2026-08-21T15:04:05Z",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "GUifCYZ8w26lYme_rhHWz1JyKz2gpDOCJJCn0mqg4cB3fczqFXy58NpZwYvnzX2cziPaC0kgg7r9UyxCdAdQDA"
+    }
+  },
+  "sessionDoc": {
+    "id": "bbbb2222-2222-4222-8222-222222222222",
+    "type": "https://trusttasks.org/witness/session/0.1",
+    "threadId": "bbbb2222-2222-4222-8222-222222222222",
+    "parentThreadId": "aaaa1111-1111-4111-8111-111111111111",
+    "issuer": "did:peer:4alice",
+    "recipient": "did:peer:4wendy",
+    "issuedAt": "2026-08-21T15:04:05Z",
+    "payload": {
+      "parties": [
+        "did:peer:alice-rel",
+        "did:peer:bob-rel"
+      ]
+    }
+  },
+  "submitResponse": {
+    "id": "ffff6666-0000-4000-8000-00000000000f",
+    "type": "https://trusttasks.org/witness/session/submit/0.1#response",
+    "threadId": "bbbb2222-2222-4222-8222-222222222222",
+    "parentThreadId": "aaaa1111-1111-4111-8111-111111111111",
+    "issuer": "did:peer:4wendy",
+    "recipient": "did:peer:4alice",
+    "issuedAt": "2026-08-21T15:04:05Z",
+    "payload": {
+      "vwc": {
+        "type": [
+          "VerifiableCredential",
+          "DTGCredential",
+          "WitnessCredential"
+        ]
+      },
+      "vwcDigestMultibase": "zQmdbZA54ch6J6yScAX2PuiQrb8cHJedx31k3Fg3vM4PFiM",
+      "ext": {
+        "edu.harvard.seas.atl.keyring": {
+          "locality": {
+            "observation": {
+              "method": "ble-challenge-response/0.1",
+              "sensorDid": "did:peer:4wendy",
+              "venueClaim": "Applied Technology Lab, Cambridge MA — Room 2",
+              "observedAt": "2026-08-21T15:04:05Z",
+              "windowSeconds": 120,
+              "confirmed": true,
+              "deviceKeyId": "z6MktULudTtAsAhRegYPiZ6631RV3viv12qd4GQF8z1xB22S",
+              "transcriptDigestMultibase": "zQme3owi6AisJ2XbP3BaETSRiPnmek6fp3j4YdJWLcLejK3",
+              "corroboration": {
+                "rttMs": 180,
+                "rssiDbm": -58,
+                "rttBoundMs": 400
+              },
+              "residuals": [
+                "rf-relay",
+                "venue-scale-range"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "proof": {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "eddsa-jcs-2022",
+      "verificationMethod": "did:peer:4wendy#key-1",
+      "created": "2026-08-21T15:04:05Z",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "3xdF_1gACK-RxrchC8YC4htk7AG3MEkQ0Pnpvob5ocD6ofalwhKux8JX4iJowshsSH0mSTUVAYIi4fF6lxWdDg"
+    }
+  },
+  "transcript": {
+    "method": "ble-challenge-response/0.1",
+    "taskDigestMultibase": "zQmThPAfpiEuXaQYikrEdvtWJbtJSCcwYPrh9vWe2pTaoWZ",
+    "challenge": "9f2c1d7e4a8b0c5f3e6d1a2b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+    "sensorNonce": "5a6b7c8d9e0f1a2b3c4d5e6f70819200",
+    "sensorDid": "did:peer:4wendy",
+    "keyId": "z6MktULudTtAsAhRegYPiZ6631RV3viv12qd4GQF8z1xB22S",
+    "signature": "Vrcn9XrSNeCeeDwGypZyI2_rfm92etTzrfCm_rBnsW-SUwkgg1HqdbKd-w7fl9PuYDbXM-9qzCP35p6Fw419CA",
+    "hardwareAttestation": "verified"
+  },
+  "vrcSignerKeyId": "z6MktULudTtAsAhRegYPiZ6631RV3viv12qd4GQF8z1xB22S"
+}
