@@ -90,11 +90,15 @@ follow-up PR is lower-friction than a cold-start contribution — see
 This rung is the crypto-design half of "extract the ports," proven against
 the raw-key case only. Still open, in roughly this order:
 
-- **A real Askar-backed `KeyAgreement`/`SigningKey` adapter** — `Key.
-  fromKeyExchange` for `agree()`, `signMessage` for `sign()`, on two
-  `@credo-ts/node` 0.6.3 agents, run through this same `run.mjs`-shaped
-  fixture suite (levels 1–3 at minimum; level 4 becomes real rather than
-  simulated).
+- ~~A real Askar-backed `KeyAgreement`/`SigningKey` adapter~~ — **done**, see
+  [`ref-10-credo-askar-adapter`](../ref-10-credo-askar-adapter/): two real
+  `@credo-ts/node` 0.6.3 agents, real Askar wallets, this same `run.mjs`-shaped
+  fixture suite (all four levels, level 4 now real rather than simulated).
+  One correction to this entry's own prediction: `Key.fromKeyExchange`'s
+  `algorithm` param names the *output* key type, not the DH curve — `x25519`
+  itself is rejected ("Unsupported algorithm for key exchange"); a symmetric
+  tag like `c20p` is required and is inert packaging only (measured
+  byte-identical against `a256gcm`).
 - **A `VidResolver` port** — resolving a VID string to the keys/DID document
   it names. A simpler concern than the crypto above (no custody boundary
   involved), not attempted here to keep this rung to one question.

@@ -56,6 +56,7 @@ proposals since adopted upstream.
 | [`ref-06x-cypress-stack`](./ref-06x-cypress-stack/) | the stack composed joint-by-joint at the **Cypress release**: local release-binary VTA + webvh at the wallet (Credo can't resolve it natively — measured; 20-line workaround proven) + the mediator dialect (v1 refused, 404 — measured) + the witnessed exchange end-to-end on binding 0.2 × trust-tasks 0.9.0 | a local VTA; network for the mediator act |
 | [`ref-07-dtg-edge-semantics`](./ref-07-dtg-edge-semantics/) | the DTG cred-spec edge-verifiability semantics tested from Keyring-shaped fixtures: the #21 glossary-vs-body contradiction reproduced (opposite answers on the same edge; the spec's own example fails its own glossary; condition (b) unsatisfiable as written), the #22 declared-scope model yielding one deterministic rule set (uniqueness becomes a check, not prose), and the #23 asymmetric edge unnameable under four types but computable under scope (effective disclosure = max of halves). Fixtures are real: one edge captured from the actual Credo exchange (verified by Keyring's verifier at capture), the rest signed eddsa-jcs-2022 and verified in-run | nothing |
 | [`ref-09-tsp-core-ports`](./ref-09-tsp-core-ports/) | `tsp-core`'s `SigningKey`/`KeyAgreement` ports (the design blocker `ref-07-credo-adapter`, Phase D, hit before any Credo code was written — see the parent plan's §4.4): `vti-tsp-js`/`hpke-js` both require a raw private key with no injection point for a pre-computed DH result, which an Askar-backed identity never exposes. Ports the two DH call sites in a copy of `ref-03`'s already vector-verified HPKE-Auth onto a `KeyAgreement.agree()` operation instead — proven byte-identical to the unported implementation, still RFC 9180-vector-correct, and satisfiable by a fully opaque, async-only identity (the shape a real Askar RPC would have) | nothing |
+| [`ref-10-credo-askar-adapter`](./ref-10-credo-askar-adapter/) | the real Askar-backed adapter ref-09 left open: two live `@credo-ts/node` 0.6.3 agents, real Askar wallets throughout. Signing rides Credo's public `KeyManagementApi` unchanged; key agreement has no public equivalent (confirmed against the `.d.ts`) and is reached via `AskarStoreManager.withSession` — a genuinely public, DI-registered class, the same route Credo's own `AskarKeyManagementService` uses internally, not a fork. Askar's `keyFromKeyExchange` output matches noble's raw X25519 DH byte-for-byte (measured against both the CFRG vector and `ref-03`'s unmodified implementation), and two independent wallets agree on the same shared secret. Also documents a real import-order gotcha in `@credo-ts/askar` 0.6.3 that silently breaks `kms.createKey`/`kms.sign` if `@openwallet-foundation/askar-nodejs` isn't imported first | nothing |
 
 ## Running them
 
@@ -82,9 +83,6 @@ Worth stating plainly, since the point of the corpus is honest evidence:
   mediator; ref-05's VTA runs with no mediator attached, so it is REST-only.
   Closing that seam needs a local mediator — the tractable path is the
   `affinidi-messaging-test-mediator` harness the VTI's own e2e tests use.
-- **A real Askar-backed adapter for the `SigningKey`/`KeyAgreement` ports**
-  (`ref-09`) — proven so far only against a raw in-memory key and a
-  simulated opaque/async identity, not real Askar.
 - **A `VidResolver` port** — not yet attempted.
 - ref-05's `docker-compose.yml` brings up the VTA only, and its recipe uses a
   plaintext seed backend: fine for disposable local testing, never for
