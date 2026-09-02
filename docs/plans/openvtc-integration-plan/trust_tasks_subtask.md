@@ -1034,12 +1034,27 @@ schema.
 
 ### 3. `didcomm-v1-basicmessage` binding
 
-Parent Phase D, once the ports exist. Prerequisite for steps 4–6.
+**Done — shipped, and never actually depended on Phase D.** This entry's
+"Parent Phase D, once the ports exist" line was stale from early planning,
+when this binding was assumed to need `tsp-core`'s ports before it could be
+built. It doesn't: `DidCommV1Carriage`
+(`bifold/packages/core/src/modules/trust-tasks/module/DidCommV1Carriage.ts`)
+sends/receives over Credo's own DIDComm message sender directly, no
+`SigningKey`/`KeyAgreement`/`VidResolver` involved, and shipped as step 1's
+`Carriage` resolution — weeks before Phase D's ports existed (§6's binding
+0.2 rungs, `ref-06v1`/`06v1b`/`06v1c`, predate `ref-09` by roughly a month).
+The heading is also stale in the same way: the shipped binding is a
+**dedicated `@type`** (`TrustTaskMessage`, binding 0.2), not a basic message
+— see §6 and the "Where this stands" note above.
 
-**Done when:** a Trust Task document round-trips between two Credo agents over a
-basic message; the receiving side derives peer identity from the connection's
-`theirDid` and rejects a document whose in-band `issuer` disagrees with it
-([[TT-SPEC]] §4.8.1); and a `trust-task-error` returns on the same connection.
+**Done when:** a Trust Task document round-trips between two Credo agents over
+the binding — **met**, live-proven on attended devices (steps 5–7); the
+receiving side derives peer identity from the connection's `theirDid` and
+rejects a document whose in-band `issuer` disagrees with it ([[TT-SPEC]]
+§4.8.1) — **met**, `documentProof.ts`'s `verifyDocumentProof` requires the
+proof's verification method belong to the expected (connection-derived)
+controller; and a `trust-task-error` returns on the same connection — **met**,
+`ceremony.ts`'s inbound dispatch and `TrustTasksService`'s `rejectWith`.
 
 ### 4. Adopt `credential-exchange/{query,present,pending/*}`
 
