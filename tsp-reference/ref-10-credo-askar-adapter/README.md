@@ -91,9 +91,8 @@ same way.
 This closes the Askar-adapter half of what ref-09's README left open. Still
 open, per that same list:
 
-- **A `VidResolver` port** — resolving a VID string to the keys/DID document
-  it names. Not attempted here; a simpler concern than the crypto above (no
-  custody boundary involved).
+- ~~A `VidResolver` port~~ — **done**, see
+  [`ref-11-vidresolver-port`](../ref-11-vidresolver-port/).
 - **The Credo trust-task client for `bindings/didcomm-v1/0.1`** (§7.9) — note
   this may already be substantially covered by `@bifold/trust-tasks`'s
   `ceremony.ts` (`sendTrustTaskDocument`/`setupTrustTasksInbound`), which
