@@ -93,12 +93,17 @@ open, per that same list:
 
 - ~~A `VidResolver` port~~ — **done**, see
   [`ref-11-vidresolver-port`](../ref-11-vidresolver-port/).
-- **The Credo trust-task client for `bindings/didcomm-v1/0.1`** (§7.9) — note
-  this may already be substantially covered by `@bifold/trust-tasks`'s
-  `ceremony.ts` (`sendTrustTaskDocument`/`setupTrustTasksInbound`), which
-  `trust_tasks_subtask.md`'s step 1 already marks resolved in code; worth
-  reconciling against that document rather than re-deriving from ref-09's
-  older list.
+- ~~`direct.ts`'s `pack`/`unpack` CESR-framing port~~ — **done**, see
+  [`ref-12-direct-ts-port`](../ref-12-direct-ts-port/), which also uses this
+  rung's `KeyAgreement` derivation approach as a cautionary example: it
+  originally minted an independent X25519 key the way this rung does, which
+  is correct for a `KeyAgreement` used on its own but silently wrong once a
+  `VidResolver` is involved (a `did:key` VID's resolved keyAgreement key is
+  always DERIVED from the identity's Ed25519 key, never independent).
+- The Credo trust-task client for `bindings/didcomm-v1/0.1` (§7.9) and the
+  `eddsa-jcs-2022` signer for `auth/authenticate` (§4.5) **already ship** —
+  `@bifold/core`'s `DidCommV1Carriage.ts`/`ceremony.ts` and
+  `@bifold/trust-tasks`'s `documentProof.ts` respectively.
 - Wiring this adapter into an actual `credo-tsp-adapter` package (§5.2) as an
   external Credo Module, rather than living only as a reference script.
 

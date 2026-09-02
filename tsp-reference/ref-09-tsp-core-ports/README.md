@@ -112,11 +112,10 @@ the raw-key case only. Still open, in roughly this order:
   attended devices. This list was written before anyone checked whether
   `@bifold/trust-tasks` already covered them. See
   [`2026-09-02-bam.md`](../../docs/plans/openvtc-integration-plan/2026-09-02-bam.md).
-- **`direct.ts`'s `pack`/`unpack` CESR-framing port** — needs the `VidResolver`
-  above (to resolve a peer's keys) plus production-grade `SigningKey`/
-  `KeyAgreement` beyond this rung's proof script. The actual remaining gap
-  for `ref-07-credo-adapter`, along with assembling the `credo-tsp-adapter`
-  package itself.
+- ~~`direct.ts`'s `pack`/`unpack` CESR-framing port~~ — **done**, see
+  [`ref-12-direct-ts-port`](../ref-12-direct-ts-port/).
+- Assembling the actual `credo-tsp-adapter` package (§5.2) — everything
+  through ref-12 is `tsp-reference` proof, not the production Credo Module.
 - Renumbering: this rung claimed `ref-09` because `ref-07` and `ref-08` are
   both already taken on disk by unrelated rungs (`ref-07-dtg-edge-semantics`,
   `ref-08-credential-exchange`) — the parent plan's ladder table predates
