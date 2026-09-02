@@ -935,14 +935,21 @@ companions, latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
 **Step 1 is now resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`,
 forked from `fix/mediator-pickup-strategy`) — see step 1 below and
-[`2026-09-01-bam.md`](./2026-09-01-bam.md). Phase D's own remaining scope is
-narrower than first written: the `eddsa-jcs-2022` signer and the DIDComm-v1
-trust-task client it names as still-needed already ship (step 1's `Carriage`
-resolution) — what's left is a `VidResolver` port, a `direct.ts` CESR-framing
-port, and assembling the actual `credo-tsp-adapter` package. A wallet-to-wallet
-TSP carriage between two Keyring wallets is buildable and live-e2e-provable
-now, independent of any ecosystem `vta-service` counterparty — see
-[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections. (Step 4,
+[`2026-09-01-bam.md`](./2026-09-01-bam.md). **Phase D's core deliverable is
+now built**, not just scoped: the `VidResolver` port and `direct.ts`'s
+`pack`/`unpack` (both named as remaining in earlier entries) are done, the
+`eddsa-jcs-2022` signer and DIDComm-v1 trust-task client it once also named
+already shipped (step 1's `Carriage` resolution), and a real `bifold/packages/
+credo-tsp-adapter` package plus a `TspCarriage` now exist — the parent plan's
+stage-4 "gated on `vta-service`" note applies to ecosystem interop, not to
+this wallet-to-wallet carriage between two Keyring wallets, which is built,
+dev-flag-gated, and unit/integration-tested against real Askar custody.
+Still open at this point: an actual e2e run confirming the Developer-toggle
+navigation on a real device/emulator (written, unverified — no device was
+available when it was written). See
+[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections for the full
+build and the real bug it caught (an independently-derived `KeyAgreement`
+resolves to the wrong key once a real `VidResolver` is involved). (Step 4,
 credential-exchange against a live `vta-service`, is tracked on a separate
 branch and out of scope here.)
 
