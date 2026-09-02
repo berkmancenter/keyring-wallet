@@ -961,8 +961,9 @@ resolves to the wrong key once a real `VidResolver` is involved), and
 [`2026-09-03-bam.md`](./2026-09-03-bam.md) for this bug and the
 witness-over-TSP work below.
 
-**Step 4 is started** (Keyring, `feat/trust-tasks-vta-credential-exchange`,
-forked from the Carriage branch above) — see step 4 below and
+**Step 4 is done except for the Node reference-adapter fixtures** (Keyring,
+`feat/trust-tasks-vta-credential-exchange`, forked from the Carriage branch
+above) — see step 4 below and
 [`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
@@ -1091,14 +1092,25 @@ tunneled/disposable shape as `startVta()`), `run-messaging.mjs` reaches the
 query directly over DIDComm-via-mediator (`@openvtc/vti-didcomm-js`'s
 `connectVtaViaMediator`/`sendAndWait`): the VTA receives, processes, and
 correctly answers with `report-problem/2.0` (`e.p.msg.not-found` — no held
-credential satisfies the query, correct since this VTA holds none). **Not
-done**: a held credential to reach the defer/pending-list/approve/present
-half, and the Node reference-adapter fixtures.
+credential satisfies the query, correct since this VTA holds none).
+
+**Defer/pending-list/pending-approve/present path also proven** (same branch,
+later session): `run-pending.mjs` mints and receives a held Data-Integrity
+credential (via REST — `vault/credentials/receive/0.1` is also
+REST-dispatchable, so no `pnm` CLI plumbing needed), re-sends the query from a
+fresh not-pre-trusted verifier (now genuinely deferred, not `not-found`), then
+approves the deferral as the VTA's own admin and receives back a real,
+holder-bound `vp_token`. Two non-obvious constraints found and fixed along the
+way: a presentation's `credentialSubject.id` must be a did:key the VTA itself
+manages (`resolve_holder_keys`), and a DCQL query's `claims` must be
+non-empty (`vta-vault`'s consent record is default-deny on an empty reveal
+set). Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). **Not done**: the
+Node reference-adapter fixtures — the only remaining item for this step.
 
 **Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
-approval, approved, and answered with a `vp_token` that `vta-service` accepts —
-and the same fixtures pass in Node against the reference adapter. Interop evidence
-for parent §7.9 falls out of this.
+approval, approved, and answered with a `vp_token` that `vta-service` accepts
+— **met** — and the same fixtures pass in Node against the reference adapter
+— **outstanding**. Interop evidence for parent §7.9 falls out of this.
 
 ### 5. Implement layer C — `witness/*`
 
