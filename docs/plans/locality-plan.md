@@ -35,7 +35,7 @@ specifically, so the coupling can be checked rather than assumed:
 | [2026-08-19-bam.md](./locality-plan/2026-08-19-bam.md) | Dispositions on the three 2026-08-19-al.md findings: all three adopted, with the `windowSeconds` anchor narrowed to a sensor-side-only trust parameter, separated from the device's own (non-normative) advertise timeout |
 | [2026-08-20-bam.md](./locality-plan/2026-08-20-bam.md) | `ref-06p2` built and run against a real phone: why a raw-HCI-socket BLE library (`@abandonware/noble`) failed silently on the dev machine it was first run on, and why BlueZ's D-Bus interface (`node-ble`) is the right default for `witness-server`'s own `BleLocalityProvider` (§10.2 item 2), not just this rung's workaround |
 | [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) | `ref-06p3`, `ref-06p4`, and `ref-06p5` built and run: the §7.3 verifier's three-state coverage, the one-real-leg simplification `ref-06p4` uses for the relay trial and why, the measured numbers (100ms first fully caught against a 224.7ms bound), a reconnect-retry bug (stale `Device` object across retries) that feeds back into §10.2 item 2, the App-Attest-vs-Play-Integrity offline-verifiability asymmetry behind new Q7, and why a summarizing web fetch is unsafe for pinning cryptographic material |
-| [2026-09-01-bam.md](./locality-plan/2026-09-01-bam.md) | Item 12 run live on real hardware, both witnessed e2e variants passing. Two bugs the run surfaced and fixed: the witness-connect pre-flight sheet (item 8) couldn't tell a witness's `offered` policy apart from `off`, so it fired for witnesses with no locality leg at all; and once gated correctly, the sheet had no operator cue, so an attended run stalled on it anyway. Supersedes item 8's "always shown first" text |
+| [2026-09-01-bam.md](./locality-plan/2026-09-01-bam.md) | Item 12 run live on real hardware, both witnessed e2e variants passing. Four things found and fixed: the witness-connect pre-flight sheet (item 8) fired for witnesses with no locality leg at all (superseding its "always shown first" text); the sheet then had no operator cue, stalling an attended run; a locality-confirmed Contacts badge, which exposed a dead-code bug in the existing per-record display; and item 2's stale-`Device`-object fix, claimed "folded into" `BleLocalityProvider` since `ref-06p4` but never actually applied there — now is, with a bounded retry |
 
 ---
 
@@ -1031,9 +1031,16 @@ submodule, with the user's explicit sign-off, before any of this could start.**
    producing zero discover events against a live advert while `bluetoothd`
    was running, silently, on the same box D-Bus scanning worked on
    ([2026-08-20-bam.md](./locality-plan/2026-08-20-bam.md)). One shared scan
-   loop serves every concurrent `observeSession` call; reconnect re-scans
-   from scratch rather than reusing a cached `Device` object (`ref-06p4`,
-   [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md)). *Done when:* the
+   loop serves every concurrent `observeSession` call. **Corrected
+   (2026-09-01-bam.md): this item previously claimed `ref-06p4`'s
+   reconnect-from-scratch fix was already "folded into" this class — it was
+   not. The production class had no retry at all until today: a single
+   mid-exchange GATT failure resolved the session `null` immediately, and
+   the failed `Device` object stayed cached forever, exactly `ref-06p4`'s
+   bug, just never actually fixed here.** Now retries up to
+   `MAX_TRANSCRIPT_ATTEMPTS` (3) within the same `windowSeconds` budget,
+   evicting the cached `Device` on each failure so a retry reconnects fresh.
+   *Done when:* the
    `ref-06p2` transcript runs against the real witness process —
    **run live (2026-08-21), via item 9's verification pass: a temporary
    script reused this exact class's real `runTranscriptExchange` (not
