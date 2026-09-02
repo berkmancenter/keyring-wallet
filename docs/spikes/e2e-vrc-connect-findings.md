@@ -498,3 +498,118 @@ Both now read the always-populated three-state `locality.outcome` instead.
 
 Full detail, plan-status updates, and test counts: `docs/plans/locality-plan/2026-09-01-bam.md`
 and `docs/plans/locality-plan.md` items 2, 8, and 12.
+
+## Two hardware-signing prompts disagreeing on biometric vs. passcode within one run (2026-09-02, bam)
+
+Session context: still `feat/locality-android-ble`, same two physical Android
+phones. Not a BLE radio bug like the section above — a user-facing
+consistency bug in how the two hardware-signing prompts a witnessed+locality
+exchange triggers choose between biometric and device-passcode.
+
+### Symptom
+
+Running the attended flow manually (not the e2e script), the operator had to
+authenticate twice — once with a device PIN prompt, once with a biometric
+prompt — in the same run. Reasonable question: is that intentional, or
+should any given exchange be consistent about which auth method it asks for?
+
+### Diagnosis
+
+Two independent `BiometricPrompt` call sites authorize the same Android
+Keystore key (`vrc_hardware_signing_key`), and only one of them respected
+the user's `useBiometry` preference:
+
+- **VRC content signing** (`requestBiometricWithHardwareSigning` →
+  `vrc-biometric.ts`'s `resolveHardwareSigningAuthMode()`, which reads
+  `Preferences.useBiometry` + device enrollment) — enforced natively in
+  `AttestationModule.kt`'s `signWithHardwareBiometricAuth`, which built its
+  `allowedAuthenticators` from the passed `authMode`.
+- **Locality-transcript signing** (`LocalityPeripheralModule.kt`'s
+  `authorizeSignature`, called from `respondToSensor`) — hardcoded
+  `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` regardless of `authMode`, so it
+  let the OS pick whichever the combined-authenticator prompt defaults to.
+
+Depending on device/enrollment state, the two prompts could resolve
+differently within the same run — exactly what was observed. Traced with
+`AndroidBleDeviceLocalityProvider.ts`/`witnessCeremony.ts`: the two
+signatures are legitimately separate operations over different content —
+VRC content signing happens once, early, when `storeVrcForWitnessedExchange`
+prepares the pending VRC (well before any witness session opens); the
+locality-transcript signature happens later, mid-ceremony, over a five-value
+JCS binding that includes `sensorNonce` — a value that does not exist until
+the witness's BLE sensor writes it live during `respondToSensor`'s GATT
+exchange. So the bug was never "two signatures where there should be one" —
+it was two signatures that should agree on auth *policy* and didn't.
+
+### Remedy
+
+`AndroidBleDeviceLocalityProvider.respondToSensor` now calls the same
+`resolveHardwareSigningAuthMode()` VRC content signing uses and threads the
+result through the native bridge as `authMode`
+(`NativeRespondToSensorParams`). `LocalityPeripheralModule.kt`'s
+`authorizeSignature` now builds its `BiometricPrompt` from that value via a
+new `allowedAuthenticatorsFor()` — the identical mapping extracted into
+`AttestationModule.kt` too (replacing its inline ternary), so both native
+modules compute it the same way. They stay two separate Kotlin functions,
+not a shared Gradle dependency — consistent with this codebase's existing
+convention (see `HARDWARE_SIGNING_KEY_ALIAS`'s own duplication comment) of
+duplicating small cross-package logic by contract rather than a fragile
+cross-module build dependency. A new log line
+(`Locality:Peripheral: ▶ Authorizing with … [authMode=…]`) makes the
+resolved mode greppable in logcat, matching `AttestationModule.kt`'s
+existing `VRC:Android: ▶ Signing with … auth` line, so a live run can be
+checked without eyeballing prompt UI text.
+
+New JUnit tests (`LocalityPeripheralModuleTest.kt` /
+`AttestationModuleTest.kt`, kept deliberately in lockstep — a future edit to
+one that isn't mirrored in the other fails loudly in CI rather than only
+showing up as a live-device inconsistency) plus a TS test in
+`AndroidBleDeviceLocalityProvider.test.ts` confirming the resolved mode is
+threaded through rather than decided independently. Full `core` suite (178
+suites / 1647 tests), the locality-peripheral package's own suite, and root
+`yarn typecheck` all green.
+
+### Confirmed on device (2026-09-02)
+
+Same two physical Android phones, fresh debug APK (native Kotlin changed,
+so the pre-fix APK would not have exercised this). `yarn
+e2e:vrc:witnessed:locality:android-only` passed:
+`WITNESS_PORT`/`WITNESS_WEB_PORT` had to be overridden (port 9002/9003 —
+see "phantom, root-owned listener" above, same recurring environment
+gotcha, different port pair this time). Both phones' logcat, pulled
+post-run, show both gates agreeing:
+
+```
+VRC:Android:          ▶ Signing with passcode auth [454 bytes]
+ReactNativeJS:          [VRC:Sign] ▶ Starting hardware signing [android, authMode=passcode]
+Locality:Peripheral:  ▶ Authorizing with passcode auth [authMode=passcode]
+```
+
+on both `R5CN70Q6PDP` and `R5CY83SM4ST` — the exact mismatch from the
+Symptom section, gone. Both phones also confirmed locality over a real BLE
+round trip and landed Witnessed contacts (one with full Secure Exchange,
+the other with the same pre-existing hardware-verification-warning
+tolerance noted throughout this document).
+
+### Open follow-up: could this be ONE user-visible authentication instead of two?
+
+Not attempted this session — a design question raised after the fix
+landed, worth recording rather than losing. The two signatures are
+temporally forced apart (VRC content is signed before the witness session
+even opens; the locality transcript can't be signed until `sensorNonce`
+arrives live over BLE), so they can't share one Keystore operation as
+currently architected. The two prompts *could* still collapse into one
+user-visible authentication by switching the hardware key from
+per-operation auth (`setUserAuthenticationParameters(0, …)`, today's
+policy — a fresh prompt required for every single use) to a short
+time-bound window (`setUserAuthenticationParameters(N, …)`, N > 0): one
+authentication would then silently cover any key use for N seconds,
+including the later locality sign. That trades a real guarantee (each
+individual hardware signature backed by an explicit, fresh user
+confirmation — worth something specifically because this key backs
+witnessed, hardware-attested relationship credentials) for less friction,
+and requires a key-regeneration/migration path (existing keys' auth policy
+is immutable once generated) plus an iOS-side equivalent
+(`LAContext`/`kSecAccessControlBiometryCurrentSet` reuse). Not a quick
+tweak — if pursued, it wants its own plan item and explicit sign-off on the
+security-model trade-off, not a follow-on patch to this fix.
