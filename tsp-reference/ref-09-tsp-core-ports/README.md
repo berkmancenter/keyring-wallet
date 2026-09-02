@@ -99,10 +99,10 @@ the raw-key case only. Still open, in roughly this order:
   itself is rejected ("Unsupported algorithm for key exchange"); a symmetric
   tag like `c20p` is required and is inert packaging only (measured
   byte-identical against `a256gcm`).
-- **A `VidResolver` port** — resolving a VID string to the keys/DID document
-  it names. A simpler concern than the crypto above (no custody boundary
-  involved), not attempted here to keep this rung to one question. Still
-  open as of 2026-09-02.
+- ~~A `VidResolver` port~~ — **done**, see
+  [`ref-11-vidresolver-port`](../ref-11-vidresolver-port/): a raw-key/fixture
+  adapter and a real Credo-backed adapter (`agent.dids.resolveDidDocument`),
+  proven with a real HPKE-Auth round trip using only the resolver's output.
 - ~~The `eddsa-jcs-2022` signer for `auth/authenticate` (§4.5) and the Credo
   trust-task client for `bindings/didcomm-v1/0.1` (§7.9)~~ — **already ship**,
   checked against production code rather than assumed: `@bifold/trust-tasks`'s
