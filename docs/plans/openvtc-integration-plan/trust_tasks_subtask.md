@@ -929,10 +929,13 @@ a basic message). Step 2's specifications are the upstream `vrc/*` /
 `witness/*` batch, with `witness-share` and a future R-Card task to join it.
 Outside this milestone: step 6's evidence against an older build (the
 legacy dual-accept path is true by construction, not yet e2e'd), step 4
-(credential-exchange with a VTA), step 1 (the `tsp-core` dependency
-direction — TSP-side), and the proof-set migration (parent §4.6, parked on
-the working group). Reasoning and evidence per day: the dated companions,
-latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+(credential-exchange with a VTA), and the proof-set migration (parent §4.6,
+parked on the working group). Reasoning and evidence per day: the dated
+companions, latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
+**Step 1 is now resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`,
+forked from `fix/mediator-pickup-strategy`) — see step 1 below and
+[`2026-09-01-bam.md`](./2026-09-01-bam.md).
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
 post-`3a5ea51` (credo-0.6+) build and
@@ -961,8 +964,33 @@ Precondition for everything below. The trust-task model must depend on a carriag
 port, not on TSP envelope orchestration, or layer C has to carry its own task
 spine (§8.1).
 
+**Resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`, forked from
+`fix/mediator-pickup-strategy`). No separate `tsp-core` package was built — one
+already exists in effect as `@bifold/trust-tasks`, and building a second task
+spine now would be exactly the duplicated work §8.1 warns against. The
+resolution is the shape §5.2 always specified, applied to the package that
+exists: a `Carriage` port (`packages/trust-tasks/src/carriage.ts`, no
+dependencies) that the existing DIDComm-v1 send/receive plumbing now
+implements explicitly (`DidCommV1Carriage`, `packages/core`), with
+`ceremony.ts`'s two entry points (`sendTrustTaskDocument`,
+`setupTrustTasksInbound`) as its only callers. Both keep their existing
+signatures, so every call site — the wallet's agent-setup hook and the eight
+in-module send sites — needed no changes. Verified behavior-preserving: the
+module's 64 tests (7 suites) pass unchanged, and `@bifold/core` /
+`@bifold/trust-tasks` typecheck clean.
+
+**Narrower than §5.2's full port set.** `documentProof.ts`'s signing and
+verification still call Credo's KMS and DID resolution directly — the
+`SigningKey`/`VidResolver` half of §5.2's ports. That is §4.3's territory
+(crypto custody), not this step's (carriage/transport), and stays as-is here.
+
+Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
 **Done when:** `tsp-core`'s task model compiles and its tests pass with the TSP
-wire package absent from its dependency graph.
+wire package absent from its dependency graph. Trivially true today — no TSP
+wire package exists anywhere in this codebase yet — so the criterion that
+actually matters going forward is the one just described: the task model
+depends on the `Carriage` port, never on a transport's internals directly.
 
 ### 2. Author the `vrc/*` and `witness/*` specifications
 
