@@ -1104,13 +1104,19 @@ holder-bound `vp_token`. Two non-obvious constraints found and fixed along the
 way: a presentation's `credentialSubject.id` must be a did:key the VTA itself
 manages (`resolve_holder_keys`), and a DCQL query's `claims` must be
 non-empty (`vta-vault`'s consent record is default-deny on an empty reveal
-set). Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). **Not done**: the
-Node reference-adapter fixtures — the only remaining item for this step.
+set). Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). **Not done, and
+blocked, not standalone**: "the reference adapter" the parent plan's own
+"done when" names is `ref-07-credo-adapter`'s raw-key implementation (§4.4,
+Phase D) — this step's remaining item cannot be built ahead of that rung,
+which extracts the `SigningKey`/`KeyAgreement`/`VidResolver` ports no
+`tsp-core` package defines yet anywhere in this codebase. Reasoning:
+[`2026-09-02-bam.md`](./2026-09-02-bam.md).
 
 **Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
 approval, approved, and answered with a `vp_token` that `vta-service` accepts
 — **met** — and the same fixtures pass in Node against the reference adapter
-— **outstanding**. Interop evidence for parent §7.9 falls out of this.
+— **blocked on Phase D** (`ref-07-credo-adapter`, below). Interop evidence for
+parent §7.9 falls out of this.
 
 ### 5. Implement layer C — `witness/*`
 
