@@ -9,7 +9,13 @@
  * giving up on an empty chunk, the iteration cap) against a fake
  * characteristic, not against real radios.
  */
-import { readFullValue, runTranscriptExchange, type BleCharacteristic, type BleDevice } from '../../src/trustTasks/BleLocalityProvider'
+import { BleLocalityProvider, readFullValue, runTranscriptExchange, type BleCharacteristic, type BleDevice } from '../../src/trustTasks/BleLocalityProvider'
+import { deriveEid, serviceUuidFromEid } from '../../src/trustTasks/locality'
+
+const mockCreateBluetooth = jest.fn()
+jest.mock('node-ble', () => ({
+  createBluetooth: () => mockCreateBluetooth(),
+}))
 
 function fakeCharacteristic(chunks: Buffer[]): BleCharacteristic {
   let call = 0
@@ -172,5 +178,109 @@ describe('runTranscriptExchange', () => {
       'connection dropped mid-read'
     )
     expect(device.disconnect).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('BleLocalityProvider — retry on a mid-exchange GATT failure', () => {
+  const address = 'AA:BB:CC:DD:EE:FF'
+  const params = {
+    sessionTaskDigestMultibase: 'sha256:deadbeef',
+    challenge: 'a-challenge',
+    sensorDid: 'did:peer:4witness',
+  }
+  const matchingUuid = serviceUuidFromEid(deriveEid(params.challenge, params.sessionTaskDigestMultibase)).toLowerCase()
+
+  function fakeAdapter(getDevice: jest.Mock) {
+    return {
+      isDiscovering: jest.fn(async () => false),
+      startDiscovery: jest.fn(async () => undefined),
+      stopDiscovery: jest.fn(async () => undefined),
+      devices: jest.fn(async () => [address]),
+      getDevice,
+    }
+  }
+
+  function brokenDevice(): BleDevice {
+    return {
+      connect: jest.fn(async () => undefined),
+      disconnect: jest.fn(async () => undefined),
+      helper: { prop: jest.fn(async () => [matchingUuid]) },
+      gatt: jest.fn(async () => {
+        throw new Error('GATT connection dropped')
+      }),
+    }
+  }
+
+  function workingDevice(): BleDevice {
+    return {
+      connect: jest.fn(async () => undefined),
+      disconnect: jest.fn(async () => undefined),
+      helper: { prop: jest.fn(async () => [matchingUuid]) },
+      gatt: jest.fn(async () => ({
+        getPrimaryService: jest.fn(async () => ({
+          getCharacteristic: jest.fn(async (): Promise<BleCharacteristic> => ({
+            writeValue: jest.fn(async () => undefined),
+            readValue: jest.fn(async () =>
+              Buffer.from(
+                JSON.stringify({
+                  method: 'ble-challenge-response/0.1',
+                  taskDigestMultibase: params.sessionTaskDigestMultibase,
+                  challenge: params.challenge,
+                  sensorNonce: 'ignored-here',
+                  sensorDid: params.sensorDid,
+                  hardwareAttestation: 'present-unverified',
+                  devicePublicKey: 'ZmFrZS1wdWJsaWMta2V5',
+                  signature: 'ZmFrZS1zaWduYXR1cmU',
+                })
+              )
+            ),
+          })),
+        })),
+      })),
+    }
+  }
+
+  let provider: InstanceType<typeof BleLocalityProvider>
+
+  afterEach(async () => {
+    await provider?.stop()
+  })
+
+  test('evicts the stale cached device and retries within the window, succeeding on the next attempt', async () => {
+    const broken = brokenDevice()
+    const working = workingDevice()
+    const getDevice = jest.fn(async () => (getDevice.mock.calls.length === 1 ? broken : working))
+    mockCreateBluetooth.mockReturnValue({
+      bluetooth: { defaultAdapter: async () => fakeAdapter(getDevice) },
+      destroy: jest.fn(),
+    })
+
+    provider = new BleLocalityProvider()
+    await provider.start()
+    const result = await provider.observeSession({ ...params, windowSeconds: 5 })
+
+    expect(result).not.toBeNull()
+    expect(result?.transcript.signature).toBe('ZmFrZS1zaWduYXR1cmU')
+    // Refetched after the first failure — proves the stale entry was evicted
+    // rather than the same broken device object being reused forever.
+    expect(getDevice).toHaveBeenCalledTimes(2)
+    expect(broken.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  test('gives up after MAX_TRANSCRIPT_ATTEMPTS even with plenty of window left', async () => {
+    const getDevice = jest.fn(async () => brokenDevice())
+    mockCreateBluetooth.mockReturnValue({
+      bluetooth: { defaultAdapter: async () => fakeAdapter(getDevice) },
+      destroy: jest.fn(),
+    })
+
+    provider = new BleLocalityProvider()
+    await provider.start()
+    // A long window — if this still gives up quickly, the attempt cap (not
+    // the window) is what stopped it.
+    const result = await provider.observeSession({ ...params, windowSeconds: 30 })
+
+    expect(result).toBeNull()
+    expect(getDevice).toHaveBeenCalledTimes(3)
   })
 })

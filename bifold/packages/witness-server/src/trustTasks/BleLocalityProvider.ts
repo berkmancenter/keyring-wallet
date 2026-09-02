@@ -174,7 +174,19 @@ interface PendingObservation {
   serviceUuid: string
   windowDeadline: number
   resolve: (result: LocalityObservationResult | null) => void
+  attempts: number
 }
+
+/**
+ * Bounded retries within the SAME ceremony window — `windowSeconds` (plan
+ * §5.5) is the security parameter and stays the outer bound; this is a
+ * reliability cap on top of it, not a substitute. A single mid-exchange GATT
+ * failure (a real, observed failure mode — see `runScanLoop`'s own catch-site
+ * comment) no longer permanently loses the session while retries are still
+ * cheap and the window has room left. Kept small: each attempt is a real
+ * connect/GATT round trip against a physical radio, not a cheap retry.
+ */
+const MAX_TRANSCRIPT_ATTEMPTS = 3
 
 /**
  * The BLE sensor, over BlueZ's D-Bus interface. One continuous scan serves
@@ -218,6 +230,7 @@ export class BleLocalityProvider implements TaskLocalityProvider {
         serviceUuid,
         windowDeadline: Date.now() + params.windowSeconds * 1000,
         resolve,
+        attempts: 0,
       })
       this.ensureScanning()
     })
@@ -272,18 +285,32 @@ export class BleLocalityProvider implements TaskLocalityProvider {
           if (!waiter) continue
           this.pending.delete(matched)
           this.seenAddresses.add(address)
-          const observation = await runTranscriptExchange(device, waiter.serviceUuid).catch((error: Error) => {
-            // Swallowed as a windowLost-shaped null by design (a mid-exchange
-            // failure is still "no confirmed observation," not a crash the
-            // caller should see) — but silently, with zero trace, made a real
-            // BLE failure indistinguishable from an honest timeout. Logged
-            // here so the next person debugging a "sensor never observed it"
-            // report (2026-08-21's live on-device verification hit this
-            // exact silence) has something to look at.
-            console.warn(`[ble] transcript exchange with ${address} failed: ${error.message}`)
-            return null
-          })
-          waiter.resolve(observation)
+          try {
+            const observation = await runTranscriptExchange(device, waiter.serviceUuid)
+            waiter.resolve(observation)
+          } catch (error) {
+            // A mid-exchange GATT failure is still "no confirmed
+            // observation," not a crash the caller should see — but
+            // resolving null immediately silently gave up on a session
+            // whose device was still advertising and its window still open,
+            // making a real BLE failure indistinguishable from an honest
+            // timeout with zero trace (2026-08-21's live on-device
+            // verification hit this exact silence).
+            console.warn(`[ble] transcript exchange with ${address} failed: ${(error as Error).message}`)
+            // The cached Device object may now be stale (its BlueZ-side GATT
+            // state left mid-teardown) — evict so a retry reconnects fresh
+            // rather than repeating the same failure against the same
+            // broken proxy every tick.
+            this.deviceByAddress.delete(address)
+            const attempts = waiter.attempts + 1
+            if (attempts < MAX_TRANSCRIPT_ATTEMPTS && Date.now() < waiter.windowDeadline) {
+              // Back into `pending` under the same key for a later tick
+              // (500ms away) to retry — same bounded window, not a new one.
+              this.pending.set(matched, { ...waiter, attempts })
+            } else {
+              waiter.resolve(null)
+            }
+          }
         }
         await new Promise((r) => setTimeout(r, 500))
       }
