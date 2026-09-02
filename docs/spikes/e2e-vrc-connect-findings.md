@@ -409,3 +409,92 @@ state first. It is a throwaway diagnostic script (README: "not part of the
 maintained suite"), so this wasn't fixed; just know to check `adb shell
 dumpsys power | grep mWakefulness` before assuming a `debug-witness-connect.js`
 timeout is a real bug.
+
+## BLE co-presence: a mid-exchange GATT failure with no retry, and a false "already fixed" claim (2026-09-02, bam)
+
+Session context: `yarn e2e:vrc:witnessed:locality:android-only` on
+`feat/locality-android-ble`, same two physical Android phones, this machine's
+own Bluetooth adapter as the witness's BLE sensor (`BleLocalityProvider`,
+BlueZ via `node-ble`). Not a mediator/transport issue like the rest of this
+document — a different radio leg entirely — but the same shape of bug: a
+real hardware failure the harness surfaced, with no retry to absorb it.
+
+### Symptom
+
+A locality-required run failed asymmetrically: one phone's contact showed a
+confirmed-locality VWC (Witnessed + In-Person + a "Locality Verification:
+Confirmed" record); the other showed no witness record at all, just the
+base Secure Exchange badge. The witness ceremony assertion timed out
+waiting for that phone's `VWC stored, outcome evidence self-check` markers.
+
+### Diagnosis
+
+The failing phone's own logcat showed the real cause, well before either
+phone had any manual interaction:
+
+```
+[TrustTasks:Witness] locality radio phase did not complete (session a9abe903...)
+witness/session/submit:localityRequired — trust-task-error
+```
+
+A genuine mid-ceremony BLE GATT failure — `required` policy correctly
+refused to issue a VWC rather than issuing a false one, so nothing here was
+a *correctness* bug. But reading `BleLocalityProvider.observeSession`
+found it had **no retry at all**: a single mid-exchange GATT exception
+resolved the session `null` immediately, and the failed `Device` object
+stayed cached in `deviceByAddress` forever, un-evicted.
+
+That combination — exactly this failure mode — was already found and fixed
+once before, in the reference rung `ref-06p4` (`docs/plans/locality-plan/2026-08-21-bam.md`),
+which states the fix was "folded into" `BleLocalityProvider`'s own
+acceptance text (`locality-plan.md` item 2). It was not. The claim went
+unverified for eleven days and only surfaced because a live e2e run hit the
+exact failure the reference rung had already characterized. `locality-plan.md`
+item 2 has been corrected in place.
+
+### Remedy
+
+`BleLocalityProvider.observeSession` now retries a mid-exchange failure up
+to `MAX_TRANSCRIPT_ATTEMPTS` (3) within the same `windowSeconds` budget —
+the security parameter stays the outer bound, this is a reliability cap on
+top of it — evicting the cached `Device` on every failure so a retry
+reconnects fresh rather than repeating the same failure against the same
+stale BlueZ proxy. A longer window alone would not have helped: the
+provider was giving up on the first exception regardless of how much window
+time remained, so extending the window just gives more time to not retry.
+
+Two new unit tests against a fake adapter/device (`BleLocalityProvider.test.ts`):
+one that fails once then succeeds (asserts the device is refetched, proving
+eviction rather than merely that a retry happened), and one that fails every
+attempt with a long window (asserts the attempt cap, not the window, is what
+stops it).
+
+### Confirmed on device (2026-09-02)
+
+Same two physical Android phones. First run after the fix: **passed**, both
+legs' BLE round trips succeeding on their first attempt — no retry actually
+fired this run, so this confirms no regression, not the retry path itself
+firing against a real flake (BLE failures are inherently non-deterministic;
+the unit tests are what prove the retry logic itself). Both phones landed a
+confirmed-locality VWC, both showed the Witnessed badge and the new
+locality-confirmed Contacts indicator (see below), fully symmetric this
+time.
+
+### Also landed this session: a locality-confirmed indicator on Contacts, and a dead-code bug it exposed
+
+Neither the Contacts list nor the contact detail screen surfaced BLE
+co-presence confirmation at a glance. Added a third badge
+(`map-marker-check`, green, "In-Person" on the detail screen) to both,
+following the existing `hasWitnessCredential`/`hasHardwareAttestation`
+pattern in `ListContacts.tsx`/`ContactDetails.tsx` exactly.
+
+Building it found that both the new badges and the pre-existing per-record
+"Locality Verification" line were reading `witnessContext.localityVerification`
+— the legacy nested shape `extractWitnessInfo` only populates for VWCs
+issued before this plan's flat `locality*` members existed. Every current
+VWC leaves that field `undefined`, so the existing line had been silently
+dead code since the flat shape shipped: never wrong on screen, invisible.
+Both now read the always-populated three-state `locality.outcome` instead.
+
+Full detail, plan-status updates, and test counts: `docs/plans/locality-plan/2026-09-01-bam.md`
+and `docs/plans/locality-plan.md` items 2, 8, and 12.
