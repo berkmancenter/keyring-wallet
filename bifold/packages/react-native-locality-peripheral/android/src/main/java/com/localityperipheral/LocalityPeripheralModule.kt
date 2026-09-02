@@ -81,6 +81,29 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     // server/this file all independently assemble the same JCS binding).
     private const val HARDWARE_SIGNING_KEY_ALIAS = "vrc_hardware_signing_key"
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
+
+    /**
+     * A second DELIBERATE DUPLICATE, for the same reason as the alias
+     * above: `AttestationModule.kt`'s `signWithHardwareBiometricAuth` computes
+     * this identical mapping inline for VRC content signing. Both authorize
+     * the SAME hardware key (`HARDWARE_SIGNING_KEY_ALIAS`), so both must
+     * honor the same caller-resolved `authMode` — bugfix for the two prompts
+     * silently diverging: this file used to hardcode
+     * `BIOMETRIC_STRONG or DEVICE_CREDENTIAL` regardless of the user's
+     * `useBiometry` preference, so it could show a plain biometric prompt in
+     * the same run where VRC signing, honoring the preference, showed
+     * passcode-only (or vice versa) — confusing, and not a designed
+     * distinction. `authMode` now comes from the JS side's single
+     * `resolveHardwareSigningAuthMode()` policy (vrc-biometric.ts), the same
+     * one VRC signing uses.
+     */
+    fun allowedAuthenticatorsFor(authMode: String?): Int {
+      return if (authMode == "passcode") {
+        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      } else {
+        BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      }
+    }
   }
 
   // ---------------------------------------------------------------- isSupported
@@ -120,6 +143,7 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     val sensorDid: String,
     val hardwareAttestation: String,
     val devicePublicKeyBase64: String,
+    val authMode: String?,
     var authorizedSignature: Signature? = null,
     var gattServer: BluetoothGattServer? = null,
     var advertiser: BluetoothLeAdvertiser? = null,
@@ -190,10 +214,11 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     val sensorDid = params.getString("sensorDid")
     val hardwareAttestation = params.getString("hardwareAttestation")
     val windowSeconds = if (params.hasKey("windowSeconds")) params.getDouble("windowSeconds") else Double.NaN
+    val authMode = params.getString("authMode")
 
     if (serviceUuidStr == null || characteristicUuidStr == null || signatureCharacteristicUuidStr == null ||
       contextString == null || method == null || taskDigestMultibase == null || challenge == null ||
-      sensorDid == null || hardwareAttestation == null || windowSeconds.isNaN()
+      sensorDid == null || hardwareAttestation == null || windowSeconds.isNaN() || authMode == null
     ) {
       promise.reject("error", "respondToSensor: missing or malformed params")
       return
@@ -235,6 +260,7 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
       sensorDid = sensorDid,
       hardwareAttestation = hardwareAttestation,
       devicePublicKeyBase64 = devicePublicKeyBase64,
+      authMode = authMode,
     )
     activeCall = call
 
@@ -303,6 +329,11 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     call: ActiveCall,
     onResult: (authorized: Boolean) -> Unit,
   ) {
+    // Greppable in logcat alongside AttestationModule's identical log line
+    // for VRC content signing, so a live run can confirm both gates agree
+    // on the SAME authMode rather than only comparing the two prompts by eye.
+    Log.i(TAG, "▶ Authorizing with ${if (call.authMode == "passcode") "passcode" else "biometric"} auth [authMode=${call.authMode}]")
+
     val signature = Signature.getInstance("SHA256withECDSA")
     try {
       signature.initSign(privateKey)
@@ -336,12 +367,14 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
       }
     }
 
+    val passcodeOnly = call.authMode == "passcode"
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
       .setTitle("Confirm In-Person Presence")
-      .setSubtitle("Authenticate to sign the locality confirmation")
-      .setAllowedAuthenticators(
-        BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      .setSubtitle(
+        if (passcodeOnly) "Enter your device passcode to sign the locality confirmation"
+        else "Authenticate to sign the locality confirmation"
       )
+      .setAllowedAuthenticators(allowedAuthenticatorsFor(call.authMode))
       .build()
 
     activity.runOnUiThread {

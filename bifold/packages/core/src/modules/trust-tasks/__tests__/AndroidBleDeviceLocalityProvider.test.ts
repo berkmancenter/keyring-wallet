@@ -31,6 +31,11 @@ jest.mock('../../vrc/vrc-hardware-signing', () => ({
   ensureHardwareSigningKey: (...args: unknown[]) => mockEnsureHardwareSigningKey(...args),
 }))
 
+const mockResolveHardwareSigningAuthMode = jest.fn(async () => 'biometric' as const)
+jest.mock('../../vrc/vrc-biometric', () => ({
+  resolveHardwareSigningAuthMode: () => mockResolveHardwareSigningAuthMode(),
+}))
+
 const mockHasCachedAttestation = jest.fn()
 jest.mock('../../vrc/services/EvidenceBuilder', () => ({
   createEvidenceBuilder: () => ({ hasCachedAttestation: (...args: unknown[]) => mockHasCachedAttestation(...args) }),
@@ -105,6 +110,28 @@ describe('AndroidBleDeviceLocalityProvider (design sketch â€” locality-plan.md Â
     expect(nativeParams.sensorDid).toBe(DIRECTIVE.sensorDid)
     expect(nativeParams.windowSeconds).toBe(DIRECTIVE.windowSeconds)
     expect(nativeParams.hardwareAttestation).toBe('verified')
+    expect(nativeParams.authMode).toBe('biometric')
+  })
+
+  test('threads the SAME resolveHardwareSigningAuthMode() policy VRC content signing uses, not an independent choice', async () => {
+    const { bridge, respondToSensor } = makeBridge()
+    respondToSensor.mockResolvedValue({
+      sensorNonceHex: 'cc'.repeat(32),
+      devicePublicKeyBase64: 'ZmFrZQ',
+      signatureBase64Url: 'ZmFrZQ',
+    })
+    mockResolveHardwareSigningAuthMode.mockClear()
+    mockResolveHardwareSigningAuthMode.mockResolvedValueOnce('passcode')
+    const provider = new AndroidBleDeviceLocalityProvider(bridge, async () => 'verified')
+
+    await provider.respondToSensor({
+      taskDigestMultibase: 'sha256:deadbeef',
+      challenge: 'a-fresh-challenge',
+      directive: DIRECTIVE,
+    })
+
+    expect(mockResolveHardwareSigningAuthMode).toHaveBeenCalledTimes(1)
+    expect(respondToSensor.mock.calls[0][0].authMode).toBe('passcode')
   })
 
   test('assembles a full LocalityTranscript from the native result', async () => {

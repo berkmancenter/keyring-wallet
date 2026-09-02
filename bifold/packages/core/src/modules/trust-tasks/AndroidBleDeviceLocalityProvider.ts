@@ -17,6 +17,7 @@ import type {
 } from '@bifold/react-native-locality-peripheral'
 
 import { ensureHardwareSigningKey } from '../vrc/vrc-hardware-signing'
+import { resolveHardwareSigningAuthMode } from '../vrc/vrc-biometric'
 import { createEvidenceBuilder } from '../vrc/services/EvidenceBuilder'
 import {
   deriveEid,
@@ -66,6 +67,11 @@ export class AndroidBleDeviceLocalityProvider implements DeviceLocalityProvider 
     const eid = deriveEid(params.challenge, params.taskDigestMultibase)
     const serviceUuid = serviceUuidFromEid(eid)
     const hardwareAttestation = await this.getHardwareAttestationState()
+    // Same policy VRC content signing uses (vrc-biometric.ts's
+    // `resolveHardwareSigningAuthMode`) — the locality-transcript signature
+    // authorizes the same hardware key, so it should honor the same
+    // biometric/passcode preference rather than deciding independently.
+    const authMode = await resolveHardwareSigningAuthMode()
 
     const result = await this.bridge.respondToSensor({
       serviceUuid,
@@ -78,6 +84,7 @@ export class AndroidBleDeviceLocalityProvider implements DeviceLocalityProvider 
       sensorDid: params.directive.sensorDid,
       hardwareAttestation,
       windowSeconds: params.directive.windowSeconds,
+      authMode,
     })
     if (!result) return null
 

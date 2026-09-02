@@ -70,6 +70,21 @@ export type NativeRespondToSensorParams = {
    * clock once advertising actually starts.
    */
   windowSeconds: number;
+  /**
+   * `'biometric'` or `'passcode'`, resolved by `@bifold/core`'s
+   * `resolveHardwareSigningAuthMode()` — the SAME policy (device enrollment
+   * + the user's `useBiometry` preference) that governs the OS prompt for
+   * VRC content signing (`vrc-biometric.ts`), so the locality-transcript
+   * signature — authorizing the same hardware key — doesn't independently
+   * decide to always offer both biometric and device-credential regardless
+   * of preference. Structurally identical to (but not imported from)
+   * `@bifold/react-native-attestation`'s `HardwareSigningAuthMode`, per
+   * this package's own convention of duplicating small cross-package types
+   * by contract rather than a real Gradle/package dependency (see
+   * `HARDWARE_SIGNING_KEY_ALIAS`'s own comment in
+   * `LocalityPeripheralModule.kt`).
+   */
+  authMode: 'biometric' | 'passcode';
 };
 
 export type NativeLocalityTranscriptResult = {
@@ -103,9 +118,10 @@ export interface Spec extends TurboModule {
   isSupported(): Promise<boolean>;
 
   /**
-   * Present the biometric prompt ONCE, now — authorizing a `Signature`
-   * bound to the existing hardware-attestation key via `CryptoObject`,
-   * *before* advertising starts and outside the RTT-bound window — then run
+   * Present the biometric/passcode prompt ONCE, now — per `params.authMode`
+   * — authorizing a `Signature` bound to the existing hardware-attestation
+   * key via `CryptoObject`, *before* advertising starts and outside the
+   * RTT-bound window — then run
    * the whole peripheral lifecycle: advertise `serviceUuid`, open the GATT
    * server, wait for a central to write to `characteristicUuid`, sign the
    * binding synchronously with the already-authorized object (no further

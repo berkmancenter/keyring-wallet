@@ -69,6 +69,7 @@ const sampleParams = {
   sensorDid: 'did:peer:4witness',
   hardwareAttestation: 'present-unverified' as const,
   windowSeconds: 30,
+  authMode: 'biometric' as const,
 }
 
 describe('isNativeModuleLinked', () => {
