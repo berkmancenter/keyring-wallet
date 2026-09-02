@@ -266,6 +266,45 @@ export async function enableHardwareAttestation(driver) {
   await returnToContacts(driver);
 }
 
+/**
+ * Enable the "Enable TSP envelope carriage" developer setting (OFF by
+ * default) — the dev/test-only toggle for the real TSP envelope Carriage
+ * (@bifold/trust-tasks's tsp.pack/unpack over @bifold/credo-tsp-adapter's
+ * Askar-backed ports) as an alternative to the default DIDComm-v1 carriage.
+ * See docs/plans/openvtc-integration-plan/2026-09-02-bam.md for why this
+ * doesn't need vta-service or any ecosystem counterparty — it's wallet-to-
+ * wallet only, delivered over the same existing DIDComm-v1 connection.
+ *
+ * The "Developer" row is hidden in Settings until developer mode is enabled
+ * (bifold/packages/core/src/hooks/developer-mode.ts:
+ * TOUCH_COUNT_TO_ENABLE_DEVELOPER_MODE = 10 taps on the version footer).
+ * Toggling the switch updates outbound sends immediately, but
+ * setupTrustTasksInbound only registers the TSP carriage's inbound handler
+ * at agent setup — a restart is required for the inbound side to pick it
+ * up (same restart-to-apply behavior as most developer toggles), so this
+ * restarts the app before returning.
+ */
+export async function enableTspCarriage(driver) {
+  await dismissTourIfPresent(driver);
+  await tapTestId(driver, "Settings", 15000);
+
+  if (!(await existsTestId(driver, "DeveloperOptions", 3000))) {
+    const versionEl = await scrollToTestId(driver, "Version");
+    for (let i = 0; i < 10; i++) {
+      await versionEl.click();
+      await sleep(150);
+    }
+    await waitForTestId(driver, "DeveloperOptions", 5000);
+  }
+
+  await tapTestId(driver, "DeveloperOptions", 15000);
+  await tapTestId(driver, "ToggleEnableTspCarriage", 15000);
+  console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope carriage enabled (developer setting)`);
+
+  await returnToContacts(driver);
+  await restartApp(driver);
+}
+
 /** The QR exchange bottom sheet is open if any of its content is visible. */
 async function qrSheetIsOpen(driver, timeout = 4000) {
   for (const key of ["ScanQRCode", "QRCodeExchangeTitle"]) {
@@ -945,6 +984,44 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
   }
   throw new Error(
     `android: trust-task markers missing after ${timeout}ms: ${missing
+      .map(([, name]) => name)
+      .join(", ")}`
+  );
+}
+
+/**
+ * Confirm the TSP envelope carriage specifically ran (not just that a
+ * document arrived, which either carriage would show) — from the Android
+ * side's logcat, distinct from assertTrustTaskExchangeMarkers's
+ * [TrustTasks:Ceremony] markers. Requires enableTspCarriage() to have been
+ * run (and the app restarted) on the device(s) under test first. No-op on
+ * iOS drivers (no logcat; the Android log covers both directions).
+ */
+export async function assertTspCarriageMarkers(driver, timeout = 60000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:TspCarriage\] envelope sent/, "envelope sent"],
+    [/\[TrustTasks:TspCarriage\] envelope received/, "envelope received"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(
+        "[e2e] android: TSP envelope carriage markers present (sent + received)"
+      );
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: TSP carriage markers missing after ${timeout}ms: ${missing
       .map(([, name]) => name)
       .join(", ")}`
   );
