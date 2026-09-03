@@ -35,6 +35,8 @@ import {
   walletExists,
   shouldUseFresh,
   getWalletStoragePath,
+  startMediatorMessagePickup,
+  SUPPORTED_MEDIATOR_PICKUP_STRATEGY,
 } from '@bifold/vrc-shared'
 import { greenText, purpleText } from './OutputClass'
 
@@ -146,9 +148,15 @@ export class BaseAgent {
         console.log(greenText(`[${this.name}] ✓ Mediation already provisioned`))
       }
 
-      // Initiate message pickup - CRITICAL for receiving messages from mediator
-      await this.agent.modules.didcomm.mediationRecipient.initiateMessagePickup(mediationRecord)
-      console.log(greenText(`[${this.name}] ✓ Message pickup initiated`))
+      // Initiate message pickup - CRITICAL for receiving messages from mediator.
+      // Must pass the strategy EXPLICITLY: calling initiateMessagePickup without one
+      // resolves it as `mediationRecord.pickupStrategy ?? moduleConfig`, so a value
+      // persisted in this wallet silently outranks our config and inbound delivery
+      // starts depending on hidden per-wallet state.
+      const pickup = await startMediatorMessagePickup(this.agent, (message) =>
+        console.log(greenText(`[${this.name}] ${message}`))
+      )
+      console.log(greenText(`[${this.name}] ✓ Message pickup initiated (${pickup.strategy})`))
       
     } catch (error) {
       // Log warning but don't fail - mediator setup can retry later
@@ -256,11 +264,14 @@ function getJsonLdDemoModules({ walletId, walletKey, endpoints, mediatorInvitati
           new DidCommProofV2Protocol({ proofFormats: [new DidCommDifPresentationExchangeProofFormatService()] }),
         ],
       },
-      // Mediation recipient config is only applied when a mediator URL is provided
+      // Mediation recipient config is only applied when a mediator URL is provided.
+      // Fallback only — the authoritative call is startMediatorMessagePickup() in
+      // setupMediation(), which passes the strategy explicitly. See
+      // @bifold/vrc-shared src/mediation.ts.
       mediationRecipient: mediatorInvitationUrl
         ? {
             mediatorInvitationUrl,
-            mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+            mediatorPickupStrategy: SUPPORTED_MEDIATOR_PICKUP_STRATEGY as DidCommMediatorPickupStrategy,
           }
         : undefined,
     }),

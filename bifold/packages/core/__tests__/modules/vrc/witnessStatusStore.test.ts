@@ -736,6 +736,18 @@ describe('VrcFlowStore R-Card receive tracking', () => {
     expect(vrcFlowStore.isRcardReceiveComplete('rc-1')).toBe(true)
   })
 
+  it('isRcardReceivePending is false when no R-Card was ever expected', () => {
+    // e.g. the inviter side of a unidirectional exchange never receives one
+    expect(vrcFlowStore.isRcardReceivePending('rc-1')).toBe(false)
+  })
+
+  it('isRcardReceivePending is true only between markRcardReceivePending and markRcardReceiveComplete', () => {
+    vrcFlowStore.markRcardReceivePending('rc-1')
+    expect(vrcFlowStore.isRcardReceivePending('rc-1')).toBe(true)
+    vrcFlowStore.markRcardReceiveComplete('rc-1')
+    expect(vrcFlowStore.isRcardReceivePending('rc-1')).toBe(false)
+  })
+
   it('emits flowUpdate on both marks so the overlay re-evaluates', () => {
     const seen: string[] = []
     vrcFlowStore.on('flowUpdate', ({ connectionId }: { connectionId: string }) => seen.push(connectionId))

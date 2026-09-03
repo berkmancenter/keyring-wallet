@@ -305,7 +305,7 @@ export const useVrcFlowInProgress = (connectionId: string): VrcFlowOverlayState 
         shouldClearOverlay &&
         flowStatus !== 'idle' &&
         progressStartedRef.current &&
-        !vrcFlowStore.isRcardReceiveComplete(connectionId) &&
+        vrcFlowStore.isRcardReceivePending(connectionId) &&
         !rcardGraceExpiredRef.current
 
       if (shouldShowOverlay) {

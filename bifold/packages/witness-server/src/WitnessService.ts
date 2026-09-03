@@ -67,7 +67,12 @@ import {
 import { pseudonymDisplay } from './pseudonym'
 
 // Import shared wallet config
-import { getWalletStoragePath } from '@bifold/vrc-shared'
+import {
+  getWalletStoragePath,
+  startMediatorMessagePickup,
+  SUPPORTED_MEDIATOR_PICKUP_STRATEGY,
+  type MediatorPickupStrategyName,
+} from '@bifold/vrc-shared'
 
 import {
   CredentialRegistry,
@@ -367,11 +372,23 @@ function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationU
           new DidCommProofV2Protocol({ proofFormats: [new DidCommDifPresentationExchangeProofFormatService()] }),
         ],
       },
-      // Mediation recipient config is only applied when a mediator URL is provided
+      // Mediation recipient config is only applied when a mediator URL is provided.
+      //
+      // This was MediatorPickupStrategy.Implicit until 2026-08-31, which meant the
+      // witness never received a single mediated message: Implicit is push-only and
+      // our mediator queues rather than pushes, so the witness sent fine and was deaf
+      // forever, with no error on either side.
+      //
+      // Treat this value as a fallback only. credo resolves the strategy as
+      // `mediationRecord.pickupStrategy ?? thisConfig`, so a value persisted in the
+      // wallet OUTRANKS it — the authoritative call is startMediatorMessagePickup()
+      // after agent.initialize(), which passes the strategy explicitly and bypasses
+      // both. See @bifold/vrc-shared src/mediation.ts and
+      // docs/spikes/e2e-vrc-connect-findings.md ("fourth failure layer").
       mediationRecipient: mediatorInvitationUrl
         ? {
             mediatorInvitationUrl,
-            mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+            mediatorPickupStrategy: SUPPORTED_MEDIATOR_PICKUP_STRATEGY as DidCommMediatorPickupStrategy,
           }
         : undefined,
     }),
@@ -410,6 +427,9 @@ export class WitnessService {
   private issuerVerificationMethodId?: string
   private activeSessions: Map<string, SessionData> = new Map()
   private outOfBandId?: string
+  /** Effective mediator pickup strategy, surfaced in the startup banner so a
+   *  silent-inbound misconfiguration is visible at a glance in any run's log. */
+  private pickupStrategy?: MediatorPickupStrategyName
   private taskSessions?: WitnessTaskSessions
   private invitationUrl?: string
 
@@ -523,6 +543,16 @@ export class WitnessService {
 
     // Wait for transport to be fully ready (critical for mediation stability)
     await this.waitForTransportReady()
+
+    // Start message pickup EXPLICITLY. This is the line that decides whether the
+    // witness can receive anything at all when running behind a mediator, and it
+    // deliberately does not trust the module config above: credo lets a strategy
+    // persisted on this wallet's MediationRecord outrank config, which is what made
+    // this bug look machine-specific. Passing the strategy explicitly bypasses both.
+    const pickup = await startMediatorMessagePickup(this.agent, (message) =>
+      console.log(`[${this.name}] ${message}`)
+    )
+    this.pickupStrategy = pickup.strategy
 
     // Register debug event listeners for mediation
     this.registerDebugEventListeners()
@@ -773,6 +803,12 @@ export class WitnessService {
     console.log('╠══════════════════════════════════════════════════════════════════╣')
     console.log('║  NETWORK                                                         ║')
     console.log(`║    Transport:       ${this.padRight(useMediator ? 'MEDIATOR (WebSocket)' : 'DIRECT (HTTP)', 43)}║`)
+    if (useMediator) {
+      // Inbound delivery depends entirely on this. Print it: a wrong strategy
+      // produces total silence rather than an error, so the banner is the
+      // cheapest place to catch it.
+      console.log(`║    Msg Pickup:      ${this.padRight(`${this.pickupStrategy ?? 'NOT STARTED'} (explicit)`, 43)}║`)
+    }
     if (useMediator) {
       const mediatorUrl = this.config.mediatorInvitationUrl || ''
       let mediatorDisplay = mediatorUrl
