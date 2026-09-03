@@ -205,17 +205,25 @@ module.exports = (async () => {
         // condition to match.
         if (moduleName.startsWith('@openvtc/trust-tasks/')) {
           const subPath = moduleName.slice('@openvtc/trust-tasks/'.length)
-          for (const base of [
+          const bases = [
             path.join(__dirname, 'node_modules'),
             path.join(__dirname, '..', 'bifold', 'packages', 'core', 'node_modules'),
             path.join(__dirname, '..', 'bifold', 'node_modules'),
             path.join(__dirname, '..', 'node_modules'),
-          ]) {
+          ]
+          for (const base of bases) {
             const candidate = path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)
             if (fs.existsSync(candidate)) {
               return { filePath: candidate, type: 'sourceFile' }
             }
           }
+          // No dist/<subPath>.js in any base — falling through to Metro's default
+          // resolution would just reproduce the "no match was resolved" failure
+          // this block exists to work around. Fail loudly instead.
+          throw new Error(
+            `[metro.config] Could not resolve '${moduleName}': no dist/${subPath}.js found under any of:\n` +
+              bases.map((base) => `  ${path.join(base, '@openvtc', 'trust-tasks', 'dist', `${subPath}.js`)}`).join('\n')
+          )
         }
         // Intercept rdf-canonize package requests to ensure patched version is used
         if (moduleName === 'rdf-canonize' || moduleName.startsWith('rdf-canonize/')) {

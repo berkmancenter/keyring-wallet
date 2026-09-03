@@ -127,7 +127,12 @@ export function getBCAgentModules({
       },
       mediationRecipient: {
         mediatorInvitationUrl: mediatorInvitationUrl,
-        mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+        // PickUpV2, matching the runtime start in configureMessagePickup. This
+        // said Implicit until 2026-08-31 — harmless here only because the runtime
+        // override happened to correct it, but it meant the declared config was a
+        // lie, and copying this block into a new agent (as the witness-server
+        // effectively had) produced an agent that could never receive anything.
+        mediatorPickupStrategy: DidCommMediatorPickupStrategy.PickUpV2,
         // Pickup V2 polling cadence (see configureMessagePickup): each poll is
         // a status-request the mediator answers from its queue, so delivery is
         // request/ack'd instead of live-pushed into a websocket that may have
@@ -151,6 +156,13 @@ export function getBCAgentModules({
         // at 1s that is ~86k mediator requests/day per idle wallet, which is
         // fine for demo/testing but wants an idle/active split before it
         // ships (see the parked adaptive-polling work).
+        //
+        // The witness-server carried this same bug on Implicit until 2026-08-31 and
+        // received nothing at all through the mediator — the wallet's runtime
+        // override is the ONLY reason this side was unaffected. Anything new that
+        // talks to this mediator must start pickup explicitly too; the reusable
+        // guard is startMediatorMessagePickup in @bifold/vrc-shared (src/mediation.ts),
+        // and the diagnosis is docs/spikes/e2e-vrc-connect-findings.md.
         //
         // Safe since the mediator pickup queue moved off askar to postgres on
         // 2026-08-26; before that a faster cadence tripped rate-correlated

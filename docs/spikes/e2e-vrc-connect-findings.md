@@ -191,3 +191,221 @@ second, divergent DID for the same counterparty (worth hardening separately).
   `IOS_DEVICE_NAME="iPhone 17 Pro"`. The `API36_S25_A` AVD refuses to launch the
   app ("Error type 3: Activity class does not exist") despite a clean install —
   environment quirk, avoid it for e2e.
+
+## Fourth failure layer: the witness never picks up its mail (2026-08-31, bam)
+
+Session context: `yarn e2e:vrc:witnessed:android-only` on `feat/trust-tasks-integration`,
+two physical Android phones, witness-server run by the e2e harness against the same
+production mediator. Failed 4/4 identically at
+`witness.waitForParticipants(2, 120000)` — *"only 0/2 participant(s) connected"* —
+including once fully attended with both phones unlocked, which rules out Doze.
+
+### Symptom
+
+Both wallets accepted the witness's reusable OOB invitation, created a connection
+record with `theirLabel: "e2e-witness"`, and sent their `didexchange/1.1/request`.
+The witness logged **nothing at all** afterwards — no connection-state-changed, no
+message-received, no problem-report — so the `state === 'completed'` gate in
+`WitnessService.registerMessageHandlers` never opened and no `witness-announcement`
+was ever sent. Meanwhile the witness's own outbound traffic worked throughout:
+mediation request, `keylist-update` (ACKed), locality heartbeats, WebSocket
+teardown at shutdown. Sending fine, receiving nothing, no error on either side.
+
+### Diagnosis
+
+The witness ran `MediatorPickupStrategy.Implicit`. Implicit is **push-only** — per
+credo's own doc comment it "consists simply on initiating a long-lived session to a
+mediator and wait for the messages to arrive automatically", and it issues no
+pickup requests at all. Our mediator queues rather than pushes (it has run
+`MESSAGE_PICKUP__FORWARDING_STRATEGY=QueueOnly` since the 2026-08-24 fix in
+`docs/plans/openvtc-integration-plan/2026-08-24-bam.md`, which was applied to make
+the *wallet-to-wallet* run pass). A push-only recipient against a queue-only
+mediator receives nothing, permanently.
+
+The wallet was moved off exactly this failure on 2026-08-18 (second layer, above)
+and now calls `initiateMessagePickup(undefined, PickUpV2)` at runtime in
+`useBCAgentSetup.ts`. The witness-server was never given the equivalent, so the
+08-24 mediator fix that made the wallet reliable is the same change that made the
+witness deaf.
+
+Evidence, from the witness's own verbose log across the whole failing run
+(13,194 lines): exactly **one** inbound message, a `keylist-update-response`
+returned on the HTTP response body of the witness's own POST — i.e. return-route,
+not mediator delivery — and **zero** message-pickup protocol messages of any kind.
+
+### Confirmed by A/B, one phone, unattended (`e2e/debug-witness-connect.js`)
+
+| Witness wallet | Transport | Strategy observed at runtime | pickup msgs | Result |
+|---|---|---|---|---|
+| persistent | MEDIATOR | `implicit` | 0 | FAIL 0/2 |
+| persistent | DIRECT | n/a | — | **PASS** |
+| persistent (mutated, see below) | MEDIATOR | `explicit v2` | 175 | **PASS** |
+| **fresh** | MEDIATOR | `implicit` | 0 | **FAIL 0/1** |
+
+The last row reproduces the original failure deterministically in ~5 minutes with
+one phone. The third row matters just as much: through the *same* mediator, with
+PickUpV2, `messagepickup/2.0/delivery` carried the phone's `didexchange/1.1/request`
+and `/complete`, the connection completed, and the announcement went out. **The
+mediator was never the problem** — it queues and delivers on request. The witness
+simply never asked.
+
+### The part that made this look machine-specific
+
+Setting `mediatorPickupStrategy` in module config is **not sufficient**. credo
+resolves it as `mediationRecord.pickupStrategy ?? moduleConfig.mediatorPickupStrategy`
+(`DidCommMediationRecipientApi.getPickupStrategyForMediator`): a value persisted on
+the MediationRecord **in the agent's wallet outranks the config**, and credo writes
+one there itself whenever the config leaves the strategy unset — which is what
+happens in DIRECT mode, where `mediationRecipient` is `undefined` but a leftover
+default-mediator record is still found and triggers feature discovery.
+
+So the effective strategy depends on hidden per-wallet state. A witness whose
+wallet ever got `PickUpV2` pinned works forever after and looks fine; a fresh
+wallet is dead on arrival. This is why the failure appeared to be
+environment-specific rather than a deterministic bug, and why it survived: the
+witness-server's own wallet is persistent (`.wallets/<name>-wallet/`, *not* the
+e2e's temp dir despite the harness comment), and `yarn fresh` cleans
+`${WITNESS_NAME}-wallet` — the wrong wallet unless `WITNESS_NAME` is exported to
+match the run.
+
+Observed live: running the DIRECT-mode probe silently pinned `PickUpV2` onto the
+e2e wallet's record, after which the very next MEDIATOR-mode run passed. Any
+"it works now" result on a reused witness wallet should be treated as suspect
+until confirmed on a fresh one.
+
+### Superseded position
+
+An earlier reading of this session's evidence was "the witness is silently in
+MEDIATOR mode when the harness assumes DIRECT, and mediator mode is broken". The
+mode confusion is real and worth fixing (below), but it is not the defect: mediator
+mode works fine with a pull strategy. Recording this because the narrower true
+cause — push-only pickup, plus a config value that loses to persisted wallet state —
+is not reachable from the mode observation alone.
+
+### Remedies
+
+**Applied, everywhere the codebase talks to a mediator:**
+- `startMediatorMessagePickup` / `assertSupportedMediatorPickupStrategy` in
+  `@bifold/vrc-shared` (`src/mediation.ts`) — passes the pickup strategy
+  explicitly, which bypasses both the module config and any value pinned on
+  the MediationRecord, and logs the effective strategy plus any pinned value
+  it overrode. Called by the witness-server (`WitnessService.ts`, after
+  `agent.initialize()`) and `vrc-reference/src/BaseAgent.ts`.
+  `bifold/packages/core/src/utils/agent.ts`'s module config now declares
+  `PickUpV2` directly (it has no runtime override of its own, unlike the app,
+  so the declared config is what consumers of `@bifold/core` actually get).
+  `core/src/contexts/activity.tsx`'s foreground-resume path now stops the
+  running pickup loop before restarting it with an explicit strategy — it had
+  been leaking a duplicate polling loop on every resume, doubling the wallet's
+  request rate against shared infrastructure for the life of the process; see
+  the `startMediatorMessagePickup` doc comment for where the same shape of bug
+  was caught a second time.
+- A repo-wide static-analysis guard,
+  `witness-server/__tests__/unit/mediatorPickupStrategy.guard.test.ts` and its
+  app-side twin `app/src/utils/mediatorPickupStrategy.guard.test.ts` — fails
+  the build if any file declares an unreceivable strategy, or calls
+  `initiateMessagePickup()` without one. A shared constant doesn't prevent the
+  next agent from typing `Implicit` in a new file (that's exactly how this
+  happened); the guard reads the source tree so it can't be bypassed by not
+  importing the helper.
+- The `WitnessService.test.ts` test that used to *document* `Implicit` as
+  intended behaviour with an `expect(true).toBe(true)` body now asserts the
+  actual contract (a pull strategy is required; push-only strategies throw
+  with an explanation) — prose enshrining the bug is gone.
+- `e2e/lib/witness.js` no longer lets a developer's `bifold/packages/witness-server/.env`
+  decide this run's transport: `MEDIATOR_INVITATION_URL` is passed explicitly
+  (forced empty → DIRECT, unless `WITNESS_MEDIATOR_INVITATION_URL` is set to
+  deliberately test mediator mode), and the witness's own startup banner is
+  read back and asserted against what was requested — a mismatch fails in
+  seconds with a clear message instead of as a mysterious participant-connect
+  timeout. The wallet is now genuinely temporary too: `VRC_WALLET_PATH` points
+  it into the same per-run temp dir as the invitation file (previously only
+  the invitation file was temporary; the wallet was a persistent, named
+  directory reused across every run — see "the part that made this look
+  machine-specific," above), so `stop()`'s existing cleanup removes it
+  automatically and no run can inherit another run's persisted mediation
+  state. `yarn fresh` is no longer relevant to the e2e path at all.
+- **The mediator-mode fallback now has its own confirmable test, and it's been
+  run and passed** (see below): `yarn e2e:vrc:witnessed:android-only:mediator`
+  (2026-09-01) runs the same witnessed exchange with the witness deliberately
+  put into MEDIATOR mode, reusing `app/.env`'s own `MEDIATOR_URL` so it's a
+  real test against actual infrastructure rather than a stand-in. This is the
+  direct answer to how this bug survived: mediator mode was never exercised by
+  anything, deterministic or otherwise. See `e2e/README.md`, "Confirming the
+  mediator-mode fallback." No periodic/CI job runs it automatically yet —
+  manual, on demand, for now.
+
+**Open tuning question:** the witness sets no `mediatorPollingInterval`, so it
+polls at credo's 5 s default — previously it polled not at all, so this is new
+behaviour rather than a regression, but each inbound hop of the witness ceremony
+now costs up to 5 s. The wallet deliberately runs 1 s (`bc-agent-modules.ts`, with
+the measured justification). Matching that would cut ceremony latency at the cost
+of load on shared infrastructure; it wants the same kind of measurement the wallet
+value got, not a guess. Left open deliberately.
+
+### Confirmed fixed on device (2026-09-01)
+
+Same two physical Android phones (SM_G986U1 / Android 13, SM_S936U / Android
+16) for both runs below, against the same production mediator, with the
+applied fix and harness hardening above.
+
+**DIRECT mode** (`yarn e2e:vrc:witnessed:android-only`) — first run after the
+fix: **passed**. Witness banner read `DIRECT (HTTP)` as requested (transport
+guard confirmed the override took effect); both phones got `🤝 NEW PARTICIPANT
+CONNECTED` / `✓ Sent witness-announcement` from the witness — the exact signal
+that was silent across all four pre-fix failures; both landed the **Witnessed**
+badge; one landed **Secure Exchange** too, the other tolerated a hardware
+verification warning (a pre-existing, documented tolerance for an aging
+attestation root — see `assertSecureExchangeBadge` in `e2e/lib/flows.js` —
+unrelated to this bug). This closes the fourth failure layer.
+
+**MEDIATOR mode** (`yarn e2e:vrc:witnessed:android-only:mediator`, the new
+confirmable-fallback variant) — first run: also **passed**. Witness banner
+read `MEDIATOR (WebSocket)` as requested; both phones again got `🤝 NEW
+PARTICIPANT CONNECTED` / `✓ Sent witness-announcement`, this time actually
+delivered through the shared production mediator instead of direct HTTP; same
+badge outcome as the DIRECT run (one full `Witnessed` + `Secure Exchange`, one
+`Witnessed` with the same pre-existing hardware-verification tolerance). This
+is the first time mediator-mode witnessing has been confirmed working end to
+end on real devices — it was silently, completely broken from 2026-08-24
+until this fix, and nothing had exercised it before this run.
+
+Both transport modes the witness supports are now proven working on real
+hardware, not just by unit test or code inspection.
+
+## Environment gotchas that cost debugging time but are not code bugs
+
+Two more things burned real time this session, worth naming so a future
+session recognizes them immediately instead of re-diagnosing from scratch.
+
+**A phantom, root-owned listener can occupy the witness's default web port
+(9003) on some machines**, invisible to `lsof -tiTCP:9003` (returns nothing)
+but real per `ss -ltn` (shows `LISTEN`) and per an actual bind attempt (fails
+`EADDRINUSE`). Observed present even immediately after a full machine reboot,
+before any e2e process had run — so it is some other persistent
+service/listener on that particular machine, not anything this repo's tooling
+starts or can identify. Root cause not identified; out of scope to chase
+further here. Symptom if hit: the witness's full startup banner prints, then
+`Error: listen EADDRINUSE ... port: 9003` right at the end, ~15s in.
+**Fix:** `e2e/lib/witness.js`'s `assertPortFree` now bind-tests the port
+directly (not via `lsof`) before starting anything, and fails in under a
+second with a message naming the port and the `WITNESS_PORT`/`WITNESS_WEB_PORT`
+override — see the "Witness fails immediately with 'port N is already in
+use...'" entry in `e2e/README.md`'s Troubleshooting section. If you hit this,
+just pick different ports; don't spend time trying to find the offending
+process.
+
+**`e2e/debug-witness-connect.js` has no lock-screen preflight**, unlike the
+maintained witnessed runners (which got one in `90a7b62` — see
+`ensureLockScreenEnabled` in `e2e/lib/driver.js`). If the single phone it
+drives falls asleep mid-run (e.g. left unattended — it's meant to be
+unattended, that's the point of the script, but the phone still needs to stay
+awake), the app never receives the paste-invitation input at all and the
+script times out at `completeOnboarding` with a screen dump containing just
+the lock-screen clock (`mWakefulness=Dozing`, `isKeyguardShowing=true` via
+`adb shell dumpsys power` / `dumpsys activity activities`) — which reads
+exactly like a genuine onboarding-flow hang if you don't check the screen
+state first. It is a throwaway diagnostic script (README: "not part of the
+maintained suite"), so this wasn't fixed; just know to check `adb shell
+dumpsys power | grep mWakefulness` before assuming a `debug-witness-connect.js`
+timeout is a real bug.
