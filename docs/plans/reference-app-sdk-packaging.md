@@ -187,9 +187,29 @@ should be read before revisiting any of them.
 **Framing.** Mobile-first, and the SDK is the deliverable — the reference app is
 what proves it. The notes above are a reference-app packaging analysis and stay
 valid as such; the SDK half is stated in the companion and adds requirements
-R6–R12 (versioning and publishing, package inventory, error taxonomy, a VTC
-administration reference app, documentation in multiple languages, a
-compatibility matrix, supply-chain posture).
+**R6–R17**: versioning and publishing; the package inventory with dependency
+direction drawn before extraction; an error taxonomy as a product surface; a VTC
+administration reference app (Wikimedia Foundation as the named client);
+documentation in multiple languages; a compatibility matrix; supply-chain
+posture; a documentation stack, stable hosted address and agent-readable
+index; SDK conventions borrowed from mature SDKs — of which a **sandbox makes R1
+table stakes rather than polish**; an intake channel for builders; a showcase
+surface kept separate from the docs; and a multi-language strategy built on
+**published conformance vectors** rather than OpenAPI generators, which cannot
+carry the canonicalization and signature verification that make a response
+checkable.
+
+Two acceptance criteria are stated so they can fail: the reference app consumes
+the **published** SDK rather than the source, and "stupid easy" is a timed
+walkthrough by someone who has not seen the repo, not an assertion.
+
+Three upstream overlaps to check before building anything: `@openvtc/rp-sdk`
+(the relying-party surface), `@openvtc/pnm-core` (the passkeys-to-VTA bridge,
+which is substantially the slate's passkey product), and `vtc-service`'s
+existing administrative routes. Two risks in the product slate are recorded in
+the companion — an identity model that conflicts with the correlation-scope
+position we argued upstream this week, and three "ready to build" items whose
+infrastructure is not in this repo.
 
 **Trust Tasks: consume upstream, own the orchestration.**
 `@openvtc/trust-tasks` is generated bindings for the whole registry plus a
