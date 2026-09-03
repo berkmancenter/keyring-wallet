@@ -43,7 +43,34 @@ const SIG_QUADLETS = Math.ceil(SIG_LEN / 3) // 22
 const EMPTY = new Uint8Array(0)
 
 const utf8 = new TextEncoder()
-const fromUtf8 = new TextDecoder('utf-8', { fatal: true })
+
+/**
+ * Strict UTF-8 decode (rejects malformed input rather than silently
+ * replacing it) — needed so a corrupted or attacker-crafted routing hop
+ * can't decode into a garbled-but-plausible-looking VID string. `TextDecoder`
+ * with `{ fatal: true }` gives this for free on Node and browsers, but React
+ * Native's Hermes runtime implements `TextDecoder` without the `fatal`
+ * option and throws just constructing it — feature-detect once at module
+ * load and fall back to a decode/re-encode round-trip check, which gives
+ * the same strictness without relying on that option.
+ */
+export function makeStrictUtf8Decode(): (bytes: Uint8Array) => string {
+  try {
+    const decoder = new TextDecoder('utf-8', { fatal: true })
+    return (bytes) => decoder.decode(bytes)
+  } catch {
+    const lenient = new TextDecoder('utf-8')
+    return (bytes) => {
+      const text = lenient.decode(bytes)
+      if (!bytesEqual(utf8.encode(text), bytes)) {
+        throw new TypeError('invalid UTF-8')
+      }
+      return text
+    }
+  }
+}
+
+export const decodeUtf8Strict = makeStrictUtf8Decode()
 
 export interface PackedMessage {
   /** Raw wire bytes. */
@@ -132,7 +159,7 @@ function decodePayloadFrame(frame: Uint8Array): DecodedFrame {
     if (hopBytes === undefined) throw new Error('tsp: malformed hop list')
     let hops: string[]
     try {
-      hops = hopBytes.map((h) => fromUtf8.decode(h))
+      hops = hopBytes.map((h) => decodeUtf8Strict(h))
     } catch {
       throw new Error('tsp: hop VID not UTF-8')
     }

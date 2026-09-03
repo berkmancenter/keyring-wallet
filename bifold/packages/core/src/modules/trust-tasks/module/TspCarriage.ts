@@ -36,7 +36,11 @@ import { identityFromDid, createCredoVidResolver } from '@bifold/credo-tsp-adapt
 import { TspEnvelopeMessage } from '../messages/TspEnvelopeMessage'
 
 const utf8 = new TextEncoder()
-const fromUtf8 = new TextDecoder('utf-8', { fatal: true })
+// `tsp.decodeUtf8Strict` (not a plain `new TextDecoder(..., { fatal: true })`)
+// because React Native's Hermes runtime throws just constructing a
+// `TextDecoder` with the `fatal` option — see its doc comment in
+// `@bifold/trust-tasks`'s `tsp/direct.ts` for the full explanation.
+const fromUtf8 = tsp.decodeUtf8Strict
 
 /** Distinct from ceremony.ts's `[TrustTasks:Ceremony]` markers — this
  *  confirms the TSP envelope path specifically ran, not just that a
@@ -88,7 +92,7 @@ export function createTspCarriage(agent: Agent): Carriage {
             )
           }
 
-          const document = JSON.parse(fromUtf8.decode(unpacked.payload)) as Record<string, unknown>
+          const document = JSON.parse(fromUtf8(unpacked.payload)) as Record<string, unknown>
           agent.config.logger.info(`${LOG_PREFIX} envelope received on connection ${connection.id}`)
           await handler(document, {
             connectionId: connection.id,
