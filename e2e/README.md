@@ -63,6 +63,18 @@ iOS simulator runtime) — see the root README "Getting Started".
 
 The harness starts Appium itself if nothing is listening on `:4723`.
 
+**Working in a git worktree?** Every debug build looks for the Metro packager
+on host port `:8081` regardless of which checkout it was built from — Android
+via a hardcoded `adb reverse tcp:8081`, the iOS simulator directly over
+localhost. If a Metro from a DIFFERENT checkout (another worktree, or the
+main checkout) is already holding that port, it keeps serving *its own*
+checkout's JS with no error at all — the app boots fine, just against the
+wrong code, which only surfaces much later as a confusing "element not
+found" deep into a run. The harness checks this itself before starting
+(`checkMetroIsThisWorktree` in `lib/driver.js`) and fails fast with a clear
+message if `:8081` belongs to another checkout; when that happens, stop that
+Metro and run `yarn start` from **this** worktree's `app/` before retrying.
+
 ## Build the app binaries first
 
 The tests install pre-built binaries; they don't build the app for you.

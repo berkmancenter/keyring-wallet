@@ -170,7 +170,22 @@ export async function unlockIfLocked(driver) {
   await pinInput.setValue(PIN);
   if (await existsTestId(driver, "Enter", 1500)) {
     await hideKeyboard(driver);
-    await tapTestId(driver, "Enter");
+    // A dropped tap here (same class of flakiness tapTestIdReliable exists
+    // for elsewhere in this file) leaves the wallet locked indefinitely —
+    // verify the PIN screen actually went away, re-tapping if it didn't.
+    // Generous timeout/settle: under heavy host contention (this sandbox
+    // runs the emulators alongside a full, actively-used desktop — real
+    // swap usage observed growing under load) a single webdriver round
+    // trip (e.g. getElementTagName) has been observed to take 10+ seconds.
+    await tapTestIdReliable(driver, "Enter", () => existsTestId(driver, "EnterPIN", 1500).then((v) => !v), {
+      timeout: 90000,
+      attempts: 6,
+      settleMs: 5000,
+    });
+  } else {
+    // Inactivity-lock variant: auto-submits on the final digit — just wait
+    // for the PIN screen to clear.
+    for (let i = 0; i < 10 && (await pinInput.isExisting()); i++) await sleep(500);
   }
   await sleep(3000);
   return true;
@@ -267,6 +282,38 @@ export async function enableHardwareAttestation(driver) {
 }
 
 /**
+ * Set the wallet's inactivity auto-lock to "Never" (Settings → Lockout,
+ * a normal, always-visible row — not developer-only). The rest of the TSP
+ * flow (QR sheet, invitation, relationship proposal) spans real network
+ * round trips and a second device's own onboarding running concurrently
+ * under CPU contention — easily long enough to exceed the default 5-minute
+ * auto-lock and relock the app mid-flow. Must be called while already on
+ * the Settings screen.
+ */
+async function setAutoLockNever(driver) {
+  await tapTestId(driver, "Lockout", 15000);
+  // Settings is a SectionList (virtualized) — "Never" is the last of 5
+  // inline options and isn't mounted until scrolled into view.
+  let neverEl;
+  for (let i = 0; i < 6; i++) {
+    neverEl = byText(driver, "Never");
+    if ((await neverEl.isExisting()) && (await neverEl.isDisplayed())) break;
+    const { width, height } = await driver.getWindowRect();
+    await driver
+      .action("pointer")
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
+      .down()
+      .pause(100)
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
+      .up()
+      .perform();
+    await sleep(500);
+  }
+  await neverEl.click();
+  console.log(`[e2e] ${driver.e2ePlatform}: auto-lock set to Never`);
+}
+
+/**
  * Enable the "Enable TSP envelope carriage" developer setting (OFF by
  * default) — the dev/test-only toggle for the real TSP envelope Carriage
  * (@bifold/trust-tasks's tsp.pack/unpack over @bifold/credo-tsp-adapter's
@@ -275,9 +322,19 @@ export async function enableHardwareAttestation(driver) {
  * doesn't need vta-service or any ecosystem counterparty — it's wallet-to-
  * wallet only, delivered over the same existing DIDComm-v1 connection.
  *
- * The "Developer" row is hidden in Settings until developer mode is enabled
+ * The "Developer" row on Settings (testID DeveloperOptions) only exists
+ * once `store.preferences.developerModeEnabled` is already persisted true
+ * (bifold/packages/core/src/screens/Settings.tsx) — i.e. on a LATER visit
+ * to Settings, after developer mode has already been turned on. Tripping
+ * the tap counter for the FIRST time takes a different path entirely:
+ * Settings' own onDevModeTriggered fires as soon as the threshold trips
+ * and calls `navigation.navigate(Screens.Developer)` directly, so the app
+ * jumps straight to the Developer screen — there is no "DeveloperOptions"
+ * row to see or tap on Settings in that transition, only afterwards.
  * (bifold/packages/core/src/hooks/developer-mode.ts:
- * TOUCH_COUNT_TO_ENABLE_DEVELOPER_MODE = 10 taps on the version footer).
+ * TOUCH_COUNT_TO_ENABLE_DEVELOPER_MODE = 10 taps on the version footer,
+ * but the counter is checked BEFORE incrementing, so it only trips on the
+ * 11th tap despite the constant's name.)
  * Toggling the switch updates outbound sends immediately, but
  * setupTrustTasksInbound only registers the TSP carriage's inbound handler
  * at agent setup — a restart is required for the inbound side to pick it
@@ -287,18 +344,26 @@ export async function enableHardwareAttestation(driver) {
 export async function enableTspCarriage(driver) {
   await dismissTourIfPresent(driver);
   await tapTestId(driver, "Settings", 15000);
+  await setAutoLockNever(driver);
 
-  if (!(await existsTestId(driver, "DeveloperOptions", 3000))) {
+  if (await existsTestId(driver, "DeveloperOptions", 3000)) {
+    // Developer mode was already enabled in a prior session (persisted store).
+    await tapTestId(driver, "DeveloperOptions", 15000);
+  } else {
     const versionEl = await scrollToTestId(driver, "Version");
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 11; i++) {
       await versionEl.click();
       await sleep(150);
     }
-    await waitForTestId(driver, "DeveloperOptions", 5000);
+    // Settings navigates to the Developer screen itself on the trip — wait
+    // for a Developer-screen-only element, not a Settings row.
+    await waitForTestId(driver, "ToggleDeveloper", 5000);
   }
 
-  await tapTestId(driver, "DeveloperOptions", 15000);
-  await tapTestId(driver, "ToggleEnableTspCarriage", 15000);
+  // Near the bottom of the Developer screen's long ScrollView — same
+  // scroll-into-view need as the Version footer above.
+  const tspToggle = await scrollToTestId(driver, "ToggleEnableTspCarriage");
+  await tspToggle.click();
   console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope carriage enabled (developer setting)`);
 
   await returnToContacts(driver);
@@ -323,6 +388,12 @@ async function qrSheetIsOpen(driver, timeout = 4000) {
  * lands on the sheet's dark overlay and CLOSES it (open/close toggle loop).
  */
 async function openQrSheet(driver) {
+  // A process-level watchdog kill can relock the wallet at any moment,
+  // independent of the in-app inactivity timer (autoLockTime doesn't
+  // prevent this — a fresh process always needs the PIN again) — check
+  // every time this is called, not just once per showRelationshipInvitation
+  // retry loop iteration.
+  await unlockIfLocked(driver);
   if (await qrSheetIsOpen(driver, 1500)) return;
   if (await existsTestId(driver, "InviteContact", 3000)) {
     await tapTestId(driver, "InviteContact");
@@ -354,6 +425,10 @@ export async function showRelationshipInvitation(driver) {
       // presented) — only an app restart resets it
       await restartApp(driver);
     }
+    // The wallet's own inactivity auto-lock can fire between attempts too —
+    // e.g. while this device sits idle waiting on a peer device under CPU
+    // contention — independent of the watchdog-restart case above.
+    await unlockIfLocked(driver);
     await acceptSystemAlertIfPresent(driver);
     await dismissTourIfPresent(driver);
     await openQrSheet(driver);
