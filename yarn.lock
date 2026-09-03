@@ -5409,6 +5409,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch":
+  version: 0.1.0
+  resolution: "@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch::version=0.1.0&hash=dbb2d4"
+  dependencies:
+    "@hpke/chacha20poly1305": "npm:^1.8.0"
+    "@hpke/core": "npm:^1.9.0"
+    "@noble/curves": "npm:^2.2.0"
+    "@noble/hashes": "npm:^2.0.0"
+  checksum: 10c0/11d6a80d8ecb0f0b8e567427720df610578c3d404625c974bdeb0f797840af45cd940921e278d3605fd5a90769ea7f39c1ff2d8616fa7bc0251d8d368b5dfe78
+  languageName: node
+  linkType: hard
+
 "@openwallet-foundation/askar-react-native@npm:0.6.0":
   version: 0.6.0
   resolution: "@openwallet-foundation/askar-react-native@npm:0.6.0"
