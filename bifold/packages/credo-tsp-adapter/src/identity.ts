@@ -41,7 +41,13 @@ export function keyAgreementFromEd25519Key(agent: Agent, signingKeyId: string, e
         const entry = await session.fetchKey({ name: signingKeyId })
         if (!entry) throw new Error(`credo-tsp-adapter: no askar key stored under keyId ${signingKeyId}`)
         const x25519Key = entry.key.convertkey({ algorithm: KeyAlgorithm.X25519 })
-        const peerKey = Key.fromPublicBytes({ algorithm: KeyAlgorithm.X25519, publicKey: peerPublicKey })
+        // Askar's native binding needs a standalone 32-byte buffer: a `Buffer`
+        // view sliced from a larger message (`Buffer.prototype.slice` — unlike
+        // `Uint8Array.prototype.slice` — returns a view over the ORIGINAL
+        // backing ArrayBuffer, not a copy) crosses the JSI boundary as that
+        // whole larger buffer and gets rejected as "Invalid key data". Force
+        // a real copy regardless of what the caller handed us.
+        const peerKey = Key.fromPublicBytes({ algorithm: KeyAlgorithm.X25519, publicKey: Uint8Array.from(peerPublicKey) })
         return x25519Key.keyFromKeyExchange({ algorithm: KeyAlgorithm.Chacha20C20P, publicKey: peerKey }).secretBytes
       })
       if (sharedSecret.every((b: number) => b === 0)) {
