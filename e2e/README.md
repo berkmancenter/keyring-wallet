@@ -213,6 +213,26 @@ adb -s emulator-5554 shell getprop sys.boot_completed # repeat per serial until 
 adb -s emulator-5556 shell getprop sys.boot_completed
 ```
 
+**Windowed by default.** The commands above open a visible emulator window
+so you can watch the suite drive the app — that's the default, and the
+right one for local dev (you want to see what broke). Add `-no-window` only
+when you deliberately want headless (e.g. a CI box with no display):
+
+```sh
+emulator -avd Pixel_8_API_33 -gpu swiftshader_indirect -no-window &
+```
+
+**Don't mix a headless and a windowed run on the same AVD via its saved
+snapshot.** By default the emulator saves a snapshot (`default_boot`) on
+clean shutdown and reloads it on the next boot to save time. If that
+snapshot was saved under one display mode (windowed vs. `-no-window`) and
+you boot into the other, the two can disagree about GPU/framebuffer state:
+observed symptom is `FrameBuffer.cpp:3544] Failed to find ColorBuffer:0`
+spamming the emulator's own log, followed by the process wedging (still
+running, pegged at high CPU, but its adb/console ports stop responding and
+it vanishes from `adb devices`). Fix: kill it and boot that AVD once with
+`-no-snapshot-load` to force a clean cold boot before switching modes.
+
 Then run the suite from the repo root, telling it which AVD is which
 wallet — `ANDROID_AVD` is wallet A, `ANDROID_AVD2` is wallet B:
 
