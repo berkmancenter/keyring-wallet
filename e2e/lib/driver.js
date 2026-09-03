@@ -1,9 +1,19 @@
 import { remote } from "webdriverio";
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import net from "node:net";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { mkdirSync, createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
+
+const METRO_PORT = 8081;
+const THIS_APP_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "app"
+);
 
 function portInUse(port) {
   return new Promise((resolve) => {
@@ -13,9 +23,47 @@ function portInUse(port) {
   });
 }
 
+/**
+ * Metro's dev-server port is a single global resource on the host, and a
+ * debug build always looks for it there — Android via a hardcoded
+ * `adb reverse tcp:8081`, iOS simulator directly over localhost. A repo
+ * checked out as multiple git worktrees (or alongside its own main
+ * checkout) can easily have a STALE Metro left running from a different
+ * checkout still holding that port; it keeps serving ITS OWN checkout's
+ * code with no error at all — the app boots fine, just against the wrong
+ * JS. That surfaces much later as a confusing "element not found" deep
+ * into a run, not as an obvious "wrong bundle" error (this cost a full
+ * debug session to track down once — see
+ * docs/plans/openvtc-integration-plan/2026-09-02-bam.md). Catch it here,
+ * before wasting a full install+onboarding cycle on it.
+ */
+async function checkMetroIsThisWorktree() {
+  if (!(await portInUse(METRO_PORT))) return; // nothing running yet — Metro's own absence is a separate, self-evident failure later
+  let ps;
+  try {
+    ps = execSync("ps -eo pid,args", { encoding: "utf8" });
+  } catch {
+    return; // can't introspect processes on this platform — don't block the run over it
+  }
+  const match = ps.match(/(\S+\/app)\/node_modules\/react-native\/cli\.js\s+start/);
+  if (!match) return; // something else owns the port, or we can't identify it — not our call to make
+  const metroAppDir = path.resolve(match[1]);
+  if (metroAppDir !== THIS_APP_DIR) {
+    throw new Error(
+      `Metro on :${METRO_PORT} is serving ${metroAppDir}, not this worktree's ` +
+        `app/ (${THIS_APP_DIR}). Every debug build looks for the packager on ` +
+        `host port ${METRO_PORT} regardless of which checkout it was built ` +
+        `from, so this run would silently get the WRONG checkout's JS. Stop ` +
+        `that Metro (find it: ps -eo pid,args | grep 'react-native/cli.js start') ` +
+        `and run 'yarn start' from THIS worktree's app/ before retrying.`
+    );
+  }
+}
+
 let appiumProc;
 
 export async function ensureAppium() {
+  await checkMetroIsThisWorktree();
   if (await portInUse(APPIUM_PORT)) {
     // A server from a previous run may still be tearing down (it responds to
     // /status but dies seconds later, killing our sessions mid-run). Prefer
