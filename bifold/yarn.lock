@@ -2373,7 +2373,7 @@ __metadata:
     "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
-    "@openvtc/vti-tsp-js": "npm:0.1.0"
+    "@openvtc/vti-tsp-js": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch"
     ajv: "npm:^8.17.1"
     canonicalize: "npm:^1.0.8"
     rimraf: "npm:~5.0.10"
@@ -4970,6 +4970,18 @@ __metadata:
     "@noble/curves": "npm:^2.2.0"
     "@noble/hashes": "npm:^2.0.0"
   checksum: 10c0/36cd6aed45566e434a222695b30e11526285862ae442c7205f121889865cfd251571770e8f1771ea45b01a2cca4c6f89a4c41122c54dddd24bcb3c3e8ebdeef8
+  languageName: node
+  linkType: hard
+
+"@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch":
+  version: 0.1.0
+  resolution: "@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch::version=0.1.0&hash=dbb2d4"
+  dependencies:
+    "@hpke/chacha20poly1305": "npm:^1.8.0"
+    "@hpke/core": "npm:^1.9.0"
+    "@noble/curves": "npm:^2.2.0"
+    "@noble/hashes": "npm:^2.0.0"
+  checksum: 10c0/11d6a80d8ecb0f0b8e567427720df610578c3d404625c974bdeb0f797840af45cd940921e278d3605fd5a90769ea7f39c1ff2d8616fa7bc0251d8d368b5dfe78
   languageName: node
   linkType: hard
 

@@ -30,7 +30,7 @@
     "@noble/ciphers": "^2.0.0",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
-    "@openvtc/vti-tsp-js": "0.1.0",
+    "@openvtc/vti-tsp-js": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch",
     "ajv": "^8.17.1",
     "canonicalize": "^1.0.8"
   },
