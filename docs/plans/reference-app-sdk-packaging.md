@@ -219,15 +219,19 @@ what it deliberately leaves blank — a concrete `eddsa-jcs-2022` signer and
 verifier including hardware-backed signing, a payload validator, and the
 binding-0.2 DIDComm carriage.
 
-**A duplicate implementation exists today and has to go.**
-`@bifold/trust-tasks` does not depend on the upstream package at all; it is a
-parallel implementation over `canonicalize` + `ajv`. Since `pnm-core` depends on
-`@openvtc/trust-tasks`, bringing PNM into the wallet would ship two Trust Tasks
-implementations — two JCS canonicalizers — in one bundle, whose failure mode is
-an intermittent per-document signature mismatch rather than a build error. The
-companion sequences the remediation **T0–T4**; T0 (advance the pins) and T1
-(measure whether the two canonicalizers actually diverge, before changing any
-code) are independent of everything else here and should proceed regardless.
+**Two JCS canonicalizers are already in the bundle, and nothing measures
+them.** We do consume upstream — `@openvtc/trust-tasks` is a declared dependency
+of `@bifold/core` and `@bifold/witness-server` at `^0.9.0`. What is duplicated
+is the canonicalization: our `documentProof.ts` uses the `canonicalize` package
+while upstream's runtime implements RFC 8785 itself, and both ship today. If
+they disagree on any input, a digest computed by one path fails against the
+other — intermittently, per document, with no build error. Separately we are
+pinned `^0.9.0` against **0.16.8**, spanning framework 0.5.0 (the two named
+digests, the lifecycle table, the freshness rules), and `pnm-core` will require
+a newer one, so Prague forces the bump. The companion sequences remediation
+**T0–T4**; **T1 — measure whether the two canonicalizers actually diverge,
+before changing any code — is the cheapest step and applies to the bundle as it
+stands**, independent of any packaging decision.
 
 **The package splits on two axes, not one.** Platform-neutral is not enough:
 `@bifold/trust-tasks` depends on Credo, so a relying party embedding the SDK to
