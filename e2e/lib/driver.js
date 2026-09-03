@@ -231,10 +231,18 @@ export async function waitForTestId(driver, key, timeout = 30000) {
   return el;
 }
 
+/** `android:emulator-5554` (or just the platform, e.g. `ios`, when no udid
+ *  is tracked) — prefixes every tap log so a two-device run's log is
+ *  attributable to the device that acted, not just "android" twice. */
+function deviceTag(driver) {
+  return driver.e2eUdid ? `${driver.e2ePlatform}:${driver.e2eUdid}` : driver.e2ePlatform;
+}
+
 export async function tapTestId(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
   await el.click();
+  console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key}`);
   return el;
 }
 
@@ -257,6 +265,16 @@ export async function tapTestId(driver, key, timeout = 30000) {
  */
 export async function tapTestIdReliable(driver, key, verify, options = {}) {
   const { attempts = 3, settleMs = 1500, timeout = 15000 } = options;
+  // The goal can already be met before we look for the button: a slow
+  // WebDriver round trip (element lookup, tag-name check inside click())
+  // can race an app-side auto-submit that fires between the caller's own
+  // existence check and this call. If verify() already passes, the
+  // element that would confirm it is gone for good — waiting for it to
+  // reappear would block for the full timeout instead of succeeding.
+  if (await verify()) {
+    console.log(`[e2e] ${deviceTag(driver)}: testID=${key} already satisfied, no tap needed`);
+    return;
+  }
   await waitForTestId(driver, key, timeout);
   for (let attempt = 0; attempt < attempts; attempt++) {
     const el = byTestId(driver, key);
@@ -264,7 +282,10 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
       await el.click().catch(() => {});
     }
     await sleep(settleMs);
-    if (await verify()) return;
+    if (await verify()) {
+      console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (attempt ${attempt + 1}/${attempts}, verified)`);
+      return;
+    }
   }
   throw new Error(
     `${driver.e2ePlatform}: tap on testID=${key} did not take effect after ${attempts} attempts`
