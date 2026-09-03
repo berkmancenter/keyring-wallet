@@ -6,6 +6,12 @@
 
 **Positioned as a sibling to the openvtc plan, not a subtask of it** — same relationship `locality-plan.md` has (openvtc-integration-plan.md §4.6: "the locality axis now has its own plan"). It depends on that plan's infra (Trust Tasks, witness recast, PNM/VTA) but its own scope — developer packaging, DI/theming ergonomics, a trading-card demo — extends past Trust Tasks into territory the parent plan doesn't own. It stays a standalone exploratory doc rather than moving under `openvtc-integration-plan/` because subtasks there state *current design* in present tense (per `docs/plans/CLAUDE.md`); this is still pre-decision brainstorming.
 
+**Review index.** Companions carrying the reasoning behind the positions below:
+
+| Companion | Author | What it settles |
+|---|---|---|
+| [`2026-09-01-al.md`](./reference-app-sdk-packaging/2026-09-01-al.md) | AL | SDK scope and framing (mobile-first, SDK as the deliverable); consume upstream Trust Tasks rather than reimplement, and the duplicate-implementation problem it exposes; wrap orchestration rather than types; the VTA Farm as first-class onboarding; `ref-08-pnm-core-hermes` as the unblocking experiment; requirements R6–R12 |
+
 **Reconciled against `openvtc-integration-plan.md` §6 ("Demo concepts — brainstorm only")**, which already proposes several of the same demos under different names, with more ecosystem grounding (real Trust Task type URIs, a stated flagship target). This file's per-idea notes below cite the overlap explicitly rather than treating these as independent proposals:
 
 | This file's idea | §6 prior art |
@@ -168,3 +174,77 @@ Cutting across all ten ideas, five infra pieces keep recurring, ranked by how ma
 - Every new use case that isn't pure UI needs its own Trust Task type spec (`payload.schema.json` per `trust_tasks_subtask.md` §1, point 4) — and per that same document, publishing under a private authority we control is fully conforming (§6.5), so none of these demos need to wait on `trusttasks.org` registry work to exist.
 
 **Sequencing implication:** items 1 and 4 above are the cheapest and unlock the most (Approver, Multi-Factor, HFA, trading-card, and a stubbed Agent-Leash all become buildable). Item 3 (quorum) is next — it's genuinely new orchestration but no new protocol. Items 2 and 5 are each a bounded, mostly-mechanical decoupling of infra that already works. Recovery (#6) and the agent-identity half of #5 are the only two ideas that need real new design work beyond assembly of existing pieces — consistent with the user's own "biggest swing" / "bigger swing" framing for both.
+
+---
+
+## Adopted positions — 2026-09-01
+
+Recorded here because the plan holds current design; the argument and the
+evidence for each of these is in
+[`2026-09-01-al.md`](./reference-app-sdk-packaging/2026-09-01-al.md), which
+should be read before revisiting any of them.
+
+**Framing.** Mobile-first, and the SDK is the deliverable — the reference app is
+what proves it. The notes above are a reference-app packaging analysis and stay
+valid as such; the SDK half is stated in the companion and adds requirements
+R6–R12 (versioning and publishing, package inventory, error taxonomy, a VTC
+administration reference app, documentation in multiple languages, a
+compatibility matrix, supply-chain posture).
+
+**Trust Tasks: consume upstream, own the orchestration.**
+`@openvtc/trust-tasks` is generated bindings for the whole registry plus a
+zero-dependency runtime, and it *injects* cryptography rather than implementing
+it (`proofPolicy`, `payloadPolicy`). We adopt its types and machinery and own
+what it deliberately leaves blank — a concrete `eddsa-jcs-2022` signer and
+verifier including hardware-backed signing, a payload validator, and the
+binding-0.2 DIDComm carriage.
+
+**A duplicate implementation exists today and has to go.**
+`@bifold/trust-tasks` does not depend on the upstream package at all; it is a
+parallel implementation over `canonicalize` + `ajv`. Since `pnm-core` depends on
+`@openvtc/trust-tasks`, bringing PNM into the wallet would ship two Trust Tasks
+implementations — two JCS canonicalizers — in one bundle, whose failure mode is
+an intermittent per-document signature mismatch rather than a build error. The
+companion sequences the remediation **T0–T4**; T0 (advance the pins) and T1
+(measure whether the two canonicalizers actually diverge, before changing any
+code) are independent of everything else here and should proceed regardless.
+
+**The package splits on two axes, not one.** Platform-neutral is not enough:
+`@bifold/trust-tasks` depends on Credo, so a relying party embedding the SDK to
+request an approval would be made to install an agent framework. A Credo-free
+**pure layer** (documents, proofs, digests) is shared by the wallet, the
+witness-server, the VTA and any relying-party service; a **Credo adapter**
+(askar keys, DIDComm carriage) is wallet-and-witness only. There is no separate
+"Trust Tasks backend" to build — there are services that embed the pure layer.
+
+**R5 is restated.** An open `typeUri` → handler registry is necessary but not
+sufficient. Registration carries `{ spec, orchestration, renderer }`, because
+the framework is document-level and says nothing about what `ceremony.ts`
+already does: proposer selection (`isDeterministicProposer`), peer capability
+discovery (`peerSupportsTaskType`), version gating
+(`TRUST_TASKS_MIN_RCE_VERSION`), idempotence on redelivery (documents queried by
+`{typeUri, connectionId}`), and the `vrcFlowStore` interlock. That orchestration
+— a session over a relationship — is the SDK's product surface, and it is the
+reason wrapping is worth doing at all.
+
+**R1 becomes the VTA Farm.** Upstream's own guidance is Path A (the managed
+Farm: VTA hosting, DID hosting, mediator connection management, no server and no
+public domain) for newcomers, with self-hosting as Path B where
+`tsp-reference/ref-05-local-vta` is the precedent. Open question that gates the
+Agent Leash: Path A's prerequisites are a Farm account, passkey support and
+locally installed PNM software — i.e. the browser plugin — so whether a React
+Native wallet can authenticate to a Farm-hosted VTA is unanswered.
+
+**The critical-path experiment is `ref-08-pnm-core-hermes`.**
+`@openvtc/pnm-core` carries a complete TypeScript VTA client under `src/vta/`
+on an RN-viable dependency stack (noble, scure, cfworker/json-schema, cbor-x)
+that is nonetheless described as browser-side and mentions neither React Native
+nor Hermes anywhere. Proving it under Hermes answers three questions this plan
+is currently guessing at: whether Keyring can talk to a Farm VTA, whether the
+Agent Leash is a port or a rewrite, and whether the SDK owns a VTA client or
+consumes one.
+
+**Out of scope here.** Prague (which connects Keyring directly to the Farm and
+is parallel, not downstream); OCA in the SDK core (confirmed absent from the
+Trust Task path — it stays in the reference app for credential-shaped demos); a
+full UI kit (`keyring-theme/` plus two screens is version zero).
