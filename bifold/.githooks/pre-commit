@@ -1,0 +1,26 @@
+#!/bin/sh
+# Verifies commit signing is configured before allowing a commit to be made.
+#
+# This can only check the precondition, not the resulting signature: git
+# signs a commit in `commit-tree`, which runs *after* every hook here, so by
+# the time any hook sees a commit it's too late to reject an unsigned one.
+# Actual signature enforcement lives server-side (GitHub branch protection)
+# and in CI (.github/workflows/commit-checks.yaml), which check the commit
+# after it exists. This hook just gives fast local feedback.
+
+gpgsign=$(git config --get commit.gpgsign || true)
+if [ "$gpgsign" != "true" ]; then
+  echo "error: commit signing is not enabled." >&2
+  echo "       This repo requires cryptographically signed commits." >&2
+  echo "       Run: git config commit.gpgsign true" >&2
+  echo "       and configure an SSH or GPG signing key (see CONTRIBUTING.md)." >&2
+  exit 1
+fi
+
+format=$(git config --get gpg.format || true)
+format=${format:-openpgp}
+if [ "$format" = "ssh" ] && [ -z "$(git config --get user.signingkey || true)" ]; then
+  echo "error: gpg.format is 'ssh' but user.signingkey is not set." >&2
+  echo "       Run: git config user.signingkey <path-to-public-key>" >&2
+  exit 1
+fi
