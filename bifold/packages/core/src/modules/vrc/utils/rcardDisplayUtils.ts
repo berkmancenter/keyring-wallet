@@ -17,6 +17,8 @@ export interface ContactDisplayInfo {
   name?: string
   email?: string
   organization?: string
+  /** A data:image/jpeg;base64,... URI. Legacy (pre-RCard-separation) VRCs never carry one. */
+  photo?: string
 }
 
 /**
@@ -108,6 +110,7 @@ export function extractContactInfoFromRCard(record: W3cCredentialRecord): Contac
     name,
     email: formInput.email?.trim() || undefined,
     organization: formInput.organization?.trim() || undefined,
+    photo: formInput.photo || undefined,
   }
 }
 
@@ -123,7 +126,7 @@ export function resolveContactDisplayInfo(records: W3cCredentialRecord[], issuer
   const rcard = getReceivedRCardForIssuer(records, issuerDid)
   if (rcard) {
     const info = extractContactInfoFromRCard(rcard)
-    if (info.name || info.email || info.organization) {
+    if (info.name || info.email || info.organization || info.photo) {
       return info
     }
   }

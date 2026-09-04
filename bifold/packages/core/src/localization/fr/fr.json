@@ -951,7 +951,11 @@
       "FirstName": "Prénom",
       "LastName": "Nom",
       "Email": "Courriel",
-      "Organization": "Organisation"
+      "Organization": "Organisation",
+      "Photo": "Photo de profil",
+      "PhotoAdd": "Ajouter une photo",
+      "PhotoRemove": "Supprimer la photo",
+      "PhotoProcessing": "Traitement de la photo..."
     },
     "Errors": {
       "FirstNameRequired": "Veuillez entrer votre prénom.",
@@ -959,7 +963,10 @@
       "EmailRequired": "Veuillez entrer une adresse courriel.",
       "EmailInvalid": "Veuillez entrer une adresse courriel valide.",
       "OrganizationRequired": "Veuillez entrer votre organisation.",
-      "Generic": "Nous n'avons pas pu enregistrer vos renseignements de profil. Veuillez réessayer."
+      "Generic": "Nous n'avons pas pu enregistrer vos renseignements de profil. Veuillez réessayer.",
+      "PhotoTooLarge": "Cette photo est trop volumineuse, même à la qualité la plus basse. Veuillez choisir une photo plus petite ou plus simple.",
+      "PhotoGeneric": "Nous n'avons pas pu utiliser cette photo. Veuillez réessayer.",
+      "PhotoPermissionDenied": "Keyring a besoin d'accéder à vos photos pour ajouter une photo de profil."
     }
   },
   "RenameContact": {

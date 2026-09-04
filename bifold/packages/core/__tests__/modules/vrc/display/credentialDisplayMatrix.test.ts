@@ -53,6 +53,7 @@ const RCARD_FORM: RCardFormInput = {
   organization: 'RCard Org',
 }
 const RCARD_NAME = 'Rae Card'
+const RCARD_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
 
 const ED25519_PROOF = {
   type: 'Ed25519Signature2018',
@@ -114,7 +115,7 @@ const rcardTemplateJson: W3cCredentialJson = {
 }
 
 /** A received RelationshipCard record from the contact, as stored in the wallet */
-function createReceivedRCardRecord(): W3cCredentialRecord {
+function createReceivedRCardRecord(form: RCardFormInput = RCARD_FORM): W3cCredentialRecord {
   const issuanceDate = '2026-01-02T12:00:00Z'
   return JsonTransformer.fromJSON(
     {
@@ -131,7 +132,7 @@ function createReceivedRCardRecord(): W3cCredentialRecord {
         type: ['VerifiableCredential', 'RelationshipCard'],
         issuer: CONTACT_DID,
         issuanceDate,
-        credentialSubject: { id: HOLDER_DID, card: buildJCardFromFormInput(RCARD_FORM) },
+        credentialSubject: { id: HOLDER_DID, card: buildJCardFromFormInput(form) },
         proof: ED25519_PROOF,
       },
     },
@@ -207,6 +208,14 @@ describe('Credential display version-compatibility matrix', () => {
       expect(result.subject?.name).toBe(RCARD_NAME)
       expect(result.subject?.email).toBe(RCARD_FORM.email)
       expect(result.subject?.organization).toBe(RCARD_FORM.organization)
+      expect(result.subject?.photo).toBeUndefined()
+    })
+
+    it('resolves the photo from the sibling RCard when it carries one', () => {
+      const result = credentialDisplayRegistry.getDisplayInfo(vrc, {
+        relatedRecords: [createReceivedRCardRecord({ ...RCARD_FORM, photo: RCARD_PHOTO })],
+      })
+      expect(result.subject?.photo).toBe(RCARD_PHOTO)
     })
 
     it.each([

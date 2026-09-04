@@ -70,6 +70,8 @@ export class RelationshipCredentialHandler implements CredentialDisplayHandler {
       name: rcardInfo.name ?? issuer.name,
       email: rcardInfo.email ?? issuer.email,
       organization: rcardInfo.organization ?? issuer.organization,
+      // Legacy (pre-RCard-separation) issuer objects never carried a photo.
+      photo: rcardInfo.photo,
     }
   }
 

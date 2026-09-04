@@ -144,6 +144,8 @@ export interface ContactCredentialDetails {
     name: string
     email?: string
     organization?: string
+    /** A data:image/jpeg;base64,... URI. Undefined when the contact's RCard carries no photo. */
+    photo?: string
   }
   hasWitnessCredentials?: boolean
   hasHardwareAttestation?: boolean

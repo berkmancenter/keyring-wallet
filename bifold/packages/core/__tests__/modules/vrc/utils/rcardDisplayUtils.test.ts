@@ -97,6 +97,8 @@ const aliceForm: RCardFormInput = {
   organization: 'RCard Corp',
 }
 
+const ALICE_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+
 describe('rcardDisplayUtils', () => {
   describe('isReceivedRCard', () => {
     test('returns true for a received RelationshipCard', () => {
@@ -164,6 +166,20 @@ describe('rcardDisplayUtils', () => {
 
       expect(extractContactInfoFromRCard(rcard)).toEqual({})
     })
+
+    test('extracts the photo from the jCard when present', () => {
+      const info = extractContactInfoFromRCard(
+        createReceivedRCard({ issuerDid: ALICE_DID, form: { ...aliceForm, photo: ALICE_PHOTO } })
+      )
+
+      expect(info.photo).toBe(ALICE_PHOTO)
+    })
+
+    test('resolves photo to undefined when the card has none', () => {
+      const info = extractContactInfoFromRCard(createReceivedRCard({ issuerDid: ALICE_DID, form: aliceForm }))
+
+      expect(info.photo).toBeUndefined()
+    })
   })
 
   describe('resolveContactDisplayInfo', () => {
@@ -180,6 +196,12 @@ describe('rcardDisplayUtils', () => {
       expect(info.email).toBe('alice@rcard.example.com')
     })
 
+    test('resolves the photo from a received RCard, same priority as name/email/organization', () => {
+      const rcard = createReceivedRCard({ issuerDid: ALICE_DID, form: { ...aliceForm, photo: ALICE_PHOTO } })
+
+      expect(resolveContactDisplayInfo([rcard], ALICE_DID).photo).toBe(ALICE_PHOTO)
+    })
+
     test('falls back to the legacy VRC issuer object when no RCard exists', () => {
       const legacyVrc = createDTGCredential({
         issuer: TEST_CONTACTS.alice.issuer,
@@ -191,6 +213,7 @@ describe('rcardDisplayUtils', () => {
       expect(info.name).toBe('Alice Smith')
       expect(info.email).toBe('alice@example.com')
       expect(info.organization).toBe('Tech Corp')
+      expect(info.photo).toBeUndefined()
     })
 
     test('uses the most recent legacy VRC when several exist', () => {

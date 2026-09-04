@@ -6,6 +6,7 @@ import ContactDetails from '../../../../src/modules/vrc/screens/ContactDetails'
 import { TEST_CONTACTS, generateTestDid } from '../fixtures/dtg-credentials'
 import { ContactCredentialDetails } from '../../../../src/types/navigators'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
+import { testIdWithKey } from '../../../../src/utils/testable'
 
 // Mock dependencies
 jest.mock('@bifold/react-hooks')
@@ -73,6 +74,37 @@ describe('ContactDetails Screen', () => {
 
       // Should display issuer DID
       expect(await findByText(TEST_CONTACTS.alice.issuer.id)).toBeTruthy()
+    })
+  })
+
+  test('Displays the contact photo when provided', async () => {
+    mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+
+    const photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+    const contact: ContactCredentialDetails = {
+      issuer: { ...TEST_CONTACTS.alice.issuer, photo },
+    }
+
+    const { findByTestId } = render(<ContactDetails {...createRouteParams(contact)} />)
+
+    await waitFor(async () => {
+      const image = await findByTestId(testIdWithKey('ContactAvatarImage'))
+      expect(image.props.source).toEqual({ uri: photo })
+    })
+  })
+
+  test('Falls back to the generic icon when there is no photo', async () => {
+    mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+
+    const contact: ContactCredentialDetails = {
+      issuer: TEST_CONTACTS.alice.issuer,
+    }
+
+    const { findByText, queryByTestId } = render(<ContactDetails {...createRouteParams(contact)} />)
+
+    await waitFor(async () => {
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId(testIdWithKey('ContactAvatarImage'))).toBeNull()
     })
   })
 

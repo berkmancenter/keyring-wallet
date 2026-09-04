@@ -5,7 +5,7 @@ import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useEffect, useMemo, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FlatList, View, TouchableOpacity, StyleSheet, Platform } from 'react-native'
+import { FlatList, View, TouchableOpacity, StyleSheet, Platform, Image } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -25,6 +25,7 @@ import {
   getVrcCredentialJsonForSubject,
 } from '../utils/witnessCredentialUtils'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
+import { testIdWithKey } from '../../../utils/testable'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 
 const ListContacts: React.FC = () => {
@@ -86,6 +87,11 @@ const ListContacts: React.FC = () => {
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 12,
+      overflow: 'hidden',
+    },
+    avatarImage: {
+      width: 36,
+      height: 36,
     },
     itemText: {
       fontFamily: 'SourceSans3-Regular',
@@ -270,6 +276,7 @@ const ListContacts: React.FC = () => {
             name: formatIssuerName(id, displayInfo.name || name),
             email: displayInfo.email || email,
             organization: displayInfo.organization || organization,
+            photo: displayInfo.photo,
           },
           hasWitnessCredentials: hasWitnessCredential(id),
           hasHardwareAttestation: hasHardwareAttestationCredential(id),
@@ -343,7 +350,15 @@ const ListContacts: React.FC = () => {
         accessibilityLabel={`Contact: ${item.issuer.name}`}
       >
         <View style={styles.avatarCircle}>
-          <Icon name="account-outline" size={22} color="#666666" />
+          {item.issuer.photo ? (
+            <Image
+              testID={testIdWithKey('ContactAvatarImage')}
+              style={styles.avatarImage}
+              source={{ uri: item.issuer.photo }}
+            />
+          ) : (
+            <Icon name="account-outline" size={22} color="#666666" />
+          )}
         </View>
         <ThemedText style={styles.itemText}>{item.issuer.name}</ThemedText>
         <View style={styles.badgeContainer}>
