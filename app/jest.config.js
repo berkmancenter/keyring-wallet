@@ -68,6 +68,8 @@ module.exports = {
     // Expo modules used by bifold core - reuse bifold's jest mocks
     'expo-crypto': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-crypto.js',
     '@expo/app-integrity': '<rootDir>/../bifold/packages/core/__mocks__/@expo/app-integrity.js',
+    'expo-image-picker': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-image-picker.js',
+    'expo-image-manipulator': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-image-manipulator.js',
   },
   transform: {
     '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
