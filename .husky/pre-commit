@@ -1,2 +1,3 @@
+sh scripts/check-commit-signing.sh
 yarn pre-commit-lint
 yarn typecheck
