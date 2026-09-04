@@ -1,0 +1,35 @@
+{
+  "name": "@bifold/mediator-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A local DIDComm mediator so a developer can run Keyring without shared infrastructure",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/index.ts",
+    "start:prod": "node dist/index.js",
+    "start:fresh": "yarn fresh && yarn start",
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "fresh": "ts-node src/cleanWallet.ts",
+    "verify": "ts-node src/verifyMediation.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@credo-ts/askar": "0.6.3",
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
+    "@credo-ts/didcomm": "0.6.3",
+    "@credo-ts/node": "0.6.3",
+    "@openwallet-foundation/askar-nodejs": "0.6.0",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.30",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}
