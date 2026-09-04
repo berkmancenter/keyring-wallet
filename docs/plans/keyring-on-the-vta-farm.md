@@ -3,7 +3,8 @@
 **Status:** Proposal for review. Not a commitment to implement.
 **Scope:** making Keyring a first-class client of a **Farm-hosted** Personal VTA, at every level of the developer path the ecosystem documents — provisioning, everyday operation, community membership — and making the React Native runtime a supported target of the ecosystem's own TypeScript libraries along the way. No change to the VRC/witness stack except where §6 says so.
 **Siblings:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) owns the transport and operation layers this plan stands on; its [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client itself. [`reference-app-sdk-packaging.md`](./reference-app-sdk-packaging.md) owns what we hand a third-party developer. This plan owns only what changes when the VTA is **somebody else's managed service** rather than one we run.
-**Reasoning:** [`2026-09-03-al.md`](./keyring-on-the-vta-farm/2026-09-03-al.md) — the measurements behind §3 and §4, the positions adopted, and what they supersede. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
+**Dependency direction:** optional and additive, not core. No phase of `openvtc-integration-plan.md`, `pnm_cnm_subtask.md`, or `reference-app-sdk-packaging.md` is blocked on this plan, and none should become so. See §1.
+**Reasoning:** [`2026-09-03-al.md`](./keyring-on-the-vta-farm/2026-09-03-al.md) — the measurements behind §3 and §4, the positions adopted, and what they supersede. [`2026-09-04-bm.md`](./keyring-on-the-vta-farm/2026-09-04-bm.md) — why this plan's non-core status needs to be a stated constraint rather than an implicit reading of "sibling," and the one place (§3.4) the original text read otherwise. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
 **Baseline:** upstream guides read from the pinned `vti-setup` clone at **22f712f** (2026-08-17), whose own header records the versions it was verified against: **VTA 0.17.0, Mediator 0.18.19, DID Hosting Daemon 0.8.3**. Package facts measured from the **npm registry on 2026-09-03** and reproducible with the commands in the companion. Every version below moves weekly — re-measure before acting, per [`scripts/openvtc/README.md`](../../scripts/openvtc/README.md).
 
 **References:**
@@ -25,6 +26,8 @@ That difference is the whole reason it is a separate document, and it has three 
 3. **It is the only plan that can retire "works against our own VTA" as the standard of evidence.** `ref-05-local-vta` and `ref-06x-cypress-stack` both drive infrastructure we configured. Neither can detect a wrong assumption we and our own deployment happen to share.
 
 **Framing, stated once.** *Keyring at every level* means the phone is a full participant at each level of [[DEV-GUIDE]], not a companion device to a laptop that does the real work. At levels L0–L2 Keyring is a **client** of the ecosystem. At level L3 it is a **producer** — the credential the community's join policy consumes is the credential Keyring's VRC module mints. That asymmetry is the strategic point of this plan and the reason it is worth doing in this order.
+
+**Non-core, stated as a constraint rather than left implicit.** Keyring's OpenVTC goals — the transport and task-layer work in [`openvtc-integration-plan.md`](./openvtc-integration-plan.md), the VTA client in [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md), developer packaging in [`reference-app-sdk-packaging.md`](./reference-app-sdk-packaging.md) — reach their own definitions of done whether or not any phase below ships. Nothing in F0–F4 gates a phase of those plans. The one place work is genuinely shared, `did:webvh` resolution (§3.4), is not a dependency this plan creates: [`ref-06x-cypress-stack`](../../tsp-reference/ref-06x-cypress-stack/) proved the need against Keyring's own **self-hosted** VTA, with no Farm involved, and it is already parent Phase D item 3 — [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) marks it explicitly *"shared with parent Phase D item 3."* This plan consumes that adapter at the parent's pace; it does not get to accelerate it. Valuable and worth building — but a side path, not a critical one. See [`2026-09-04-bm.md`](./keyring-on-the-vta-farm/2026-09-04-bm.md).
 
 ---
 
@@ -85,7 +88,7 @@ It is a requirement on the **Farm console**, not on the VTA session. Measured in
 
 On Path A the VTA is identified to the client by **DID alone** — the console displays a VTA DID, the client is given nothing else. Resolution is therefore on the critical path of every level, starting at L0.
 
-Keyring cannot do it today: [`ref-06x-cypress-stack`](../../tsp-reference/ref-06x-cypress-stack/) measured Credo 0.6.3 returning `unsupportedDidMethod` for `did:webvh`, and proved a ~20-line wallet-side resolver adapter sufficient. That adapter is parent Phase D item 3. **This plan is what makes it urgent rather than eventual**, and §4 is the reason it is not simply "call the library".
+Keyring cannot do it today: [`ref-06x-cypress-stack`](../../tsp-reference/ref-06x-cypress-stack/) measured Credo 0.6.3 returning `unsupportedDidMethod` for `did:webvh`, and proved a ~20-line wallet-side resolver adapter sufficient. That adapter is parent Phase D item 3, and the need is the parent's own — `ref-06x` proved it against a self-hosted VTA, with no Farm involved. **What the Farm changes is not the adapter's priority on the parent's roadmap, but this plan's exposure to its absence**: every level below F1 is blocked without it, where the self-hosted path can sequence around Phase D's own pace instead. §4 is the reason it is not simply "call the library". F1 (§6) may end up building the shared adapter itself — the same ~20-line surface either way — but Phase D is not blocked waiting on F1's schedule, and F1 does not ask Phase D to move sooner than the parent plan otherwise would.
 
 ### 3.5 The endpoint-discovery contract moved after our pin
 
@@ -222,6 +225,8 @@ Keyring is about to become the ecosystem's first React Native client. Everything
 
 **Sequencing.** #1, #2 and #6 are openable on evidence alone and are the right first contributions: real, small, and free of design argument, which is also how we learn their review process before spending it on #3 and #4. #3–#5 want a working RN consumer behind them — a portability claim with no consumer is an opinion; the same claim with a reference implementation that had to work around each item is a bug report with a patch.
 
+**None of this is phase-gating.** The whole track is spare-capacity work in service of the Farm/ecosystem relationship specifically — it advances independently of F0–F4 and is not a precondition for any of them, including the two items (#1, #2) cheap enough to open immediately.
+
 ---
 
 ## 8. Standing rationale
@@ -253,6 +258,7 @@ Keyring is about to become the ecosystem's first React Native client. Everything
 | Companion | Author | What it settles |
 |---|---|---|
 | [`2026-09-03-al.md`](./keyring-on-the-vta-farm/2026-09-03-al.md) | AL | The Farm measurements behind §3; the packaged-dependency measurements behind §4 and the contribution shapes in §7; the positions adopted on custody, WebAuthn and the CI environment, and the open questions each supersedes |
+| [`2026-09-04-bm.md`](./keyring-on-the-vta-farm/2026-09-04-bm.md) | BM | Why this plan's non-core status belongs in the plan text as a stated constraint, not only in the "Siblings" framing; the §3.4 wording it corrects and the evidence that the shared `did:webvh` work was never Farm-created |
 
 ## 11. Sources
 
