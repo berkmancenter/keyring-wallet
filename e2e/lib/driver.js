@@ -99,9 +99,47 @@ export async function createSession(platform, capsOverride) {
         "could not determine android device udid for adb reverse"
       );
     const { execSync } = await import("node:child_process");
-    execSync(`adb -s ${udid} reverse tcp:8081 tcp:8081`);
-    console.log(`[e2e] adb reverse tcp:8081 set up on ${udid}`);
     const { APP_ID } = await import("./config.js");
+    // Override when a metro for a different worktree/project already holds
+    // host port 8081 — lets this suite run its own metro on another port
+    // without touching that unrelated process.
+    const metroPort = process.env.METRO_PORT || "8081";
+    execSync(`adb -s ${udid} reverse tcp:8081 tcp:${metroPort}`);
+    console.log(`[e2e] adb reverse tcp:8081 -> tcp:${metroPort} set up on ${udid}`);
+    if (metroPort !== "8081") {
+      // This app's debug bundle loader resolves the packager via
+      // 10.0.2.2:8081 (the emulator's host alias) BEFORE consulting the
+      // adb-reverse-mapped localhost:8081 — so on a non-default METRO_PORT,
+      // the adb reverse above is not enough: it would still silently hit
+      // whatever real metro (if any) is listening on the *host's actual*
+      // port 8081, which on a shared machine can belong to an unrelated
+      // worktree, with no error and no visible sign the wrong bundle loaded.
+      // Force it by seeding RN's own dev-settings SharedPreferences key
+      // (debug_http_host) before first launch — this takes priority over
+      // the 10.0.2.2:8081 default.
+      const { writeFileSync, mkdtempSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const path = await import("node:path");
+      const localPrefsPath = path.join(
+        mkdtempSync(path.join(tmpdir(), "e2e-prefs-")),
+        "prefs.xml"
+      );
+      writeFileSync(
+        localPrefsPath,
+        `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <string name="debug_http_host">10.0.2.2:${metroPort}</string>\n</map>\n`
+      );
+      const devicePrefsPath = "/data/local/tmp/e2e-debug-http-host-prefs.xml";
+      execSync(`adb -s ${udid} push "${localPrefsPath}" ${devicePrefsPath}`);
+      execSync(
+        `adb -s ${udid} shell run-as ${APP_ID} mkdir -p shared_prefs`
+      );
+      execSync(
+        `adb -s ${udid} shell run-as ${APP_ID} cp ${devicePrefsPath} shared_prefs/${APP_ID}_preferences.xml`
+      );
+      console.log(
+        `[e2e] seeded debug_http_host=10.0.2.2:${metroPort} shared pref on ${udid}`
+      );
+    }
     await driver.activateApp(APP_ID);
     console.log("[e2e] app launched");
   }

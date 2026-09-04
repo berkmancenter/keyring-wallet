@@ -139,10 +139,15 @@ export async function pickRCardPhoto(driver) {
   await sleep(2000);
 
   try {
+    // Android's system Photo Picker (com.google.android.providers.media.module)
+    // wraps each grid thumbnail in a clickable FrameLayout carrying a
+    // "Photo taken on ..." content-desc; the ImageView thumbnail inside it
+    // is NOT itself clickable, confirmed via a live uiautomator dump against
+    // this exact picker on 2026-09-04.
     const photoCell =
       driver.e2ePlatform === "android"
         ? driver.$(
-            'android=new UiSelector().clickable(true).className("android.widget.ImageView")'
+            'android=new UiSelector().clickable(true).descriptionContains("Photo")'
           )
         : driver.$("-ios class chain:**/XCUIElementTypeCell[1]");
     await photoCell.waitForExist({ timeout: 8000 });
@@ -151,15 +156,48 @@ export async function pickRCardPhoto(driver) {
     console.log(
       `[e2e] ${driver.e2ePlatform}: could not find a photo to select in the native picker (non-fatal): ${err.message}`
     );
+    // Back out of the native picker rather than leaving it open — a stuck
+    // picker fails every later step in the flow with a confusing, unrelated
+    // "element not found" error instead of this one legible message.
+    try {
+      const cancel =
+        driver.e2ePlatform === "android"
+          ? driver.$('android=new UiSelector().description("Cancel")')
+          : byText(driver, "Cancel");
+      if (await cancel.isExisting()) {
+        await cancel.click();
+      }
+    } catch {
+      /* best-effort dismissal only */
+    }
     return;
   }
 
   await sleep(1500);
-  // Try the plausible crop/selection confirm labels for each platform in turn.
+  if (driver.e2ePlatform === "android") {
+    // android-image-cropper's own confirm button — confirmed via a live
+    // uiautomator dump against this exact crop screen on 2026-09-04: its
+    // visible label is "CROP" (all-caps, so a case-sensitive `text("Crop")`
+    // UiSelector match never fires), but its resource-id is stable regardless
+    // of label casing/localization, so prefer that.
+    try {
+      const cropButton = driver.$(
+        'android=new UiSelector().resourceId("asml.bkc.harvard.wallet:id/crop_image_menu_crop")'
+      );
+      if (await cropButton.isExisting()) {
+        await cropButton.click();
+      }
+    } catch {
+      /* fall through to the generic label search below */
+    }
+  }
+  // Try the plausible crop/selection confirm labels for each platform in turn
+  // (covers the iOS PHPicker/UCrop-equivalent flow, and is a harmless no-op on
+  // Android if the resource-id match above already confirmed the crop).
   const confirmLabels =
     driver.e2ePlatform === "ios"
       ? ["Choose", "Use Photo", "Done"]
-      : ["Crop", "Done", "OK", "Save"];
+      : ["CROP", "Crop", "Done", "OK", "Save"];
   for (const label of confirmLabels) {
     try {
       const el = byText(driver, label);
