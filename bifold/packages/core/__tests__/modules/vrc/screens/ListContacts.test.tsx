@@ -15,6 +15,7 @@ import {
   TEST_CONTACTS,
   generateTestDid,
 } from '../fixtures/dtg-credentials'
+import { testIdWithKey } from '../../../../src/utils/testable'
 
 const ALICE_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
 
@@ -458,7 +459,7 @@ describe('ListContacts Screen', () => {
 
     await waitFor(async () => {
       expect(await findByText('Alice Smith')).toBeTruthy()
-      const image = await findByTestId('ContactAvatarImage')
+      const image = await findByTestId(testIdWithKey('ContactAvatarImage'))
       expect(image.props.source).toEqual({ uri: ALICE_PHOTO })
     })
   })
@@ -490,7 +491,7 @@ describe('ListContacts Screen', () => {
 
     await waitFor(async () => {
       expect(await findByText('Alice Smith')).toBeTruthy()
-      expect(queryByTestId('ContactAvatarImage')).toBeNull()
+      expect(queryByTestId(testIdWithKey('ContactAvatarImage'))).toBeNull()
     })
   })
 })

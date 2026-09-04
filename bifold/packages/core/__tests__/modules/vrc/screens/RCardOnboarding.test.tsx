@@ -172,7 +172,7 @@ describe('RCardOnboarding Screen', () => {
     })
 
     await waitFor(async () => {
-      expect(await tree.findByTestId('RCardPhotoPreview')).toBeTruthy()
+      expect(await tree.findByTestId(testIdWithKey('RCardPhotoPreview'))).toBeTruthy()
     })
 
     await act(async () => {
@@ -221,6 +221,6 @@ describe('RCardOnboarding Screen', () => {
       expect(await tree.findByText('RCardOnboarding.Errors.PhotoTooLarge')).toBeTruthy()
     })
 
-    expect(tree.queryByTestId('RCardPhotoPreview')).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('RCardPhotoPreview'))).toBeNull()
   })
 })

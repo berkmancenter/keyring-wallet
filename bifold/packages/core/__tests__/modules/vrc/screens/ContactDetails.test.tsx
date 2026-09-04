@@ -6,6 +6,7 @@ import ContactDetails from '../../../../src/modules/vrc/screens/ContactDetails'
 import { TEST_CONTACTS, generateTestDid } from '../fixtures/dtg-credentials'
 import { ContactCredentialDetails } from '../../../../src/types/navigators'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
+import { testIdWithKey } from '../../../../src/utils/testable'
 
 // Mock dependencies
 jest.mock('@bifold/react-hooks')
@@ -87,7 +88,7 @@ describe('ContactDetails Screen', () => {
     const { findByTestId } = render(<ContactDetails {...createRouteParams(contact)} />)
 
     await waitFor(async () => {
-      const image = await findByTestId('ContactAvatarImage')
+      const image = await findByTestId(testIdWithKey('ContactAvatarImage'))
       expect(image.props.source).toEqual({ uri: photo })
     })
   })
@@ -103,7 +104,7 @@ describe('ContactDetails Screen', () => {
 
     await waitFor(async () => {
       expect(await findByText('Alice Smith')).toBeTruthy()
-      expect(queryByTestId('ContactAvatarImage')).toBeNull()
+      expect(queryByTestId(testIdWithKey('ContactAvatarImage'))).toBeNull()
     })
   })
 

@@ -361,7 +361,11 @@ const RCardOnboarding: React.FC<RCardOnboardingProps> = ({ agent }) => {
                 >
                   <View style={styles.photoCircle}>
                     {formState.photo ? (
-                      <Image testID="RCardPhotoPreview" style={styles.photoImage} source={{ uri: formState.photo }} />
+                      <Image
+                        testID={testIdWithKey('RCardPhotoPreview')}
+                        style={styles.photoImage}
+                        source={{ uri: formState.photo }}
+                      />
                     ) : (
                       <Icon name="account-outline" size={40} color="#666666" />
                     )}

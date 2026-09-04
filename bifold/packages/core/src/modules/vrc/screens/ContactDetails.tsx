@@ -17,6 +17,7 @@ import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecor
 import { getWitnessCredentialsForSubject, extractWitnessInfo, getVrcCredentialJsonForSubject, WitnessRecord } from '../utils/witnessCredentialUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
+import { testIdWithKey } from '../../../utils/testable'
 
 const AVATAR_BG = '#E8E0E8'
 const NAME_COLOR = '#010B13'
@@ -321,7 +322,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
         <View style={styles.avatarSection}>
           <View style={styles.avatarCircle}>
             {displayPhoto ? (
-              <Image testID="ContactAvatarImage" style={styles.avatarImage} source={{ uri: displayPhoto }} />
+              <Image
+                testID={testIdWithKey('ContactAvatarImage')}
+                style={styles.avatarImage}
+                source={{ uri: displayPhoto }}
+              />
             ) : (
               <Icon name="account-outline" size={32} color="#666666" />
             )}

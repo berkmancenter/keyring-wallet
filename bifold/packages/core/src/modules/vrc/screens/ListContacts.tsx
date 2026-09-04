@@ -25,6 +25,7 @@ import {
   getVrcCredentialJsonForSubject,
 } from '../utils/witnessCredentialUtils'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
+import { testIdWithKey } from '../../../utils/testable'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 
 const ListContacts: React.FC = () => {
@@ -350,7 +351,11 @@ const ListContacts: React.FC = () => {
       >
         <View style={styles.avatarCircle}>
           {item.issuer.photo ? (
-            <Image testID="ContactAvatarImage" style={styles.avatarImage} source={{ uri: item.issuer.photo }} />
+            <Image
+              testID={testIdWithKey('ContactAvatarImage')}
+              style={styles.avatarImage}
+              source={{ uri: item.issuer.photo }}
+            />
           ) : (
             <Icon name="account-outline" size={22} color="#666666" />
           )}
