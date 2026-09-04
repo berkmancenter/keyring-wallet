@@ -378,21 +378,28 @@ administrator/community split — disappears.
 | Slug | Direction | Membership-exchange analogue | Payload |
 |---|---|---|---|
 | `vrc/relationship/propose/0.1` + `#response` | peer → peer | `solicit-vmc` + `request-vmc`, collapsed (no intermediary) | request: `{ relationshipDid, mode, capabilities? }` · response: `{ relationshipDid, accepted }` |
-| `vrc/relationship/issue/0.1` + `#response` | issuer → subject | `vtc/members/vmc` | request: `{ vc, requestId?, ext? }` — member names matched to `vtc/members/vmc` exactly (`vc`, **not** `credential`) · response: an `IssuedCredential` receipt from `credentials/_shared/0.1` |
+| `vrc/relationships/issue/0.1` + `#response` | issuer → subject | `vtc/members/vmc` | request: `{ vrc, vrcDigestMultibase?, ext? }` — the signed credential plus an optional digest over its RFC 8785 canonicalization · response: `{ vrcDigestMultibase }` **recomputed over the credential as stored**. The digest receipt, not a shared `IssuedCredential` component, because both directions share one `threadId` and a `#response` carries no `inResponseTo` — only a recomputed digest identifies *which* delivery a receipt answers, and a copied value attests nothing about what was stored (staged spec `vrc/relationships/issue` 0.1, "Both deliveries share one thread") |
 
 `propose` declarations: `proof: OPTIONAL` (DIDComm authcrypt already
 authenticates the sender); `sideEffects: mutating` (persists a
 `RelationshipDidRecord`); `exposure: { discloses: metadata, actsAsSubject: false }`.
 
-`issue` declarations: `proof: RECOMMENDED` — mirroring
-`credential-exchange/issue`'s rationale, the credential carries its own issuer
-signature, but a peer receiving an unexpected credential should be able to
-attribute *the delivery* as well as the credential; `sideEffects: mutating` (the
-credential enters the wallet; recoverable — re-issuance is an ordinary flow);
-`exposure: { discloses: secret, actsAsSubject: false }` (the body *is* signed
-claims about the subject). Error codes: `vrc/relationship/issue:subjectMismatch`
-(the `credentialSubject.id` is not the recipient) and
-`vrc/relationship/issue:unsupportedFormat`.
+`issue` declarations (as staged, `vrc/relationships/issue` 0.1): proof
+**request REQUIRED, response OPTIONAL** — the delivery is
+retained-and-relied-upon (the §4.7.1 condition), and the envelope proof
+attributes *the delivery* itself on a relayed path, independent of the
+credential's own issuer signature; the receipt is consumed inside the exchange
+by the connected peer under authcrypt. `sideEffects: mutating` (the credential
+enters the wallet; not compensatable by this exchange — revocation is the
+issuer's own act); `exposure: { discloses: none, actsAsSubject: false }` (the
+delivery carries the two relationship DIDs to the very party that already
+holds them from the accepted proposal — nothing reaches anyone who did not
+already have it, which is why `propose`, the document that *first* discloses a
+relationship DID, is `metadata` where this is `none`). One error code,
+`vrc/relationships/issue:notAccepted`: the accepted proposal is the
+authorization evidence, so a delivery that does not match it — wrong parties,
+wrong relationship DIDs, or no accepted exchange at all — is one and the same
+refusal.
 
 **Why `issue` exists rather than deferring to Credo.** Credo's
 `issue-credential` v2 already delivers credentials, so a dedicated task can look
@@ -908,14 +915,105 @@ reading that code or naming our slugs.
 Each step names what makes it **done**. A step without a completion test is a
 step an implementer either stops short of or gold-plates.
 
+**Where this stands (Keyring, `feat/trust-tasks-integration`):** the
+relationship-and-witness recast — steps 5, 6 and 7 — is **complete for
+current wallets and proven on attended real devices**: one-tap proposal
+consent, hardware-attested signed issue legs with digest receipts, per-party
+witness sessions with task-bound VWCs and retained outcome evidence,
+presentation assembly with the verifier's pairing algorithm, and the
+witness-record share that earns the Witnessed indicator on both contact
+screens. Both sides run the same pipeline from the same library
+(`@bifold/trust-tasks`; the witness on the real `@openvtc/trust-tasks`
+runtime). Step 3's carriage ships as binding 0.2 (the dedicated `@type`, not
+a basic message). Step 2's specifications are the upstream `vrc/*` /
+`witness/*` batch, with `witness-share` and a future R-Card task to join it.
+Outside this milestone: step 6's evidence against an older build (the
+legacy dual-accept path is true by construction, not yet e2e'd), step 4
+(credential-exchange with a VTA), and the proof-set migration (parent §4.6,
+parked on the working group). Reasoning and evidence per day: the dated
+companions, latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
+**Step 1 is now resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`,
+forked from `fix/mediator-pickup-strategy`) — see step 1 below and
+[`2026-09-01-bam.md`](./2026-09-01-bam.md). **Phase D's core deliverable is
+now built**, not just scoped: the `VidResolver` port and `direct.ts`'s
+`pack`/`unpack` (both named as remaining in earlier entries) are done, the
+`eddsa-jcs-2022` signer and DIDComm-v1 trust-task client it once also named
+already shipped (step 1's `Carriage` resolution), and a real `bifold/packages/
+credo-tsp-adapter` package plus a `TspCarriage` now exist — the parent plan's
+stage-4 "gated on `vta-service`" note applies to ecosystem interop, not to
+this wallet-to-wallet carriage between two Keyring wallets, which is built,
+dev-flag-gated, and unit/integration-tested against real Askar custody.
+**Now verified** (2026-09-03): `yarn e2e:vrc:tsp` passes clean on a real
+device, including the Developer-toggle navigation. Getting there required
+fixing a second real bug beyond the one `ref-12` caught: Askar's native
+`Key.fromPublicBytes` rejected a peer's public key as "Invalid key data"
+whenever it arrived as a `Buffer` view sliced from a larger message
+(`Buffer.prototype.slice()`, unlike `Uint8Array.prototype.slice()`, returns
+a view over the original backing `ArrayBuffer`, not a copy — the whole
+surrounding message crossed the JSI boundary instead of the 32-byte key).
+Fixed with a defensive `Uint8Array.from(...)` copy at the FFI boundary. See
+[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections for the Phase D
+build and the `ref-12` bug it caught (an independently-derived `KeyAgreement`
+resolves to the wrong key once a real `VidResolver` is involved), and
+[`2026-09-03-bam.md`](./2026-09-03-bam.md) for this bug and the
+witness-over-TSP work below. (Step 4, credential-exchange against a live
+`vta-service`, is tracked on a separate branch and out of scope here.)
+
+**Mediator delivery.** The shared production `credo-mediator` must run a
+post-`3a5ea51` (credo-0.6+) build and
+`MESSAGE_PICKUP__FORWARDING_STRATEGY=QueueOnly` to match this wallet's
+deliberate polling-only (`PickUpV2`, non-live) pickup design — a pre-migration
+build silently drops every forwarded message, and the *default*
+`DirectDelivery` strategy only delivers to an already-open live session rather
+than queuing for pickup. `yarn e2e:vrc:android-only` passes clean against this
+configuration. Reasoning: [`2026-08-24-bam.md`](./2026-08-24-bam.md).
+
+**Witness transport.** The witness reaches participants over DIRECT HTTP by
+default — lower latency than a mediated round-trip, and it keeps the
+witness's traffic off the same shared mediator that already sees the two
+wallets' own relationship — or over the shared MEDIATOR as a supported
+fallback, for an operator who can't expose a public port or to recover from a
+direct-endpoint outage without cancelling a live event. Both transports are
+proven end-to-end: `yarn e2e:vrc:witnessed:android-only` (DIRECT) and
+`yarn e2e:vrc:witnessed:android-only:mediator` (MEDIATOR) — the latter exists
+specifically so the fallback keeps getting exercised rather than rotting
+silently between real uses. Reasoning:
+[`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
 ### 1. Resolve review A1 — `tsp-core`'s dependency direction
 
 Precondition for everything below. The trust-task model must depend on a carriage
 port, not on TSP envelope orchestration, or layer C has to carry its own task
 spine (§8.1).
 
+**Resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`, forked from
+`fix/mediator-pickup-strategy`). No separate `tsp-core` package was built — one
+already exists in effect as `@bifold/trust-tasks`, and building a second task
+spine now would be exactly the duplicated work §8.1 warns against. The
+resolution is the shape §5.2 always specified, applied to the package that
+exists: a `Carriage` port (`packages/trust-tasks/src/carriage.ts`, no
+dependencies) that the existing DIDComm-v1 send/receive plumbing now
+implements explicitly (`DidCommV1Carriage`, `packages/core`), with
+`ceremony.ts`'s two entry points (`sendTrustTaskDocument`,
+`setupTrustTasksInbound`) as its only callers. Both keep their existing
+signatures, so every call site — the wallet's agent-setup hook and the eight
+in-module send sites — needed no changes. Verified behavior-preserving: the
+module's 64 tests (7 suites) pass unchanged, and `@bifold/core` /
+`@bifold/trust-tasks` typecheck clean.
+
+**Narrower than §5.2's full port set.** `documentProof.ts`'s signing and
+verification still call Credo's KMS and DID resolution directly — the
+`SigningKey`/`VidResolver` half of §5.2's ports. That is §4.3's territory
+(crypto custody), not this step's (carriage/transport), and stays as-is here.
+
+Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
 **Done when:** `tsp-core`'s task model compiles and its tests pass with the TSP
-wire package absent from its dependency graph.
+wire package absent from its dependency graph. Trivially true today — no TSP
+wire package exists anywhere in this codebase yet — so the criterion that
+actually matters going forward is the one just described: the task model
+depends on the `Carriage` port, never on a transport's internals directly.
 
 ### 2. Author the `vrc/*` and `witness/*` specifications
 
@@ -943,12 +1041,27 @@ schema.
 
 ### 3. `didcomm-v1-basicmessage` binding
 
-Parent Phase D, once the ports exist. Prerequisite for steps 4–6.
+**Done — shipped, and never actually depended on Phase D.** This entry's
+"Parent Phase D, once the ports exist" line was stale from early planning,
+when this binding was assumed to need `tsp-core`'s ports before it could be
+built. It doesn't: `DidCommV1Carriage`
+(`bifold/packages/core/src/modules/trust-tasks/module/DidCommV1Carriage.ts`)
+sends/receives over Credo's own DIDComm message sender directly, no
+`SigningKey`/`KeyAgreement`/`VidResolver` involved, and shipped as step 1's
+`Carriage` resolution — weeks before Phase D's ports existed (§6's binding
+0.2 rungs, `ref-06v1`/`06v1b`/`06v1c`, predate `ref-09` by roughly a month).
+The heading is also stale in the same way: the shipped binding is a
+**dedicated `@type`** (`TrustTaskMessage`, binding 0.2), not a basic message
+— see §6 and the "Where this stands" note above.
 
-**Done when:** a Trust Task document round-trips between two Credo agents over a
-basic message; the receiving side derives peer identity from the connection's
-`theirDid` and rejects a document whose in-band `issuer` disagrees with it
-([[TT-SPEC]] §4.8.1); and a `trust-task-error` returns on the same connection.
+**Done when:** a Trust Task document round-trips between two Credo agents over
+the binding — **met**, live-proven on attended devices (steps 5–7); the
+receiving side derives peer identity from the connection's `theirDid` and
+rejects a document whose in-band `issuer` disagrees with it ([[TT-SPEC]]
+§4.8.1) — **met**, `documentProof.ts`'s `verifyDocumentProof` requires the
+proof's verification method belong to the expected (connection-derived)
+controller; and a `trust-task-error` returns on the same connection — **met**,
+`ceremony.ts`'s inbound dispatch and `TrustTasksService`'s `rejectWith`.
 
 ### 4. Adopt `credential-exchange/{query,present,pending/*}`
 
@@ -967,6 +1080,52 @@ On `tsp-core`'s task model, including **outcome-evidence retention** (§4, Layer
 C). Retention is the item with a silent failure mode: without it the VWCs still
 verify as credentials and simply fail to prove what they exist to prove.
 
+**Core done, live-proven (Keyring, `feat/trust-tasks-integration`): a
+witnessed exchange completed over the new tasks against a running
+witness-server — both per-party sessions, challenge-bound VPs, VWCs with
+`taskContext` bound and `taskDigestMultibase` binding the session document,
+outcome evidence retained — under an e2e gate requiring the ceremony
+markers. Presentation assembly is also done and live-proven: the holder
+assembles the VWC with its retained outcome pair and the verifier's pairing
+algorithm (`outcomeEvidence.ts`) confirms it, gated by a per-run self-check
+marker in the witnessed e2e. The attended device run (M4) is green with the
+hardware-attestation evidence block proven on-device — the done-when list
+below is met. Open UX item from that run: the contact's Witnessed badge
+needs VWC *sharing* (the v4 ceremony's VWC names the holder's own DID, and
+nothing delivers it to the peer) — mechanism undecided, see
+[`2026-08-19-al.md`](./2026-08-19-al.md) §E. Interop findings and reasoning:
+[`2026-08-18-al.md`](./2026-08-18-al.md) §G,
+[`2026-08-19-al.md`](./2026-08-19-al.md).** The wallet runs its per-party session
+(`witnessCeremony.ts`): own thread nested via `parentThreadId`, the
+challenge's REQUIRED proof verified under the witness's DID, the
+challenge-bound VP submitted under our REQUIRED proof, and the VWC's
+`taskContext` + `taskDigestMultibase` validated against the session document
+before storage — the `submit#response` retained as the outcome-evidence
+pair, retrievable by session id. The witness-server speaks the dialect
+beside its legacy JSON flow (`WitnessTaskSessions`): per-party sessions with
+unique challenges (the published spec forbids the legacy shared challenge),
+VP verification against this session's `{challenge, domain}`, and VWC
+issuance carrying the two task-binding fields, responses signed. Activated
+by the propose's `witnessed` flag when a witness is connected; additive,
+never a precondition. Reasoning:
+[`2026-08-18-al.md`](./2026-08-18-al.md) §F.
+
+**The witness now also accepts these same Trust Task documents wrapped in
+a TSP envelope** (2026-09-03): `WitnessTaskSessions` registers a second
+handler, for `TspEnvelopeMessage`, alongside the DIDComm-v1
+`TrustTaskMessage` one, both routing to the same per-party session logic
+and replying on whichever carriage the request arrived on — mirroring
+`TspCarriage.ts`'s own send/receive pattern. This was necessary, not
+optional, the moment a wallet's TSP-carriage dev flag (§9 step 1 above) is
+on: `sendTrustTaskDocument` auto-selects carriage from that flag with no
+regard for whether the witness can read the result, so a TSP-enabled
+wallet's witness session-request already went out TSP-wrapped whether or
+not the witness's handler expected one — it didn't, and the ceremony
+silently timed out with no error. Live-proven end to end on two physical
+Android devices (`yarn e2e:vrc:witnessed:tsp:android-only`): witness
+sessions opened and VWCs issued over the TSP-enveloped carriage in both
+directions. Reasoning: [`2026-09-03-bam.md`](./2026-09-03-bam.md).
+
 **Done when:** a witnessed exchange completes over the new tasks; the issued VWC
 carries `taskContext` equal to the ceremony's initiating document `id`; the
 ceremony's `#response` is persisted with its proof and retrievable by that
@@ -977,12 +1136,109 @@ and `e2e:vrc:devices` stays green.
 
 With `trust-task-discovery` replacing the `rceVersion` ladder.
 
-**Done when:** two wallets complete an unwitnessed exchange over the new tasks and
-both store the counterparty's VRC; capability negotiation runs through
-`supportedTypes` rather than an ordinal version; a legacy peer still completes an
-exchange via the dual-send path (§7.2); and the witnessed path from step 5 still
-passes.
+**In progress, sliced (Keyring, `feat/trust-tasks-integration`).** Landed and
+e2e-proven on the production mediator: the propose exchange (deterministic
+proposer, binding-0.2 carriage, gated on `rceVersion` v4 for now) and the
+issue leg in **shadow mode** — signed VRC delivered on the exchange thread
+with a real eddsa-jcs-2022 request proof (the REQUIRED declaration pulled
+this part of step 5's proof work forward), digest receipts recomputed and
+correlated both directions, refusals as `trust-task-error`, and the
+**eddsa-jcs-2022 verifier live on the issue legs**: proofs verify under the
+sender's relationship DID as the accepted proposal established it, so a
+valid signature under any other key fails; a delivery outside an accepted
+exchange still refuses `notAccepted` rather than `proofInvalid`. The legacy
+issue-credential 2.0 leg remains the storage authority, and the e2e suite
+gates on the ceremony markers. Evidence:
+[`docs/spikes/trust-task-propose-evidence.md`](../../spikes/trust-task-propose-evidence.md);
+reasoning: [`2026-08-18-al.md`](./2026-08-18-al.md).
 
+**The authority flip is landed and e2e-proven**: for v4 pairs the VRC travels
+ONLY as the trust-task issue leg — consent is the accepted proposal (a
+bottom-sheet prompt on the non-proposer's wallet replaces the legacy
+per-credential accept), each side builds and signs its VRC standalone
+(evidence flow included), and the receiver verifies the document proof, the
+credential's own proof and the party bindings before **storing from the
+task** (digest-deduplicated) and receipting. The legacy issue-credential leg
+is suppressed for the VRC on v4 pairs; the RCard (a VDS) still travels it. A
+decline is a `trust-task-error` (`propose:declined`) — never
+`accept: false`.
+
+**Capability negotiation runs through `supportedTypes`** (e2e-proven,
+marker-gated): the proposer's `trust-task-discovery` query precedes the
+propose, which opens only when the peer's response lists it. The legacy
+`rceVersion` marker remains the bootstrap beneath it — it is what says the
+peer can parse a Trust Task message at all (§7.2's chicken-and-egg), so
+sub-v4 peers never see even the query; the marker itself retires with the
+legacy dialect.
+
+**Remaining delta to done:** a legacy peer still completes an exchange via
+the dual-send path (§7.2) — true by construction (sub-v4 peers keep the
+untouched legacy flow), and now unit-evidenced for the parsing and
+capability-gate half: `parseLegacyRelationshipAnnouncement` (extracted from
+the basic-message handler) round-trips every RCE generation's real wire
+format, and a real v1–v3 announcement string, run through it, never opens
+the Trust Task dialect (`maybeOpenRelationshipExchange` no-ops downstream).
+**Still not evidenced against an actual v3 build** — that requires an older
+app binary on a device, which unit tests cannot substitute for; see
+[`2026-09-01-bam.md`](./2026-09-01-bam.md). The witnessed path (step 5)
+passes live, simulator and attended devices both (see
+[`2026-08-19-al.md`](./2026-08-19-al.md) §E).
+
+### 7. VWC sharing — counterparty visibility of the witnessing
+
+A witnessed exchange leaves each wallet holding a VWC about its **own**
+issuance (`witness/session` is per-party; the `submit#response` returns the
+credential to the submitter), and nothing carries it to the counterparty —
+so the contact screen's Witnessed indicator, which keys on a stored VWC
+whose subject is the *peer's* relationship DID, stays dark
+([`2026-08-19-al.md`](./2026-08-19-al.md) §E). The legacy flow solved this
+by witness-side cross-distribution — the witness pushed each VWC to the
+other party unbidden. That mechanism does not return: the holder controls
+disclosure (cred-spec, Outcome Interpretability — a holder presenting a
+`taskContext`-bearing credential MUST include matching outcome evidence),
+and a witness volunteering a credential about your exchange to a third
+party is exactly what the per-party model removes.
+
+**`vrc/relationships/witness-share/0.1`** closes the gap holder-side: after
+its witness session completes and its issue leg is sent, each party sends
+the peer its **presentation bundle** — the VWC wrapped in a signed VP plus
+the retained outcome-evidence pair (the §9-step-5 assembly), on the
+exchange thread, proof REQUIRED under the sender's relationship DID. The
+VP's challenge is the exchange thread id and its domain a fixed
+`vrc:witness-share` — freshness within the DIDComm channel comes from the
+channel and the thread binding, and replay across exchanges fails the
+challenge check. A bare VWC on the issue leg is rejected as the
+alternative: it would deliver a credential stripped of the evidence that
+makes it mean anything, re-creating the silent failure retention exists to
+prevent, and it would leave the verifier path (`verifyVwcPresentationBundle`)
+without a production consumer.
+
+The receiver runs the full pairing algorithm before anything is stored:
+document proof under the sender's relationship DID, presentation verified
+against the expected challenge/domain, credential valid AND completion
+evidenced, the VWC's subject equal to the sender's relationship DID as the
+accepted proposal established it, and its `parties` naming both
+relationship DIDs. Only then is the VWC stored (digest-deduplicated) and
+receipted — the Witnessed indicator is *earned by verification*, never
+granted on receipt. Any failure refuses with a `trust-task-error` and
+stores nothing. The type is advertised through `supportedTypes`; a sender
+whose peer does not list it skips the share silently (earlier v4 peers).
+The spec module is local until the `vrc/*` batch upstreams (step 2 owns
+that), where it joins as a third relationship task.
+
+**Built and live-proven — simulator pair and attended real devices
+(Keyring, `feat/trust-tasks-integration`): both contact screens show the
+Witnessed indicator (and, on devices, Secure Exchange) from a bundle each
+wallet verified itself, gated by markers and UI assertion; reasoning and
+the e2e findings in [`2026-08-20-al.md`](./2026-08-20-al.md).**
+
+**Done when:** on a witnessed exchange between two current wallets, both
+contact screens show the Witnessed indicator, gated in the witnessed e2e
+by UI assertion plus `witness-share sent` / `witness-share verified and
+stored` markers; a tampered bundle (wrong subject, missing or error-typed
+evidence, failed VP challenge) is refused with nothing stored, unit-proven;
+and an exchange with a peer that does not advertise the type completes
+exactly as today.
 
 ## 10. Open questions
 

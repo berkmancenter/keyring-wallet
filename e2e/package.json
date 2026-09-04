@@ -7,13 +7,17 @@
   "scripts": {
     "vrc-exchange": "node run-vrc-exchange.js",
     "vrc-exchange:android-only": "PLATFORMS=android,android node run-vrc-exchange.js",
+    "vrc-exchange:tsp": "node run-vrc-exchange-tsp.js",
     "vrc-exchange:devices": "node run-vrc-exchange-devices.js",
     "vrc-exchange:devices:android-only": "node run-vrc-exchange-devices-android-only.js",
     "store-migration": "node run-store-migration.js",
     "store-migration:android-only": "node run-store-migration-android-only.js",
     "onboarding-smoke": "node run-onboarding-smoke.js",
     "vrc-exchange:witnessed:devices": "node run-vrc-exchange-witnessed-devices.js",
-    "vrc-exchange:witnessed:android-only": "node run-vrc-exchange-witnessed-android-only-devices.js"
+    "vrc-exchange:witnessed:android-only": "node run-vrc-exchange-witnessed-android-only-devices.js",
+    "vrc-exchange:witnessed:tsp:android-only": "node run-vrc-exchange-witnessed-tsp-android-only-devices.js",
+    "vrc-exchange:witnessed:android-only:mediator": "node run-vrc-exchange-witnessed-android-only-devices-mediator.js",
+    "vrc-exchange:witnessed": "node run-vrc-exchange-witnessed.js"
   },
   "dependencies": {
     "webdriverio": "^9.12.0"

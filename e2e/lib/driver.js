@@ -1,9 +1,19 @@
 import { remote } from "webdriverio";
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import net from "node:net";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { mkdirSync, createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
+
+const METRO_PORT = 8081;
+const THIS_APP_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "app"
+);
 
 function portInUse(port) {
   return new Promise((resolve) => {
@@ -13,9 +23,47 @@ function portInUse(port) {
   });
 }
 
+/**
+ * Metro's dev-server port is a single global resource on the host, and a
+ * debug build always looks for it there — Android via a hardcoded
+ * `adb reverse tcp:8081`, iOS simulator directly over localhost. A repo
+ * checked out as multiple git worktrees (or alongside its own main
+ * checkout) can easily have a STALE Metro left running from a different
+ * checkout still holding that port; it keeps serving ITS OWN checkout's
+ * code with no error at all — the app boots fine, just against the wrong
+ * JS. That surfaces much later as a confusing "element not found" deep
+ * into a run, not as an obvious "wrong bundle" error (this cost a full
+ * debug session to track down once — see
+ * docs/plans/openvtc-integration-plan/2026-09-02-bam.md). Catch it here,
+ * before wasting a full install+onboarding cycle on it.
+ */
+async function checkMetroIsThisWorktree() {
+  if (!(await portInUse(METRO_PORT))) return; // nothing running yet — Metro's own absence is a separate, self-evident failure later
+  let ps;
+  try {
+    ps = execSync("ps -eo pid,args", { encoding: "utf8" });
+  } catch {
+    return; // can't introspect processes on this platform — don't block the run over it
+  }
+  const match = ps.match(/(\S+\/app)\/node_modules\/react-native\/cli\.js\s+start/);
+  if (!match) return; // something else owns the port, or we can't identify it — not our call to make
+  const metroAppDir = path.resolve(match[1]);
+  if (metroAppDir !== THIS_APP_DIR) {
+    throw new Error(
+      `Metro on :${METRO_PORT} is serving ${metroAppDir}, not this worktree's ` +
+        `app/ (${THIS_APP_DIR}). Every debug build looks for the packager on ` +
+        `host port ${METRO_PORT} regardless of which checkout it was built ` +
+        `from, so this run would silently get the WRONG checkout's JS. Stop ` +
+        `that Metro (find it: ps -eo pid,args | grep 'react-native/cli.js start') ` +
+        `and run 'yarn start' from THIS worktree's app/ before retrying.`
+    );
+  }
+}
+
 let appiumProc;
 
 export async function ensureAppium() {
+  await checkMetroIsThisWorktree();
   if (await portInUse(APPIUM_PORT)) {
     // A server from a previous run may still be tearing down (it responds to
     // /status but dies seconds later, killing our sessions mid-run). Prefer
@@ -101,6 +149,10 @@ export async function createSession(platform, capsOverride) {
     const { execSync } = await import("node:child_process");
     execSync(`adb -s ${udid} reverse tcp:8081 tcp:8081`);
     console.log(`[e2e] adb reverse tcp:8081 set up on ${udid}`);
+    driver.e2eUdid = udid; // for logcat-based assertions (trust-task markers)
+    // Scope logcat-based assertions to THIS run — the buffer survives app
+    // reinstalls and would otherwise satisfy markers with a previous run's lines.
+    execSync(`adb -s ${udid} logcat -c`);
     const { APP_ID } = await import("./config.js");
     await driver.activateApp(APP_ID);
     console.log("[e2e] app launched");
@@ -159,6 +211,25 @@ export async function acceptSystemAlertIfPresent(driver) {
 }
 
 /**
+ * Collapse Android's notification shade if it's open, hiding the app
+ * underneath — a real notification (battery, message, etc.) landing on an
+ * attended real-device run can pull it down mid-flow. Observed failure: a
+ * page-source dump at a "QR Code" click failure showed ONLY status-bar
+ * content (battery %, clock, notification count), no app UI at all. No-op
+ * on iOS/emulators (this is an Android real-notification concern
+ * specifically) or if nothing is open.
+ */
+export async function collapseNotificationShadeIfOpen(driver) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync(`adb -s ${driver.e2eUdid} shell cmd statusbar collapse`);
+  } catch {
+    /* best-effort — a missing statusbar service on some OEM builds is non-fatal */
+  }
+}
+
+/**
  * Find an element by bifold testID (testIdWithKey key).
  * RN maps testID → resource-id on Android and → accessibility identifier on iOS.
  */
@@ -179,10 +250,18 @@ export async function waitForTestId(driver, key, timeout = 30000) {
   return el;
 }
 
+/** `android:emulator-5554` (or just the platform, e.g. `ios`, when no udid
+ *  is tracked) — prefixes every tap log so a two-device run's log is
+ *  attributable to the device that acted, not just "android" twice. */
+export function deviceTag(driver) {
+  return driver.e2eUdid ? `${driver.e2ePlatform}:${driver.e2eUdid}` : driver.e2ePlatform;
+}
+
 export async function tapTestId(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
   await el.click();
+  console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key}`);
   return el;
 }
 
@@ -205,6 +284,16 @@ export async function tapTestId(driver, key, timeout = 30000) {
  */
 export async function tapTestIdReliable(driver, key, verify, options = {}) {
   const { attempts = 3, settleMs = 1500, timeout = 15000 } = options;
+  // The goal can already be met before we look for the button: a slow
+  // WebDriver round trip (element lookup, tag-name check inside click())
+  // can race an app-side auto-submit that fires between the caller's own
+  // existence check and this call. If verify() already passes, the
+  // element that would confirm it is gone for good — waiting for it to
+  // reappear would block for the full timeout instead of succeeding.
+  if (await verify()) {
+    console.log(`[e2e] ${deviceTag(driver)}: testID=${key} already satisfied, no tap needed`);
+    return;
+  }
   await waitForTestId(driver, key, timeout);
   for (let attempt = 0; attempt < attempts; attempt++) {
     const el = byTestId(driver, key);
@@ -212,7 +301,10 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
       await el.click().catch(() => {});
     }
     await sleep(settleMs);
-    if (await verify()) return;
+    if (await verify()) {
+      console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (attempt ${attempt + 1}/${attempts}, verified)`);
+      return;
+    }
   }
   throw new Error(
     `${driver.e2ePlatform}: tap on testID=${key} did not take effect after ${attempts} attempts`

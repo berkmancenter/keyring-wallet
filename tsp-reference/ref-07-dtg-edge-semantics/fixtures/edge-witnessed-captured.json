@@ -1,0 +1,145 @@
+{
+  "description": "A REAL witnessed Keyring edge: the full 5-phase witnessed VRC exchange (session challenge, VP-wrapped VRCs, witness three-check verification, VWC minting and DIDComm distribution) run by the reference implementation (bifold/packages/vrc-reference) over actual Credo-TS agents. Everything below is frozen exactly as held in the participants' wallets, with per-credential verification receipts from each holder's own Credo verifier. The VWCs are what OUR witness actually mints today — Check D audits them against the spec's VWC requirements (digest form, taskContext) the way Glenn audits VTI.",
+  "captureMeta": {
+    "capturedAt": "2026-08-26T20:21:15.341Z",
+    "tool": "vrc-reference (@credo-ts/* 0.6.3), __tests__/integration/captureWitnessedEdge.local-al.test.ts",
+    "witnessIssuerDid": "did:peer:0z6Mkn1HiMU6BqSPJSR9ydCmDUuNc68foyR7A7V4RugmGy27K",
+    "sessionNote": "sessionId/challenge are per-run values inside witnessContext; the digest binds the VWC to its VRC"
+  },
+  "declaredScopes": {
+    "half1": "pairwise",
+    "half2": "pairwise"
+  },
+  "vrcs": [
+    {
+      "holder": "bob (minted, submitted in VP)",
+      "verifiedAtCapture": "inside witness-verified VP",
+      "credential": {
+        "@context": [
+          "https://www.w3.org/ns/credentials/v2",
+          "https://www.firstperson.network/dtg/v1",
+          "https://www.firstperson.network/relationship/v1",
+          "https://w3id.org/security/suites/ed25519-2018/v1"
+        ],
+        "type": [
+          "VerifiableCredential",
+          "DTGCredential",
+          "RelationshipCredential"
+        ],
+        "issuer": "did:peer:0z6MkweNYNyiETYFmWCaBL34Emid8dbFQ7wHQ6Kf5z5gBSxxk",
+        "validFrom": "2026-08-26T20:21:11.945Z",
+        "credentialSubject": {
+          "id": "did:peer:0z6MkpYsfzz3DezVBVcsRHeJW45b5M7ydpuBj8PWWeay69p1n"
+        },
+        "proof": {
+          "verificationMethod": "did:peer:0z6MkweNYNyiETYFmWCaBL34Emid8dbFQ7wHQ6Kf5z5gBSxxk#z6MkweNYNyiETYFmWCaBL34Emid8dbFQ7wHQ6Kf5z5gBSxxk",
+          "type": "Ed25519Signature2018",
+          "created": "2026-08-26T20:21:11Z",
+          "proofPurpose": "assertionMethod",
+          "jws": "eyJhbGciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..szPEtX4G0S4TxsqDpwtWkIJMWfp0LCFXboPTvkI3EKi1eiOSzRMM-gH2OLJQzoOIS3S0J_Y6N6h5ysZGE_hRDw"
+        }
+      }
+    },
+    {
+      "holder": "alice (minted, submitted in VP)",
+      "verifiedAtCapture": "inside witness-verified VP",
+      "credential": {
+        "@context": [
+          "https://www.w3.org/ns/credentials/v2",
+          "https://www.firstperson.network/dtg/v1",
+          "https://www.firstperson.network/relationship/v1",
+          "https://w3id.org/security/suites/ed25519-2018/v1"
+        ],
+        "type": [
+          "VerifiableCredential",
+          "DTGCredential",
+          "RelationshipCredential"
+        ],
+        "issuer": "did:peer:0z6MkpYsfzz3DezVBVcsRHeJW45b5M7ydpuBj8PWWeay69p1n",
+        "validFrom": "2026-08-26T20:21:12.009Z",
+        "credentialSubject": {
+          "id": "did:peer:0z6MkweNYNyiETYFmWCaBL34Emid8dbFQ7wHQ6Kf5z5gBSxxk"
+        },
+        "proof": {
+          "verificationMethod": "did:peer:0z6MkpYsfzz3DezVBVcsRHeJW45b5M7ydpuBj8PWWeay69p1n#z6MkpYsfzz3DezVBVcsRHeJW45b5M7ydpuBj8PWWeay69p1n",
+          "type": "Ed25519Signature2018",
+          "created": "2026-08-26T20:21:12Z",
+          "proofPurpose": "assertionMethod",
+          "jws": "eyJhbGciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..uUpixBEHp8oI-cijXx3AeG8HT3ascWx1VQY2FRC0UVcGWsPgT1EfRqu9RL7SiuwNlyoB03Li01YB7Rocs143BQ"
+        }
+      }
+    }
+  ],
+  "vwcs": [
+    {
+      "holder": "alice",
+      "verifiedAtCapture": true,
+      "credential": {
+        "@context": [
+          "https://www.w3.org/ns/credentials/v2",
+          "https://trustoverip.org/credentials/witnessed-exchange/v1",
+          "https://w3id.org/security/suites/ed25519-2018/v1"
+        ],
+        "id": "urn:uuid:36b589ec-e48c-40f2-885f-82976cce75bb",
+        "type": [
+          "VerifiableCredential",
+          "DTGCredential",
+          "WitnessCredential"
+        ],
+        "issuer": "did:peer:0z6Mkn1HiMU6BqSPJSR9ydCmDUuNc68foyR7A7V4RugmGy27K",
+        "validFrom": "2026-08-26T20:21:12.062Z",
+        "credentialSubject": {
+          "digest": "sha256:1b761746e1900509cefc8ab49441268f0de63fc6c3d399890dca04bdba3d9b91",
+          "witnessContext": {
+            "event": "Witnessed Exchange",
+            "sessionId": "6236ce90-1bec-451f-8bfe-cf38d852a7cd",
+            "method": "session-based-challenge"
+          },
+          "id": "did:peer:0z6MkweNYNyiETYFmWCaBL34Emid8dbFQ7wHQ6Kf5z5gBSxxk"
+        },
+        "proof": {
+          "verificationMethod": "did:peer:0z6Mkn1HiMU6BqSPJSR9ydCmDUuNc68foyR7A7V4RugmGy27K#z6Mkn1HiMU6BqSPJSR9ydCmDUuNc68foyR7A7V4RugmGy27K",
+          "type": "Ed25519Signature2018",
+          "created": "2026-08-26T20:21:12Z",
+          "proofPurpose": "assertionMethod",
+          "jws": "eyJhbGciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..CLFJMWZYRX01ZFX-WC9BotQMufwp4db4rX3ivn1U3ac3VMULJFkHbArqOPEJ3wNWejU7hLss3ZUa-ctDiPRiBA"
+        }
+      }
+    },
+    {
+      "holder": "bob",
+      "verifiedAtCapture": true,
+      "credential": {
+        "@context": [
+          "https://www.w3.org/ns/credentials/v2",
+          "https://trustoverip.org/credentials/witnessed-exchange/v1",
+          "https://w3id.org/security/suites/ed25519-2018/v1"
+        ],
+        "id": "urn:uuid:da88ecd3-8cd2-4005-a03b-a10a82545839",
+        "type": [
+          "VerifiableCredential",
+          "DTGCredential",
+          "WitnessCredential"
+        ],
+        "issuer": "did:peer:0z6Mkn1HiMU6BqSPJSR9ydCmDUuNc68foyR7A7V4RugmGy27K",
+        "validFrom": "2026-08-26T20:21:12.090Z",
+        "credentialSubject": {
+          "digest": "sha256:1194f3baa71b8115a992abe78bce2c640f29f2e127d71ad70e4080ac230a6b5b",
+          "witnessContext": {
+            "event": "Witnessed Exchange",
+            "sessionId": "6236ce90-1bec-451f-8bfe-cf38d852a7cd",
+            "method": "session-based-challenge"
+          },
+          "id": "did:peer:0z6MkpYsfzz3DezVBVcsRHeJW45b5M7ydpuBj8PWWeay69p1n"
+        },
+        "proof": {
+          "verificationMethod": "did:peer:0z6Mkn1HiMU6BqSPJSR9ydCmDUuNc68foyR7A7V4RugmGy27K#z6Mkn1HiMU6BqSPJSR9ydCmDUuNc68foyR7A7V4RugmGy27K",
+          "type": "Ed25519Signature2018",
+          "created": "2026-08-26T20:21:12Z",
+          "proofPurpose": "assertionMethod",
+          "jws": "eyJhbGciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..Td3hfZPQqXtdJz7HGhGmnC2lQucKpzvBIinJfIjc5ha5xQmINxnx2By7dn5ZSin9ZIKJ1om6QhfXBxo7xqXoCQ"
+        }
+      }
+    }
+  ]
+}
