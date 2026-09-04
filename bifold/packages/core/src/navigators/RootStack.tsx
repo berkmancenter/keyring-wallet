@@ -11,6 +11,7 @@ import { TOKENS, useServices } from '../container-api'
 import { ActivityProvider } from '../contexts/activity'
 import { BiometricConfirmationProvider } from '../contexts/biometric-confirmation'
 import RelationshipProposalModal from '../modules/vrc/components/RelationshipProposalModal'
+import CredentialExchangeQueryModal from '../modules/trust-tasks/components/CredentialExchangeQueryModal'
 import { useStore } from '../contexts/store'
 import { BifoldError } from '../types/error'
 import MainStack from './MainStack'
@@ -67,6 +68,7 @@ const RootStack: React.FC = () => {
                 <ActivityProvider>
                   <MainStack />
                   <RelationshipProposalModal />
+                  <CredentialExchangeQueryModal />
                 </ActivityProvider>
               </WitnessConnectionProvider>
             </VrcNameCacheProvider>
