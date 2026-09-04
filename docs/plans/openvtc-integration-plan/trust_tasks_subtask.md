@@ -944,14 +944,21 @@ credo-tsp-adapter` package plus a `TspCarriage` now exist — the parent plan's
 stage-4 "gated on `vta-service`" note applies to ecosystem interop, not to
 this wallet-to-wallet carriage between two Keyring wallets, which is built,
 dev-flag-gated, and unit/integration-tested against real Askar custody.
-Still open at this point: an actual e2e run confirming the Developer-toggle
-navigation on a real device/emulator (written, unverified — no device was
-available when it was written). See
-[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections for the full
-build and the real bug it caught (an independently-derived `KeyAgreement`
-resolves to the wrong key once a real `VidResolver` is involved). (Step 4,
-credential-exchange against a live `vta-service`, is tracked on a separate
-branch and out of scope here.)
+**Now verified** (2026-09-03): `yarn e2e:vrc:tsp` passes clean on a real
+device, including the Developer-toggle navigation. Getting there required
+fixing a second real bug beyond the one `ref-12` caught: Askar's native
+`Key.fromPublicBytes` rejected a peer's public key as "Invalid key data"
+whenever it arrived as a `Buffer` view sliced from a larger message
+(`Buffer.prototype.slice()`, unlike `Uint8Array.prototype.slice()`, returns
+a view over the original backing `ArrayBuffer`, not a copy — the whole
+surrounding message crossed the JSI boundary instead of the 32-byte key).
+Fixed with a defensive `Uint8Array.from(...)` copy at the FFI boundary. See
+[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections for the Phase D
+build and the `ref-12` bug it caught (an independently-derived `KeyAgreement`
+resolves to the wrong key once a real `VidResolver` is involved), and
+[`2026-09-03-bam.md`](./2026-09-03-bam.md) for this bug and the
+witness-over-TSP work below. (Step 4, credential-exchange against a live
+`vta-service`, is tracked on a separate branch and out of scope here.)
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
 post-`3a5ea51` (credo-0.6+) build and
@@ -1102,6 +1109,22 @@ issuance carrying the two task-binding fields, responses signed. Activated
 by the propose's `witnessed` flag when a witness is connected; additive,
 never a precondition. Reasoning:
 [`2026-08-18-al.md`](./2026-08-18-al.md) §F.
+
+**The witness now also accepts these same Trust Task documents wrapped in
+a TSP envelope** (2026-09-03): `WitnessTaskSessions` registers a second
+handler, for `TspEnvelopeMessage`, alongside the DIDComm-v1
+`TrustTaskMessage` one, both routing to the same per-party session logic
+and replying on whichever carriage the request arrived on — mirroring
+`TspCarriage.ts`'s own send/receive pattern. This was necessary, not
+optional, the moment a wallet's TSP-carriage dev flag (§9 step 1 above) is
+on: `sendTrustTaskDocument` auto-selects carriage from that flag with no
+regard for whether the witness can read the result, so a TSP-enabled
+wallet's witness session-request already went out TSP-wrapped whether or
+not the witness's handler expected one — it didn't, and the ceremony
+silently timed out with no error. Live-proven end to end on two physical
+Android devices (`yarn e2e:vrc:witnessed:tsp:android-only`): witness
+sessions opened and VWCs issued over the TSP-enveloped carriage in both
+directions. Reasoning: [`2026-09-03-bam.md`](./2026-09-03-bam.md).
 
 **Done when:** a witnessed exchange completes over the new tasks; the issued VWC
 carries `taskContext` equal to the ceremony's initiating document `id`; the
