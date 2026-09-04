@@ -11,6 +11,7 @@
 | Companion | Author | What it settles |
 |---|---|---|
 | [`2026-09-01-al.md`](./reference-app-sdk-packaging/2026-09-01-al.md) | AL | SDK scope and framing (mobile-first, SDK as the deliverable); consume upstream Trust Tasks rather than reimplement, and the duplicate-implementation problem it exposes; wrap orchestration rather than types; the VTA Farm as first-class onboarding; `ref-08-pnm-core-hermes` as the unblocking experiment; requirements R6–R12 |
+| [`2026-09-03-bm.md`](./reference-app-sdk-packaging/2026-09-03-bm.md) | BM | Fundraising-driven phasing (reference-app track first, SDK track deferred); the one-app/additive-registry/picker architecture; sequencing with hardware-signing decoupling pulled forward; the `feat/trust-tasks-over-didcomm-v1` cross-check that constrains how R5 must be built, and what to tell that branch's owner |
 
 **Reconciled against `openvtc-integration-plan.md` §6 ("Demo concepts — brainstorm only")**, which already proposes several of the same demos under different names, with more ecosystem grounding (real Trust Task type URIs, a stated flagship target). This file's per-idea notes below cite the overlap explicitly rather than treating these as independent proposals:
 
@@ -272,3 +273,67 @@ consumes one.
 is parallel, not downstream); OCA in the SDK core (confirmed absent from the
 Trust Task path — it stays in the reference app for credential-shaped demos); a
 full UI kit (`keyring-theme/` plus two screens is version zero).
+
+---
+
+## Phasing and priorities — 2026-09-03
+
+Recorded here because the plan holds current design; the argument, the
+evidence, and the items to raise with `feat/trust-tasks-over-didcomm-v1` are in
+[`2026-09-03-bm.md`](./reference-app-sdk-packaging/2026-09-03-bm.md), which
+should be read before revisiting any of them.
+
+**Driver.** Packaged, spin-up-and-use demos are needed in the short term for
+fundraising — real, customizable tasks a person outside the team can run and
+extend, not a slide deck. That puts this phase entirely on the reference-app
+track (R1–R5); the SDK track (R6–R17) is deferred, not reversed or
+reprioritized down — nothing above changes because of this section.
+
+**The two demos.** Trading-card exchange (✅ ready — rides the existing
+RCard/VRC exchange, no new engine) and The Approver (🧩 partial — the
+consume/respond engine already exists; the gap is the registry plus a
+render/approve-deny UI). Both are already scored this way in the checklist
+above; this phase adds no new ideas to that list.
+
+**One app, additive registries, a picker — not per-demo forks.** Both demos
+register into the same running build through the existing `container-api.ts`
+token pattern (`TRUST_TASK_TOKENS`, `ICredentialDisplayRegistry`) rather than
+being separate builds or an env flag swapped before rebuild. A home-screen
+chooser lists installed demo profiles (`demo-profiles/`, R4); adding a third
+demo later is dropping in a profile module, no rebuild and no shared-code
+change. This is also the first working instance of this document's proposed
+`registerTrustTask({ spec, orchestration, renderer })` surface — built and
+exercised by our own two demos before any outside developer sees it.
+
+**Sequencing.**
+1. R1 (mediator spin-up script) + R2 (trimmed starter container) — universal
+   blockers for every demo, done once, first.
+2. R3 (local/bundled OCA resolver) + the trading-card demo — smallest new-code
+   footprint on the idea list, ships first.
+3. Hardware-signing decoupling (Patterns item 2 above) — pulled forward from
+   its original sequencing because it is dual-purpose: it lets the approval
+   demo show hardware-backed signing directly, and it is independently one of
+   the SDK's own identified extraction targets. One task instead of two.
+4. R5 (open `typeUri` registry + a generic render/approve-deny screen) — the
+   Approver demo. Built **Carriage-shaped from day one**: the registry's
+   dispatch takes an injected `send`/`onDocument`-style dependency rather than
+   calling `agent.modules.didcomm` directly, even though that is what
+   `ceremony.ts` does today. See the companion for why.
+
+**Pre-demo-day insurance, not a blocker.** T1 (measure whether
+`@bifold/trust-tasks`'s canonicalizer and `@openvtc/trust-tasks`'s diverge) is
+worth running before either demo is shown publicly, since `ceremony.ts`
+genuinely invokes both today. This is the only piece of the T0–T4 remediation
+pulled into this phase; T0, T2, T3, T4 stay deferred.
+
+**Coordination required with `feat/trust-tasks-over-didcomm-v1`.** That
+branch is independently building a `Carriage` port
+(`bifold/packages/trust-tasks/src/carriage.ts`) that abstracts `ceremony.ts`
+away from Credo/DIDComm specifics — the same discipline this phase's R5 work
+needs, arrived at from a different direction (TSP transport pluggability, not
+SDK packaging). It is not yet on `main`. See the companion for what should be
+communicated to whoever owns that branch before R5 starts.
+
+**Out of scope for this phase, restated.** All of R6–R17, and T0/T2–T4 of the
+trust-tasks remediation. They proceed on their own timeline once the
+fundraising demos ship — nothing here re-opens or re-sequences them.
