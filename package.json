@@ -37,6 +37,8 @@
     "typecheck": "cd app && yarn typecheck",
     "e2e:vrc": "cd e2e && npm run vrc-exchange",
     "e2e:vrc:android-only": "cd e2e && npm run vrc-exchange:android-only",
+    "e2e:vrc:photo": "cd e2e && npm run vrc-exchange:photo",
+    "e2e:vrc:photo:android-only": "cd e2e && npm run vrc-exchange:photo:android-only",
     "e2e:vrc:devices": "cd e2e && npm run vrc-exchange:devices",
     "e2e:vrc:devices:android-only": "cd e2e && npm run vrc-exchange:devices:android-only",
     "e2e:migration": "cd e2e && npm run store-migration",

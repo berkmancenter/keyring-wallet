@@ -7,6 +7,8 @@
   "scripts": {
     "vrc-exchange": "node run-vrc-exchange.js",
     "vrc-exchange:android-only": "PLATFORMS=android,android node run-vrc-exchange.js",
+    "vrc-exchange:photo": "node run-vrc-exchange-photo.js",
+    "vrc-exchange:photo:android-only": "PLATFORMS=android,android node run-vrc-exchange-photo.js",
     "vrc-exchange:devices": "node run-vrc-exchange-devices.js",
     "vrc-exchange:devices:android-only": "node run-vrc-exchange-devices-android-only.js",
     "store-migration": "node run-store-migration.js",

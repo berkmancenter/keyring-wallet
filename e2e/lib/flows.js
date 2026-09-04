@@ -12,7 +12,16 @@ import {
   screenshot,
 } from "./driver.js";
 export { sleep };
-import { PIN } from "./config.js";
+import { PIN, APP_ID } from "./config.js";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const TEST_PHOTO_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "fixtures",
+  "test-rcard-photo.jpg"
+);
 
 /**
  * Drive a fresh install through the full onboarding:
@@ -65,7 +74,116 @@ async function hideKeyboard(driver, inputEl) {
   }
 }
 
-export async function completeOnboarding(driver, { firstName, lastName }) {
+function androidUdid(driver) {
+  return (
+    driver.capabilities.deviceUDID ||
+    driver.capabilities["appium:udid"] ||
+    driver.capabilities.udid
+  );
+}
+
+/**
+ * Seed a fixed test JPEG into the device's photo library so the R-Card photo
+ * picker has something to select, and pre-grant the media permission so the
+ * OS permission dialog doesn't block the picker. Best-effort/non-fatal (same
+ * posture as createSession's iOS camera pre-grant): a failure here just means
+ * pickRCardPhoto won't find a photo to pick, not a hard e2e failure.
+ */
+export async function seedTestPhoto(driver) {
+  const { execSync } = await import("node:child_process");
+  try {
+    if (driver.e2ePlatform === "android") {
+      const udid = androidUdid(driver);
+      execSync(
+        `adb -s ${udid} push "${TEST_PHOTO_PATH}" /sdcard/Pictures/rcard-e2e-test-photo.jpg`
+      );
+      execSync(
+        `adb -s ${udid} shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/rcard-e2e-test-photo.jpg`
+      );
+      // READ_MEDIA_IMAGES (API 33+) — older API levels use READ_EXTERNAL_STORAGE,
+      // granted at install time by default in the test build; this grant is a
+      // no-op (and harmless) on those levels.
+      execSync(
+        `adb -s ${udid} shell pm grant ${APP_ID} android.permission.READ_MEDIA_IMAGES`
+      );
+      console.log(`[e2e] android: seeded test photo + granted media permission`);
+    } else {
+      execSync(`xcrun simctl addmedia booted "${TEST_PHOTO_PATH}"`);
+      execSync(`xcrun simctl privacy booted grant photos ${APP_ID}`);
+      console.log(`[e2e] ios: seeded test photo + granted photos permission`);
+    }
+  } catch (err) {
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: seedTestPhoto failed (non-fatal — photo picker will have nothing to pick): ${err.message}`
+    );
+  }
+}
+
+/**
+ * Drive the R-Card onboarding photo picker: tap the photo control, select the
+ * (single) seeded test photo, and confirm the crop screen.
+ *
+ * UNVERIFIED: the native photo-grid-cell and crop-confirm selectors below are
+ * best-effort guesses at the stock iOS PHPicker / Android UCrop UI (as wired
+ * by expo-image-picker with allowsEditing:true) and have not been exercised
+ * against a real simulator/emulator in this environment. If the native picker
+ * UI doesn't match these selectors, this degrades to logging a warning and
+ * returning without a photo (RCardOnboarding submits fine either way, since
+ * the photo is optional) rather than hanging the run — but it means
+ * assertContactPhotoReceived will then legitimately fail, which is the
+ * correct signal that these selectors need updating against a real device.
+ */
+export async function pickRCardPhoto(driver) {
+  await tapTestId(driver, "RCardPhotoInput");
+  await acceptSystemAlertIfPresent(driver);
+  await sleep(2000);
+
+  try {
+    const photoCell =
+      driver.e2ePlatform === "android"
+        ? driver.$(
+            'android=new UiSelector().clickable(true).className("android.widget.ImageView")'
+          )
+        : driver.$("-ios class chain:**/XCUIElementTypeCell[1]");
+    await photoCell.waitForExist({ timeout: 8000 });
+    await photoCell.click();
+  } catch (err) {
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: could not find a photo to select in the native picker (non-fatal): ${err.message}`
+    );
+    return;
+  }
+
+  await sleep(1500);
+  // Try the plausible crop/selection confirm labels for each platform in turn.
+  const confirmLabels =
+    driver.e2ePlatform === "ios"
+      ? ["Choose", "Use Photo", "Done"]
+      : ["Crop", "Done", "OK", "Save"];
+  for (const label of confirmLabels) {
+    try {
+      const el = byText(driver, label);
+      if (await el.isExisting()) {
+        await el.click();
+        break;
+      }
+    } catch {
+      /* try the next candidate label */
+    }
+  }
+
+  await sleep(1500);
+  if (!(await existsTestId(driver, "RCardPhotoPreview", 5000))) {
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: photo picker did not produce a preview — continuing onboarding without a photo`
+    );
+  }
+}
+
+export async function completeOnboarding(
+  driver,
+  { firstName, lastName, photo = false }
+) {
   // Screen-dispatch loop: onboarding step order varies (tutorial, PIN explainer, PIN,
   // biometry, wallet naming, R-Card). Handle whichever known screen is visible until
   // the main tab bar appears.
@@ -113,6 +231,10 @@ export async function completeOnboarding(driver, { firstName, lastName }) {
       const last = byTestId(driver, "RCardLastNameInput");
       await last.setValue(lastName);
       await hideKeyboard(driver, last);
+      if (photo) {
+        await seedTestPhoto(driver);
+        await pickRCardPhoto(driver);
+      }
       await tapTestId(driver, "RCardSubmit");
       lastAction = "RCardSubmit";
       // R-Card creation can take a while (key generation + signing)
@@ -753,5 +875,31 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
   await screenshot(driver, "vrc-missing");
   throw new Error(
     `${driver.e2ePlatform}: contact "${peerName}" did not appear within ${timeout}ms`
+  );
+}
+
+/**
+ * Assert the peer's R-Card photo made it through the exchange: opens the
+ * contact's detail screen and checks for the ContactAvatarImage element
+ * (rendered only when resolveContactDisplayInfo found a photo attribute on
+ * the received RCard — see rcardDisplayUtils.ts). This checks the data
+ * arrived, not what it looks like — no pixel/visual assertion is made.
+ */
+export async function assertContactPhotoReceived(driver, peerName, timeout = 60000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    await openContactDetail(driver, peerName);
+    if (await existsTestId(driver, "ContactAvatarImage", 4000)) {
+      console.log(`[e2e] ${driver.e2ePlatform}: photo present for "${peerName}"`);
+      return;
+    }
+    if (await existsTestId(driver, "BackButton", 2000)) {
+      await tapTestId(driver, "BackButton");
+    }
+    await sleep(3000);
+  }
+  await screenshot(driver, "photo-missing");
+  throw new Error(
+    `${driver.e2ePlatform}: no photo (ContactAvatarImage) shown for "${peerName}" within ${timeout}ms`
   );
 }
