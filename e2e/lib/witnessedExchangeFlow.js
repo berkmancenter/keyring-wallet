@@ -1,9 +1,11 @@
-// Shared WITNESSED two-wallet VRC exchange flow (attended, hardware-attested):
+// Shared WITNESSED two-wallet VRC exchange flow (attended, hardware-attested),
+// on the Trust Task dialect (§9 step 5):
 //
 //   start witness (HTTPS tunnel) → fresh installs → onboarding → both wallets
-//   connect to the witness → invitation → bidirectional, hardware-attested,
-//   witnessed VRC exchange → assert VRC + VWC (Verifiable Witness Credential)
-//   on both.
+//   connect to the witness → invitation → v4 exchange (discovery → propose →
+//   consent bottom-sheet → per-party witness sessions → hardware-attested
+//   signed issue legs) → assert VRC on both + the ceremony/attestation
+//   markers from Android's run-scoped logcat.
 //
 // Device discovery and session creation are injected by the caller — nothing
 // here depends on which platform(s) the two sessions are on. See
@@ -15,10 +17,13 @@ import net from "node:net";
 
 import { ensureAppium, stopAppium, screenshot, dumpSource, sleep } from "./driver.js";
 import {
-  acceptCredentialOfferFromChat,
   acceptInvitationViaPaste,
+  acceptRelationshipProposalOnEitherSide,
+  assertTrustTaskExchangeMarkers,
   assertVrcReceived,
   assertContactShields,
+  assertWitnessCeremonyMarkers,
+  assertWitnessShareMarkers,
   completeOnboarding,
   connectToWitness,
   enableHardwareAttestation,
@@ -78,6 +83,40 @@ export function dumpAndroidWitnessLogs(udids) {
     } catch (e) {
       console.warn(`[e2e] logcat capture failed for ${udid} (non-fatal): ${e.message}`);
     }
+  }
+}
+
+/**
+ * The device-only gate: the VRC delivery must carry a hardware-attestation
+ * evidence block ("Evidence block added" — Secure Enclave / StrongBox cert
+ * chain, biometric-signed). Emulators/simulators silently skip this, which is
+ * why only the devices run proves it. Android-side logcat covers only the
+ * Android wallet's own issuance; a biometric decline or missing keystore
+ * fails loudly here instead of silently downgrading the run.
+ */
+async function assertHardwareEvidenceMarker(driver, timeout = 120000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    }).toString();
+    const added = log.match(/Evidence block added \[[^\]]*\]/);
+    if (added) {
+      console.log(`[e2e] android: hardware-attestation evidence present — ${added[0]}`);
+      return;
+    }
+    const downgraded = log.match(
+      /proceeding without hardware attestation|issued without hardware attestation evidence/
+    );
+    if (downgraded) {
+      throw new Error(`android: exchange downgraded to unattested: "${downgraded[0]}"`);
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`android: no hardware-attestation evidence marker after ${timeout}ms`);
+    }
+    await sleep(3000);
   }
 }
 
@@ -150,30 +189,47 @@ export async function runWitnessedExchange({
     const invitationUrl = await showRelationshipInvitation(sessionA);
     await acceptInvitationViaPaste(sessionB, invitationUrl);
 
-    const [attestationA, attestationB] = await Promise.all([
-      acceptCredentialOfferFromChat(sessionA, 600000, { expectAttestation: true }),
-      acceptCredentialOfferFromChat(sessionB, 600000, { expectAttestation: true }),
-    ]);
+    // v4 consent: one bottom-sheet on the non-proposer wallet, no
+    // per-credential offers. The biometric prompts fire DURING the signed
+    // delivery that follows consent.
+    console.log(
+      "\n[e2e] OPERATOR: a relationship proposal appears on one phone (auto-accepted);\n" +
+        "[e2e] OPERATOR: then satisfy the BIOMETRIC prompt on EACH phone when it appears.\n"
+    );
+    await acceptRelationshipProposalOnEitherSide(sessionA, sessionB);
 
     await Promise.all([
       assertVrcReceived(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`),
       assertVrcReceived(sessionB, `${IDENTITY_A.firstName} ${IDENTITY_A.lastName}`),
     ]);
 
-    // The culminating check: each contact must show Witnessed, plus Secure
-    // Exchange UNLESS that side already reported a hardware-verification
-    // warning above — this test proves the exchange flow, not that a given
-    // physical device's attestation root cert is still within its validity
-    // window (outside our control; see docs/HARDWARE_ATTESTATION_FLOW.md
-    // "Known limitations" #5).
+    // The crypto gates, from Android's run-scoped logcat (covers both
+    // directions of the exchange; iOS has no logcat path).
     await Promise.all([
-      assertContactShields(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`, 240000, {
-        requireSecureExchange: attestationA !== "warning",
-      }),
-      assertContactShields(sessionB, `${IDENTITY_A.firstName} ${IDENTITY_A.lastName}`, 240000, {
-        requireSecureExchange: attestationB !== "warning",
-      }),
+      assertTrustTaskExchangeMarkers(sessionA, 120000),
+      assertTrustTaskExchangeMarkers(sessionB, 120000),
     ]);
+    await Promise.all([
+      assertWitnessCeremonyMarkers(sessionA, 180000),
+      assertWitnessCeremonyMarkers(sessionB, 180000),
+    ]);
+    await Promise.all([
+      assertHardwareEvidenceMarker(sessionA),
+      assertHardwareEvidenceMarker(sessionB),
+    ]);
+
+    // Step 7: each wallet verifies the peer's shared bundle before the
+    // Witnessed badge lights — gate the markers, then the badge itself.
+    await Promise.all([
+      assertWitnessShareMarkers(sessionA),
+      assertWitnessShareMarkers(sessionB),
+    ]);
+    await assertContactShields(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`, 120000, {
+      requireSecureExchange: false,
+    });
+    await assertContactShields(sessionB, `${IDENTITY_A.firstName} ${IDENTITY_A.lastName}`, 120000, {
+      requireSecureExchange: false,
+    });
 
     printSuccess(name);
     process.exitCode = 0;

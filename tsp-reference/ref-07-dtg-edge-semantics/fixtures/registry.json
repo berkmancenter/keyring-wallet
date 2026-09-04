@@ -1,0 +1,11 @@
+{
+  "description": "The out-of-band context the glossary's conditions (c) and (d) require a verifier to consult: which DIDs hold VMCs from which C-DID, and which VTCs are recognized as trust anchors in which VTN. Pairwise did:peer identifiers deliberately have no rows here — that is what pairwise means.",
+  "vmcs": {
+    "did:web:community.example:members:alice": { "issuerCDid": "did:web:community.example" },
+    "did:web:community.example:members:bob": { "issuerCDid": "did:web:community.example" },
+    "did:web:kernel.example:maintainers:mickey": { "issuerCDid": "did:web:kernel.example" }
+  },
+  "vtnTrustAnchors": {
+    "vtn:demo": ["did:web:community.example", "did:web:kernel.example"]
+  }
+}

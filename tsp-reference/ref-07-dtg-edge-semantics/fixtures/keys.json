@@ -1,0 +1,13 @@
+{
+  "description": "Ed25519 public keys (hex) for the SYNTHETIC fixtures, one per verificationMethod. Test keys: seeds are sha256(\"ref-07:\" + verificationMethod) — deterministic, not secret. The captured fixture is verified at capture time by Credo instead (see its captureMeta).",
+  "publicKeys": {
+    "did:peer:2.Ez6LSbysKZAliceToBob11111111111111111111111111#key-1": "f00c8f115e640f08c681b3d861f32b46b0905efe9154f89af69ddacc164eb1ff",
+    "did:peer:2.Ez6LSpSrLxnBobToAlice1111111111111111111111111#key-1": "28d3ea22331fc1f6e32a8b49c422fa5afa34f330589c24fec87e447d01d5263e",
+    "did:web:community.example:members:alice#key-1": "2aa48f8e509cbbe526e523ad1943a9acdd6cb620d3575691af9386ae9585e3a5",
+    "did:web:community.example:members:bob#key-1": "1059740153d627f6adb8065f25e143d0d3bdb268e6018c1c448e526cf2f2a470",
+    "did:web:kernel.example:maintainers:mickey#key-1": "bef9ce2b309e893f38e6116460956c3cb6bbe6d2d84b59e12d84eccf1ebf009e",
+    "did:peer:2.Ez6LSwPrivWalletToMickey1111111111111111111111#key-1": "94f42cdbee44a3bac8d0e4244035d1f1d7327a8628afc12aa0cad0071273a20f",
+    "did:peer:2.Ez6LSbysKZAliceReused111111111111111111111111#key-1": "7d263c0dc93f81a02a5e2c8450563526c9404991b4fe1d6c743f2b44bcab376c",
+    "did:peer:2.Ez6LSmigBobToAliceM11111111111111111111111111#key-1": "424ce35b06760861020dcfbd6e3db77ae73a64934279dccfd6ad71b590cfc6cc"
+  }
+}
