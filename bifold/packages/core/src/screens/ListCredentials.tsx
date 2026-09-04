@@ -91,25 +91,27 @@ const ListCredentials: React.FC = () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cred = credential as any
 
-      // For W3C credentials - check if it has a 'credential' property (duck typing)
-      // This handles both W3cCredentialRecord instances and plain objects
-      if (cred.credential && typeof cred.credential === 'object') {
-        const credentialData = cred.credential
-
-        // Check the type property on the credential
-        if ('type' in credentialData) {
-          const typeValue = credentialData.type
-          const types = Array.isArray(typeValue) ? typeValue : [typeValue]
-
-          // Check for credential types that should be hidden from wallet
-          // - DTGCredential: Relationship credentials (shown in Contacts)
-          // - RelationshipCredential: Peer VRC exchanges (shown in Contacts)
-          // - RCardTemplate: Self-issued business card (internal use only)
-          // - RelationshipCard: Exchanged contact card (feeds Contacts display)
-          if (isVrcModuleCredential(types)) {
-            return true
-          }
-        }
+      // Credential types that must never appear in the wallet list:
+      // - DTGCredential: Relationship credentials (shown in Contacts)
+      // - RelationshipCredential: Peer VRC exchanges (shown in Contacts)
+      // - WitnessCredential: VWCs (surface as the witness badge on a contact)
+      // - RCardTemplate: Self-issued business card (internal use only)
+      // - RelationshipCard: Exchanged contact card (feeds Contacts display)
+      //
+      // The type has to be read from three different places, which is why this
+      // used to leak. Only the v1 shape was handled — `cred.credential` as an
+      // object — but every VRC, VWC and R-Card is VCDM 2.0 and therefore a
+      // W3cV2CredentialRecord, where `credential` is a PRIVATE SETTER and so
+      // reads back as undefined. The guard silently failed and all of them
+      // showed up in the wallet (device 2026-09-01). V2 exposes the credential
+      // as `firstCredential`, and both record types carry a `types` tag.
+      const typeSources: unknown[] = [
+        cred.credential && typeof cred.credential === 'object' ? cred.credential : undefined,
+        cred.firstCredential,
+        typeof cred.getTags === 'function' ? cred.getTags()?.types : undefined,
+      ]
+      if (typeSources.some((source) => source && isVrcModuleCredential(source))) {
+        return true
       }
 
       // For CredentialExchangeRecord - hide issuer role records
@@ -263,6 +265,13 @@ const ListCredentials: React.FC = () => {
     <View>
       <FlatList
         style={{ backgroundColor: ColorPalette.brand.primaryBackground }}
+        // flexGrow lets ListEmptyComponent fill the viewport. The empty state
+        // asks to be centred (flex: 1 + justifyContent: 'center'), but flex: 1
+        // collapses to the content's own height inside a FlatList whose content
+        // container does not grow — so it rendered top-anchored instead of
+        // centred, unlike Contacts, which has always passed flexGrow here.
+        // Latent until the wallet list legitimately became empty (2026-09-01).
+        contentContainerStyle={{ flexGrow: 1 }}
         data={credentials.sort((a, b) => new Date(b.createdAt).valueOf() - new Date(a.createdAt).valueOf())}
         keyExtractor={(credential) => credential.id}
         renderItem={({ item: credential, index }) => {
