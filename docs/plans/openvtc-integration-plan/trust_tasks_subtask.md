@@ -1104,19 +1104,54 @@ holder-bound `vp_token`. Two non-obvious constraints found and fixed along the
 way: a presentation's `credentialSubject.id` must be a did:key the VTA itself
 manages (`resolve_holder_keys`), and a DCQL query's `claims` must be
 non-empty (`vta-vault`'s consent record is default-deny on an empty reveal
-set). Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md). **Not done, and
-blocked, not standalone**: "the reference adapter" the parent plan's own
-"done when" names is `ref-07-credo-adapter`'s raw-key implementation (§4.4,
-Phase D) — this step's remaining item cannot be built ahead of that rung,
-which extracts the `SigningKey`/`KeyAgreement`/`VidResolver` ports no
-`tsp-core` package defines yet anywhere in this codebase. Reasoning:
-[`2026-09-02-bam.md`](./2026-09-02-bam.md).
+set). Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
+**The wallet itself now answers a `credential-exchange/query` — the happy
+path, in the app** (Keyring, `feat/trust-tasks-vta-credential-exchange`):
+`ceremony.ts`'s existing dispatch table (the same one `propose`/`issue`/
+`witnessShare` already ride) gains a handler that checks the query's DCQL
+against the wallet's stored credentials (Credo's `DcqlService`, the same
+primitive `modules/openid`'s holder-side OID4VP path already uses, called
+directly with the bare query — this Trust Task carries no OID4VP request
+envelope to unwrap), surfaces a consent prompt
+(`CredentialExchangeQueryModal`, mirroring `RelationshipProposalModal`'s
+existing pattern exactly) when satisfiable, and on Share builds a
+challenge-bound VP (`buildChallengeBoundVp`, the same construction the
+witness ceremony already uses for its own VP) and sends
+`credential-exchange/present` on the query's thread. `pending/*` (defer for
+later approval) is out of scope for this slice. Reprioritized ahead of the
+reference-adapter item below because it produces something a person can
+verify — a real consent prompt, a real presentation — where the reference
+adapter is a cross-implementation correctness check with no user-facing
+surface. Reasoning, including why the reference-adapter item is not actually
+blocked: [`2026-09-04-bam.md`](./2026-09-04-bam.md).
+
+Verified: `@bifold/core`'s trust-tasks suite (10/10 suites, 78/78 tests,
+including a new `ceremonyCredentialExchange.test.ts`), root `yarn typecheck`.
+**Not verified**: a live device/emulator run — `yarn e2e:credential-exchange-query`
+(`e2e/run-credential-exchange-query.js`) is written to this branch's existing
+conventions but has not been run against real hardware (no Android
+device/emulator was available when it was written); see
+[`2026-09-04-bam.md`](./2026-09-04-bam.md) for what's real vs. asserted-but-untested.
+
+**`ref-07-credo-adapter`'s reference-adapter fixture item remains open and
+tracked, correctly described as a small unblocked cross-check, not a blocked
+one**: `ae14e04`'s finding (Askar can't drive `vti-tsp-js`/`hpke-js`'s
+HPKE-Auth directly) was resolved the same session by `ref-09`'s
+`KeyAgreement.agree()` port — already shipped in `@bifold/credo-tsp-adapter`
+(PR #27) — so re-running `ref-08-credential-exchange`'s fixture suite through
+that port-based adapter has nothing left blocking it. Not done in this
+slice; correctly deprioritized behind the user-facing work above, not
+abandoned. See [`2026-09-04-bam.md`](./2026-09-04-bam.md).
 
 **Done when:** a DCQL query from `vta-service` is received, deferred, surfaced for
 approval, approved, and answered with a `vp_token` that `vta-service` accepts
-— **met** — and the same fixtures pass in Node against the reference adapter
-— **blocked on Phase D** (`ref-07-credo-adapter`, below). Interop evidence for
-parent §7.9 falls out of this.
+— **met at the reference-implementation level** (Node scripts against a real
+`vta-service`, above); the happy path (query → consent → present, no defer)
+now also runs through the actual wallet — **built, unit-tested, device
+verification pending** (above); and the same fixtures pass in Node against
+the reference adapter — **open, unblocked, tracked** (`ref-07-credo-adapter`,
+below). Interop evidence for parent §7.9 falls out of the reference-level work.
 
 ### 5. Implement layer C — `witness/*`
 
