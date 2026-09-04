@@ -88,7 +88,8 @@
     "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
     "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks",
     "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter",
-    "@openvtc/vti-tsp-js@npm:0.1.0": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch"
+    "@openvtc/vti-tsp-js@npm:0.1.0": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch",
+    "@credo-ts/core@npm:0.6.3": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {
