@@ -105,12 +105,23 @@ export async function startVerifier(port = Number(process.env.VERIFIER_PORT || 9
       };
     },
 
-    /** Poll until the wallet's connection to this invitation completes. */
+    /**
+     * Poll until the wallet's connection to this invitation completes.
+     * `returnWhenIsConnected` has its OWN internal timeout (Credo's default:
+     * 20s — DidCommConnectionService.returnWhenIsConnected), independent of
+     * this function's own `timeoutMs` poll loop; a real mediator round trip
+     * through a live cloudflared tunnel can exceed that default under load,
+     * so it must be passed through explicitly rather than left to default.
+     */
     async waitForConnection(invitationId, timeoutMs = 60000) {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         const [pending] = await agent.modules.didcomm.connections.findAllByOutOfBandId(invitationId);
-        if (pending) return agent.modules.didcomm.connections.returnWhenIsConnected(pending.id);
+        if (pending) {
+          return agent.modules.didcomm.connections.returnWhenIsConnected(pending.id, {
+            timeoutMs: Math.max(deadline - Date.now(), 1000),
+          });
+        }
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
       throw new Error("timed out waiting for the wallet to connect");

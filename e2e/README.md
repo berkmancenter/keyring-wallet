@@ -514,7 +514,7 @@ mediator exists to point it at), ports 8180/8181 (chosen to avoid
 plaintext seed storage (dev-only, matches upstream's own `"plaintext"`
 backend warning — never use this shape for anything real).
 
-## Credential-exchange query, in the app (`yarn e2e:credential-exchange-query`) — UNVERIFIED
+## Credential-exchange query, in the app (`yarn e2e:credential-exchange-query`)
 
 `run-credential-exchange-query.js` drives the first in-app (not Node-script-
 only) proof of `trust_tasks_subtask.md` §9 step 4's happy path: a verifier
@@ -527,13 +527,14 @@ real, stored credential to be queried for; a minimal verifier agent
 connects to Alice the same way Bob did (a plain OOB paste) and sends the
 query directly.
 
-**Not run against a real device or emulator as of this writing** — written to
-the same conventions as the runners above, ready for the next session with
-Android hardware available. See
-`docs/plans/openvtc-integration-plan/2026-09-04-bam.md`.
+**Passes clean** on a Pixel 8 API 33 emulator + a physical device. Getting
+there found and fixed six real bugs (one a genuine upstream bug in
+`@credo-ts/core`'s `DcqlService`); see
+`docs/spikes/credential-exchange-query-e2e-findings.md`.
 
 ```
 ANDROID_AVD2=<second-avd> yarn e2e:credential-exchange-query
+ANDROID_UDID2=<second-device-udid> yarn e2e:credential-exchange-query
 ```
 
 ## Troubleshooting

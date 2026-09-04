@@ -8,6 +8,7 @@ import {
   existsTestId,
   scrollToTestId,
   sleep,
+  tapText,
   tapTestId,
   tapTestIdReliable,
   waitForTestId,
@@ -1051,6 +1052,26 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
   throw new Error(
     `${driver.e2ePlatform}: contact "${peerName}" did not appear within ${timeout}ms`
   );
+}
+
+/**
+ * `assertVrcReceived`'s text match isn't scoped to the Contacts list — the
+ * moment the VRC lands, Chat.tsx auto-pushes the peer's chat screen (header
+ * text: the peer's own name) on top of the Contacts tab with a "Relationship
+ * confirmed" overlay, and `byTextContains(driver, peerName)` matches that
+ * header just as well as the contacts-list row. So the assertion can return
+ * successfully while the device is actually sitting on this overlay, not the
+ * Contacts tab — invisible to callers who only need "the VRC arrived" (every
+ * existing flow), but a real problem for one that needs to drive the UI
+ * further afterward. Dismiss it (its "View contacts" button has no testID,
+ * only an accessibilityLabel — byText/tapText is the only way to reach it)
+ * before any such follow-on navigation. A no-op if the overlay isn't showing.
+ */
+export async function dismissVrcConfirmationOverlayIfPresent(driver, timeout = 5000) {
+  if (await byTextContains(driver, "Relationship confirmed").isExisting()) {
+    await tapText(driver, "View contacts", timeout);
+    console.log(`[e2e] ${driver.e2ePlatform}: dismissed the VRC confirmation overlay`);
+  }
 }
 
 /**
