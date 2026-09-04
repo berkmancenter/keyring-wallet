@@ -20,6 +20,7 @@ import {
   acceptInvitationViaPaste,
   acceptRelationshipProposalOnEitherSide,
   assertTrustTaskExchangeMarkers,
+  assertTspCarriageMarkers,
   assertVrcReceived,
   assertContactShields,
   assertWitnessCeremonyMarkers,
@@ -27,6 +28,7 @@ import {
   completeOnboarding,
   connectToWitness,
   enableHardwareAttestation,
+  enableTspCarriage,
   showRelationshipInvitation,
 } from "./flows.js";
 import { startWitness } from "./witness.js";
@@ -135,6 +137,12 @@ async function assertHardwareEvidenceMarker(driver, timeout = 120000) {
  *   iOS udid isn't reachable via `adb logcat`).
  * @param {string} opts.name - banner name, matching the npm script that invoked this
  *   (e.g. "vrc-exchange:witnessed:devices" or "vrc-exchange:witnessed:android-only").
+ * @param {boolean} [opts.useTspCarriage] - carry the wallet-to-wallet Trust
+ *   Task documents (discovery/propose/issue) over the real TSP envelope
+ *   stack instead of the default DIDComm-v1 binding. Wallet-to-witness
+ *   communication (session-request/challenge/VP) is a SEPARATE protocol —
+ *   plain DIDComm basic messages (witnessed-vrc-manager.ts) — and is
+ *   unaffected by this flag either way.
  */
 export async function runWitnessedExchange({
   detectDevices,
@@ -142,6 +150,7 @@ export async function runWitnessedExchange({
   createSessionB,
   dumpWitnessLogs: dumpLogs,
   name,
+  useTspCarriage = false,
 }) {
   let sessionA, sessionB, witness;
   try {
@@ -176,6 +185,16 @@ export async function runWitnessedExchange({
       enableHardwareAttestation(sessionB),
     ]);
 
+    // Both sides need the flag before either connects to anyone: it restarts
+    // the app (required for the inbound TSP handler to register), and doing
+    // that BEFORE the witness connection avoids any question of whether a
+    // restart disrupts in-flight witness-protocol state (it doesn't need to
+    // — DIDComm connections persist across a restart — but there's no
+    // reason to find out under an attended run instead of before one starts).
+    if (useTspCarriage) {
+      await Promise.all([enableTspCarriage(sessionA), enableTspCarriage(sessionB)]);
+    }
+
     // Both wallets connect to the witness FIRST — if either isn't connected when
     // the exchange starts, the 15s session-challenge timeout fires and the
     // exchange silently falls back to direct (no VWC). Confirm BOTH connections
@@ -209,6 +228,12 @@ export async function runWitnessedExchange({
       assertTrustTaskExchangeMarkers(sessionA, 120000),
       assertTrustTaskExchangeMarkers(sessionB, 120000),
     ]);
+    if (useTspCarriage) {
+      await Promise.all([
+        assertTspCarriageMarkers(sessionA),
+        assertTspCarriageMarkers(sessionB),
+      ]);
+    }
     await Promise.all([
       assertWitnessCeremonyMarkers(sessionA, 180000),
       assertWitnessCeremonyMarkers(sessionB, 180000),

@@ -46,6 +46,7 @@
     "e2e:vrc:witnessed": "cd e2e && npm run vrc-exchange:witnessed",
     "e2e:vrc:witnessed:devices": "cd e2e && npm run vrc-exchange:witnessed:devices",
     "e2e:vrc:witnessed:android-only": "cd e2e && npm run vrc-exchange:witnessed:android-only",
+    "e2e:vrc:witnessed:tsp:android-only": "cd e2e && npm run vrc-exchange:witnessed:tsp:android-only",
     "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator"
   },
   "devDependencies": {

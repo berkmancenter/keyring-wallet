@@ -1,8 +1,10 @@
 import {
   acceptSystemAlertIfPresent,
+  collapseNotificationShadeIfOpen,
   byTestId,
   byText,
   byTextContains,
+  deviceTag,
   existsTestId,
   scrollToTestId,
   sleep,
@@ -217,7 +219,16 @@ export async function restartApp(driver) {
   await driver.terminateApp(APP_ID).catch(() => {});
   await sleep(2000);
   await driver.activateApp(APP_ID);
-  await sleep(5000);
+  // A fixed sleep here raced a slow cold JS boot on a real device (observed:
+  // the restart right after enableTspCarriage — a heavier bundle, freshly
+  // Metro-cache-reset — took long enough that unlockIfLocked's instant,
+  // non-polling existence check ran before the PIN screen had even mounted,
+  // silently missing it; the caller then searched for post-unlock UI on a
+  // screen that was, moments later, still the lock screen). Wait for the
+  // PIN screen to actually appear (or definitively not, within a generous
+  // budget) before deciding whether to unlock — existsTestId's own polling,
+  // not a fixed delay, absorbs however long this particular boot takes.
+  await existsTestId(driver, "EnterPIN", 15000);
   await unlockIfLocked(driver);
   await dismissTourIfPresent(driver);
 }
@@ -350,14 +361,33 @@ export async function enableTspCarriage(driver) {
     // Developer mode was already enabled in a prior session (persisted store).
     await tapTestId(driver, "DeveloperOptions", 15000);
   } else {
+    // useDeveloperMode's counter (bifold/packages/core/src/hooks/developer-
+    // mode.ts) has no time-window reset — any 11 taps that land trip it,
+    // however spaced out. So a plain "click 11 times" loop assumes every
+    // click lands, but real devices under load occasionally drop a tap
+    // silently (the same class of flake tapTestIdReliable exists to work
+    // around elsewhere in this file) — losing even one of the 11 here
+    // leaves the counter one short with no visible symptom until the
+    // ToggleDeveloper wait afterward times out. Fix: overshoot the tap
+    // count and poll for the Developer screen after each one, so a few
+    // dropped taps just cost a few extra clicks instead of failing the run.
     const versionEl = await scrollToTestId(driver, "Version");
-    for (let i = 0; i < 11; i++) {
-      await versionEl.click();
+    const maxTaps = 20;
+    let reachedDeveloperScreen = false;
+    for (let i = 0; i < maxTaps; i++) {
+      await versionEl.click().catch(() => {});
+      if (await existsTestId(driver, "ToggleDeveloper", 300)) {
+        reachedDeveloperScreen = true;
+        console.log(`[e2e] ${deviceTag(driver)}: reached Developer screen after ${i + 1} Version taps`);
+        break;
+      }
       await sleep(150);
     }
     // Settings navigates to the Developer screen itself on the trip — wait
     // for a Developer-screen-only element, not a Settings row.
-    await waitForTestId(driver, "ToggleDeveloper", 5000);
+    if (!reachedDeveloperScreen) {
+      await waitForTestId(driver, "ToggleDeveloper", 5000);
+    }
   }
 
   // Near the bottom of the Developer screen's long ScrollView — same
@@ -394,6 +424,10 @@ async function openQrSheet(driver) {
   // every time this is called, not just once per showRelationshipInvitation
   // retry loop iteration.
   await unlockIfLocked(driver);
+  // Same idea for a real notification pulling the shade down over the app
+  // mid-run (observed on a real device: a "QR Code" click failure whose
+  // page-source dump showed only status-bar content, no app UI at all).
+  await collapseNotificationShadeIfOpen(driver);
   if (await qrSheetIsOpen(driver, 1500)) return;
   if (await existsTestId(driver, "InviteContact", 3000)) {
     await tapTestId(driver, "InviteContact");
