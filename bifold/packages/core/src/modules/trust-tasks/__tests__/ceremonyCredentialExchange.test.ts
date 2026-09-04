@@ -15,7 +15,7 @@
  * `w3cCredentials`.
  */
 import { DidCommMessageSender, DidCommMessageHandlerRegistry } from '@credo-ts/didcomm'
-import { InjectionSymbols, EventEmitter, DcqlService } from '@credo-ts/core'
+import { InjectionSymbols, EventEmitter, DcqlService, ClaimFormat } from '@credo-ts/core'
 import * as credentialExchangePresent from '@openvtc/trust-tasks/credential-exchange/present/0.1/payload'
 import * as credentialExchangeQuery from '@openvtc/trust-tasks/credential-exchange/query/0.1/payload'
 
@@ -23,6 +23,15 @@ import { respondToCredentialExchangeQuery, setupTrustTasksInbound } from '../cer
 import { credentialExchangeStore } from '../credentialExchangeStore'
 import { TrustTaskMessage } from '../messages/TrustTaskMessage'
 import { RelationshipDidRepository } from '../../vrc/repositories/RelationshipDidRepository'
+
+// DCQL `type_values` matches against a stored credential's JSON-LD EXPANDED
+// type IRIs (Credo's `expandedTypes` tag), not its raw compact `type` array —
+// see ceremony.ts's `matchDcqlQuery` doc comment.
+const EXPANDED_TYPES = [
+  'https://www.w3.org/2018/credentials#VerifiableCredential',
+  'https://example.org/dtg#DTGCredential',
+  'https://example.org/dtg#RelationshipCredential',
+]
 
 const STORED_CREDENTIAL_JSON = {
   '@context': ['https://www.w3.org/ns/credentials/v2'],
@@ -132,9 +141,21 @@ function makeFakeAgent(options: { myDid: string; theirDid: string; canBeSatisfie
   })
 
   const signPresentation = jest.fn(async () => SIGNED_VP)
-  const selectCredentialsForDcqlRequest = jest.fn(() => ({
-    cred1: { credentialRecord: { firstCredential: STORED_CREDENTIAL_JSON } },
-  }))
+  // matchDcqlQuery selects the concrete record directly against
+  // w3cCredentials.getAll() (not Credo's openid4vc holder API — see that
+  // function's doc comment for why) — only returned when the query is
+  // satisfiable, matching how the real DcqlService/stored-record pairing
+  // behaves.
+  const getAll = jest.fn(async () =>
+    options.canBeSatisfied
+      ? [
+          {
+            firstCredential: { ...STORED_CREDENTIAL_JSON, claimFormat: ClaimFormat.LdpVc },
+            getTags: () => ({ expandedTypes: EXPANDED_TYPES }),
+          },
+        ]
+      : []
+  )
 
   const agent = {
     context: {},
@@ -147,10 +168,7 @@ function makeFakeAgent(options: { myDid: string; theirDid: string; canBeSatisfie
     },
     w3cCredentials: {
       signPresentation,
-      getAll: jest.fn(async () => []),
-    },
-    openid4vc: {
-      holder: { selectCredentialsForDcqlRequest },
+      getAll,
     },
     modules: {
       didcomm: {
@@ -170,7 +188,7 @@ function makeFakeAgent(options: { myDid: string; theirDid: string; canBeSatisfie
     sentMessages,
     connectionId,
     getCredentialsForRequest,
-    selectCredentialsForDcqlRequest,
+    getAll,
     signPresentation,
     capturedHandlerRef: () => capturedHandler,
   }
@@ -193,7 +211,11 @@ const inboundQuery = (id = 'qqqq1111-1111-4111-8111-111111111111') => ({
   issuer: 'did:peer:4zzz',
   recipient: 'did:peer:4aaa',
   issuedAt: new Date().toISOString(),
-  payload: { dcql_query: { credentials: [{ id: 'cred1', format: 'ldp_vc' }] }, nonce: 'server-nonce', purpose: 'Prove membership' },
+  payload: {
+    dcql_query: { credentials: [{ id: 'cred1', format: 'ldp_vc', meta: { type_values: [EXPANDED_TYPES] } }] },
+    nonce: 'server-nonce',
+    purpose: 'Prove membership',
+  },
 })
 
 afterEach(() => {

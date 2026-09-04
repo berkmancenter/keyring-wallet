@@ -1380,7 +1380,16 @@ async function handleInboundCredentialExchangeQuery(
   }
 
   const payload = (document as { payload: credentialExchangeQuery.CredentialExchangeQueryPayload }).payload
-  const match = await matchDcqlQuery(agent, payload.dcql_query as never)
+  let match: Awaited<ReturnType<typeof matchDcqlQuery>>
+  try {
+    match = await matchDcqlQuery(agent, payload.dcql_query as never)
+  } catch (e) {
+    // A DCQL-matching failure should never look like a silent, opaque
+    // Credo-level "Error handling message" with no explanation — log it
+    // clearly through this module's own conventions instead.
+    logger.error(`${LOG_PREFIX} credential-exchange query matching failed: ${(e as Error).message}`)
+    return
+  }
   if (!match) {
     logger.info(
       `${LOG_PREFIX} credential-exchange query has no satisfying credential — no prompt shown (query ${document.id})`
@@ -1401,13 +1410,22 @@ async function handleInboundCredentialExchangeQuery(
 }
 
 /**
- * The wallet's own credential matching a DCQL query, if any — a thin wrapper
- * over Credo's `DcqlService`, which needs only the bare DCQL query object
- * (no OID4VP authorization-request envelope; this Trust Task carries the
- * query verbatim, so none exists). Auto-selects via the same holder API
- * `resolverProof.tsx`'s OID4VP path uses when the user hasn't picked among
- * several candidates — our happy path assumes at most one relevant
- * credential, so auto-select is the right default here too.
+ * The wallet's own credential matching a DCQL query, if any. Confirms
+ * satisfiability via Credo's `DcqlService` (needs only the bare DCQL query
+ * object — no OID4VP authorization-request envelope; this Trust Task
+ * carries the query verbatim, so none exists), then selects the concrete
+ * record directly against `agent.w3cCredentials` rather than through
+ * Credo's `openid4vc` module's holder-selection helper: that module is not
+ * reliably registered on `agent.modules` in this app's agent configuration
+ * (confirmed empirically — `agent.modules.openid4vc` is `undefined` at
+ * runtime despite being passed into the agent's module config), and this
+ * flow has no other reason to depend on it — it exists for the OID4VP
+ * request/response pipeline this exchange deliberately doesn't use (see
+ * `respondToCredentialExchangeQuery`'s own doc comment). Our happy path
+ * assumes at most one relevant credential, so the first `ldp_vc` record
+ * whose `expandedTypes` tag is a superset of one of the query's
+ * `type_values` entries (DCQL's own match rule — order-independent, extra
+ * types allowed) is the match.
  */
 async function matchDcqlQuery(
   agent: Agent,
@@ -1417,12 +1435,23 @@ async function matchDcqlQuery(
   const queryResult = await dcqlService.getCredentialsForRequest(agent.context, dcqlQuery as never)
   if (!queryResult.can_be_satisfied) return undefined
 
-  const selected = agent.openid4vc.holder.selectCredentialsForDcqlRequest(queryResult)
-  const firstMatch = Object.values(selected)[0] as { credentialRecord: W3cCredentialRecord } | undefined
-  const credentialRecord = firstMatch?.credentialRecord
-  if (!credentialRecord || !('firstCredential' in credentialRecord)) return undefined
+  const typeValueSets = (
+    (dcqlQuery as { credentials?: { format?: string; meta?: { type_values?: string[][] } }[] }).credentials ?? []
+  )
+    .filter((c) => c.format === 'ldp_vc')
+    .flatMap((c) => c.meta?.type_values ?? [])
+  if (typeValueSets.length === 0) return undefined
 
-  return { credentialJson: JsonTransformer.toJSON(credentialRecord.firstCredential) as Record<string, unknown> }
+  const allCredentials = await agent.w3cCredentials.getAll()
+  for (const record of allCredentials) {
+    if (record.firstCredential.claimFormat !== ClaimFormat.LdpVc) continue
+    const expandedTypes = (record.getTags() as { expandedTypes?: string[] }).expandedTypes ?? []
+    const isMatch = typeValueSets.some((types) => types.every((t) => expandedTypes.includes(t)))
+    if (isMatch) {
+      return { credentialJson: JsonTransformer.toJSON(record.firstCredential) as Record<string, unknown> }
+    }
+  }
+  return undefined
 }
 
 /**
@@ -1472,11 +1501,21 @@ export async function respondToCredentialExchangeQuery(
   const didDocument = await agent.dids.resolveDidDocument(connection.did)
   const embeddedId = (entries?: unknown[]) =>
     (entries ?? []).find((entry) => typeof entry === 'object' && entry !== null) as { id: string } | undefined
-  const verificationMethodId =
+  const rawVerificationMethodId =
     didDocument.verificationMethod?.[0]?.id ??
     embeddedId(didDocument.assertionMethod)?.id ??
     embeddedId(didDocument.authentication)?.id
-  if (!verificationMethodId) throw new Error(`no verification method on ${connection.did}`)
+  if (!rawVerificationMethodId) throw new Error(`no verification method on ${connection.did}`)
+  // did:peer numalgo 4 documents (connection.did here) embed a RELATIVE
+  // verification method id (e.g. "#key-1") — unlike the did:peer:0 numalgo 0
+  // relationship DIDs this file signs under elsewhere, whose resolved id is
+  // already fully qualified. Confirmed live: signing under the bare
+  // fragment silently never completed (no error, no signature) rather than
+  // throwing, so this needs qualifying before use as a verificationMethod
+  // reference.
+  const verificationMethodId = rawVerificationMethodId.startsWith('#')
+    ? `${connection.did}${rawVerificationMethodId}`
+    : rawVerificationMethodId
 
   const vp = await buildChallengeBoundVp(agent, match.credentialJson, verificationMethodId, payload.nonce, connection.theirDid)
 
