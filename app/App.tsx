@@ -20,6 +20,7 @@ import { useNavigationContainerRef } from '@react-navigation/native'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isTablet } from 'react-native-device-info'
+import { KeyboardProvider } from 'react-native-keyboard-controller'
 import Orientation from 'react-native-orientation-locker'
 import SplashScreen from 'react-native-splash-screen'
 import Toast from 'react-native-toast-message'
@@ -84,9 +85,20 @@ const App = () => {
                       onClose={() => setSurveyVisible(false)}
                     />
                     <TourProvider tours={tours} overlayColor={'black'} overlayOpacity={0.7}>
-                      <ErrorAlertProvider enableReport>
-                        <Root />
-                      </ErrorAlertProvider>
+                      {/*
+                       * KeyboardProvider is required by react-native-keyboard-controller,
+                       * which ScreenWrapper's keyboardActive branch reaches through
+                       * KeyboardView/KeyboardAwareScrollView. Keyring renders its own root
+                       * instead of @bifold/core's App, so it must mount the provider itself —
+                       * without it every keyboardActive screen (PINEnter, PINChange, ...) logged
+                       * "Couldn't find real values for KeyboardContext" and ran with the
+                       * library's degraded fallback (device logs 2026-08-26).
+                       */}
+                      <KeyboardProvider statusBarTranslucent={true} navigationBarTranslucent={true}>
+                        <ErrorAlertProvider enableReport>
+                          <Root />
+                        </ErrorAlertProvider>
+                      </KeyboardProvider>
                     </TourProvider>
                     <Toast topOffset={15} config={toastConfig} />
                   </NetworkProvider>

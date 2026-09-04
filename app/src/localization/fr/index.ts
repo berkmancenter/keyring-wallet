@@ -191,6 +191,7 @@ const translation = {
     "AttestationSupport": "Soutien d'attestation",
     "EnableProxy": "Enable proxy (FR)",
     "EnableAppToAppPersonFlow": "App-to-app Person flow (FR)",
+    "EnableTspCarriage": "Enable TSP envelope carriage (FR)",
   },
   "Tips": {
     "Header": "Conseils",

@@ -1,0 +1,15 @@
+# engine: hermes for RN 0.81.5
+# webcrypto subtle: undefined
+pk-g2: 8b9a051b77956975dd6ebca347ee6108857fe4e58ea52170dd2b7f62d67254dbaaea9f870c617e0b7b825d1c4b5ddc8b0c397d4f1b25ecd817ed32a05477c27b9c2933b2cd3b1517810d62789298d744b04657a20907145238d97a486bd9f9f1
+hash-to-g1: 936762f13786219f5425da33616acecc7ad794d7623c0f2951a05ac237db3ea4efa0274a0dfd99d7164d4164645aba32
+sig-g1: b00dc49211810fbcd687508335abd6c81224ac53bbe88076633a4852ca277ea3c0b209e3da052de592a3c052b330d39b
+verify: true forged-key-verify: false
+pairing-bilinear: true
+# transcript-sha256: 24a48d800e482bf49a37e78cf3d395629d6041c0031bc8b6dc32000f72d40cce
+RESULT: ALL PASS
+# timing g1-mul: 4.6 ms/op (n=5)
+# timing g2-mul: 8.0 ms/op (n=5)
+# timing hash-to-g1: 22.6 ms/op (n=5)
+# timing sign: 36.4 ms/op (n=5)
+# timing pairing: 96.7 ms/op (n=3)
+# timing verify(2 pairings): 146.0 ms/op (n=3)

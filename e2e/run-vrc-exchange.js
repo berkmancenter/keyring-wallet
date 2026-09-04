@@ -20,8 +20,9 @@ import {
   dumpSource,
 } from "./lib/driver.js";
 import {
-  acceptCredentialOfferFromChat,
   acceptInvitationViaPaste,
+  acceptRelationshipProposalOnEitherSide,
+  assertTrustTaskExchangeMarkers,
   assertVrcReceived,
   completeOnboarding,
   showRelationshipInvitation,
@@ -65,16 +66,21 @@ try {
   const invitationUrl = await showRelationshipInvitation(a);
   await acceptInvitationViaPaste(b, invitationUrl);
 
-  // Bidirectional VRC: each wallet issues to the other, so BOTH get a credential
-  // offer in the contact chat that must be accepted manually.
-  await Promise.all([
-    acceptCredentialOfferFromChat(a),
-    acceptCredentialOfferFromChat(b),
-  ]);
+  // v4 pairs: consent is the RELATIONSHIP PROPOSAL — one side gets the
+  // "wants to form a relationship" prompt; on Accept both signed VRCs flow
+  // automatically as trust tasks (no per-credential offers to accept).
+  await acceptRelationshipProposalOnEitherSide(a, b);
 
   await Promise.all([
     assertVrcReceived(a, "Bob Baker"),
     assertVrcReceived(b, "Alice Anderson"),
+  ]);
+
+  // v4 pairs also run the Trust Task relationship exchange (propose + issue
+  // shadow legs) — assert its markers from the Android side's logcat.
+  await Promise.all([
+    assertTrustTaskExchangeMarkers(a),
+    assertTrustTaskExchangeMarkers(b),
   ]);
 
   printSuccess("vrc-exchange");

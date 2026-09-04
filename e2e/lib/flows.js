@@ -1,8 +1,10 @@
 import {
   acceptSystemAlertIfPresent,
+  collapseNotificationShadeIfOpen,
   byTestId,
   byText,
   byTextContains,
+  deviceTag,
   existsTestId,
   scrollToTestId,
   sleep,
@@ -115,8 +117,18 @@ export async function completeOnboarding(driver, { firstName, lastName }) {
       await hideKeyboard(driver, last);
       await tapTestId(driver, "RCardSubmit");
       lastAction = "RCardSubmit";
-      // R-Card creation can take a while (key generation + signing)
-      await waitForTestId(driver, "Contacts", 120000);
+      // R-Card creation can take a while (key generation + signing) — and the
+      // app can be watchdog-killed and relaunched mid-creation under CPU
+      // contention (observed with a cold emulator boot running beside the
+      // simulator), landing on the unlock screen. Poll unlock-aware instead
+      // of staring at a screen that will never show Contacts.
+      const rcardDeadline = Date.now() + 120000;
+      for (;;) {
+        if (await existsTestId(driver, "Contacts", 3000)) break;
+        if (Date.now() > rcardDeadline)
+          throw new Error(`${driver.e2ePlatform}: Contacts did not appear within 120000ms after RCardSubmit`);
+        await unlockIfLocked(driver);
+      }
       console.log(`[e2e] ${driver.e2ePlatform}: onboarding complete`);
       return;
     }
@@ -160,7 +172,22 @@ export async function unlockIfLocked(driver) {
   await pinInput.setValue(PIN);
   if (await existsTestId(driver, "Enter", 1500)) {
     await hideKeyboard(driver);
-    await tapTestId(driver, "Enter");
+    // A dropped tap here (same class of flakiness tapTestIdReliable exists
+    // for elsewhere in this file) leaves the wallet locked indefinitely —
+    // verify the PIN screen actually went away, re-tapping if it didn't.
+    // Generous timeout/settle: under heavy host contention (this sandbox
+    // runs the emulators alongside a full, actively-used desktop — real
+    // swap usage observed growing under load) a single webdriver round
+    // trip (e.g. getElementTagName) has been observed to take 10+ seconds.
+    await tapTestIdReliable(driver, "Enter", () => existsTestId(driver, "EnterPIN", 1500).then((v) => !v), {
+      timeout: 90000,
+      attempts: 6,
+      settleMs: 5000,
+    });
+  } else {
+    // Inactivity-lock variant: auto-submits on the final digit — just wait
+    // for the PIN screen to clear.
+    for (let i = 0; i < 10 && (await pinInput.isExisting()); i++) await sleep(500);
   }
   await sleep(3000);
   return true;
@@ -192,7 +219,16 @@ export async function restartApp(driver) {
   await driver.terminateApp(APP_ID).catch(() => {});
   await sleep(2000);
   await driver.activateApp(APP_ID);
-  await sleep(5000);
+  // A fixed sleep here raced a slow cold JS boot on a real device (observed:
+  // the restart right after enableTspCarriage — a heavier bundle, freshly
+  // Metro-cache-reset — took long enough that unlockIfLocked's instant,
+  // non-polling existence check ran before the PIN screen had even mounted,
+  // silently missing it; the caller then searched for post-unlock UI on a
+  // screen that was, moments later, still the lock screen). Wait for the
+  // PIN screen to actually appear (or definitively not, within a generous
+  // budget) before deciding whether to unlock — existsTestId's own polling,
+  // not a fixed delay, absorbs however long this particular boot takes.
+  await existsTestId(driver, "EnterPIN", 15000);
   await unlockIfLocked(driver);
   await dismissTourIfPresent(driver);
 }
@@ -256,6 +292,114 @@ export async function enableHardwareAttestation(driver) {
   await returnToContacts(driver);
 }
 
+/**
+ * Set the wallet's inactivity auto-lock to "Never" (Settings → Lockout,
+ * a normal, always-visible row — not developer-only). The rest of the TSP
+ * flow (QR sheet, invitation, relationship proposal) spans real network
+ * round trips and a second device's own onboarding running concurrently
+ * under CPU contention — easily long enough to exceed the default 5-minute
+ * auto-lock and relock the app mid-flow. Must be called while already on
+ * the Settings screen.
+ */
+async function setAutoLockNever(driver) {
+  await tapTestId(driver, "Lockout", 15000);
+  // Settings is a SectionList (virtualized) — "Never" is the last of 5
+  // inline options and isn't mounted until scrolled into view.
+  let neverEl;
+  for (let i = 0; i < 6; i++) {
+    neverEl = byText(driver, "Never");
+    if ((await neverEl.isExisting()) && (await neverEl.isDisplayed())) break;
+    const { width, height } = await driver.getWindowRect();
+    await driver
+      .action("pointer")
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
+      .down()
+      .pause(100)
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
+      .up()
+      .perform();
+    await sleep(500);
+  }
+  await neverEl.click();
+  console.log(`[e2e] ${driver.e2ePlatform}: auto-lock set to Never`);
+}
+
+/**
+ * Enable the "Enable TSP envelope carriage" developer setting (OFF by
+ * default) — the dev/test-only toggle for the real TSP envelope Carriage
+ * (@bifold/trust-tasks's tsp.pack/unpack over @bifold/credo-tsp-adapter's
+ * Askar-backed ports) as an alternative to the default DIDComm-v1 carriage.
+ * See docs/plans/openvtc-integration-plan/2026-09-02-bam.md for why this
+ * doesn't need vta-service or any ecosystem counterparty — it's wallet-to-
+ * wallet only, delivered over the same existing DIDComm-v1 connection.
+ *
+ * The "Developer" row on Settings (testID DeveloperOptions) only exists
+ * once `store.preferences.developerModeEnabled` is already persisted true
+ * (bifold/packages/core/src/screens/Settings.tsx) — i.e. on a LATER visit
+ * to Settings, after developer mode has already been turned on. Tripping
+ * the tap counter for the FIRST time takes a different path entirely:
+ * Settings' own onDevModeTriggered fires as soon as the threshold trips
+ * and calls `navigation.navigate(Screens.Developer)` directly, so the app
+ * jumps straight to the Developer screen — there is no "DeveloperOptions"
+ * row to see or tap on Settings in that transition, only afterwards.
+ * (bifold/packages/core/src/hooks/developer-mode.ts:
+ * TOUCH_COUNT_TO_ENABLE_DEVELOPER_MODE = 10 taps on the version footer,
+ * but the counter is checked BEFORE incrementing, so it only trips on the
+ * 11th tap despite the constant's name.)
+ * Toggling the switch updates outbound sends immediately, but
+ * setupTrustTasksInbound only registers the TSP carriage's inbound handler
+ * at agent setup — a restart is required for the inbound side to pick it
+ * up (same restart-to-apply behavior as most developer toggles), so this
+ * restarts the app before returning.
+ */
+export async function enableTspCarriage(driver) {
+  await dismissTourIfPresent(driver);
+  await tapTestId(driver, "Settings", 15000);
+  await setAutoLockNever(driver);
+
+  if (await existsTestId(driver, "DeveloperOptions", 3000)) {
+    // Developer mode was already enabled in a prior session (persisted store).
+    await tapTestId(driver, "DeveloperOptions", 15000);
+  } else {
+    // useDeveloperMode's counter (bifold/packages/core/src/hooks/developer-
+    // mode.ts) has no time-window reset — any 11 taps that land trip it,
+    // however spaced out. So a plain "click 11 times" loop assumes every
+    // click lands, but real devices under load occasionally drop a tap
+    // silently (the same class of flake tapTestIdReliable exists to work
+    // around elsewhere in this file) — losing even one of the 11 here
+    // leaves the counter one short with no visible symptom until the
+    // ToggleDeveloper wait afterward times out. Fix: overshoot the tap
+    // count and poll for the Developer screen after each one, so a few
+    // dropped taps just cost a few extra clicks instead of failing the run.
+    const versionEl = await scrollToTestId(driver, "Version");
+    const maxTaps = 20;
+    let reachedDeveloperScreen = false;
+    for (let i = 0; i < maxTaps; i++) {
+      await versionEl.click().catch(() => {});
+      if (await existsTestId(driver, "ToggleDeveloper", 300)) {
+        reachedDeveloperScreen = true;
+        console.log(`[e2e] ${deviceTag(driver)}: reached Developer screen after ${i + 1} Version taps`);
+        break;
+      }
+      await sleep(150);
+    }
+    // Settings navigates to the Developer screen itself on the trip — wait
+    // for a Developer-screen-only element, not a Settings row.
+    if (!reachedDeveloperScreen) {
+      await waitForTestId(driver, "ToggleDeveloper", 5000);
+    }
+  }
+
+  // Near the bottom of the Developer screen's long ScrollView — same
+  // scroll-into-view need as the Version footer above.
+  const tspToggle = await scrollToTestId(driver, "ToggleEnableTspCarriage");
+  await tspToggle.click();
+  console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope carriage enabled (developer setting)`);
+
+  await returnToContacts(driver);
+  await restartApp(driver);
+}
+
 /** The QR exchange bottom sheet is open if any of its content is visible. */
 async function qrSheetIsOpen(driver, timeout = 4000) {
   for (const key of ["ScanQRCode", "QRCodeExchangeTitle"]) {
@@ -274,6 +418,16 @@ async function qrSheetIsOpen(driver, timeout = 4000) {
  * lands on the sheet's dark overlay and CLOSES it (open/close toggle loop).
  */
 async function openQrSheet(driver) {
+  // A process-level watchdog kill can relock the wallet at any moment,
+  // independent of the in-app inactivity timer (autoLockTime doesn't
+  // prevent this — a fresh process always needs the PIN again) — check
+  // every time this is called, not just once per showRelationshipInvitation
+  // retry loop iteration.
+  await unlockIfLocked(driver);
+  // Same idea for a real notification pulling the shade down over the app
+  // mid-run (observed on a real device: a "QR Code" click failure whose
+  // page-source dump showed only status-bar content, no app UI at all).
+  await collapseNotificationShadeIfOpen(driver);
   if (await qrSheetIsOpen(driver, 1500)) return;
   if (await existsTestId(driver, "InviteContact", 3000)) {
     await tapTestId(driver, "InviteContact");
@@ -292,6 +446,9 @@ async function openQrSheet(driver) {
 
 /** Open the QR bottom sheet from the center tab and show "my QR" for a relationship exchange. */
 export async function showRelationshipInvitation(driver) {
+  // The app can be watchdog-restarted between onboarding and this step under
+  // CPU contention, landing on the unlock screen — recover before tapping.
+  await unlockIfLocked(driver);
   await dismissTourIfPresent(driver);
   // A lingering tour overlay can swallow the first tab tap (older builds attach
   // tour steps to the tab bar) — retry until the bottom sheet actually shows.
@@ -302,6 +459,10 @@ export async function showRelationshipInvitation(driver) {
       // presented) — only an app restart resets it
       await restartApp(driver);
     }
+    // The wallet's own inactivity auto-lock can fire between attempts too —
+    // e.g. while this device sits idle waiting on a peer device under CPU
+    // contention — independent of the watchdog-restart case above.
+    await unlockIfLocked(driver);
     await acceptSystemAlertIfPresent(driver);
     await dismissTourIfPresent(driver);
     await openQrSheet(driver);
@@ -392,13 +553,30 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
     await tapTestId(driver, "ScanQRCode", 15000);
   }
   await tapTestId(driver, "PasteUrlButton", 30000);
-  const input = await waitForTestId(driver, "PastedUrl", 15000);
-  await input.setValue(invitationUrl);
-  // multiline input: don't send \n — tap a neutral spot to dismiss the keyboard
-  await hideKeyboard(driver);
-  // the long URL grows the input; the button may be below the fold
-  const submit = await scrollToTestId(driver, "ScanPastedUrl");
-  await submit.click();
+  // XCUITest's simulated typing occasionally drops characters on ~1000-char
+  // strings, corrupting the base64 payload — the app then shows the
+  // "URL not recognized" ErrorModal. Clear, retype and resubmit until it takes.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const input = await waitForTestId(driver, "PastedUrl", 15000);
+    if (attempt > 0) await input.clearValue();
+    await input.setValue(invitationUrl);
+    // multiline input: don't send \n — tap a neutral spot to dismiss the keyboard
+    await hideKeyboard(driver);
+    // the long URL grows the input; the button may be below the fold
+    const submit = await scrollToTestId(driver, "ScanPastedUrl");
+    await submit.click();
+    // detect the rejection via the modal's CTA button — RN Modal testIDs
+    // (ErrorModal) don't reliably surface on iOS, but children do
+    if (!(await existsTestId(driver, "Try Again", 5000))) break;
+    if (attempt === 3) {
+      await screenshot(driver, "paste-url-rejected");
+      throw new Error("invitation URL rejected 4 times (ErrorModal persisted)");
+    }
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: URL not recognized (typing flake) — retrying`
+    );
+    await tapTestId(driver, "Try Again", 5000);
+  }
   console.log(`[e2e] ${driver.e2ePlatform}: invitation pasted & submitted`);
 }
 
@@ -623,23 +801,43 @@ export async function returnToContacts(driver) {
   );
 }
 
-/** Open a stored contact's detail screen by tapping its row in the Contacts list. */
+/**
+ * Open a stored contact's DETAIL screen. Tapping a Contacts row either opens
+ * the CHAT (then the VRC ContactDetails screen — shields, Witness Records —
+ * sits behind the chat header's ContactMenu → "View Contact") or opens
+ * Contact Details directly; the helper detects which. If the chat is already
+ * open for this peer, it starts from the menu.
+ */
 export async function openContactDetail(driver, peerName) {
-  let onTab = false;
-  for (let backs = 0; backs < 3 && !onTab; backs++) {
-    if (await existsTestId(driver, "Contacts", 3000)) {
-      await tapTestIdReliable(driver, "Contacts", () => leftStackedScreen(driver));
-      onTab = true;
-      break;
+  // Already on the peer's chat? (header menu present + peer name visible)
+  const alreadyOnPeerChat =
+    (await existsTestId(driver, "ContactMenu", 2000)) &&
+    (await byTextContains(driver, peerName).isExisting());
+  if (!alreadyOnPeerChat) {
+    let onTab = false;
+    for (let backs = 0; backs < 3 && !onTab; backs++) {
+      if (await existsTestId(driver, "Contacts", 3000)) {
+        await tapTestId(driver, "Contacts");
+        onTab = true;
+        break;
+      }
+      await unlockIfLocked(driver);
+      if (await existsTestId(driver, "BackButton", 2000)) {
+        await tapTestIdReliable(driver, "BackButton", () => leftStackedScreen(driver)).catch(() => {});
+      }
     }
-    await unlockIfLocked(driver);
-    if (await existsTestId(driver, "BackButton", 2000)) {
-      await tapTestIdReliable(driver, "BackButton", () => leftStackedScreen(driver)).catch(() => {});
-    }
+    const row = byTextContains(driver, peerName);
+    await row.waitForExist({ timeout: 30000 });
+    await row.click();
   }
-  const row = byTextContains(driver, peerName);
-  await row.waitForExist({ timeout: 30000 });
-  await row.click();
+  // Two shapes: the row opens the CHAT (header ContactMenu → View Contact),
+  // or it opens Contact Details directly — detect which, don't assume.
+  if (await existsTestId(driver, "ContactMenu", 5000)) {
+    await tapTestId(driver, "ContactMenu", 5000);
+    const viewContact = byTextContains(driver, "View Contact");
+    await viewContact.waitForExist({ timeout: 10000 });
+    await viewContact.click();
+  }
 }
 
 /**
@@ -661,6 +859,20 @@ export async function openContactDetail(driver, peerName) {
  * at all), so re-requiring it here would fail the run over the same
  * uncontrollable hardware/root-expiry fact already accepted upstream.
  */
+/** A testID declared WITHOUT the com.ariesbifold:id/ prefix (raw accessibility id / resource-id). */
+async function existsRawId(driver, key, timeout = 2000) {
+  const el =
+    driver.e2ePlatform === "android"
+      ? driver.$(`android=new UiSelector().resourceId("${key}")`)
+      : driver.$(`~${key}`);
+  try {
+    await el.waitForExist({ timeout });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function assertContactShields(driver, peerName, timeout = 240000, options = {}) {
   const requireSecureExchange = options.requireSecureExchange ?? true;
   const deadline = Date.now() + timeout;
@@ -668,11 +880,18 @@ export async function assertContactShields(driver, peerName, timeout = 240000, o
   let sawWitness = false;
   while (Date.now() < deadline) {
     await openContactDetail(driver, peerName);
+    // ContactDetails declares these testIDs BARE (no com.ariesbifold:id/
+    // prefix), so check the raw accessibility id too — the prefixed lookup
+    // misses them on iOS, and the text fallback fails there because the
+    // section header renders uppercased ("WITNESS RECORDS").
     sawAttestation =
       (await existsTestId(driver, "SecureExchangeBadge", 3000)) ||
+      (await existsRawId(driver, "SecureExchangeBadge", 2000)) ||
       (await byTextContains(driver, "Secure Exchange").isExisting());
     sawWitness =
       (await existsTestId(driver, "WitnessSection", 3000)) ||
+      (await existsRawId(driver, "WitnessSection", 2000)) ||
+      (await existsRawId(driver, "WitnessedBadge", 2000)) ||
       (await byTextContains(driver, "Witness Records").isExisting());
     if ((sawAttestation || !requireSecureExchange) && sawWitness) {
       console.log(
@@ -694,6 +913,80 @@ export async function assertContactShields(driver, peerName, timeout = 240000, o
   throw new Error(
     `${driver.e2ePlatform}: "${peerName}" missing a shield — Secure Exchange=${sawAttestation}, Witnessed=${sawWitness}`
   );
+}
+
+/**
+ * ContactDetails renders SecureExchangeBadge only on a fully-validated chain
+ * — a warning outcome (evidence present, chain didn't validate — e.g. an
+ * aging attestation root, see docs/HARDWARE_ATTESTATION_FLOW.md "Known
+ * limitations" #5) omits the badge exactly like no evidence at all (see
+ * assertContactShields' comment). The old per-credential-offer screen used
+ * to distinguish the two via its own AttestationWarning banner; v4's
+ * automatic flow has no chat-screen equivalent, so Android's own
+ * verification log is the only remaining signal. No equivalent surfaces on
+ * iOS — this is a no-op there, same as assertTrustTaskExchangeMarkers.
+ */
+async function androidSawAttestationAttempt(driver) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return false;
+  try {
+    const { execSync } = await import("node:child_process");
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return /\[VRC:Verify\]|\[VRC:Badge\]/.test(log);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Assert the "Secure Exchange" badge (peer device-attestation, re-validated
+ * on-device) landed for the peer — attestation shield only, no witness
+ * involved. For the plain (non-witnessed) real-device VRC exchange, where
+ * assertContactShields' witness requirement can never be satisfied.
+ *
+ * options.requireSecureExchange (default true): pass false to tolerate the
+ * warning outcome unconditionally instead of falling back to the Android
+ * log check below (e.g. when the caller already knows the peer's evidence
+ * was attempted through some other signal).
+ */
+export async function assertSecureExchangeBadge(driver, peerName, timeout = 120000, options = {}) {
+  const requireSecureExchange = options.requireSecureExchange ?? true;
+  const deadline = Date.now() + timeout;
+  let sawAttestation = false;
+  while (Date.now() < deadline) {
+    await openContactDetail(driver, peerName);
+    sawAttestation =
+      (await existsTestId(driver, "SecureExchangeBadge", 3000)) ||
+      (await existsRawId(driver, "SecureExchangeBadge", 2000)) ||
+      (await byTextContains(driver, "Secure Exchange").isExisting());
+    if (sawAttestation || !requireSecureExchange) {
+      console.log(
+        `[e2e] ${driver.e2ePlatform}: "${peerName}" shows` +
+          (sawAttestation
+            ? " Secure Exchange"
+            : " no Secure Exchange badge (not required — hardware verification warning accepted)")
+      );
+      return;
+    }
+    if (await existsTestId(driver, "BackButton", 2000)) {
+      await tapTestId(driver, "BackButton");
+    }
+    await sleep(3000);
+  }
+  // Badge never rendered — tell "evidence never attempted" (real failure)
+  // apart from "attempted, chain didn't validate" (tolerated) via Android's
+  // own verification log before failing the run.
+  if (await androidSawAttestationAttempt(driver)) {
+    console.log(
+      `[e2e] ${driver.e2ePlatform}: ⚠️ no Secure Exchange badge for "${peerName}", but the verification log ` +
+        `shows evidence was attempted (commonly an aging/legacy attestation root, not a flow regression); continuing`
+    );
+    return;
+  }
+  await screenshot(driver, "secure-exchange-missing");
+  throw new Error(`${driver.e2ePlatform}: "${peerName}" missing Secure Exchange badge after ${timeout}ms`);
 }
 
 /**
@@ -733,6 +1026,9 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
       onTab = true;
       break;
     }
+    // Real devices only: the signed delivery that follows consent may still
+    // be in flight here, requesting biometric confirmation. No-op elsewhere.
+    await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
     if (await existsTestId(driver, "BackButton", 2000)) {
       await tapTestId(driver, "BackButton");
@@ -747,6 +1043,7 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
       );
       return;
     }
+    await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
     await sleep(3000);
   }
@@ -754,4 +1051,204 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
   throw new Error(
     `${driver.e2ePlatform}: contact "${peerName}" did not appear within ${timeout}ms`
   );
+}
+
+/**
+ * Assert the Trust Task relationship exchange ran alongside the legacy flow
+ * (integration M2: propose + the issue leg in shadow mode), from the Android
+ * side's logcat. One android device sees the whole exchange regardless of
+ * which peer was the deterministic proposer:
+ *  - a propose marker (sent, accepted, or #response consumed),
+ *  - "issue sent"            — this side delivered its VRC on the exchange,
+ *  - "issue receipt sent"    — it receipted the peer's delivery,
+ *  - "issue receipt matched" — the peer's receipt correlated to our delivery.
+ * No-op on iOS drivers (no logcat; the Android log covers both directions).
+ */
+export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:Ceremony\] discovery (sent|answered|confirmed propose support)/, "discovery"],
+    [/\[TrustTasks:Ceremony\] propose (sent|accepted|received|#response consumed)/, "propose"],
+    [/\[TrustTasks:Ceremony\] issue sent/, "issue sent"],
+    [/\[TrustTasks:Ceremony\] issue (stored|already stored)/, "issue stored"],
+    [/\[TrustTasks:Ceremony\] issue receipt sent/, "issue receipt sent"],
+    [/\[TrustTasks:Ceremony\] issue receipt matched/, "issue receipt matched"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(
+        "[e2e] android: trust-task exchange markers all present (propose + issue legs)"
+      );
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: trust-task markers missing after ${timeout}ms: ${missing
+      .map(([, name]) => name)
+      .join(", ")}`
+  );
+}
+
+/**
+ * Confirm the TSP envelope carriage specifically ran (not just that a
+ * document arrived, which either carriage would show) — from the Android
+ * side's logcat, distinct from assertTrustTaskExchangeMarkers's
+ * [TrustTasks:Ceremony] markers. Requires enableTspCarriage() to have been
+ * run (and the app restarted) on the device(s) under test first. No-op on
+ * iOS drivers (no logcat; the Android log covers both directions).
+ */
+export async function assertTspCarriageMarkers(driver, timeout = 60000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:TspCarriage\] envelope sent/, "envelope sent"],
+    [/\[TrustTasks:TspCarriage\] envelope received/, "envelope received"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(
+        "[e2e] android: TSP envelope carriage markers present (sent + received)"
+      );
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: TSP carriage markers missing after ${timeout}ms: ${missing
+      .map(([, name]) => name)
+      .join(", ")}`
+  );
+}
+
+/**
+ * The witness-session markers of a witnessed exchange (§9 step 5), from
+ * Android's run-scoped logcat: session → challenge → VP → VWC, plus the
+ * outcome-evidence self-check (presentation assembled from the retained pair
+ * and verified). No-op on iOS drivers.
+ */
+export async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:Witness\] session opened/, "session opened"],
+    [/\[TrustTasks:Witness\] challenge received/, "challenge received"],
+    [/\[TrustTasks:Witness\] presentation submitted/, "presentation submitted"],
+    [/\[TrustTasks:Witness\] VWC stored/, "VWC stored"],
+    [/\[TrustTasks:Ceremony\] outcome evidence assembled and verified/, "outcome evidence self-check"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(
+        "[e2e] android: witness ceremony markers all present (session → challenge → VP → VWC → evidence self-check)"
+      );
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: witness ceremony markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
+  );
+}
+
+/**
+ * The witness-share markers (step 7), from Android's run-scoped logcat.
+ * Android's log covers all four directions: its own share sent, the peer's
+ * share verified AND stored, our receipt sent, and the peer's receipt
+ * matched back to our share. No-op on iOS drivers.
+ */
+export async function assertWitnessShareMarkers(driver, timeout = 120000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:Ceremony\] witness-share sent/, "witness-share sent"],
+    [/\[TrustTasks:Ceremony\] witness-share verified and stored/, "witness-share verified and stored"],
+    [/\[TrustTasks:Ceremony\] witness-share receipt sent/, "witness-share receipt sent"],
+    [/\[TrustTasks:Ceremony\] witness-share receipt matched/, "witness-share receipt matched"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log("[e2e] android: witness-share markers all present (shared → verified → stored → receipted)");
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: witness-share markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
+  );
+}
+
+/**
+ * v4 pairs: consent is the RELATIONSHIP PROPOSAL, not per-credential offers.
+ * One side (whichever wallet did not deterministically propose) gets the
+ * "wants to form a relationship" bottom-sheet — find and accept it. Returns
+ * true if this driver was the one prompted. The un-prompted side returns
+ * false after the wait, which is expected.
+ */
+export async function acceptRelationshipProposalIfPrompted(driver, timeout = 90000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await existsTestId(driver, "ProposalAccept", 3000)) {
+      await tapTestId(driver, "ProposalAccept");
+      console.log(`[e2e] ${driver.e2ePlatform}: relationship proposal accepted`);
+      return true;
+    }
+    // Real devices only: signing may request biometric confirmation while
+    // we're still waiting for the proposal prompt (e.g. the peer proposed
+    // and is already issuing). No-op on emulators/simulators.
+    await handleBiometricConfirmIfPresent(driver);
+    await unlockIfLocked(driver);
+    await sleep(2000);
+  }
+  console.log(`[e2e] ${driver.e2ePlatform}: no proposal prompt (peer side proposed)`);
+  return false;
+}
+
+/**
+ * Run acceptRelationshipProposalIfPrompted on both sides of an exchange and
+ * assert that at least one of them actually saw the proposal. If discovery
+ * failed and neither side was ever prompted, both calls return false and the
+ * run would otherwise fall through into assertVrcReceived's generic
+ * "contact never appeared" timeout — fail loudly here instead, with the
+ * specific cause.
+ */
+export async function acceptRelationshipProposalOnEitherSide(driverA, driverB, timeout = 90000) {
+  const [acceptedA, acceptedB] = await Promise.all([
+    acceptRelationshipProposalIfPrompted(driverA, timeout),
+    acceptRelationshipProposalIfPrompted(driverB, timeout),
+  ]);
+  if (!acceptedA && !acceptedB) {
+    throw new Error(
+      `${driverA.e2ePlatform}/${driverB.e2ePlatform}: neither side saw a relationship proposal prompt within ${timeout}ms — discovery likely failed`
+    );
+  }
 }

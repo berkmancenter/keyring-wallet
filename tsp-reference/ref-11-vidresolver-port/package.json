@@ -1,0 +1,24 @@
+{
+  "name": "ref-11-vidresolver-port",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 11 — the VidResolver port for tsp-core, proven with a raw-key/fixture adapter and a real Credo-backed adapter (agent.dids.resolveDidDocument), and used to drive a real HPKE-Auth round trip through ref-09/ref-10's ported crypto using only resolver output",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "overrides": {
+    "@openwallet-foundation/askar-shared": "0.6.0"
+  },
+  "dependencies": {
+    "@credo-ts/askar": "0.6.3",
+    "@credo-ts/core": "0.6.3",
+    "@credo-ts/node": "0.6.3",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.0.0",
+    "@noble/ciphers": "^2.0.0",
+    "@stablelib/ed25519": "^2.0.2"
+  }
+}

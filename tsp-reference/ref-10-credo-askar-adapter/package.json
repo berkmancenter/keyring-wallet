@@ -1,0 +1,23 @@
+{
+  "name": "ref-10-credo-askar-adapter",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 10 — a real Askar-backed SigningKey/KeyAgreement adapter for tsp-core's ports (ref-09), run through the same fixture suite against two live @credo-ts/node agents",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "overrides": {
+    "@openwallet-foundation/askar-shared": "0.6.0"
+  },
+  "dependencies": {
+    "@credo-ts/askar": "0.6.3",
+    "@credo-ts/core": "0.6.3",
+    "@credo-ts/node": "0.6.3",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.0.0",
+    "@noble/ciphers": "^2.0.0"
+  }
+}

@@ -37,13 +37,17 @@
     "typecheck": "cd app && yarn typecheck",
     "e2e:vrc": "cd e2e && npm run vrc-exchange",
     "e2e:vrc:android-only": "cd e2e && npm run vrc-exchange:android-only",
+    "e2e:vrc:tsp": "cd e2e && npm run vrc-exchange:tsp",
     "e2e:vrc:devices": "cd e2e && npm run vrc-exchange:devices",
     "e2e:vrc:devices:android-only": "cd e2e && npm run vrc-exchange:devices:android-only",
     "e2e:migration": "cd e2e && npm run store-migration",
     "e2e:migration:android-only": "cd e2e && npm run store-migration:android-only",
     "e2e:smoke": "cd e2e && npm run onboarding-smoke",
+    "e2e:vrc:witnessed": "cd e2e && npm run vrc-exchange:witnessed",
     "e2e:vrc:witnessed:devices": "cd e2e && npm run vrc-exchange:witnessed:devices",
-    "e2e:vrc:witnessed:android-only": "cd e2e && npm run vrc-exchange:witnessed:android-only"
+    "e2e:vrc:witnessed:android-only": "cd e2e && npm run vrc-exchange:witnessed:android-only",
+    "e2e:vrc:witnessed:tsp:android-only": "cd e2e && npm run vrc-exchange:witnessed:tsp:android-only",
+    "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator"
   },
   "devDependencies": {
     "@commitlint/cli": "~19.8.1",
@@ -80,7 +84,10 @@
     "@bifold/react-native-attestation": "portal:bifold/packages/react-native-attestation",
     "@bifold/remote-logs": "portal:bifold/packages/remote-logs",
     "@bifold/verifier": "portal:bifold/packages/verifier",
-    "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts"
+    "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
+    "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks",
+    "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter",
+    "@openvtc/vti-tsp-js@npm:0.1.0": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {
