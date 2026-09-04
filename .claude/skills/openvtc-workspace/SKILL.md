@@ -41,6 +41,20 @@ Full guide: [`scripts/openvtc/README.md`](../../../scripts/openvtc/README.md).
   daily; documentation and memory go stale fast. This rule exists because a
   previous review round turned on facts that were true when written and wrong a
   week later.
+- **Read from `external/`, not from some other checkout of the same repo
+  that happens to exist on the machine.** A sibling clone elsewhere (a
+  personal checkout, a different project's copy) is not managed by
+  `setup-external.mjs`/`sync-external.mjs` and can silently sit on any
+  commit — including one *older* than the pin, not just newer. If a
+  same-named clone exists somewhere other than this repo's `external/`,
+  don't read it as upstream truth. If you ever do need to read one anyway,
+  verify first: `git -C <clone> merge-base --is-ancestor <pin> HEAD`, or
+  read the exact pinned blob directly (`git -C <clone> show <pin>:<path>`)
+  rather than trusting the working tree. This rule exists because an
+  investigation once read a stale out-of-repo clone of `vta-browser-plugin`
+  a full month behind the pin — not merely unverified, but not even the
+  right repo copy — and drew a wrong conclusion from code the pin had
+  already superseded.
 
 ## The reference ladder
 

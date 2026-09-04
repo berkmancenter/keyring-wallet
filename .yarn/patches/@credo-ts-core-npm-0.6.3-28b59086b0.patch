@@ -1,3 +1,22 @@
+diff --git a/build/modules/dcql/DcqlService.mjs b/build/modules/dcql/DcqlService.mjs
+index baecfad719868106535ed66b7e39471b11ef7d91..af3e82308af78fd9a9dbecf381f5ec212411635c 100644
+--- a/build/modules/dcql/DcqlService.mjs
++++ b/build/modules/dcql/DcqlService.mjs
+@@ -77,9 +77,13 @@ let DcqlService = class DcqlService {
+ 			allRecords.push(...w3cRecords);
+ 		}
+ 		if (formats.has("ldp_vc")) {
++			// KEYRING PATCH: upstream copy-pastes the jwt_vc_json branch's
++			// condition here (c.format === "jwt_vc_json"), so this $or filter
++			// is always empty for ldp_vc queries and no W3C JSON-LD credential
++			// is ever found — fixed to check ldp_vc, matching the branch it's in.
+ 			const w3cRecords = await w3cCredentialRepository.findByQuery(agentContext, {
+ 				claimFormat: ClaimFormat.LdpVc,
+-				$or: dcqlQuery.credentials.flatMap((c) => c.format === "jwt_vc_json" ? c.meta.type_values : []).map((typeValues) => ({ expandedTypes: typeValues }))
++				$or: dcqlQuery.credentials.flatMap((c) => c.format === "ldp_vc" ? c.meta.type_values : []).map((typeValues) => ({ expandedTypes: typeValues }))
+ 			});
+ 			allRecords.push(...w3cRecords);
+ 		}
 diff --git a/build/modules/vc/models/credential/W3cCredential.d.mts b/build/modules/vc/models/credential/W3cCredential.d.mts
 index 6ecceb006c81a8f7dba8500b18e217c3d6b8c192..6df40bc454dec759ac878f20cb4eec9e74b742d0 100644
 --- a/build/modules/vc/models/credential/W3cCredential.d.mts

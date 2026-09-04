@@ -1,0 +1,84 @@
+{
+  "updated": "2026-09-02",
+  "note": "Sibling to PINS.json, but for download.firstperson.dev's prebuilt binaries rather than git-cloned source. IMPORTANT DIFFERENCE: that server has no versioned-artifact URLs \u2014 only 'latest' (newest tagged release) and 'main' (newest compiled commit) moving pointers, plus a named release *channel* (currently 'dogwood') for the pnm/openvtc client builds. A pin here therefore records the LAST VERIFIED VERSION for drift detection, not a URL that can be re-fetched historically: advancing a pin means 'we verified a newer build', never 'roll back to an old one'. Advance only via fetch-binaries.mjs --advance <binary> --why \"reason\".",
+  "releaseChannel": "dogwood",
+  "binaries": {
+    "vta": {
+      "track": "latest",
+      "urlPath": "vta/latest/vta",
+      "os": "linux-x86_64-only (observed; no macOS path found for this endpoint)",
+      "pinnedVersion": "0.23.3",
+      "pinnedOn": "2026-09-02",
+      "why": "Seed pinnedSha256 for the binary proven working this session (vta setup --from + cloudflared rig; ref-08 auth handshake)",
+      "watch": [
+        "vta-service/src/trust_tasks/",
+        "vta-service/src/messaging/"
+      ],
+      "pinnedSha256": "e9acea858abdb0618ce0cb3933dfef511d4b6cf2d11567e0e163ad7e28fe792c"
+    },
+    "pnm-server": {
+      "track": "latest",
+      "urlPath": "pnm-server/latest/pnm",
+      "os": "linux-x86_64-only (observed)",
+      "pinnedVersion": null,
+      "why": "The SERVER build \u2014 plaintext-config secrets, no OS keyring \u2014 the one a headless test/CI host uses (see sysop/explore/01-server-setup.md's own warning: do not substitute the client build here). DISTINCT ARTIFACT from pnm-client below \u2014 same binary name (pnm) on disk, different build. pnm has no top-level --version flag (verified), so pinnedSha256 is the only drift signal; pnm health proven working against the pinned vta build above.",
+      "pinnedOn": "2026-09-02",
+      "watch": [],
+      "pinnedSha256": "db7050f97606ef91d919c86e4017287d99f04d5abb58926b4ef3a075e7673f5f"
+    },
+    "pnm-client": {
+      "track": "channel",
+      "urlPathTemplate": "releases/{channel}/{os}/pnm",
+      "os": "x86 or macOS",
+      "pinnedVersion": null,
+      "why": "The default (OS-keyring-backed) build for a developer workstation driving a VTA \u2014 not what e2e/lib/vta.js uses today (it uses pnm-server, headless). Recorded so this file also covers firstperson.dev/#downloads' listed client artifact; not yet downloaded or exercised by anything in this repo.",
+      "pinnedOn": null,
+      "watch": []
+    },
+    "mediator": {
+      "track": "latest",
+      "urlPath": "mediator/latest/mediator",
+      "os": "linux-x86_64-only (observed)",
+      "pinnedVersion": null,
+      "why": "Downloaded but not yet exercised. tsp-reference/ref-08-credential-exchange found that credential-exchange/query/0.1 is NOT in vta-service's REST dispatch table (only pending-list/approve/deny are) \u2014 the query inbound path is DIDComm/TSP-messaging-only, so finishing that rung needs this mediator running and a messaging-enabled VTA (`[messaging] kind = \"create_mediator\"` in e2e/lib/vta.js's setup.toml), which hasn't been built yet.",
+      "pinnedOn": "2026-09-02",
+      "watch": []
+    },
+    "mediator-setup": {
+      "track": "latest",
+      "urlPath": "mediator/latest/mediator-setup",
+      "os": "linux-x86_64-only (observed)",
+      "pinnedVersion": null,
+      "why": "Companion to `mediator` above \u2014 its non-interactive setup wizard binary. Same status: downloaded, not yet exercised.",
+      "pinnedOn": "2026-09-02",
+      "watch": []
+    },
+    "did-hosting-daemon": {
+      "track": "latest",
+      "urlPath": "did-hosting-daemon/latest/did-hosting-daemon",
+      "os": "linux-x86_64-only (observed)",
+      "pinnedVersion": null,
+      "why": "Downloaded but not yet exercised \u2014 e2e/lib/vta.js hosts its did:webvh did.jsonl with a plain static file server instead (per the developer tutorial's own note: 'you do not need to run a DID Daemon for this tutorial \u2014 any plain static-file host will work'). Kept pinned for when a rung needs the real daemon (key rotation, multiple DIDs, etc).",
+      "pinnedOn": "2026-09-02",
+      "watch": []
+    },
+    "vtc": {
+      "track": "latest",
+      "urlPath": "vtc/latest/vtc",
+      "os": "linux-x86_64-only (observed)",
+      "pinnedVersion": null,
+      "why": "Downloaded but not yet exercised \u2014 no rung has stood up a Verifiable Trust Community yet.",
+      "pinnedOn": "2026-09-02",
+      "watch": []
+    },
+    "openvtc": {
+      "track": "latest",
+      "urlPath": "openvtc/latest/openvtc",
+      "os": "linux-x86_64 or macOS (per 02-openvtc-tui.md; also offered channel-pinned at releases/{channel}/{os}/openvtc)",
+      "pinnedVersion": null,
+      "why": "Not yet downloaded by anything in this repo. Recorded for when a rung drives the interactive TUI client end-to-end (persona creation, joining a community) rather than talking to a VTA's REST API directly.",
+      "pinnedOn": null,
+      "watch": []
+    }
+  }
+}

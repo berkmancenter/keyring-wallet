@@ -31,7 +31,7 @@ const witnessDir = join(repoRoot, "bifold", "packages", "witness-server");
  * and witness process even start, with a message that names the actual port
  * and how to work around it.
  */
-async function assertPortFree(port) {
+export async function assertPortFree(port) {
   await new Promise((resolve, reject) => {
     const srv = createServer();
     srv.once("error", (err) => {

@@ -17,7 +17,8 @@
     "vrc-exchange:witnessed:android-only": "node run-vrc-exchange-witnessed-android-only-devices.js",
     "vrc-exchange:witnessed:tsp:android-only": "node run-vrc-exchange-witnessed-tsp-android-only-devices.js",
     "vrc-exchange:witnessed:android-only:mediator": "node run-vrc-exchange-witnessed-android-only-devices-mediator.js",
-    "vrc-exchange:witnessed": "node run-vrc-exchange-witnessed.js"
+    "vrc-exchange:witnessed": "node run-vrc-exchange-witnessed.js",
+    "credential-exchange-query": "node run-credential-exchange-query.js"
   },
   "dependencies": {
     "webdriverio": "^9.12.0"
