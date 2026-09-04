@@ -77,3 +77,17 @@ index 0fc04e59a6b764602060be3911fea8390200b6a2..5e97a9fd4139489a1b171659f38a17ee
  /** Encode an envelope to its binary-CESR `-E` frame. The returned bytes are the
   *  HPKE `info` for the message. */
  export function encodeEnvelope(sender, receiver) {
+diff --git a/package.json b/package.json
+index b910926f2eca3fa63ded9f88f69e7f7554986786..fd008c09dc7de558affeaa063143f29e5f241c0a 100644
+--- a/package.json
++++ b/package.json
+@@ -8,7 +8,8 @@
+   "exports": {
+     ".": {
+       "types": "./dist/index.d.ts",
+-      "import": "./dist/index.js"
++      "import": "./dist/index.js",
++      "require": "./dist/index.js"
+     }
+   },
+   "files": ["dist", "README.md"],

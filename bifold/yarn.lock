@@ -2463,6 +2463,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@bifold/witness-server@workspace:packages/witness-server"
   dependencies:
+    "@bifold/credo-tsp-adapter": "workspace:*"
     "@bifold/trust-tasks": "workspace:*"
     "@bifold/vrc-contexts": "workspace:*"
     "@bifold/vrc-shared": "workspace:*"
@@ -4975,13 +4976,13 @@ __metadata:
 
 "@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch":
   version: 0.1.0
-  resolution: "@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch::version=0.1.0&hash=dbb2d4"
+  resolution: "@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch::version=0.1.0&hash=aec2d3"
   dependencies:
     "@hpke/chacha20poly1305": "npm:^1.8.0"
     "@hpke/core": "npm:^1.9.0"
     "@noble/curves": "npm:^2.2.0"
     "@noble/hashes": "npm:^2.0.0"
-  checksum: 10c0/11d6a80d8ecb0f0b8e567427720df610578c3d404625c974bdeb0f797840af45cd940921e278d3605fd5a90769ea7f39c1ff2d8616fa7bc0251d8d368b5dfe78
+  checksum: 10c0/31a7d67cd8e7fdf2567a7087e43f8e68b112131fa2e89cfd4d81438d8738781a397fe86dbd4d7aaec840cb43f302b6ddb3eb4340c2c0577c733e7196860a7ce9
   languageName: node
   linkType: hard
 

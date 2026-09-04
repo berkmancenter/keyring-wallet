@@ -13,5 +13,6 @@
 export * from './carriage'
 export * from './documentProof'
 export * from './TrustTaskMessage'
+export * from './TspEnvelopeMessage'
 export * from './validator'
 export * as tsp from './tsp'

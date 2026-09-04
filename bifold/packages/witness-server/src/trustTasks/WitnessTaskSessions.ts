@@ -2,8 +2,17 @@
  * The witness ceremony on Trust Tasks — §9 step 5, witness side.
  *
  * Handles the two witness legs of a witnessed relationship exchange, spoken
- * over the binding-0.2 carriage beside the legacy JSON-over-basicmessage
- * dialect (dual-dialect: old wallets keep working):
+ * over EITHER of two carriages beside the legacy JSON-over-basicmessage
+ * dialect (triple-dialect: old wallets keep working):
+ *
+ *   - the binding-0.2 DIDComm-v1 carriage (`TrustTaskMessage`)
+ *   - the real TSP envelope carriage (`TspEnvelopeMessage` — HPKE-Auth,
+ *     Askar custody, CESR framing), mirroring the wallet's own TspCarriage
+ *     (`@bifold/core`'s `modules/trust-tasks/module/TspCarriage.ts`) —
+ *     needed because a TSP-carriage-enabled wallet pair also sends ITS
+ *     witness-session documents wrapped in TSP envelopes, not just its
+ *     peer-to-peer discovery/propose/issue documents. A reply always goes
+ *     back on whichever carriage the request arrived on.
  *
  *   wallet → witness   witness/session { parties }            → challenge (signed)
  *   wallet → witness   witness/session/submit { vp }          → { vwc, digest } (signed)
@@ -30,15 +39,21 @@ import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 import {
   TRUST_TASK_BINDING_URI,
   TrustTaskMessage,
+  TspEnvelopeMessage,
   digestMultibase,
   signDocumentProof,
   taskDigestMultibase,
   trustTaskPayloadValidator,
+  tsp,
   verifyDocumentProof,
 } from '@bifold/trust-tasks'
+import { createCredoVidResolver, identityFromDid } from '@bifold/credo-tsp-adapter'
 import { randomUUID } from 'node:crypto'
 
 import { loadTrustTaskRuntime } from './runtime'
+
+/** Which carriage a request arrived on — a reply always goes back the same way. */
+type Carriage = 'didcomm-v1' | 'tsp'
 
 const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
 const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
@@ -75,10 +90,13 @@ function replyOf(outcome: { kind: string; response?: unknown; error?: unknown })
 
 export class WitnessTaskSessions {
   private readonly sessions = new Map<string, TaskSession>()
+  private readonly resolver: ReturnType<typeof createCredoVidResolver>
 
-  public constructor(private readonly host: WitnessTaskHost) {}
+  public constructor(private readonly host: WitnessTaskHost) {
+    this.resolver = createCredoVidResolver(host.agent)
+  }
 
-  /** Register the binding-0.2 inbound handler on the witness agent. */
+  /** Register both carriages' inbound handlers on the witness agent. */
   public register(): void {
     const registry = this.host.agent.dependencyManager.container.resolve(DidCommMessageHandlerRegistry)
     registry.registerMessageHandler({
@@ -88,21 +106,44 @@ export class WitnessTaskSessions {
         const connection = context.connection
         if (!document || !connection?.did || !connection.theirDid) return undefined
         try {
-          await this.handleDocument(document, connection.id, connection.did, connection.theirDid)
+          await this.handleDocument(document, connection.id, connection.did, connection.theirDid, 'didcomm-v1')
         } catch (error) {
           console.error(`[${this.host.name}] trust-task handling failed: ${(error as Error).message}`)
         }
         return undefined
       },
     })
-    console.log(`[${this.host.name}] Trust Task witness handler registered (binding 0.2)`)
+    registry.registerMessageHandler({
+      supportedMessages: [TspEnvelopeMessage],
+      handle: async (context: DidCommInboundMessageContext<TspEnvelopeMessage>) => {
+        const envelope = context.message.envelope
+        const connection = context.connection
+        if (!envelope || !connection?.did || !connection.theirDid) return undefined
+        try {
+          const receiverIdentity = await identityFromDid(this.host.agent, connection.did)
+          const unpacked = await tsp.unpack(envelope, receiverIdentity, this.resolver)
+          if (unpacked.sender !== connection.theirDid) {
+            throw new Error(
+              `envelope's claimed sender (${unpacked.sender}) disagrees with the connection's counterparty (${connection.theirDid})`
+            )
+          }
+          const document = JSON.parse(Buffer.from(unpacked.payload).toString('utf-8')) as Record<string, unknown>
+          await this.handleDocument(document, connection.id, connection.did, connection.theirDid, 'tsp')
+        } catch (error) {
+          console.error(`[${this.host.name}] TSP trust-task handling failed: ${(error as Error).message}`)
+        }
+        return undefined
+      },
+    })
+    console.log(`[${this.host.name}] Trust Task witness handler registered (binding 0.2 + TSP envelope)`)
   }
 
   private async handleDocument(
     document: Record<string, unknown>,
     connectionId: string,
     myDid: string,
-    theirDid: string
+    theirDid: string,
+    carriage: Carriage
   ): Promise<void> {
     const type = String(document.type ?? '')
     let reply: Record<string, unknown> | undefined
@@ -121,6 +162,22 @@ export class WitnessTaskSessions {
     }
     const connection = await this.host.agent.modules.didcomm.connections.getById(connectionId)
     const sender = this.host.agent.dependencyManager.container.resolve(DidCommMessageSender)
+    // Reply on whichever carriage the request arrived on — a TSP-enabled
+    // wallet has no inbound handler for the plain binding-0.2 message, and
+    // vice versa (see TspCarriage.ts's own onDocument for the wallet side of
+    // this same send-identity-resolve-pack sequence).
+    if (carriage === 'tsp') {
+      const senderIdentity = await identityFromDid(this.host.agent, myDid)
+      const body = new TextEncoder().encode(JSON.stringify(reply))
+      const packed = await tsp.pack(body, myDid, theirDid, senderIdentity, this.resolver)
+      await sender.sendMessage(
+        new DidCommOutboundMessageContext(new TspEnvelopeMessage({ envelope: packed.bytes }), {
+          agentContext: this.host.agent.context,
+          connection,
+        })
+      )
+      return
+    }
     await sender.sendMessage(
       new DidCommOutboundMessageContext(new TrustTaskMessage({ document: reply }), {
         agentContext: this.host.agent.context,
