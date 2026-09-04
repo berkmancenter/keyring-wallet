@@ -1,0 +1,120 @@
+/**
+ * Two-wallet VRC exchange E2E, with an R-Card profile photo attached on one
+ * side: fresh install (uninstall first) → onboarding on both devices (wallet
+ * A seeds+picks a test photo during R-Card setup) → wallet A generates a
+ * relationship invitation → wallet B pastes the URL → both wallets end up
+ * holding a Verifiable Relationship Credential, and wallet B sees wallet A's
+ * photo on the resulting contact.
+ *
+ * Scope: this asserts the photo attribute survives a real DIDComm exchange
+ * and renders (as data, not pixels — see assertContactPhotoReceived) on the
+ * receiving side. It does not assert anything about the photo's visual
+ * appearance.
+ *
+ * NOTE: pickRCardPhoto's native-picker-UI selectors (lib/flows.js) are
+ * best-effort and have not been verified against a real simulator/emulator in
+ * this environment — see the caveat on that function. If this run fails at
+ * "no photo (ContactAvatarImage) shown", check those selectors first against
+ * an actual device before assuming the photo pipeline itself regressed
+ * (rcardPhoto.test.ts already covers the pipeline in isolation).
+ *
+ * Usage:
+ *   node run-vrc-exchange-photo.js                 # android emulator + iOS simulator
+ *   PLATFORMS=android,ios node run-vrc-exchange-photo.js
+ *
+ * Requires: hosted mediator/witness reachable (baked into the app via app/.env),
+ * appium with uiautomator2 + xcuitest drivers, built .apk/.app (see lib/config.js).
+ */
+import {
+  createSession,
+  ensureAppium,
+  stopAppium,
+  screenshot,
+  dumpSource,
+} from "./lib/driver.js";
+import {
+  acceptCredentialOfferFromChat,
+  acceptInvitationViaPaste,
+  assertContactPhotoReceived,
+  assertVrcReceived,
+  completeOnboarding,
+  showRelationshipInvitation,
+} from "./lib/flows.js";
+import { androidCaps, ANDROID_AVD2 } from "./lib/config.js";
+import { printSuccess, printFailure } from "./lib/banner.js";
+
+const platforms = (process.env.PLATFORMS || "android,ios")
+  .split(",")
+  .map((s) => s.trim());
+if (platforms.length !== 2) {
+  console.error("PLATFORMS must list exactly two entries, e.g. android,ios");
+  process.exit(1);
+}
+const bothAndroid = platforms[0] === "android" && platforms[1] === "android";
+if (bothAndroid && !ANDROID_AVD2) {
+  console.error(
+    "PLATFORMS=android,android needs a second AVD — set ANDROID_AVD2 " +
+      "(two emulators can't share one AVD; see e2e/README.md)"
+  );
+  process.exit(1);
+}
+
+let a, b;
+try {
+  await ensureAppium();
+
+  console.log(`[e2e] wallet A = ${platforms[0]}, wallet B = ${platforms[1]}`);
+  // Sessions created sequentially: simulator + emulator booting in parallel can starve CPU.
+  a = await createSession(platforms[0]);
+  b = await createSession(
+    platforms[1],
+    bothAndroid ? androidCaps(ANDROID_AVD2) : undefined
+  );
+
+  await Promise.all([
+    completeOnboarding(a, { firstName: "Alice", lastName: "Anderson", photo: true }),
+    completeOnboarding(b, { firstName: "Bob", lastName: "Baker" }),
+  ]);
+
+  const invitationUrl = await showRelationshipInvitation(a);
+  await acceptInvitationViaPaste(b, invitationUrl);
+
+  // Bidirectional VRC: each wallet issues to the other, so BOTH get a credential
+  // offer in the contact chat that must be accepted manually.
+  await Promise.all([
+    acceptCredentialOfferFromChat(a),
+    acceptCredentialOfferFromChat(b),
+  ]);
+
+  await Promise.all([
+    assertVrcReceived(a, "Bob Baker"),
+    assertVrcReceived(b, "Alice Anderson"),
+  ]);
+
+  // Only wallet A attached a photo — only wallet B (the receiver of A's card)
+  // should see one.
+  await assertContactPhotoReceived(b, "Alice Anderson");
+
+  printSuccess("vrc-exchange-photo");
+  process.exitCode = 0;
+} catch (err) {
+  printFailure("vrc-exchange-photo", err);
+  for (const d of [a, b].filter(Boolean)) {
+    try {
+      await screenshot(d, "failure");
+      await dumpSource(d, "failure");
+    } catch {
+      /* session may be dead */
+    }
+  }
+  process.exitCode = 1;
+} finally {
+  for (const d of [a, b].filter(Boolean)) {
+    try {
+      await d.deleteSession();
+    } catch {
+      /* ignore */
+    }
+  }
+  stopAppium();
+}
