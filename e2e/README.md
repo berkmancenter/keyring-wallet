@@ -514,6 +514,28 @@ mediator exists to point it at), ports 8180/8181 (chosen to avoid
 plaintext seed storage (dev-only, matches upstream's own `"plaintext"`
 backend warning — never use this shape for anything real).
 
+## Credential-exchange query, in the app (`yarn e2e:credential-exchange-query`) — UNVERIFIED
+
+`run-credential-exchange-query.js` drives the first in-app (not Node-script-
+only) proof of `trust_tasks_subtask.md` §9 step 4's happy path: a verifier
+sends `credential-exchange/query`, the wallet shows a real consent prompt
+(`CredentialExchangeQueryModal`, testID `CredentialExchangeQueryShare`), and
+approving it sends back `credential-exchange/present` with a real `vp_token`.
+Two Android wallets first complete an ordinary VRC exchange so Alice holds a
+real, stored credential to be queried for; a minimal verifier agent
+(`lib/verifier.js` — not a full `vta-service`, see that file's header) then
+connects to Alice the same way Bob did (a plain OOB paste) and sends the
+query directly.
+
+**Not run against a real device or emulator as of this writing** — written to
+the same conventions as the runners above, ready for the next session with
+Android hardware available. See
+`docs/plans/openvtc-integration-plan/2026-09-04-bam.md`.
+
+```
+ANDROID_AVD2=<second-avd> yarn e2e:credential-exchange-query
+```
+
 ## Troubleshooting
 
 - **Isolating the witness-connect step**: `node debug-witness-connect.js` (run

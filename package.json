@@ -44,6 +44,7 @@
     "e2e:migration:android-only": "cd e2e && npm run store-migration:android-only",
     "e2e:smoke": "cd e2e && npm run onboarding-smoke",
     "e2e:vrc:witnessed": "cd e2e && npm run vrc-exchange:witnessed",
+    "e2e:credential-exchange-query": "cd e2e && npm run credential-exchange-query",
     "e2e:vrc:witnessed:devices": "cd e2e && npm run vrc-exchange:witnessed:devices",
     "e2e:vrc:witnessed:android-only": "cd e2e && npm run vrc-exchange:witnessed:android-only",
     "e2e:vrc:witnessed:tsp:android-only": "cd e2e && npm run vrc-exchange:witnessed:tsp:android-only",
