@@ -211,6 +211,25 @@ export async function acceptSystemAlertIfPresent(driver) {
 }
 
 /**
+ * Collapse Android's notification shade if it's open, hiding the app
+ * underneath — a real notification (battery, message, etc.) landing on an
+ * attended real-device run can pull it down mid-flow. Observed failure: a
+ * page-source dump at a "QR Code" click failure showed ONLY status-bar
+ * content (battery %, clock, notification count), no app UI at all. No-op
+ * on iOS/emulators (this is an Android real-notification concern
+ * specifically) or if nothing is open.
+ */
+export async function collapseNotificationShadeIfOpen(driver) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync(`adb -s ${driver.e2eUdid} shell cmd statusbar collapse`);
+  } catch {
+    /* best-effort — a missing statusbar service on some OEM builds is non-fatal */
+  }
+}
+
+/**
  * Find an element by bifold testID (testIdWithKey key).
  * RN maps testID → resource-id on Android and → accessibility identifier on iOS.
  */
@@ -234,7 +253,7 @@ export async function waitForTestId(driver, key, timeout = 30000) {
 /** `android:emulator-5554` (or just the platform, e.g. `ios`, when no udid
  *  is tracked) — prefixes every tap log so a two-device run's log is
  *  attributable to the device that acted, not just "android" twice. */
-function deviceTag(driver) {
+export function deviceTag(driver) {
   return driver.e2eUdid ? `${driver.e2ePlatform}:${driver.e2eUdid}` : driver.e2ePlatform;
 }
 

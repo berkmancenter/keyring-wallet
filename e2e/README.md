@@ -17,6 +17,7 @@ this folder is a small standalone npm package.
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
 | `yarn e2e:vrc:witnessed:devices` | Witnessed + hardware-attested exchange on a **physical Android phone + iPhone**, routed through a locally-run witness server — both wallets end up with a Verifiable Witness Credential (VWC) in addition to the peer VRC | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
+| `yarn e2e:vrc:witnessed:tsp:android-only` | Same witnessed + attested exchange as above, but the wallet-to-wallet VRC documents (discovery/propose/issue) are carried over the real TSP envelope stack instead of the default DIDComm-v1 binding — same **two physical Android phones** requirement. The wallet-to-*witness* protocol (session/challenge/VP) is a separate channel and is unaffected either way — see "TSP + witnessed" below. | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only:mediator` | Same as above, but the witness runs in **MEDIATOR mode** (through the shared production mediator) instead of the default DIRECT mode — confirms the mediator-mode fallback still works, on demand, without hand-setting an env var. See "Confirming the mediator-mode fallback" below. | **Yes** |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
@@ -24,6 +25,7 @@ The same scripts exist inside this folder as `npm run vrc-exchange`,
 `vrc-exchange:devices:android-only`, `store-migration`,
 `store-migration:android-only`, `onboarding-smoke`,
 `vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`,
+`vrc-exchange:witnessed:tsp:android-only`,
 `vrc-exchange:witnessed:android-only:mediator`.
 
 Every script above ends by printing a bordered pass/fail banner
@@ -403,6 +405,24 @@ adb devices                                      # list connected serials
 ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
   yarn e2e:vrc:witnessed:android-only
 ```
+
+### TSP + witnessed (`yarn e2e:vrc:witnessed:tsp:android-only`)
+
+Same witnessed + attested exchange as above (same two physical phones, same
+witness, same VWC issuance), but the wallet-to-wallet Trust Task documents —
+discovery, propose, issue — move onto the real TSP envelope stack (HPKE-Auth,
+Askar custody, CESR framing), same as `yarn e2e:vrc:tsp`.
+
+**The wallet-to-*witness* protocol is untouched by this flag.**
+Session-request/session-challenge/VP submission
+(`bifold/packages/core/src/modules/vrc/witnessed-vrc-manager.ts`) goes over
+plain DIDComm basic messages, not the Trust Task carriage — that's a
+separate channel entirely, so this variant proves the TSP envelope carries
+the peer-to-peer VRC exchange correctly *alongside* an otherwise-unchanged
+witnessing ceremony, not that witnessing itself runs over TSP.
+
+Same device/env requirements as `vrc-exchange:witnessed:android-only`
+above (`ANDROID_UDID`/`ANDROID_UDID2` to pick devices explicitly).
 
 ### Confirming the mediator-mode fallback (`yarn e2e:vrc:witnessed:android-only:mediator`)
 
