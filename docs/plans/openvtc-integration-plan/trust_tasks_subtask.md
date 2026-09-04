@@ -1127,12 +1127,15 @@ surface. Reasoning, including why the reference-adapter item is not actually
 blocked: [`2026-09-04-bam.md`](./2026-09-04-bam.md).
 
 Verified: `@bifold/core`'s trust-tasks suite (10/10 suites, 78/78 tests,
-including a new `ceremonyCredentialExchange.test.ts`), root `yarn typecheck`.
-**Not verified**: a live device/emulator run — `yarn e2e:credential-exchange-query`
-(`e2e/run-credential-exchange-query.js`) is written to this branch's existing
-conventions but has not been run against real hardware (no Android
-device/emulator was available when it was written); see
-[`2026-09-04-bam.md`](./2026-09-04-bam.md) for what's real vs. asserted-but-untested.
+including a new `ceremonyCredentialExchange.test.ts`), root `yarn typecheck`,
+and **`yarn e2e:credential-exchange-query` passes clean on real hardware**
+(Pixel 8 API 33 emulator + a physical `R5CN70Q6PDP` phone) — the holder's app
+shows a real consent prompt and Share produces a correctly-threaded, signed
+`credential-exchange/present` a live verifier agent receives and checks.
+Getting there found and fixed six real bugs (one of them a genuine upstream
+bug in `@credo-ts/core`'s `DcqlService`, patched via `.yarn/patches/`); full
+diagnosis chain for each:
+[`docs/spikes/credential-exchange-query-e2e-findings.md`](../../spikes/credential-exchange-query-e2e-findings.md).
 
 **`ref-07-credo-adapter`'s reference-adapter fixture item remains open and
 tracked, correctly described as a small unblocked cross-check, not a blocked
@@ -1148,10 +1151,10 @@ abandoned. See [`2026-09-04-bam.md`](./2026-09-04-bam.md).
 approval, approved, and answered with a `vp_token` that `vta-service` accepts
 — **met at the reference-implementation level** (Node scripts against a real
 `vta-service`, above); the happy path (query → consent → present, no defer)
-now also runs through the actual wallet — **built, unit-tested, device
-verification pending** (above); and the same fixtures pass in Node against
-the reference adapter — **open, unblocked, tracked** (`ref-07-credo-adapter`,
-below). Interop evidence for parent §7.9 falls out of the reference-level work.
+now also runs through the actual wallet — **met, device-verified** (above);
+and the same fixtures pass in Node against the reference adapter — **open,
+unblocked, tracked** (`ref-07-credo-adapter`, below). Interop evidence for
+parent §7.9 falls out of the reference-level work.
 
 ### 5. Implement layer C — `witness/*`
 
