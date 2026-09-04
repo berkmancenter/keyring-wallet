@@ -863,7 +863,11 @@
       "FirstName": "Nome",
       "LastName": "Sobrenome",
       "Email": "Email",
-      "Organization": "Organização"
+      "Organization": "Organização",
+      "Photo": "Foto de perfil",
+      "PhotoAdd": "Adicionar foto",
+      "PhotoRemove": "Remover foto",
+      "PhotoProcessing": "Processando foto..."
     },
     "Errors": {
       "FirstNameRequired": "Informe seu nome.",
@@ -871,7 +875,10 @@
       "EmailRequired": "Informe um endereço de email.",
       "EmailInvalid": "Informe um endereço de email válido.",
       "OrganizationRequired": "Informe sua organização.",
-      "Generic": "Não foi possível salvar seus dados de perfil. Tente novamente."
+      "Generic": "Não foi possível salvar seus dados de perfil. Tente novamente.",
+      "PhotoTooLarge": "Esta foto é muito grande mesmo na qualidade mais baixa. Escolha uma foto menor ou mais simples.",
+      "PhotoGeneric": "Não foi possível usar esta foto. Tente novamente.",
+      "PhotoPermissionDenied": "O Keyring precisa de permissão para acessar suas fotos para adicionar uma foto de perfil."
     }
   },
   "RenameContact": {

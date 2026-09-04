@@ -1008,7 +1008,11 @@
       "FirstName": "First name",
       "LastName": "Last name",
       "Email": "Email",
-      "Organization": "Organization"
+      "Organization": "Organization",
+      "Photo": "Profile photo",
+      "PhotoAdd": "Add photo",
+      "PhotoRemove": "Remove photo",
+      "PhotoProcessing": "Processing photo..."
     },
     "Errors": {
       "FirstNameRequired": "Enter your first name.",
@@ -1016,7 +1020,10 @@
       "EmailRequired": "Enter an email address.",
       "EmailInvalid": "Enter a valid email address.",
       "OrganizationRequired": "Enter your organization.",
-      "Generic": "We couldn\u2019t save your profile details. Please try again."
+      "Generic": "We couldn\u2019t save your profile details. Please try again.",
+      "PhotoTooLarge": "This photo is too large even at the lowest quality. Please choose a smaller or simpler photo.",
+      "PhotoGeneric": "We couldn\u2019t use that photo. Please try again.",
+      "PhotoPermissionDenied": "Keyring needs permission to access your photos to add a profile picture."
     }
   },
   "RenameContact": {

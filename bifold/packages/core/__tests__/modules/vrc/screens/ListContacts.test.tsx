@@ -1,3 +1,4 @@
+import { ClaimFormat, JsonTransformer, W3cCredentialRecord } from '@credo-ts/core'
 import { fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 
@@ -5,6 +6,8 @@ import { useNavigation as testUseNavigation } from '../../../../__mocks__/@react
 import ListContacts from '../../../../src/modules/vrc/screens/ListContacts'
 import { BasicAppContext } from '../../../helpers/app'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
+import { buildJCardFromFormInput, RCardFormInput } from '../../../../src/modules/vrc/types/rcard'
+import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../../../../src/modules/vrc/types/relationshipContext'
 import {
   createDTGCredential,
   createCredentialsFromSameIssuer,
@@ -12,6 +15,40 @@ import {
   TEST_CONTACTS,
   generateTestDid,
 } from '../fixtures/dtg-credentials'
+
+const ALICE_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+
+/** A received RelationshipCard record from a contact, as stored after auto-accept */
+function createReceivedRCard(issuerDid: string, holderDid: string, form: RCardFormInput): W3cCredentialRecord {
+  const issuanceDate = new Date().toISOString()
+  return JsonTransformer.fromJSON(
+    {
+      _tags: {
+        claimFormat: ClaimFormat.LdpVc,
+        types: ['VerifiableCredential', 'RelationshipCard'],
+        issuerId: issuerDid,
+      },
+      type: 'W3cCredentialRecord',
+      id: `urn:uuid:rcard-${Math.random().toString(16).slice(2)}`,
+      createdAt: issuanceDate,
+      credential: {
+        '@context': ['https://www.w3.org/2018/credentials/v1', DTG_CONTEXT_URL, RCARD_CONTEXT_URL],
+        type: ['VerifiableCredential', 'RelationshipCard'],
+        issuer: issuerDid,
+        issuanceDate,
+        credentialSubject: { id: holderDid, card: buildJCardFromFormInput(form) },
+        proof: {
+          type: 'Ed25519Signature2018',
+          created: issuanceDate,
+          proofPurpose: 'assertionMethod',
+          verificationMethod: `${issuerDid}#key-1`,
+          jws: 'mock-jws-signature',
+        },
+      },
+    },
+    W3cCredentialRecord
+  )
+}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 jest.mock('react-native-localize', () => {})
@@ -381,6 +418,79 @@ describe('ListContacts Screen', () => {
       // Should display the newer name
       expect(await findByText('Alice Smith')).toBeTruthy()
       expect(queryByText('Old Name')).toBeNull()
+    })
+  })
+
+  test('Displays a contact photo when their RCard carries one', async () => {
+    const dtgCredential = createDTGCredential({
+      issuer: TEST_CONTACTS.alice.issuer,
+      credentialSubject: { id: holderDid },
+    })
+    const rcard = createReceivedRCard(TEST_CONTACTS.alice.issuer.id, holderDid, {
+      firstName: 'Alice',
+      lastName: 'Smith',
+      email: TEST_CONTACTS.alice.issuer.email,
+      organization: TEST_CONTACTS.alice.issuer.organization,
+      photo: ALICE_PHOTO,
+    })
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: [dtgCredential, rcard],
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { findByText, findByTestId } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    await waitFor(async () => {
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      const image = await findByTestId('ContactAvatarImage')
+      expect(image.props.source).toEqual({ uri: ALICE_PHOTO })
+    })
+  })
+
+  test('Falls back to the generic icon when the contact has no photo', async () => {
+    const credentials = createTestCredentialsForHolder(holderDid, [{ issuer: TEST_CONTACTS.alice.issuer }])
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: credentials,
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const { findByText, queryByTestId } = render(
+      <BasicAppContext>
+        <ListContacts />
+      </BasicAppContext>
+    )
+
+    await waitFor(async () => {
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId('ContactAvatarImage')).toBeNull()
     })
   })
 })

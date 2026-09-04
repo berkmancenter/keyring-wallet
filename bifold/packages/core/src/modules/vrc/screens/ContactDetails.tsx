@@ -1,6 +1,6 @@
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState, useMemo } from 'react'
-import { StyleSheet, View, TouchableOpacity, ScrollView } from 'react-native'
+import { StyleSheet, View, TouchableOpacity, ScrollView, Image } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAgent } from '@bifold/react-hooks'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -52,6 +52,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   const displayName = displayInfo.name || contact.issuer.name
   const displayEmail = displayInfo.email || contact.issuer.email
   const displayOrganization = displayInfo.organization || contact.issuer.organization
+  const displayPhoto = displayInfo.photo || contact.issuer.photo
 
   const witnessCredentials = useMemo(() => {
     return getWitnessCredentialsForSubject(w3cCredentialRecords, contact.issuer.id)
@@ -138,6 +139,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
       backgroundColor: AVATAR_BG,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    avatarImage: {
+      width: AVATAR_SIZE,
+      height: AVATAR_SIZE,
     },
     contactName: {
       ...TextTheme.headingTwo,
@@ -314,7 +320,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
         {/* Avatar + Name + Badges */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarCircle}>
-            <Icon name="account-outline" size={32} color="#666666" />
+            {displayPhoto ? (
+              <Image testID="ContactAvatarImage" style={styles.avatarImage} source={{ uri: displayPhoto }} />
+            ) : (
+              <Icon name="account-outline" size={32} color="#666666" />
+            )}
           </View>
           <ThemedText style={styles.contactName}>{displayName}</ThemedText>
           {(witnessRecords.length > 0 || hwVerified) && (

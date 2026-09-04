@@ -76,6 +76,37 @@ describe('ContactDetails Screen', () => {
     })
   })
 
+  test('Displays the contact photo when provided', async () => {
+    mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+
+    const photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+    const contact: ContactCredentialDetails = {
+      issuer: { ...TEST_CONTACTS.alice.issuer, photo },
+    }
+
+    const { findByTestId } = render(<ContactDetails {...createRouteParams(contact)} />)
+
+    await waitFor(async () => {
+      const image = await findByTestId('ContactAvatarImage')
+      expect(image.props.source).toEqual({ uri: photo })
+    })
+  })
+
+  test('Falls back to the generic icon when there is no photo', async () => {
+    mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+
+    const contact: ContactCredentialDetails = {
+      issuer: TEST_CONTACTS.alice.issuer,
+    }
+
+    const { findByText, queryByTestId } = render(<ContactDetails {...createRouteParams(contact)} />)
+
+    await waitFor(async () => {
+      expect(await findByText('Alice Smith')).toBeTruthy()
+      expect(queryByTestId('ContactAvatarImage')).toBeNull()
+    })
+  })
+
   test('Shows View Messages button when connection exists', async () => {
     const connectionId = 'test-connection-123'
     mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue({
