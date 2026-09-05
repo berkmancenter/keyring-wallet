@@ -22,6 +22,7 @@ multi-root trust anchors + real-device E2E).
 | Certificate expiry / path checks | ✅ | Native chain validation |
 | Signature / assertion verify | ✅ | Android DER ECDSA; iOS App Attest CBOR assertion |
 | Preference gate | ✅ | `useHardwareAttestation` (default **off** in store; Settings → Secure Exchanges) |
+| Standalone use (no Credo/DIDComm) | ✅ | `core/src/hardware-signing/` — see "Using it without VRC, Credo or DIDComm" |
 | Emulator / simulator E2E | ⚠️ | No real App Attest / TEE attestation — evidence skipped |
 | Real-device E2E | ✅ | `yarn e2e:vrc:devices` — requires Secure Exchange banner both ways |
 
@@ -229,12 +230,13 @@ and post-rotation chains.
 
 | File | Purpose |
 |------|---------|
+| `core/src/hardware-signing/` | **Credo-free signing/evidence/verification core** (see below) |
 | `core/src/modules/vrc/vrc-manager.ts` | Issue/offer; preference gate; offer `proofType` |
 | `core/src/modules/vrc/vrc-biometric.ts` | Confirm UI + signing orchestration |
-| `core/src/modules/vrc/vrc-hardware-signing.ts` | Key create / sign |
-| `core/src/modules/vrc/services/EvidenceBuilder.ts` | Evidence assembly + attestation cache |
-| `core/src/modules/vrc/services/BiometricSignatureVerifier.ts` | JS wrapper → native verify |
-| `core/src/modules/vrc/types/evidence.ts` | Evidence TypeScript types |
+| `core/src/modules/vrc/vrc-hardware-signing.ts` | Credo adapter: `Agent` → logger, keeps the VRC-facing API |
+| `core/src/modules/vrc/services/EvidenceBuilder.ts` | Credo adapter: Askar attestation cache + `utils.uuid` |
+| `core/src/modules/vrc/services/BiometricSignatureVerifier.ts` | VRC-shaped verify wrapper (strips `evidence`/`proof`, restores `@context`) |
+| `core/src/modules/vrc/types/evidence.ts` | Re-exports the evidence types; holds `VrcCredentialWithEvidence` |
 | `core/src/screens/ToggleHardwareAttestation.tsx` | Settings toggle (PIN-gated) |
 | `react-native-attestation/.../Attestation.mm` | iOS SE / App Attest / verify |
 | `react-native-attestation/.../AttestationModule.kt` | Android KeyStore / verify |
@@ -243,14 +245,66 @@ and post-rotation chains.
 
 ---
 
+## Using it without VRC, Credo or DIDComm
+
+`core/src/hardware-signing/` is the signing, evidence-assembly and verification
+stack with the VRC orchestration removed. It imports exactly three things —
+`@bifold/react-native-attestation`, `react-native` (`Platform`) and `buffer` —
+and **no `@credo-ts/*`, not even as a type**. A boundary test
+(`core/__tests__/hardware-signing/credo-free-boundary.test.ts`) fails the build
+if that stops being true, because the point of the directory is that it can move
+into its own package, or into a relying-party service, as a directory move.
+
+```ts
+import { createHardwareSigningService } from '@bifold/core/hardware-signing'
+
+const signer = createHardwareSigningService()
+
+if (await signer.isAvailable()) {
+  await signer.prepare()                       // optional: front-load key + attestation
+  const outcome = await signer.signPayload(loginChallenge)
+
+  if (outcome.success) {
+    // outcome.attestation is self-contained — POST it to the relying party
+    // { payload, payloadHash, signedAt, evidence }
+    // outcome.hasAttestation is false on emulators/simulators: the signature is
+    // real, but there is no Apple/Google certificate chain behind it.
+  }
+}
+
+// On the receiving side (no Credo needed, but native verification is, so this
+// runs on a device):
+const result = await signer.verify(attestation)
+```
+
+`SignedPayloadAttestation` is deliberately **not** a credential and not a
+`credentialSubject` fragment: it is a payload plus the evidence block that a
+specific attested device key signed exactly those bytes. A credential embeds one
+of these in its `evidence` array — which is what VRC issuance does — but a
+caller proving "this login challenge was signed by this device" does not have to
+construct a credential to do it.
+
+Two dependencies are injectable so the wallet's behaviour is unchanged while a
+standalone caller still works with no setup:
+
+| Injection | Wallet supplies | Default |
+|---|---|---|
+| `logger` | `agent.config.logger` | `console` |
+| `attestationCache` | Askar-backed `AttestationStorageRepository` | in-memory, process lifetime |
+| `generateId` | `utils.uuid` from `@credo-ts/core` | local RFC 4122 v4 |
+
+---
+
 ## Log Prefixes
 
 | Prefix | Component |
 |--------|-----------|
-| `[VRC:Sign]` | Hardware signing |
+| `[HW:Sign]` | Hardware signing (`src/hardware-signing/`) |
+| `[HW:Evidence]` | Evidence building (`src/hardware-signing/`) |
+| `[HW:Verify]` | Native verification wrapper (`src/hardware-signing/`) |
+| `[VRC:Sign]` | The VRC adapter around `[HW:Sign]` |
 | `[VRC:Biometric]` | Confirm / auth mode |
-| `[VRC:Evidence]` | Evidence building |
-| `[VRC:Verify]` | Native verification wrapper |
+| `[VRC:Verify]` | VRC credential → evidence extraction |
 | `[VRC:Attest]` | Attestation fetch / cache |
 | `[VRC:IssuedCredentialJSON]` | Slim credential dump (E2E; PEMs omitted) |
 | `VRC:Android` / iOS native tags | Native sign / verify |
