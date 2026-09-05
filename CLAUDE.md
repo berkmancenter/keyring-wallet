@@ -11,7 +11,7 @@ Keyring — a React Native (0.81, React 19) mobile wallet for decentralized iden
 Two-level monorepo:
 
 - `app/` — the only yarn workspace. Keyring-specific mobile app: screens, `keyring-theme/`, localization, errors framework, and agent/container configuration. Native projects live in `app/android` and `app/ios` (workspace `AriesBifold.xcworkspace`, scheme `AriesBifold`).
-- `bifold/` — **git submodule** (github.com/berkmancenter/keyring-bifold, fork of bifold-wallet). Core framework packages under `bifold/packages/`: `core` (UI, navigation, tsyringe DI container in `container-api.ts`/`container-impl.ts`, VRC module at `src/modules/vrc`), `witness-server` (standalone Node.js witness service), `react-native-attestation`, `oca`, `verifier`, `vrc-contexts`, `vrc-reference` (reference implementation + conformance tests), `vrc-shared` (server-side helpers — NOT for the mobile app, see its README), `trust-tasks` (platform-neutral Trust Task plumbing shared by the wallet and the witness-server: document proofs/digests, the binding-0.2 carriage message, the payload validator — no Node-only or RN-only imports allowed), `remote-logs`.
+- `bifold/` — **git submodule** (github.com/berkmancenter/keyring-bifold, fork of bifold-wallet). Core framework packages under `bifold/packages/`: `core` (UI, navigation, tsyringe DI container in `container-api.ts`/`container-impl.ts`, VRC module at `src/modules/vrc`), `witness-server` (standalone Node.js witness service), `mediator-server` (a local DIDComm mediator so a developer can run the app without shared infrastructure — `yarn mediator` at the repo root), `react-native-attestation`, `oca`, `verifier`, `vrc-contexts`, `vrc-reference` (reference implementation + conformance tests), `vrc-shared` (server-side helpers — NOT for the mobile app, see its README), `trust-tasks` (platform-neutral Trust Task plumbing shared by the wallet and the witness-server: document proofs/digests, the binding-0.2 carriage message, the payload validator — no Node-only or RN-only imports allowed), `remote-logs`.
 - `e2e/` — standalone npm package (deliberately outside the yarn workspaces) with Appium two-device tests.
 
 `@bifold/*` dependencies resolve to the submodule via `portal:` resolutions in the root `package.json` (a NEW `@bifold/*` package the app must bundle needs four entries: a root `portal:` resolution, an `app/package.json` dependency, a `packageDirs` entry in `app/metro.config.js` — Metro only resolves files inside its watch folders — and, for dev hot-reload from source, `BIFOLD_SOURCE_PACKAGES` there) — source changes in `bifold/packages/*` are picked up without a build step in dev. `yarn install` at the root runs `scripts/ensure-bifold-ready.js` (init + build submodule) as preinstall and `scripts/fix-portal-symlinks.js` as postinstall.
@@ -37,9 +37,16 @@ Each bifold package's test gate is whatever its own `package.json` defines (usua
 
 `bifold/packages/react-hooks` specifically: its jest config is plain `ts-jest` and does **not** transform `@credo-ts/*`'s ESM builds — unlike `core`, which uses the React Native preset + babel + a broad `transformIgnorePatterns` allowlist for exactly this. When writing tests here that touch providers/hooks importing `@credo-ts/core` or `@credo-ts/didcomm`, `jest.mock(...)` those modules with minimal fakes rather than importing them for real or trying to extend this package's jest/babel config to match `core`'s.
 
-Run the app (requires `app/.env`, copied from `app/.env.sample`, with a reachable DIDComm mediator):
+Run the app. It needs a reachable DIDComm mediator, and `yarn mediator` at the repo
+root starts a local one and writes its live invitation into `app/.env` (creating that
+file from `.env.sample` if needed) — leave it running. Pass
+`--endpoint http://10.0.2.2:3010` for Android emulators or
+`--endpoint http://localhost:3010` for an iOS simulator to skip the cloudflared tunnel;
+see `bifold/packages/mediator-server/README.md`.
 
 ```sh
+yarn mediator                  # in its own terminal, first
+
 cd app
 yarn ios:setup && yarn ios     # iOS (pod install, then build+launch)
 yarn android                   # Android

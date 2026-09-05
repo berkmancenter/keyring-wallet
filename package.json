@@ -26,6 +26,9 @@
   "scripts": {
     "preinstall": "node scripts/ensure-bifold-ready.js && npx husky install .husky",
     "postinstall": "node scripts/fix-portal-symlinks.js",
+    "demo:android": "node scripts/demo.js android",
+    "demo:ios": "node scripts/demo.js ios",
+    "mediator": "node scripts/local-mediator.js",
     "lint:app": "cd app && yarn lint",
     "lint": "yarn lint:app",
     "prettier:app": "cd app && yarn prettier",

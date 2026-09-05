@@ -2302,7 +2302,7 @@ __metadata:
     "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
-    "@openvtc/vti-tsp-js": "npm:0.1.0"
+    "@openvtc/vti-tsp-js": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch"
     ajv: "npm:^8.17.1"
     canonicalize: "npm:^1.0.8"
   languageName: node
