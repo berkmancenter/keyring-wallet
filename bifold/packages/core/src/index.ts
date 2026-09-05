@@ -233,13 +233,36 @@ export {
   isHardwareSigningAvailable,
   prepareHardwareKeyForSigning,
 } from './modules/vrc/vrc-hardware-signing'
-export type { 
+export type {
   VrcHardwareSignature,
   HardwareKeyGenerationResult,
   HardwareSignatureResult,
   HardwareKeyInfo,
   HardwareSigningResult,
 } from './modules/vrc/vrc-hardware-signing'
+
+// Standalone hardware signing — Credo-free; also published as
+// `@bifold/core/hardware-signing`. See src/hardware-signing/index.ts.
+export {
+  createHardwareSigningService,
+  createInMemoryAttestationCache,
+  ensureHardwareKey,
+  signPayloadWithHardwareKey,
+  verifySignedPayload,
+  HardwareEvidenceBuilder,
+} from './hardware-signing'
+export type {
+  AttestationCache,
+  AttestationCacheEntry,
+  HardwareKeyHandle,
+  HardwareKeySignature,
+  HardwareSigningLogger,
+  HardwareSigningService,
+  HardwareSigningServiceOptions,
+  SignPayloadOutcome,
+  SignPayloadRequest,
+  SignedPayloadAttestation,
+} from './hardware-signing'
 
 // Biometric Confirmation UI Context and Modal
 export {

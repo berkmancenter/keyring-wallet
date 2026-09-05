@@ -342,7 +342,9 @@ describe('VRC Hardware Signing', () => {
 
       await signVrcWithHardwareKey(mockAgent, vrcContent)
 
-      expect(mockAgent.config.logger.info).toHaveBeenCalledWith(expect.stringContaining('VRC to sign'))
+      // The message is now 'Payload to sign' — the signer moved to
+      // src/hardware-signing/, where nothing is VRC-shaped. Same log, same call.
+      expect(mockAgent.config.logger.info).toHaveBeenCalledWith(expect.stringContaining('Payload to sign'))
       expect(mockAgent.config.logger.info).toHaveBeenCalledWith(expect.stringContaining(vrcContent.substring(0, 80)))
     })
   })

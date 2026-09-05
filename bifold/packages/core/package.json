@@ -12,6 +12,11 @@
       "require": "./lib/commonjs/index.js",
       "types": "./lib/typescript/src/index.d.ts"
     },
+    "./hardware-signing": {
+      "import": "./lib/module/hardware-signing/index.js",
+      "require": "./lib/commonjs/hardware-signing/index.js",
+      "types": "./lib/typescript/src/hardware-signing/index.d.ts"
+    },
     "./utils/file-cache": {
       "import": "./lib/module/utils/fileCache.js",
       "require": "./lib/commonjs/utils/fileCache.js",
