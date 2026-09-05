@@ -83,6 +83,16 @@ The `app/` directory contains the Keyring-specific experience — themes, custom
 
 ## Getting Started
 
+Two ways in, depending on what you want:
+
+| | Start here | |
+|---|---|---|
+| **I want to see it run** | [**Demo quickstart**](docs/DEMO_QUICKSTART.md) | From an empty machine to two wallets exchanging a credential. No mobile-development experience assumed, nothing to configure. Or run `yarn quickstart`, which checks your toolchain, installs what is missing, and launches the demo. |
+| **I want to build on it** | [**the rest of this page**](#prerequisites) | Prerequisites, the repo layout, running each piece by hand, the witness server, tests, and troubleshooting. |
+
+Building your own use case on Keyring is covered separately in
+[`app/src/demo-profiles/README.md`](app/src/demo-profiles/README.md).
+
 ### Prerequisites
 
 | Tool | Version | Notes |

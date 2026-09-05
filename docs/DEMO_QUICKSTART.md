@@ -9,6 +9,28 @@ servers, and no configuration files to edit.
 
 Budget **about an hour**, most of it downloads and the first build.
 
+## The short version
+
+If you would rather not install things by hand, one command checks your
+toolchain, installs whatever is missing, and starts the demo:
+
+```sh
+git clone --recurse-submodules https://github.com/berkmancenter/keyring-wallet.git
+cd keyring-wallet
+yarn quickstart
+```
+
+It asks before installing anything, and `yarn doctor` reports what you are
+missing without changing a thing.
+
+It handles Node, the JDK, the Android SDK, an emulator and the project's
+dependencies, on **macOS and Linux**. Two things it cannot do: install
+**Xcode** (App Store only — it will tell you), and run on **native Windows**
+(use WSL2). Where it cannot install something, it says exactly what to do.
+
+The rest of this page is that same path by hand — worth reading if the script
+fails, or if you want to know what it did.
+
 ---
 
 ## What you are about to run
