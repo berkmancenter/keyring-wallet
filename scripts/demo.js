@@ -14,10 +14,11 @@
  */
 
 const { execFileSync, spawn } = require('node:child_process')
+const { existsSync, readFileSync } = require('node:fs')
 const { createServer } = require('node:net')
 const { join } = require('node:path')
 
-const { DEFAULT_PORT, defaultEndpointFor, startMediator, writeMediatorUrl } = require('./mediator-lifecycle')
+const { DEFAULT_PORT, defaultEndpointFor, envPath, startMediator, writeMediatorUrl } = require('./mediator-lifecycle')
 
 const appDir = join(__dirname, '..', 'app')
 const APP_ID = 'asml.bkc.harvard.wallet'
@@ -30,6 +31,11 @@ Everything a basic demo needs, in one command: no .env to edit, no mediator URL
 to paste, no account anywhere. app/.env is created from .env.sample if you have
 not got one, and its MEDIATOR_URL is set to a mediator started here.
 
+  --no-mediator     Build against the mediator already running from another
+                    \`yarn demo:*\`, instead of starting a second one. This is
+                    how you bring up a SECOND wallet for a two-device exchange:
+                    both wallets then share one mediator, and app/.env is left
+                    alone.
   --tunnel          Reach the mediator through a cloudflared tunnel instead of
                     a cleartext localhost address. Needed for physical phones,
                     or an Android emulator and an iOS simulator at once.
@@ -56,12 +62,14 @@ function parseArgs(argv) {
     tunnel: false,
     fresh: false,
     verbose: false,
+    mediator: true,
   }
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]
     if (arg === '--port') args.port = Number(rest[++i])
     else if (arg === '--metro-port') args.metroPort = Number(rest[++i])
     else if (arg === '--device') args.device = rest[++i]
+    else if (arg === '--no-mediator') args.mediator = false
     else if (arg === '--tunnel') args.tunnel = true
     else if (arg === '--fresh') args.fresh = true
     else if (arg === '--verbose') args.verbose = true
@@ -116,6 +124,27 @@ function assertInstalledOnAndroid(device) {
   }
   if (!packages.includes(APP_ID)) {
     throw new Error(`the build finished but ${APP_ID} is not installed on the device — see the build output above`)
+  }
+}
+
+/**
+ * With --no-mediator the build inherits whatever app/.env already says, so
+ * check there is something there. An empty MEDIATOR_URL builds a wallet that
+ * can never receive anything, and says so only much later as "There is no
+ * mediator to pickup messages from".
+ */
+function assertMediatorConfigured() {
+  // Spaces and tabs only, never \s — \s matches newlines, so `\s*\S+` after the
+  // `=` happily matches the NEXT line and reports an empty MEDIATOR_URL as
+  // configured, which is precisely the case this guard exists to catch.
+  const configured =
+    existsSync(envPath) && /^[ \t]*MEDIATOR_URL[ \t]*=[ \t]*\S+/m.test(readFileSync(envPath, 'utf8'))
+  if (!configured) {
+    throw new Error(
+      '--no-mediator was passed, but app/.env has no MEDIATOR_URL.\n' +
+        '  Start the first wallet with `yarn demo:android` (no flag) and leave it running,\n' +
+        '  then re-run this for the second device.'
+    )
   }
 }
 
@@ -176,15 +205,24 @@ async function main() {
 
   const endpoint = args.tunnel ? undefined : defaultEndpointFor(args.platform, args.port)
 
-  console.log(`[demo] starting a local mediator for ${args.platform}`)
-  const mediator = await startMediator({ port: args.port, endpoint, fresh: args.fresh, verbose: args.verbose })
+  // --no-mediator: a second wallet joining the mediator the first `yarn demo:*`
+  // is already running. Starting another would fail on the port anyway, and two
+  // wallets on one mediator is what a two-device exchange wants.
+  let mediator
+  if (args.mediator) {
+    console.log(`[demo] starting a local mediator for ${args.platform}`)
+    mediator = await startMediator({ port: args.port, endpoint, fresh: args.fresh, verbose: args.verbose })
 
-  const stop = () => mediator.stop()
-  process.on('SIGINT', stop)
-  process.on('SIGTERM', stop)
+    const stop = () => mediator.stop()
+    process.on('SIGINT', stop)
+    process.on('SIGTERM', stop)
 
-  const { created } = writeMediatorUrl(mediator.mediatorUrl)
-  console.log(`[demo] ${created ? 'created app/.env and set' : 'set'} MEDIATOR_URL — ${mediator.publicUrl}`)
+    const { created } = writeMediatorUrl(mediator.mediatorUrl)
+    console.log(`[demo] ${created ? 'created app/.env and set' : 'set'} MEDIATOR_URL — ${mediator.publicUrl}`)
+  } else {
+    assertMediatorConfigured()
+    console.log('[demo] using the mediator already configured in app/.env (--no-mediator)')
+  }
 
   console.log(`[demo] starting Metro on port ${args.metroPort}`)
   const metro = await startMetro(args.metroPort)

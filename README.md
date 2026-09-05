@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" /></a>
   <img src="https://img.shields.io/badge/Platform-iOS%20%7C%20Android-lightgrey" alt="Platform" />
-  <img src="https://img.shields.io/badge/React_Native-0.73-61DAFB?logo=react" alt="React Native" />
+  <img src="https://img.shields.io/badge/React_Native-0.81-61DAFB?logo=react" alt="React Native" />
 </p>
 
 ---
@@ -19,6 +19,8 @@
 **Keyring** gives individuals full ownership and control of their digital identity. Create decentralized identifiers, store verifiable credentials on-device, and exchange relationship credentials with others — no centralized intermediaries required.
 
 Developed at the [Applied Social Media Lab](https://asml.cyber.harvard.edu/) at Harvard's [Berkman Klein Center for Internet & Society](https://cyber.harvard.edu/).
+
+**Want to see it running?** [`docs/DEMO_QUICKSTART.md`](docs/DEMO_QUICKSTART.md) takes you from an empty machine to two wallets exchanging a credential — no prior mobile-development experience assumed, and nothing to configure.
 
 ⚠️ NOTE! This is a functional alpha release, but is not meant for production uses at this time. See [issues](https://github.com/berkmancenter/keyring-wallet/issues) for more information.
 
@@ -62,7 +64,7 @@ keyring-wallet/
 │   ├── src/                # App-specific screens, hooks, themes, localization
 │   ├── android/            # Android native project
 │   └── ios/                # iOS native project
-├── keyring-bifold/         # Git submodule — core wallet framework
+├── bifold/         # Git submodule — core wallet framework
 │   └── packages/
 │       ├── core/           # UI, navigation, VRC module, hooks, agent config
 │       ├── witness-server/ # Node.js witness service (DIDComm + web UI)
@@ -77,7 +79,7 @@ keyring-wallet/
     └── react-native-argon2/  # Argon2 key derivation
 ```
 
-The `app/` directory contains the Keyring-specific experience — themes, custom screens, localization overrides, and agent configuration. The `keyring-bifold/` submodule contains reusable core logic shared across wallet implementations.
+The `app/` directory contains the Keyring-specific experience — themes, custom screens, localization overrides, and agent configuration. The `bifold/` submodule contains reusable core logic shared across wallet implementations.
 
 ## Getting Started
 
@@ -107,39 +109,61 @@ git submodule update --init --recursive
 yarn install
 ```
 
-### Configuration
+### Run a demo
 
-Copy the environment sample and configure your mediator:
+One command starts a local mediator, points the app at it, and builds and
+launches the wallet. There is nothing to configure:
 
 ```sh
-cp app/.env.sample app/.env
+yarn demo:android    # Android emulator
+yarn demo:ios        # iOS simulator (macOS)
 ```
 
-Edit `app/.env` with your values:
+Leave that terminal open — it is running your mediator. The first build takes
+5-10 minutes.
+
+**New to mobile development?** [`docs/DEMO_QUICKSTART.md`](docs/DEMO_QUICKSTART.md)
+walks the whole path from an empty machine: installing the SDK, creating an
+emulator, running the demo, exchanging a credential between two wallets, and
+what to do when something fails.
+
+Useful flags: `--device <id>` to pick one of several attached devices,
+`--metro-port <n>` when another checkout already holds port 8081, `--tunnel`
+for physical phones, `--fresh` to wipe the mediator's state.
+
+### The mediator on its own
+
+If you would rather build the app yourself, `yarn mediator` runs just the
+mediator and writes its invitation into `app/.env`. See
+[`bifold/packages/mediator-server/README.md`](bifold/packages/mediator-server/README.md)
+for endpoint options and when a tunnel is needed.
+
+### Configuration
+
+`yarn demo:*` and `yarn mediator` create `app/.env` from `app/.env.sample` and
+keep `MEDIATOR_URL` current, so a basic demo needs no hand-editing. The
+remaining values are optional:
 
 ```
-MEDIATOR_URL=<your-mediator-invitation-url>
 MEDIATOR_USE_PUSH_NOTIFICATIONS=<true|false>
 PROOF_TEMPLATE_URL=<url>
 REMOTE_LOGGING_URL=<url>
 INDY_VDR_PROXY_URL=<url>
 ```
 
-You will need a DIDComm mediator for the wallet to communicate with other agents. See the [Credo Mediator](https://github.com/openwallet-foundation/credo-ts-ext/tree/main/packages/rest#mediator) or [Aries Mediator](https://github.com/hyperledger/aries-mediator-service) for options.
+To point at a mediator you host yourself instead, set `MEDIATOR_URL` to its
+invitation URL and skip `yarn mediator`.
 
-### Run on iOS
+### Building manually
 
 ```sh
 cd app
-yarn run ios:setup   # Install CocoaPods
-yarn ios             # Build and launch
+yarn ios:setup && yarn ios   # iOS: install CocoaPods, then build and launch
+yarn android                 # Android
+yarn start                   # Metro, if it does not start on its own
 ```
 
-Or open `app/ios/AriesBifold.xcworkspace` in Xcode and run from there.
-
-### Run on Android
-
-Set up your Android environment (`~/.zshrc` or equivalent):
+On Android, set your SDK location first (`~/.zshrc` or equivalent):
 
 ```sh
 export ANDROID_HOME=$HOME/Library/Android/sdk
@@ -148,28 +172,12 @@ export PATH=$PATH:$ANDROID_HOME/platform-tools
 export JAVA_HOME="/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home"
 ```
 
-Then:
-
-```sh
-cd app
-yarn android
-```
-
-### Start Metro Bundler
-
-If Metro doesn't start automatically:
-
-```sh
-cd app
-yarn start
-```
-
 ### Witness Server
 
-The witness server is a separate Node.js service. See the [keyring-bifold witness-server README](keyring-bifold/packages/witness-server/README.md) for complete documentation. Quick start:
+The witness server is a separate Node.js service. See the [witness-server README](bifold/packages/witness-server/README.md) for complete documentation. Quick start:
 
 ```sh
-cd keyring-bifold/packages/witness-server
+cd bifold/packages/witness-server
 cp .env.sample .env   # Configure mediator and ports
 yarn install
 yarn start
@@ -193,9 +201,9 @@ Setup, app-build commands, and the real-device operator guide: [`e2e/README.md`]
 
 ## Developing in keyring-bifold
 
-The `keyring-bifold/` directory is a Git submodule pointing to our Bifold fork. To work on core changes:
+The `bifold/` directory is a Git submodule pointing to our Bifold fork. To work on core changes:
 
-1. Make changes in `keyring-bifold/packages/core/` (or other packages)
+1. Make changes in `bifold/packages/core/` (or other packages)
 2. Changes are picked up via Yarn portals — no build step needed in dev
 3. For hot reload of keyring-bifold source, see `docs/HOT_RELOAD_BIFOLD_DEV_SETUP.md`
 
