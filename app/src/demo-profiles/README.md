@@ -43,6 +43,38 @@ that has to stay up, and a round trip that can fail while someone is watching.
 Credentials with no bundle still render — the resolver generates one, deriving
 a background colour from the credential name — so a partial set is fine.
 
+## A worked demo: `trading-card/`
+
+An exchanged R-Card, drawn as a collectable card — photo, name plate, and a
+rarity grade taken from what the exchange actually proved (hardware-signed,
+witnessed, both). The exchange itself is untouched: this is Keyring's VRC
+flow, with the R-Card's photo (`modules/vrc/utils/rcardPhoto.ts`) rendered
+differently.
+
+Two registrations, both additive:
+
+| Token                    | What the profile puts there                             |
+| ------------------------ | ------------------------------------------------------- |
+| `COMPONENT_CONTACT_CARD` | `TradingCard` — how one exchanged R-Card is drawn       |
+| `UTIL_OCA_RESOLVER`      | the card's colours and set name, bundled inside the app |
+
+`COMPONENT_CONTACT_CARD` is resolved per contact by the contacts list, so a
+profile changes the card without touching the screen. The colours come from an
+OCA branding overlay in `trading-card/ocaBundles.ts`, keyed by the R-Card
+template id — the identifier `DefaultOCABundleResolver` falls back to when a
+credential has no AnonCreds schema or credential-definition id.
+
+To turn it on, register the installed profiles on the container in `App.tsx`:
+
+```ts
+import { installedDemoProfiles, registerDemoProfiles } from './src/demo-profiles'
+
+const bcwContainer = new AppContainer(bifoldContainer, ...).init()
+registerDemoProfiles(bcwContainer, installedDemoProfiles)
+```
+
+Nothing in `app/.env` changes, and no branding is fetched over the network.
+
 ## The `DemoProfile` shape
 
 `types.ts` defines it: an `id`, a `title` and `description` for the picker, and
