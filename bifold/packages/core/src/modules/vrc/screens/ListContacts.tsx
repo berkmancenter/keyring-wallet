@@ -5,10 +5,8 @@ import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useEffect, useMemo, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FlatList, View, TouchableOpacity, StyleSheet, Platform, Image } from 'react-native'
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
+import { FlatList, View, StyleSheet } from 'react-native'
 
-import { ThemedText } from '../../../components/texts/ThemedText'
 import { DispatchAction } from '../../../contexts/reducers/store'
 import { useStore } from '../../../contexts/store'
 import { useTheme } from '../../../contexts/theme'
@@ -25,13 +23,12 @@ import {
   getVrcCredentialJsonForSubject,
 } from '../utils/witnessCredentialUtils'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
-import { testIdWithKey } from '../../../utils/testable'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 
 const ListContacts: React.FC = () => {
   const { t: _t } = useTranslation()
   const [store, dispatch] = useStore()
-  const [{ enableTours: enableToursConfig }] = useServices([TOKENS.CONFIG])
+  const [{ enableTours: enableToursConfig }, ContactCard] = useServices([TOKENS.CONFIG, TOKENS.COMPONENT_CONTACT_CARD])
   const navigation = useNavigation<StackNavigationProp<ContactStackParams>>()
   useTheme()
   const { start, stop } = useTour()
@@ -40,13 +37,6 @@ const ListContacts: React.FC = () => {
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
 
-  const CARD_BG = '#F5F5F5'
-  const CARD_BORDER = 'rgba(170, 170, 170, 0.4)'
-  const AVATAR_BG = '#E8E0E8'
-  const NAME_COLOR = '#010B13'
-  const BADGE_HW_TEAL = '#4D7A8B'
-  const BADGE_WITNESS_PURPLE = '#A349A4'
-
   const styles = StyleSheet.create({
     listContainer: {
       backgroundColor: '#F5F5F5',
@@ -54,58 +44,6 @@ const ListContacts: React.FC = () => {
     },
     listContentContainer: {
       paddingVertical: 8,
-    },
-    itemContainer: {
-      backgroundColor: CARD_BG,
-      marginHorizontal: 14,
-      marginVertical: 4,
-      paddingHorizontal: 14,
-      paddingVertical: 0,
-      height: 62,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: CARD_BORDER,
-      flexDirection: 'row',
-      alignItems: 'center',
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-        },
-        android: {
-          elevation: 3,
-        },
-      }),
-    },
-    avatarCircle: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: AVATAR_BG,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: 12,
-      overflow: 'hidden',
-    },
-    avatarImage: {
-      width: 36,
-      height: 36,
-    },
-    itemText: {
-      fontFamily: 'SourceSans3-Regular',
-      fontSize: 16,
-      color: NAME_COLOR,
-      flex: 1,
-    },
-    badgeContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginLeft: 8,
-    },
-    badgeIcon: {
-      marginLeft: 4,
     },
   })
 
@@ -338,38 +276,19 @@ const ListContacts: React.FC = () => {
     return stop
   }, [stop])
 
+  // How a contact is drawn is injected, not hard-coded: an exchanged R-Card is
+  // the app's most skinnable credential, and a demo profile swaps this token
+  // for its own renderer (see app/src/demo-profiles/trading-card/) without
+  // touching this screen.
   const renderContactItem = ({ item }: { item: ContactCredentialDetails }) => {
     return (
-      <TouchableOpacity
-        style={styles.itemContainer}
+      <ContactCard
+        contact={item}
+        hardwareVerified={hwVerifiedMap[item.issuer.id] === true}
         onPress={() => {
           navigation.navigate(Screens.ContactDetails, { contact: item })
         }}
-        accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel={`Contact: ${item.issuer.name}`}
-      >
-        <View style={styles.avatarCircle}>
-          {item.issuer.photo ? (
-            <Image
-              testID={testIdWithKey('ContactAvatarImage')}
-              style={styles.avatarImage}
-              source={{ uri: item.issuer.photo }}
-            />
-          ) : (
-            <Icon name="account-outline" size={22} color="#666666" />
-          )}
-        </View>
-        <ThemedText style={styles.itemText}>{item.issuer.name}</ThemedText>
-        <View style={styles.badgeContainer}>
-          {hwVerifiedMap[item.issuer.id] === true && (
-            <Icon name="shield-check" size={18} color={BADGE_HW_TEAL} style={styles.badgeIcon} />
-          )}
-          {item.hasWitnessCredentials && (
-            <Icon name="check-decagram" size={18} color={BADGE_WITNESS_PURPLE} style={styles.badgeIcon} />
-          )}
-        </View>
-      </TouchableOpacity>
+      />
     )
   }
 

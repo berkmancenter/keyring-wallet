@@ -268,7 +268,8 @@ export { MainContainer } from './container-impl'
 export type { CredentialListFooterProps }
 
 export type { Config, HistoryEventsLoggerConfig } from './types/config'
-export type { OnboardingTask, ScreenLayoutConfig } from './types/navigators'
+export type { ContactCardProps } from './types/contact-card'
+export type { ContactCredentialDetails, OnboardingTask, ScreenLayoutConfig } from './types/navigators'
 
 export { LockoutReason } from './contexts/auth'
 export type { OnboardingStackProps } from './navigators/OnboardingStack'

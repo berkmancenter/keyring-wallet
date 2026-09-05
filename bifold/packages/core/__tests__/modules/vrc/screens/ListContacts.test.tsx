@@ -1,10 +1,15 @@
 import { ClaimFormat, JsonTransformer, W3cCredentialRecord } from '@credo-ts/core'
 import { fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
+import { Text } from 'react-native'
+import { container } from 'tsyringe'
 
 import { useNavigation as testUseNavigation } from '../../../../__mocks__/@react-navigation/native'
+import { TOKENS } from '../../../../src/container-api'
+import { MainContainer } from '../../../../src/container-impl'
 import ListContacts from '../../../../src/modules/vrc/screens/ListContacts'
-import { BasicAppContext } from '../../../helpers/app'
+import { ContactCardProps } from '../../../../src/types/contact-card'
+import { BasicAppContext, CustomBasicAppContext } from '../../../helpers/app'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
 import { buildJCardFromFormInput, RCardFormInput } from '../../../../src/modules/vrc/types/rcard'
 import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../../../../src/modules/vrc/types/relationshipContext'
@@ -17,7 +22,8 @@ import {
 } from '../fixtures/dtg-credentials'
 import { testIdWithKey } from '../../../../src/utils/testable'
 
-const ALICE_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+const ALICE_PHOTO =
+  'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
 
 /** A received RelationshipCard record from a contact, as stored after auto-accept */
 function createReceivedRCard(issuerDid: string, holderDid: string, form: RCardFormInput): W3cCredentialRecord {
@@ -461,6 +467,45 @@ describe('ListContacts Screen', () => {
       expect(await findByText('Alice Smith')).toBeTruthy()
       const image = await findByTestId(testIdWithKey('ContactAvatarImage'))
       expect(image.props.source).toEqual({ uri: ALICE_PHOTO })
+    })
+  })
+
+  test('Draws each contact with the registered contact card', async () => {
+    // An exchanged R-Card is the app's most skinnable credential, so how one
+    // is drawn is injected rather than hard-coded — this is the seam a demo
+    // profile takes over to render the same R-Card as a trading card.
+    const credentials = createTestCredentialsForHolder(holderDid, [{ issuer: TEST_CONTACTS.alice.issuer }])
+
+    mockUseOpenIDCredentials.mockReturnValue({
+      openIdState: {
+        w3cCredentialRecords: credentials,
+        sdJwtVcRecords: [],
+        mdocVcRecords: [],
+        openIDCredentialRecords: [],
+        isLoading: false,
+      },
+      getW3CCredentialById: jest.fn(),
+      getSdJwtCredentialById: jest.fn(),
+      getMdocCredentialById: jest.fn(),
+      storeCredential: jest.fn(),
+      removeCredential: jest.fn(),
+      resolveBundleForCredential: jest.fn(),
+    } as any)
+
+    const CustomCard: React.FC<ContactCardProps> = ({ contact }) => <Text>{`Custom: ${contact.issuer.name}`}</Text>
+    const customContainer = new MainContainer(container.createChildContainer()).init()
+    customContainer.container.registerInstance(TOKENS.COMPONENT_CONTACT_CARD, CustomCard)
+
+    const { findByText, queryByText } = render(
+      <CustomBasicAppContext container={customContainer}>
+        <ListContacts />
+      </CustomBasicAppContext>
+    )
+
+    await waitFor(async () => {
+      expect(await findByText('Custom: Alice Smith')).toBeTruthy()
+      // The default row is gone, not merely joined by the override.
+      expect(queryByText('Alice Smith')).toBeNull()
     })
   })
 

@@ -26,6 +26,7 @@ import { BifoldLogger } from './services/logger'
 import { AttestationMonitor } from './types/attestation'
 import { CredentialProvisioningMonitor } from './types/auto-credential'
 import { Config, HistoryEventsLoggerConfig } from './types/config'
+import { ContactCardProps } from './types/contact-card'
 import { CredentialListFooterProps } from './types/credential-list-footer'
 import { InlineErrorConfig } from './types/error'
 import { GenericFn } from './types/fn'
@@ -88,6 +89,9 @@ export const COMPONENT_TOKENS = {
   COMPONENT_RECORD: 'component.record',
   COMPONENT_PIN_HEADER: 'component.pin-create-header',
   COMPONENT_CONTACT_LIST_ITEM: 'component.contact-list-item',
+  // How one exchanged R-Card is drawn in the VRC contacts list. Distinct from
+  // COMPONENT_CONTACT_LIST_ITEM above, which draws a DIDComm connection.
+  COMPONENT_CONTACT_CARD: 'component.contact-card',
   COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM: 'component.contact-details-cred-list-item',
   COMPONENT_CONNECTION_ALERT: 'component.connection-alert',
 } as const
@@ -250,6 +254,7 @@ export type TokenMapping = {
   [TOKENS.COMPONENT_CRED_EMPTY_LIST]: React.FC
   [TOKENS.COMPONENT_RECORD]: React.FC
   [TOKENS.COMPONENT_CONTACT_LIST_ITEM]: React.FC<ContactListItemProps>
+  [TOKENS.COMPONENT_CONTACT_CARD]: React.FC<ContactCardProps>
   [TOKENS.COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM]: React.FC<ContactCredentialListItemProps>
   [TOKENS.INLINE_ERRORS]: InlineErrorConfig
   [TOKENS.CUSTOM_NAV_STACK_1]: React.FC
