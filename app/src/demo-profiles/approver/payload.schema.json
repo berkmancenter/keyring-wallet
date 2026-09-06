@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://keyring.appliedtechnologylab.org/spec/approver/access-request/0.1",
+  "title": "Approver Access Request — payload",
+  "description": "One party asks a contact — over an already-established VRC relationship — for access to a named resource. The counterparty approves or denies; either way a signed #response travels back, never a silent drop.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["resource"],
+  "properties": {
+    "resource": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable description of what access is being requested, shown to the approving person verbatim."
+    },
+    "resourceId": {
+      "type": "string",
+      "description": "Opaque identifier for the resource in a real integration's own access-control system."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the requester is asking, in their own words. A hint reaching a human, not an obligation the counterparty must honour."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Approver Access Request — response payload",
+      "description": "The counterparty's signed decision.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "respondedAt"],
+      "properties": {
+        "decision": { "type": "string", "enum": ["approved", "denied"] },
+        "respondedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

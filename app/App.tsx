@@ -24,6 +24,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller'
 import Orientation from 'react-native-orientation-locker'
 import SplashScreen from 'react-native-splash-screen'
 import Toast from 'react-native-toast-message'
+import { Config } from 'react-native-config'
 import { container } from 'tsyringe'
 
 import Root from '@/Root'
@@ -37,7 +38,7 @@ import BCLogger from '@/utils/logger'
 import tours from '@keyring-theme/features/tours'
 import WebDisplay from '@screens/WebDisplay'
 import { AppContainer } from './container-imp'
-import { installedDemoProfiles, registerDemoProfiles } from './src/demo-profiles'
+import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
 
 initLanguages(localization)
 
@@ -54,10 +55,13 @@ const App = () => {
   const [surveyVisible, setSurveyVisible] = useState(false)
   const bcwContainer = new AppContainer(bifoldContainer, t, navigationRef.navigate, setSurveyVisible).init()
   // Additive, per demo-profiles/README.md ("A worked demo: trading-card/") —
-  // registers whatever profiles are installed (currently just trading-card)
-  // on top of the running container. No .env flag, no rebuild-per-demo: the
-  // whole point of the DemoProfile shape is that this is safe to leave on.
-  registerDemoProfiles(bcwContainer, installedDemoProfiles)
+  // registers whatever profiles are installed (trading-card and approver, as
+  // of this profile) on top of the running container. No rebuild-per-demo:
+  // the whole point of the DemoProfile shape is that this is safe to leave
+  // on. ACTIVE_DEMO_PROFILE (app/.env, optional) narrows this to a single
+  // profile by id when a specific e2e run or demo-day walkthrough wants only
+  // one active — see demo-profiles/index.ts's selectDemoProfiles for why.
+  registerDemoProfiles(bcwContainer, selectDemoProfiles(Config.ACTIVE_DEMO_PROFILE))
 
   if (!isTablet()) {
     Orientation.lockToPortrait()

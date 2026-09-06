@@ -47,6 +47,8 @@
     "e2e:vrc:photo:android-only": "cd e2e && npm run vrc-exchange:photo:android-only",
     "e2e:vrc:trading-card": "cd e2e && npm run vrc-exchange:trading-card",
     "e2e:vrc:trading-card:android-only": "cd e2e && npm run vrc-exchange:trading-card:android-only",
+    "e2e:approver": "cd e2e && npm run approver-exchange",
+    "e2e:approver:android-only": "cd e2e && npm run approver-exchange:android-only",
     "e2e:vrc:devices": "cd e2e && npm run vrc-exchange:devices",
     "e2e:vrc:devices:android-only": "cd e2e && npm run vrc-exchange:devices:android-only",
     "e2e:migration": "cd e2e && npm run store-migration",

@@ -12,6 +12,8 @@
     "vrc-exchange:photo:android-only": "PLATFORMS=android,android node run-vrc-exchange-photo.js",
     "vrc-exchange:trading-card": "node run-vrc-exchange-trading-card.js",
     "vrc-exchange:trading-card:android-only": "PLATFORMS=android,android node run-vrc-exchange-trading-card.js",
+    "approver-exchange": "node run-approver-exchange.js",
+    "approver-exchange:android-only": "PLATFORMS=android,android node run-approver-exchange.js",
     "vrc-exchange:devices": "node run-vrc-exchange-devices.js",
     "vrc-exchange:devices:android-only": "node run-vrc-exchange-devices-android-only.js",
     "store-migration": "node run-store-migration.js",
