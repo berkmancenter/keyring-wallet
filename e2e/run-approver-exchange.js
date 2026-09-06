@@ -43,6 +43,7 @@ import {
   assertTrustTaskExchangeMarkers,
   assertVrcReceived,
   completeOnboarding,
+  dismissTourIfPresent,
   returnToContacts,
   showRelationshipInvitation,
 } from "./lib/flows.js";
@@ -84,6 +85,21 @@ async function goToWalletTab(driver) {
   await returnToContacts(driver).catch(() => {});
   await waitForTestId(driver, "Wallet", 30000);
   await tapTestId(driver, "Wallet");
+  // The Wallet tab's own credential-list tour ("Add credentials", spotlighting
+  // the empty-state "Add Credential" button) auto-starts the FIRST time this
+  // screen renders with zero credentials — which is always, for this demo,
+  // since it runs no credential issuance. Its overlay (TourOverlay.tsx:
+  // SpotlightOverlay/SpotOverlay/SpotTooltip) is a full-screen absolutely
+  // positioned View covering the whole window, so — regardless of what the
+  // accessibility tree reports for the real footer buttons underneath
+  // (clickable=true, displayed=true) — every tap anywhere on screen lands on
+  // this overlay's backdrop, not on ApproverRequestAccess/TrustTaskApprove.
+  // Confirmed via view-hierarchy dump + logcat: neither a bare RN <Button>
+  // nor the real TouchableOpacity ever logged their onPress while this tour
+  // was up, though Appium's elementClick reported a clean success every time.
+  // dismissTourIfPresent is the same helper other flows already call after
+  // switching tabs for exactly this reason.
+  await dismissTourIfPresent(driver);
 }
 
 /** Wallet A: tap the Approver demo's "Request access" button on the Wallet tab's list footer. */
