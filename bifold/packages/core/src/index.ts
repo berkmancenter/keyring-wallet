@@ -105,7 +105,7 @@ export * from './types/auto-credential'
 export { BifoldError } from './types/error'
 export { Screens, Stacks, TabStacks } from './types/navigators'
 export * from './types/version-check'
-export { createLinkSecretIfRequired, getAgentModules } from './utils/agent'
+export { createLinkSecretIfRequired, getAgentModules, useAppAgent } from './utils/agent'
 export { getCredentialIdentifiers, isValidAnonCredsCredential } from './utils/credential'
 export {
   connectFromScanOrDeepLink,
@@ -208,7 +208,31 @@ export {
   loadVrcLocalization,
   getCredentialDisplayRegistry,
 } from './modules/vrc'
-export { setupTrustTasksInbound, setTspCarriageEnabled, TRUST_TASKS_MIN_RCE_VERSION } from './modules/trust-tasks'
+export {
+  setupTrustTasksInbound,
+  setTspCarriageEnabled,
+  TRUST_TASKS_MIN_RCE_VERSION,
+  sendTrustTaskDocument,
+  getTrustTasksService,
+  TrustTaskDocumentRepository,
+  trustTaskRegistry,
+  registerTrustTask,
+  createApprovalRequestHandler,
+  respondToPendingTrustTask,
+  trustTaskPromptStore,
+  trustTaskDisplayRegistry,
+  registerTrustTaskDisplay,
+} from './modules/trust-tasks'
+export type {
+  TrustTaskRegistration,
+  TrustTaskOrchestration,
+  TrustTaskDocumentHandler,
+  InboundContext as TrustTaskInboundContext,
+  RegisterTrustTaskOptions,
+  PendingTrustTaskPrompt,
+} from './modules/trust-tasks'
+export type { ITrustTaskDisplayHandler, ITrustTaskDisplayRegistry, TrustTaskDisplayResult } from './types/trust-task-display'
+export { default as TrustTaskApprovalCard } from './screens/TrustTaskApprovalCard'
 export type {
   RelationshipDidRecordProps,
   CustomTags,

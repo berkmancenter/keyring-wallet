@@ -35,6 +35,7 @@ import { CustomNotification } from './types/notification'
 import { State } from './types/state'
 import { IVersionCheckService } from './types/version-check'
 import { ICredentialDisplayRegistry } from './types/credential-display'
+import { ITrustTaskDisplayRegistry } from './types/trust-task-display'
 
 export type FN_ONBOARDING_DONE = (
   dispatch: React.Dispatch<ReducerAction<unknown>>,
@@ -151,6 +152,7 @@ export const UTILITY_TOKENS = {
   UTIL_AGENT_BRIDGE: 'utility.agent-bridge',
   UTIL_REFRESH_ORCHESTRATOR: 'utility.refresh-orchestrator',
   UTIL_CREDENTIAL_DISPLAY_REGISTRY: 'utility.credential-display-registry',
+  UTIL_TRUST_TASK_DISPLAY_REGISTRY: 'utility.trust-task-display-registry',
 } as const
 
 export const CONFIG_TOKENS = {
@@ -265,6 +267,7 @@ export type TokenMapping = {
   [TOKENS.FN_ATTESTATION_GET_CHALLENGE]: FN_ATTESTATION_GET_CHALLENGE
   [TOKENS.FN_ATTESTATION_GET_JWT]: FN_ATTESTATION_GET_JWT
   [TOKENS.UTIL_CREDENTIAL_DISPLAY_REGISTRY]: ICredentialDisplayRegistry | undefined
+  [TOKENS.UTIL_TRUST_TASK_DISPLAY_REGISTRY]: ITrustTaskDisplayRegistry | undefined
 }
 
 export interface Container {
