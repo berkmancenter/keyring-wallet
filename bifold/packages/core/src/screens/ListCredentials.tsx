@@ -289,7 +289,23 @@ const ListCredentials: React.FC = () => {
           )
         }}
         ListEmptyComponent={() => <CredentialEmptyList message={t('Credentials.EmptyList')} />}
-        ListFooterComponent={() => <CredentialListFooter credentialsCount={credentials.length} />}
+        // A real element, not a wrapping function: VirtualizedList treats a
+        // non-element ListFooterComponent as a component TYPE and
+        // instantiates it fresh via `<ListFooterComponent />` on every
+        // render of THIS screen (see @react-native/virtualized-lists'
+        // VirtualizedList.js, "Add cell for ListFooterComponent" —
+        // `isValidElement(ListFooterComponent) ? ListFooterComponent :
+        // <ListFooterComponent />`). An inline arrow function here is a new
+        // identity on every render, so React reads it as a changed element
+        // type and fully unmounts/remounts the whole footer subtree on
+        // every unrelated re-render of this list (a credential-state hook
+        // firing, a store update — routine during an active DIDComm
+        // session). Passing the element directly reconciles by
+        // CredentialListFooter's own stable type instead, so an in-flight
+        // touch on a footer that has its own onPress (the Approver demo's
+        // request/approve buttons — 2026-09-06) is not orphaned mid-gesture
+        // by a remount the credential list itself never asked for.
+        ListFooterComponent={<CredentialListFooter credentialsCount={credentials.length} />}
       />
       <CredentialListOptions />
     </View>
