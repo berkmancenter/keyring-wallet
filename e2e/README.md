@@ -12,6 +12,8 @@ this folder is a small standalone npm package.
 | `yarn e2e:vrc:tsp` | Same exchange, but the VRC/witness Trust Task documents are carried over the real TSP envelope stack (HPKE-Auth, Askar custody, CESR framing) instead of the default DIDComm-v1 binding — both **Android emulators** (logcat-based marker assertion needs it; see below for the two-AVD setup). Wallet-to-wallet only, not an ecosystem-interop test — see `docs/plans/openvtc-integration-plan/2026-09-02-bam.md` | No |
 | `yarn e2e:vrc:photo` | Same exchange, with wallet A attaching an R-Card profile photo — asserts the photo attribute survives the exchange (data only, no visual assertion). Native photo-picker automation is experimental — see the caveat in `lib/flows.js`'s `pickRCardPhoto` | No |
 | `yarn e2e:vrc:photo:android-only` | Same photo-exchange test on **two Android emulators** | No |
+| `yarn e2e:vrc:trading-card` | Same exchange with the `trading-card` demo profile (`app/src/demo-profiles/trading-card/`) active — asserts the exchanged R-Card renders as a `TradingCard` (rarity badge, photo) on **both** sides, not the default `ContactCard` | No |
+| `yarn e2e:vrc:trading-card:android-only` | Same trading-card test on **two Android emulators** | No |
 | `yarn e2e:vrc:devices` | Same exchange on a **physical Android phone + iPhone**, proving hardware attestation + biometric signing | **Yes** — you authenticate on the phones |
 | `yarn e2e:vrc:devices:android-only` | Same hardware-attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
 | `yarn e2e:migration` | Askar 0.2→0.6 store migration: old app → exchange → in-place upgrade (Android emulator + iOS simulator peer) | No |

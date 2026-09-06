@@ -37,6 +37,7 @@ import BCLogger from '@/utils/logger'
 import tours from '@keyring-theme/features/tours'
 import WebDisplay from '@screens/WebDisplay'
 import { AppContainer } from './container-imp'
+import { installedDemoProfiles, registerDemoProfiles } from './src/demo-profiles'
 
 initLanguages(localization)
 
@@ -52,6 +53,11 @@ const App = () => {
   const bifoldContainer = new MainContainer(container.createChildContainer()).init()
   const [surveyVisible, setSurveyVisible] = useState(false)
   const bcwContainer = new AppContainer(bifoldContainer, t, navigationRef.navigate, setSurveyVisible).init()
+  // Additive, per demo-profiles/README.md ("A worked demo: trading-card/") —
+  // registers whatever profiles are installed (currently just trading-card)
+  // on top of the running container. No .env flag, no rebuild-per-demo: the
+  // whole point of the DemoProfile shape is that this is safe to leave on.
+  registerDemoProfiles(bcwContainer, installedDemoProfiles)
 
   if (!isTablet()) {
     Orientation.lockToPortrait()
