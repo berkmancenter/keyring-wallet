@@ -3,3 +3,6 @@
 !lib/**
 node_modules/
 artifacts/
+# ad hoc diagnostic dumps from manual/agent verification runs (e.g. artifacts-run1,
+# artifacts-run2-badenv) — same shape as artifacts/, just not that exact name
+artifacts-*/
