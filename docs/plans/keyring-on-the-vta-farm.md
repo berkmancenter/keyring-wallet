@@ -29,6 +29,8 @@ That difference is the whole reason it is a separate document, and it has three 
 
 **Non-core, stated as a constraint rather than left implicit.** Keyring's OpenVTC goals — the transport and task-layer work in [`openvtc-integration-plan.md`](./openvtc-integration-plan.md), the VTA client in [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md), developer packaging in [`reference-app-sdk-packaging.md`](./reference-app-sdk-packaging.md) — reach their own definitions of done whether or not any phase below ships. Nothing in F0–F4 gates a phase of those plans. The one place work is genuinely shared, `did:webvh` resolution (§3.4), is not a dependency this plan creates: [`ref-06x-cypress-stack`](../../tsp-reference/ref-06x-cypress-stack/) proved the need against Keyring's own **self-hosted** VTA, with no Farm involved, and it is already parent Phase D item 3 — [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) marks it explicitly *"shared with parent Phase D item 3."* This plan consumes that adapter at the parent's pace; it does not get to accelerate it. Valuable and worth building — but a side path, not a critical one. See [`2026-09-04-bm.md`](./keyring-on-the-vta-farm/2026-09-04-bm.md).
 
+**Non-core is a statement about dependency, not about priority.** The paragraph above is about what this plan is allowed to block: nothing. It is not a claim that the work is unimportant or unscheduled, and the two should not be read together. As of 2026-09-07 the Farm is the **primary interoperability target for the OSS Linux Foundation Summit Europe (Prague, 2026-10-01)** — the venue where Keyring is expected to exchange with infrastructure it does not run. That makes F0–F2 schedule-critical for a date, while leaving every sentence above intact: if the Farm work slips, the parent plans still reach their own definitions of done, and Prague is what is lost rather than the roadmap. A plan can be both non-blocking and time-boxed; this one is. See [`2026-09-07-al.md`](./keyring-on-the-vta-farm/2026-09-07-al.md).
+
 ---
 
 ## 2. The levels
@@ -259,6 +261,7 @@ Keyring is about to become the ecosystem's first React Native client. Everything
 |---|---|---|
 | [`2026-09-03-al.md`](./keyring-on-the-vta-farm/2026-09-03-al.md) | AL | The Farm measurements behind §3; the packaged-dependency measurements behind §4 and the contribution shapes in §7; the positions adopted on custody, WebAuthn and the CI environment, and the open questions each supersedes |
 | [`2026-09-04-bm.md`](./keyring-on-the-vta-farm/2026-09-04-bm.md) | BM | Why this plan's non-core status belongs in the plan text as a stated constraint, not only in the "Siblings" framing; the §3.4 wording it corrects and the evidence that the shared `did:webvh` work was never Farm-created |
+| [`2026-09-07-al.md`](./keyring-on-the-vta-farm/2026-09-07-al.md) | AL | Adopts the non-core constraint without amendment, and closes what it leaves open: non-core is a statement about the dependency graph, not about priority. Records the Farm as the primary interoperability target for Prague (OSS LF Summit Europe, 2026-10-01), making F0–F2 schedule-critical while every non-blocking sentence stays true — if the work slips, Prague is lost rather than the roadmap. Restates that Prague-on-the-Farm does not retire the standalone VTA |
 
 ## 11. Sources
 
