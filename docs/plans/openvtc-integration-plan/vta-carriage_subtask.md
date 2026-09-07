@@ -19,7 +19,10 @@ the topology and authorization layer neither one currently specifies.
 that found the gap, an initial design that conflated locality (a hard,
 optional, physical constraint) with credential custody (a soft, revisitable
 engineering choice), and the correction that separated them; this document
-reflects the corrected model throughout.
+reflects the corrected model throughout. [`2026-09-07-al.md`](./2026-09-07-al.md)
+— Alberto's review: the mediator, `did:webvh` resolution, the CLI-vs-wallet
+policy surface and VTA attachment are unstated here; a consideration added to
+§11 Q1; and the contrast demo §5's mechanism implies.
 **Baseline:** `verifiable-trust-infrastructure@187ad9cd`, `openvtc@3797dd0`,
 per [`scripts/openvtc/PINS.json`](../../../scripts/openvtc/PINS.json).
 
