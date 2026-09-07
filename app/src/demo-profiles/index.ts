@@ -33,9 +33,20 @@ export const installedDemoProfiles: readonly DemoProfile[] = [tradingCardProfile
  * single profile by id; unset (the default) registers every installed
  * profile, which is what today's actual (collision-free) pair needs for a
  * demo-day walkthrough of both.
+ *
+ * `ACTIVE_DEMO_PROFILE=none` is the escape hatch this shape was missing: a
+ * plain Keyring build with every demo profile excluded. Before this, there
+ * was no value for this variable — set, unset, or a typo'd profile id — that
+ * produced an empty list; `selectDemoProfiles` always fell back to "register
+ * everything installed" (a non-matching id is a config mistake, not a
+ * request for zero profiles, so that fallback stays). `none` is reserved and
+ * cannot collide with a real profile id, since `DemoProfile.id` values are
+ * meant to be picker-facing labels like `trading-card`/`approver`, not this
+ * sentinel.
  */
 export function selectDemoProfiles(activeProfileId?: string): readonly DemoProfile[] {
   if (!activeProfileId) return installedDemoProfiles
+  if (activeProfileId === 'none') return []
   const match = installedDemoProfiles.find((p) => p.id === activeProfileId)
   return match ? [match] : installedDemoProfiles
 }

@@ -60,7 +60,8 @@ const App = () => {
   // the whole point of the DemoProfile shape is that this is safe to leave
   // on. ACTIVE_DEMO_PROFILE (app/.env, optional) narrows this to a single
   // profile by id when a specific e2e run or demo-day walkthrough wants only
-  // one active — see demo-profiles/index.ts's selectDemoProfiles for why.
+  // one active, or excludes every profile with ACTIVE_DEMO_PROFILE=none for
+  // a plain Keyring build — see demo-profiles/index.ts's selectDemoProfiles.
   registerDemoProfiles(bcwContainer, selectDemoProfiles(Config.ACTIVE_DEMO_PROFILE))
 
   if (!isTablet()) {

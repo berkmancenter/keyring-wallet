@@ -64,16 +64,28 @@ OCA branding overlay in `trading-card/ocaBundles.ts`, keyed by the R-Card
 template id — the identifier `DefaultOCABundleResolver` falls back to when a
 credential has no AnonCreds schema or credential-definition id.
 
-To turn it on, register the installed profiles on the container in `App.tsx`:
+`App.tsx` already registers every installed profile on the container:
 
 ```ts
-import { installedDemoProfiles, registerDemoProfiles } from './src/demo-profiles'
+import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
 
 const bcwContainer = new AppContainer(bifoldContainer, ...).init()
-registerDemoProfiles(bcwContainer, installedDemoProfiles)
+registerDemoProfiles(bcwContainer, selectDemoProfiles(Config.ACTIVE_DEMO_PROFILE))
 ```
 
-Nothing in `app/.env` changes, and no branding is fetched over the network.
+Nothing in `app/.env` has to change for this, and no branding is fetched over
+the network — but `app/.env`'s `ACTIVE_DEMO_PROFILE` is how you pick which
+profiles that registers:
+
+| `ACTIVE_DEMO_PROFILE` | Result |
+| ---------------------- | ------------------------------------------- |
+| unset (the default)    | every installed profile, all at once |
+| a profile's `id` (`trading-card`, `approver`) | only that one |
+| an id that doesn't match any installed profile | every installed profile (a typo isn't a request for zero) |
+| `none` | no demo profiles at all — a plain Keyring build |
+
+`none` is the one to reach for if you want to build and run Keyring itself,
+with none of this directory's demos active.
 
 ## The `DemoProfile` shape
 
