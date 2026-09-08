@@ -16,6 +16,8 @@
       "@services/*": ["src/services/*"],
       "@types/*": ["src/types/*"],
       "@utils/*": ["src/utils/*"],
+      "@openvtc/trust-tasks": ["../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/index.d.ts"],
+      "@openvtc/trust-tasks/*": ["../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/*"],
       "react-native": ["node_modules/react-native"],
       "react-native-svg": ["node_modules/react-native-svg"],
       "@react-navigation/*": ["node_modules/@react-navigation/*"]

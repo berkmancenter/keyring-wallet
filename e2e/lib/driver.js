@@ -101,6 +101,10 @@ export async function createSession(platform, capsOverride) {
     const { execSync } = await import("node:child_process");
     execSync(`adb -s ${udid} reverse tcp:8081 tcp:8081`);
     console.log(`[e2e] adb reverse tcp:8081 set up on ${udid}`);
+    driver.e2eUdid = udid; // for logcat-based assertions (trust-task markers)
+    // Scope logcat-based assertions to THIS run — the buffer survives app
+    // reinstalls and would otherwise satisfy markers with a previous run's lines.
+    execSync(`adb -s ${udid} logcat -c`);
     const { APP_ID } = await import("./config.js");
     await driver.activateApp(APP_ID);
     console.log("[e2e] app launched");

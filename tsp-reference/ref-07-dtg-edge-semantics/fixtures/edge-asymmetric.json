@@ -1,0 +1,57 @@
+{
+  "description": "The cred-spec #23 case: a cross-community edge whose halves legitimately declare different correlation scopes. Half 1 is issued by a member of a deliberately public community (kernel.example) under an attributed, registry-known identifier; half 2 is issued by a Keyring wallet user under a pairwise did:peer:2. Both halves are conformant; the edge is one edge.",
+  "declaredScopes": {
+    "half1": "public",
+    "half2": "pairwise"
+  },
+  "halves": [
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:web:kernel.example:maintainers:mickey",
+      "validFrom": "2026-08-20T10:00:00Z",
+      "credentialSubject": {
+        "id": "did:peer:2.Ez6LSwPrivWalletToMickey1111111111111111111111"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T10:00:00Z",
+        "verificationMethod": "did:web:kernel.example:maintainers:mickey#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "zMZ3MSoptiomjkXhmoo8oQCW13isWgdCEPtsBET85yBHpTFLqMZgig6r5LucREi6mCP5vWGG45LjwqGnQksTtApC"
+      }
+    },
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:peer:2.Ez6LSwPrivWalletToMickey1111111111111111111111",
+      "validFrom": "2026-08-20T10:00:05Z",
+      "credentialSubject": {
+        "id": "did:web:kernel.example:maintainers:mickey"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T10:00:05Z",
+        "verificationMethod": "did:peer:2.Ez6LSwPrivWalletToMickey1111111111111111111111#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z3R7t3RDTbn4ApKbfVmWxMY1VSEvrbhu6hcAeHaHkT8qjzw7HxXvqA74FH8mDufBJq2dH8UbmpZDsHKMWRH6kTYpc"
+      }
+    }
+  ]
+}

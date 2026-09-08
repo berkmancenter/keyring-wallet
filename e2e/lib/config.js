@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,6 +7,44 @@ const repoRoot = path.resolve(
   "..",
   ".."
 );
+
+/**
+ * app/.env is read by react-native-config, which accepts quoted values and
+ * trailing `#` comments; a naive `.trim()` would carry both into the
+ * invitation URL and produce a malformed one. Strips a matched pair of
+ * surrounding quotes, and an unquoted trailing comment.
+ */
+function unquoteEnvValue(raw) {
+  const value = raw.trim();
+  const quoted = value.match(/^(['"])(.*)\1$/);
+  if (quoted) return quoted[2];
+  return value.split(/\s+#/)[0].trim();
+}
+
+/**
+ * The witness's mediator invitation for the ":mediator" e2e variant (see
+ * run-vrc-exchange-witnessed-android-only-devices-mediator.js). Reuses
+ * app/.env's own MEDIATOR_URL rather than requiring a second, separately
+ * maintained value: it's the same production mediator the wallets already
+ * connect to, so this is what makes the variant a real test of "does
+ * mediator-mode witnessing work against our actual infrastructure" rather
+ * than a stand-in. Set WITNESS_MEDIATOR_INVITATION_URL to override.
+ */
+export function resolveWitnessMediatorInvitationUrl() {
+  if (process.env.WITNESS_MEDIATOR_INVITATION_URL) {
+    return process.env.WITNESS_MEDIATOR_INVITATION_URL;
+  }
+  const appEnvPath = path.join(repoRoot, "app", ".env");
+  if (existsSync(appEnvPath)) {
+    const match = readFileSync(appEnvPath, "utf-8").match(/^MEDIATOR_URL=(.*)$/m);
+    const value = match && unquoteEnvValue(match[1]);
+    if (value) return value;
+  }
+  throw new Error(
+    "no mediator invitation URL to run the witness against — set WITNESS_MEDIATOR_INVITATION_URL, " +
+      "or set MEDIATOR_URL in app/.env (reused as-is: same production mediator the wallets already use)."
+  );
+}
 
 export const APP_ID = "asml.bkc.harvard.wallet";
 export const TEST_ID_PREFIX = "com.ariesbifold:id/";
@@ -144,6 +183,9 @@ export function iosCaps() {
     "appium:enforceAppInstall": true,
     "appium:newCommandTimeout": 300,
     "appium:autoAcceptAlerts": true,
+    // WDA defaults to :8100, which collides with anything else on that port
+    // (e.g. a local VTA); override with WDA_LOCAL_PORT
+    "appium:wdaLocalPort": Number(process.env.WDA_LOCAL_PORT || 8100),
     "appium:wdaLaunchTimeout": 180000,
     "appium:simulatorStartupTimeout": 300000,
   };

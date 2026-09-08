@@ -1,0 +1,14 @@
+{
+  "name": "ref-07-dtg-edge-semantics",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.3.0",
+    "@scure/base": "^2.3.0"
+  }
+}
