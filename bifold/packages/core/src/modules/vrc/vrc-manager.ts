@@ -130,6 +130,33 @@ async function logIssuedCredentialSnapshot(
  */
 export const RCE_PROTOCOL_VERSION = 4
 
+/** A parsed `vrc:relationshipDid:… vrc:rceVersion:N` legacy announcement. */
+export interface LegacyRelationshipAnnouncement {
+  relationshipDid: string
+  counterpartyRceVersion: number
+}
+
+/**
+ * Parse the legacy relationshipDid announcement out of a basic-message body.
+ * Extracted so the dual-accept gate (`trust_tasks_subtask.md` §7.3: a sub-v4
+ * peer's announcement must both drive the untouched legacy dance AND suppress
+ * the Trust Task dialect) is testable against real wire-format strings —
+ * v3-and-below peers only ever speak this format, never the Trust Task one.
+ * Returns undefined for content with no `vrc:relationshipDid:` at all, or a
+ * malformed one (present but no DID captured).
+ */
+export function parseLegacyRelationshipAnnouncement(content: string): LegacyRelationshipAnnouncement | undefined {
+  if (!content.includes('vrc:relationshipDid:')) return undefined
+  const match = content.match(/vrc:relationshipDid:(did:peer:[a-zA-Z0-9]+)/)
+  if (!match || !match[1]) return undefined
+
+  // RCE protocol version announced by the peer (absent = 1, pre-VC-2.0 app)
+  const versionMatch = content.match(/vrc:rceVersion:(\d+)/)
+  const counterpartyRceVersion = versionMatch ? parseInt(versionMatch[1], 10) : 1
+
+  return { relationshipDid: match[1], counterpartyRceVersion }
+}
+
 /**
  * Default expiration time for VRC credentials (in days)
  * Set via W3C VC v1 `expirationDate` field
@@ -1562,18 +1589,12 @@ export function setupVrcConnectionHandler(agent: Agent) {
 
     const logger = createVrcLogger(agent, { module: 'vrc', side: 'INVITER', component: 'BasicMessageHandler' })
 
-    // Extract the DID from the message (handles both with and without prefix)
-    const match = content.match(/vrc:relationshipDid:(did:peer:[a-zA-Z0-9]+)/)
-    if (!match || !match[1]) {
+    const announcement = parseLegacyRelationshipAnnouncement(content)
+    if (!announcement) {
       logger.warn(`Received malformed relationshipDid message: ${content}`)
       return
     }
-
-    const counterpartyRelationshipDid = match[1]
-
-    // RCE protocol version announced by the peer (absent = 1, pre-VC-2.0 app)
-    const versionMatch = content.match(/vrc:rceVersion:(\d+)/)
-    const counterpartyRceVersion = versionMatch ? parseInt(versionMatch[1], 10) : 1
+    const { relationshipDid: counterpartyRelationshipDid, counterpartyRceVersion } = announcement
 
     logger.info(
       `Received relationshipDid via message: ${counterpartyRelationshipDid} (RCE v${counterpartyRceVersion})`
