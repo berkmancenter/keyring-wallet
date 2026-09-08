@@ -49,7 +49,8 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
           navigation?.getParent(),
           false, // isDeepLink
           enableImplicitInvitations,
-          enableReuseConnections
+          enableReuseConnections,
+          store.preferences.walletName
         )
       } catch (err: unknown) {
         const error = new BifoldError(
@@ -62,7 +63,7 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
         throw error
       }
     },
-    [agent, logger, navigation, enableImplicitInvitations, enableReuseConnections, t]
+    [agent, logger, navigation, enableImplicitInvitations, enableReuseConnections, store.preferences.walletName, t]
   )
 
   const handleCodeScan = useCallback(

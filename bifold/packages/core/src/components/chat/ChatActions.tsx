@@ -11,7 +11,11 @@ export const renderActions = (
   return actions ? (
     <Actions
       {...props}
-      containerStyle={{
+      // v3 prop names. It took `containerStyle` and `optionTintColor` in v2 and
+      // silently ignores both now — v3 reads wrapperStyle and
+      // actionSheetOptionTintColor (see Actions.d.ts). Nothing errored; the
+      // styling simply never applied.
+      wrapperStyle={{
         width: 40,
         height: 40,
         marginBottom: 6,
@@ -27,7 +31,7 @@ export const renderActions = (
           accessibilityRole="button"
         />
       )}
-      optionTintColor={theme.optionsText}
+      actionSheetOptionTintColor={theme.optionsText}
     />
   ) : null
 }

@@ -18,30 +18,47 @@ import { ChatMessage, ExtendedChatMessage } from '../components/chat/ChatMessage
 import { useNetwork } from '../contexts/network'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
-import { useChatMessagesByConnection, useVrcFlowInProgress } from '../hooks/chat-messages'
+import { useChatMessagesByConnection, useVrcFlowInProgress, PROGRESS_MILESTONES } from '../hooks/chat-messages'
 import { useConnectionDisplayName } from '../hooks/connections'
 import { useWitnessConnection } from '../modules/vrc/context/WitnessConnectionProvider'
 import { Role } from '../types/chat'
 import { BasicMessageMetadata, basicMessageCustomMetadata } from '../types/metadata'
 import { setActiveChatConnectionId } from '../utils/activeChatTracker'
-import { RootStackParams, ContactStackParams, Screens, Stacks } from '../types/navigators'
-import { Animated, KeyboardAvoidingView, Platform, View, StyleSheet, Text, TouchableOpacity } from 'react-native'
+import { RootStackParams, ContactStackParams, Screens, Stacks, TabStacks } from '../types/navigators'
+import { Animated, Easing, View, StyleSheet, Text, TouchableOpacity } from 'react-native'
 
 const PROGRESS_BAR_WIDTH = 200
 
-const FlowProgressBar: React.FC<{ durationMs: number; color: string; complete?: boolean }> = ({ durationMs, color, complete }) => {
+const FlowProgressBar: React.FC<{ fraction: number; color: string; complete?: boolean }> = ({ fraction, color, complete }) => {
   const progress = useRef(new Animated.Value(0)).current
 
+  // Milestone-driven with creep: snap toward the flow's actual milestone,
+  // then drift toward (never past) the next rung — the waits between
+  // milestones are real multi-second protocol round trips, and a frozen bar
+  // reads as a hang. The creep runs long (60s, longer than any normal phase)
+  // with an ease-out curve, so motion is clearly visible early and only
+  // asymptotically slows — the bar never sits dead still mid-phase.
+  // Monotonic: the creep stops short of the next milestone, so the next real
+  // advance always lands ahead of the drift.
   useEffect(() => {
-    progress.setValue(0)
-    const animation = Animated.timing(progress, {
-      toValue: 1,
-      duration: durationMs,
-      useNativeDriver: false,
-    })
+    const next = PROGRESS_MILESTONES.find((m) => m > fraction) ?? 1
+    const creepTarget = fraction + (next - fraction) * 0.9
+    const animation = Animated.sequence([
+      Animated.timing(progress, {
+        toValue: fraction,
+        duration: 600,
+        useNativeDriver: false,
+      }),
+      Animated.timing(progress, {
+        toValue: creepTarget,
+        duration: 60000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ])
     animation.start()
     return () => animation.stop()
-  }, [durationMs, progress])
+  }, [fraction, progress])
 
   useEffect(() => {
     if (complete) {
@@ -104,7 +121,7 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
   const { connectedWitness } = useWitnessConnection()
   
   // Track VRC flow in progress to show loading overlay during exchanges
-  const { inProgress: vrcFlowInProgress, statusText: vrcStatusText, timedOut: vrcTimedOut, progressDurationMs, progressComplete, onDismissTimeout } = useVrcFlowInProgress(connectionId)
+  const { inProgress: vrcFlowInProgress, statusText: vrcStatusText, timedOut: vrcTimedOut, progressFraction, progressComplete, confirmed: vrcConfirmed, onDismissTimeout, onDismissConfirmation } = useVrcFlowInProgress(connectionId)
 
   // Check if this connection is a witness connection by matching connectionId
   const _isWitnessConnection = connectedWitness?.connectionId === connectionId
@@ -179,12 +196,25 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
     <SafeAreaView edges={['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
       {/* Temporarily removed for cleaner witness chat UI */}
       {/* {isWitnessConnection && <WitnessChatBanner connectionId={connectionId} />} */}
-      <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: '#F5F5F5' }}
-        behavior={Platform.OS === 'ios' ? undefined : 'padding'}
-        keyboardVerticalOffset={headerHeight}
-      >
+      {/*
+       * No KeyboardAvoidingView of our own here — gifted-chat v3 already
+       * mounts one (plus its own KeyboardProvider) internally, and wrapping it
+       * in a second one is what broke the composer on device 2026-08-26: two
+       * avoiders over nested providers produced ~135 UIKeyboardAutomatic frame
+       * events per second, tore the text input session down and rebuilt it on
+       * each keystroke, and the field cleared and re-asserted sentence
+       * capitalisation as a result.
+       *
+       * The original complaint (keyboard covering the composer, message
+       * unsendable) had the same single root cause seen from the other side:
+       * gifted-chat's internal avoider defaults to
+       * keyboardVerticalOffset={insets.top}, the safe-area inset, which is
+       * wrong for a screen inside a navigation header. Give it the real header
+       * height instead and it behaves.
+       */}
+      <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
         <GiftedChat<ExtendedChatMessage>
+          keyboardAvoidingViewProps={{ keyboardVerticalOffset: headerHeight }}
           messages={chatMessages}
           isAvatarVisibleForEveryMessage={true}
           renderAvatar={() => null}
@@ -212,7 +242,27 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
         {vrcFlowInProgress && (
           <View style={styles.flowOverlay} pointerEvents="auto">
             <View style={styles.flowOverlayContent}>
-              {vrcTimedOut ? (
+              {vrcConfirmed ? (
+                <>
+                  <Text style={styles.flowOverlayText}>
+                    {theirLabel
+                      ? `Relationship confirmed — ${theirLabel} added to Contacts`
+                      : 'Relationship confirmed — contact added'}
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.flowOverlayDismissButton, { backgroundColor: ColorPalette.brand.primary }]}
+                    onPress={() => {
+                      onDismissConfirmation()
+                      const nav = navigation.getParent() ?? navigation
+                      ;(nav as any).navigate(TabStacks.ContactStack, { screen: Screens.Contacts })
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={'View contacts'}
+                  >
+                    <Text style={styles.flowOverlayDismissText}>View contacts</Text>
+                  </TouchableOpacity>
+                </>
+              ) : vrcTimedOut ? (
                 <>
                   <Text style={styles.flowOverlayTimeoutIcon}>⚠</Text>
                   <Text style={styles.flowOverlayText}>{vrcStatusText}</Text>
@@ -232,15 +282,15 @@ const Chat: React.FC<ChatProps> = ({ route }) => {
               ) : (
                 <>
                   <Text style={styles.flowOverlayText}>{vrcStatusText}</Text>
-                  {progressDurationMs > 0 && (
-                    <FlowProgressBar durationMs={progressDurationMs} color={ColorPalette.brand.primary} complete={progressComplete} />
+                  {progressFraction > 0 && (
+                    <FlowProgressBar fraction={progressFraction} color={ColorPalette.brand.primary} complete={progressComplete} />
                   )}
                 </>
               )}
             </View>
           </View>
         )}
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   )
 }

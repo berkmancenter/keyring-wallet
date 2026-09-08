@@ -211,6 +211,18 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       const preferences = {
         ...state.preferences,
         useBiometry: choice,
+        // Turning biometrics on also enables hardware-backed signing. These were
+        // two independent preferences, and useHardwareAttestation defaults to
+        // false, so a user who opted into biometrics during onboarding still had
+        // secure exchange switched off and signed in software without ever being
+        // told (reported on device 2026-08-28).
+        //
+        // Only ever turned ON here. Turning biometrics off does not turn it back
+        // off: the hardware key needs a secure lock screen, not biometrics
+        // specifically — iOS signs happily with the device passcode — so
+        // disabling biometrics is not a reason to silently downgrade signing.
+        // The dedicated toggle in Settings remains the way to switch it off.
+        useHardwareAttestation: choice ? true : state.preferences.useHardwareAttestation,
       }
       const onboarding = {
         ...state.onboarding,

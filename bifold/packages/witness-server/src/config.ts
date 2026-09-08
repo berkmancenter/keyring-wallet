@@ -193,8 +193,18 @@ export interface WitnessServerConfig {
   llmEnabled: boolean
 
   /**
-   * Anthropic API key for Claude access.
+   * Which LLM provider to talk to.
+   * - 'anthropic' (default): Claude via the Anthropic API.
+   * - 'deepseek': DeepSeek via its OpenAI-compatible API.
+   * These are different wire formats, so this selects the client that gets
+   * built — an Anthropic client pointed at DeepSeek's base URL will not work.
+   */
+  llmProvider: 'anthropic' | 'deepseek'
+
+  /**
+   * API key for the selected provider.
    * Required when llmEnabled is true.
+   * Set via WITNESS_LLM_API_KEY (or the legacy WITNESS_ANTHROPIC_API_KEY).
    */
   anthropicApiKey?: string
 
@@ -364,9 +374,22 @@ export function loadConfig(): WitnessServerConfig {
 
   // LLM Configuration
   const llmEnabled = process.env.WITNESS_LLM_ENABLED === 'true' // Default: false
-  const anthropicApiKey = process.env.WITNESS_ANTHROPIC_API_KEY || undefined
-  const anthropicBaseUrl = process.env.WITNESS_ANTHROPIC_BASE_URL || undefined
-  const anthropicModel = process.env.WITNESS_ANTHROPIC_MODEL || undefined
+
+  // Provider selection. 'anthropic' (default) talks to Claude directly;
+  // 'deepseek' talks to DeepSeek's OpenAI-compatible API, which is a different
+  // wire format — pointing the Anthropic client at it does NOT work, so the
+  // provider decides which client gets built (see LLMService).
+  const rawProvider = (process.env.WITNESS_LLM_PROVIDER || 'anthropic').toLowerCase()
+  if (rawProvider !== 'anthropic' && rawProvider !== 'deepseek') {
+    throw new Error(`WITNESS_LLM_PROVIDER must be 'anthropic' or 'deepseek', got '${rawProvider}'`)
+  }
+  const llmProvider = rawProvider as 'anthropic' | 'deepseek'
+
+  // Generic names are preferred; the WITNESS_ANTHROPIC_* names are kept as
+  // fallbacks so existing setups keep working unchanged.
+  const anthropicApiKey = process.env.WITNESS_LLM_API_KEY || process.env.WITNESS_ANTHROPIC_API_KEY || undefined
+  const anthropicBaseUrl = process.env.WITNESS_LLM_BASE_URL || process.env.WITNESS_ANTHROPIC_BASE_URL || undefined
+  const anthropicModel = process.env.WITNESS_LLM_MODEL || process.env.WITNESS_ANTHROPIC_MODEL || undefined
   const anthropicMaxTokens = process.env.WITNESS_ANTHROPIC_MAX_TOKENS ? parseInt(process.env.WITNESS_ANTHROPIC_MAX_TOKENS, 10) : undefined
   const anthropicTemperature = process.env.WITNESS_ANTHROPIC_TEMPERATURE ? parseFloat(process.env.WITNESS_ANTHROPIC_TEMPERATURE) : undefined
   const llmContextOrganization = process.env.WITNESS_CONTEXT_ORGANIZATION || undefined
@@ -380,8 +403,8 @@ export function loadConfig(): WitnessServerConfig {
   // Validate LLM configuration if enabled
   if (llmEnabled && !anthropicApiKey) {
     throw new Error(
-      'WITNESS_LLM_ENABLED is true but WITNESS_ANTHROPIC_API_KEY is not set. ' +
-        'Please provide an Anthropic API key or disable LLM features.'
+      `WITNESS_LLM_ENABLED is true but no API key is set for provider '${llmProvider}'. ` +
+        'Set WITNESS_LLM_API_KEY (or WITNESS_ANTHROPIC_API_KEY), or disable LLM features.'
     )
   }
 
@@ -414,6 +437,7 @@ export function loadConfig(): WitnessServerConfig {
     localityVerificationRequired,
     retainMessages,
     llmEnabled,
+    llmProvider,
     anthropicApiKey,
     anthropicBaseUrl,
     anthropicModel,
@@ -461,6 +485,7 @@ export const defaultConfig: WitnessServerConfig = {
   localityVerificationRequired: true,
   retainMessages: false,
   llmEnabled: false,
+  llmProvider: 'anthropic',
   anthropicApiKey: undefined,
   anthropicBaseUrl: undefined,
   anthropicModel: undefined,

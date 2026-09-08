@@ -250,13 +250,17 @@
     ]
   },
   "dependencies": {
+    "@bifold/trust-tasks": "workspace:*",
     "@digitalcredentials/data-integrity": "^2.6.0",
     "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "^1.3.0",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
+    "@openvtc/trust-tasks": "^0.9.0",
     "@openwallet-foundation/askar-react-native": "0.6.0",
     "@openwallet-foundation/askar-shared": "0.6.0",
     "@types/base-64": "^1.0.2",
+    "ajv": "^8.17.1",
+    "canonicalize": "^1.0.8",
     "unique-names-generator": "^4.7.1"
   }
 }

@@ -12,6 +12,12 @@ module.exports = {
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node', 'mjs'],
   moduleNameMapper: {
+    // @openvtc/trust-tasks is ESM-only with an import-condition exports map,
+    // which jest's require-based resolver cannot see through — map straight
+    // to the dist files (babel transforms them; the package is allowlisted
+    // in transformIgnorePatterns).
+    '^@openvtc/trust-tasks$': '<rootDir>/node_modules/@openvtc/trust-tasks/dist/index.js',
+    '^@openvtc/trust-tasks/(.*)$': '<rootDir>/node_modules/@openvtc/trust-tasks/dist/$1.js',
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       '<rootDir>/__mocks__/file.js',
     '\\.(css|less)$': '<rootDir>/__mocks__/style.js',
@@ -19,6 +25,7 @@ module.exports = {
     'react-i18next': '<rootDir>/__mocks__/react-i18next.ts',
     '^uuid$': require.resolve('uuid'),
     '^@bifold/oca$': '<rootDir>/../oca/src/index.ts',
+    '^@bifold/trust-tasks$': '<rootDir>/../trust-tasks/src/index.ts',
     '^@bifold/verifier$': '<rootDir>/../verifier/src/index.ts',
     'expo-crypto': '<rootDir>/__mocks__/@expo/expo-crypto.js',
     '@expo/app-integrity': '<rootDir>/__mocks__/@expo/app-integrity.js',
@@ -27,7 +34,7 @@ module.exports = {
     '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(.*react-native.*|@credo-ts|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|expo(nent)?|@expo(nent)?/.*)/)',
+    'node_modules/(?!(.*react-native.*|@credo-ts|@openvtc|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|expo(nent)?|@expo(nent)?/.*)/)',
   ],
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]sx?$',
   testPathIgnorePatterns: [

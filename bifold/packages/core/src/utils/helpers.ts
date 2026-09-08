@@ -24,6 +24,7 @@ import {
   DidCommCredentialPreviewAttribute,
   DidCommOutOfBandRole,
   DidCommBasicMessageRole,
+  DidCommDidExchangeState,
 } from '@credo-ts/didcomm'
 import { BrandingOverlay, CaptureBaseAttributeType } from '@bifold/oca'
 import { Attribute, CredentialOverlay, Predicate } from '@bifold/oca/build/legacy'
@@ -273,17 +274,19 @@ export const getAttributeFormats = (bundle: any): Record<string, string | undefi
   }, {})
 }
 
+// The label this wallet announces on `receiveInvitation` (see
+// connectFromInvitation below) — a protocol placeholder, never a real
+// contact name. getConnectionName treats a counterparty's label equal to
+// this the same as "no label yet" rather than rendering it verbatim (seen in
+// the chat header before the RCard/VRC name arrives).
+const OOB_INVITATION_LABEL = 'didcomm-oob-invitation'
+
 export function getConnectionName(
   connection: DidCommConnectionRecord | undefined,
   alternateContactNames: Record<string, string>
 ): string {
-  return (
-    (connection?.id && alternateContactNames[connection?.id]) ||
-    connection?.theirLabel ||
-    connection?.alias ||
-    connection?.id ||
-    ''
-  )
+  const theirLabel = connection?.theirLabel !== OOB_INVITATION_LABEL ? connection?.theirLabel : undefined
+  return (connection?.id && alternateContactNames[connection?.id]) || theirLabel || connection?.alias || connection?.id || ''
 }
 
 export function useCredentialConnectionLabel(
@@ -1110,13 +1113,16 @@ export const removeExistingInvitationsById = async (
  * @param agent an Agent instance
  * @param implicitInvitations a boolean to determine if implicit invitation behavior should be used
  * @param reuseConnection a boolean to determine if connection reuse should be allowed
+ * @param walletLabel this wallet's display name, announced to the counterparty in the
+ *   didexchange request (their chat header shows it immediately, before any credential)
  * @returns an object containing an OOB record and, if not connectionless, a connection record
  */
 export const connectFromInvitation = async (
   uri: string,
   agent: BifoldAgent | undefined,
   implicitInvitations: boolean = false,
-  reuseConnection: boolean = false
+  reuseConnection: boolean = false,
+  walletLabel?: string
 ): Promise<DidCommOutOfBandRecord> => {
   const invitation = await agent?.modules.didcomm.oob.parseInvitation(uri)
 
@@ -1143,7 +1149,7 @@ export const connectFromInvitation = async (
 
   const record = await agent?.modules.didcomm.oob.receiveInvitation(invitation, {
     reuseConnection,
-    label: 'didcomm-oob-invitation',
+    label: walletLabel || OOB_INVITATION_LABEL,
   })
   return record?.outOfBandRecord as DidCommOutOfBandRecord
 }
@@ -1219,6 +1225,43 @@ const waitForMediatorTransport = async (agent: BifoldAgent, logger: BifoldLogger
  * @param reuseConnection a boolean to determine if connection reuse should be allowed
  * @throws Error with message containing the primary and beta error messages if both fail
  */
+/**
+ * Watchdog for the silent-no-send failure mode: credo's `receiveInvitation`
+ * auto-accepts by OBSERVING connection-record state while the didexchange
+ * request itself is dispatched in the background — a send that dies quietly
+ * leaves a connection record, a chat screen, and an empty wire, with nothing
+ * logged anywhere (observed intermittently on iOS; see
+ * docs/spikes/e2e-vrc-connect-findings.md, "intermittent iOS no-send").
+ *
+ * Checks the connection's didexchange progress after the accept and logs at
+ * ERROR level — deliberately: on iOS only error-level JS logs reach the
+ * system log, and this breadcrumb exists precisely for that platform's
+ * otherwise-invisible failures. Silent when progress is normal.
+ */
+const watchDidExchangeProgress = (agent: BifoldAgent, oobRecordId: string, logger: BifoldLogger) => {
+  for (const delay of [12000, 30000]) {
+    setTimeout(async () => {
+      try {
+        const connections = await agent.modules.didcomm.connections.findAllByOutOfBandId(oobRecordId)
+        const connection = connections[0]
+        const stalled =
+          !connection ||
+          connection.state === DidCommDidExchangeState.Start ||
+          connection.state === DidCommDidExchangeState.InvitationReceived
+        if (stalled) {
+          logger.error(
+            `[VRC:ConnectWatchdog] didexchange has not progressed ${delay}ms after invitation accept — ` +
+              `oob=${oobRecordId} connection=${connection?.id ?? 'none'} state=${connection?.state ?? 'no-record'}. ` +
+              `The request may never have been sent (background send died silently).`
+          )
+        }
+      } catch (error) {
+        logger.error(`[VRC:ConnectWatchdog] progress check failed: ${(error as Error).message}`)
+      }
+    }, delay)
+  }
+}
+
 export const connectFromScanOrDeepLink = async (
   uri: string,
   agent: BifoldAgent | undefined,
@@ -1226,7 +1269,8 @@ export const connectFromScanOrDeepLink = async (
   navigation: any,
   isDeepLink: boolean,
   implicitInvitations: boolean = false,
-  reuseConnection: boolean = false
+  reuseConnection: boolean = false,
+  walletLabel?: string
 ) => {
   if (!agent) {
     return
@@ -1266,9 +1310,10 @@ export const connectFromScanOrDeepLink = async (
     }
 
     const aUrl = processBetaUrlIfRequired(uri)
-    const receivedInvitation = await connectFromInvitation(aUrl, agent, implicitInvitations, reuseConnection)
+    const receivedInvitation = await connectFromInvitation(aUrl, agent, implicitInvitations, reuseConnection, walletLabel)
 
     if (receivedInvitation?.id) {
+      watchDidExchangeProgress(agent, receivedInvitation.id, logger)
       navigation.navigate(Stacks.ConnectionStack as any, {
         screen: Screens.Connection,
         params: { oobRecordId: receivedInvitation.id },

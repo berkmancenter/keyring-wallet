@@ -116,12 +116,19 @@ async function logIssuedCredentialSnapshot(
  *       a v3 peer still accepts Ed25519Signature2018 proofs silently
  *       (docs/CRYPTO_SUITE_FOLLOWUP.md, Decisions 6 and 7).
  *
+ * - v4: the Trust Task dialect. The relationship exchange can additionally
+ *       run as Trust Task documents (`vrc/relationships/propose` and its
+ *       `#response`, per the merged upstream specifications) over the
+ *       binding-0.2 dedicated message type — see `modules/trust-tasks`.
+ *       v4 changes nothing about credentials; both dialects write the same
+ *       repository state, and peers below v4 never see a Trust Task message.
+ *
  * The version is announced in the relationshipDid handshake message
  * (`vrc:rceVersion:<n>`). A peer that doesn't announce one is treated as v1,
  * so exchanges with pre-VC-2.0 app versions still produce credentials the
  * old peer can validate.
  */
-export const RCE_PROTOCOL_VERSION = 3
+export const RCE_PROTOCOL_VERSION = 4
 
 /**
  * Default expiration time for VRC credentials (in days)
@@ -427,7 +434,32 @@ export async function getVrcJsonLdProofOptions(
  * @param connectionId Optional connection ID to associate with this relationship
  * @returns My relationship DID for this counterparty
  */
+// In-flight creations keyed by counterparty DID: getOrCreateRelationshipDid's
+// find-then-create awaits between the find and the create, so two concurrent
+// callers (the connection handler, the trust-task proposer, the issuance
+// trigger) could each miss the other's find and mint DIVERGENT DIDs for one
+// counterparty — one announced to the peer, another baked into a credential.
+// Concurrent callers now share the first caller's promise; the map is cleared
+// on settle (the repository is the durable truth).
+const relationshipDidCreations = new Map<string, Promise<string>>()
+
 export async function getOrCreateRelationshipDid(
+  agent: Agent,
+  counterpartyConnectionDid: string,
+  connectionId?: string
+): Promise<string> {
+  const inFlight = relationshipDidCreations.get(counterpartyConnectionDid)
+  if (inFlight) return inFlight
+  const creation = createOrReuseRelationshipDid(agent, counterpartyConnectionDid, connectionId)
+  relationshipDidCreations.set(counterpartyConnectionDid, creation)
+  try {
+    return await creation
+  } finally {
+    relationshipDidCreations.delete(counterpartyConnectionDid)
+  }
+}
+
+async function createOrReuseRelationshipDid(
   agent: Agent,
   counterpartyConnectionDid: string,
   connectionId?: string
@@ -493,6 +525,89 @@ export async function setRelationshipDidOnConnection(
  * @param preparedCredential - Optional pre-built credential (from witnessed exchange flow).
  *                             If provided, skips biometric confirmation since it was already done.
  */
+/**
+ * Build the unsigned VRC and run the hardware-attestation flow (biometric
+ * prompt → evidence block) when the preference allows and hardware supports
+ * it. Shared by the legacy issue-credential leg and the trust-task issue leg —
+ * the credential and its evidence are identical whichever leg delivers it.
+ */
+export async function prepareVrcCredentialWithEvidence(
+  agent: Agent,
+  connectionRecord: DidCommConnectionRecord,
+  myRelationshipDid: string,
+  counterpartyRelationshipDid: string
+): Promise<{ credential: any; biometricSkipped: boolean }> {
+  const logger = createVrcLogger(agent, { module: 'vrc', side: 'INVITER', component: 'prepareVrcCredential' })
+  let biometricSkipped = false
+
+  // Read useHardwareAttestation preference from AsyncStorage — callers are
+  // agent event handlers with no access to React context/useStore()
+  const preferences = await PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences)
+  const useHardwareAttestation = preferences?.useHardwareAttestation ?? true
+
+  logger.debug(`Hardware attestation preference: ${useHardwareAttestation}`)
+
+  const buildResult = await buildVrcCredential(agent, myRelationshipDid, counterpartyRelationshipDid)
+  const credential = buildResult.credential
+
+  logger.debug(`W3C credential: issuer=${myRelationshipDid}, subject=${counterpartyRelationshipDid}`)
+
+  const vrcContentForSigning = JSON.stringify(credential)
+  logger.info(`VRC content prepared for signing (${vrcContentForSigning.length} chars)`)
+
+  if (useHardwareAttestation) {
+    logger.info(`Step 3: Requesting biometric signing for ${connectionRecord.theirLabel || 'Unknown Contact'}...`)
+
+    const counterpartyName = connectionRecord.theirLabel || 'Unknown Contact'
+
+    const biometricResult = await requestBiometricWithHardwareSigning(
+      agent,
+      counterpartyName,
+      connectionRecord.id,
+      vrcContentForSigning
+    )
+
+    logger.info(`Biometric result: ${biometricResult.reason}`)
+
+    if (!biometricResult.success && biometricResult.reason !== 'not_available') {
+      biometricSkipped = true
+      logger.warn(`⚠️ Biometric ${biometricResult.reason} — proceeding without hardware attestation`)
+      vrcFlowStore.setStatus(connectionRecord.id, 'biometric-fallback', false)
+      await new Promise<void>((resolve) => setTimeout(resolve, 2000))
+      vrcFlowStore.setStatus(connectionRecord.id, 'preparing-offer', false)
+    }
+
+    if (biometricResult.reason === 'confirmed') {
+      logger.info(`✅ Biometric confirmed [${biometricResult.hardwareSignature?.platform}/${biometricResult.hardwareSignature?.keyStorage}]`)
+
+      if (biometricResult.hardwareSignature) {
+        const evidenceBuilder = createEvidenceBuilder(agent)
+        const evidenceResult = await evidenceBuilder.buildEvidenceFromSignature({
+          success: true,
+          signature: biometricResult.hardwareSignature,
+          reason: 'signed',
+        }, biometricResult.hardwareSignature.clientDataHash)
+
+        if (evidenceResult.success && evidenceResult.evidence) {
+          credential.evidence = [evidenceResult.evidence]
+          logger.info(`✅ Evidence block added [${evidenceResult.evidence.attestation.certificateChain.length} certs, source=${evidenceResult.attestationSource || 'none'}]`)
+        } else {
+          logger.warn(`⚠️ Could not build evidence block: ${evidenceResult.error || 'unknown error'}`)
+          logger.warn(`VRC will be issued without hardware attestation evidence`)
+        }
+      } else {
+        logger.info(`ℹ️ No hardware signature available`)
+      }
+    } else if (biometricResult.reason === 'not_available') {
+      logger.info(`ℹ️ Biometrics not available - proceeding without biometric confirmation`)
+    }
+  } else {
+    logger.info(`Hardware attestation disabled — skipping biometric evidence`)
+  }
+
+  return { credential, biometricSkipped }
+}
+
 async function issueVrcCredential(
   agent: Agent,
   connectionRecord: DidCommConnectionRecord,
@@ -513,6 +628,36 @@ async function issueVrcCredential(
   }
   connectionCredentialOffers.set(connectionId, 'pending')
 
+  // v4 pairs: the VRC rides the trust-task issue leg, and consent is the
+  // accepted proposal — the legacy VRC offer is suppressed so the user is not
+  // asked twice and the credential is not delivered twice. The RCard is a VDS
+  // with no task yet and still travels the legacy leg.
+  const relationshipRepositoryForGate = agent.dependencyManager.resolve(RelationshipDidRepository)
+  const relationshipRecordForGate = connectionRecord.theirDid
+    ? await relationshipRepositoryForGate.findByConnectionDid(agent.context, connectionRecord.theirDid)
+    : null
+  if (relationshipRecordForGate?.counterpartyRceVersion === undefined) {
+    // The peer's RCE version is not yet known — its relationshipDid
+    // announcement hasn't arrived (the connection-complete trigger can win
+    // that race). Guessing here is wrong in both directions: a v4 peer would
+    // get a stray legacy VRC offer and lose its RCard ("v1" skip). Defer —
+    // the announcement-triggered call decides the dialect, and every peer
+    // (v1 included) sends the announcement.
+    logger.info(`Peer RCE version unknown yet — deferring issuance | Connection: ${connectionId}`)
+    connectionCredentialOffers.delete(connectionId)
+    return { biometricSkipped: false }
+  }
+  if (RCE_PROTOCOL_VERSION >= 4 && relationshipRecordForGate.counterpartyRceVersion >= 4) {
+    logger.info(`v4 pair — VRC rides the trust-task issue leg; issuing RCard only | Connection: ${connectionId}`)
+    connectionCredentialOffers.set(connectionId, 'offered')
+    try {
+      await issueRCardCredential(agent, connectionRecord, myRelationshipDid, counterpartyRelationshipDid)
+    } catch (rcardError) {
+      logger.warn(`RCard issuance failed (non-blocking): ${(rcardError as Error).message}`)
+    }
+    return { biometricSkipped: false }
+  }
+
   let credential: any
   let biometricSkipped = biometricAlreadySkipped ?? false
 
@@ -523,75 +668,15 @@ async function issueVrcCredential(
     credential = preparedCredential
     logger.info(`Credential already has evidence: ${!!credential.evidence}`)
   } else {
-    // Read useHardwareAttestation preference from AsyncStorage
-    // This is necessary because this function is called from agent event handlers
-    // that don't have access to React context/useStore()
-    const preferences = await PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences)
-    const useHardwareAttestation = preferences?.useHardwareAttestation ?? true
-    
-    logger.debug(`Hardware attestation preference: ${useHardwareAttestation}`)
-
-    // Build the credential using shared helper
-    const buildResult = await buildVrcCredential(agent, myRelationshipDid, counterpartyRelationshipDid)
-    credential = buildResult.credential
-
-    logger.debug(`W3C credential: issuer=${myRelationshipDid}, subject=${counterpartyRelationshipDid}`)
-
-    // Serialize credential content for signing
-    const vrcContentForSigning = JSON.stringify(credential)
-    logger.info(`VRC content prepared for signing (${vrcContentForSigning.length} chars)`)
-
-    // Conditionally perform biometric/attestation flow
-    if (useHardwareAttestation) {
-    logger.info(`Step 3: Requesting biometric signing for ${connectionRecord.theirLabel || 'Unknown Contact'}...`)
-    
-    const counterpartyName = connectionRecord.theirLabel || 'Unknown Contact'
-    
-    const biometricResult = await requestBiometricWithHardwareSigning(
+    const prepared = await prepareVrcCredentialWithEvidence(
       agent,
-      counterpartyName,
-      connectionRecord.id,
-      vrcContentForSigning
+      connectionRecord,
+      myRelationshipDid,
+      counterpartyRelationshipDid
     )
-    
-    logger.info(`Biometric result: ${biometricResult.reason}`)
-    
-    if (!biometricResult.success && biometricResult.reason !== 'not_available') {
-      biometricSkipped = true
-      logger.warn(`⚠️ Biometric ${biometricResult.reason} — proceeding without hardware attestation`)
-      vrcFlowStore.setStatus(connectionRecord.id, 'biometric-fallback', false)
-      await new Promise<void>((resolve) => setTimeout(resolve, 2000))
-      vrcFlowStore.setStatus(connectionRecord.id, 'preparing-offer', false)
-    }
-    
-    if (biometricResult.reason === 'confirmed') {
-      logger.info(`✅ Biometric confirmed [${biometricResult.hardwareSignature?.platform}/${biometricResult.hardwareSignature?.keyStorage}]`)
-      
-      if (biometricResult.hardwareSignature) {
-        const evidenceBuilder = createEvidenceBuilder(agent)
-        const evidenceResult = await evidenceBuilder.buildEvidenceFromSignature({
-          success: true,
-          signature: biometricResult.hardwareSignature,
-          reason: 'signed',
-        }, biometricResult.hardwareSignature.clientDataHash)
-        
-        if (evidenceResult.success && evidenceResult.evidence) {
-          credential.evidence = [evidenceResult.evidence]
-          logger.info(`✅ Evidence block added [${evidenceResult.evidence.attestation.certificateChain.length} certs, source=${evidenceResult.attestationSource || 'none'}]`)
-        } else {
-          logger.warn(`⚠️ Could not build evidence block: ${evidenceResult.error || 'unknown error'}`)
-          logger.warn(`VRC will be issued without hardware attestation evidence`)
-        }
-      } else {
-        logger.info(`ℹ️ No hardware signature available`)
-      }
-    } else if (biometricResult.reason === 'not_available') {
-      logger.info(`ℹ️ Biometrics not available - proceeding without biometric confirmation`)
-    }
-    } else {
-      logger.info(`Hardware attestation disabled — skipping biometric evidence`)
-    }
-  } // End of else (no preparedCredential) block
+    credential = prepared.credential
+    biometricSkipped = biometricSkipped || prepared.biometricSkipped
+  }
 
   logger.info(`Step 4: Offering credential [connection=${connectionRecord.id}]`)
 
@@ -718,6 +803,50 @@ async function issueRCardCredential(
 }
 
 /**
+ * Issue the R-Card on a connection whose relationship exchange the Trust Task
+ * dialect has just ACCEPTED (both relationship DIDs and the peer's RCE
+ * version are on the record). Called by the ceremony from both the responder's
+ * acceptance and the proposer's consumption of it.
+ *
+ * Why a second trigger: the legacy trigger (the peer's
+ * `vrc:relationshipDid … rceVersion` basic-message announcement) can be lost
+ * — observed live: the connection-complete trigger deferred ("Peer RCE version
+ * unknown yet") and nothing resumed it, so the task exchange completed while
+ * the R-Card never went out and the contact showed as "Unknown …DID". The
+ * accepted proposal is processed reliably by both sides and carries the same
+ * facts, so it triggers the R-Card too. Duplicate-safe: issueRCardCredential's
+ * own per-connection lock makes whichever trigger runs second a no-op. The
+ * invitation's mode flag is respected exactly as the legacy triggers do
+ * (bidirectional: both sides; unidirectional: the INVITER only).
+ */
+export async function issueRCardForAcceptedExchange(agent: Agent, connectionId: string): Promise<void> {
+  const logger = createVrcLogger(agent, { module: 'vrc', side: 'INVITER', component: 'issueRCardForAcceptedExchange' })
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  if (!connection.theirDid) return
+  const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
+  const record = await repository.findByConnectionDid(agent.context, connection.theirDid)
+  if (!record?.myRelationshipDid || !record.counterpartyRelationshipDid) {
+    logger.debug(`R-Card trigger skipped — relationship DIDs incomplete | Connection: ${connectionId}`)
+    return
+  }
+
+  if (connection.outOfBandId) {
+    const outOfBandRecord = await agent.modules.didcomm.oob.findById(connection.outOfBandId)
+    const goalCode = outOfBandRecord?.outOfBandInvitation?.goalCode
+    const isBidirectional = goalCode === 'relationship.credential.bidirectional'
+    const isUnidirectional = goalCode === 'relationship.credential'
+    const isInviter = outOfBandRecord?.role === DidCommOutOfBandRole.Sender
+    if (!(isBidirectional || (isUnidirectional && isInviter))) {
+      logger.debug(`R-Card trigger skipped — invitation mode ${goalCode ?? 'unknown'} | Connection: ${connectionId}`)
+      return
+    }
+  }
+
+  logger.info(`Triggering R-Card issuance from the accepted relationship exchange | Connection: ${connectionId}`)
+  await issueRCardCredential(agent, connection, record.myRelationshipDid, record.counterpartyRelationshipDid)
+}
+
+/**
  * Callback for witness session updates
  * This will be set by the WitnessConnectionProvider
  */
@@ -785,6 +914,20 @@ let witnessStateGetter: (() => WitnessConnectionState) | undefined
  */
 export function registerWitnessStateGetter(callback: () => WitnessConnectionState): void {
   witnessStateGetter = callback
+}
+
+/**
+ * The currently connected witness's connection id, if any — how the
+ * trust-task ceremony decides whether an exchange can run witnessed.
+ */
+export function getConnectedWitnessConnectionId(): string | undefined {
+  return witnessStateGetter?.().connectedWitness?.connectionId
+}
+
+/** The user's witnessing preference (default true), for the task ceremony's gating. */
+export async function isWitnessingPreferred(): Promise<boolean> {
+  const preferences = await PersistentStorage.fetchValueForKey<Preferences>(LocalStorageKeys.Preferences)
+  return preferences?.useWitnessing ?? true
 }
 
 /**
@@ -1142,6 +1285,19 @@ async function handleSessionChallenge(
 export function setupVrcConnectionHandler(agent: Agent) {
   agent.config.logger.info('[VRC] Setting up automatic VRC connection handler')
 
+  // Re-drive any Trust Task exchange interrupted by a restart. The messages
+  // that drive the ceremony are consumed exactly once, so a kill mid-exchange
+  // otherwise leaves the connection wedged forever with no VRC (see
+  // resumeInterruptedExchanges). Lazy require for the same module-cycle reason
+  // as the call site below. Fire-and-forget: setup must not block on storage.
+  {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { resumeInterruptedExchanges } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+    resumeInterruptedExchanges(agent).catch((e: Error) =>
+      agent.config.logger.warn(`[VRC] Trust-task resume sweep failed: ${e.message}`)
+    )
+  }
+
   // Set up basic message handler to receive relationshipDid from counterparty AND witness protocol messages
   agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, async ({ payload }: any) => {
     const record = payload.basicMessageRecord as DidCommBasicMessageRecord
@@ -1423,6 +1579,18 @@ export function setupVrcConnectionHandler(agent: Agent) {
       `Received relationshipDid via message: ${counterpartyRelationshipDid} (RCE v${counterpartyRceVersion})`
     )
 
+    // v4+ peers speak the Trust Task dialect: the deterministic proposer opens
+    // the formal exchange. Lazy require breaks the module cycle with the
+    // trust-tasks ceremony (which reuses this module's DID helpers); a dynamic
+    // import() here becomes a Metro split-bundle fetch in dev builds, which
+    // fails at runtime ("Could not load bundle") — require stays in-bundle.
+    if (record.connectionId) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { maybeOpenRelationshipExchange } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+      maybeOpenRelationshipExchange(agent, record.connectionId as string, counterpartyRceVersion, RCE_PROTOCOL_VERSION)
+        .catch((e: Error) => logger.warn(`Trust-task exchange open failed: ${e.message}`))
+    }
+
     // Store in persistent repository using counterpartyConnectionDid as key
     if (record.connectionId) {
       try {
@@ -1470,13 +1638,25 @@ export function setupVrcConnectionHandler(agent: Agent) {
               `Triggering ${mode} credential issuance from message handler for connection ${record.connectionId}`
             )
 
-            // Get my relationshipDid
+            // Get my relationshipDid. The connection handler may still be
+            // mid-creation when the peer's message lands (observed as a ~25 ms
+            // race in e2e that silently killed this side's issuance and left the
+            // peer waiting until flow timeout), so poll briefly rather than
+            // aborting. Deliberately NOT getOrCreateRelationshipDid here: its
+            // find-then-create is not concurrency-safe and a parallel call could
+            // mint a second, divergent DID for the same counterparty.
             const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
-            const myRecord = await repository.findByConnectionDid(agent.context, counterpartyConnectionDid)
-            const myRelationshipDid = myRecord?.myRelationshipDid
+            let myRelationshipDid: string | undefined
+            for (let attempt = 0; attempt < 20 && !myRelationshipDid; attempt++) {
+              if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 250))
+              const myRecord = await repository.findByConnectionDid(agent.context, counterpartyConnectionDid)
+              myRelationshipDid = myRecord?.myRelationshipDid
+            }
 
             if (!myRelationshipDid) {
-              issueLogger.error(`No myRelationshipDid found for counterpartyConnectionDid ${counterpartyConnectionDid}`)
+              issueLogger.error(
+                `No myRelationshipDid found for counterpartyConnectionDid ${counterpartyConnectionDid} (gave up after 5s)`
+              )
               return
             }
 
@@ -1636,8 +1816,27 @@ export function setupVrcConnectionHandler(agent: Agent) {
             // 1. Full witness flow: useWitnessing=true → wait for VWC
             // 2. Reporting-only: useWitnessing=false, enableReporting=true → submit VP, issue VRC directly
             // 3. No witness: everything else → regular VRC directly
-            const shouldUseWitness = useWitnessing && witnessConnected
-            const shouldUseReporting = !useWitnessing && enableReporting && witnessConnected
+            //
+            // v4 pairs run the witness ceremony as TRUST TASKS (per-party
+            // sessions inside the relationship exchange — see
+            // trust-tasks/witnessCeremony.ts), so the legacy witnessed flow
+            // must stand down or the pair would be witnessed twice and hold
+            // two VWCs. Known gap, recorded in the plan companion: the task
+            // dialect does not carry the reporting edge yet, so v4 pairs
+            // skip witness-reporting until it does.
+            // Use the counterpartyRceVersion parsed from the triggering message
+            // itself (in scope from above), not a repository re-read: the DB
+            // write for it (updateCounterpartyRelationshipDid, above) is a no-op
+            // when my own RelationshipDidRecord hasn't been created yet, which
+            // races with this same handler (see the ~25ms race noted above) and
+            // silently drops the version, making a genuine v4 pair read back as
+            // v1 and skip this gate.
+            const v4Pair = RCE_PROTOCOL_VERSION >= 4 && counterpartyRceVersion >= 4
+            if (v4Pair && witnessConnected) {
+              issueLogger.info(`v4 pair — witness ceremony rides the trust-task session; legacy witness flow stands down`)
+            }
+            const shouldUseWitness = useWitnessing && witnessConnected && !v4Pair
+            const shouldUseReporting = !useWitnessing && enableReporting && witnessConnected && !v4Pair
             
             issueLogger.info(`Flow decision | useWitnessing=${useWitnessing} | enableReporting=${enableReporting} | witnessConnected=${witnessConnected} | shouldUseWitness=${shouldUseWitness} | shouldUseReporting=${shouldUseReporting}`)
             
@@ -1808,6 +2007,20 @@ export function setupVrcConnectionHandler(agent: Agent) {
     // RelationshipCards (contact card accompanying an already-accepted relationship).
     // RelationshipCredentials remain manual (user should consciously accept contact)
     if (record.state === DidCommCredentialState.OfferReceived && record.role === DidCommCredentialRole.Holder) {
+      // Hold the offer out of the chat/notifications until classified: an
+      // R-Card (auto-accepted plumbing) would otherwise render as an
+      // actionable offer for the ~1 s getFormatData takes. Cleared below on
+      // every non-R-Card path BEFORE any acceptOffer, so this in-memory
+      // record is never written back over a state credo has since advanced.
+      record.metadata.set('offerClassifying', { since: Date.now() })
+      await agent.modules.didcomm.credentials.update(record)
+      let released = false
+      const release = async () => {
+        if (released) return
+        released = true
+        record.metadata.delete('offerClassifying')
+        await agent.modules.didcomm.credentials.update(record)
+      }
       try {
         const vwcAutoLogger = createVrcLogger(agent, { module: 'vrc', component: 'VWCAutoAccept' })
 
@@ -1827,6 +2040,7 @@ export function setupVrcConnectionHandler(agent: Agent) {
             if (isWitnessCredential(types)) {
               vwcAutoLogger.info(`✓ Auto-accepting WitnessCredential offer: ${record.id}`)
 
+              await release()
               await agent.modules.didcomm.credentials.acceptOffer({
                 credentialExchangeRecordId: record.id,
               })
@@ -1840,7 +2054,15 @@ export function setupVrcConnectionHandler(agent: Agent) {
               vwcAutoLogger.info(`✓ Auto-accepting RelationshipCard offer: ${record.id}`)
 
               record.metadata.set('rcardExchange', { autoAccepted: true })
+              record.metadata.delete('offerClassifying')
+              released = true // the rcardExchange tag keeps it hidden for good
               await agent.modules.didcomm.credentials.update(record)
+
+              // Let the exchange overlay narrate the card exchange (a trailing
+              // "exchanging contact cards" beat) — never a completion gate.
+              if (record.connectionId) {
+                vrcFlowStore.markRcardReceivePending(record.connectionId)
+              }
 
               await agent.modules.didcomm.credentials.acceptOffer({
                 credentialExchangeRecordId: record.id,
@@ -1850,10 +2072,18 @@ export function setupVrcConnectionHandler(agent: Agent) {
             }
           }
         }
-        // RelationshipCredentials remain manual - user must accept
+        // RelationshipCredentials remain manual - user must accept: release
+        // the hold so the offer renders for them.
+        await release()
       } catch (error) {
-        // Log but don't fail - this is auto-accept logic
+        // Log but don't fail - this is auto-accept logic. Best-effort release
+        // (a no-op once an accept was attempted, see above).
         agent.config.logger.error(`[VRC] VWC/RCard auto-accept failed: ${(error as Error).message}`)
+        try {
+          await release()
+        } catch {
+          /* leave as is */
+        }
       }
     }
 
@@ -2002,7 +2232,19 @@ export function setupVrcConnectionHandler(agent: Agent) {
 
       // Skip RCard exchanges: they piggyback on the VRC connection but must not
       // drive the exchange-flow overlay states (offer-sent / offer-received).
-      if (record.metadata.get('rcardExchange')) return
+      // The one signal they DO feed the overlay: the inbound card completing
+      // (the peer's name becomes resolvable) ends the trailing
+      // "exchanging contact cards" beat.
+      if (record.metadata.get('rcardExchange')) {
+        if (
+          record.state === DidCommCredentialState.Done &&
+          record.role === DidCommCredentialRole.Holder &&
+          record.connectionId
+        ) {
+          vrcFlowStore.markRcardReceiveComplete(record.connectionId)
+        }
+        return
+      }
       try {
         const formatData = await agent.modules.didcomm.credentials.getFormatData(record.id)
         const offer = (formatData?.offer as any)?.jsonld ?? (formatData?.offer as any)?.ldProof
@@ -2031,12 +2273,21 @@ export function setupVrcConnectionHandler(agent: Agent) {
         if (record.connectionId) {
           const currentStatus = vrcFlowStore.getStatus(record.connectionId)
 
-          // Don't clear the overlay if we're still in a witness flow.
-          // The other party's offer arriving early shouldn't interrupt our
-          // witness verification / fallback sequence.
+          // Don't tear the progress dialog down while OUR OWN side is still
+          // working. The witness states were guarded already, but the v4
+          // ceremony also passes through 'preparing-offer' and
+          // 'sharing-witness-record' — an inbound credential landing in one of
+          // those hid the dialog, and the ceremony's next status brought it
+          // back (the flicker seen on slower hardware, 2026-08-25). In the
+          // trust-task dialect nothing here is user-actionable (the credential
+          // is auto-stored), so the dialog stays until we've sent ours; legacy
+          // still clears, because there the user has an offer to accept.
           const inWitnessFlow = currentStatus === 'witness-active' || currentStatus === 'witness-fallback'
-          if (inWitnessFlow) {
-            credLogger.info(`[VRC Flow] Received offer but witness flow active (${currentStatus}) — keeping overlay, marking received`)
+          const ownDeliveryPending =
+            vrcFlowStore.getDialect(record.connectionId) === 'trust-tasks' &&
+            !vrcFlowStore.hasSentOfferFlag(record.connectionId)
+          if (inWitnessFlow || ownDeliveryPending) {
+            credLogger.info(`[VRC Flow] Received offer but own side still active (${currentStatus}) — keeping overlay, marking received`)
             vrcFlowStore.markOfferReceived(record.connectionId)
           } else {
             credLogger.info(`[VRC Flow] Setting 'offer-received' | Previous status: ${currentStatus}`)

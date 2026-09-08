@@ -2028,6 +2028,7 @@ __metadata:
     "@bifold/oca": "npm:3.0.16"
     "@bifold/react-hooks": "npm:3.0.16"
     "@bifold/react-native-attestation": "npm:3.0.16"
+    "@bifold/trust-tasks": "workspace:*"
     "@bifold/verifier": "npm:3.0.16"
     "@bifold/vrc-contexts": "workspace:*"
     "@credo-ts/anoncreds": "npm:0.6.3"
@@ -2056,6 +2057,7 @@ __metadata:
     "@hyperledger/indy-vdr-shared": "npm:0.2.3"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
+    "@openvtc/trust-tasks": "npm:^0.9.0"
     "@openwallet-foundation/askar-react-native": "npm:0.6.0"
     "@openwallet-foundation/askar-shared": "npm:0.6.0"
     "@react-native-async-storage/async-storage": "npm:~2.2.0"
@@ -2079,11 +2081,13 @@ __metadata:
     "@types/react-native-vector-icons": "npm:~6.4.18"
     "@typescript-eslint/eslint-plugin": "npm:~7.18.0"
     "@typescript-eslint/parser": "npm:~7.18.0"
+    ajv: "npm:^8.17.1"
     axios: "npm:~1.13.2"
     babel-jest: "npm:~29.7.0"
     babel-plugin-module-resolver: "npm:~5.0.2"
     base-64: "npm:~1.0.0"
     buffer: "npm:~6.0.3"
+    canonicalize: "npm:^1.0.8"
     eslint: "npm:~8.57.1"
     eslint-import-resolver-typescript: "npm:~3.6.3"
     eslint-plugin-import: "npm:~2.29.1"
@@ -2339,6 +2343,21 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@bifold/trust-tasks@workspace:*, @bifold/trust-tasks@workspace:packages/trust-tasks":
+  version: 0.0.0-use.local
+  resolution: "@bifold/trust-tasks@workspace:packages/trust-tasks"
+  dependencies:
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch"
+    "@credo-ts/didcomm": "npm:0.6.3"
+    "@noble/curves": "npm:^2.0.1"
+    "@noble/hashes": "npm:^2.0.1"
+    ajv: "npm:^8.17.1"
+    canonicalize: "npm:^1.0.8"
+    rimraf: "npm:~5.0.10"
+    typescript: "npm:~5.5.4"
+  languageName: unknown
+  linkType: soft
+
 "@bifold/verifier@npm:3.0.16, @bifold/verifier@workspace:packages/verifier":
   version: 0.0.0-use.local
   resolution: "@bifold/verifier@workspace:packages/verifier"
@@ -2421,6 +2440,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@bifold/witness-server@workspace:packages/witness-server"
   dependencies:
+    "@bifold/trust-tasks": "workspace:*"
     "@bifold/vrc-contexts": "workspace:*"
     "@bifold/vrc-shared": "workspace:*"
     "@credo-ts/askar": "npm:0.6.3"
@@ -2429,12 +2449,17 @@ __metadata:
     "@credo-ts/node": "npm:0.6.3"
     "@langchain/anthropic": "npm:^1.3.25"
     "@langchain/core": "npm:^1.1.36"
+    "@langchain/openai": "npm:^0.6.17"
+    "@noble/curves": "npm:^2.0.1"
+    "@noble/hashes": "npm:^2.0.1"
+    "@openvtc/trust-tasks": "npm:^0.9.0"
     "@openwallet-foundation/askar-nodejs": "npm:0.6.0"
     "@types/jest": "npm:^29.5.0"
     "@types/node": "npm:^20.0.0"
     "@types/qrcode": "npm:^1.5.5"
     "@types/selfsigned": "npm:^2.0.4"
     "@types/ws": "npm:^8.18.1"
+    canonicalize: "npm:^1.0.8"
     dotenv: "npm:^17.2.3"
     esbuild: "npm:^0.24.0"
     jest: "npm:^29.5.0"
@@ -4649,7 +4674,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@langchain/openai@npm:>=0.1.0 <0.7.0":
+"@langchain/openai@npm:>=0.1.0 <0.7.0, @langchain/openai@npm:^0.6.17":
   version: 0.6.17
   resolution: "@langchain/openai@npm:0.6.17"
   dependencies:
@@ -4855,6 +4880,13 @@ __metadata:
     zod: "npm:^4.3.5"
     zod-validation-error: "npm:^5.0.0"
   checksum: 10c0/f183cede193abbcedeaf359b41dedf74a4f1ab991566fdebdb7fa48bbfab9b93578eb1f4ec32505f0317efbf22bf29509b83c0bf50824920ebb62be6475d3eeb
+  languageName: node
+  linkType: hard
+
+"@openvtc/trust-tasks@npm:^0.9.0":
+  version: 0.9.0
+  resolution: "@openvtc/trust-tasks@npm:0.9.0"
+  checksum: 10c0/ee6b4aa1c3c3709e4262922cdacb2d2063bdcc3a871bce678694800d5e6fc11c237e151ca0740ad9b31ba1093659d204f3bcc0c32bb7c150d0754e7254b7e343
   languageName: node
   linkType: hard
 
@@ -7283,6 +7315,18 @@ __metadata:
   languageName: node
   linkType: hard
 
+"ajv@npm:^8.17.1":
+  version: 8.20.0
+  resolution: "ajv@npm:8.20.0"
+  dependencies:
+    fast-deep-equal: "npm:^3.1.3"
+    fast-uri: "npm:^3.0.1"
+    json-schema-traverse: "npm:^1.0.0"
+    require-from-string: "npm:^2.0.2"
+  checksum: 10c0/5df9a1c8f83863cde1bd3a9ddb426f599718f88e3dc9153616c79fb28e0be455335830d7f21d745576519f057b371352daa31047b6a33d7036fe08777d60cf2a
+  languageName: node
+  linkType: hard
+
 "anser@npm:^1.4.9":
   version: 1.4.10
   resolution: "anser@npm:1.4.10"
@@ -8313,7 +8357,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"canonicalize@npm:^1.0.1":
+"canonicalize@npm:^1.0.1, canonicalize@npm:^1.0.8":
   version: 1.0.8
   resolution: "canonicalize@npm:1.0.8"
   checksum: 10c0/6fafcfa73855a49c86eed26d2f23734713a542a3107a23a6ab16fb22b6cee6bb2d92ad32b2244d52594bd69bc08bec820413911cd566dcc5399048012ce26a83
@@ -17164,7 +17208,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"rxjs@npm:^7.2.0, rxjs@npm:^7.5.5, rxjs@npm:^7.8.2":
+"rxjs@npm:7.8.2":
   version: 7.8.2
   resolution: "rxjs@npm:7.8.2"
   dependencies:

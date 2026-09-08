@@ -13,6 +13,16 @@ import { getActiveChatConnectionId } from '../utils/activeChatTracker'
 import { Screens, Stacks } from '../types/navigators'
 
 const isVrcProtocolMessage = (content: string): boolean => {
+  // Plain-text protocol traffic. The relationship-DID announcement
+  // ("This is my relationship DID: vrc:relationshipDid:… vrc:rceVersion:N")
+  // and the biometric-status ping are basic messages carrying protocol
+  // payloads, not anything a user should be toasted about. The chat screen
+  // already hides/transforms these (see chat-messages.tsx); this guard was
+  // JSON-only, so the plain-text ones leaked into the notification as raw
+  // protocol text (seen on device, 2026-08-26).
+  if (content.includes('vrc:relationshipDid:') || content.startsWith('vrc:')) {
+    return true
+  }
   try {
     const parsed = JSON.parse(content)
     return typeof parsed === 'object' && parsed !== null && ('type' in parsed || '@type' in parsed)

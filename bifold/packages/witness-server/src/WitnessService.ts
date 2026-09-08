@@ -67,7 +67,12 @@ import {
 import { pseudonymDisplay } from './pseudonym'
 
 // Import shared wallet config
-import { getWalletStoragePath } from '@bifold/vrc-shared'
+import {
+  getWalletStoragePath,
+  startMediatorMessagePickup,
+  SUPPORTED_MEDIATOR_PICKUP_STRATEGY,
+  type MediatorPickupStrategyName,
+} from '@bifold/vrc-shared'
 
 import {
   CredentialRegistry,
@@ -91,6 +96,7 @@ import { DataIntegritySuiteModule, demoDocumentLoader, getMirroredJsonLdProofOpt
 import { vcLibraries } from '@credo-ts/core'
 
 import { ReportingGraph } from './ReportingGraph'
+import { WitnessTaskSessions } from './trustTasks/WitnessTaskSessions'
 
 // Session expiration time in minutes (default)
 const DEFAULT_SESSION_EXPIRATION_MINUTES = 30
@@ -266,7 +272,23 @@ export function buildWitnessCredentialJson(
   const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
   const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
   const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
-  const issuedTimestamp = new Date().toISOString()
+  // Backdate validFrom, exactly as the wallet already does when it builds a VRC
+  // ("Backdate issuance to tolerate clock skew between issuer and holder
+  // devices — the holder rejects credentials whose issuanceDate is in its
+  // future", vrc-manager.buildVrcCredential). The witness never got the same
+  // treatment, and it is the one issuer whose credential is verified within a
+  // second of being signed, so it is the most exposed:
+  //   "The current date time (…54.965Z) is before validFrom (…55.261Z)"
+  // — a 296 ms miss observed on device 2026-08-30. The holder's
+  // outcome-evidence self-check then failed and it withheld its witness-share,
+  // so the peer never received a VWC about them and their contact showed no
+  // witness badge. It presented as intermittent and platform-specific; it was
+  // neither, just clock skew.
+  //
+  // Safe: the credential attests an exchange that has already happened, and
+  // validUntil still runs from now. CLOCK_SKEW_ALLOWANCE_MS is the same
+  // allowance the freshness window above is already built around.
+  const issuedTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
   const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
 
   if (vrcIsVc20) {
@@ -350,11 +372,23 @@ function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationU
           new DidCommProofV2Protocol({ proofFormats: [new DidCommDifPresentationExchangeProofFormatService()] }),
         ],
       },
-      // Mediation recipient config is only applied when a mediator URL is provided
+      // Mediation recipient config is only applied when a mediator URL is provided.
+      //
+      // This was MediatorPickupStrategy.Implicit until 2026-08-31, which meant the
+      // witness never received a single mediated message: Implicit is push-only and
+      // our mediator queues rather than pushes, so the witness sent fine and was deaf
+      // forever, with no error on either side.
+      //
+      // Treat this value as a fallback only. credo resolves the strategy as
+      // `mediationRecord.pickupStrategy ?? thisConfig`, so a value persisted in the
+      // wallet OUTRANKS it — the authoritative call is startMediatorMessagePickup()
+      // after agent.initialize(), which passes the strategy explicitly and bypasses
+      // both. See @bifold/vrc-shared src/mediation.ts and
+      // docs/spikes/e2e-vrc-connect-findings.md ("fourth failure layer").
       mediationRecipient: mediatorInvitationUrl
         ? {
             mediatorInvitationUrl,
-            mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+            mediatorPickupStrategy: SUPPORTED_MEDIATOR_PICKUP_STRATEGY as DidCommMediatorPickupStrategy,
           }
         : undefined,
     }),
@@ -393,6 +427,10 @@ export class WitnessService {
   private issuerVerificationMethodId?: string
   private activeSessions: Map<string, SessionData> = new Map()
   private outOfBandId?: string
+  /** Effective mediator pickup strategy, surfaced in the startup banner so a
+   *  silent-inbound misconfiguration is visible at a glance in any run's log. */
+  private pickupStrategy?: MediatorPickupStrategyName
+  private taskSessions?: WitnessTaskSessions
   private invitationUrl?: string
 
   // Registry: relationship DID → witness connection ID
@@ -506,6 +544,16 @@ export class WitnessService {
     // Wait for transport to be fully ready (critical for mediation stability)
     await this.waitForTransportReady()
 
+    // Start message pickup EXPLICITLY. This is the line that decides whether the
+    // witness can receive anything at all when running behind a mediator, and it
+    // deliberately does not trust the module config above: credo lets a strategy
+    // persisted on this wallet's MediationRecord outrank config, which is what made
+    // this bug look machine-specific. Passing the strategy explicitly bypasses both.
+    const pickup = await startMediatorMessagePickup(this.agent, (message) =>
+      console.log(`[${this.name}] ${message}`)
+    )
+    this.pickupStrategy = pickup.strategy
+
     // Register debug event listeners for mediation
     this.registerDebugEventListeners()
 
@@ -518,6 +566,36 @@ export class WitnessService {
     this.reportingGraph = new ReportingGraph(reportingDir, this.name)
 
     this.registerMessageHandlers()
+
+    // The Trust Task dialect (witness/session + submit over binding-0.2),
+    // beside the legacy JSON-over-basicmessage flow — dual-dialect so old
+    // wallets keep working. Per-party sessions with unique challenges, VWCs
+    // bound to the session document (taskContext + taskDigestMultibase).
+    this.taskSessions = new WitnessTaskSessions({
+      agent: this.agent,
+      name: this.name,
+      domain: `witness-session-${this.port}`,
+      eventName: this.config.eventName,
+      getIssuer: async () => {
+        await this.ensureDedicatedIssuerDid()
+        if (!this.issuerDid || !this.issuerVerificationMethodId) {
+          throw new Error('witness issuer DID unavailable')
+        }
+        return { did: this.issuerDid, verificationMethodId: this.issuerVerificationMethodId }
+      },
+      buildVwcJson: (presentation, sessionId) => {
+        if (!this.issuerDid) throw new Error('witness issuer DID unavailable')
+        return buildWitnessCredentialJson(presentation, {
+          issuerDid: this.issuerDid,
+          witnessName: this.name,
+          sessionId,
+          verificationMethod: this.config.verificationMethod,
+          eventName: this.config.eventName,
+        })
+      },
+    })
+    this.taskSessions.register()
+
     this.startPendingRequestCleanup()
     this.startSessionCleanup()
 
@@ -725,6 +803,12 @@ export class WitnessService {
     console.log('╠══════════════════════════════════════════════════════════════════╣')
     console.log('║  NETWORK                                                         ║')
     console.log(`║    Transport:       ${this.padRight(useMediator ? 'MEDIATOR (WebSocket)' : 'DIRECT (HTTP)', 43)}║`)
+    if (useMediator) {
+      // Inbound delivery depends entirely on this. Print it: a wrong strategy
+      // produces total silence rather than an error, so the banner is the
+      // cheapest place to catch it.
+      console.log(`║    Msg Pickup:      ${this.padRight(`${this.pickupStrategy ?? 'NOT STARTED'} (explicit)`, 43)}║`)
+    }
     if (useMediator) {
       const mediatorUrl = this.config.mediatorInvitationUrl || ''
       let mediatorDisplay = mediatorUrl
@@ -1256,7 +1340,9 @@ export class WitnessService {
 
             const welcomeMessage =
               `Welcome to ${eventName}! 🎉\n\n` +
-              `I'm the ${this.name}. I am verifying credential exchanges during this event.\n\n` +
+              // No article before the name: WITNESS_NAME is a proper name, not a role.
+              // "I'm the keyring-demo-witness" read acceptably; "I'm the GDC - Day 2" does not.
+              `I'm ${this.name}. I am verifying credential exchanges during this event.\n\n` +
               `You're all set — go connect with others!`
 
             await new Promise((resolve) => setTimeout(resolve, 750))
@@ -1906,6 +1992,12 @@ export class WitnessService {
 
     // Create new invitation
     const outOfBand = await this.agent.modules.didcomm.oob.createInvitation({
+      // The wallet stores this as the connection's theirLabel and shows it as
+      // the contact name. Without it the invitation carries no label and the
+      // wallet falls back to the raw connection UUID, which is what the
+      // witness chat header displayed (device 2026-08-27). Note credo 0.6
+      // takes this on the invitation, not on the agent's InitConfig.
+      label: this.config.name,
       multiUseInvitation: true,
     })
 
@@ -2049,7 +2141,7 @@ export class WitnessService {
    * Create a single-use connection invitation
    */
   public async createConnectionInvitation(): Promise<string> {
-    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation()
+    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation({ label: this.config.name })
     const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
       domain: this.config.publicUrl,
     })

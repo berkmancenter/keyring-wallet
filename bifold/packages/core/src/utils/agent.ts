@@ -126,7 +126,19 @@ export function getAgentModules({
       },
       mediationRecipient: {
         mediatorInvitationUrl: mediatorInvitationUrl,
-        mediatorPickupStrategy: DidCommMediatorPickupStrategy.Implicit,
+        // PickUpV2, not Implicit. Implicit is push-only: it issues no pickup
+        // requests and waits for the mediator to push. A mediator that queues
+        // instead of pushing (ours does) leaves such an agent able to send
+        // perfectly while receiving NOTHING, with no error on either side. This
+        // cost the witness-server every inbound message until 2026-08-31 — see
+        // docs/spikes/e2e-vrc-connect-findings.md ("fourth failure layer").
+        //
+        // Note for consumers of this module: unlike the wallet, nothing here
+        // re-starts pickup at runtime, so this value is what you get. If you do
+        // override it, pass the strategy explicitly to initiateMessagePickup —
+        // credo resolves `mediationRecord.pickupStrategy ?? thisConfig`, so a
+        // value persisted in the agent's wallet outranks this line.
+        mediatorPickupStrategy: DidCommMediatorPickupStrategy.PickUpV2,
       },
     }),
     dcql: new DcqlModule(),
