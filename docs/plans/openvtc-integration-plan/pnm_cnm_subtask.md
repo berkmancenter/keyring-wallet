@@ -3,7 +3,7 @@
 **Status:** Draft for discussion. Not a commitment to implement.
 **Scope:** a new bifold package (`vti-client`, per parent §5.2) plus the RN edges it needs; no change to the VRC/witness stack except where §6 says so.
 **Parent:** [`openvtc-integration-plan.md`](../openvtc-integration-plan.md) — this document is item **§7 #5** of its contribution roadmap ("The RN/PNM mobile library") in detail, and the second consumer that makes its Phase D deliverables concrete.
-**Sibling:** [`trust_tasks_subtask.md`](./trust_tasks_subtask.md) — the VRC/witness recast. Where the two meet is §5 and §8.
+**Siblings:** [`trust_tasks_subtask.md`](./trust_tasks_subtask.md) — the VRC/witness recast. Where the two meet is §5 and §8. [`vta-carriage_subtask.md`](./vta-carriage_subtask.md) — VTA-to-VTA carriage for the `propose` leg of §5's relationship exchange; narrows open question 2 below and extends P4's acceptance criteria (§6).
 **Reasoning:** [`2026-08-17-bam.md`](./2026-08-17-bam.md) — the upstream corrections behind §2.2, §4.5–§4.8 and the phase scoping, and the positions each supersedes. This document states only the current design; see [`../CLAUDE.md`](../CLAUDE.md).
 **Baseline:** every claim is measured against the **Cypress release** — `verifiable-trust-infrastructure` 187ad9cd, `vta-browser-plugin` 89d70c4, `openvtc` 3797dd0, `dtgwg-trust-tasks-tf` 7e0d755 — and carries a file path. Re-verify after any pin advance ([`scripts/openvtc/README.md`](../../../scripts/openvtc/README.md)).
 
@@ -1004,6 +1004,15 @@ is a carriage change and not a second spine. This mirrors the lossless old⇄new
 translator already proven for the witness stack (parent ref-06w2). The VTC
 publish path (§5.1) is a *different* capability and belongs with P5, not here.
 
+**This section describes the decentralized path only — PNM/Credo agent
+directly against `openvtc`'s equivalent.** [`vta-carriage_subtask.md`](./vta-carriage_subtask.md)
+adds a second path, addressing `propose` at a counterparty's VTA instead when
+one is discoverable, so the exchange can be screened or decided while the
+counterparty's phone is asleep. It does not change anything above: the
+decentralized path stays first-class, and `issue` plus witnessing (unwitnessed,
+remotely witnessed, or locally witnessed, per that document's §3) keep running
+exactly as described here regardless of how `propose` was carried.
+
 *(`openvtc` is **not in `scripts/openvtc/PINS.json`**. It must be added, with
 `dtg-credentials` as a tripwire, before P4 can claim a pinned baseline — §9 Q5.)*
 
@@ -1520,7 +1529,14 @@ workflow (parent §7) — nothing is pushed anywhere without review:
    generated off-device, which is in tension with hardware attestation as our
    differentiator. The operator-grant + `acl/swap-key/0.1` path avoids it and is
    currently unused upstream. *Blocks: P2's custody model, and it is cheaper to
-   decide before P2 ships.* **Ours.**
+   decide before P2 ships.* **Ours.** **Narrowed by
+   [`vta-carriage_subtask.md`](./vta-carriage_subtask.md) §3:** the
+   Relationship DID — the identity this tension actually bites on for
+   VRC/VWC work — never needs to leave hardware attestation under that
+   document's v1 default, since the VTA there only ever negotiates
+   (`propose`) on its own key and never touches the credential-bearing
+   identity. This question still stands for whatever else P2's custody model
+   covers, but the VRC/VWC case is no longer part of what's riding on it.
 3. **Which VTA does a Keyring user enrol with, and who performs the out-of-band
    grant?** §2.4 means P1 ships without answering this; P2 cannot. Self-hosted,
    one we operate, or the user's choice? Not a technical question. *Blocks: P2's
