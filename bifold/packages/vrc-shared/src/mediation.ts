@@ -112,7 +112,13 @@ export interface MediatedAgentLike {
     didcomm: {
       mediationRecipient: {
         findDefaultMediator(): Promise<{ id: string; pickupStrategy?: string } | null>
-        initiateMessagePickup(mediator: undefined, pickupStrategy: string): Promise<unknown>
+        // Both params optional (never required here) so this stays assignable
+        // from credo's real DidCommMediationRecipientApi: its pickupStrategy is
+        // a nominal string enum, and TS only accepts a mirrored string literal
+        // in that position when the parameter is optional on both sides —
+        // required parameters of merely-matching string values are rejected as
+        // unsound (verified empirically; enums are not structurally string).
+        initiateMessagePickup(mediator?: undefined, pickupStrategy?: string): Promise<unknown>
         stopMessagePickup(): Promise<unknown>
       }
     }

@@ -1,0 +1,44 @@
+{
+  "name": "@bifold/credo-tsp-adapter",
+  "version": "0.1.0-alpha.1",
+  "description": "Askar-backed implementations of @bifold/trust-tasks's tsp-core ports (SigningKey, KeyAgreement, VidResolver) — the credo-tsp-adapter package from the OpenVTC integration plan's Phase D.",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "files": [
+    "build"
+  ],
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "echo 'building credo-tsp-adapter 🏗️' && yarn run clean && yarn run compile && echo 'credo-tsp-adapter built ✅'",
+    "clean": "rimraf ./build",
+    "compile": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
+    "directory": "packages/credo-tsp-adapter"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "dependencies": {
+    "@bifold/trust-tasks": "workspace:*",
+    "@credo-ts/askar": "0.6.3",
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
+    "@openwallet-foundation/askar-shared": "0.6.0",
+    "@stablelib/ed25519": "^2.0.2"
+  },
+  "devDependencies": {
+    "@credo-ts/node": "0.6.3",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.5.0",
+    "rimraf": "~5.0.10",
+    "ts-jest": "^29.1.0",
+    "typescript": "~5.5.4"
+  }
+}

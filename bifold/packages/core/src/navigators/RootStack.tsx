@@ -12,6 +12,7 @@ import { ActivityProvider } from '../contexts/activity'
 import { BiometricConfirmationProvider } from '../contexts/biometric-confirmation'
 import RelationshipProposalModal from '../modules/vrc/components/RelationshipProposalModal'
 import LocalityPreflightModal from '../modules/vrc/components/LocalityPreflightModal'
+import CredentialExchangeQueryModal from '../modules/trust-tasks/components/CredentialExchangeQueryModal'
 import { useStore } from '../contexts/store'
 import { BifoldError } from '../types/error'
 import MainStack from './MainStack'
@@ -69,6 +70,7 @@ const RootStack: React.FC = () => {
                   <MainStack />
                   <RelationshipProposalModal />
                   <LocalityPreflightModal />
+                  <CredentialExchangeQueryModal />
                 </ActivityProvider>
               </WitnessConnectionProvider>
             </VrcNameCacheProvider>

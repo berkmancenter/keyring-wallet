@@ -28,5 +28,7 @@ export {
   sendTrustTaskDocument,
   getTrustTasksService,
   isDeterministicProposer,
+  setTspCarriageEnabled,
+  isTspCarriageEnabled,
   TRUST_TASKS_MIN_RCE_VERSION,
 } from './ceremony'
