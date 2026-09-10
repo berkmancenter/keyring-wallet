@@ -3,7 +3,7 @@ import React, { createContext, PropsWithChildren, useContext, useEffect, useStat
 import { BrandingOverlay } from '@bifold/oca'
 import { BrandingOverlayType, CredentialOverlay, OCABundleResolveAllParams } from '@bifold/oca/build/legacy'
 import { Agent, ClaimFormat, MdocRecord, SdJwtVcRecord, W3cCredentialRecord } from '@credo-ts/core'
-import { recordsAddedByType, recordsRemovedByType } from '@bifold/react-hooks/build/recordUtils'
+import { recordsAddedByType, recordsRemovedByType } from '@bifold/react-hooks'
 import { useTranslation } from 'react-i18next'
 import { TOKENS, useServices } from '../../../container-api'
 import { buildFieldsFromW3cCredsCredential } from '../../../utils/oca'

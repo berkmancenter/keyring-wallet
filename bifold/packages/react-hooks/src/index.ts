@@ -16,10 +16,14 @@ import { useExchanges, useExchangesByConnectionId } from './ExchangesProvider'
 import { useProofsFormatData, useProofFormatDataById } from './ProofFormatDataProvider'
 import { useProofs, useProofById, useProofByState, useProofNotInState, useProofsByConnectionId } from './ProofProvider'
 import { useQuestionAnswer, useQuestionAnswerByConnectionId, useQuestionAnswerById } from './QuestionAnswerProvider'
+import { recordsAddedByType, recordsRemovedByType } from './recordUtils'
 
 export type { ProofFormatData, CredentialFormatData }
+export type { RecordsState } from './recordUtils'
 
 export {
+  recordsAddedByType,
+  recordsRemovedByType,
   useAgent,
   useOptionalAgent,
   useBasicMessages,
