@@ -18,6 +18,17 @@
       "@utils/*": ["src/utils/*"],
       "@openvtc/trust-tasks": ["../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/index.d.ts"],
       "@openvtc/trust-tasks/*": ["../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/*"],
+      // @bifold/react-hooks and @bifold/credo-tsp-adapter declare "main"/"types"
+      // pointing at build/index.js, which only exists after a package build —
+      // these two are never built in dev (metro.config.js's BIFOLD_SOURCE_PACKAGES
+      // resolves them to src at runtime the same way), so tsc needs the same
+      // source redirect or every consumer sees "Cannot find module".
+      "@bifold/react-hooks": ["../bifold/packages/react-hooks/src/index.ts"],
+      "@bifold/credo-tsp-adapter": ["../bifold/packages/credo-tsp-adapter/src/index.ts"],
+      // @bifold/core's "types" points at lib/typescript/src/index.d.ts, a stale
+      // prebuilt declaration file that lags behind src (see the two entries
+      // above) — redirect to source so tsc sees what Metro's dev bundler does.
+      "@bifold/core": ["../bifold/packages/core/src/index.ts"],
       "react-native": ["node_modules/react-native"],
       "react-native-svg": ["node_modules/react-native-svg"],
       "@react-navigation/*": ["node_modules/@react-navigation/*"]
