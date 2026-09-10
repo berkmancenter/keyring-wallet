@@ -1,0 +1,10 @@
+{
+  "name": "ref-06p3-third-party-verify",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 06p3 — the locality-plan §7.3 third-party verification algorithm, mechanical and independently forgeable at every step",
+  "scripts": {
+    "check": "node run.mjs --quiet",
+    "start": "node run.mjs"
+  }
+}

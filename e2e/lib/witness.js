@@ -209,6 +209,15 @@ export async function startWitness({
       // shield). Appium-driven phones can't produce a locality proof; a real
       // deployment keeps this enforced.
       WITNESS_LOCALITY_REQUIRED: process.env.WITNESS_LOCALITY_REQUIRED || "false",
+      // Trust Tasks locality policy (locality-plan.md §8.2) — distinct from
+      // WITNESS_LOCALITY_REQUIRED above. Defaults to "off" here (NOT the
+      // witness-server's own "offered" default) because most e2e variants
+      // don't exercise locality at all, and an "offered" witness still
+      // discovery-declares locality support, which fires the app's
+      // witness-connect Bluetooth pre-flight sheet on a flow with no code to
+      // dismiss it. The locality-specific runner overrides this to
+      // "required" before calling startWitness.
+      WITNESS_LOCALITY_POLICY: process.env.WITNESS_LOCALITY_POLICY || "off",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

@@ -1,0 +1,13 @@
+{
+  "name": "ref-06p4-relay-trial",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 06p4 — a staged BLE relay, real device leg + socket-bridged injected latency, sweeping added delay to find where a timing bound starts rejecting it",
+  "scripts": {
+    "check": "node run.mjs --quiet",
+    "start": "node run.mjs"
+  },
+  "dependencies": {
+    "node-ble": "^1.13.0"
+  }
+}

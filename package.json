@@ -47,6 +47,7 @@
     "e2e:credential-exchange-query": "cd e2e && npm run credential-exchange-query",
     "e2e:vrc:witnessed:devices": "cd e2e && npm run vrc-exchange:witnessed:devices",
     "e2e:vrc:witnessed:android-only": "cd e2e && npm run vrc-exchange:witnessed:android-only",
+    "e2e:vrc:witnessed:locality:android-only": "cd e2e && npm run vrc-exchange:witnessed:locality:android-only",
     "e2e:vrc:witnessed:tsp:android-only": "cd e2e && npm run vrc-exchange:witnessed:tsp:android-only",
     "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator"
   },
@@ -83,6 +84,7 @@
     "@bifold/oca": "portal:bifold/packages/oca",
     "@bifold/react-hooks": "portal:bifold/packages/react-hooks",
     "@bifold/react-native-attestation": "portal:bifold/packages/react-native-attestation",
+    "@bifold/react-native-locality-peripheral": "portal:bifold/packages/react-native-locality-peripheral",
     "@bifold/remote-logs": "portal:bifold/packages/remote-logs",
     "@bifold/verifier": "portal:bifold/packages/verifier",
     "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
