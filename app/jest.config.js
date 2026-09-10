@@ -8,6 +8,17 @@ module.exports = {
   // This is necessary when using portal: with a submodule that has its own node_modules
   modulePaths: ['<rootDir>/node_modules'],
   moduleNameMapper: {
+    // @openvtc/trust-tasks is ESM-only with an import-condition exports map
+    // (reached through @bifold/core's portal source) — map to dist, as the
+    // core package's own jest config does.
+    '^@openvtc/trust-tasks$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/index.js',
+    '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../bifold/packages/core/node_modules/@openvtc/trust-tasks/dist/$1.js',
+    // Same reason as @openvtc/trust-tasks above: ESM-only, import-condition-only
+    // exports map (reached through @bifold/trust-tasks, itself reached through
+    // @bifold/core's portal source). Only @bifold/trust-tasks depends on it, so
+    // it's hoisted to the outer repo root rather than into any package's own
+    // node_modules.
+    '^@openvtc/vti-tsp-js$': '<rootDir>/../node_modules/@openvtc/vti-tsp-js/dist/index.js',
     '\\.(jpg|ico|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$':
       '<rootDir>/__mocks__/file.js',
     '\\.(css|less)$': '<rootDir>/__mocks__/style.js',
@@ -70,12 +81,19 @@ module.exports = {
     '@expo/app-integrity': '<rootDir>/../bifold/packages/core/__mocks__/@expo/app-integrity.js',
     'expo-image-picker': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-image-picker.js',
     'expo-image-manipulator': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-image-manipulator.js',
+    // @openvtc/trust-tasks is ESM-only with an import-condition exports map,
+    // which Jest's CJS resolver can't follow — same fix as bifold/core's own
+    // jest.config.js, pointed at the root-hoisted copy (this package isn't
+    // nested under app/node_modules; modulePaths above only searches app's
+    // own node_modules, so the mapping has to name the root path explicitly).
+    '^@openvtc/trust-tasks$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/index.js',
+    '^@openvtc/trust-tasks/(.*)$': '<rootDir>/../node_modules/@openvtc/trust-tasks/dist/$1.js',
   },
   transform: {
     '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(.*react-native.*|@credo-ts|@openwallet-foundation|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|expo(nent)?|@expo(nent)?/.*)/)',
+    'node_modules/(?!(.*react-native.*|@credo-ts|@openwallet-foundation|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|@openvtc|expo(nent)?|@expo(nent)?/.*)/)',
   ],
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]sx?$',
   testPathIgnorePatterns: ['\\.snap$', '<rootDir>/node_modules/', '<rootDir>/lib', '<rootDir>/__tests__/contexts/'],

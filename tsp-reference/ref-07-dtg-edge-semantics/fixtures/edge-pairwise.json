@@ -1,0 +1,57 @@
+{
+  "description": "A Keyring-style DTG edge: two self-issued VRC halves under pairwise did:peer:2 identifiers (R-DIDs). This is the shape the Keyring wallet emits today (bifold/packages/core/src/modules/vrc/credentialTypes.ts) and the shape of the spec's own §VRC example (spec/body.md:209-222 @ fc2276b). Proofs are REAL eddsa-jcs-2022 Ed25519 signatures over deterministic test keys (sign-fixtures.mjs), verified by run.mjs Check 0. For an edge minted by the actual Credo exchange, see edge-pairwise-captured.json.",
+  "declaredScopes": {
+    "half1": "pairwise",
+    "half2": "pairwise"
+  },
+  "halves": [
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:peer:2.Ez6LSbysKZAliceToBob11111111111111111111111111",
+      "validFrom": "2026-08-20T10:00:00Z",
+      "credentialSubject": {
+        "id": "did:peer:2.Ez6LSpSrLxnBobToAlice1111111111111111111111111"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T10:00:00Z",
+        "verificationMethod": "did:peer:2.Ez6LSbysKZAliceToBob11111111111111111111111111#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z3E9X9uuhXgPuPF7QxmYZWFACnYTZqzqXuDALSBQ84i7KY2FR7ryy9gjcFCcdNr7eyQ1LAq3PJE4HU5UHEQz8iBgJ"
+      }
+    },
+    {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://firstperson.network/credentials/dtg/v1"
+      ],
+      "type": [
+        "VerifiableCredential",
+        "DTGCredential",
+        "RelationshipCredential"
+      ],
+      "issuer": "did:peer:2.Ez6LSpSrLxnBobToAlice1111111111111111111111111",
+      "validFrom": "2026-08-20T10:00:05Z",
+      "credentialSubject": {
+        "id": "did:peer:2.Ez6LSbysKZAliceToBob11111111111111111111111111"
+      },
+      "proof": {
+        "type": "DataIntegrityProof",
+        "cryptosuite": "eddsa-jcs-2022",
+        "created": "2026-08-20T10:00:05Z",
+        "verificationMethod": "did:peer:2.Ez6LSpSrLxnBobToAlice1111111111111111111111111#key-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z4L6iQjxcS33ydMvvqw7Etavrob8SuCxix3QZyKBacvHtdXABRWiQ4pbGcqBqnuKAH33kCw9kHyZ4Z2G5hjQ4XSyM"
+      }
+    }
+  ]
+}

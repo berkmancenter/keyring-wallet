@@ -1,0 +1,79 @@
+diff --git a/dist/message/direct.js b/dist/message/direct.js
+index bd900c0166ff4ad9bac46d163549de4abdf08b75..d9deee7a26e7c86d2430008fa0f7ed2c56148bd4 100644
+--- a/dist/message/direct.js
++++ b/dist/message/direct.js
+@@ -26,7 +26,30 @@ const SIG_LEN = 64;
+ const SIG_QUADLETS = Math.ceil(SIG_LEN / 3); // 22
+ const EMPTY = new Uint8Array(0);
+ const utf8 = new TextEncoder();
+-const fromUtf8 = new TextDecoder("utf-8", { fatal: true });
++// Hermes/RN doesn't support `TextDecoder`'s `fatal` option (throws at
++// construction: "Failed to construct 'TextDecoder': the 'fatal' option is
++// unsupported"), so the strict decoder used on Node/browser targets must
++// fall back to a lenient decode + re-encode comparison there. `bytesEqual`
++// is declared below but usable here — function declarations hoist.
++function makeStrictUtf8Decoder() {
++    try {
++        const decoder = new TextDecoder("utf-8", { fatal: true });
++        return { decode: (bytes) => decoder.decode(bytes) };
++    }
++    catch {
++        const lenient = new TextDecoder("utf-8");
++        return {
++            decode: (bytes) => {
++                const text = lenient.decode(bytes);
++                if (!bytesEqual(utf8.encode(text), bytes)) {
++                    throw new TypeError("invalid UTF-8");
++                }
++                return text;
++            },
++        };
++    }
++}
++const fromUtf8 = makeStrictUtf8Decoder();
+ function concat(a, b) {
+     const out = new Uint8Array(a.length + b.length);
+     out.set(a, 0);
+diff --git a/dist/message/envelope.js b/dist/message/envelope.js
+index 0fc04e59a6b764602060be3911fea8390200b6a2..5e97a9fd4139489a1b171659f38a17eec30d276c 100644
+--- a/dist/message/envelope.js
++++ b/dist/message/envelope.js
+@@ -9,7 +9,37 @@
+ //   -E<count>  ·  YTSP<ver>  ·  B sender-VID  ·  B receiver-VID  ·  X 00 00
+ import * as wire from "../cesr/wire.js";
+ const utf8 = new TextEncoder();
+-const fromUtf8 = new TextDecoder("utf-8", { fatal: true });
++// Hermes/RN doesn't support `TextDecoder`'s `fatal` option (throws at
++// construction: "Failed to construct 'TextDecoder': the 'fatal' option is
++// unsupported"), so the strict decoder used on Node/browser targets must
++// fall back to a lenient decode + re-encode comparison there.
++function bytesEqual(a, b) {
++    if (a.length !== b.length)
++        return false;
++    for (let i = 0; i < a.length; i++)
++        if (a[i] !== b[i])
++            return false;
++    return true;
++}
++function makeStrictUtf8Decoder() {
++    try {
++        const decoder = new TextDecoder("utf-8", { fatal: true });
++        return { decode: (bytes) => decoder.decode(bytes) };
++    }
++    catch {
++        const lenient = new TextDecoder("utf-8");
++        return {
++            decode: (bytes) => {
++                const text = lenient.decode(bytes);
++                if (!bytesEqual(utf8.encode(text), bytes)) {
++                    throw new TypeError("invalid UTF-8");
++                }
++                return text;
++            },
++        };
++    }
++}
++const fromUtf8 = makeStrictUtf8Decoder();
+ /** Encode an envelope to its binary-CESR `-E` frame. The returned bytes are the
+  *  HPKE `info` for the message. */
+ export function encodeEnvelope(sender, receiver) {

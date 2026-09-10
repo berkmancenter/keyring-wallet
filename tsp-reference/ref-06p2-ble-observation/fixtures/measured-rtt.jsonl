@@ -1,0 +1,2 @@
+{"measuredAt":"2026-08-21T00:12:11.026Z","targetSession":"A","peripheralAddress":"78:DE:C3:42:7E:05","trials":15,"stats":{"n":15,"medianMs":179.76,"p95Ms":224.75,"worstMs":224.75,"bestMs":155.87}}
+{"measuredAt":"2026-08-21T00:13:58.065Z","targetSession":"A","peripheralAddress":"78:DE:C3:42:7E:05","advertisedRssiDbm":null,"trials":20,"stats":{"n":20,"medianMs":179.98,"p95Ms":223.85,"worstMs":223.85,"bestMs":103.45}}

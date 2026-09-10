@@ -9,6 +9,7 @@ import {
   useTheme,
   seedTestContacts,
   clearTestContacts,
+  setTspCarriageEnabled,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
 import { useAgent } from '@bifold/react-hooks'
@@ -54,6 +55,7 @@ const Developer: React.FC = () => {
   const [enableShareableLink, setEnableShareableLink] = useState(!!store.preferences.enableShareableLink)
   const [enableProxy, setEnableProxy] = useState(!!store.developer.enableProxy)
   const [enableAppToAppPersonFlow, setEnableAppToAppPersonFlow] = useState(!!store.developer.enableAppToAppPersonFlow)
+  const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isClearingContacts, setIsClearingContacts] = useState(false)
   const navigation = useNavigation()
@@ -290,6 +292,21 @@ const Developer: React.FC = () => {
       payload: [!enableAppToAppPersonFlow],
     })
     setEnableAppToAppPersonFlow((previousState) => !previousState)
+  }
+
+  const toggleEnableTspCarriageSwitch = () => {
+    const next = !enableTspCarriage
+    dispatch({
+      type: BCDispatchAction.TOGGLE_TSP_CARRIAGE,
+      payload: [next],
+    })
+    // Outbound (sendTrustTaskDocument) reads this flag live, so it takes
+    // effect immediately; inbound (setupTrustTasksInbound) only registers
+    // the TSP carriage's handler at agent setup, so a restart is needed for
+    // the inbound side to pick this up — same restart-to-apply behavior as
+    // most of this screen's other developer toggles.
+    setTspCarriageEnabled(next)
+    setEnableTspCarriage(next)
   }
 
   const handleSeedTestContacts = async () => {
@@ -539,6 +556,20 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableAppToAppPersonFlowSwitch}
             value={enableAppToAppPersonFlow}
+          />
+        </SectionRow>
+
+        <SectionRow
+          title={t('Developer.EnableTspCarriage')}
+          accessibilityLabel={t('Developer.EnableTspCarriage')}
+          testID={testIdWithKey('ToggleEnableTspCarriage')}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableTspCarriage ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableTspCarriageSwitch}
+            value={enableTspCarriage}
           />
         </SectionRow>
 
