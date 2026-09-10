@@ -1,0 +1,25 @@
+{
+  "name": "ref-12-direct-ts-port",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 12 — direct.ts's pack/unpack (CESR framing + HPKE-Auth seal/sign) ported onto tsp-core's three ports (ref-09/ref-10/ref-11), reusing the real published @openvtc/vti-tsp-js's own CESR/envelope code for the framing layer",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "overrides": {
+    "@openwallet-foundation/askar-shared": "0.6.0"
+  },
+  "dependencies": {
+    "@openvtc/vti-tsp-js": "0.1.0",
+    "@credo-ts/askar": "0.6.3",
+    "@credo-ts/core": "0.6.3",
+    "@credo-ts/node": "0.6.3",
+    "@openwallet-foundation/askar-nodejs": "^0.6.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.0.0",
+    "@noble/ciphers": "^2.0.0",
+    "@stablelib/ed25519": "^2.0.2"
+  }
+}

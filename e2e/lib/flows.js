@@ -1,11 +1,14 @@
 import {
   acceptSystemAlertIfPresent,
+  collapseNotificationShadeIfOpen,
   byTestId,
   byText,
   byTextContains,
+  deviceTag,
   existsTestId,
   scrollToTestId,
   sleep,
+  tapText,
   tapTestId,
   tapTestIdReliable,
   waitForTestId,
@@ -170,7 +173,22 @@ export async function unlockIfLocked(driver) {
   await pinInput.setValue(PIN);
   if (await existsTestId(driver, "Enter", 1500)) {
     await hideKeyboard(driver);
-    await tapTestId(driver, "Enter");
+    // A dropped tap here (same class of flakiness tapTestIdReliable exists
+    // for elsewhere in this file) leaves the wallet locked indefinitely —
+    // verify the PIN screen actually went away, re-tapping if it didn't.
+    // Generous timeout/settle: under heavy host contention (this sandbox
+    // runs the emulators alongside a full, actively-used desktop — real
+    // swap usage observed growing under load) a single webdriver round
+    // trip (e.g. getElementTagName) has been observed to take 10+ seconds.
+    await tapTestIdReliable(driver, "Enter", () => existsTestId(driver, "EnterPIN", 1500).then((v) => !v), {
+      timeout: 90000,
+      attempts: 6,
+      settleMs: 5000,
+    });
+  } else {
+    // Inactivity-lock variant: auto-submits on the final digit — just wait
+    // for the PIN screen to clear.
+    for (let i = 0; i < 10 && (await pinInput.isExisting()); i++) await sleep(500);
   }
   await sleep(3000);
   return true;
@@ -202,7 +220,16 @@ export async function restartApp(driver) {
   await driver.terminateApp(APP_ID).catch(() => {});
   await sleep(2000);
   await driver.activateApp(APP_ID);
-  await sleep(5000);
+  // A fixed sleep here raced a slow cold JS boot on a real device (observed:
+  // the restart right after enableTspCarriage — a heavier bundle, freshly
+  // Metro-cache-reset — took long enough that unlockIfLocked's instant,
+  // non-polling existence check ran before the PIN screen had even mounted,
+  // silently missing it; the caller then searched for post-unlock UI on a
+  // screen that was, moments later, still the lock screen). Wait for the
+  // PIN screen to actually appear (or definitively not, within a generous
+  // budget) before deciding whether to unlock — existsTestId's own polling,
+  // not a fixed delay, absorbs however long this particular boot takes.
+  await existsTestId(driver, "EnterPIN", 15000);
   await unlockIfLocked(driver);
   await dismissTourIfPresent(driver);
 }
@@ -266,6 +293,114 @@ export async function enableHardwareAttestation(driver) {
   await returnToContacts(driver);
 }
 
+/**
+ * Set the wallet's inactivity auto-lock to "Never" (Settings → Lockout,
+ * a normal, always-visible row — not developer-only). The rest of the TSP
+ * flow (QR sheet, invitation, relationship proposal) spans real network
+ * round trips and a second device's own onboarding running concurrently
+ * under CPU contention — easily long enough to exceed the default 5-minute
+ * auto-lock and relock the app mid-flow. Must be called while already on
+ * the Settings screen.
+ */
+async function setAutoLockNever(driver) {
+  await tapTestId(driver, "Lockout", 15000);
+  // Settings is a SectionList (virtualized) — "Never" is the last of 5
+  // inline options and isn't mounted until scrolled into view.
+  let neverEl;
+  for (let i = 0; i < 6; i++) {
+    neverEl = byText(driver, "Never");
+    if ((await neverEl.isExisting()) && (await neverEl.isDisplayed())) break;
+    const { width, height } = await driver.getWindowRect();
+    await driver
+      .action("pointer")
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
+      .down()
+      .pause(100)
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
+      .up()
+      .perform();
+    await sleep(500);
+  }
+  await neverEl.click();
+  console.log(`[e2e] ${driver.e2ePlatform}: auto-lock set to Never`);
+}
+
+/**
+ * Enable the "Enable TSP envelope carriage" developer setting (OFF by
+ * default) — the dev/test-only toggle for the real TSP envelope Carriage
+ * (@bifold/trust-tasks's tsp.pack/unpack over @bifold/credo-tsp-adapter's
+ * Askar-backed ports) as an alternative to the default DIDComm-v1 carriage.
+ * See docs/plans/openvtc-integration-plan/2026-09-02-bam.md for why this
+ * doesn't need vta-service or any ecosystem counterparty — it's wallet-to-
+ * wallet only, delivered over the same existing DIDComm-v1 connection.
+ *
+ * The "Developer" row on Settings (testID DeveloperOptions) only exists
+ * once `store.preferences.developerModeEnabled` is already persisted true
+ * (bifold/packages/core/src/screens/Settings.tsx) — i.e. on a LATER visit
+ * to Settings, after developer mode has already been turned on. Tripping
+ * the tap counter for the FIRST time takes a different path entirely:
+ * Settings' own onDevModeTriggered fires as soon as the threshold trips
+ * and calls `navigation.navigate(Screens.Developer)` directly, so the app
+ * jumps straight to the Developer screen — there is no "DeveloperOptions"
+ * row to see or tap on Settings in that transition, only afterwards.
+ * (bifold/packages/core/src/hooks/developer-mode.ts:
+ * TOUCH_COUNT_TO_ENABLE_DEVELOPER_MODE = 10 taps on the version footer,
+ * but the counter is checked BEFORE incrementing, so it only trips on the
+ * 11th tap despite the constant's name.)
+ * Toggling the switch updates outbound sends immediately, but
+ * setupTrustTasksInbound only registers the TSP carriage's inbound handler
+ * at agent setup — a restart is required for the inbound side to pick it
+ * up (same restart-to-apply behavior as most developer toggles), so this
+ * restarts the app before returning.
+ */
+export async function enableTspCarriage(driver) {
+  await dismissTourIfPresent(driver);
+  await tapTestId(driver, "Settings", 15000);
+  await setAutoLockNever(driver);
+
+  if (await existsTestId(driver, "DeveloperOptions", 3000)) {
+    // Developer mode was already enabled in a prior session (persisted store).
+    await tapTestId(driver, "DeveloperOptions", 15000);
+  } else {
+    // useDeveloperMode's counter (bifold/packages/core/src/hooks/developer-
+    // mode.ts) has no time-window reset — any 11 taps that land trip it,
+    // however spaced out. So a plain "click 11 times" loop assumes every
+    // click lands, but real devices under load occasionally drop a tap
+    // silently (the same class of flake tapTestIdReliable exists to work
+    // around elsewhere in this file) — losing even one of the 11 here
+    // leaves the counter one short with no visible symptom until the
+    // ToggleDeveloper wait afterward times out. Fix: overshoot the tap
+    // count and poll for the Developer screen after each one, so a few
+    // dropped taps just cost a few extra clicks instead of failing the run.
+    const versionEl = await scrollToTestId(driver, "Version");
+    const maxTaps = 20;
+    let reachedDeveloperScreen = false;
+    for (let i = 0; i < maxTaps; i++) {
+      await versionEl.click().catch(() => {});
+      if (await existsTestId(driver, "ToggleDeveloper", 300)) {
+        reachedDeveloperScreen = true;
+        console.log(`[e2e] ${deviceTag(driver)}: reached Developer screen after ${i + 1} Version taps`);
+        break;
+      }
+      await sleep(150);
+    }
+    // Settings navigates to the Developer screen itself on the trip — wait
+    // for a Developer-screen-only element, not a Settings row.
+    if (!reachedDeveloperScreen) {
+      await waitForTestId(driver, "ToggleDeveloper", 5000);
+    }
+  }
+
+  // Near the bottom of the Developer screen's long ScrollView — same
+  // scroll-into-view need as the Version footer above.
+  const tspToggle = await scrollToTestId(driver, "ToggleEnableTspCarriage");
+  await tspToggle.click();
+  console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope carriage enabled (developer setting)`);
+
+  await returnToContacts(driver);
+  await restartApp(driver);
+}
+
 /** The QR exchange bottom sheet is open if any of its content is visible. */
 async function qrSheetIsOpen(driver, timeout = 4000) {
   for (const key of ["ScanQRCode", "QRCodeExchangeTitle"]) {
@@ -284,6 +419,16 @@ async function qrSheetIsOpen(driver, timeout = 4000) {
  * lands on the sheet's dark overlay and CLOSES it (open/close toggle loop).
  */
 async function openQrSheet(driver) {
+  // A process-level watchdog kill can relock the wallet at any moment,
+  // independent of the in-app inactivity timer (autoLockTime doesn't
+  // prevent this — a fresh process always needs the PIN again) — check
+  // every time this is called, not just once per showRelationshipInvitation
+  // retry loop iteration.
+  await unlockIfLocked(driver);
+  // Same idea for a real notification pulling the shade down over the app
+  // mid-run (observed on a real device: a "QR Code" click failure whose
+  // page-source dump showed only status-bar content, no app UI at all).
+  await collapseNotificationShadeIfOpen(driver);
   if (await qrSheetIsOpen(driver, 1500)) return;
   if (await existsTestId(driver, "InviteContact", 3000)) {
     await tapTestId(driver, "InviteContact");
@@ -315,6 +460,10 @@ export async function showRelationshipInvitation(driver) {
       // presented) — only an app restart resets it
       await restartApp(driver);
     }
+    // The wallet's own inactivity auto-lock can fire between attempts too —
+    // e.g. while this device sits idle waiting on a peer device under CPU
+    // contention — independent of the watchdog-restart case above.
+    await unlockIfLocked(driver);
     await acceptSystemAlertIfPresent(driver);
     await dismissTourIfPresent(driver);
     await openQrSheet(driver);
@@ -906,6 +1055,26 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
 }
 
 /**
+ * `assertVrcReceived`'s text match isn't scoped to the Contacts list — the
+ * moment the VRC lands, Chat.tsx auto-pushes the peer's chat screen (header
+ * text: the peer's own name) on top of the Contacts tab with a "Relationship
+ * confirmed" overlay, and `byTextContains(driver, peerName)` matches that
+ * header just as well as the contacts-list row. So the assertion can return
+ * successfully while the device is actually sitting on this overlay, not the
+ * Contacts tab — invisible to callers who only need "the VRC arrived" (every
+ * existing flow), but a real problem for one that needs to drive the UI
+ * further afterward. Dismiss it (its "View contacts" button has no testID,
+ * only an accessibilityLabel — byText/tapText is the only way to reach it)
+ * before any such follow-on navigation. A no-op if the overlay isn't showing.
+ */
+export async function dismissVrcConfirmationOverlayIfPresent(driver, timeout = 5000) {
+  if (await byTextContains(driver, "Relationship confirmed").isExisting()) {
+    await tapText(driver, "View contacts", timeout);
+    console.log(`[e2e] ${driver.e2ePlatform}: dismissed the VRC confirmation overlay`);
+  }
+}
+
+/**
  * Assert the Trust Task relationship exchange ran alongside the legacy flow
  * (integration M2: propose + the issue leg in shadow mode), from the Android
  * side's logcat. One android device sees the whole exchange regardless of
@@ -945,6 +1114,44 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
   }
   throw new Error(
     `android: trust-task markers missing after ${timeout}ms: ${missing
+      .map(([, name]) => name)
+      .join(", ")}`
+  );
+}
+
+/**
+ * Confirm the TSP envelope carriage specifically ran (not just that a
+ * document arrived, which either carriage would show) — from the Android
+ * side's logcat, distinct from assertTrustTaskExchangeMarkers's
+ * [TrustTasks:Ceremony] markers. Requires enableTspCarriage() to have been
+ * run (and the app restarted) on the device(s) under test first. No-op on
+ * iOS drivers (no logcat; the Android log covers both directions).
+ */
+export async function assertTspCarriageMarkers(driver, timeout = 60000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const required = [
+    [/\[TrustTasks:TspCarriage\] envelope sent/, "envelope sent"],
+    [/\[TrustTasks:TspCarriage\] envelope received/, "envelope received"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(
+        "[e2e] android: TSP envelope carriage markers present (sent + received)"
+      );
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `android: TSP carriage markers missing after ${timeout}ms: ${missing
       .map(([, name]) => name)
       .join(", ")}`
   );

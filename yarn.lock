@@ -2130,6 +2130,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@bifold/core@portal:bifold/packages/core::locator=keyring-wallet%40workspace%3A."
   dependencies:
+    "@bifold/credo-tsp-adapter": "workspace:*"
     "@bifold/trust-tasks": "workspace:*"
     "@digitalcredentials/data-integrity": "npm:^2.6.0"
     "@digitalcredentials/eddsa-rdfc-2022-cryptosuite": "npm:^1.3.0"
@@ -2220,6 +2221,18 @@ __metadata:
   languageName: node
   linkType: soft
 
+"@bifold/credo-tsp-adapter@portal:bifold/packages/credo-tsp-adapter::locator=keyring-wallet%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@bifold/credo-tsp-adapter@portal:bifold/packages/credo-tsp-adapter::locator=keyring-wallet%40workspace%3A."
+  dependencies:
+    "@bifold/trust-tasks": "workspace:*"
+    "@credo-ts/askar": "npm:0.6.3"
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch"
+    "@openwallet-foundation/askar-shared": "npm:0.6.0"
+    "@stablelib/ed25519": "npm:^2.0.2"
+  languageName: node
+  linkType: soft
+
 "@bifold/oca@portal:bifold/packages/oca::locator=keyring-wallet%40workspace%3A.":
   version: 0.0.0-use.local
   resolution: "@bifold/oca@portal:bifold/packages/oca::locator=keyring-wallet%40workspace%3A."
@@ -2293,8 +2306,10 @@ __metadata:
   dependencies:
     "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch"
     "@credo-ts/didcomm": "npm:0.6.3"
+    "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
+    "@openvtc/vti-tsp-js": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch"
     ajv: "npm:^8.17.1"
     canonicalize: "npm:^1.0.8"
   languageName: node
@@ -2942,7 +2957,7 @@ __metadata:
 
 "@credo-ts/core@patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch":
   version: 0.6.3
-  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch::version=0.6.3&hash=8a03d3"
+  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch::version=0.6.3&hash=6a1148"
   dependencies:
     "@animo-id/mdoc": "npm:^0.5.2"
     "@animo-id/pex": "npm:^6.1.1"
@@ -2986,7 +3001,7 @@ __metadata:
     web-did-resolver: "npm:^2.0.32"
     webcrypto-core: "npm:^1.8.1"
     zod: "npm:^4.3.6"
-  checksum: 10c0/909158ff53d5a3db20aadc5de3481fa3f8fe57c896097c57d781730b1ca4385c4728ebba2af4bd180f1f559817fbed5b18b2691307be750e726c9a0ddd626b5c
+  checksum: 10c0/140fe92bd99590020050654c1bb24ee74efdcb94081e066b48fd9cbee14c60b932b0e87bfd616f1177226d6d908b19b2f2d5c74e2547c953f99a937a5ffb2db4
   languageName: node
   linkType: hard
 
@@ -4459,6 +4474,31 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@hpke/chacha20poly1305@npm:^1.8.0":
+  version: 1.8.0
+  resolution: "@hpke/chacha20poly1305@npm:1.8.0"
+  dependencies:
+    "@hpke/common": "npm:^1.10.0"
+  checksum: 10c0/bf85857e64f5fbe4d84ade3b6140dac852f05096498e9055b7a85bb854f8c9142dfe8b93cd95934c1402267a40a50ab52311feb76d46457250292dfbe7f39a81
+  languageName: node
+  linkType: hard
+
+"@hpke/common@npm:^1.10.0":
+  version: 1.10.1
+  resolution: "@hpke/common@npm:1.10.1"
+  checksum: 10c0/9620587336341138d0b98c03f0bdf4fa6390350c378775d6aff6031c77dffed8315c672dd7c04abf1ec753994b047d7f7b87f4c1d706a19c412b2e1756ce986a
+  languageName: node
+  linkType: hard
+
+"@hpke/core@npm:^1.9.0":
+  version: 1.9.0
+  resolution: "@hpke/core@npm:1.9.0"
+  dependencies:
+    "@hpke/common": "npm:^1.10.0"
+  checksum: 10c0/184d8c6a0e72e25362a8e5d559349cacf20f161df12ff31cbcdaf32b1a5ad08ebf4e44c512c52212e22c634449b7689a716b1753a565003a70a7cb430c7a1c76
+  languageName: node
+  linkType: hard
+
 "@humanwhocodes/config-array@npm:^0.13.0":
   version: 0.13.0
   resolution: "@humanwhocodes/config-array@npm:0.13.0"
@@ -5213,12 +5253,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@noble/ciphers@npm:^2.0.0":
+  version: 2.4.0
+  resolution: "@noble/ciphers@npm:2.4.0"
+  checksum: 10c0/f8c0cfec0c96554a379385e0a851e4f4eb3ceb1ac645885d8f94f6e75b8d56233e4a434413cb2bf37ec08960cc05dad1ddf98d25311e990ea6505c56a1c1ca95
+  languageName: node
+  linkType: hard
+
 "@noble/curves@npm:^2.0.1":
   version: 2.0.1
   resolution: "@noble/curves@npm:2.0.1"
   dependencies:
     "@noble/hashes": "npm:2.0.1"
   checksum: 10c0/e0b329eb9229e862d3b7203e0444bd479e9ecf2d5990181908dad416aab69106717ca696fc7b12ad0eb19d710f58c454646b27ce517a4298ab9abc89a9bdb6ee
+  languageName: node
+  linkType: hard
+
+"@noble/curves@npm:^2.2.0":
+  version: 2.4.0
+  resolution: "@noble/curves@npm:2.4.0"
+  dependencies:
+    "@noble/hashes": "npm:2.4.0"
+  checksum: 10c0/b60b737f65cc4e128dd94fea467df1ed73c5c0c089ef1bdb61614a0897db1fa7151d7f95bb7205854a9030d3f80a879e00f3bb74990befde061184ae43dfaec6
   languageName: node
   linkType: hard
 
@@ -5240,6 +5296,13 @@ __metadata:
   version: 2.0.1
   resolution: "@noble/hashes@npm:2.0.1"
   checksum: 10c0/e81769ce21c3b1c80141a3b99bd001f17edea09879aa936692ae39525477386d696101cd573928a304806efb2b9fa751e1dd83241c67d0c84d30091e85c79bdb
+  languageName: node
+  linkType: hard
+
+"@noble/hashes@npm:2.4.0, @noble/hashes@npm:^2.0.0":
+  version: 2.4.0
+  resolution: "@noble/hashes@npm:2.4.0"
+  checksum: 10c0/f5820a38c52886073a69722a030688ad188bbacb822d01554545371259961c2b916266c57c013c2ce5a0d78aec977142fc68fd2a79be4c97b0644fcee9bb35f6
   languageName: node
   linkType: hard
 
@@ -5340,6 +5403,30 @@ __metadata:
   version: 0.9.0
   resolution: "@openvtc/trust-tasks@npm:0.9.0"
   checksum: 10c0/ee6b4aa1c3c3709e4262922cdacb2d2063bdcc3a871bce678694800d5e6fc11c237e151ca0740ad9b31ba1093659d204f3bcc0c32bb7c150d0754e7254b7e343
+  languageName: node
+  linkType: hard
+
+"@openvtc/vti-tsp-js@npm:0.1.0":
+  version: 0.1.0
+  resolution: "@openvtc/vti-tsp-js@npm:0.1.0"
+  dependencies:
+    "@hpke/chacha20poly1305": "npm:^1.8.0"
+    "@hpke/core": "npm:^1.9.0"
+    "@noble/curves": "npm:^2.2.0"
+    "@noble/hashes": "npm:^2.0.0"
+  checksum: 10c0/36cd6aed45566e434a222695b30e11526285862ae442c7205f121889865cfd251571770e8f1771ea45b01a2cca4c6f89a4c41122c54dddd24bcb3c3e8ebdeef8
+  languageName: node
+  linkType: hard
+
+"@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch":
+  version: 0.1.0
+  resolution: "@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch::version=0.1.0&hash=dbb2d4"
+  dependencies:
+    "@hpke/chacha20poly1305": "npm:^1.8.0"
+    "@hpke/core": "npm:^1.9.0"
+    "@noble/curves": "npm:^2.2.0"
+    "@noble/hashes": "npm:^2.0.0"
+  checksum: 10c0/11d6a80d8ecb0f0b8e567427720df610578c3d404625c974bdeb0f797840af45cd940921e278d3605fd5a90769ea7f39c1ff2d8616fa7bc0251d8d368b5dfe78
   languageName: node
   linkType: hard
 
@@ -14266,6 +14353,7 @@ __metadata:
     "@babel/preset-env": "npm:~7.28.6"
     "@babel/runtime": "npm:~7.28.6"
     "@bifold/core": "npm:3.0.16"
+    "@bifold/credo-tsp-adapter": "npm:0.1.0-alpha.1"
     "@bifold/oca": "npm:3.0.16"
     "@bifold/react-hooks": "npm:3.0.16"
     "@bifold/react-native-attestation": "npm:3.0.16"
@@ -14278,7 +14366,7 @@ __metadata:
     "@craftzdog/react-native-buffer": "npm:^6.1.1"
     "@credo-ts/anoncreds": "npm:0.6.3"
     "@credo-ts/askar": "npm:0.6.3"
-    "@credo-ts/core": "npm:0.6.3"
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch"
     "@credo-ts/didcomm": "patch:@credo-ts/didcomm@npm%3A0.6.3#~/.yarn/patches/@credo-ts-didcomm-npm-0.6.3-b3cbe5f2a8.patch"
     "@credo-ts/indy-vdr": "npm:0.6.3"
     "@credo-ts/openid4vc": "npm:0.6.3"

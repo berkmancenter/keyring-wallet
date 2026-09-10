@@ -9,6 +9,7 @@ this folder is a small standalone npm package.
 | --- | --- | --- |
 | `yarn e2e:vrc` | Two-device VRC exchange on the **Android emulator + iOS simulator** | No |
 | `yarn e2e:vrc:android-only` | Same exchange on **two Android emulators** (no macOS/Xcode needed; see below for the two-AVD setup) | No |
+| `yarn e2e:vrc:tsp` | Same exchange, but the VRC/witness Trust Task documents are carried over the real TSP envelope stack (HPKE-Auth, Askar custody, CESR framing) instead of the default DIDComm-v1 binding — both **Android emulators** (logcat-based marker assertion needs it; see below for the two-AVD setup). Wallet-to-wallet only, not an ecosystem-interop test — see `docs/plans/openvtc-integration-plan/2026-09-02-bam.md` | No |
 | `yarn e2e:vrc:devices` | Same exchange on a **physical Android phone + iPhone**, proving hardware attestation + biometric signing | **Yes** — you authenticate on the phones |
 | `yarn e2e:vrc:devices:android-only` | Same hardware-attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
 | `yarn e2e:migration` | Askar 0.2→0.6 store migration: old app → exchange → in-place upgrade (Android emulator + iOS simulator peer) | No |
@@ -17,13 +18,15 @@ this folder is a small standalone npm package.
 | `yarn e2e:vrc:witnessed:devices` | Witnessed + hardware-attested exchange on a **physical Android phone + iPhone**, routed through a locally-run witness server — both wallets end up with a Verifiable Witness Credential (VWC) in addition to the peer VRC | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
 | `yarn e2e:vrc:witnessed:locality:android-only` | Same witnessed + attested exchange on **two physical Android phones**, with BLE co-presence (locality) **required and asserted confirmed** — the one variant where the machine running the test needs its own real Bluetooth adapter (and a Linux host — see below), not just the phones | **Yes** |
+| `yarn e2e:vrc:witnessed:tsp:android-only` | Same witnessed + attested exchange as above, but the wallet-to-wallet VRC documents (discovery/propose/issue) are carried over the real TSP envelope stack instead of the default DIDComm-v1 binding — same **two physical Android phones** requirement. The wallet-to-*witness* protocol (session/challenge/VP) is a separate channel and is unaffected either way — see "TSP + witnessed" below. | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only:mediator` | Same as above, but the witness runs in **MEDIATOR mode** (through the shared production mediator) instead of the default DIRECT mode — confirms the mediator-mode fallback still works, on demand, without hand-setting an env var. See "Confirming the mediator-mode fallback" below. | **Yes** |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
-`vrc-exchange:android-only`, `vrc-exchange:devices`,
+`vrc-exchange:android-only`, `vrc-exchange:tsp`, `vrc-exchange:devices`,
 `vrc-exchange:devices:android-only`, `store-migration`,
 `store-migration:android-only`, `onboarding-smoke`,
 `vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`,
+`vrc-exchange:witnessed:tsp:android-only`,
 `vrc-exchange:witnessed:android-only:mediator`.
 
 Every script above ends by printing a bordered pass/fail banner
@@ -62,6 +65,18 @@ You also need the normal app dev environment (Android SDK + an AVD, Xcode + an
 iOS simulator runtime) — see the root README "Getting Started".
 
 The harness starts Appium itself if nothing is listening on `:4723`.
+
+**Working in a git worktree?** Every debug build looks for the Metro packager
+on host port `:8081` regardless of which checkout it was built from — Android
+via a hardcoded `adb reverse tcp:8081`, the iOS simulator directly over
+localhost. If a Metro from a DIFFERENT checkout (another worktree, or the
+main checkout) is already holding that port, it keeps serving *its own*
+checkout's JS with no error at all — the app boots fine, just against the
+wrong code, which only surfaces much later as a confusing "element not
+found" deep into a run. The harness checks this itself before starting
+(`checkMetroIsThisWorktree` in `lib/driver.js`) and fails fast with a clear
+message if `:8081` belongs to another checkout; when that happens, stop that
+Metro and run `yarn start` from **this** worktree's `app/` before retrying.
 
 ## Build the app binaries first
 
@@ -200,6 +215,26 @@ adb devices                                          # should list both, as "dev
 adb -s emulator-5554 shell getprop sys.boot_completed # repeat per serial until "1"
 adb -s emulator-5556 shell getprop sys.boot_completed
 ```
+
+**Windowed by default.** The commands above open a visible emulator window
+so you can watch the suite drive the app — that's the default, and the
+right one for local dev (you want to see what broke). Add `-no-window` only
+when you deliberately want headless (e.g. a CI box with no display):
+
+```sh
+emulator -avd Pixel_8_API_33 -gpu swiftshader_indirect -no-window &
+```
+
+**Don't mix a headless and a windowed run on the same AVD via its saved
+snapshot.** By default the emulator saves a snapshot (`default_boot`) on
+clean shutdown and reloads it on the next boot to save time. If that
+snapshot was saved under one display mode (windowed vs. `-no-window`) and
+you boot into the other, the two can disagree about GPU/framebuffer state:
+observed symptom is `FrameBuffer.cpp:3544] Failed to find ColorBuffer:0`
+spamming the emulator's own log, followed by the process wedging (still
+running, pegged at high CPU, but its adb/console ports stop responding and
+it vanishes from `adb devices`). Fix: kill it and boot that AVD once with
+`-no-snapshot-load` to force a clean cold boot before switching modes.
 
 Then run the suite from the repo root, telling it which AVD is which
 wallet — `ANDROID_AVD` is wallet A, `ANDROID_AVD2` is wallet B:
@@ -417,6 +452,23 @@ ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
 Everything else — invitation, hardware attestation, the Trust Task ceremony
 markers — is identical to the plain android-only witnessed variant above;
 see that section and "The Trust Task dialect" below for what those assert.
+### TSP + witnessed (`yarn e2e:vrc:witnessed:tsp:android-only`)
+
+Same witnessed + attested exchange as above (same two physical phones, same
+witness, same VWC issuance), but the wallet-to-wallet Trust Task documents —
+discovery, propose, issue — move onto the real TSP envelope stack (HPKE-Auth,
+Askar custody, CESR framing), same as `yarn e2e:vrc:tsp`.
+
+**The wallet-to-*witness* protocol is untouched by this flag.**
+Session-request/session-challenge/VP submission
+(`bifold/packages/core/src/modules/vrc/witnessed-vrc-manager.ts`) goes over
+plain DIDComm basic messages, not the Trust Task carriage — that's a
+separate channel entirely, so this variant proves the TSP envelope carries
+the peer-to-peer VRC exchange correctly *alongside* an otherwise-unchanged
+witnessing ceremony, not that witnessing itself runs over TSP.
+
+Same device/env requirements as `vrc-exchange:witnessed:android-only`
+above (`ANDROID_UDID`/`ANDROID_UDID2` to pick devices explicitly).
 
 ### Confirming the mediator-mode fallback (`yarn e2e:vrc:witnessed:android-only:mediator`)
 
@@ -458,6 +510,78 @@ Since the relationship exchange moved onto Trust Tasks (plan: `docs/plans/openvt
 - **Env that matters:** `APPIUM_PORT` (default 4723 — set another port if something else already listens there), `WDA_LOCAL_PORT` (iOS simulator WebDriverAgent; 8101 known good), `ANDROID_AVD` (default `Pixel_8_API_33`), `WITNESS_MEDIATOR_INVITATION_URL` (unset by default, forcing the witness into DIRECT mode regardless of local `.env` — set it to deliberately test mediator mode instead). The Android 16 / API 36 PIN-modal fix (`waitForKeyboardGone` in `enableHardwareAttestation`) is in place and unchanged by the v4 work.
 - **Known intermittents on simulators, not regressions:** one wallet occasionally misses the witness connection ("only 1/2 participants connected") or iOS never sends the didexchange request (the open "iOS no-send"); the witness agent init can hang under heavy machine load. Re-run. Distinct from a **deterministic 0/N** failure, seen on real devices through 2026-08-31: the witness silently running in mediator mode with a push-only pickup strategy against a mediator that only queues — fixed (see `docs/spikes/e2e-vrc-connect-findings.md`, "fourth failure layer"), and the harness no longer lets a local `.env` put the witness back into that mode by accident.
 - **Between runs:** free ports 4750/9002/9003 and kill stray `cloudflared`; cold-reboot an emulator that has been up for hours (its host network path degrades).
+
+## A local VTA for real-VTA testing (`lib/vta.js`)
+
+`startVta()` (`lib/vta.js`) brings up a real, disposable OpenVTC `vta` binary
+(https://firstperson.dev) for testing against — the piece
+`trust_tasks_subtask.md` §9 step 4 (credential-exchange against a live
+`vta-service`) needed and didn't have. Non-interactive end to end: `vta setup
+--from` (a generated TOML, no prompts), an offline-minted admin `did:key`, the
+daemon started and health-checked through its own HTTPS tunnel — same
+`cloudflared` quick-tunnel approach `startWitness` already uses, just applied
+to a second, independent process.
+
+```js
+import { startVta } from "./lib/vta.js";
+
+const vta = await startVta();
+// vta.vtaDid, vta.vtaUrl, vta.adminDid, vta.adminCredential (base64; decode
+// for { did, privateKeyMultibase, vtaDid, vtaUrl } — what a client needs to
+// authenticate as this admin)
+...
+await vta.stop();
+```
+
+**Prerequisites:**
+
+- [`cloudflared`](https://github.com/cloudflare/cloudflared) (already required
+  for the witnessed exchange above).
+- The `vta` binary, cached and pinned by
+  [`scripts/openvtc/fetch-binaries.mjs`](../scripts/openvtc/README.md) (run
+  `node scripts/openvtc/fetch-binaries.mjs vta` once — `startVta` finds the
+  cached copy automatically). Point `VTA_BIN` at a different binary instead if
+  you need to. See the [OpenVTC developer
+  tutorial](https://github.com/OpenVTC/vti-setup/tree/main/developer) for the
+  wider ecosystem (the `pnm`/`openvtc` CLIs, joining a community) — this
+  harness only automates the `vta` half.
+
+**Every call mints a brand-new VTA, never a persistent one.** `did:webvh`'s
+identifier is derived from its hosting domain, and a free cloudflared quick
+tunnel gets a random new hostname every run — so the DID this VTA gets is
+never resolvable again once `stop()` tears the tunnel down. That's the right
+shape for a spin-up-fresh-per-run test fixture (same as the witness server
+above) and the wrong shape for anything meant to persist across sessions —
+don't reach for this to stand up a long-lived dev VTA.
+
+Defaults: REST-only (no mediator — pass `mediatorDid` once a local/test
+mediator exists to point it at), ports 8180/8181 (chosen to avoid
+4723/8101/9002/9003, already used by Appium/WDA/the witness server above),
+plaintext seed storage (dev-only, matches upstream's own `"plaintext"`
+backend warning — never use this shape for anything real).
+
+## Credential-exchange query, in the app (`yarn e2e:credential-exchange-query`)
+
+`run-credential-exchange-query.js` drives the first in-app (not Node-script-
+only) proof of `trust_tasks_subtask.md` §9 step 4's happy path: a verifier
+sends `credential-exchange/query`, the wallet shows a real consent prompt
+(`CredentialExchangeQueryModal`, testID `CredentialExchangeQueryShare`), and
+approving it sends back `credential-exchange/present` with a real `vp_token`.
+Two Android wallets first complete an ordinary VRC exchange so Alice holds a
+real, stored credential to be queried for; a minimal verifier agent
+(`lib/verifier.js` — not a full `vta-service`, see that file's header) then
+connects to Alice the same way Bob did (a plain OOB paste) and sends the
+query directly.
+
+**Passes clean** on a Pixel 8 API 33 emulator + a physical device. Getting
+there found and fixed six real bugs (one a genuine upstream bug in
+`@credo-ts/core`'s `DcqlService`); see
+`docs/spikes/credential-exchange-query-e2e-findings.md`.
+
+```
+ANDROID_AVD2=<second-avd> yarn e2e:credential-exchange-query
+ANDROID_UDID2=<second-device-udid> yarn e2e:credential-exchange-query
+```
 
 ## Troubleshooting
 

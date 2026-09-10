@@ -75,6 +75,23 @@ The active one is **`docs/plans/openvtc-integration-plan.md`** — aligning Keyr
 
 `docs/plans/CLAUDE.md` covers how these documents are written — read it before editing one, and note that plans state current design in the present tense while reasoning and superseded positions live in the dated companions.
 
+## OpenVTC/TSP upstream clones
+
+The OpenVTC integration work (see Planning documents above) reads real
+upstream source, not just documentation. Those repos live in `external/`
+(gitignored), cloned and pinned to exact commits by `node
+scripts/openvtc/setup-external.mjs` — see the `openvtc-workspace` skill and
+`scripts/openvtc/README.md` for the full setup/sync workflow.
+
+**Before reading any upstream source as ground truth, confirm you're reading
+`external/`'s pinned clone, not some other checkout of the same repo that
+happens to exist on the machine.** A sibling clone elsewhere is not managed
+by the pin tooling and can silently sit on any commit, including one older
+than the pin — this has actually happened, produced a wrong conclusion, and
+took a user catching it to surface (see `docs/plans/openvtc-integration-plan/2026-09-02-bam.md`'s
+correction section). If `external/` doesn't have the clone yet, run
+`setup-external.mjs` rather than reaching for one elsewhere.
+
 ## CodeGraph
 
 A CodeGraph MCP index (`.codegraph/`) is configured for this repo — prefer `codegraph_*` tools over grep for structural questions (symbol definitions, callers, impact analysis).

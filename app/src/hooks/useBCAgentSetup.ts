@@ -11,6 +11,7 @@ import {
   WalletSecret,
   setupVrcConnectionHandler,
   setupTrustTasksInbound,
+  setTspCarriageEnabled,
 } from '@bifold/core'
 import { Agent } from '@credo-ts/core'
 import {
@@ -267,6 +268,13 @@ const useBCAgentSetup = () => {
       logger.info('Setting up VRC connection handler...')
       setupVrcConnectionHandler(newAgent)
 
+      // Dev/test-only carriage selection (docs/plans/openvtc-integration-plan
+      // §5.4's TSP scope correction) — must be set before setupTrustTasksInbound
+      // registers the inbound handler(s), since that registration only happens
+      // once per agent. Toggling Developer > Enable TSP envelope carriage takes
+      // effect on outbound sends immediately, but needs a restart for inbound.
+      setTspCarriageEnabled(!!store.developer.enableTspCarriage)
+
       logger.info('Setting up Trust Tasks inbound handler (binding 0.2)...')
       setupTrustTasksInbound(newAgent)
 
@@ -289,6 +297,7 @@ const useBCAgentSetup = () => {
     },
     [
       store.preferences.selectedMediator,
+      store.developer.enableTspCarriage,
       // store.preferences.usePushNotifications, // DISABLED: Push notifications disabled
       logger,
       indyLedgers,

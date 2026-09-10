@@ -194,6 +194,7 @@ const translation = {
     "AttestationSupport": "Attestation support",
     "EnableProxy": "Enable proxy",
     "EnableAppToAppPersonFlow": "App-to-app Person flow",
+    "EnableTspCarriage": "Enable TSP envelope carriage",
     "SwitchMode": "Switch mode",
     "SwitchTheme": "Switch theme",
   },
