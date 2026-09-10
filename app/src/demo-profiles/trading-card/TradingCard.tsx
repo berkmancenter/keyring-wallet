@@ -2,6 +2,7 @@ import { ContactCardProps, testIdWithKey } from '@bifold/core'
 import React from 'react'
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
+import { cardVariantForDid } from './didColorVariant'
 import { useTradingCardBranding } from './useTradingCardBranding'
 
 /**
@@ -29,8 +30,12 @@ export const rarityFor = (hardwareVerified: boolean, witnessed?: boolean): strin
 }
 
 const TradingCard: React.FC<ContactCardProps> = ({ contact, hardwareVerified, onPress }) => {
-  const { primary, secondary, setName } = useTradingCardBranding()
-  const { name, organization, photo } = contact.issuer
+  const branding = useTradingCardBranding()
+  const { setName } = branding
+  const { id, name, organization, photo } = contact.issuer
+  // Same set, same design — just a different foil per contact, so a
+  // collection of cards doesn't read as one color repeated over and over.
+  const { primary, secondary } = cardVariantForDid(id, branding)
   const rarity = rarityFor(hardwareVerified, contact.hasWitnessCredentials)
 
   const styles = StyleSheet.create({
