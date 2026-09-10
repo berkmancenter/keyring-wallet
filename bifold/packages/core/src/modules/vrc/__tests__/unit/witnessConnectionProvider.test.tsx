@@ -11,6 +11,7 @@
 
 import React from 'react'
 import { renderHook, act } from '@testing-library/react-native'
+import { Platform } from 'react-native'
 import type { Agent } from '@credo-ts/core'
 
 import {
@@ -18,24 +19,47 @@ import {
   useWitnessConnection,
 } from '../../context/WitnessConnectionProvider'
 
-// Mock the vrc-manager
+// Capture the announcement callback the provider registers, so tests can
+// invoke it directly the way vrc-manager would on a real `witness-announcement`.
+const mockRegisterWitnessConnectionDetectedCallback = jest.fn()
 jest.mock('../../vrc-manager', () => ({
   registerWitnessSessionCallback: jest.fn(),
   registerWitnessStateGetter: jest.fn(),
-  registerWitnessConnectionDetectedCallback: jest.fn(),
+  registerWitnessConnectionDetectedCallback: (cb: unknown) =>
+    mockRegisterWitnessConnectionDetectedCallback(cb),
   registerWitnessValidationCallback: jest.fn(),
+}))
+
+type WitnessLocalitySupport = 'off' | 'offered' | 'required'
+
+const mockQueryWitnessDiscovery = jest.fn(async () => undefined)
+// Defaults to 'offered' — the common case of a witness that supports
+// locality but doesn't require it — so existing "a preflight is scheduled"
+// tests below keep exercising that path unless they override it.
+const mockGetWitnessLocalitySupport = jest.fn(async () => 'offered' as WitnessLocalitySupport | null)
+jest.mock('../../../trust-tasks/ceremony', () => ({
+  queryWitnessDiscovery: (...args: unknown[]) => mockQueryWitnessDiscovery(...args),
+  getWitnessLocalitySupport: (...args: unknown[]) => mockGetWitnessLocalitySupport(...args),
 }))
 
 // Capture the mock dispatch so we can assert on calls
 const mockDispatch = jest.fn()
 
-// Mock the store
+const DEFAULT_STORE = {
+  witness: { activeWitnessConnectionId: undefined },
+  preferences: { useLocalityConfirmation: true, hasSeenLocalityPreflight: false },
+}
+
+// Mock the store. The factory creates its OWN jest.fn() (no reference to a
+// later `const` in this file, which the hoisted jest.mock() call would see
+// as undefined) — the actual store data is wired in via `mockUseStore`
+// below, obtained from the mocked module itself once it's safe to.
 jest.mock('../../../../contexts/store', () => ({
-  useStore: jest.fn(() => [
-    { witness: { activeWitnessConnectionId: undefined } },
-    mockDispatch,
-  ]),
+  useStore: jest.fn(),
 }))
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const mockUseStore = require('../../../../contexts/store').useStore as jest.Mock
+mockUseStore.mockImplementation(() => [DEFAULT_STORE, mockDispatch])
 
 describe('WitnessConnectionProvider', () => {
   let mockAgent: jest.Mocked<Agent>
@@ -328,6 +352,137 @@ describe('WitnessConnectionProvider', () => {
       })
 
       expect(result.current.activeSession).toBeUndefined()
+    })
+  })
+
+  describe('Locality pre-flight (locality-plan.md §10.3 item 8)', () => {
+    const originalPlatformOs = Platform.OS
+
+    afterEach(() => {
+      Platform.OS = originalPlatformOs
+      mockUseStore.mockReturnValue([DEFAULT_STORE, mockDispatch])
+    })
+
+    async function announceWitness(overrides?: { eventName?: string }) {
+      mockAgent.modules.didcomm.connections.getById = jest.fn().mockResolvedValue({
+        id: 'conn-witness-1',
+        did: 'did:peer:mine',
+        theirDid: 'did:peer:witness123',
+        metadata: { set: jest.fn() },
+      })
+      const { result } = renderHook(() => useWitnessConnection(), { wrapper })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      const handler = mockRegisterWitnessConnectionDetectedCallback.mock.calls.at(-1)?.[0] as (
+        connectionId: string,
+        announcement: { name: string; did: string; eventName?: string | null }
+      ) => Promise<void>
+      await act(async () => {
+        await handler('conn-witness-1', {
+          name: 'e2e-witness',
+          did: 'did:peer:witness123',
+          eventName: overrides?.eventName ?? null,
+        })
+      })
+      return result
+    }
+
+    it('schedules a preflight prompt on Android when the setting is on and unseen', async () => {
+      Platform.OS = 'android'
+      const result = await announceWitness({ eventName: 'IIW Fall 2026' })
+
+      expect(result.current.localityPreflight?.witness.eventName).toBe('IIW Fall 2026')
+      expect(result.current.localityPreflight?.required).toBe(false)
+    })
+
+    it('does not schedule a prompt on iOS', async () => {
+      Platform.OS = 'ios'
+      const result = await announceWitness()
+
+      expect(result.current.localityPreflight).toBeUndefined()
+    })
+
+    it('does not schedule a prompt once already seen this install', async () => {
+      Platform.OS = 'android'
+      mockUseStore.mockReturnValue([
+        { ...DEFAULT_STORE, preferences: { ...DEFAULT_STORE.preferences, hasSeenLocalityPreflight: true } },
+        mockDispatch,
+      ])
+      const result = await announceWitness()
+
+      expect(result.current.localityPreflight).toBeUndefined()
+    })
+
+    it('does not schedule a prompt when locality confirmation is already off', async () => {
+      Platform.OS = 'android'
+      mockUseStore.mockReturnValue([
+        { ...DEFAULT_STORE, preferences: { ...DEFAULT_STORE.preferences, useLocalityConfirmation: false } },
+        mockDispatch,
+      ])
+      const result = await announceWitness()
+
+      expect(result.current.localityPreflight).toBeUndefined()
+    })
+
+    it('carries required:true through when discovery confirms it', async () => {
+      Platform.OS = 'android'
+      mockGetWitnessLocalitySupport.mockResolvedValueOnce('required')
+      const result = await announceWitness()
+
+      expect(result.current.localityPreflight?.required).toBe(true)
+    })
+
+    it('fails open to required:false if the discovery check throws', async () => {
+      Platform.OS = 'android'
+      mockGetWitnessLocalitySupport.mockRejectedValueOnce(new Error('no answer'))
+      const result = await announceWitness()
+
+      expect(result.current.localityPreflight?.required).toBe(false)
+    })
+
+    it('does not schedule a prompt when the witness discovery-declares no locality leg at all', async () => {
+      Platform.OS = 'android'
+      mockGetWitnessLocalitySupport.mockResolvedValueOnce('off')
+      const result = await announceWitness()
+
+      expect(result.current.localityPreflight).toBeUndefined()
+    })
+
+    it('resolveLocalityPreflight(true) marks it seen without touching the locality setting', async () => {
+      Platform.OS = 'android'
+      const result = await announceWitness()
+      expect(result.current.localityPreflight).toBeDefined()
+
+      act(() => {
+        result.current.resolveLocalityPreflight(true)
+      })
+
+      expect(result.current.localityPreflight).toBeUndefined()
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'preferences/markLocalityPreflightSeen' })
+      )
+      expect(mockDispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'preferences/useLocalityConfirmation' })
+      )
+    })
+
+    it('resolveLocalityPreflight(false) marks it seen AND turns the locality setting off', async () => {
+      Platform.OS = 'android'
+      const result = await announceWitness()
+
+      act(() => {
+        result.current.resolveLocalityPreflight(false)
+      })
+
+      expect(result.current.localityPreflight).toBeUndefined()
+      expect(mockDispatch).toHaveBeenCalledWith({
+        type: 'preferences/useLocalityConfirmation',
+        payload: [false],
+      })
+      expect(mockDispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'preferences/markLocalityPreflightSeen' })
+      )
     })
   })
 })

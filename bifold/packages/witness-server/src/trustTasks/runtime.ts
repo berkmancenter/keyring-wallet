@@ -17,11 +17,13 @@
 export type TrustTaskRuntime = typeof import('@openvtc/trust-tasks')
 export type WitnessSessionPayload = typeof import('@openvtc/trust-tasks/witness/session/0.1/payload')
 export type WitnessSubmitPayload = typeof import('@openvtc/trust-tasks/witness/session/submit/0.1/payload')
+export type TrustTaskDiscoveryPayload = typeof import('@openvtc/trust-tasks/trust-task-discovery/0.1/payload')
 
 export interface LoadedTrustTaskRuntime {
   runtime: TrustTaskRuntime
   session: WitnessSessionPayload
   submit: WitnessSubmitPayload
+  discovery: TrustTaskDiscoveryPayload
 }
 
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -35,7 +37,8 @@ export function loadTrustTaskRuntime(): Promise<LoadedTrustTaskRuntime> {
       dynamicImport('@openvtc/trust-tasks') as Promise<TrustTaskRuntime>,
       dynamicImport('@openvtc/trust-tasks/witness/session/0.1/payload') as Promise<WitnessSessionPayload>,
       dynamicImport('@openvtc/trust-tasks/witness/session/submit/0.1/payload') as Promise<WitnessSubmitPayload>,
-    ]).then(([runtime, session, submit]) => ({ runtime, session, submit }))
+      dynamicImport('@openvtc/trust-tasks/trust-task-discovery/0.1/payload') as Promise<TrustTaskDiscoveryPayload>,
+    ]).then(([runtime, session, submit, discovery]) => ({ runtime, session, submit, discovery }))
   }
   return loaded
 }

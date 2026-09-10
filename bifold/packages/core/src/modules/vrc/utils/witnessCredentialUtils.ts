@@ -12,6 +12,9 @@ import { toRawCredential } from './rcardDisplayUtils'
 
 /**
  * Locality verification information from witnessContext
+ *
+ * @deprecated the pre-locality-plan nested shape (`witnessContext.localityVerification`).
+ * Kept for VWCs issued before the flat `locality*` members landed — see `LocalityStatus`.
  */
 export interface LocalityVerification {
   /** Type of locality verification (e.g., "proximity", "gps") */
@@ -20,6 +23,30 @@ export interface LocalityVerification {
   confirmed?: boolean
   /** Additional details */
   details?: string
+}
+
+/**
+ * The three states locality-plan.md §7.1 rule 5 requires to stay
+ * distinguishable — never collapsed into a boolean:
+ *   - 'confirmed'    — a real observation, with method/venue/time to show
+ *   - 'declined'     — attempted and not confirmed, WITH a reason (a choice
+ *                      vs. an interruption read differently to a holder)
+ *   - 'not-offered'  — this witness doesn't do locality at all; the ONLY
+ *                      signal for this is the total absence of any
+ *                      `locality*` member (never inferred from one being
+ *                      false or empty)
+ */
+export type LocalityOutcome = 'confirmed' | 'declined' | 'not-offered'
+
+export interface LocalityStatus {
+  outcome: LocalityOutcome
+  /** Present when outcome is 'confirmed' — e.g. "ble-challenge-response/0.1" */
+  method?: string
+  /** Present when outcome is 'declined' — e.g. "declinedByHolder" | "windowLost" */
+  reason?: string
+  /** Present when outcome is 'confirmed' — the witness's (unverified, §11-Q4) claim about itself */
+  venue?: string
+  observedAt?: string
 }
 
 /**
@@ -40,8 +67,10 @@ export interface WitnessRecord {
   issuanceDate?: string
   /** Credential ID for navigation */
   credentialId: string
-  /** Locality verification information */
+  /** @deprecated — the pre-locality-plan nested shape. Populated only when a VWC has no flat `locality*` members at all but does have this old nested one (an older-issued credential). */
   localityVerification?: LocalityVerification
+  /** The three-state locality read (locality-plan.md §7.1) — always populated, one of 'confirmed' | 'declined' | 'not-offered'. */
+  locality?: LocalityStatus
   /** Whether hardware attestation was included in the exchange */
   hardwareAttestationIncluded?: boolean
 }
@@ -230,6 +259,7 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
     let method: string | undefined
     let sessionId: string | undefined
     let localityVerification: LocalityVerification | undefined
+    let locality: LocalityStatus | undefined
     let hardwareAttestationIncluded: boolean | undefined
 
     if ('credentialSubject' in rawCredential) {
@@ -272,14 +302,34 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
             hardwareAttestationIncluded = witnessContext.hardwareAttestationIncluded === true
           }
 
-          // Extract locality verification if present
-          if (witnessContext.localityVerification && typeof witnessContext.localityVerification === 'object') {
+          // Locality (locality-plan.md §7.1) — three states, read in this
+          // order so the check for "not offered" is never inferred from a
+          // false/empty value, only from total absence:
+          //   1. the flat `locality*` members (current shape)
+          //   2. the old nested `witnessContext.localityVerification` (VWCs
+          //      issued before this shape existed) — kept for those only
+          //   3. neither present → 'not-offered'
+          if ('localityConfirmed' in witnessContext) {
+            locality = {
+              outcome: witnessContext.localityConfirmed === true ? 'confirmed' : 'declined',
+              method: witnessContext.localityMethod,
+              reason: witnessContext.localityReason,
+              venue: witnessContext.localityVenue,
+              observedAt: witnessContext.localityObservedAt,
+            }
+          } else if (witnessContext.localityVerification && typeof witnessContext.localityVerification === 'object') {
             localityVerification = {
               type: witnessContext.localityVerification.type,
               confirmed: witnessContext.localityVerification.confirmed,
               details: witnessContext.localityVerification.details,
             }
+            locality = { outcome: localityVerification.confirmed ? 'confirmed' : 'declined' }
+          } else {
+            locality = { outcome: 'not-offered' }
           }
+        } else {
+          // No witnessContext at all on this VWC — no locality claim exists.
+          locality = { outcome: 'not-offered' }
         }
       }
     }
@@ -301,6 +351,9 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
       issuanceDate,
       credentialId: vwc.id,
       localityVerification,
+      // Guaranteed set even if credentialSubject was missing/malformed above —
+      // "not-offered" is the honest read of a VWC with no locality claim at all.
+      locality: locality ?? { outcome: 'not-offered' },
       hardwareAttestationIncluded,
     }
   } catch (error) {

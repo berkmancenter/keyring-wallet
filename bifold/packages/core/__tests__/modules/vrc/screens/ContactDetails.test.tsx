@@ -1,3 +1,4 @@
+import { W3cCredentialRecord } from '@credo-ts/core'
 import { render, waitFor, fireEvent } from '@testing-library/react-native'
 import React from 'react'
 import { useAgent } from '@bifold/react-hooks'
@@ -6,6 +7,22 @@ import ContactDetails from '../../../../src/modules/vrc/screens/ContactDetails'
 import { TEST_CONTACTS, generateTestDid } from '../fixtures/dtg-credentials'
 import { ContactCredentialDetails } from '../../../../src/types/navigators'
 import { useOpenIDCredentials } from '../../../../src/modules/openid/context/OpenIDCredentialRecordProvider'
+
+/** A minimal VWC naming `subjectId` — same lightweight shape used in
+ * witnessCredentialUtils.test.ts and ListContacts.test.tsx, since the code
+ * under test only ever reads `.encoded`. `witnessContext: {}` (no
+ * `localityConfirmed` at all) represents a witness that never offered
+ * locality — the three-state 'not-offered' case. */
+function createLocalityVwc(subjectId: string, witnessContext: Record<string, unknown>): W3cCredentialRecord {
+  return {
+    id: 'credential-locality-vwc',
+    encoded: {
+      type: ['VerifiableCredential', 'WitnessCredential'],
+      issuer: 'did:example:witness',
+      credentialSubject: { id: subjectId, witnessContext },
+    },
+  } as unknown as W3cCredentialRecord
+}
 
 // Mock dependencies
 jest.mock('@bifold/react-hooks')
@@ -360,6 +377,88 @@ describe('ContactDetails Screen', () => {
     await waitFor(() => {
       const button = getByLabelText('ContactDetails.ViewMessages')
       expect(button.props.accessibilityRole).toBe('button')
+    })
+  })
+
+  describe('locality confirmation', () => {
+    test('shows the In-Person badge and a Confirmed record line for a confirmed-locality VWC', async () => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+      const vwc = createLocalityVwc(TEST_CONTACTS.alice.issuer.id, {
+        localityConfirmed: true,
+        localityMethod: 'ble-challenge-response/0.1',
+        localityVenue: 'ATL, Room 2',
+      })
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: { w3cCredentialRecords: [vwc] },
+      } as any)
+
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+      const { findByTestId, findByText } = render(<ContactDetails {...createRouteParams(contact)} />)
+
+      await waitFor(async () => {
+        expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
+        expect(await findByText('In-Person')).toBeTruthy()
+        expect(await findByText('Confirmed — ATL, Room 2')).toBeTruthy()
+      })
+    })
+
+    test('does not show the badge, and shows a Declined record line, when the holder declined locality', async () => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+      const vwc = createLocalityVwc(TEST_CONTACTS.alice.issuer.id, {
+        localityConfirmed: false,
+        localityMethod: 'none',
+        localityReason: 'declinedByHolder',
+      })
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: { w3cCredentialRecords: [vwc] },
+      } as any)
+
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+      const { queryByTestId, findByText } = render(<ContactDetails {...createRouteParams(contact)} />)
+
+      await waitFor(async () => {
+        expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+        expect(await findByText('Declined')).toBeTruthy()
+      })
+    })
+
+    test('shows an Interrupted record line when the ceremony window was lost, not Declined', async () => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+      const vwc = createLocalityVwc(TEST_CONTACTS.alice.issuer.id, {
+        localityConfirmed: false,
+        localityMethod: 'none',
+        localityReason: 'windowLost',
+      })
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: { w3cCredentialRecords: [vwc] },
+      } as any)
+
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+      const { findByText, queryByText } = render(<ContactDetails {...createRouteParams(contact)} />)
+
+      await waitFor(async () => {
+        expect(await findByText('Interrupted')).toBeTruthy()
+        expect(queryByText('Declined')).toBeNull()
+      })
+    })
+
+    test('shows neither the badge nor a record line for a witness that never offered locality', async () => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+      const vwc = createLocalityVwc(TEST_CONTACTS.alice.issuer.id, {})
+      mockUseOpenIDCredentials.mockReturnValue({
+        openIdState: { w3cCredentialRecords: [vwc] },
+      } as any)
+
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+      const { queryByTestId, queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />)
+
+      await waitFor(async () => {
+        // Still shows the Witnessed badge/section (a VWC exists) —
+        // just no locality-specific indicator anywhere.
+        expect(await findByText('Verified')).toBeTruthy()
+        expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
+        expect(queryByText('Locality Verification')).toBeNull()
+      })
     })
   })
 })

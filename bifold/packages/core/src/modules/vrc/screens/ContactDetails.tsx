@@ -23,6 +23,7 @@ const NAME_COLOR = '#010B13'
 const BRAND_PURPLE = '#622C62'
 const BADGE_HW_TEAL = '#4D7A8B'
 const BADGE_WITNESS_PURPLE = '#A349A4'
+const BADGE_LOCALITY_GREEN = '#2E8540'
 const AVATAR_SIZE = 50
 
 type ContactDetailsProps = StackScreenProps<ContactStackParams, Screens.ContactDetails>
@@ -60,6 +61,14 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   const witnessRecords = useMemo(() => {
     return witnessCredentials.map(extractWitnessInfo).filter((record): record is WitnessRecord => record !== null)
   }, [witnessCredentials])
+
+  // Any confirmed VWC is enough for the glanceable badge — same "any, not
+  // all" rule as the Witnessed badge above; the per-record breakdown below
+  // still shows every record's own state.
+  const hasLocalityConfirmed = useMemo(
+    () => witnessRecords.some((record) => record.locality?.outcome === 'confirmed'),
+    [witnessRecords]
+  )
 
   const [hwVerified, setHwVerified] = useState(false)
 
@@ -180,6 +189,20 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
       fontSize: 11,
       fontWeight: '600',
       color: BADGE_HW_TEAL,
+    },
+    localityConfirmedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(46, 133, 64, 0.12)',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 14,
+      gap: 4,
+    },
+    localityConfirmedBadgeText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: BADGE_LOCALITY_GREEN,
     },
     divider: {
       height: 1,
@@ -331,6 +354,12 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
                   <ThemedText style={styles.verifiedBadgeText}>Verified</ThemedText>
                 </View>
               )}
+              {hasLocalityConfirmed && (
+                <View style={styles.localityConfirmedBadge} testID="LocalityConfirmedBadge">
+                  <Icon name="map-marker-check" size={14} color={BADGE_LOCALITY_GREEN} />
+                  <ThemedText style={styles.localityConfirmedBadgeText}>In-Person</ThemedText>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -391,25 +420,28 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
                     </ThemedText>
                   </View>
                 )}
-                {record.localityVerification && (
+                {record.locality && record.locality.outcome !== 'not-offered' && (
                   <View style={styles.witnessSubSection}>
                     <ThemedText style={styles.witnessLabel}>Locality Verification</ThemedText>
                     <View style={styles.localityVerified}>
                       <Icon
-                        name={record.localityVerification.confirmed ? 'check-circle' : 'information'}
+                        name={record.locality.outcome === 'confirmed' ? 'check-circle' : 'information'}
                         size={16}
-                        color={record.localityVerification.confirmed ? ColorPalette.semantic.success : ColorPalette.grayscale.mediumGrey}
+                        color={
+                          record.locality.outcome === 'confirmed'
+                            ? ColorPalette.semantic.success
+                            : ColorPalette.grayscale.mediumGrey
+                        }
                       />
                       <ThemedText style={styles.witnessValue}>
-                        {record.localityVerification.confirmed ? 'Verified' : 'Not Verified'}
-                        {record.localityVerification.type ? ` (${record.localityVerification.type})` : ''}
+                        {record.locality.outcome === 'confirmed'
+                          ? 'Confirmed'
+                          : record.locality.reason === 'windowLost'
+                            ? 'Interrupted'
+                            : 'Declined'}
+                        {record.locality.venue ? ` — ${record.locality.venue}` : ''}
                       </ThemedText>
                     </View>
-                    {record.localityVerification.details && (
-                      <ThemedText style={[styles.witnessValue, { marginTop: 4 }]}>
-                        {record.localityVerification.details}
-                      </ThemedText>
-                    )}
                   </View>
                 )}
               </View>

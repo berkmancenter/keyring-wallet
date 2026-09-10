@@ -51,7 +51,6 @@ export class WitnessCredentialHandler implements CredentialDisplayHandler {
 
     // Extract witness context from credentialSubject
     const witnessContext = (credentialSubject.witnessContext as any) || {}
-    const localityVerification = witnessContext.localityVerification || {}
 
     // 1. Event Name (from witnessContext.event)
     if (witnessContext.event) {
@@ -77,17 +76,14 @@ export class WitnessCredentialHandler implements CredentialDisplayHandler {
       )
     }
 
-    // 3. Locality Verification Status
-    const localityStatus = this.getLocalityStatus(localityVerification)
-    if (localityStatus) {
-      fields.push(
-        new Attribute({
-          name: 'locality',
-          label: 'Witness.VWC.Locality',
-          value: localityStatus,
-          mimeType: 'text/plain',
-        })
-      )
+    // 3. Locality — three states, never collapsed into a boolean
+    // (locality-plan.md §7.1 rule 5, §10.3 item 11): confirmed (venue-scale,
+    // never "verified together"), declined-or-interrupted (with a reason,
+    // read differently — a choice vs. "try again"), or nothing at all when
+    // this witness doesn't do locality (the honest read of total absence).
+    const localityField = this.getLocalityField(witnessContext)
+    if (localityField) {
+      fields.push(localityField)
     }
 
     // 4. Session ID (from witnessContext.sessionId)
@@ -158,23 +154,44 @@ export class WitnessCredentialHandler implements CredentialDisplayHandler {
   }
 
   /**
-   * Get locality verification status for display
+   * The locality field, in one of three visibly different states — never a
+   * boolean. Reads the flat `locality*` members first (current shape);
+   * falls back to the old nested `witnessContext.localityVerification` only
+   * for VWCs issued before that shape existed. Absence of BOTH means this
+   * witness doesn't do locality at all, and renders nothing (§7.1 rule 5 —
+   * the only signal for "not offered" is total absence, so this method
+   * returns null rather than a field saying "not offered").
    */
-  private getLocalityStatus(localityVerification: any): string | null {
-    if (!localityVerification) {
-      return 'Witness.VWC.NotVerified'
+  private getLocalityField(witnessContext: any): Attribute | null {
+    if ('localityConfirmed' in witnessContext) {
+      const confirmed = witnessContext.localityConfirmed === true
+      return new Attribute({
+        name: 'locality',
+        label: 'Witness.VWC.Locality',
+        value: confirmed
+          ? 'Witness.VWC.LocalityConfirmed'
+          : this.formatDeclineReason(witnessContext.localityReason),
+        mimeType: 'text/plain',
+      })
     }
 
-    // Check for various locality proof structures
-    if (localityVerification.verified === true) {
-      return 'Witness.VWC.Verified'
+    const legacy = witnessContext.localityVerification
+    if (legacy && typeof legacy === 'object') {
+      return new Attribute({
+        name: 'locality',
+        label: 'Witness.VWC.Locality',
+        value: legacy.confirmed === true ? 'Witness.VWC.LocalityConfirmed' : 'Witness.VWC.LocalityDeclined',
+        mimeType: 'text/plain',
+      })
     }
 
-    if (localityVerification.ipProof || localityVerification.challenge) {
-      return 'Witness.VWC.Verified'
-    }
+    return null
+  }
 
-    return 'Witness.VWC.NotVerified'
+  /** `declinedByHolder` (a choice) reads differently to a holder than `windowLost` (try again, not suspicious) — plan §7.1 rule 5. */
+  private formatDeclineReason(reason: unknown): string {
+    if (reason === 'windowLost') return 'Witness.VWC.LocalityInterrupted'
+    return 'Witness.VWC.LocalityDeclined'
   }
 
   /**

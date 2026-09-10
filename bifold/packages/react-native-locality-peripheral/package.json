@@ -1,0 +1,55 @@
+{
+  "name": "@bifold/react-native-locality-peripheral",
+  "version": "0.1.0",
+  "description": "Android/iOS BLE peripheral role for locality co-presence evidence (locality-plan.md §10.3 item 9) — Android is real and verified live end to end; iOS has no native implementation. See README.md.",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "source": "src/index.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "ble"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/berkmancenter/keyring-bifold.git",
+    "directory": "packages/react-native-locality-peripheral"
+  },
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/berkmancenter/keyring-bifold/issues"
+  },
+  "homepage": "https://github.com/berkmancenter/keyring-bifold",
+  "scripts": {
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/jest": "~29.5.14",
+    "@types/react": "~19.1.9",
+    "jest": "~29.7.0",
+    "react": "*",
+    "react-native": "*",
+    "ts-jest": "~29.1.5",
+    "typescript": "~5.9.2"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "engines": {
+    "node": ">= 20"
+  },
+  "codegenConfig": {
+    "name": "RNLocalityPeripheralSpec",
+    "type": "modules",
+    "jsSrcsDir": "src"
+  }
+}
