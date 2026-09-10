@@ -70,6 +70,7 @@ export enum Screens {
   ToggleHardwareAttestation = 'Toggle Hardware Attestation',
   ToggleWitnessReporting = 'Toggle Witness Reporting',
   ToggleWitnessing = 'Toggle Witnessing',
+  ToggleLocalityConfirmation = 'Toggle Locality Confirmation',
   About = 'About',
   ExportWallet = 'Export Wallet',
   ImportWallet = 'Import Wallet',
@@ -149,6 +150,7 @@ export interface ContactCredentialDetails {
   }
   hasWitnessCredentials?: boolean
   hasHardwareAttestation?: boolean
+  hasLocalityConfirmed?: boolean
 }
 
 export type ContactStackParams = {
@@ -231,6 +233,7 @@ export type SettingStackParams = {
   [Screens.ToggleHardwareAttestation]: undefined
   [Screens.ToggleWitnessReporting]: undefined
   [Screens.ToggleWitnessing]: undefined
+  [Screens.ToggleLocalityConfirmation]: undefined
   [Screens.About]: undefined
   [Screens.ExportWallet]: undefined
   [Screens.ImportWallet]: undefined

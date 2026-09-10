@@ -2,7 +2,9 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020"
+    ],
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "outDir": "./dist",
@@ -14,8 +16,23 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "paths": {
+      "@openvtc/trust-tasks": [
+        "../../node_modules/@openvtc/trust-tasks/dist/index.d.ts"
+      ],
+      "@openvtc/trust-tasks/*": [
+        "../../node_modules/@openvtc/trust-tasks/dist/*.d.ts"
+      ]
+    }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/network-html/runtime/**/*", "src/network-ui/runtime/**/*"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/network-html/runtime/**/*",
+    "src/network-ui/runtime/**/*"
+  ]
 }

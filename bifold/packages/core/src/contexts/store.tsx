@@ -63,6 +63,8 @@ export const defaultState: State = {
     bannerMessages: [],
     genericErrorMessages: true,
     useWitnessing: true,
+    useLocalityConfirmation: true,
+    hasSeenLocalityPreflight: false,
   },
   tours: {
     seenToursPrompt: false,

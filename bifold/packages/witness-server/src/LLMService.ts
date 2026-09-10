@@ -1,8 +1,14 @@
 /**
- * LLM Service - AI-powered responses via LangChain.js + Claude
+ * LLM Service - AI-powered responses via LangChain.js
  *
- * This service provides intelligent responses to user messages using Claude Sonnet,
- * with context from organization, event, and app capabilities files.
+ * This service provides intelligent responses to user messages, with context
+ * from organization, event, and app capabilities files.
+ *
+ * Two providers are supported, selected by WITNESS_LLM_PROVIDER:
+ * - 'anthropic' (default): Claude via @langchain/anthropic.
+ * - 'deepseek': DeepSeek via its OpenAI-compatible API, which needs the OpenAI
+ *   client with a custom baseURL — the two wire formats are not
+ *   interchangeable, so an Anthropic client pointed at DeepSeek will not work.
  *
  * Features:
  * - Context-aware responses using loaded markdown files
@@ -12,7 +18,9 @@
  */
 
 import { ChatAnthropic } from '@langchain/anthropic'
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
+import { ChatOpenAI } from '@langchain/openai'
 import { readFileSync, existsSync } from 'fs'
 import { WitnessServerConfig } from './config'
 
@@ -29,6 +37,8 @@ interface RateLimitBucket {
  */
 export interface LLMServiceConfig {
   enabled: boolean
+  /** Which provider to build a client for. Defaults to 'anthropic'. */
+  provider?: 'anthropic' | 'deepseek'
   apiKey: string
   baseUrl?: string
   model?: string
@@ -49,7 +59,9 @@ export interface LLMServiceConfig {
  */
 export class LLMService {
   private readonly config: LLMServiceConfig
-  private readonly llm: ChatAnthropic
+  private readonly llm: BaseChatModel
+  /** The model actually in use, after provider defaults are applied. */
+  private readonly resolvedModel: string
   private readonly systemPrompt: string
   private readonly userRateLimits: Map<string, RateLimitBucket> = new Map()
   private globalRateLimit: RateLimitBucket = { count: 0, resetTime: 0 }
@@ -63,39 +75,54 @@ export class LLMService {
     }
 
     if (!config.apiKey) {
-      throw new Error('Anthropic API key is required when LLM is enabled')
+      throw new Error(`An API key is required when LLM is enabled (provider: ${config.provider ?? 'anthropic'})`)
     }
 
-    // Default model is Claude Sonnet 4.6
-    const defaultModel = 'claude-sonnet-4-20250514'
+    const provider = config.provider ?? 'anthropic'
     // Default max tokens for very short mobile chat responses
     const defaultMaxTokens = 100
     // Default model temperature
     const defaultTemperature = 0.7
 
-    // Initialize Claude via LangChain
-    // Note: We avoid setting temperature/topP defaults as some models (e.g., via proxy)
-    // may not support these parameters and LangChain may set invalid default values.
-    // We use modelKwargs to pass parameters directly without LangChain's defaults.
-    const llmConfig: ConstructorParameters<typeof ChatAnthropic>[0] = {
-      anthropicApiKey: config.apiKey,
-      model: config.model || defaultModel,
-      maxTokens: config.maxTokens || defaultMaxTokens,
-      temperature: config.temperature || defaultTemperature,
-    }
+    if (provider === 'deepseek') {
+      // DeepSeek exposes an OpenAI-compatible API, NOT an Anthropic-compatible
+      // one — the request/response shapes differ, so this needs the OpenAI
+      // client with a custom baseURL rather than ChatAnthropic pointed at
+      // DeepSeek's host.
+      this.resolvedModel = config.model || 'deepseek-chat'
+      this.llm = new ChatOpenAI({
+        apiKey: config.apiKey,
+        model: this.resolvedModel,
+        maxTokens: config.maxTokens || defaultMaxTokens,
+        temperature: config.temperature ?? defaultTemperature,
+        configuration: { baseURL: config.baseUrl || 'https://api.deepseek.com' },
+      })
+    } else {
+      // Default model is Claude Sonnet 4.6
+      const defaultModel = 'claude-sonnet-4-20250514'
+      // Note: We avoid setting temperature/topP defaults as some models (e.g., via proxy)
+      // may not support these parameters and LangChain may set invalid default values.
+      this.resolvedModel = config.model || defaultModel
+      const llmConfig: ConstructorParameters<typeof ChatAnthropic>[0] = {
+        anthropicApiKey: config.apiKey,
+        model: this.resolvedModel,
+        maxTokens: config.maxTokens || defaultMaxTokens,
+        temperature: config.temperature || defaultTemperature,
+      }
 
-    // Add custom base URL if provided (e.g., for proxy usage)
-    if (config.baseUrl) {
-      llmConfig.anthropicApiUrl = config.baseUrl
-    }
+      // Add custom base URL if provided (e.g., for proxy usage)
+      if (config.baseUrl) {
+        llmConfig.anthropicApiUrl = config.baseUrl
+      }
 
-    this.llm = new ChatAnthropic(llmConfig)
+      this.llm = new ChatAnthropic(llmConfig)
+    }
 
     // Load context files and build system prompt
     this.systemPrompt = this.buildSystemPrompt()
 
     if (config.verbose) {
-      console.log(`[LLMService] Initialized with model: ${config.model || defaultModel}`)
+      console.log(`[LLMService] Initialized provider=${provider} model=${this.resolvedModel}`)
       console.log(
         `[LLMService] Rate limits: ${config.rateLimitPerUser}/${config.rateLimitUserWindow}s per user, ${config.rateLimitGlobal}/${config.rateLimitGlobalWindow}s global`
       )
@@ -367,6 +394,7 @@ export function createLLMService(config: WitnessServerConfig): LLMService | null
 
   const llmConfig: LLMServiceConfig = {
     enabled: config.llmEnabled,
+    provider: config.llmProvider,
     apiKey: config.anthropicApiKey || '',
     baseUrl: config.anthropicBaseUrl,
     model: config.anthropicModel,

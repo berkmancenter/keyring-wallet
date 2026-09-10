@@ -134,12 +134,94 @@ export async function generateInvitationPage(config: WebServerConfig): Promise<s
     .nav-button.primary:hover {
       background: #252540;
     }
+    /* Manual-paste affordance: scanning is the happy path, but an emulator or
+       a second desktop wallet needs the raw invitation. */
+    .copy-row {
+      margin-top: 2vh;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+      max-width: min(50vh, 480px);
+      flex-shrink: 0;
+    }
+
+    .copy-url {
+      flex: 1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      color: #33475B;
+      background: #F1F4F6;
+      border: 1px solid #D6DEE3;
+      border-radius: 8px;
+      padding: 8px 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      direction: rtl;
+      text-align: left;
+    }
+
+    .copy-btn {
+      font-size: 13px;
+      font-weight: 600;
+      color: #FFFFFF;
+      background: #09465B;
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 16px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .copy-btn:active { transform: translateY(1px); }
+    .copy-btn.copied { background: #2E7D4F; }
   </style>
 </head>
 <body>
   <div class="card">
     <img src="/logo.png" alt="Applied Social Media Lab" class="logo" />
     <img src="${qrCodeDataUrl}" alt="Scan to connect" class="qr-code" />
+
+    <div class="copy-row">
+      <div class="copy-url" id="invitation-url" title="${config.invitationUrl}">${config.invitationUrl}</div>
+      <button class="copy-btn" id="copy-btn" type="button">Copy link</button>
+    </div>
+
+    <script>
+      (function () {
+        var btn = document.getElementById('copy-btn')
+        var url = document.getElementById('invitation-url').getAttribute('title')
+        btn.addEventListener('click', function () {
+          function done() {
+            btn.textContent = 'Copied'
+            btn.classList.add('copied')
+            setTimeout(function () {
+              btn.textContent = 'Copy link'
+              btn.classList.remove('copied')
+            }, 1600)
+          }
+          // navigator.clipboard needs a secure context; this page is served
+          // over plain http on a LAN, so fall back to a hidden textarea.
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(url).then(done, fallback)
+          } else {
+            fallback()
+          }
+          function fallback() {
+            var ta = document.createElement('textarea')
+            ta.value = url
+            ta.setAttribute('readonly', '')
+            ta.style.position = 'fixed'
+            ta.style.opacity = '0'
+            document.body.appendChild(ta)
+            ta.select()
+            try { document.execCommand('copy'); done() } catch (e) { btn.textContent = 'Copy failed' }
+            document.body.removeChild(ta)
+          }
+        })
+      })()
+    </script>
     <p class="subtitle">Scan with the Keyring to connect to the witness</p>
     <div class="accent-bar"></div>
     <div class="button-row">

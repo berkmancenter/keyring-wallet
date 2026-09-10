@@ -60,10 +60,18 @@ export interface VrcFlowError {
  *
  * Tracks the entire VRC exchange flow for overlay display:
  * - 'connecting': DID exchange in progress
+ * - 'discovering': (trust-task dialect) capability query sent, awaiting the
+ *   peer's supportedTypes — one mediated round trip, so a real wait
+ * - 'proposed': (trust-task dialect) relationship proposal sent, awaiting the
+ *   peer's consent — another mediated round trip. Both exist so the progress
+ *   dialog can move during waits that previously sat on 'preparing-offer' for
+ *   20-30s with nothing to show (device logs 2026-08-26).
  * - 'witness-active': Witness verification in progress
  * - 'witness-fallback': Witness unavailable, falling back to direct issuance
  * - 'biometric-fallback': Biometric failed/cancelled, issuing without hardware attestation
  * - 'preparing-offer': Witness complete, preparing credential offer
+ * - 'sharing-witness-record': (trust-task dialect) sending the counterparty our
+ *   witness-record bundle for verification (subtask step 7)
  * - 'offer-sent': Credential offer sent by Issuer (overlay should clear on Inviter side)
  * - 'offer-received': Credential offer received by Holder (overlay should clear on Receiver side)
  * - 'idle': No active flow
@@ -71,12 +79,33 @@ export interface VrcFlowError {
 export type VrcFlowStatus =
   | 'idle'
   | 'connecting'
+  | 'discovering'
+  | 'proposed'
   | 'witness-active'
   | 'witness-fallback'
   | 'biometric-fallback'
   | 'preparing-offer'
+  | 'sharing-witness-record'
   | 'offer-sent'
   | 'offer-received'
+
+/**
+ * Which exchange dialect is driving a connection's flow — the overlay words
+ * the same status machine differently for the Trust Task ceremony (no
+ * "offers": a consent, a witness verification, a signed credential exchange,
+ * a witness-record share) than for the legacy offer/accept flow.
+ */
+export type VrcFlowDialect = 'legacy' | 'trust-tasks'
+
+/**
+ * A pending relationship proposal awaiting the user's consent (the trust-task
+ * dialect's consent moment: accepting the proposal, not each credential).
+ */
+export interface RelationshipProposalPrompt {
+  connectionId: string
+  exchangeId: string
+  counterpartyLabel: string
+}
 
 class VrcFlowStore extends EventEmitter {
   private flowStatus: Map<string, VrcFlowStatus> = new Map()
@@ -84,6 +113,42 @@ class VrcFlowStore extends EventEmitter {
   private hasReceivedOffer: Map<string, boolean> = new Map()
   private hasSentOffer: Map<string, boolean> = new Map()
   private flowErrors: Map<string, VrcFlowError> = new Map()
+  private proposalPrompts: Map<string, RelationshipProposalPrompt> = new Map()
+  private dialects: Map<string, VrcFlowDialect> = new Map()
+  // The inbound R-Card (the peer's contact card, what names them locally).
+  // Fired/tracked separately from the VRC completion flags above: the R-Card
+  // is best-effort and never gates isExchangeComplete — the overlay only uses
+  // this for a trailing "exchanging contact cards" beat after the VRC is done.
+  private rcardReceive: Map<string, 'pending' | 'complete'> = new Map()
+
+  /** Record which dialect drives this connection's flow (overlay wording). */
+  setDialect(connectionId: string, dialect: VrcFlowDialect): void {
+    this.dialects.set(connectionId, dialect)
+  }
+
+  getDialect(connectionId: string): VrcFlowDialect {
+    return this.dialects.get(connectionId) ?? 'legacy'
+  }
+
+  /** Surface a relationship proposal for user consent ('proposalPrompt' event). */
+  setProposalPrompt(prompt: RelationshipProposalPrompt): void {
+    this.proposalPrompts.set(prompt.connectionId, prompt)
+    this.emit('proposalPrompt', prompt)
+  }
+
+  getProposalPrompt(connectionId: string): RelationshipProposalPrompt | undefined {
+    return this.proposalPrompts.get(connectionId)
+  }
+
+  /** The first pending prompt, if any — what a global consent modal renders. */
+  getAnyProposalPrompt(): RelationshipProposalPrompt | undefined {
+    return this.proposalPrompts.values().next().value
+  }
+
+  clearProposalPrompt(connectionId: string): void {
+    this.proposalPrompts.delete(connectionId)
+    this.emit('proposalPromptCleared', { connectionId })
+  }
 
   setStatus(connectionId: string, status: VrcFlowStatus, witnessed: boolean = false): void {
     this.flowStatus.set(connectionId, status)
@@ -139,6 +204,41 @@ class VrcFlowStore extends EventEmitter {
   }
 
   /**
+   * Has THIS side finished delivering its own credential ('offer-sent')?
+   * In the trust-task dialect the counterparty's credential is auto-stored
+   * with nothing for the user to act on, so its arrival must not tear the
+   * progress dialog down while our own ceremony is still running — the
+   * dialog would vanish and then reappear for the remaining steps (observed
+   * on slower hardware, 2026-08-25). Legacy keeps clearing on 'offer-received':
+   * there the user has an actionable offer and needs the dialog out of the way.
+   */
+  hasSentOfferFlag(connectionId: string): boolean {
+    return this.hasSentOffer.get(connectionId) || false
+  }
+
+  /** An inbound R-Card offer arrived and is being auto-accepted. */
+  markRcardReceivePending(connectionId: string): void {
+    if (this.rcardReceive.get(connectionId) === 'complete') return
+    this.rcardReceive.set(connectionId, 'pending')
+    this.emit('flowUpdate', { connectionId, status: this.getStatus(connectionId) })
+  }
+
+  /** The peer's R-Card is stored — their real name is now resolvable. */
+  markRcardReceiveComplete(connectionId: string): void {
+    this.rcardReceive.set(connectionId, 'complete')
+    this.emit('flowUpdate', { connectionId, status: this.getStatus(connectionId) })
+  }
+
+  isRcardReceiveComplete(connectionId: string): boolean {
+    return this.rcardReceive.get(connectionId) === 'complete'
+  }
+
+  /** An inbound R-Card was expected and has not landed yet. `false` when none was ever expected. */
+  isRcardReceivePending(connectionId: string): boolean {
+    return this.rcardReceive.get(connectionId) === 'pending'
+  }
+
+  /**
    * Set an error state for a connection's VRC flow.
    * This triggers the WitnessErrorDialog to display.
    *
@@ -186,8 +286,10 @@ class VrcFlowStore extends EventEmitter {
   clearFlow(connectionId: string): void {
     this.flowStatus.delete(connectionId)
     this.isWitnessed.delete(connectionId)
+    this.dialects.delete(connectionId)
     this.hasReceivedOffer.delete(connectionId)
     this.hasSentOffer.delete(connectionId)
+    this.rcardReceive.delete(connectionId)
     const hadError = this.flowErrors.has(connectionId)
     this.flowErrors.delete(connectionId)
     if (hadError) {

@@ -208,6 +208,7 @@ export {
   loadVrcLocalization,
   getCredentialDisplayRegistry,
 } from './modules/vrc'
+export { setupTrustTasksInbound, setTspCarriageEnabled, TRUST_TASKS_MIN_RCE_VERSION } from './modules/trust-tasks'
 export type {
   RelationshipDidRecordProps,
   CustomTags,

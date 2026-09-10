@@ -105,5 +105,66 @@ export const WITNESSED_EXCHANGE_CONTEXT_DOCUMENT = {
       '@id': 'https://trustoverip.org/credentials/witnessed-exchange#subject',
       '@type': '@id',
     },
+
+    // Trust Task Context Binding (DTG Core Credentials): the id of the
+    // witness/session document that opened this session — the innermost
+    // exchange attesting the witnessing (framework §4.9.1) — and the task
+    // digest binding that document (§4.9.3, promoted from cred-spec #229/#236).
+    taskContext: 'https://trustoverip.org/credentials/witnessed-exchange#taskContext',
+    taskDigestMultibase: 'https://trustoverip.org/credentials/witnessed-exchange#taskDigestMultibase',
+    // The two relationship DIDs of the witnessed exchange, as the session named them.
+    parties: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#parties',
+      '@container': '@set',
+    },
+
+    // Locality (docs/plans/locality-plan.md §7.1) — flat locality* members,
+    // sibling to witnessContext.method (never nested: bbs-2023 discloses at
+    // the RDF-quad level, and a nested object is a blank node whose path
+    // must be revealed before disclosing anything under it). MANDATORY, not
+    // conditional: a member with no term here is not merely unsigned under
+    // a future bbs-2023 proof, it is undisclosable — it never enters the
+    // dataset a derived proof discloses from. Authored once in
+    // tsp-reference/ref-06p-locality-binding/fixtures/locality-context-terms.json
+    // (act 6, 26 checks green); this is that same list, not a fresh
+    // derivation — keep the two in sync if either changes.
+    localityConfirmed: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#localityConfirmed',
+      '@type': 'http://www.w3.org/2001/XMLSchema#boolean',
+    },
+    localityMethod: 'https://trustoverip.org/credentials/witnessed-exchange#localityMethod',
+    localityTopology: 'https://trustoverip.org/credentials/witnessed-exchange#localityTopology',
+    localitySensor: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#localitySensor',
+      '@type': '@id',
+    },
+    localityVenue: 'https://trustoverip.org/credentials/witnessed-exchange#localityVenue',
+    localityObservedAt: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#localityObservedAt',
+      '@type': 'http://www.w3.org/2001/XMLSchema#dateTime',
+    },
+    localityWindowSeconds: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#localityWindowSeconds',
+      '@type': 'http://www.w3.org/2001/XMLSchema#integer',
+    },
+    localityKeyMatchesCredentialSigner: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#localityKeyMatchesCredentialSigner',
+      '@type': 'http://www.w3.org/2001/XMLSchema#boolean',
+    },
+    localityHardwareAttestation: 'https://trustoverip.org/credentials/witnessed-exchange#localityHardwareAttestation',
+    localityEvidenceCommitment: 'https://trustoverip.org/credentials/witnessed-exchange#localityEvidenceCommitment',
+    localityRttMs: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#localityRttMs',
+      '@type': 'http://www.w3.org/2001/XMLSchema#integer',
+    },
+    localityRssiDbm: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#localityRssiDbm',
+      '@type': 'http://www.w3.org/2001/XMLSchema#integer',
+    },
+    localityRttBoundMs: {
+      '@id': 'https://trustoverip.org/credentials/witnessed-exchange#localityRttBoundMs',
+      '@type': 'http://www.w3.org/2001/XMLSchema#integer',
+    },
+    localityReason: 'https://trustoverip.org/credentials/witnessed-exchange#localityReason',
   },
 }

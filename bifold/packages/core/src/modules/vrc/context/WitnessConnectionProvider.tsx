@@ -15,6 +15,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import type { Agent } from '@credo-ts/core'
 import { PeerDidNumAlgo } from '@credo-ts/core'
 import { DidCommConnectionRepository, DidCommDidExchangeState } from '@credo-ts/didcomm'
+import { Platform } from 'react-native'
 
 import {
   registerWitnessSessionCallback,
@@ -22,6 +23,7 @@ import {
   registerWitnessConnectionDetectedCallback,
   registerWitnessValidationCallback,
 } from '../vrc-manager'
+import { queryWitnessDiscovery, getWitnessLocalitySupport, WitnessLocalitySupport } from '../../trust-tasks/ceremony'
 import { createVrcLogger } from '../vrc-logging'
 import { useStore } from '../../../contexts/store'
 import { DispatchAction } from '../../../contexts/reducers/store'
@@ -54,6 +56,18 @@ export interface WitnessSession {
   domain: string
   /** When the session was created */
   createdAt: Date
+}
+
+/**
+ * A witness-connect pre-flight prompt awaiting the user's decision
+ * (locality-plan.md §8.4 row 2, §10.3 item 8). `required` is `false` unless
+ * the witness's discovery answer confirmed it within the short wait
+ * `handleWitnessAnnouncement` gives it — an unresolved-in-time answer fails
+ * open to "not required" rather than blocking the sheet indefinitely.
+ */
+export interface LocalityPreflightPrompt {
+  witness: ConnectedWitness
+  required: boolean
 }
 
 /**
@@ -101,6 +115,10 @@ export interface WitnessConnectionContextValue {
   getState: () => WitnessConnectionState
   /** Validate that the active witness connection is still valid */
   validateWitnessConnection: () => Promise<boolean>
+  /** A pending witness-connect pre-flight prompt (§10.3 item 8), or undefined when none is due */
+  localityPreflight: LocalityPreflightPrompt | undefined
+  /** Resolve the pending prompt: true = the user allowed locality for this install, false = declined */
+  resolveLocalityPreflight: (allow: boolean) => void
 }
 
 /**
@@ -117,6 +135,33 @@ export interface WitnessConnectionProviderProps {
   agent: Agent
 }
 
+/** How long the pre-flight prompt waits for the witness's discovery answer before failing open to "not required". */
+const LOCALITY_REQUIREMENT_WAIT_MS = 5000
+const LOCALITY_REQUIREMENT_POLL_MS = 250
+
+/**
+ * Poll `getWitnessLocalitySupport` for a bounded window rather than deciding
+ * the pre-flight sheet immediately on a bare `null` (not-yet-known) — the
+ * discovery round trip is normally fast, and item 8's own "Done when" is
+ * specifically that a `required` answer drives the sheet's copy, not just
+ * its existence. Failing open to `offered` after the window keeps this from
+ * blocking the sheet indefinitely on a slow or silent witness — same posture
+ * as before this could distinguish `off`, just now expressed as a policy
+ * value instead of a bare boolean.
+ */
+async function resolveLocalityPreflightSupport(
+  agent: Agent,
+  witnessConnectionId: string
+): Promise<WitnessLocalitySupport> {
+  const deadline = Date.now() + LOCALITY_REQUIREMENT_WAIT_MS
+  for (;;) {
+    const support = await getWitnessLocalitySupport(agent, witnessConnectionId)
+    if (support !== null) return support
+    if (Date.now() >= deadline) return 'offered'
+    await new Promise((resolve) => setTimeout(resolve, LOCALITY_REQUIREMENT_POLL_MS))
+  }
+}
+
 /**
  * WitnessConnectionProvider - Manages witness connection list and active selection
  */
@@ -130,6 +175,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
   const [recentlyAutoActivatedWitness, setRecentlyAutoActivatedWitness] = useState<ConnectedWitness | undefined>(
     undefined
   )
+  const [localityPreflight, setLocalityPreflight] = useState<LocalityPreflightPrompt | undefined>(undefined)
 
   const logger = useRef(createVrcLogger(null, { module: 'vrc', component: 'WitnessConnection' }))
 
@@ -139,11 +185,21 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
   const activeSessionRef = useRef<WitnessSession | undefined>(undefined)
   // Keep a ref to the store's witness settings so we can read them from async callbacks
   const witnessStoreRef = useRef(store.witness)
+  // Same reason: handleWitnessAnnouncement reads the locality preference and
+  // the one-shot "already seen" flag from inside an async callback.
+  const preferencesRef = useRef(store.preferences)
+  // Guards against two witness connections in quick succession both
+  // scheduling a locality pre-flight prompt before either resolves.
+  const localityPreflightPendingRef = useRef(false)
 
   // Sync refs when state changes
   useEffect(() => {
     witnessStoreRef.current = store.witness
   }, [store.witness])
+
+  useEffect(() => {
+    preferencesRef.current = store.preferences
+  }, [store.preferences])
 
   useEffect(() => {
     allWitnessConnectionsRef.current = allWitnessConnections
@@ -372,6 +428,48 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
 
         logger.current.info(`✓ Witness auto-activated: ${announcement.name} (${connectionId})`)
 
+        // Query this witness's Trust Task capabilities as soon as it's
+        // known, so a locality requirement (witness/session's `requiredExt`,
+        // locality-plan.md §10.3 item 8) is discoverable via
+        // `getWitnessLocalityRequirement` well before any BLE permission
+        // prompt or session — not just on the peer relationship connection.
+        void queryWitnessDiscovery(agent, connectionId).catch((e: Error) =>
+          logger.current.warn(`Witness discovery query failed: ${e.message}`)
+        )
+
+        // Witness-connect pre-flight sheet (§8.4 row 2, §10.3 item 8): Android
+        // only (no native peripheral on iOS yet), only if the user hasn't
+        // already answered it this install, and only if the locality setting
+        // is still on (off means "never request Bluetooth permission" per
+        // §8.1 — nothing to prime). One `localityPreflightPendingRef` guard
+        // keeps two witnesses connecting in quick succession from both
+        // scheduling a prompt. A witness that discovery-declares no locality
+        // leg at all (`off`) skips the sheet entirely — there is nothing for
+        // Bluetooth permission to enable behind this witness.
+        if (
+          Platform.OS === 'android' &&
+          !preferencesRef.current?.hasSeenLocalityPreflight &&
+          (preferencesRef.current?.useLocalityConfirmation ?? true) &&
+          !localityPreflightPendingRef.current
+        ) {
+          localityPreflightPendingRef.current = true
+          void resolveLocalityPreflightSupport(agent, connectionId)
+            .then((support) => {
+              if (support === 'off') {
+                // No sheet to answer, so nothing will ever call
+                // `resolveLocalityPreflight` to clear this guard — clear it
+                // here instead, so a later witness connection isn't blocked.
+                localityPreflightPendingRef.current = false
+                return
+              }
+              setLocalityPreflight({ witness: newWitness, required: support === 'required' })
+            })
+            .catch((e: Error) => {
+              logger.current.warn(`Locality pre-flight requirement check failed: ${e.message}`)
+              setLocalityPreflight({ witness: newWitness, required: false })
+            })
+        }
+
         // ── Reporting DID registration ──────────────────────────────────────
         // If reporting is enabled and we have not yet registered a reporting
         // DID with this witness, generate a fresh did:peer:0 and send it.
@@ -438,6 +536,30 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
       }
     },
     [agent, dispatch, persistActiveWitnessId]
+  )
+
+  /**
+   * The pre-flight sheet's answer (§10.3 item 8). Declining reuses the SAME
+   * `useLocalityConfirmation` setting Settings → Secure Exchanges exposes —
+   * there is no separate "advertise for this session" flag to invent; the
+   * existing gate in `witnessCeremony.ts`/`ceremony.ts` (`isLocalityConfirmationPreferred`)
+   * already reads that one setting, so flipping it here is the whole effect.
+   * Allowing leaves the setting untouched (it defaults on) and only requests
+   * the OS Bluetooth permission — the sheet component does that, not this
+   * provider, since it needs `react-native-permissions`, which importing
+   * here would give every consumer of this context a hard RN-permissions
+   * dependency for no benefit.
+   */
+  const resolveLocalityPreflight = useCallback(
+    (allow: boolean) => {
+      if (!allow) {
+        dispatch({ type: DispatchAction.USE_LOCALITY_CONFIRMATION, payload: [false] })
+      }
+      dispatch({ type: DispatchAction.MARK_LOCALITY_PREFLIGHT_SEEN, payload: [] })
+      localityPreflightPendingRef.current = false
+      setLocalityPreflight(undefined)
+    },
+    [dispatch]
   )
 
   /**
@@ -557,6 +679,8 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
     clearActiveSession,
     getState,
     validateWitnessConnection,
+    localityPreflight,
+    resolveLocalityPreflight,
   }
 
   return <WitnessConnectionContext.Provider value={value}>{children}</WitnessConnectionContext.Provider>

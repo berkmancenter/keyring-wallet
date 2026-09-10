@@ -170,6 +170,30 @@ export interface WitnessServerConfig {
   localityVerificationRequired: boolean
 
   /**
+   * The Trust Tasks ceremony's locality policy (locality-plan.md §8.2) —
+   * distinct from `localityVerificationRequired` above, which gates the
+   * LEGACY basic-message ceremony's (never-wired-to-real-hardware) proof
+   * check and is left alone.
+   *
+   *   off      — no locality leg on this witness at all.
+   *   offered  — attempt it; annotate the outcome either way. DEFAULT.
+   *   required — refuse to issue a VWC without a confirmed observation;
+   *              published via discovery's `requiredExt` (§8.2).
+   *
+   * `offered`, not `required`, is the default: locality fails for boring
+   * reasons (Bluetooth off, permission denied, a phone at the far end of a
+   * hall), and gating punishes the honest majority for a control the
+   * dishonest minority isn't blocked by anyway (§8.2).
+   */
+  localityPolicy: 'off' | 'offered' | 'required'
+
+  /**
+   * The witness's claim about itself for the VWC's `localityVenue` member —
+   * unverified in v1 (§11-Q4). Only meaningful when `localityPolicy` !== 'off'.
+   */
+  localityVenueClaim?: string
+
+  /**
    * Whether to retain basic message records in the wallet after processing.
    * When false (default), messages are deleted after being processed to preserve user privacy.
    * When true, all messages are retained in the wallet for debugging/audit purposes.
@@ -193,8 +217,18 @@ export interface WitnessServerConfig {
   llmEnabled: boolean
 
   /**
-   * Anthropic API key for Claude access.
+   * Which LLM provider to talk to.
+   * - 'anthropic' (default): Claude via the Anthropic API.
+   * - 'deepseek': DeepSeek via its OpenAI-compatible API.
+   * These are different wire formats, so this selects the client that gets
+   * built — an Anthropic client pointed at DeepSeek's base URL will not work.
+   */
+  llmProvider: 'anthropic' | 'deepseek'
+
+  /**
+   * API key for the selected provider.
    * Required when llmEnabled is true.
+   * Set via WITNESS_LLM_API_KEY (or the legacy WITNESS_ANTHROPIC_API_KEY).
    */
   anthropicApiKey?: string
 
@@ -350,6 +384,12 @@ export function loadConfig(): WitnessServerConfig {
   // Locality Verification Configuration
   const localityVerificationRequired = process.env.WITNESS_LOCALITY_REQUIRED !== 'false' // Default: true (required)
 
+  // Trust Tasks locality policy (locality-plan.md §8.2) — off | offered | required, default offered.
+  const rawLocalityPolicy = process.env.WITNESS_LOCALITY_POLICY
+  const localityPolicy: WitnessServerConfig['localityPolicy'] =
+    rawLocalityPolicy === 'off' || rawLocalityPolicy === 'required' ? rawLocalityPolicy : 'offered'
+  const localityVenueClaim = process.env.WITNESS_LOCALITY_VENUE_CLAIM
+
   // Message Retention Configuration
   const retainMessages = process.env.WITNESS_RETAIN_MESSAGES === 'true' // Default: false (delete after processing)
 
@@ -364,9 +404,22 @@ export function loadConfig(): WitnessServerConfig {
 
   // LLM Configuration
   const llmEnabled = process.env.WITNESS_LLM_ENABLED === 'true' // Default: false
-  const anthropicApiKey = process.env.WITNESS_ANTHROPIC_API_KEY || undefined
-  const anthropicBaseUrl = process.env.WITNESS_ANTHROPIC_BASE_URL || undefined
-  const anthropicModel = process.env.WITNESS_ANTHROPIC_MODEL || undefined
+
+  // Provider selection. 'anthropic' (default) talks to Claude directly;
+  // 'deepseek' talks to DeepSeek's OpenAI-compatible API, which is a different
+  // wire format — pointing the Anthropic client at it does NOT work, so the
+  // provider decides which client gets built (see LLMService).
+  const rawProvider = (process.env.WITNESS_LLM_PROVIDER || 'anthropic').toLowerCase()
+  if (rawProvider !== 'anthropic' && rawProvider !== 'deepseek') {
+    throw new Error(`WITNESS_LLM_PROVIDER must be 'anthropic' or 'deepseek', got '${rawProvider}'`)
+  }
+  const llmProvider = rawProvider as 'anthropic' | 'deepseek'
+
+  // Generic names are preferred; the WITNESS_ANTHROPIC_* names are kept as
+  // fallbacks so existing setups keep working unchanged.
+  const anthropicApiKey = process.env.WITNESS_LLM_API_KEY || process.env.WITNESS_ANTHROPIC_API_KEY || undefined
+  const anthropicBaseUrl = process.env.WITNESS_LLM_BASE_URL || process.env.WITNESS_ANTHROPIC_BASE_URL || undefined
+  const anthropicModel = process.env.WITNESS_LLM_MODEL || process.env.WITNESS_ANTHROPIC_MODEL || undefined
   const anthropicMaxTokens = process.env.WITNESS_ANTHROPIC_MAX_TOKENS ? parseInt(process.env.WITNESS_ANTHROPIC_MAX_TOKENS, 10) : undefined
   const anthropicTemperature = process.env.WITNESS_ANTHROPIC_TEMPERATURE ? parseFloat(process.env.WITNESS_ANTHROPIC_TEMPERATURE) : undefined
   const llmContextOrganization = process.env.WITNESS_CONTEXT_ORGANIZATION || undefined
@@ -380,8 +433,8 @@ export function loadConfig(): WitnessServerConfig {
   // Validate LLM configuration if enabled
   if (llmEnabled && !anthropicApiKey) {
     throw new Error(
-      'WITNESS_LLM_ENABLED is true but WITNESS_ANTHROPIC_API_KEY is not set. ' +
-        'Please provide an Anthropic API key or disable LLM features.'
+      `WITNESS_LLM_ENABLED is true but no API key is set for provider '${llmProvider}'. ` +
+        'Set WITNESS_LLM_API_KEY (or WITNESS_ANTHROPIC_API_KEY), or disable LLM features.'
     )
   }
 
@@ -412,8 +465,11 @@ export function loadConfig(): WitnessServerConfig {
     tlsHostnames,
     reportingEnabled,
     localityVerificationRequired,
+    localityPolicy,
+    localityVenueClaim,
     retainMessages,
     llmEnabled,
+    llmProvider,
     anthropicApiKey,
     anthropicBaseUrl,
     anthropicModel,
@@ -459,8 +515,11 @@ export const defaultConfig: WitnessServerConfig = {
   tlsHostnames: ['localhost'],
   reportingEnabled: true,
   localityVerificationRequired: true,
+  localityPolicy: 'offered',
+  localityVenueClaim: undefined,
   retainMessages: false,
   llmEnabled: false,
+  llmProvider: 'anthropic',
   anthropicApiKey: undefined,
   anthropicBaseUrl: undefined,
   anthropicModel: undefined,

@@ -12,6 +12,7 @@ import Onboarding from '../screens/Onboarding'
 import { createCarouselStyle } from '../screens/OnboardingPages'
 import PINChange from '../screens/PINChange'
 import ToggleHardwareAttestation from '../screens/ToggleHardwareAttestation'
+import ToggleLocalityConfirmation from '../screens/ToggleLocalityConfirmation'
 import ToggleWitnessReporting from '../screens/ToggleWitnessReporting'
 import ExportWallet from '../screens/ExportWallet'
 import ImportWallet from '../screens/ImportWallet'
@@ -143,6 +144,15 @@ const SettingStack: React.FC = () => {
             title: t('Settings.HardwareAttestation'),
             headerBackTestID: testIdWithKey('Back'),
             ...ScreenOptionsDictionary[Screens.ToggleHardwareAttestation],
+          }}
+        />
+        <Stack.Screen
+          name={Screens.ToggleLocalityConfirmation}
+          component={ToggleLocalityConfirmation}
+          options={{
+            title: t('Settings.LocalityConfirmation'),
+            headerBackTestID: testIdWithKey('Back'),
+            ...ScreenOptionsDictionary[Screens.ToggleLocalityConfirmation],
           }}
         />
         <Stack.Screen

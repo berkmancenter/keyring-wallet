@@ -179,3 +179,4 @@ lib/
 
 # Local-only docs (not committed)
 .docs-local/
+.cursor/

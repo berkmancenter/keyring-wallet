@@ -133,6 +133,15 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           try {
             await storeManager.openStore(validationAgent.context)
           } catch (openError) {
+            // DIAGNOSTIC (2026-08-26): openStore's real error is otherwise lost —
+            // the validation agent logs at LogLevel.off and the outer catch below
+            // is bare. Without this a store that refuses to open is indistinguishable
+            // from a wrong PIN, which is exactly the ambiguity we hit on device.
+            logger?.error?.(
+              `[PIN] openStore failed — storeId=${secret.id} saltLen=${secret.salt?.length} ` +
+                `hashLen=${hash?.length} didCompleteOnboarding=${store.onboarding.didCompleteOnboarding} ` +
+                `error=${(openError as Error)?.name}: ${(openError as Error)?.message}`
+            )
             // The Askar store is only created during agent initialization (Splash).
             // If the user force-closed the app during onboarding before Splash ran,
             // the store doesn't exist yet and openStore() will fail for any PIN.
@@ -159,12 +168,16 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
         setWalletSecret({ id: secret.id, key: hash, salt: secret.salt })
         return true
-      } catch {
+      } catch (e) {
+        // DIAGNOSTIC (2026-08-26): see above — a bare catch here turned every
+        // failure mode into a silent "wrong PIN".
+        logger?.error?.(`[PIN] checkWalletPIN failed — ${(e as Error)?.name}: ${(e as Error)?.message}`)
         return false
       }
     },
     [
       dispatch,
+      logger,
       store.migration.didMigrateToAskar,
       hashPIN,
       store.onboarding.didCompleteOnboarding,

@@ -46,6 +46,17 @@ exports[`Settings Screen Renders correctly 1`] = `
               },
             },
             Object {
+              "accessibilityLabel": "Settings.ToggleLocalityConfirmation",
+              "subtitle": "Settings.LocalityConfirmationSubtitle",
+              "testID": "com.ariesbifold:id/LocalityConfirmation",
+              "title": "Settings.LocalityConfirmation",
+              "toggle": Object {
+                "activeColor": "#A349A4",
+                "onValueChange": [Function],
+                "value": true,
+              },
+            },
+            Object {
               "accessibilityLabel": "Settings.ToggleWitnessReporting",
               "subtitle": "Settings.ReportingSubtitle",
               "testID": "com.ariesbifold:id/WitnessReporting",
@@ -602,6 +613,212 @@ exports[`Settings Screen Renders correctly 1`] = `
                         "transform": Array [
                           Object {
                             "translateX": 4,
+                          },
+                        ],
+                        "width": 20,
+                      }
+                    }
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "backgroundColor": "#313132",
+            }
+          }
+        >
+          <View
+            style={
+              Object {
+                "borderBottomColor": "#000000",
+                "borderBottomWidth": 1,
+                "marginHorizontal": 25,
+              }
+            }
+          />
+        </View>
+      </View>
+      <View
+        onFocusCapture={[Function]}
+        onLayout={[Function]}
+        style={null}
+      >
+        <View>
+          <View
+            style={
+              Object {
+                "backgroundColor": "#313132",
+                "flexGrow": 1,
+                "paddingVertical": 24,
+              }
+            }
+          >
+            <View
+              accessibilityLabel="Settings.ToggleLocalityConfirmation"
+              accessibilityRole="switch"
+              accessibilityState={
+                Object {
+                  "busy": undefined,
+                  "checked": true,
+                  "disabled": undefined,
+                  "expanded": undefined,
+                  "selected": undefined,
+                }
+              }
+              accessibilityValue={
+                Object {
+                  "max": undefined,
+                  "min": undefined,
+                  "now": undefined,
+                  "text": undefined,
+                }
+              }
+              accessible={true}
+              collapsable={false}
+              focusable={true}
+              onClick={[Function]}
+              onResponderGrant={[Function]}
+              onResponderMove={[Function]}
+              onResponderRelease={[Function]}
+              onResponderTerminate={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              style={
+                Object {
+                  "alignItems": "flex-start",
+                  "flexDirection": "column",
+                  "flexGrow": 1,
+                  "justifyContent": "space-between",
+                  "opacity": 1,
+                  "paddingHorizontal": 25,
+                }
+              }
+              testID="com.ariesbifold:id/LocalityConfirmation"
+            >
+              <View
+                style={
+                  Object {
+                    "flex": 1,
+                    "flexShrink": 1,
+                    "marginRight": 14,
+                  }
+                }
+              >
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Array [
+                        Object {
+                          "color": "#FFFFFF",
+                          "fontSize": 21,
+                          "fontWeight": "normal",
+                        },
+                        Object {
+                          "maxWidth": "95%",
+                        },
+                      ],
+                    ]
+                  }
+                >
+                  Settings.LocalityConfirmation
+                </Text>
+                <Text
+                  maxFontSizeMultiplier={2}
+                  numberOfLines={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "color": "#606060",
+                        "fontSize": 12,
+                        "marginTop": 2,
+                      },
+                    ]
+                  }
+                >
+                  Settings.LocalityConfirmationSubtitle
+                </Text>
+              </View>
+              <View
+                accessibilityRole="switch"
+                accessibilityState={
+                  Object {
+                    "busy": undefined,
+                    "checked": true,
+                    "disabled": undefined,
+                    "expanded": undefined,
+                    "selected": undefined,
+                  }
+                }
+                accessibilityValue={
+                  Object {
+                    "max": undefined,
+                    "min": undefined,
+                    "now": undefined,
+                    "text": undefined,
+                  }
+                }
+                accessible={true}
+                collapsable={false}
+                focusable={true}
+                onClick={[Function]}
+                onResponderGrant={[Function]}
+                onResponderMove={[Function]}
+                onResponderRelease={[Function]}
+                onResponderTerminate={[Function]}
+                onResponderTerminationRequest={[Function]}
+                onStartShouldSetResponder={[Function]}
+                style={
+                  Object {
+                    "opacity": 1,
+                  }
+                }
+                testID="com.ariesbifold:id/LocalityConfirmation-toggle"
+              >
+                <View
+                  collapsable={false}
+                  style={
+                    Object {
+                      "backgroundColor": "rgba(98, 44, 98, 1)",
+                      "borderRadius": 14,
+                      "height": 28,
+                      "justifyContent": "center",
+                      "width": 52,
+                    }
+                  }
+                >
+                  <View
+                    collapsable={false}
+                    style={
+                      Object {
+                        "backgroundColor": "#FFFFFF",
+                        "borderRadius": 10,
+                        "elevation": 3,
+                        "height": 20,
+                        "shadowColor": "#000",
+                        "shadowOffset": Object {
+                          "height": 1,
+                          "width": 0,
+                        },
+                        "shadowOpacity": 0.22,
+                        "shadowRadius": 2.22,
+                        "transform": Array [
+                          Object {
+                            "translateX": 28,
                           },
                         ],
                         "width": 20,
@@ -1628,140 +1845,6 @@ exports[`Settings Screen Renders correctly 1`] = `
         </View>
       </View>
       <View
-        onFocusCapture={[Function]}
-        onLayout={[Function]}
-        style={null}
-      >
-        <View>
-          <View
-            style={
-              Object {
-                "backgroundColor": "#313132",
-                "flexGrow": 1,
-                "paddingVertical": 24,
-              }
-            }
-          >
-            <View
-              accessibilityLabel="Settings.Logout"
-              accessibilityRole="button"
-              accessibilityState={
-                Object {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": undefined,
-                  "expanded": undefined,
-                  "selected": undefined,
-                }
-              }
-              accessibilityValue={
-                Object {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
-              }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onClick={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              style={
-                Object {
-                  "alignItems": "flex-start",
-                  "flexDirection": "column",
-                  "flexGrow": 1,
-                  "justifyContent": "space-between",
-                  "opacity": 1,
-                  "paddingHorizontal": 25,
-                }
-              }
-              testID="com.ariesbifold:id/Logout"
-            >
-              <View
-                style={
-                  Object {
-                    "flex": 1,
-                    "flexShrink": 1,
-                    "marginRight": 14,
-                  }
-                }
-              >
-                <Text
-                  maxFontSizeMultiplier={2}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#FFFFFF",
-                        "fontSize": 18,
-                        "fontWeight": "normal",
-                      },
-                      Array [
-                        Object {
-                          "color": "#FFFFFF",
-                          "fontSize": 21,
-                          "fontWeight": "normal",
-                        },
-                        Object {
-                          "maxWidth": "95%",
-                        },
-                      ],
-                    ]
-                  }
-                >
-                  Settings.Logout
-                </Text>
-              </View>
-              <View
-                style={
-                  Object {
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                  }
-                }
-              >
-                <Text
-                  allowFontScaling={false}
-                  selectable={false}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#606060",
-                        "fontSize": 24,
-                      },
-                      Object {
-                        "marginLeft": 4,
-                      },
-                      Object {
-                        "fontFamily": "Material Icons",
-                        "fontStyle": "normal",
-                        "fontWeight": "normal",
-                      },
-                      Object {},
-                    ]
-                  }
-                >
-                  
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View
-          style={
-            Object {
-              "marginBottom": 10,
-            }
-          }
-        />
-      </View>
-      <View
         style={
           Object {
             "height": 0,
@@ -1875,6 +1958,17 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
                 "activeColor": "#A349A4",
                 "onValueChange": [Function],
                 "value": false,
+              },
+            },
+            Object {
+              "accessibilityLabel": "Settings.ToggleLocalityConfirmation",
+              "subtitle": "Settings.LocalityConfirmationSubtitle",
+              "testID": "com.ariesbifold:id/LocalityConfirmation",
+              "title": "Settings.LocalityConfirmation",
+              "toggle": Object {
+                "activeColor": "#A349A4",
+                "onValueChange": [Function],
+                "value": true,
               },
             },
             Object {
@@ -2496,6 +2590,212 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
             }
           >
             <View
+              accessibilityLabel="Settings.ToggleLocalityConfirmation"
+              accessibilityRole="switch"
+              accessibilityState={
+                Object {
+                  "busy": undefined,
+                  "checked": true,
+                  "disabled": undefined,
+                  "expanded": undefined,
+                  "selected": undefined,
+                }
+              }
+              accessibilityValue={
+                Object {
+                  "max": undefined,
+                  "min": undefined,
+                  "now": undefined,
+                  "text": undefined,
+                }
+              }
+              accessible={true}
+              collapsable={false}
+              focusable={true}
+              onClick={[Function]}
+              onResponderGrant={[Function]}
+              onResponderMove={[Function]}
+              onResponderRelease={[Function]}
+              onResponderTerminate={[Function]}
+              onResponderTerminationRequest={[Function]}
+              onStartShouldSetResponder={[Function]}
+              style={
+                Object {
+                  "alignItems": "flex-start",
+                  "flexDirection": "column",
+                  "flexGrow": 1,
+                  "justifyContent": "space-between",
+                  "opacity": 1,
+                  "paddingHorizontal": 25,
+                }
+              }
+              testID="com.ariesbifold:id/LocalityConfirmation"
+            >
+              <View
+                style={
+                  Object {
+                    "flex": 1,
+                    "flexShrink": 1,
+                    "marginRight": 14,
+                  }
+                }
+              >
+                <Text
+                  maxFontSizeMultiplier={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Array [
+                        Object {
+                          "color": "#FFFFFF",
+                          "fontSize": 21,
+                          "fontWeight": "normal",
+                        },
+                        Object {
+                          "maxWidth": "95%",
+                        },
+                      ],
+                    ]
+                  }
+                >
+                  Settings.LocalityConfirmation
+                </Text>
+                <Text
+                  maxFontSizeMultiplier={2}
+                  numberOfLines={2}
+                  style={
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "normal",
+                      },
+                      Object {
+                        "color": "#606060",
+                        "fontSize": 12,
+                        "marginTop": 2,
+                      },
+                    ]
+                  }
+                >
+                  Settings.LocalityConfirmationSubtitle
+                </Text>
+              </View>
+              <View
+                accessibilityRole="switch"
+                accessibilityState={
+                  Object {
+                    "busy": undefined,
+                    "checked": true,
+                    "disabled": undefined,
+                    "expanded": undefined,
+                    "selected": undefined,
+                  }
+                }
+                accessibilityValue={
+                  Object {
+                    "max": undefined,
+                    "min": undefined,
+                    "now": undefined,
+                    "text": undefined,
+                  }
+                }
+                accessible={true}
+                collapsable={false}
+                focusable={true}
+                onClick={[Function]}
+                onResponderGrant={[Function]}
+                onResponderMove={[Function]}
+                onResponderRelease={[Function]}
+                onResponderTerminate={[Function]}
+                onResponderTerminationRequest={[Function]}
+                onStartShouldSetResponder={[Function]}
+                style={
+                  Object {
+                    "opacity": 1,
+                  }
+                }
+                testID="com.ariesbifold:id/LocalityConfirmation-toggle"
+              >
+                <View
+                  collapsable={false}
+                  style={
+                    Object {
+                      "backgroundColor": "rgba(98, 44, 98, 1)",
+                      "borderRadius": 14,
+                      "height": 28,
+                      "justifyContent": "center",
+                      "width": 52,
+                    }
+                  }
+                >
+                  <View
+                    collapsable={false}
+                    style={
+                      Object {
+                        "backgroundColor": "#FFFFFF",
+                        "borderRadius": 10,
+                        "elevation": 3,
+                        "height": 20,
+                        "shadowColor": "#000",
+                        "shadowOffset": Object {
+                          "height": 1,
+                          "width": 0,
+                        },
+                        "shadowOpacity": 0.22,
+                        "shadowRadius": 2.22,
+                        "transform": Array [
+                          Object {
+                            "translateX": 28,
+                          },
+                        ],
+                        "width": 20,
+                      }
+                    }
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "backgroundColor": "#313132",
+            }
+          }
+        >
+          <View
+            style={
+              Object {
+                "borderBottomColor": "#000000",
+                "borderBottomWidth": 1,
+                "marginHorizontal": 25,
+              }
+            }
+          />
+        </View>
+      </View>
+      <View
+        onFocusCapture={[Function]}
+        onLayout={[Function]}
+        style={null}
+      >
+        <View>
+          <View
+            style={
+              Object {
+                "backgroundColor": "#313132",
+                "flexGrow": 1,
+                "paddingVertical": 24,
+              }
+            }
+          >
+            <View
               accessibilityLabel="Settings.ToggleWitnessReporting"
               accessibilityRole="switch"
               accessibilityState={
@@ -3475,140 +3775,6 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
             }
           />
         </View>
-      </View>
-      <View
-        onFocusCapture={[Function]}
-        onLayout={[Function]}
-        style={null}
-      >
-        <View>
-          <View
-            style={
-              Object {
-                "backgroundColor": "#313132",
-                "flexGrow": 1,
-                "paddingVertical": 24,
-              }
-            }
-          >
-            <View
-              accessibilityLabel="Settings.Logout"
-              accessibilityRole="button"
-              accessibilityState={
-                Object {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": undefined,
-                  "expanded": undefined,
-                  "selected": undefined,
-                }
-              }
-              accessibilityValue={
-                Object {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
-              }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onClick={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
-              style={
-                Object {
-                  "alignItems": "flex-start",
-                  "flexDirection": "column",
-                  "flexGrow": 1,
-                  "justifyContent": "space-between",
-                  "opacity": 1,
-                  "paddingHorizontal": 25,
-                }
-              }
-              testID="com.ariesbifold:id/Logout"
-            >
-              <View
-                style={
-                  Object {
-                    "flex": 1,
-                    "flexShrink": 1,
-                    "marginRight": 14,
-                  }
-                }
-              >
-                <Text
-                  maxFontSizeMultiplier={2}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#FFFFFF",
-                        "fontSize": 18,
-                        "fontWeight": "normal",
-                      },
-                      Array [
-                        Object {
-                          "color": "#FFFFFF",
-                          "fontSize": 21,
-                          "fontWeight": "normal",
-                        },
-                        Object {
-                          "maxWidth": "95%",
-                        },
-                      ],
-                    ]
-                  }
-                >
-                  Settings.Logout
-                </Text>
-              </View>
-              <View
-                style={
-                  Object {
-                    "alignItems": "center",
-                    "flexDirection": "row",
-                  }
-                }
-              >
-                <Text
-                  allowFontScaling={false}
-                  selectable={false}
-                  style={
-                    Array [
-                      Object {
-                        "color": "#606060",
-                        "fontSize": 24,
-                      },
-                      Object {
-                        "marginLeft": 4,
-                      },
-                      Object {
-                        "fontFamily": "Material Icons",
-                        "fontStyle": "normal",
-                        "fontWeight": "normal",
-                      },
-                      Object {},
-                    ]
-                  }
-                >
-                  
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-        <View
-          style={
-            Object {
-              "marginBottom": 10,
-            }
-          }
-        />
       </View>
       <View
         style={
