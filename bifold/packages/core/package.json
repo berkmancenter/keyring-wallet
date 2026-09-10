@@ -110,6 +110,8 @@
     "eslint-plugin-prettier": "~5.2.6",
     "expo": "*",
     "expo-crypto": "~15.0.8",
+    "expo-image-manipulator": "~14.0.8",
+    "expo-image-picker": "~17.0.11",
     "expo-secure-store": "*",
     "i18next": "~25.8.0",
     "install-peerdeps": "~3.0.7",

@@ -2090,6 +2090,8 @@ __metadata:
     eslint-plugin-prettier: "npm:~5.2.6"
     expo: "npm:*"
     expo-crypto: "npm:~15.0.8"
+    expo-image-manipulator: "npm:~14.0.8"
+    expo-image-picker: "npm:~17.0.11"
     expo-secure-store: "npm:*"
     i18next: "npm:~25.8.0"
     install-peerdeps: "npm:~3.0.7"
@@ -10632,6 +10634,37 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: 10c0/67b5ea924319235426c27a4b69a8409438314bed635ad9c57bfbb4b5dcc873a575d2f44129683ec145785d3cdf591349078cc2e96d750ba2dea3aebf89e19e9f
+  languageName: node
+  linkType: hard
+
+"expo-image-loader@npm:~6.0.0":
+  version: 6.0.0
+  resolution: "expo-image-loader@npm:6.0.0"
+  peerDependencies:
+    expo: "*"
+  checksum: 10c0/36f1e80d2b3d2a1cce440c7d938cd3cf3138f2b1fa706a1954e415bfae87b5b8eeaec65be0ab17880eb7585dd28c9225d056ebdb98ac81e0ffbfe880d952b0eb
+  languageName: node
+  linkType: hard
+
+"expo-image-manipulator@npm:~14.0.8":
+  version: 14.0.8
+  resolution: "expo-image-manipulator@npm:14.0.8"
+  dependencies:
+    expo-image-loader: "npm:~6.0.0"
+  peerDependencies:
+    expo: "*"
+  checksum: 10c0/74ffd39bd205272edcdb0805109add190716090b137f371bb573aec9c6f638ca612155b0ff6cbfb7725c6b3c43a10901a47a0dab9c8ca2c467b2c1924e6503b6
+  languageName: node
+  linkType: hard
+
+"expo-image-picker@npm:~17.0.11":
+  version: 17.0.11
+  resolution: "expo-image-picker@npm:17.0.11"
+  dependencies:
+    expo-image-loader: "npm:~6.0.0"
+  peerDependencies:
+    expo: "*"
+  checksum: 10c0/4708eca0f93258b9214d4a107edeed52562ade4bc1b53c5fa6dcb1218ccdf56ba46e5993110cda81b19e6d5a52e61572e057ccbcb7efdd6a48d99f5633b178ec
   languageName: node
   linkType: hard
 
