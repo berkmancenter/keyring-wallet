@@ -9,6 +9,19 @@ const repoRoot = path.resolve(
 );
 
 /**
+ * app/.env is read by react-native-config, which accepts quoted values and
+ * trailing `#` comments; a naive `.trim()` would carry both into the
+ * invitation URL and produce a malformed one. Strips a matched pair of
+ * surrounding quotes, and an unquoted trailing comment.
+ */
+function unquoteEnvValue(raw) {
+  const value = raw.trim();
+  const quoted = value.match(/^(['"])(.*)\1$/);
+  if (quoted) return quoted[2];
+  return value.split(/\s+#/)[0].trim();
+}
+
+/**
  * The witness's mediator invitation for the ":mediator" e2e variant (see
  * run-vrc-exchange-witnessed-android-only-devices-mediator.js). Reuses
  * app/.env's own MEDIATOR_URL rather than requiring a second, separately
@@ -23,8 +36,9 @@ export function resolveWitnessMediatorInvitationUrl() {
   }
   const appEnvPath = path.join(repoRoot, "app", ".env");
   if (existsSync(appEnvPath)) {
-    const match = readFileSync(appEnvPath, "utf-8").match(/^MEDIATOR_URL=(.+)$/m);
-    if (match) return match[1].trim();
+    const match = readFileSync(appEnvPath, "utf-8").match(/^MEDIATOR_URL=(.*)$/m);
+    const value = match && unquoteEnvValue(match[1]);
+    if (value) return value;
   }
   throw new Error(
     "no mediator invitation URL to run the witness against — set WITNESS_MEDIATOR_INVITATION_URL, " +
