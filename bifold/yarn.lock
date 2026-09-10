@@ -3032,7 +3032,7 @@ __metadata:
 
 "@credo-ts/core@patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch":
   version: 0.6.3
-  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch::version=0.6.3&hash=8a03d3"
+  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch::version=0.6.3&hash=6a1148"
   dependencies:
     "@animo-id/mdoc": "npm:^0.5.2"
     "@animo-id/pex": "npm:^6.1.1"
@@ -3076,7 +3076,7 @@ __metadata:
     web-did-resolver: "npm:^2.0.32"
     webcrypto-core: "npm:^1.8.1"
     zod: "npm:^4.3.6"
-  checksum: 10c0/909158ff53d5a3db20aadc5de3481fa3f8fe57c896097c57d781730b1ca4385c4728ebba2af4bd180f1f559817fbed5b18b2691307be750e726c9a0ddd626b5c
+  checksum: 10c0/140fe92bd99590020050654c1bb24ee74efdcb94081e066b48fd9cbee14c60b932b0e87bfd616f1177226d6d908b19b2f2d5c74e2547c953f99a937a5ffb2db4
   languageName: node
   linkType: hard
 
