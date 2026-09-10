@@ -71,6 +71,43 @@ red tells you which layer upstream changed.
 | `setup-external.mjs` | Clone/checkout to pins (idempotent) |
 | `sync-external.mjs` | Digest upstream changes; `--advance` to move a pin |
 | `SYNC_LOG.md` | History of pin advances and why |
+| `BINARY_PINS.json` | Same idea, for `download.firstperson.dev`'s prebuilt binaries (`vta`, `pnm`, `mediator`, …) — see below |
+| `fetch-binaries.mjs` | Download/verify/advance those binaries |
+| `BINARY_PINS_LOG.md` | History of binary pin advances and why |
+
+## The prebuilt binaries (`vta`, `pnm`, `mediator`, …)
+
+`download.firstperson.dev` publishes compiled binaries — no source clone
+needed for these. Same *fetching is free, advancing is a decision* policy as
+above, but the mechanism differs in one important way: that server has **no
+versioned-artifact URLs**, only `latest` (newest tagged release) / `main`
+(newest compiled commit) moving pointers, plus a named release *channel*
+(currently `dogwood`) for the `pnm`/`openvtc` client builds. So a pin here
+records the last **verified** build (by content sha256 — most of these
+binaries have no `--version` flag at all, `pnm` included) for drift detection;
+it cannot freeze a re-fetchable historical version the way a git SHA does.
+Advancing means "we verified a newer build," never "roll back to an old one."
+
+Concretely, why this matters: the OpenVTC developer tutorial
+(`vti-setup/developer/01-personal-vta.md`) states "Verified with: VTA Version
+0.17.0"; the `vta` binary `fetch-binaries.mjs` downloaded the same day this
+file was written was **0.23.3** — six point-releases the tutorial doesn't know
+about. Nothing failed; nothing warned. This exists so drift like that gets
+noticed on purpose.
+
+```sh
+node scripts/openvtc/fetch-binaries.mjs                # fetch + verify every pinned binary into external/bin/
+node scripts/openvtc/fetch-binaries.mjs vta pnm-server  # just the named ones
+node scripts/openvtc/fetch-binaries.mjs --status        # report the cache's state, no network
+node scripts/openvtc/fetch-binaries.mjs --check          # probe current upstream without touching the cache
+node scripts/openvtc/fetch-binaries.mjs --advance vta --why "reason"   # re-fetch, update the pin, log it
+```
+
+`e2e/lib/vta.js`'s `startVta()` uses the cached `external/bin/vta` automatically
+once fetched (`VTA_BIN` overrides it). See `BINARY_PINS.json` for what's
+pinned, exercised, and still just sitting there unverified — most of the
+mediator/VTC/did-hosting binaries were downloaded once to confirm the URLs
+work, not because anything in this repo runs them yet.
 
 ## Checking claims
 

@@ -465,6 +465,78 @@ Since the relationship exchange moved onto Trust Tasks (plan: `docs/plans/openvt
 - **Known intermittents on simulators, not regressions:** one wallet occasionally misses the witness connection ("only 1/2 participants connected") or iOS never sends the didexchange request (the open "iOS no-send"); the witness agent init can hang under heavy machine load. Re-run. Distinct from a **deterministic 0/N** failure, seen on real devices through 2026-08-31: the witness silently running in mediator mode with a push-only pickup strategy against a mediator that only queues — fixed (see `docs/spikes/e2e-vrc-connect-findings.md`, "fourth failure layer"), and the harness no longer lets a local `.env` put the witness back into that mode by accident.
 - **Between runs:** free ports 4750/9002/9003 and kill stray `cloudflared`; cold-reboot an emulator that has been up for hours (its host network path degrades).
 
+## A local VTA for real-VTA testing (`lib/vta.js`)
+
+`startVta()` (`lib/vta.js`) brings up a real, disposable OpenVTC `vta` binary
+(https://firstperson.dev) for testing against — the piece
+`trust_tasks_subtask.md` §9 step 4 (credential-exchange against a live
+`vta-service`) needed and didn't have. Non-interactive end to end: `vta setup
+--from` (a generated TOML, no prompts), an offline-minted admin `did:key`, the
+daemon started and health-checked through its own HTTPS tunnel — same
+`cloudflared` quick-tunnel approach `startWitness` already uses, just applied
+to a second, independent process.
+
+```js
+import { startVta } from "./lib/vta.js";
+
+const vta = await startVta();
+// vta.vtaDid, vta.vtaUrl, vta.adminDid, vta.adminCredential (base64; decode
+// for { did, privateKeyMultibase, vtaDid, vtaUrl } — what a client needs to
+// authenticate as this admin)
+...
+await vta.stop();
+```
+
+**Prerequisites:**
+
+- [`cloudflared`](https://github.com/cloudflare/cloudflared) (already required
+  for the witnessed exchange above).
+- The `vta` binary, cached and pinned by
+  [`scripts/openvtc/fetch-binaries.mjs`](../scripts/openvtc/README.md) (run
+  `node scripts/openvtc/fetch-binaries.mjs vta` once — `startVta` finds the
+  cached copy automatically). Point `VTA_BIN` at a different binary instead if
+  you need to. See the [OpenVTC developer
+  tutorial](https://github.com/OpenVTC/vti-setup/tree/main/developer) for the
+  wider ecosystem (the `pnm`/`openvtc` CLIs, joining a community) — this
+  harness only automates the `vta` half.
+
+**Every call mints a brand-new VTA, never a persistent one.** `did:webvh`'s
+identifier is derived from its hosting domain, and a free cloudflared quick
+tunnel gets a random new hostname every run — so the DID this VTA gets is
+never resolvable again once `stop()` tears the tunnel down. That's the right
+shape for a spin-up-fresh-per-run test fixture (same as the witness server
+above) and the wrong shape for anything meant to persist across sessions —
+don't reach for this to stand up a long-lived dev VTA.
+
+Defaults: REST-only (no mediator — pass `mediatorDid` once a local/test
+mediator exists to point it at), ports 8180/8181 (chosen to avoid
+4723/8101/9002/9003, already used by Appium/WDA/the witness server above),
+plaintext seed storage (dev-only, matches upstream's own `"plaintext"`
+backend warning — never use this shape for anything real).
+
+## Credential-exchange query, in the app (`yarn e2e:credential-exchange-query`)
+
+`run-credential-exchange-query.js` drives the first in-app (not Node-script-
+only) proof of `trust_tasks_subtask.md` §9 step 4's happy path: a verifier
+sends `credential-exchange/query`, the wallet shows a real consent prompt
+(`CredentialExchangeQueryModal`, testID `CredentialExchangeQueryShare`), and
+approving it sends back `credential-exchange/present` with a real `vp_token`.
+Two Android wallets first complete an ordinary VRC exchange so Alice holds a
+real, stored credential to be queried for; a minimal verifier agent
+(`lib/verifier.js` — not a full `vta-service`, see that file's header) then
+connects to Alice the same way Bob did (a plain OOB paste) and sends the
+query directly.
+
+**Passes clean** on a Pixel 8 API 33 emulator + a physical device. Getting
+there found and fixed six real bugs (one a genuine upstream bug in
+`@credo-ts/core`'s `DcqlService`); see
+`docs/spikes/credential-exchange-query-e2e-findings.md`.
+
+```
+ANDROID_AVD2=<second-avd> yarn e2e:credential-exchange-query
+ANDROID_UDID2=<second-device-udid> yarn e2e:credential-exchange-query
+```
+
 ## Troubleshooting
 
 - **Isolating the witness-connect step**: `node debug-witness-connect.js` (run
