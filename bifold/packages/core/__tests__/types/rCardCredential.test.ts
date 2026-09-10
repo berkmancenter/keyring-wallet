@@ -1,4 +1,9 @@
-import { buildRCardTemplate, validateRCardForm, extractFormInputFromJCard } from '../../src/modules/vrc/types/rcard'
+import {
+  buildRCardTemplate,
+  validateRCardForm,
+  extractFormInputFromJCard,
+  buildJCardFromFormInput,
+} from '../../src/modules/vrc/types/rcard'
 
 describe('R-card template helpers', () => {
   test('validateRCardForm returns errors for missing required fields', () => {
@@ -44,5 +49,40 @@ describe('R-card template helpers', () => {
     expect(formInput.lastName).toEqual('Example')
     expect(template.id).toBeDefined()
     expect(template.id).toMatch(/^urn:uuid:/)
+  })
+
+  test('buildJCardFromFormInput omits photo property when no photo is provided', () => {
+    const jcard = buildJCardFromFormInput({
+      firstName: 'Alice',
+      lastName: 'Example',
+      email: '',
+      organization: '',
+    })
+
+    const photoProperty = jcard[1].find(([propName]) => propName === 'photo')
+    expect(photoProperty).toBeUndefined()
+    expect(extractFormInputFromJCard(jcard).photo).toBeUndefined()
+  })
+
+  test('a photo round-trips through buildJCardFromFormInput -> extractFormInputFromJCard byte-identical', () => {
+    const photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+    const input = {
+      firstName: 'Alice',
+      lastName: 'Example',
+      email: 'user@example.org',
+      organization: 'Example Org',
+      photo,
+    }
+
+    const jcard = buildJCardFromFormInput(input)
+    const photoProperty = jcard[1].find(([propName]) => propName === 'photo')
+    expect(photoProperty).toEqual(['photo', {}, 'uri', photo])
+
+    const roundTripped = extractFormInputFromJCard(jcard)
+    expect(roundTripped.photo).toEqual(photo)
+    expect(roundTripped.firstName).toEqual('Alice')
+    expect(roundTripped.lastName).toEqual('Example')
+    expect(roundTripped.email).toEqual('user@example.org')
+    expect(roundTripped.organization).toEqual('Example Org')
   })
 })

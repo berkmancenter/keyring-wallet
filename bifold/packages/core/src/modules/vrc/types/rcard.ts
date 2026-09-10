@@ -5,6 +5,8 @@ export type RCardFormInput = {
   lastName: string
   email: string
   organization: string
+  /** A data:image/jpeg;base64,... URI. Optional; omitted when no photo is set. */
+  photo?: string
 }
 
 export type RCardValidationErrors = Partial<Record<keyof RCardFormInput, string>>
@@ -114,6 +116,10 @@ export const buildJCardFromFormInput = (input: RCardFormInput): JCard => {
     properties.push(['org', {}, 'text', organization])
   }
 
+  if (input.photo) {
+    properties.push(['photo', {}, 'uri', input.photo])
+  }
+
   return ['vcard', properties]
 }
 
@@ -164,6 +170,11 @@ export const extractFormInputFromJCard = (jcard: JCard): Partial<RCardFormInput>
       case 'org':
         if (typeof value === 'string') {
           result.organization = value
+        }
+        break
+      case 'photo':
+        if (typeof value === 'string') {
+          result.photo = value
         }
         break
     }

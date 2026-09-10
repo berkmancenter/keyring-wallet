@@ -32,6 +32,8 @@ module.exports = {
     '^@bifold/trust-tasks$': '<rootDir>/../trust-tasks/src/index.ts',
     '^@bifold/verifier$': '<rootDir>/../verifier/src/index.ts',
     'expo-crypto': '<rootDir>/__mocks__/@expo/expo-crypto.js',
+    'expo-image-picker': '<rootDir>/__mocks__/@expo/expo-image-picker.js',
+    'expo-image-manipulator': '<rootDir>/__mocks__/@expo/expo-image-manipulator.js',
     '@expo/app-integrity': '<rootDir>/__mocks__/@expo/app-integrity.js',
   },
   transform: {

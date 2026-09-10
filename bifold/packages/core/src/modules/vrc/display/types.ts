@@ -33,6 +33,8 @@ export interface CredentialDisplaySubject {
   name?: string
   email?: string
   organization?: string
+  /** A data:image/jpeg;base64,... URI. Handlers with no notion of a photo omit it. */
+  photo?: string
 }
 
 /**

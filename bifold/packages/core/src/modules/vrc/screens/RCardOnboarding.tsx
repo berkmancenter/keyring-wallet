@@ -1,7 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import * as ImagePicker from 'expo-image-picker'
+import { manipulateAsync, SaveFormat, Action as ExpoImageManipulatorAction } from 'expo-image-manipulator'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import ButtonLoading from '../../../components/animated/ButtonLoading'
@@ -22,9 +36,50 @@ import {
   extractFormInputFromJCard,
   validateRCardForm,
 } from '../types/rcard'
+import { processRCardPhoto, RCardPhotoTooLargeError, ManipulateAsyncFn } from '../utils/rcardPhoto'
 import { InlineErrorConfig } from '../../../types/error'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
+
+/** Adapts expo-image-manipulator's manipulateAsync to the injectable shape processRCardPhoto expects. */
+const rcardManipulateAsync: ManipulateAsyncFn = (uri, actions, saveOptions) =>
+  manipulateAsync(uri, actions as ExpoImageManipulatorAction[], {
+    compress: saveOptions.compress,
+    base64: saveOptions.base64,
+    format: SaveFormat.JPEG,
+  })
+
+export class RCardPhotoPermissionDeniedError extends Error {
+  constructor() {
+    super('Media library permission was not granted')
+    this.name = 'RCardPhotoPermissionDeniedError'
+  }
+}
+
+/**
+ * Launches the image picker (cropped to a square so the resize step in
+ * processRCardPhoto never distorts the image) and runs the result through the
+ * resize/compress budget pipeline. Returns undefined if the user cancels.
+ */
+export const pickAndProcessRCardPhoto = async (): Promise<string | undefined> => {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+  if (!permission.granted) {
+    throw new RCardPhotoPermissionDeniedError()
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images'],
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 1,
+  })
+
+  if (result.canceled || !result.assets?.[0]?.uri) {
+    return undefined
+  }
+
+  return processRCardPhoto(result.assets[0].uri, rcardManipulateAsync)
+}
 
 const CARD_MARGIN = 20
 
@@ -54,6 +109,7 @@ const RCardOnboarding: React.FC<RCardOnboardingProps> = ({ agent }) => {
   const [errors, setErrors] = useState<RCardValidationErrors>({})
   const [submitting, setSubmitting] = useState(false)
   const [errorModal, setErrorModal] = useState<string | undefined>(undefined)
+  const [pickingPhoto, setPickingPhoto] = useState(false)
   const scrollRef = useRef<ScrollView>(null)
   const lastNameRef = useRef<TextInput>(null)
   const emailRef = useRef<TextInput>(null)
@@ -122,14 +178,64 @@ const RCardOnboarding: React.FC<RCardOnboardingProps> = ({ agent }) => {
           width: '42%' as any,
           minWidth: 148,
         },
+        photoSection: {
+          alignItems: 'center',
+          marginBottom: 16,
+        },
+        photoCircle: {
+          width: 96,
+          height: 96,
+          borderRadius: 48,
+          backgroundColor: '#E8E0E8',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        },
+        photoImage: {
+          width: 96,
+          height: 96,
+        },
+        photoActionText: {
+          marginTop: 8,
+          fontSize: 14,
+          color: ColorPalette.brand.primary,
+        },
       }),
-    [bgColor]
+    [bgColor, ColorPalette]
   )
 
   const updateField = (field: keyof RCardFormInput) => (value: string) => {
     setFormState((prev) => ({ ...prev, [field]: value }))
     setErrors((prev) => ({ ...prev, [field]: undefined }))
   }
+
+  const handlePickPhoto = useCallback(async () => {
+    setPickingPhoto(true)
+    try {
+      const photo = await pickAndProcessRCardPhoto()
+      if (photo) {
+        setFormState((prev) => ({ ...prev, photo }))
+      }
+    } catch (error) {
+      let message = t('RCardOnboarding.Errors.PhotoGeneric')
+      if (error instanceof RCardPhotoTooLargeError) {
+        message = t('RCardOnboarding.Errors.PhotoTooLarge')
+      } else if (error instanceof RCardPhotoPermissionDeniedError) {
+        message = t('RCardOnboarding.Errors.PhotoPermissionDenied')
+      }
+      bifoldLoggerInstance.warn('R-card photo selection failed', {
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      })
+      setErrorModal(message)
+    } finally {
+      setPickingPhoto(false)
+    }
+  }, [t])
+
+  const handleRemovePhoto = useCallback(() => {
+    setFormState((prev) => ({ ...prev, photo: undefined }))
+  }, [])
 
   const handleSubmit = async () => {
     const validation = validateRCardForm(formState)
@@ -245,6 +351,36 @@ const RCardOnboarding: React.FC<RCardOnboardingProps> = ({ agent }) => {
                 <Text style={{ color: ColorPalette.brand.inlineError }}>*</Text>
                 {' Required'}
               </ThemedText>
+              <View style={styles.photoSection}>
+                <TouchableOpacity
+                  onPress={handlePickPhoto}
+                  disabled={pickingPhoto}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('RCardOnboarding.Fields.Photo')}
+                  testID={testIdWithKey('RCardPhotoInput')}
+                >
+                  <View style={styles.photoCircle}>
+                    {formState.photo ? (
+                      <Image
+                        testID={testIdWithKey('RCardPhotoPreview')}
+                        style={styles.photoImage}
+                        source={{ uri: formState.photo }}
+                      />
+                    ) : (
+                      <Icon name="account-outline" size={40} color="#666666" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={formState.photo ? handleRemovePhoto : handlePickPhoto} disabled={pickingPhoto}>
+                  <ThemedText style={styles.photoActionText}>
+                    {pickingPhoto
+                      ? t('RCardOnboarding.Fields.PhotoProcessing')
+                      : formState.photo
+                        ? t('RCardOnboarding.Fields.PhotoRemove')
+                        : t('RCardOnboarding.Fields.PhotoAdd')}
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
               <View>
                 <LimitedTextInput
                   showLimitCounter={false}

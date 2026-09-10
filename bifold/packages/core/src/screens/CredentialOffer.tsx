@@ -549,7 +549,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
     const displayName = isJsonLdCredential ? jsonLdIssuerName : credentialConnectionLabel
     return (
       <>
-        <ConnectionImage connectionId={credential?.connectionId} />
+        <ConnectionImage connectionId={credential?.connectionId} imageUri={rcardDisplayInfo.photo} />
         <View style={styles.headerTextContainer}>
           <ThemedText style={styles.headerText} testID={testIdWithKey('HeaderText')}>
             <ThemedText>{displayName || t('ContactDetails.AContact')}</ThemedText>{' '}
