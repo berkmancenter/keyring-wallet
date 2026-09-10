@@ -79,6 +79,8 @@ module.exports = {
     // Expo modules used by bifold core - reuse bifold's jest mocks
     'expo-crypto': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-crypto.js',
     '@expo/app-integrity': '<rootDir>/../bifold/packages/core/__mocks__/@expo/app-integrity.js',
+    'expo-image-picker': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-image-picker.js',
+    'expo-image-manipulator': '<rootDir>/../bifold/packages/core/__mocks__/@expo/expo-image-manipulator.js',
     // @openvtc/trust-tasks is ESM-only with an import-condition exports map,
     // which Jest's CJS resolver can't follow — same fix as bifold/core's own
     // jest.config.js, pointed at the root-hoisted copy (this package isn't
