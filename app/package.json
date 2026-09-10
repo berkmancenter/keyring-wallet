@@ -42,6 +42,7 @@
   "dependencies": {
     "@animo-id/expo-secure-environment": "0.1.5",
     "@bifold/core": "3.0.16",
+    "@bifold/credo-tsp-adapter": "0.1.0-alpha.1",
     "@bifold/oca": "3.0.16",
     "@bifold/react-hooks": "3.0.16",
     "@bifold/react-native-attestation": "3.0.16",

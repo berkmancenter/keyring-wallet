@@ -959,10 +959,36 @@ a basic message). Step 2's specifications are the upstream `vrc/*` /
 `witness/*` batch, with `witness-share` and a future R-Card task to join it.
 Outside this milestone: step 6's evidence against an older build (the
 legacy dual-accept path is true by construction, not yet e2e'd), step 4
-(credential-exchange with a VTA), step 1 (the `tsp-core` dependency
-direction — TSP-side), and the proof-set migration (parent §4.6, parked on
-the working group). Reasoning and evidence per day: the dated companions,
-latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+(credential-exchange with a VTA), and the proof-set migration (parent §4.6,
+parked on the working group). Reasoning and evidence per day: the dated
+companions, latest [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
+**Step 1 is now resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`,
+forked from `fix/mediator-pickup-strategy`) — see step 1 below and
+[`2026-09-01-bam.md`](./2026-09-01-bam.md). **Phase D's core deliverable is
+now built**, not just scoped: the `VidResolver` port and `direct.ts`'s
+`pack`/`unpack` (both named as remaining in earlier entries) are done, the
+`eddsa-jcs-2022` signer and DIDComm-v1 trust-task client it once also named
+already shipped (step 1's `Carriage` resolution), and a real `bifold/packages/
+credo-tsp-adapter` package plus a `TspCarriage` now exist — the parent plan's
+stage-4 "gated on `vta-service`" note applies to ecosystem interop, not to
+this wallet-to-wallet carriage between two Keyring wallets, which is built,
+dev-flag-gated, and unit/integration-tested against real Askar custody.
+**Now verified** (2026-09-03): `yarn e2e:vrc:tsp` passes clean on a real
+device, including the Developer-toggle navigation. Getting there required
+fixing a second real bug beyond the one `ref-12` caught: Askar's native
+`Key.fromPublicBytes` rejected a peer's public key as "Invalid key data"
+whenever it arrived as a `Buffer` view sliced from a larger message
+(`Buffer.prototype.slice()`, unlike `Uint8Array.prototype.slice()`, returns
+a view over the original backing `ArrayBuffer`, not a copy — the whole
+surrounding message crossed the JSI boundary instead of the 32-byte key).
+Fixed with a defensive `Uint8Array.from(...)` copy at the FFI boundary. See
+[`2026-09-02-bam.md`](./2026-09-02-bam.md)'s closing sections for the Phase D
+build and the `ref-12` bug it caught (an independently-derived `KeyAgreement`
+resolves to the wrong key once a real `VidResolver` is involved), and
+[`2026-09-03-bam.md`](./2026-09-03-bam.md) for this bug and the
+witness-over-TSP work below. (Step 4, credential-exchange against a live
+`vta-service`, is tracked on a separate branch and out of scope here.)
 
 **Mediator delivery.** The shared production `credo-mediator` must run a
 post-`3a5ea51` (credo-0.6+) build and
@@ -991,8 +1017,33 @@ Precondition for everything below. The trust-task model must depend on a carriag
 port, not on TSP envelope orchestration, or layer C has to carry its own task
 spine (§8.1).
 
+**Resolved in code** (Keyring, `feat/trust-tasks-over-didcomm-v1`, forked from
+`fix/mediator-pickup-strategy`). No separate `tsp-core` package was built — one
+already exists in effect as `@bifold/trust-tasks`, and building a second task
+spine now would be exactly the duplicated work §8.1 warns against. The
+resolution is the shape §5.2 always specified, applied to the package that
+exists: a `Carriage` port (`packages/trust-tasks/src/carriage.ts`, no
+dependencies) that the existing DIDComm-v1 send/receive plumbing now
+implements explicitly (`DidCommV1Carriage`, `packages/core`), with
+`ceremony.ts`'s two entry points (`sendTrustTaskDocument`,
+`setupTrustTasksInbound`) as its only callers. Both keep their existing
+signatures, so every call site — the wallet's agent-setup hook and the eight
+in-module send sites — needed no changes. Verified behavior-preserving: the
+module's 64 tests (7 suites) pass unchanged, and `@bifold/core` /
+`@bifold/trust-tasks` typecheck clean.
+
+**Narrower than §5.2's full port set.** `documentProof.ts`'s signing and
+verification still call Credo's KMS and DID resolution directly — the
+`SigningKey`/`VidResolver` half of §5.2's ports. That is §4.3's territory
+(crypto custody), not this step's (carriage/transport), and stays as-is here.
+
+Reasoning: [`2026-09-01-bam.md`](./2026-09-01-bam.md).
+
 **Done when:** `tsp-core`'s task model compiles and its tests pass with the TSP
-wire package absent from its dependency graph.
+wire package absent from its dependency graph. Trivially true today — no TSP
+wire package exists anywhere in this codebase yet — so the criterion that
+actually matters going forward is the one just described: the task model
+depends on the `Carriage` port, never on a transport's internals directly.
 
 ### 2. Author the `vrc/*` and `witness/*` specifications
 
@@ -1020,12 +1071,27 @@ schema.
 
 ### 3. `didcomm-v1-basicmessage` binding
 
-Parent Phase D, once the ports exist. Prerequisite for steps 4–6.
+**Done — shipped, and never actually depended on Phase D.** This entry's
+"Parent Phase D, once the ports exist" line was stale from early planning,
+when this binding was assumed to need `tsp-core`'s ports before it could be
+built. It doesn't: `DidCommV1Carriage`
+(`bifold/packages/core/src/modules/trust-tasks/module/DidCommV1Carriage.ts`)
+sends/receives over Credo's own DIDComm message sender directly, no
+`SigningKey`/`KeyAgreement`/`VidResolver` involved, and shipped as step 1's
+`Carriage` resolution — weeks before Phase D's ports existed (§6's binding
+0.2 rungs, `ref-06v1`/`06v1b`/`06v1c`, predate `ref-09` by roughly a month).
+The heading is also stale in the same way: the shipped binding is a
+**dedicated `@type`** (`TrustTaskMessage`, binding 0.2), not a basic message
+— see §6 and the "Where this stands" note above.
 
-**Done when:** a Trust Task document round-trips between two Credo agents over a
-basic message; the receiving side derives peer identity from the connection's
-`theirDid` and rejects a document whose in-band `issuer` disagrees with it
-([[TT-SPEC]] §4.8.1); and a `trust-task-error` returns on the same connection.
+**Done when:** a Trust Task document round-trips between two Credo agents over
+the binding — **met**, live-proven on attended devices (steps 5–7); the
+receiving side derives peer identity from the connection's `theirDid` and
+rejects a document whose in-band `issuer` disagrees with it ([[TT-SPEC]]
+§4.8.1) — **met**, `documentProof.ts`'s `verifyDocumentProof` requires the
+proof's verification method belong to the expected (connection-derived)
+controller; and a `trust-task-error` returns on the same connection — **met**,
+`ceremony.ts`'s inbound dispatch and `TrustTasksService`'s `rejectWith`.
 
 ### 4. Adopt `credential-exchange/{query,present,pending/*}`
 
@@ -1074,6 +1140,22 @@ by the propose's `witnessed` flag when a witness is connected; additive,
 never a precondition. Reasoning:
 [`2026-08-18-al.md`](./2026-08-18-al.md) §F.
 
+**The witness now also accepts these same Trust Task documents wrapped in
+a TSP envelope** (2026-09-03): `WitnessTaskSessions` registers a second
+handler, for `TspEnvelopeMessage`, alongside the DIDComm-v1
+`TrustTaskMessage` one, both routing to the same per-party session logic
+and replying on whichever carriage the request arrived on — mirroring
+`TspCarriage.ts`'s own send/receive pattern. This was necessary, not
+optional, the moment a wallet's TSP-carriage dev flag (§9 step 1 above) is
+on: `sendTrustTaskDocument` auto-selects carriage from that flag with no
+regard for whether the witness can read the result, so a TSP-enabled
+wallet's witness session-request already went out TSP-wrapped whether or
+not the witness's handler expected one — it didn't, and the ceremony
+silently timed out with no error. Live-proven end to end on two physical
+Android devices (`yarn e2e:vrc:witnessed:tsp:android-only`): witness
+sessions opened and VWCs issued over the TSP-enveloped carriage in both
+directions. Reasoning: [`2026-09-03-bam.md`](./2026-09-03-bam.md).
+
 **Done when:** a witnessed exchange completes over the new tasks; the issued VWC
 carries `taskContext` equal to the ceremony's initiating document `id`; the
 ceremony's `#response` is persisted with its proof and retrievable by that
@@ -1121,9 +1203,16 @@ legacy dialect.
 
 **Remaining delta to done:** a legacy peer still completes an exchange via
 the dual-send path (§7.2) — true by construction (sub-v4 peers keep the
-untouched legacy flow) but not yet evidenced against an actual v3 build.
-The witnessed path (step 5) passes live, simulator and attended devices
-both (see [`2026-08-19-al.md`](./2026-08-19-al.md) §E).
+untouched legacy flow), and now unit-evidenced for the parsing and
+capability-gate half: `parseLegacyRelationshipAnnouncement` (extracted from
+the basic-message handler) round-trips every RCE generation's real wire
+format, and a real v1–v3 announcement string, run through it, never opens
+the Trust Task dialect (`maybeOpenRelationshipExchange` no-ops downstream).
+**Still not evidenced against an actual v3 build** — that requires an older
+app binary on a device, which unit tests cannot substitute for; see
+[`2026-09-01-bam.md`](./2026-09-01-bam.md). The witnessed path (step 5)
+passes live, simulator and attended devices both (see
+[`2026-08-19-al.md`](./2026-08-19-al.md) §E).
 
 ### 7. VWC sharing — counterparty visibility of the witnessing
 

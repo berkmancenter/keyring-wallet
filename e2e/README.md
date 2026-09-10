@@ -9,6 +9,7 @@ this folder is a small standalone npm package.
 | --- | --- | --- |
 | `yarn e2e:vrc` | Two-device VRC exchange on the **Android emulator + iOS simulator** | No |
 | `yarn e2e:vrc:android-only` | Same exchange on **two Android emulators** (no macOS/Xcode needed; see below for the two-AVD setup) | No |
+| `yarn e2e:vrc:tsp` | Same exchange, but the VRC/witness Trust Task documents are carried over the real TSP envelope stack (HPKE-Auth, Askar custody, CESR framing) instead of the default DIDComm-v1 binding — both **Android emulators** (logcat-based marker assertion needs it; see below for the two-AVD setup). Wallet-to-wallet only, not an ecosystem-interop test — see `docs/plans/openvtc-integration-plan/2026-09-02-bam.md` | No |
 | `yarn e2e:vrc:devices` | Same exchange on a **physical Android phone + iPhone**, proving hardware attestation + biometric signing | **Yes** — you authenticate on the phones |
 | `yarn e2e:vrc:devices:android-only` | Same hardware-attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
 | `yarn e2e:migration` | Askar 0.2→0.6 store migration: old app → exchange → in-place upgrade (Android emulator + iOS simulator peer) | No |
@@ -16,13 +17,15 @@ this folder is a small standalone npm package.
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
 | `yarn e2e:vrc:witnessed:devices` | Witnessed + hardware-attested exchange on a **physical Android phone + iPhone**, routed through a locally-run witness server — both wallets end up with a Verifiable Witness Credential (VWC) in addition to the peer VRC | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
+| `yarn e2e:vrc:witnessed:tsp:android-only` | Same witnessed + attested exchange as above, but the wallet-to-wallet VRC documents (discovery/propose/issue) are carried over the real TSP envelope stack instead of the default DIDComm-v1 binding — same **two physical Android phones** requirement. The wallet-to-*witness* protocol (session/challenge/VP) is a separate channel and is unaffected either way — see "TSP + witnessed" below. | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only:mediator` | Same as above, but the witness runs in **MEDIATOR mode** (through the shared production mediator) instead of the default DIRECT mode — confirms the mediator-mode fallback still works, on demand, without hand-setting an env var. See "Confirming the mediator-mode fallback" below. | **Yes** |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
-`vrc-exchange:android-only`, `vrc-exchange:devices`,
+`vrc-exchange:android-only`, `vrc-exchange:tsp`, `vrc-exchange:devices`,
 `vrc-exchange:devices:android-only`, `store-migration`,
 `store-migration:android-only`, `onboarding-smoke`,
 `vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`,
+`vrc-exchange:witnessed:tsp:android-only`,
 `vrc-exchange:witnessed:android-only:mediator`.
 
 Every script above ends by printing a bordered pass/fail banner
@@ -61,6 +64,18 @@ You also need the normal app dev environment (Android SDK + an AVD, Xcode + an
 iOS simulator runtime) — see the root README "Getting Started".
 
 The harness starts Appium itself if nothing is listening on `:4723`.
+
+**Working in a git worktree?** Every debug build looks for the Metro packager
+on host port `:8081` regardless of which checkout it was built from — Android
+via a hardcoded `adb reverse tcp:8081`, the iOS simulator directly over
+localhost. If a Metro from a DIFFERENT checkout (another worktree, or the
+main checkout) is already holding that port, it keeps serving *its own*
+checkout's JS with no error at all — the app boots fine, just against the
+wrong code, which only surfaces much later as a confusing "element not
+found" deep into a run. The harness checks this itself before starting
+(`checkMetroIsThisWorktree` in `lib/driver.js`) and fails fast with a clear
+message if `:8081` belongs to another checkout; when that happens, stop that
+Metro and run `yarn start` from **this** worktree's `app/` before retrying.
 
 ## Build the app binaries first
 
@@ -199,6 +214,26 @@ adb devices                                          # should list both, as "dev
 adb -s emulator-5554 shell getprop sys.boot_completed # repeat per serial until "1"
 adb -s emulator-5556 shell getprop sys.boot_completed
 ```
+
+**Windowed by default.** The commands above open a visible emulator window
+so you can watch the suite drive the app — that's the default, and the
+right one for local dev (you want to see what broke). Add `-no-window` only
+when you deliberately want headless (e.g. a CI box with no display):
+
+```sh
+emulator -avd Pixel_8_API_33 -gpu swiftshader_indirect -no-window &
+```
+
+**Don't mix a headless and a windowed run on the same AVD via its saved
+snapshot.** By default the emulator saves a snapshot (`default_boot`) on
+clean shutdown and reloads it on the next boot to save time. If that
+snapshot was saved under one display mode (windowed vs. `-no-window`) and
+you boot into the other, the two can disagree about GPU/framebuffer state:
+observed symptom is `FrameBuffer.cpp:3544] Failed to find ColorBuffer:0`
+spamming the emulator's own log, followed by the process wedging (still
+running, pegged at high CPU, but its adb/console ports stop responding and
+it vanishes from `adb devices`). Fix: kill it and boot that AVD once with
+`-no-snapshot-load` to force a clean cold boot before switching modes.
 
 Then run the suite from the repo root, telling it which AVD is which
 wallet — `ANDROID_AVD` is wallet A, `ANDROID_AVD2` is wallet B:
@@ -370,6 +405,24 @@ adb devices                                      # list connected serials
 ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
   yarn e2e:vrc:witnessed:android-only
 ```
+
+### TSP + witnessed (`yarn e2e:vrc:witnessed:tsp:android-only`)
+
+Same witnessed + attested exchange as above (same two physical phones, same
+witness, same VWC issuance), but the wallet-to-wallet Trust Task documents —
+discovery, propose, issue — move onto the real TSP envelope stack (HPKE-Auth,
+Askar custody, CESR framing), same as `yarn e2e:vrc:tsp`.
+
+**The wallet-to-*witness* protocol is untouched by this flag.**
+Session-request/session-challenge/VP submission
+(`bifold/packages/core/src/modules/vrc/witnessed-vrc-manager.ts`) goes over
+plain DIDComm basic messages, not the Trust Task carriage — that's a
+separate channel entirely, so this variant proves the TSP envelope carries
+the peer-to-peer VRC exchange correctly *alongside* an otherwise-unchanged
+witnessing ceremony, not that witnessing itself runs over TSP.
+
+Same device/env requirements as `vrc-exchange:witnessed:android-only`
+above (`ANDROID_UDID`/`ANDROID_UDID2` to pick devices explicitly).
 
 ### Confirming the mediator-mode fallback (`yarn e2e:vrc:witnessed:android-only:mediator`)
 
