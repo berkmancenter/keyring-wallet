@@ -9,17 +9,25 @@
  * alongside `InAppMessageNotifier`, whose own toast pattern
  * (`react-native-toast-message`, tap-to-navigate) this mirrors.
  *
- * Tapping the toast opens Chat for that connection — the same reachable
- * target `InAppMessageNotifier` itself navigates to — rather than Contact
- * Details directly: building the `ContactCredentialDetails` route param
- * Contact Details needs means re-deriving it from the connection's W3C
- * credential records (see `ListContacts.tsx`'s own extraction logic), which
- * this toast has no need to duplicate. From Chat, the contact's own header
- * menu ("View Contact") reaches Contact Details, where the actual
- * `TrustTaskApprovalCard` renders.
+ * Tapping the toast navigates straight to Contact Details for the sender —
+ * where `ApproverContactSection` actually renders the pending card — rather
+ * than Chat: `getContactCredentialDetailsForConnection` (added to
+ * `@bifold/core` alongside this) re-derives the `ContactCredentialDetails`
+ * route param Contact Details needs from the connection's W3C credential
+ * records, the same resolution `ListContacts.tsx` does per row, just for
+ * this one connection. Falls back to Chat only if that resolution comes back
+ * empty (no established VRC relationship on file for this connection — the
+ * ceremony itself requires one, so this should not normally happen).
  */
 
-import { PendingTrustTaskPrompt, Screens, Stacks, trustTaskPromptStore, useAppAgent } from '@bifold/core'
+import {
+  PendingTrustTaskPrompt,
+  Screens,
+  Stacks,
+  getContactCredentialDetailsForConnection,
+  trustTaskPromptStore,
+  useAppAgent,
+} from '@bifold/core'
 import { useNavigation } from '@react-navigation/native'
 import React, { useEffect } from 'react'
 import Toast from 'react-native-toast-message'
@@ -46,10 +54,25 @@ const ApproverGlobalListener: React.FC = () => {
         },
         onPress: () => {
           Toast.hide()
-          navigation.navigate(Stacks.ContactStack, {
-            screen: Screens.Chat,
-            params: { connectionId: prompt.connectionId },
-          })
+          void (async () => {
+            const w3cCredentialRecords = await agent.w3cCredentials.getAll()
+            const contact = await getContactCredentialDetailsForConnection(
+              agent,
+              prompt.connectionId,
+              w3cCredentialRecords
+            )
+            if (contact) {
+              navigation.navigate(Stacks.ContactStack, {
+                screen: Screens.ContactDetails,
+                params: { contact },
+              })
+            } else {
+              navigation.navigate(Stacks.ContactStack, {
+                screen: Screens.Chat,
+                params: { connectionId: prompt.connectionId },
+              })
+            }
+          })()
         },
       })
     }

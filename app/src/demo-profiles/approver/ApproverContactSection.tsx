@@ -9,8 +9,11 @@
  *  1. A button that sends an access request to THIS contact —
  *     `proposeAccessRequest`, this profile's own ceremony function.
  *  2. Whenever `trustTaskPromptStore` surfaces a pending request FROM this
- *     contact, render it via the generic `TrustTaskApprovalCard` and let the
- *     user answer — `respondToAccessRequest` on the button press.
+ *     contact, render it via the generic `TrustTaskApprovalModal` (a
+ *     bottom-sheet, not the inline `TrustTaskApprovalCard` — this section
+ *     already sits inside a scrollable contact-details page, and a free-text
+ *     `resource`/`reason` value needs more room than an inline card gets) and
+ *     let the user answer — `respondToAccessRequest` on the button press.
  *
  * Renders nothing when `connectionId` is null: the ceremony requires an
  * established relationship DID on this connection, and ContactDetails only
@@ -25,7 +28,7 @@
 import {
   ContactDetailsFooterProps,
   PendingTrustTaskPrompt,
-  TrustTaskApprovalCard,
+  TrustTaskApprovalModal,
   testIdWithKey,
   trustTaskDisplayRegistry,
   trustTaskPromptStore,
@@ -179,17 +182,7 @@ const ApproverContactSection: React.FC<ContactDetailsFooterProps> = ({ connectio
     <View style={styles.container} testID={testIdWithKey('ApproverContactSection')}>
       <Text style={styles.title}>Approver demo</Text>
       <Text style={styles.subtitle}>Ask this contact for access to something, or answer a request from them.</Text>
-      {pending ? (
-        <TrustTaskApprovalCard
-          typeUri={pending.typeUri}
-          document={pending.document}
-          summary={pending.summary}
-          counterpartyLabel={pending.counterpartyLabel}
-          displayRegistry={trustTaskDisplayRegistry}
-          onApprove={() => void decide('approved')}
-          onDeny={() => void decide('denied')}
-        />
-      ) : awaitingResponse ? (
+      {awaitingResponse ? (
         <View style={styles.awaitingRow} testID={testIdWithKey('ApproverAwaitingResponse')}>
           <Text style={styles.awaitingText}>Waiting for a response…</Text>
           <TouchableOpacity
@@ -214,6 +207,17 @@ const ApproverContactSection: React.FC<ContactDetailsFooterProps> = ({ connectio
         <Text style={styles.lastDecision} testID={testIdWithKey('ApproverLastDecision')}>
           Last decision: {lastDecision}
         </Text>
+      )}
+      {pending && (
+        <TrustTaskApprovalModal
+          typeUri={pending.typeUri}
+          document={pending.document}
+          summary={pending.summary}
+          counterpartyLabel={pending.counterpartyLabel}
+          displayRegistry={trustTaskDisplayRegistry}
+          onApprove={() => void decide('approved')}
+          onDeny={() => void decide('denied')}
+        />
       )}
     </View>
   )
