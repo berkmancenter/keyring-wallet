@@ -91,7 +91,16 @@ const TabStack: React.FC = () => {
         })
       }
     },
-    [agent, enableImplicitInvitations, enableReuseConnections, logger, navigation, store.preferences.walletName, t, dispatch]
+    [
+      agent,
+      enableImplicitInvitations,
+      enableReuseConnections,
+      logger,
+      navigation,
+      store.preferences.walletName,
+      t,
+      dispatch,
+    ]
   )
 
   useEffect(() => {
@@ -103,7 +112,10 @@ const TabStack: React.FC = () => {
   const GradientBg = GradientTheme?.HeaderBackground
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: GradientBg ? 'transparent' : NavigationTheme.colors.primary }} edges={['left', 'right', 'top']}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: GradientBg ? 'transparent' : NavigationTheme.colors.primary }}
+      edges={['left', 'right', 'top']}
+    >
       {GradientBg && <GradientBg style={StyleSheet.absoluteFillObject} />}
       <Tab.Navigator
         initialRouteName={TabStacks.ContactStack}
@@ -186,9 +198,8 @@ const TabStack: React.FC = () => {
               </AttachTourStep>
             ),
             tabBarShowLabel: false,
-            tabBarAccessibilityLabel: totalUnread > 0
-              ? `${t('TabStack.Messages')}, ${totalUnread} unread`
-              : t('TabStack.Messages'),
+            tabBarAccessibilityLabel:
+              totalUnread > 0 ? `${t('TabStack.Messages')}, ${totalUnread} unread` : t('TabStack.Messages'),
             tabBarTestID: testIdWithKey(t('TabStack.Messages')),
           }}
         />

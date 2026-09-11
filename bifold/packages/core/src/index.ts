@@ -95,6 +95,7 @@ export { useDeepLinks } from './hooks/deep-links'
 export { useConnectionDisplayName } from './hooks/connections'
 export { useRCardCredential } from './modules/vrc/hooks/useRCardCredential'
 export { VrcNameCacheProvider, useVrcNameCache } from './modules/vrc/context/VrcNameCacheProvider'
+export { getContactCredentialDetailsForConnection } from './modules/vrc/utils/vrcNameHelper'
 export { initLanguages, initStoredLanguage, Locales, translationResources } from './localization'
 export * from './navigators'
 export { createStyles } from './screens/OnboardingPages'
@@ -231,8 +232,15 @@ export type {
   RegisterTrustTaskOptions,
   PendingTrustTaskPrompt,
 } from './modules/trust-tasks'
-export type { ITrustTaskDisplayHandler, ITrustTaskDisplayRegistry, TrustTaskDisplayResult } from './types/trust-task-display'
-export { default as TrustTaskApprovalCard } from './screens/TrustTaskApprovalCard'
+export type {
+  ITrustTaskDisplayHandler,
+  ITrustTaskDisplayRegistry,
+  TrustTaskDisplayResult,
+} from './types/trust-task-display'
+export { default as TrustTaskApprovalCard, TrustTaskFields } from './screens/TrustTaskApprovalCard'
+export type { TrustTaskFieldsProps } from './screens/TrustTaskApprovalCard'
+export { default as TrustTaskApprovalModal } from './screens/TrustTaskApprovalModal'
+export type { TrustTaskApprovalModalProps } from './screens/TrustTaskApprovalModal'
 export type {
   RelationshipDidRecordProps,
   CustomTags,

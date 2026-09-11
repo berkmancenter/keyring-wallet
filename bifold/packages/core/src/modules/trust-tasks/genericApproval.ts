@@ -35,6 +35,7 @@ import type { InboundContext, TrustTaskDocumentHandler } from './registry'
 import type { ConsumeOptions, TrustTaskSpecPolicy } from './services/TrustTasksService'
 import { respondWith } from './services/TrustTasksService'
 import { trustTaskPromptStore } from './trustTaskPromptStore'
+import { getVrcNameForConnection } from '../vrc/utils/vrcNameHelper'
 
 const LOG_PREFIX = '[TrustTasks:Approval]'
 
@@ -89,11 +90,27 @@ export function createApprovalRequestHandler(options: CreateApprovalRequestHandl
 
     const connection = await agent.modules.didcomm.connections.getById(context.connectionId)
     const payload = (document as { payload?: Record<string, unknown> }).payload ?? {}
+    // `connection.theirLabel` is the DIDComm connection's own label — often a
+    // generic wallet/agent label, not the contact's actual name. Once a VRC
+    // relationship exists on this connection (the common case: this handler
+    // is for post-relationship task types), the RelationshipCard/RCard issuer
+    // name is what a person actually recognizes as this contact, so prefer
+    // it — same resolution InAppMessageNotifier's toast uses for the same
+    // reason.
+    let counterpartyLabel = connection.theirLabel ?? 'Unknown Contact'
+    try {
+      const w3cCredentialRecords = await agent.w3cCredentials.getAll()
+      const vrcName = await getVrcNameForConnection(agent, context.connectionId, w3cCredentialRecords)
+      if (vrcName) counterpartyLabel = vrcName
+    } catch {
+      // Fall back to the connection label — this is a nice-to-have, not a
+      // dependency the approval flow itself should ever fail on.
+    }
     trustTaskPromptStore.setPending({
       connectionId: context.connectionId,
       typeUri: String(document.type),
       document,
-      counterpartyLabel: connection.theirLabel ?? 'Unknown Contact',
+      counterpartyLabel,
       summary: options.summarize(payload),
     })
     agent.config.logger.info(

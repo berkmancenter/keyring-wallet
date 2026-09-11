@@ -47,6 +47,71 @@ function fieldValue(field: Field): string {
   return field instanceof Attribute ? String(field.value ?? '') : ''
 }
 
+export interface TrustTaskFieldsProps {
+  fields: Field[]
+  summary: string
+}
+
+/**
+ * The payload rendering shared by `TrustTaskApprovalCard` and
+ * `TrustTaskApprovalModal`: one field per line, label ABOVE value rather than
+ * side by side — a label/value ROW with no wrap silently clipped or
+ * overflowed any value longer than roughly a word (a free-text `resource` or
+ * `reason` string routinely is), regardless of how much width the container
+ * had. Stacking avoids that at any container width; `flexShrink`/`flexWrap`
+ * on the value additionally lets long single "words" (a URL, an id) wrap
+ * rather than push past the edge.
+ */
+export const TrustTaskFields: React.FC<TrustTaskFieldsProps> = ({ fields, summary }) => {
+  const { ColorPalette, TextTheme } = useTheme()
+
+  const styles = StyleSheet.create({
+    summary: {
+      ...TextTheme.normal,
+      color: ColorPalette.brand.text,
+      marginBottom: 8,
+    },
+    fieldGroup: {
+      marginBottom: 12,
+    },
+    fieldLabel: {
+      ...TextTheme.label,
+      color: ColorPalette.brand.text,
+      fontSize: 13,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 4,
+    },
+    fieldValue: {
+      ...TextTheme.normal,
+      color: ColorPalette.brand.text,
+      fontSize: 16,
+      flexShrink: 1,
+      flexWrap: 'wrap',
+    },
+  })
+
+  if (fields.length === 0) {
+    return (
+      <Text style={styles.summary} testID={testIdWithKey('TrustTaskApprovalSummary')}>
+        {summary}
+      </Text>
+    )
+  }
+
+  return (
+    <>
+      {fields.map((field) => (
+        <View style={styles.fieldGroup} key={field.name}>
+          <Text style={styles.fieldLabel}>{field.label ?? field.name}</Text>
+          <Text style={styles.fieldValue}>{fieldValue(field)}</Text>
+        </View>
+      ))}
+    </>
+  )
+}
+
 const TrustTaskApprovalCard: React.FC<TrustTaskApprovalCardProps> = ({
   typeUri,
   document,
@@ -81,24 +146,6 @@ const TrustTaskApprovalCard: React.FC<TrustTaskApprovalCardProps> = ({
       marginTop: 2,
       marginBottom: 8,
     },
-    summary: {
-      ...TextTheme.normal,
-      color: ColorPalette.brand.text,
-      marginBottom: 8,
-    },
-    fieldRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: 4,
-    },
-    fieldLabel: {
-      ...TextTheme.labelSubtitle,
-      color: ColorPalette.brand.text,
-    },
-    fieldValue: {
-      ...TextTheme.normal,
-      color: ColorPalette.brand.text,
-    },
     actions: {
       flexDirection: 'row',
       marginTop: 12,
@@ -115,21 +162,16 @@ const TrustTaskApprovalCard: React.FC<TrustTaskApprovalCardProps> = ({
         {display.title}
       </Text>
       <Text style={styles.counterparty}>{counterpartyLabel}</Text>
-      {display.fields.length === 0 ? (
-        <Text style={styles.summary} testID={testIdWithKey('TrustTaskApprovalSummary')}>
-          {summary}
-        </Text>
-      ) : (
-        display.fields.map((field) => (
-          <View style={styles.fieldRow} key={field.name}>
-            <Text style={styles.fieldLabel}>{field.label ?? field.name}</Text>
-            <Text style={styles.fieldValue}>{fieldValue(field)}</Text>
-          </View>
-        ))
-      )}
+      <TrustTaskFields fields={display.fields} summary={summary} />
       <View style={styles.actions}>
         <View style={styles.actionButton}>
-          <Button title="Deny" accessibilityLabel="Deny" testID={testIdWithKey('TrustTaskDeny')} buttonType={ButtonType.Secondary} onPress={onDeny} />
+          <Button
+            title="Deny"
+            accessibilityLabel="Deny"
+            testID={testIdWithKey('TrustTaskDeny')}
+            buttonType={ButtonType.Secondary}
+            onPress={onDeny}
+          />
         </View>
         <View style={styles.actionButton}>
           <Button
