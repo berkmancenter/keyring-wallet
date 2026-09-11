@@ -19,6 +19,12 @@
  * it be answered" is the same question regardless of which presentation is
  * mounted.
  *
+ * `counterpartyLabel` — who is actually asking — is the thing a person most
+ * needs to notice before tapping Approve, so it renders as the dominant
+ * heading (a small "Request from" caption above a large bold name), with the
+ * task type's own title (e.g. "Access request") demoted to a small eyebrow
+ * above it rather than the other way around.
+ *
  * @module screens/TrustTaskApprovalModal
  */
 
@@ -82,11 +88,22 @@ const TrustTaskApprovalModal: React.FC<TrustTaskApprovalModalProps> = ({
       paddingBottom: 24,
     },
     title: {
-      marginBottom: 4,
+      ...TextTheme.label,
+      color: ColorPalette.brand.text,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      fontSize: 12,
+      marginBottom: 8,
     },
-    counterparty: {
+    fromLabel: {
       ...TextTheme.labelSubtitle,
       color: ColorPalette.brand.text,
+      marginBottom: 2,
+    },
+    counterparty: {
+      ...TextTheme.headingTwo,
+      color: ColorPalette.brand.text,
+      fontWeight: '800',
       marginBottom: 20,
     },
     actions: {
@@ -104,10 +121,13 @@ const TrustTaskApprovalModal: React.FC<TrustTaskApprovalModalProps> = ({
       <View style={styles.overlay}>
         <SafeAreaView style={styles.safeAreaView} edges={['bottom']} testID={testIdWithKey('TrustTaskApprovalCard')}>
           <ScrollView contentContainerStyle={styles.scrollContent}>
-            <ThemedText variant="headingThree" style={styles.title} testID={testIdWithKey('TrustTaskApprovalTitle')}>
+            <ThemedText style={styles.title} testID={testIdWithKey('TrustTaskApprovalTitle')}>
               {display.title}
             </ThemedText>
-            <ThemedText style={styles.counterparty}>{counterpartyLabel}</ThemedText>
+            <ThemedText style={styles.fromLabel}>Request from</ThemedText>
+            <ThemedText style={styles.counterparty} testID={testIdWithKey('TrustTaskApprovalCounterparty')}>
+              {counterpartyLabel}
+            </ThemedText>
             <TrustTaskFields fields={display.fields} summary={summary} />
             <View style={styles.actions}>
               <View style={styles.actionButton}>
