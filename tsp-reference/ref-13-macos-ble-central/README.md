@@ -43,10 +43,40 @@ follow — a cross-package import would hide exactly that.
 them named (`Samsung AU8200 65 TV`, `85" Crystal UHD`), RSSI −45 to −97. No
 entitlement or permission prompt was needed for scanning.
 
-**Act 2 — the full exchange: not yet run.** Nothing advertises a locality EID
-today: the Android peripheral needs a live ceremony to start advertising, and
-the iOS peripheral does not exist. Act 2 is what the iOS work will be verified
-against.
+**Act 2 — the full exchange: blocked, and the reason is worth knowing.**
+
+`fake-peripheral.swift` was written to close the gap — a CoreBluetooth
+peripheral that advertises a chosen EID and answers the same GATT exchange, so
+`run.mjs` could be proven correct before any iOS code exists. It advertises
+correctly:
+
+```
+[fake] CoreBluetooth state: 5 (5 = poweredOn)
+[fake] advertising 4B524C31-0011-2233-4455-66778899AABB
+```
+
+**But a Mac cannot see its own BLE advertisements.** An unfiltered scan running
+beside it saw 30 other peers and zero matches for our own service prefix — the
+central and peripheral roles share one controller, and macOS filters self-
+advertisements. Loopback on a single Mac is not possible.
+
+This costs nothing for the real topology, which is two devices: the phone
+advertises, the Mac scans. It only rules out single-machine self-testing, and
+knowing that in advance is worth the rung on its own — it is an easy hour to
+lose.
+
+So act 2 needs a **separate** advertising device. The iOS peripheral, installed
+on a real iPhone, is exactly that — which makes it both the thing being built
+and the thing that finally exercises this probe end to end.
+
+Two bugs this rung caught in its own code, both by running it:
+
+- **The EID is 24 hex characters, not 32.** `deriveEid` is HKDF with
+  `EID_BYTES = 12`; `prefix(8) + eid(24)` is the 32 hex a 128-bit UUID needs.
+  Both files validated 32 and produced `4b524c31-0011-2233-4455-66778899aabbccddeeff`,
+  which CoreBluetooth rejects outright.
+- **Swift block-buffers stdout when redirected**, so a working peripheral looked
+  like a silent hung one. `setvbuf(stdout, nil, _IONBF, 0)`.
 
 ## What this settles
 

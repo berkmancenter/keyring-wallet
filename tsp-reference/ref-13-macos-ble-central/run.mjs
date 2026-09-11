@@ -30,7 +30,7 @@
  *
  * Usage:
  *   npm install
- *   node run.mjs --eid <32-hex-eid>          # observe a specific advertised EID
+ *   node run.mjs --eid <24-hex-eid>          # observe a specific advertised EID
  *   node run.mjs --scan                      # list every advertising peer, no connect
  */
 
@@ -60,11 +60,13 @@ const eidIndex = args.indexOf('--eid')
 const eid = eidIndex >= 0 ? args[eidIndex + 1] : undefined
 
 if (!scanOnly && !eid) {
-  console.error('usage: node run.mjs --eid <32-hex-eid>   |   node run.mjs --scan')
+  console.error('usage: node run.mjs --eid <24-hex-eid>   |   node run.mjs --scan')
   process.exit(2)
 }
-if (eid && !/^[0-9a-f]{32}$/i.test(eid)) {
-  console.error(`--eid must be 32 hex characters (got ${eid.length}: ${eid})`)
+// The EID is HKDF L=12 bytes (locality.ts EID_BYTES) -> 24 hex chars.
+// prefix(8) + eid(24) = the 32 hex a 128-bit UUID needs.
+if (eid && !/^[0-9a-f]{24}$/i.test(eid)) {
+  console.error(`--eid must be 24 hex characters (12 bytes, see deriveEid); got ${eid.length}: ${eid}`)
   process.exit(2)
 }
 
