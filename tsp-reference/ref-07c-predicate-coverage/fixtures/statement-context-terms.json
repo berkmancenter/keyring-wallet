@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Rung-local extension context for the #45 StatementCredential shape.",
+    "Authored HERE, never merged into the shipped @bifold/vrc-contexts witnessed-exchange",
+    "context: that file is bundled into the Keyring app and hot-reloaded from source in dev,",
+    "and a byte-level change there alters what the wallet signs. Same discipline ref-06p used",
+    "for its locality terms.",
+    "",
+    "NOTE: digestMultibase is deliberately ABSENT. The W3C credentials/v2 base context already",
+    "defines it (security#digestMultibase, typed security#multibase) and marks it @protected —",
+    "redefining it to any other IRI is a fatal JSON-LD error, which is how this rung found out.",
+    "Check 4 measures the consequence."
+  ],
+  "@context": {
+    "@version": 1.1,
+    "StatementCredential": "https://trustoverip.org/credentials/statement#StatementCredential",
+    "predicate": { "@id": "https://trustoverip.org/credentials/statement#predicate", "@type": "@vocab" },
+    "object": "https://trustoverip.org/credentials/statement#object",
+    "dtg": "https://www.firstperson.network/dtg#",
+    "witnessed": "https://www.firstperson.network/dtg#witnessed",
+    "endorses": "https://www.firstperson.network/dtg#endorses"
+  }
+}

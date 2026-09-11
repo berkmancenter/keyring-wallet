@@ -1,0 +1,26 @@
+{
+  "credential": {
+    "@context": [
+      "https://www.w3.org/ns/credentials/v2",
+      "https://firstperson.network/credentials/dtg/v1"
+    ],
+    "credentialSubject": {
+      "id": "did:example:observed-party",
+      "witnessContext": {
+        "event": "ref-07e cross-implementation",
+        "method": "session-based-challenge",
+        "sessionId": "urn:uuid:5e5510f0-0000-4000-8000-000000000001"
+      },
+      "digest": "zQmfJxkbrGK9Bqs9ZuUduWZoYjUabv2EHCUrahFkzBaQRaV"
+    },
+    "issuer": "did:key:z6MkgG1WNcB7jHYaVXdnEDwqWJ8SH9jfdKYyBAcHP3NvVSL3",
+    "taskContext": "urn:uuid:5e5510f0-0000-4000-8000-000000000001",
+    "type": [
+      "VerifiableCredential",
+      "DTGCredential",
+      "WitnessCredential"
+    ],
+    "validFrom": "2026-09-10T19:49:58Z",
+    "validUntil": "2026-09-17T19:49:58Z"
+  }
+}
