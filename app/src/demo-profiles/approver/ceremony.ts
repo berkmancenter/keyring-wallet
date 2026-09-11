@@ -35,10 +35,13 @@ const LOG_PREFIX = '[Approver]'
  * The requester side has no generic "a response arrived" surface —
  * `trustTaskPromptStore` is for the ANSWERING side's pending prompt. This
  * small EventEmitter is this demo's own analogue for the other direction, so
- * `ApproverHomeBanner` (on wallet A, the requester) can show that the signed
- * decision actually landed rather than trusting the send call silently
- * succeeded. Exported so an e2e test could observe it directly if it ever
- * needed to, though the e2e in this repo asserts through the rendered UI.
+ * `ApproverContactSection` (on wallet A, the requester) can show that the
+ * signed decision actually landed rather than trusting the send call
+ * silently succeeded. Exported so an e2e test could observe it directly if
+ * it ever needed to, though the e2e in this repo asserts through the
+ * rendered UI. Events carry `connectionId` so a listener scoped to one
+ * contact (as `ApproverContactSection` is) can ignore decisions on other
+ * contacts' connections.
  */
 export interface AccessRequestDecisionEvent {
   connectionId: string

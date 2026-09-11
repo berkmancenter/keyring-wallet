@@ -16,16 +16,16 @@
  * because proving a NEGATIVE ("no demo UI anywhere") is cheapest to do
  * reliably by piggybacking on a flow already known to reach every screen a
  * demo profile could have touched — the exchanged-contact card render (where
- * `trading-card` would swap in `TradingCard`) and the Wallet tab's
- * credential-list footer (where `approver` would insert `ApproverHomeBanner`)
- * — in one real run, rather than trusting the unit test
- * (`selectDemoProfiles('none') === []`) alone to speak for the built app. A
- * single device can't stand this test up on its own: proving the negative
- * still means completing a real relationship exchange (so there's an
- * exchanged contact to render, and a "Wallet tab that actually did
- * something" to inspect the footer of), and that exchange itself needs a
- * peer wallet — so this is a two-wallet run like its trading-card/approver
- * precedents, not a single-device smoke check.
+ * `trading-card` would swap in `TradingCard`) and the peer's own Contact
+ * Details screen (where `approver` would insert `ApproverContactSection` via
+ * `COMPONENT_CONTACT_DETAILS_FOOTER`) — in one real run, rather than trusting
+ * the unit test (`selectDemoProfiles('none') === []`) alone to speak for the
+ * built app. A single device can't stand this test up on its own: proving
+ * the negative still means completing a real relationship exchange (so
+ * there's an exchanged contact to render, and its own Contact Details screen
+ * to inspect the footer of), and that exchange itself needs a peer wallet —
+ * so this is a two-wallet run like its trading-card/approver precedents, not
+ * a single-device smoke check.
  *
  * Asserts NEGATIVELY and specifically:
  *   - the exchanged contact renders via the default `ContactCard`
@@ -38,17 +38,16 @@
  *     just an empty screen — combined with the ABSENCE of `TradingCard` and
  *     `TradingCardRarity` (trading-card/TradingCard.tsx's own testIDs; the
  *     only other implementation of `COMPONENT_CONTACT_CARD` this app ships).
- *   - no Approver-demo testID (`ApproverHomeBanner` / `ApproverRequestAccess`
- *     — app/src/demo-profiles/approver/ApproverHomeBanner.tsx) exists
- *     anywhere on the Wallet tab, guarded the same way: alongside the
- *     negative check, assert the Wallet tab's own default empty-credentials
- *     state (`NoCredentials` — Keyring's own `EmptyList` override, see
- *     `app/src/keyring-theme/components/EmptyList.tsx`, registered on
- *     bifold's `ListCredentials.tsx`'s `ListEmptyComponent`; bifold's stock
- *     `EmptyList` uses a different testID, `NoneYet`, which this app never
- *     renders) is actually showing, so a screen that failed to render at all
- *     (or is still transitioning) can't produce a false pass by testing
- *     negative before there was anything on screen to test.
+ *   - no Approver-demo testID (`ApproverContactSection` /
+ *     `ApproverRequestAccess` —
+ *     app/src/demo-profiles/approver/ApproverContactSection.tsx) exists
+ *     anywhere on the peer's Contact Details screen, guarded the same way:
+ *     alongside the negative check, assert `ContactAvatarImage` (the same
+ *     positive marker `assertDefaultContactCardRendered` uses, which
+ *     ContactDetails.tsx also renders on its own avatar) is actually showing,
+ *     so a screen that failed to render at all (or is still transitioning)
+ *     can't produce a false pass by testing negative before there was
+ *     anything on screen to test.
  *
  * Requires a debug APK BUILT with `app/.env`'s `ACTIVE_DEMO_PROFILE=none` —
  * unlike the trading-card/approver runners (which tolerate an APK built with
@@ -83,8 +82,6 @@ import {
   screenshot,
   dumpSource,
   existsTestId,
-  tapTestId,
-  waitForTestId,
   byTextContains,
 } from "./lib/driver.js";
 import {
@@ -93,7 +90,7 @@ import {
   assertTrustTaskExchangeMarkers,
   assertVrcReceived,
   completeOnboarding,
-  dismissTourIfPresent,
+  openContactDetail,
   returnToContacts,
   showRelationshipInvitation,
 } from "./lib/flows.js";
@@ -166,47 +163,39 @@ async function assertDefaultContactCardRendered(driver, peerName, timeout = 6000
 }
 
 /**
- * Assert the Wallet tab shows no trace of the Approver demo
- * (`ApproverHomeBanner`/`ApproverRequestAccess` — its two own testIDs, see
- * ApproverHomeBanner.tsx), guarded by the SAME positive-first pattern as
- * above: confirm the Wallet tab's default empty-credentials state
- * (`NoCredentials` — Keyring's own `EmptyList` override) is actually showing
- * before trusting the absence checks — this run issues no credentials, so
- * `NoCredentials` is what a correctly-rendered, demo-free Wallet tab looks
- * like.
+ * Assert the peer's Contact Details screen shows no trace of the Approver
+ * demo (`ApproverContactSection`/`ApproverRequestAccess` — its two own
+ * testIDs, see ApproverContactSection.tsx), guarded by the SAME
+ * positive-first pattern as above: confirm `ContactAvatarImage` (the peer's
+ * own photo, present since this run's onboarding attaches one — see the
+ * file header) is actually showing before trusting the absence checks, so a
+ * screen that failed to render at all (or is still transitioning) can't
+ * produce a false pass.
  */
-async function assertNoApproverBanner(driver, timeout = 30000) {
-  if (await byTextContains(driver, "View contacts").isExisting().catch(() => false)) {
-    await byTextContains(driver, "View contacts").click();
-    console.log(`[e2e] ${driver.e2ePlatform}: dismissed relationship-confirmed overlay via "View contacts"`);
-  }
-  await returnToContacts(driver).catch(() => {});
-  await waitForTestId(driver, "Wallet", 30000);
-  await tapTestId(driver, "Wallet");
-  // Same tour-overlay caveat run-approver-exchange.js documents: the
-  // credential-list tour auto-starts the first time this screen renders with
-  // zero credentials, which is always true here (no issuance in this run).
-  await dismissTourIfPresent(driver);
+async function assertNoApproverSection(driver, peerName, timeout = 30000) {
+  await openContactDetail(driver, peerName);
 
-  const emptyStateShown = await existsTestId(driver, "NoCredentials", timeout);
-  if (!emptyStateShown) {
-    await screenshot(driver, "wallet-tab-not-rendered");
+  const screenRendered = await existsTestId(driver, "ContactAvatarImage", timeout);
+  if (!screenRendered) {
+    await screenshot(driver, "contact-details-not-rendered");
     throw new Error(
-      `${driver.e2ePlatform}: Wallet tab's default empty-credentials state (NoCredentials) never ` +
-        `appeared within ${timeout}ms — can't trust an absence check on a screen that may not have rendered`
+      `${driver.e2ePlatform}: Contact Details screen for "${peerName}" never rendered within ${timeout}ms — ` +
+        `can't trust an absence check on a screen that may not have rendered`
     );
   }
 
-  const bannerLeaked = await existsTestId(driver, "ApproverHomeBanner", 2000);
+  const sectionLeaked = await existsTestId(driver, "ApproverContactSection", 2000);
   const requestButtonLeaked = await existsTestId(driver, "ApproverRequestAccess", 2000);
-  if (bannerLeaked || requestButtonLeaked) {
+  if (sectionLeaked || requestButtonLeaked) {
     throw new Error(
       `${driver.e2ePlatform}: ACTIVE_DEMO_PROFILE=none build still rendered the Approver demo's ` +
-        `credential-list footer (ApproverHomeBanner=${bannerLeaked}, ApproverRequestAccess=` +
-        `${requestButtonLeaked}) — the approver profile leaked into a plain build`
+        `contact-details footer for "${peerName}" (ApproverContactSection=${sectionLeaked}, ` +
+        `ApproverRequestAccess=${requestButtonLeaked}) — the approver profile leaked into a plain build`
     );
   }
-  console.log(`[e2e] ${driver.e2ePlatform}: Wallet tab confirmed clean of Approver demo UI`);
+  console.log(
+    `[e2e] ${driver.e2ePlatform}: Contact Details screen for "${peerName}" confirmed clean of Approver demo UI`
+  );
 }
 
 let a, b;
@@ -251,13 +240,14 @@ try {
   ]);
 
   // The point of this run: the exchanged card is the plain default on BOTH
-  // sides, and the Wallet tab on BOTH sides is free of the Approver demo —
-  // proving `ACTIVE_DEMO_PROFILE=none` actually kept both installed demo
-  // profiles out of the running container, not just out of the unit test.
+  // sides, and each side's Contact Details screen for the other is free of
+  // the Approver demo — proving `ACTIVE_DEMO_PROFILE=none` actually kept
+  // both installed demo profiles out of the running container, not just out
+  // of the unit test.
   await assertDefaultContactCardRendered(a, "Bob Baker");
   await assertDefaultContactCardRendered(b, "Alice Anderson");
-  await assertNoApproverBanner(a);
-  await assertNoApproverBanner(b);
+  await assertNoApproverSection(a, "Bob Baker");
+  await assertNoApproverSection(b, "Alice Anderson");
 
   printSuccess("plain-build-smoke");
   process.exitCode = 0;
