@@ -3,7 +3,7 @@ name: Code Quality
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, labeled, edited]
 
 jobs:
   lint:
@@ -47,6 +47,27 @@ jobs:
       - name: Check types
         working-directory: app
         run: yarn typecheck
+
+      # e2e/ is a standalone npm package, deliberately outside the yarn
+      # workspaces, so none of the steps above touch it. A syntax error there
+      # reaches main through a fully green CI run and breaks every suite at
+      # import time -- which is exactly what happened in #33. This is the
+      # cheapest gate that would have caught it; it needs no install, since
+      # node --check parses without resolving imports.
+      - name: Parse-check the e2e harness
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r f; do
+            # --input-type=module, NOT a plain `node --check <file>`: e2e/ is
+            # "type": "module" and `node --check` parses a path as CommonJS,
+            # where a stray JSDoc body after a `}` is legal-looking enough to
+            # pass. Verified against the #33 defect: `node --check` exits 0 on
+            # it, this exits 1.
+            node --input-type=module --check < "$f" \
+              || { echo "::error file=$f::$f is not valid ES module JavaScript"; fail=1; }
+          done < <(find e2e -name '*.js' -not -path 'e2e/node_modules/*' -not -path 'e2e/artifacts/*')
+          exit $fail
 
   test:
     runs-on: ubuntu-22.04
