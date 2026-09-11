@@ -5,6 +5,7 @@ const escape = require('escape-string-regexp')
 // metro 0.83+ moved internal files under exports "./private/*"
 const exclusionListModule = require('metro-config/private/defaults/exclusionList')
 const exclusionList = exclusionListModule.default ?? exclusionListModule
+const { isDemoProfilesBarrelImport } = require('./metro/isDemoProfilesImport')
 require('dotenv').config()
 
 const packageDirs = [
@@ -48,6 +49,16 @@ for (const dir of packageDirs) {
 // bifold workspace deps hoist to bifold/node_modules; metro must watch it to
 // resolve them from bifold's built lib output (production bundles)
 const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', 'node_modules'))
+
+// ACTIVE_DEMO_PROFILE=none already means "no demo profiles" at RUNTIME (see
+// src/demo-profiles/index.ts's selectDemoProfiles) — every installed
+// profile's code still ships in the bundle, just unregistered. This reuses
+// the SAME lever to also mean "no demo profiles in the BUNDLE": one flag,
+// one README table, no way for "runtime says none" and "bundle still has
+// them" to drift apart. See src/demo-profiles/README.md's "Stripping demos
+// from a build" section.
+const stripDemoProfiles = process.env.ACTIVE_DEMO_PROFILE === 'none'
+const demoProfilesStubPath = path.join(__dirname, 'metro', 'demoProfilesStub.ts')
 
 const watchFolders = [...packageDirs, bifoldNodeModules]
 
@@ -130,6 +141,19 @@ module.exports = (async () => {
       nodeModulesPaths: [path.join(__dirname, 'node_modules'), bifoldNodeModules],
       // Force specific module imports to use our polyfilled/patched versions
       resolveRequest: (context, moduleName, platform) => {
+        // ACTIVE_DEMO_PROFILE=none: swap the demo-profiles barrel import for
+        // a zero-dependency stub (see demoProfilesStub.ts's own comment).
+        // App.tsx is the ONLY file that imports './src/demo-profiles' (no
+        // other file reaches into demo-profiles/ at all — enforced by
+        // convention, see src/demo-profiles/README.md), so intercepting that
+        // one specifier is sufficient: Metro's dependency graph then never
+        // has an edge into approver/, trading-card/, or starter/, and none
+        // of that code is walked, transformed, or included in the bundle —
+        // not just unregistered at runtime the way ACTIVE_DEMO_PROFILE=none
+        // already worked before this rule existed.
+        if (stripDemoProfiles && isDemoProfilesBarrelImport(moduleName)) {
+          return { filePath: demoProfilesStubPath, type: 'sourceFile' }
+        }
         // Singleton packages: always resolve from the app's node_modules so
         // bifold sources never load a second copy (bifold/node_modules is on
         // nodeModulesPaths, which would otherwise win for react etc.)

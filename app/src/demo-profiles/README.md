@@ -77,15 +77,52 @@ Nothing in `app/.env` has to change for this, and no branding is fetched over
 the network — but `app/.env`'s `ACTIVE_DEMO_PROFILE` is how you pick which
 profiles that registers:
 
-| `ACTIVE_DEMO_PROFILE` | Result |
-| ---------------------- | ------------------------------------------- |
-| unset (the default)    | every installed profile, all at once |
-| a profile's `id` (`trading-card`, `approver`) | only that one |
+| `ACTIVE_DEMO_PROFILE`                          | Result                                                    |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| unset (the default)                            | every installed profile, all at once                      |
+| a profile's `id` (`trading-card`, `approver`)  | only that one                                             |
 | an id that doesn't match any installed profile | every installed profile (a typo isn't a request for zero) |
-| `none` | no demo profiles at all — a plain Keyring build |
+| `none`                                         | no demo profiles at all — a plain Keyring build           |
 
 `none` is the one to reach for if you want to build and run Keyring itself,
-with none of this directory's demos active.
+with none of this directory's demos active — see "Stripping demos from a
+build" below for what `none` does beyond the runtime table above.
+
+## A worked demo: `approver/`
+
+A new Trust Task type proven end to end, not just the VRC exchange skinned
+differently the way `trading-card/` is: one contact asks another — over an
+already-established VRC relationship — for access to something concrete
+("may I see your shared photo album"), the other side approves or denies,
+and the signed decision travels back over the same connection. No new
+credential and no new identity mechanism: proof rides the VRC relationship
+DID the two wallets already hold (see `approver/accessRequestSpec.ts`'s own
+comment on why, and
+`docs/plans/reference-app-sdk-packaging/2026-09-06-agent.md` for the fuller
+narrative behind the scenario).
+
+The UI lives per-contact, on that contact's own Contact Details screen
+(`ApproverContactSection`) rather than on a shared screen — a sent request
+shows a "waiting for a response" state with a local-only cancel (it clears
+this wallet's own display; it does not tell the counterparty), and the
+answer, once it lands, names what was actually decided rather than just
+approved/denied in the abstract. A contact not currently on screen still
+learns a request arrived via `ApproverGlobalListener`'s toast, which
+navigates straight to that contact's own Contact Details screen.
+
+Three registrations:
+
+| Token                              | What the profile puts there                                           |
+| ---------------------------------- | --------------------------------------------------------------------- |
+| the open Trust Task registry       | `approver/access-request/0.1`, this profile's own task type           |
+| `COMPONENT_CONTACT_DETAILS_FOOTER` | `ApproverContactSection` — the trigger + inbox, scoped to one contact |
+| `COMPONENT_APP_GLOBAL_LISTENER`    | `ApproverGlobalListener` — the app-wide toast for a request elsewhere |
+
+The latter two tokens are generic `@bifold/core` extension seams (their
+default is a no-op, same as `COMPONENT_CRED_LIST_FOOTER`) — `approver/` is
+their first consumer, not something baked into core for this demo
+specifically. See `ApproverProfile.ts`'s own comment for the fuller
+reasoning, including why the UI moved off an earlier Wallet-tab placement.
 
 ## The `DemoProfile` shape
 
@@ -102,3 +139,49 @@ exercise that design before any outside developer sees it.
 A profile should register what it owns — its own credential renderer, its own
 Trust Task type — and leave shared app chrome alone: two profiles registering
 the same token means the last one wins.
+
+## Stripping demos from a build
+
+`ACTIVE_DEMO_PROFILE=none` drives two independent levers, one for RUNTIME
+behaviour and one for the BUNDLE — both keyed off the same value on purpose,
+so there is no way for "runtime says no demos" and "the bundle still ships
+them" to drift apart:
+
+- **Runtime** (the table above): `none` makes `selectDemoProfiles` return
+  `[]`, so `registerDemoProfiles` registers nothing — no demo UI renders, no
+  extra Trust Task type is registered. Every installed profile's CODE still
+  ships in the JS bundle, just unregistered and inert. Proven by
+  `e2e/run-plain-build-smoke.js`, which fails if any trace of either demo
+  leaks into a `none` build.
+
+- **Bundle**: `app/metro.config.js`'s `resolveRequest` also checks
+  `ACTIVE_DEMO_PROFILE`. When it's `none`, any import of the demo-profiles
+  barrel (`./src/demo-profiles` — `App.tsx` is the only file that imports
+  it; nothing else reaches into this directory, which is exactly what makes
+  intercepting that one specifier sufficient) is swapped for
+  `app/metro/demoProfilesStub.ts`: a zero-dependency stand-in with the same
+  public shape (`registerDemoProfiles`, `selectDemoProfiles`,
+  `installedDemoProfiles`, the `DemoProfile` type) but no code inside it —
+  the `DemoProfile` shape is duplicated rather than imported from `types.ts`,
+  so the stub has no dependency edge back into this directory of any kind.
+  Metro's dependency graph then never has a reason to walk into `approver/`,
+  `trading-card/`, or `starter/` from `App.tsx` — none of those files are
+  read, transformed, or included in the bundle, not just unregistered at
+  runtime.
+  - `app/metro/isDemoProfilesImport.js` holds the matching predicate, pulled
+    out of `metro.config.js` itself purely so it is unit-testable without
+    booting Metro's whole async config pipeline in a jest run.
+  - `app/__tests__/metro/` covers both that predicate (including that it does
+    NOT match a deep import into one profile's own internals, or an
+    unrelated module that merely contains the substring `demo-profiles`) and
+    that the stub's exported names stay in sync with the real module's.
+
+**This is a build-time decision, not a runtime one** — the same rule
+`MEDIATOR_URL` and every other baked `app/.env` value already follows (see
+the repo root `CLAUDE.md`). Metro's own read of `.env` happens once, when its
+dev server starts (`require('dotenv').config()` at the top of
+`metro.config.js`); `Config.ACTIVE_DEMO_PROFILE`, which `App.tsx` reads via
+`react-native-config`, is baked into the native binary at compile time.
+Editing `.env` and expecting an already-running Metro or an already-built APK
+to pick up the change will not work — restart Metro for the bundle-time
+effect, and rebuild the native app for `Config` to read the new value.
