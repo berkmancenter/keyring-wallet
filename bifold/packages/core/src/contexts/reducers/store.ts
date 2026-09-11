@@ -72,6 +72,8 @@ enum PreferencesDispatchAction {
   GENERIC_ERROR_MESSAGES = 'preferences/genericErrorMessages',
   REMOVE_BANNER_MESSAGE = 'REMOVE_BANNER_MESSAGE',
   USE_WITNESSING = 'preferences/useWitnessing',
+  USE_LOCALITY_CONFIRMATION = 'preferences/useLocalityConfirmation',
+  MARK_LOCALITY_PREFLIGHT_SEEN = 'preferences/markLocalityPreflightSeen',
 }
 
 enum ToursDispatchAction {
@@ -370,6 +372,42 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       const preferences = {
         ...state.preferences,
         useWitnessing: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_LOCALITY_CONFIRMATION: {
+      // Default true (locality-plan.md §8.1) — deliberately NOT the `?? false`
+      // pattern used above, which is fine there only because that flag's
+      // AsyncStorage read path also defaults false; this one's must default
+      // true everywhere or it repeats keyring-bifold#38.
+      const choice = (action?.payload ?? []).pop() ?? true
+      const preferences = {
+        ...state.preferences,
+        useLocalityConfirmation: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.MARK_LOCALITY_PREFLIGHT_SEEN: {
+      // One-way: the witness-connect pre-flight sheet (§8.4 row 2, §10.3
+      // item 8) fires at most once per install, whichever way the user
+      // answers it — there is no un-seeing it.
+      const preferences = {
+        ...state.preferences,
+        hasSeenLocalityPreflight: true,
       }
       const newState = {
         ...state,

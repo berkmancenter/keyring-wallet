@@ -135,6 +135,17 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
             activeColor: '#A349A4',
           },
         },
+        {
+          title: t('Settings.LocalityConfirmation'),
+          subtitle: t('Settings.LocalityConfirmationSubtitle'),
+          accessibilityLabel: t('Settings.ToggleLocalityConfirmation'),
+          testID: testIdWithKey('LocalityConfirmation'),
+          toggle: {
+            value: store.preferences.useLocalityConfirmation,
+            onValueChange: () => navigation.navigate(Screens.ToggleLocalityConfirmation),
+            activeColor: '#A349A4',
+          },
+        },
         // TODO: Re-add witness toggle — users manage witnessing from the witness connection screen icon section
         // {
         //   title: t('Settings.Witnessing'),

@@ -1,0 +1,57 @@
+name: Commit Requirements
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dco-and-signature:
+    runs-on: ubuntu-22.04
+    name: DCO sign-off and commit signature
+    steps:
+      - name: Check every commit in this PR is signed off and cryptographically signed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          fail=0
+
+          commits=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/commits" --paginate --jq '.[] | @base64')
+
+          for row in $commits; do
+            data=$(echo "$row" | base64 -d)
+            sha=$(echo "$data" | jq -r '.sha')
+            author_login=$(echo "$data" | jq -r '.author.login // empty')
+            message=$(echo "$data" | jq -r '.commit.message')
+            verified=$(echo "$data" | jq -r '.commit.verification.verified')
+            reason=$(echo "$data" | jq -r '.commit.verification.reason')
+
+            # Dependabot can't add a DCO sign-off, but its commits are already
+            # GitHub-verified, so only the sign-off check is skipped for it.
+            if [ "$author_login" = "dependabot[bot]" ]; then
+              if [ "$verified" != "true" ]; then
+                echo "::error::Commit $sha (dependabot) is not cryptographically verified by GitHub (reason: $reason)"
+                fail=1
+              fi
+              continue
+            fi
+
+            if ! printf '%s\n' "$message" | grep -qE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "::error::Commit $sha is missing a DCO Signed-off-by trailer (see CONTRIBUTING.md)"
+              fail=1
+            fi
+
+            if [ "$verified" != "true" ]; then
+              echo "::error::Commit $sha is not cryptographically verified by GitHub (reason: $reason). Configure commit signing: https://docs.github.com/en/authentication/managing-commit-signature-verification"
+              fail=1
+            fi
+          done
+
+          exit $fail

@@ -9,6 +9,7 @@
 import * as witnessSession from '@openvtc/trust-tasks/witness/session/0.1/payload'
 import * as witnessSubmit from '@openvtc/trust-tasks/witness/session/submit/0.1/payload'
 
+import { DeviceLocalityProvider, LOCALITY_EXT_NAMESPACE, LocalityTranscript, transcriptDigestMultibase } from '../deviceLocality'
 import { digestMultibase } from '../documentProof'
 import { resolveWitnessResponse, runWitnessSession } from '../witnessCeremony'
 
@@ -58,9 +59,19 @@ function makeFakeAgent() {
 /**
  * A scripted witness: answers the session with a challenge, the submit with
  * a VWC — through the same resolver the inbound dispatch uses. `mutate` lets
- * a test corrupt the VWC response.
+ * a test corrupt the VWC response; `challengeExt`/`observationFor` let a
+ * test drive the locality leg (sensor directive on the challenge, and the
+ * witness's own claimed observation on the VWC response — as a function of
+ * the submit document actually sent, so a test can react to what the
+ * device really did).
  */
-function makeWitness(mutate?: (vwcResponse: Record<string, unknown>, sessionDoc: Record<string, unknown>) => void) {
+function makeWitness(
+  mutate?: (vwcResponse: Record<string, unknown>, sessionDoc: Record<string, unknown>) => void,
+  options?: {
+    challengeExt?: Record<string, unknown>
+    observationFor?: (submitDoc: Record<string, unknown>) => Record<string, unknown> | undefined
+  }
+) {
   const sent: Record<string, unknown>[] = []
   let sessionDoc: Record<string, unknown> | undefined
   const sendDocument = async (_agent: unknown, _connectionId: string, document: Record<string, unknown>) => {
@@ -76,7 +87,11 @@ function makeWitness(mutate?: (vwcResponse: Record<string, unknown>, sessionDoc:
           issuer: 'did:peer:4witness',
           recipient: 'did:peer:4me',
           issuedAt: new Date().toISOString(),
-          payload: { challenge: 'nonce-1', domain: 'witness.example' },
+          payload: {
+            challenge: 'nonce-1',
+            domain: 'witness.example',
+            ...(options?.challengeExt ? { ext: options.challengeExt } : {}),
+          },
           proof: STUB_PROOF,
         })
       }, 0)
@@ -93,6 +108,7 @@ function makeWitness(mutate?: (vwcResponse: Record<string, unknown>, sessionDoc:
         },
         proof: { type: 'DataIntegrityProof', proofValue: 'zvwc' },
       }
+      const observationExt = options?.observationFor?.(document)
       const response: Record<string, unknown> = {
         id: 'resp-vwc',
         type: `${witnessSubmit.TYPE_URI}#response`,
@@ -101,7 +117,11 @@ function makeWitness(mutate?: (vwcResponse: Record<string, unknown>, sessionDoc:
         issuer: 'did:peer:4witness',
         recipient: 'did:peer:4me',
         issuedAt: new Date().toISOString(),
-        payload: { vwc, vwcDigestMultibase: digestMultibase(vwc) },
+        payload: {
+          vwc,
+          vwcDigestMultibase: digestMultibase(vwc),
+          ...(observationExt ? { ext: observationExt } : {}),
+        },
         proof: STUB_PROOF,
       }
       if (mutate) mutate(response, sessionDoc as Record<string, unknown>)
@@ -109,6 +129,24 @@ function makeWitness(mutate?: (vwcResponse: Record<string, unknown>, sessionDoc:
     }
   }
   return { sendDocument, sent }
+}
+
+const FAKE_TRANSCRIPT: LocalityTranscript = {
+  method: 'ble-challenge-response/0.1',
+  taskDigestMultibase: 'zStubTaskDigest',
+  challenge: 'nonce-1',
+  sensorNonce: 'sensor-nonce-abc',
+  sensorDid: 'did:peer:4witness',
+  devicePublicKey: 'deviceKeyBase64',
+  signature: 'sigBase64url',
+  hardwareAttestation: 'verified',
+}
+
+function fakeDeviceLocalityProvider(transcript: LocalityTranscript | null): DeviceLocalityProvider {
+  return {
+    name: 'fake',
+    respondToSensor: async () => transcript,
+  }
 }
 
 const baseOptions = (witness: ReturnType<typeof makeWitness>, retained: Record<string, unknown>[]) => ({
@@ -198,5 +236,134 @@ describe('runWitnessSession', () => {
 
     await expect(runWitnessSession(agent, baseOptions(witness, []))).rejects.toThrow('vwcDigestMultibase')
     expect(storedCredentials).toHaveLength(0)
+  })
+
+  describe('locality (locality-plan.md §10.3 item 10)', () => {
+    test('an explicit decline is recorded in the session request ext, not omitted', async () => {
+      const witness = makeWitness()
+      const { agent } = makeFakeAgent()
+      await runWitnessSession(agent, { ...baseOptions(witness, []), localityOffered: false })
+
+      const sessionDoc = witness.sent[0] as { payload: { ext?: Record<string, unknown> } }
+      expect(sessionDoc.payload.ext).toEqual({
+        [LOCALITY_EXT_NAMESPACE]: { locality: { offered: false, reason: 'declinedByHolder' } },
+      })
+    })
+
+    test('omitting localityOffered entirely means no ext at all — distinct from an explicit decline', async () => {
+      const witness = makeWitness()
+      const { agent } = makeFakeAgent()
+      await runWitnessSession(agent, baseOptions(witness, [])) // no localityOffered
+
+      const sessionDoc = witness.sent[0] as { payload: { ext?: unknown } }
+      expect(sessionDoc.payload.ext).toBeUndefined()
+    })
+
+    test('an offer plus a sensor directive runs the radio phase and attaches the transcript to the submit ext', async () => {
+      const directive = {
+        [LOCALITY_EXT_NAMESPACE]: {
+          locality: { policy: 'offered', method: 'ble-challenge-response/0.1', sensorDid: 'did:peer:4witness', windowSeconds: 120 },
+        },
+      }
+      const witness = makeWitness(undefined, { challengeExt: directive })
+      const { agent } = makeFakeAgent()
+      const provider = fakeDeviceLocalityProvider(FAKE_TRANSCRIPT)
+
+      const outcome = await runWitnessSession(agent, {
+        ...baseOptions(witness, []),
+        localityOffered: true,
+        deviceLocalityProvider: provider,
+      })
+
+      const submitDoc = witness.sent[1] as { payload: { ext?: Record<string, unknown> } }
+      expect(submitDoc.payload.ext).toEqual({ [LOCALITY_EXT_NAMESPACE]: { locality: { transcript: FAKE_TRANSCRIPT } } })
+      expect(outcome.locality).toEqual({ transcriptProduced: true })
+    })
+
+    test('windowLost (provider resolves null) is recorded honestly — no transcript, session still completes', async () => {
+      const directive = {
+        [LOCALITY_EXT_NAMESPACE]: { locality: { policy: 'offered', method: 'ble-challenge-response/0.1', sensorDid: 'did:peer:4witness', windowSeconds: 120 } },
+      }
+      const witness = makeWitness(undefined, { challengeExt: directive })
+      const { agent, storedCredentials } = makeFakeAgent()
+
+      const outcome = await runWitnessSession(agent, {
+        ...baseOptions(witness, []),
+        localityOffered: true,
+        deviceLocalityProvider: fakeDeviceLocalityProvider(null),
+      })
+
+      const submitDoc = witness.sent[1] as { payload: { ext?: unknown } }
+      expect(submitDoc.payload.ext).toBeUndefined() // no transcript to attach
+      expect(outcome.locality).toEqual({ transcriptProduced: false })
+      expect(storedCredentials).toHaveLength(1) // the exchange still completes
+    })
+
+    test('a witness claiming a confirmed observation this device never produced a transcript for is refused', async () => {
+      // No directive at all this time — the device never ran the radio
+      // phase — but the witness's #response claims a confirmed observation
+      // anyway. Exactly the case item 10 exists to catch.
+      const witness = makeWitness(undefined, {
+        observationFor: () => ({
+          [LOCALITY_EXT_NAMESPACE]: {
+            locality: { observation: { confirmed: true, transcriptDigestMultibase: transcriptDigestMultibase(FAKE_TRANSCRIPT) } },
+          },
+        }),
+      })
+      const { agent, storedCredentials } = makeFakeAgent()
+
+      await expect(
+        runWitnessSession(agent, { ...baseOptions(witness, []), localityOffered: true })
+      ).rejects.toThrow('never produced a transcript')
+      expect(storedCredentials).toHaveLength(0)
+    })
+
+    test("a witness claiming an observation whose digest doesn't match this device's real transcript is refused", async () => {
+      const directive = {
+        [LOCALITY_EXT_NAMESPACE]: { locality: { policy: 'offered', method: 'ble-challenge-response/0.1', sensorDid: 'did:peer:4witness', windowSeconds: 120 } },
+      }
+      const witness = makeWitness(undefined, {
+        challengeExt: directive,
+        observationFor: () => ({
+          [LOCALITY_EXT_NAMESPACE]: {
+            locality: { observation: { confirmed: true, transcriptDigestMultibase: 'zSomeOtherTranscriptEntirely' } },
+          },
+        }),
+      })
+      const { agent, storedCredentials } = makeFakeAgent()
+
+      await expect(
+        runWitnessSession(agent, {
+          ...baseOptions(witness, []),
+          localityOffered: true,
+          deviceLocalityProvider: fakeDeviceLocalityProvider(FAKE_TRANSCRIPT),
+        })
+      ).rejects.toThrow("does not match this device's own transcript")
+      expect(storedCredentials).toHaveLength(0)
+    })
+
+    test('a witness observation that genuinely matches the real transcript completes normally', async () => {
+      const directive = {
+        [LOCALITY_EXT_NAMESPACE]: { locality: { policy: 'offered', method: 'ble-challenge-response/0.1', sensorDid: 'did:peer:4witness', windowSeconds: 120 } },
+      }
+      const witness = makeWitness(undefined, {
+        challengeExt: directive,
+        observationFor: () => ({
+          [LOCALITY_EXT_NAMESPACE]: {
+            locality: { observation: { confirmed: true, transcriptDigestMultibase: transcriptDigestMultibase(FAKE_TRANSCRIPT) } },
+          },
+        }),
+      })
+      const { agent, storedCredentials } = makeFakeAgent()
+
+      const outcome = await runWitnessSession(agent, {
+        ...baseOptions(witness, []),
+        localityOffered: true,
+        deviceLocalityProvider: fakeDeviceLocalityProvider(FAKE_TRANSCRIPT),
+      })
+
+      expect(outcome.locality).toEqual({ transcriptProduced: true })
+      expect(storedCredentials).toHaveLength(1)
+    })
   })
 })

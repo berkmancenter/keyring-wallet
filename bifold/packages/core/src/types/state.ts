@@ -42,6 +42,23 @@ export interface Preferences {
   bannerMessages: BannerMessage[]
   genericErrorMessages: boolean
   useWitnessing: boolean
+  /**
+   * Locality confirmation (docs/plans/locality-plan.md §8.1) — default TRUE,
+   * in the store default below AND everywhere this is read from
+   * AsyncStorage (vrc-manager.ts's `useHardwareAttestation` reads it with
+   * `?? true` while the store here defaults it to `false` — two different
+   * defaults for the same flag, reported as keyring-bifold#38. Do not repeat
+   * that pattern for this flag.)
+   */
+  useLocalityConfirmation: boolean
+  /**
+   * Whether the witness-connect pre-flight sheet (docs/plans/locality-plan.md
+   * §8.4 row 2, §10.3 item 8) has already been shown once this install.
+   * Default false everywhere — no split-default risk here, unlike
+   * `useLocalityConfirmation` above, because both the store default and
+   * every read of this flag agree it starts false.
+   */
+  hasSeenLocalityPreflight: boolean
 }
 
 export interface Tours {

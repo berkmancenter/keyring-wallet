@@ -25,6 +25,8 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import * as credentialExchangePresent from '@openvtc/trust-tasks/credential-exchange/present/0.1/payload'
+import * as credentialExchangeQuery from '@openvtc/trust-tasks/credential-exchange/query/0.1/payload'
 import * as discovery from '@openvtc/trust-tasks/trust-task-discovery/0.1/payload'
 import * as issue from '@openvtc/trust-tasks/vrc/relationships/issue/0.1/payload'
 import * as propose from '@openvtc/trust-tasks/vrc/relationships/propose/0.1/payload'
@@ -32,6 +34,7 @@ import * as witnessSession from '@openvtc/trust-tasks/witness/session/0.1/payloa
 import * as witnessSubmit from '@openvtc/trust-tasks/witness/session/submit/0.1/payload'
 import {
   ClaimFormat,
+  DcqlService,
   JsonTransformer,
   W3cCredential,
   W3cCredentialRecord,
@@ -45,15 +48,19 @@ import {
   getConnectedWitnessConnectionId,
   getOrCreateRelationshipDid,
   getVrcJsonLdProofOptions,
+  isLocalityConfirmationPreferred,
   isWitnessingPreferred,
   issueRCardForAcceptedExchange,
   prepareVrcCredentialWithEvidence,
 } from '../vrc/vrc-manager'
 import { RelationshipDidRepository } from '../vrc/repositories/RelationshipDidRepository'
 import { vrcFlowStore } from '../vrc/witnessStatusStore'
+import { credentialExchangeStore } from './credentialExchangeStore'
 
 import type { CarriageDocumentHandler } from '@bifold/trust-tasks'
 
+import { LOCALITY_EXT_NAMESPACE } from './deviceLocality'
+import { createDeviceLocalityProvider } from './AndroidBleDeviceLocalityProvider'
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
@@ -115,6 +122,7 @@ export const SUPPORTED_TASK_TYPES = [
   propose.TYPE_URI,
   issue.TYPE_URI,
   witnessShare.TYPE_URI,
+  credentialExchangeQuery.TYPE_URI,
 ] as const
 
 /** The slug of a Type URI: authority and version stripped. */
@@ -273,6 +281,75 @@ async function peerSupportsTaskType(agent: Agent, connectionId: string, typeUri:
 }
 
 /**
+ * Send our trust-task-discovery query on a witness connection specifically
+ * (locality-plan.md §10.3 item 8) — `sendDiscoveryQuery` is connection-
+ * agnostic and its own patterns already include `witness/*`, so this is a
+ * thin, intention-revealing wrapper for the witness-connect call site.
+ * Fire-and-forget, same as the peer-connection callers of the underlying
+ * function.
+ */
+export async function queryWitnessDiscovery(agent: Agent, witnessConnectionId: string): Promise<void> {
+  await sendDiscoveryQuery(agent, witnessConnectionId)
+}
+
+export type WitnessLocalitySupport = 'required' | 'offered' | 'off'
+
+/**
+ * A connected witness's discovery-declared locality policy (locality-plan.md
+ * §8.2): `required` marks `witness/session` with `requiredExt` for the
+ * locality namespace, `offered` marks it with `offeredExt`, and `off` (or a
+ * row with neither marker) means this witness has no locality leg at all.
+ * Returns null when no discovery answer has arrived yet — a caller gating on
+ * this (e.g. the witness-connect pre-flight sheet, before Bluetooth
+ * permission is requested) must treat "not yet known" as distinct from
+ * "known off", exactly as `peerSupportsTaskType` does above.
+ */
+export async function getWitnessLocalitySupport(
+  agent: Agent,
+  witnessConnectionId: string
+): Promise<WitnessLocalitySupport | null> {
+  const connection = await agent.modules.didcomm.connections.getById(witnessConnectionId)
+  if (!connection.theirDid) return null
+  const documentRepository = agent.dependencyManager.container.resolve(TrustTaskDocumentRepository)
+  const responses = await documentRepository.findByQuery(agent.context, {
+    typeUri: discovery.TYPE_URI,
+    connectionId: witnessConnectionId,
+    role: 'response',
+  })
+  const fromWitness = responses.filter(
+    (r) => r.document.type === `${discovery.TYPE_URI}#response` && r.document.issuer === connection.theirDid
+  )
+  if (fromWitness.length === 0) return null
+
+  const entries = fromWitness.flatMap(
+    (r) =>
+      (
+        r.document as {
+          payload?: { supportedTypes?: (string | { type: string; requiredExt?: string[]; offeredExt?: string[] })[] }
+        }
+      ).payload?.supportedTypes ?? []
+  )
+  const sessionEntries = entries.filter(
+    (entry): entry is { type: string; requiredExt?: string[]; offeredExt?: string[] } =>
+      typeof entry !== 'string' && entry.type === witnessSession.TYPE_URI
+  )
+  if (sessionEntries.some((entry) => (entry.requiredExt ?? []).includes(LOCALITY_EXT_NAMESPACE))) return 'required'
+  if (sessionEntries.some((entry) => (entry.offeredExt ?? []).includes(LOCALITY_EXT_NAMESPACE))) return 'offered'
+  return 'off'
+}
+
+/**
+ * Whether a connected witness's discovery answer marks `witness/session` as
+ * requiring the locality `ext` namespace. Returns null when no answer has
+ * arrived yet — see `getWitnessLocalitySupport`, which this is a thin
+ * boolean projection of, kept for callers that only care about `required`.
+ */
+export async function getWitnessLocalityRequirement(agent: Agent, witnessConnectionId: string): Promise<boolean | null> {
+  const support = await getWitnessLocalitySupport(agent, witnessConnectionId)
+  return support === null ? null : support === 'required'
+}
+
+/**
  * Open the relationship exchange itself — called once discovery confirms the
  * peer supports the propose. Idempotent per connection.
  */
@@ -322,7 +399,7 @@ async function openRelationshipExchange(agent: Agent, connectionId: string): Pro
  * and the VP proof stays Ed25519Signature2018 until the witness dual-verifies
  * Data Integrity presentations (docs/CRYPTO_SUITE_FOLLOWUP.md).
  */
-async function buildChallengeBoundVp(
+export async function buildChallengeBoundVp(
   agent: Agent,
   signedVcJson: Record<string, unknown>,
   verificationMethodId: string,
@@ -420,6 +497,15 @@ export function setupTrustTasksInbound(agent: Agent): void {
       } else {
         await resolved.registration.handleRequest(agent, service, document, ctx)
       }
+      return
+    }
+
+    if (type === credentialExchangeQuery.TYPE_URI) {
+      await handleInboundCredentialExchangeQuery(agent, service, document, {
+        connectionId: context.connectionId,
+        senderDid: context.senderDid,
+        recipientDid: context.recipientDid,
+      })
       return
     }
 
@@ -783,6 +869,15 @@ async function deliverVrcViaTrustTaskForExchangeInner(
           buildChallengeBoundVp(agent, signedVc, verificationMethodId, challenge, domain),
         sendDocument: sendTrustTaskDocument,
         retain: (doc, role) => service.retain(agent.context, doc, role, witnessConnectionId),
+        // locality-plan.md §8.1/§10.3 item 10: offer per the user's own
+        // setting. `createDeviceLocalityProvider` resolves to the real
+        // Android BLE peripheral when the native module is linked (item 9,
+        // verified live end to end 2026-08-21) and falls back to
+        // `NullDeviceLocalityProvider` everywhere else (iOS, or Android
+        // without the module) — the ext protocol and cross-check still run
+        // for real in that case; they just never receive a transcript.
+        localityOffered: await isLocalityConfirmationPreferred(),
+        deviceLocalityProvider: createDeviceLocalityProvider(agent),
       })
       logger.info(`${LOG_PREFIX} witness session complete — VWC bound and stored (exchange ${exchangeId})`)
 
@@ -1349,3 +1444,203 @@ function registerBuiltinTrustTasks(): void {
 }
 
 registerBuiltinTrustTasks()
+
+/**
+ * Pending credential-exchange queries awaiting the user's consent, keyed by
+ * the QUERY DOCUMENT's own id (not connectionId — unlike a relationship
+ * proposal, a wallet can plausibly hold open queries from more than one
+ * verifier connection at once).
+ */
+const pendingCredentialExchangeQueries = new Map<
+  string,
+  { document: Record<string, unknown>; context: InboundContext }
+>()
+
+/**
+ * Verifier asks to see a credential (`credential-exchange/query`): validate
+ * through the pipeline, check whether the wallet actually holds something
+ * satisfying the DCQL query, and — only if it does — surface it for USER
+ * CONSENT. No `#response`/error variant exists for this spec (see the
+ * payload's own doc comment): an unsatisfiable query or a declined prompt
+ * both simply produce no `credential-exchange/present` reply.
+ */
+async function handleInboundCredentialExchangeQuery(
+  agent: Agent,
+  service: TrustTasksService,
+  document: Record<string, unknown>,
+  context: InboundContext
+): Promise<void> {
+  const logger = agent.config.logger
+  const outcome = await service.consume(agent.context, {
+    spec: credentialExchangeQuery.SPEC as never,
+    document,
+    myDid: context.recipientDid,
+    senderDid: context.senderDid,
+    connectionId: context.connectionId,
+    // Defer the answer to the user: a handler returning nothing is an
+    // 'accepted' outcome with no reply on the wire (mirrors handleInboundPropose).
+    handler: async () => undefined,
+  })
+
+  if (outcome.kind === 'rejected') {
+    logger.warn(
+      `${LOG_PREFIX} credential-exchange query rejected: ${JSON.stringify((outcome as { error?: { payload?: unknown } }).error?.payload)}`
+    )
+    return
+  }
+
+  const payload = (document as { payload: credentialExchangeQuery.CredentialExchangeQueryPayload }).payload
+  let match: Awaited<ReturnType<typeof matchDcqlQuery>>
+  try {
+    match = await matchDcqlQuery(agent, payload.dcql_query as never)
+  } catch (e) {
+    // A DCQL-matching failure should never look like a silent, opaque
+    // Credo-level "Error handling message" with no explanation — log it
+    // clearly through this module's own conventions instead.
+    logger.error(`${LOG_PREFIX} credential-exchange query matching failed: ${(e as Error).message}`)
+    return
+  }
+  if (!match) {
+    logger.info(
+      `${LOG_PREFIX} credential-exchange query has no satisfying credential — no prompt shown (query ${document.id})`
+    )
+    return
+  }
+
+  const connection = await agent.modules.didcomm.connections.getById(context.connectionId)
+  const queryId = String(document.id)
+  pendingCredentialExchangeQueries.set(queryId, { document, context })
+  credentialExchangeStore.setQueryPrompt({
+    queryId,
+    connectionId: context.connectionId,
+    verifierLabel: connection.theirLabel ?? 'Unknown Verifier',
+    purpose: payload.purpose,
+  })
+  logger.info(`${LOG_PREFIX} credential-exchange query received — awaiting user consent (query ${document.id})`)
+}
+
+/**
+ * The wallet's own credential matching a DCQL query, if any. Confirms
+ * satisfiability via Credo's `DcqlService` (needs only the bare DCQL query
+ * object — no OID4VP authorization-request envelope; this Trust Task
+ * carries the query verbatim, so none exists), then selects the concrete
+ * record directly against `agent.w3cCredentials` rather than through
+ * Credo's `openid4vc` module's holder-selection helper: that module is not
+ * reliably registered on `agent.modules` in this app's agent configuration
+ * (confirmed empirically — `agent.modules.openid4vc` is `undefined` at
+ * runtime despite being passed into the agent's module config), and this
+ * flow has no other reason to depend on it — it exists for the OID4VP
+ * request/response pipeline this exchange deliberately doesn't use (see
+ * `respondToCredentialExchangeQuery`'s own doc comment). Our happy path
+ * assumes at most one relevant credential, so the first `ldp_vc` record
+ * whose `expandedTypes` tag is a superset of one of the query's
+ * `type_values` entries (DCQL's own match rule — order-independent, extra
+ * types allowed) is the match.
+ */
+async function matchDcqlQuery(
+  agent: Agent,
+  dcqlQuery: unknown
+): Promise<{ credentialJson: Record<string, unknown> } | undefined> {
+  const dcqlService = agent.dependencyManager.container.resolve(DcqlService)
+  const queryResult = await dcqlService.getCredentialsForRequest(agent.context, dcqlQuery as never)
+  if (!queryResult.can_be_satisfied) return undefined
+
+  const typeValueSets = (
+    (dcqlQuery as { credentials?: { format?: string; meta?: { type_values?: string[][] } }[] }).credentials ?? []
+  )
+    .filter((c) => c.format === 'ldp_vc')
+    .flatMap((c) => c.meta?.type_values ?? [])
+  if (typeValueSets.length === 0) return undefined
+
+  const allCredentials = await agent.w3cCredentials.getAll()
+  for (const record of allCredentials) {
+    if (record.firstCredential.claimFormat !== ClaimFormat.LdpVc) continue
+    const expandedTypes = (record.getTags() as { expandedTypes?: string[] }).expandedTypes ?? []
+    const isMatch = typeValueSets.some((types) => types.every((t) => expandedTypes.includes(t)))
+    if (isMatch) {
+      return { credentialJson: JsonTransformer.toJSON(record.firstCredential) as Record<string, unknown> }
+    }
+  }
+  return undefined
+}
+
+/**
+ * The user's answer to a pending credential-exchange query.
+ *
+ * Share: build a challenge-bound VP wrapping the matched credential (the
+ * SAME construction the witness ceremony uses for its own VP — a plain W3C
+ * Data-Integrity presentation, not Credo's OID4VP/DCQL presentation
+ * pipeline, which this exchange has no need of: the spec's own payload
+ * doc says a JSON *object* `vp_token` is exactly "a W3C Data-Integrity VP
+ * whose proof carries the same nonce and domain"), then send it as
+ * `credential-exchange/present` on the query's own thread. Decline: nothing
+ * is sent — there is no error/response variant for this spec.
+ */
+export async function respondToCredentialExchangeQuery(
+  agent: Agent,
+  queryId: string,
+  accept: boolean
+): Promise<void> {
+  const logger = agent.config.logger
+  const pending = pendingCredentialExchangeQueries.get(queryId)
+  pendingCredentialExchangeQueries.delete(queryId)
+  credentialExchangeStore.clearQueryPrompt(queryId)
+  if (!pending) {
+    logger.warn(`${LOG_PREFIX} no pending credential-exchange query ${queryId}`)
+    return
+  }
+  const { document, context } = pending
+
+  if (!accept) {
+    logger.info(`${LOG_PREFIX} credential-exchange query declined by user (query ${queryId})`)
+    return
+  }
+
+  const payload = (document as { payload: credentialExchangeQuery.CredentialExchangeQueryPayload }).payload
+  const match = await matchDcqlQuery(agent, payload.dcql_query as never)
+  if (!match) {
+    // Re-checked at answer time: a credential the query matched when the
+    // prompt was shown may no longer be available (deleted meanwhile).
+    logger.warn(`${LOG_PREFIX} credential-exchange query no longer satisfiable at answer time (query ${queryId})`)
+    return
+  }
+
+  const connection = await agent.modules.didcomm.connections.getById(context.connectionId)
+  if (!connection.did || !connection.theirDid) return
+
+  const didDocument = await agent.dids.resolveDidDocument(connection.did)
+  const embeddedId = (entries?: unknown[]) =>
+    (entries ?? []).find((entry) => typeof entry === 'object' && entry !== null) as { id: string } | undefined
+  const rawVerificationMethodId =
+    didDocument.verificationMethod?.[0]?.id ??
+    embeddedId(didDocument.assertionMethod)?.id ??
+    embeddedId(didDocument.authentication)?.id
+  if (!rawVerificationMethodId) throw new Error(`no verification method on ${connection.did}`)
+  // did:peer numalgo 4 documents (connection.did here) embed a RELATIVE
+  // verification method id (e.g. "#key-1") — unlike the did:peer:0 numalgo 0
+  // relationship DIDs this file signs under elsewhere, whose resolved id is
+  // already fully qualified. Confirmed live: signing under the bare
+  // fragment silently never completed (no error, no signature) rather than
+  // throwing, so this needs qualifying before use as a verificationMethod
+  // reference.
+  const verificationMethodId = rawVerificationMethodId.startsWith('#')
+    ? `${connection.did}${rawVerificationMethodId}`
+    : rawVerificationMethodId
+
+  const vp = await buildChallengeBoundVp(agent, match.credentialJson, verificationMethodId, payload.nonce, connection.theirDid)
+
+  const service = getTrustTasksService(agent)
+  const presentDocument: Record<string, unknown> = {
+    id: utils.uuid(),
+    type: credentialExchangePresent.TYPE_URI,
+    threadId: document.threadId ?? document.id,
+    issuer: connection.did,
+    recipient: connection.theirDid,
+    issuedAt: new Date().toISOString(),
+    payload: { vp_token: vp },
+  }
+  const signed = await signDocumentProof(agent, presentDocument, connection.did)
+  await service.retain(agent.context, signed, 'request', context.connectionId)
+  await sendTrustTaskDocument(agent, context.connectionId, signed)
+  logger.info(`${LOG_PREFIX} credential-exchange present sent (query ${queryId})`)
+}

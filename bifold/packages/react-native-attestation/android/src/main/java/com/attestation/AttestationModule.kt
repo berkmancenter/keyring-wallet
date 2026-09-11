@@ -63,6 +63,24 @@ class AttestationModule : AttestationSpec {
 
     private const val ATTESTATION_EXTENSION_OID = "1.3.6.1.4.1.11129.2.1.17"
 
+    /**
+     * Also duplicated (by convention, not a Gradle dependency — see
+     * `LocalityPeripheralModule.kt`'s `HARDWARE_SIGNING_KEY_ALIAS` comment
+     * for why these two packages don't share code directly) in
+     * `LocalityPeripheralModule.kt`'s `allowedAuthenticatorsFor`, which
+     * authorizes a signature with this SAME `HARDWARE_SIGNING_KEY_ALIAS` key
+     * for the locality-transcript signature. Both must resolve identically
+     * for a given `authMode` so the two OS prompts stay consistent with each
+     * other and with the caller's resolved preference.
+     */
+    fun allowedAuthenticatorsFor(authMode: String?): Int {
+      return if (authMode == "passcode") {
+        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      } else {
+        BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+      }
+    }
+
     /** Hex representation of first/last few bytes for diagnostic logging */
     fun bytesToHexShort(bytes: ByteArray, maxBytes: Int = 8): String {
       if (bytes.isEmpty()) return "(empty)"
@@ -465,12 +483,7 @@ class AttestationModule : AttestationSpec {
         }
       }
 
-      val allowedAuthenticators = if (passcodeOnly) {
-        BiometricManager.Authenticators.DEVICE_CREDENTIAL
-      } else {
-        BiometricManager.Authenticators.BIOMETRIC_STRONG or
-          BiometricManager.Authenticators.DEVICE_CREDENTIAL
-      }
+      val allowedAuthenticators = allowedAuthenticatorsFor(authMode)
 
       val promptBuilder = BiometricPrompt.PromptInfo.Builder()
         .setTitle("Confirm Relationship")

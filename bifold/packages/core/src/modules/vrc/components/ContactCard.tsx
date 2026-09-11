@@ -22,6 +22,7 @@ const AVATAR_BG = '#E8E0E8'
 const NAME_COLOR = '#010B13'
 const BADGE_HW_TEAL = '#4D7A8B'
 const BADGE_WITNESS_PURPLE = '#A349A4'
+const BADGE_LOCALITY_GREEN = '#2E8540'
 
 const styles = StyleSheet.create({
   itemContainer: {
@@ -103,6 +104,16 @@ const ContactCard: React.FC<ContactCardProps> = ({ contact, hardwareVerified, on
         {hardwareVerified && <Icon name="shield-check" size={18} color={BADGE_HW_TEAL} style={styles.badgeIcon} />}
         {contact.hasWitnessCredentials && (
           <Icon name="check-decagram" size={18} color={BADGE_WITNESS_PURPLE} style={styles.badgeIcon} />
+        )}
+        {contact.hasLocalityConfirmed && (
+          <Icon
+            name="map-marker-check"
+            size={18}
+            color={BADGE_LOCALITY_GREEN}
+            style={styles.badgeIcon}
+            testID="LocalityConfirmedBadge"
+            accessibilityLabel="Locality confirmed"
+          />
         )}
       </View>
     </TouchableOpacity>
