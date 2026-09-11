@@ -87,6 +87,8 @@
 	<string>We include this permission because a library our app uses references it, even though we don't use it directly</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>$(PRODUCT_NAME) needs access to your microphone to enable video calls</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>$(PRODUCT_NAME) needs access to your photo library so you can choose a profile picture for your relationship card</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIAppFonts</key>

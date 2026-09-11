@@ -69,6 +69,7 @@ Note: emulators/simulators cannot do hardware attestation — the app silently f
 - Conventional commits enforced by commitlint: `feat|fix|docs|style|refactor|perf|test|chore|revert`, lower-case type.
 - Commits in the `bifold/` submodule require a `Signed-off-by:` trailer as the **last line** of the message (commitlint rejects anything after it), naming the commit's own author — i.e. your configured `user.name` / `user.email`, the same as `git commit -s` produces. A sign-off is an attestation by whoever made the commit, so never sign off as another contributor. Do not add agent co-author trailers to bifold commits.
 - For message-only rewrites in bifold, use `git commit-tree -S` (SSH signing) to keep commits Verified; fallback `git commit -S -F msg.txt` with `HUSKY=0`.
+- Every commit on `main` (both repos) must also be cryptographically signed and verified by GitHub — enforced by branch protection and by the `commit-checks` CI workflow. `.husky/pre-commit` (root) and `bifold/.githooks/pre-commit` only check that `commit.gpgsign` is enabled locally, since a hook can't see the signature itself (git signs after hooks run).
 
 ## Ongoing upgrade work
 
@@ -81,6 +82,23 @@ Note: emulators/simulators cannot do hardware attestation — the app silently f
 The active one is **`docs/plans/openvtc-integration-plan.md`** — aligning Keyring with the OpenVTC / First Person Project ecosystem: TSP as transport, Trust Tasks as the operation layer, and the VRC/witness/attestation work moving onto both. Read it before touching TSP, Trust Tasks, a VRC-exchange recast, or PNM/CNM. It owns two subtask plans, both under `openvtc-integration-plan/`: `trust_tasks_subtask.md` carries the VRC/witness detail and per-step acceptance criteria, and `pnm_cnm_subtask.md` carries the PNM/CNM client — how PNM commands reach a VTA, the client architecture, and its phases.
 
 `docs/plans/CLAUDE.md` covers how these documents are written — read it before editing one, and note that plans state current design in the present tense while reasoning and superseded positions live in the dated companions.
+
+## OpenVTC/TSP upstream clones
+
+The OpenVTC integration work (see Planning documents above) reads real
+upstream source, not just documentation. Those repos live in `external/`
+(gitignored), cloned and pinned to exact commits by `node
+scripts/openvtc/setup-external.mjs` — see the `openvtc-workspace` skill and
+`scripts/openvtc/README.md` for the full setup/sync workflow.
+
+**Before reading any upstream source as ground truth, confirm you're reading
+`external/`'s pinned clone, not some other checkout of the same repo that
+happens to exist on the machine.** A sibling clone elsewhere is not managed
+by the pin tooling and can silently sit on any commit, including one older
+than the pin — this has actually happened, produced a wrong conclusion, and
+took a user catching it to surface (see `docs/plans/openvtc-integration-plan/2026-09-02-bam.md`'s
+correction section). If `external/` doesn't have the clone yet, run
+`setup-external.mjs` rather than reaching for one elsewhere.
 
 ## CodeGraph
 

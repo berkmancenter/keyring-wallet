@@ -1,0 +1,14 @@
+{
+  "name": "ref-06p2-ble-observation",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 06p2 — the locality binding (ref-06p) run over real BLE: EID advert, GATT round trip, honest RTT distribution",
+  "scripts": {
+    "check": "node run.mjs --quiet",
+    "start": "node run.mjs",
+    "setup": "node run.mjs --setup"
+  },
+  "dependencies": {
+    "node-ble": "^1.13.0"
+  }
+}

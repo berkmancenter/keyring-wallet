@@ -99,10 +99,21 @@ function buildBifoldPackages() {
   }
 }
 
+function configureBifoldHooks() {
+  // bifold has its own git directory (it's a submodule), so core.hooksPath
+  // must be set here rather than inherited from the parent repo. .githooks
+  // enforces DCO sign-off and signed commits — see bifold/CONTRIBUTING.
+  exec('git config core.hooksPath .githooks', {
+    cwd: BIFOLD_DIR,
+    ignoreErrors: true,
+  });
+}
+
 function main() {
   try {
     log('Starting bifold preparation...');
     ensureSubmoduleInitialized();
+    configureBifoldHooks();
     buildBifoldPackages();
     log('Bifold preparation complete');
   } catch (error) {

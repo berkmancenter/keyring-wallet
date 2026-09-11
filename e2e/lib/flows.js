@@ -8,6 +8,7 @@ import {
   existsTestId,
   scrollToTestId,
   sleep,
+  tapText,
   tapTestId,
   tapTestIdReliable,
   waitForTestId,
@@ -1214,6 +1215,26 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
 }
 
 /**
+ * `assertVrcReceived`'s text match isn't scoped to the Contacts list — the
+ * moment the VRC lands, Chat.tsx auto-pushes the peer's chat screen (header
+ * text: the peer's own name) on top of the Contacts tab with a "Relationship
+ * confirmed" overlay, and `byTextContains(driver, peerName)` matches that
+ * header just as well as the contacts-list row. So the assertion can return
+ * successfully while the device is actually sitting on this overlay, not the
+ * Contacts tab — invisible to callers who only need "the VRC arrived" (every
+ * existing flow), but a real problem for one that needs to drive the UI
+ * further afterward. Dismiss it (its "View contacts" button has no testID,
+ * only an accessibilityLabel — byText/tapText is the only way to reach it)
+ * before any such follow-on navigation. A no-op if the overlay isn't showing.
+ */
+export async function dismissVrcConfirmationOverlayIfPresent(driver, timeout = 5000) {
+  if (await byTextContains(driver, "Relationship confirmed").isExisting()) {
+    await tapText(driver, "View contacts", timeout);
+    console.log(`[e2e] ${driver.e2ePlatform}: dismissed the VRC confirmation overlay`);
+  }
+}
+
+/**
  * Assert the Trust Task relationship exchange ran alongside the legacy flow
  * (integration M2: propose + the issue leg in shadow mode), from the Android
  * side's logcat. One android device sees the whole exchange regardless of
@@ -1365,6 +1386,43 @@ export async function assertWitnessShareMarkers(driver, timeout = 120000) {
   throw new Error(
     `android: witness-share markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
   );
+}
+
+/**
+ * The locality co-presence marker (locality-plan.md §10.3 item 12), from
+ * Android's run-scoped logcat: `witnessCeremony.ts` logs a dedicated
+ * "locality confirmed"/"locality not confirmed" line once it has processed
+ * the witness's `#response` — distinct from the earlier "radio phase
+ * produced a transcript" line, which only reports what the DEVICE itself
+ * produced, not what the witness ultimately confirmed. No-op on iOS drivers
+ * (no native peripheral exists there; see locality-plan.md §10.3 item 9).
+ *
+ * Fails loudly on a "not confirmed" line rather than merely on a missing
+ * one — a silent fallback to unconfirmed is exactly the failure mode this
+ * assertion exists to catch, not something to wait out.
+ */
+export async function assertLocalityConfirmedMarker(driver, timeout = 60000) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  const { execSync } = await import("node:child_process");
+  const confirmed = /\[TrustTasks:Witness\] locality confirmed for session/;
+  const notConfirmed = /\[TrustTasks:Witness\] locality not confirmed for session[^\n]*/;
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (confirmed.test(log)) {
+      console.log(`[e2e] android: locality confirmed`);
+      return;
+    }
+    const failure = log.match(notConfirmed);
+    if (failure) {
+      throw new Error(`android: locality was NOT confirmed — "${failure[0]}"`);
+    }
+    await sleep(3000);
+  }
+  throw new Error(`android: no locality marker (confirmed or not) appeared within ${timeout}ms`);
 }
 
 /**

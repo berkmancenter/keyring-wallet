@@ -18,6 +18,7 @@ import net from "node:net";
 import { ensureAppium, stopAppium, screenshot, dumpSource, sleep } from "./driver.js";
 import {
   acceptInvitationViaPaste,
+  assertLocalityConfirmedMarker,
   acceptRelationshipProposalOnEitherSide,
   assertTrustTaskExchangeMarkers,
   assertTspCarriageMarkers,
@@ -137,6 +138,14 @@ async function assertHardwareEvidenceMarker(driver, timeout = 120000) {
  *   iOS udid isn't reachable via `adb logcat`).
  * @param {string} opts.name - banner name, matching the npm script that invoked this
  *   (e.g. "vrc-exchange:witnessed:devices" or "vrc-exchange:witnessed:android-only").
+ * @param {boolean} [opts.assertLocality] - locality-plan.md §10.3 item 12:
+ *   additionally require BOTH sides' co-presence to be confirmed
+ *   (`assertLocalityConfirmedMarker`), not merely attempted. The CALLER is
+ *   responsible for setting `WITNESS_LOCALITY_REQUIRED=true` before this
+ *   function runs (`startWitness` reads it from `process.env` itself) —
+ *   this flag only controls whether the assertion runs, not the witness's
+ *   policy, so a caller can't accidentally assert on a witness that was
+ *   never actually going to enforce it.
  * @param {boolean} [opts.useTspCarriage] - carry the wallet-to-wallet Trust
  *   Task documents (discovery/propose/issue) over the real TSP envelope
  *   stack instead of the default DIDComm-v1 binding. Wallet-to-witness
@@ -150,6 +159,7 @@ export async function runWitnessedExchange({
   createSessionB,
   dumpWitnessLogs: dumpLogs,
   name,
+  assertLocality = false,
   useTspCarriage = false,
 }) {
   let sessionA, sessionB, witness;
@@ -160,6 +170,17 @@ export async function runWitnessedExchange({
     await ensureMetro();
     await ensureAppium();
 
+    if (assertLocality && process.env.WITNESS_LOCALITY_REQUIRED !== "true") {
+      // Asserting locality against a witness that was never going to enforce
+      // it (or wasn't asked to attempt it at all) would just hang on
+      // assertLocalityConfirmedMarker's timeout, or worse, pass vacuously —
+      // fail fast with the actual cause instead.
+      throw new Error(
+        "assertLocality is set but WITNESS_LOCALITY_REQUIRED is not \"true\" — " +
+          "export WITNESS_LOCALITY_REQUIRED=true before running this script."
+      );
+    }
+
     // The witness runs in direct mode behind a cloudflared HTTPS tunnel: the app
     // blocks cleartext http, and production witnesses are HTTPS (real mediators
     // like aaleon have SSL). The tunnel mirrors that locally without the
@@ -169,7 +190,11 @@ export async function runWitnessedExchange({
     console.log(
       "\n[e2e] ATTENDED WITNESSED RUN — keep both phones unlocked and within reach.\n" +
         "[e2e] Witness is reachable via an HTTPS tunnel; no LAN needed.\n" +
-        "[e2e] Authenticate at the OPERATOR banners.\n"
+        "[e2e] Authenticate at the OPERATOR banners.\n" +
+        (assertLocality
+          ? "[e2e] LOCALITY REQUIRED — keep both phones' Bluetooth on and within range of THIS machine's adapter;\n" +
+            "[e2e] grant the Bluetooth permission prompt on each phone when it appears.\n"
+          : "")
     );
 
     sessionA = await createSessionA(udidA);
@@ -200,6 +225,22 @@ export async function runWitnessedExchange({
     // exchange silently falls back to direct (no VWC). Confirm BOTH connections
     // completed via the witness's own log (no "connected" banner exists in the
     // app — witness participation only surfaces as a VWC after the exchange).
+    if (assertLocality) {
+      // The witness-connect locality pre-flight sheet (locality-plan.md §8.4)
+      // fires on EACH phone right after ITS OWN connectToWitness resolves —
+      // no automation taps it, and while it's up it blocks the rest of the
+      // UI, so an operator who misses it stalls the whole run downstream
+      // (surfacing much later as a confusing "could not land on Contacts").
+      // Loud and up front, same as the biometric banner below, so the
+      // operator is watching BOTH phones before either connects.
+      console.log(
+        "\n████████████████████████████████████████████████████████████\n" +
+          "█  OPERATOR: a Bluetooth pre-flight sheet appears on EACH\n" +
+          "█  phone right after it connects to the witness — tap Allow\n" +
+          "█  on BOTH as soon as they appear, before continuing.\n" +
+          "████████████████████████████████████████████████████████████\n"
+      );
+    }
     await connectToWitness(sessionA, witness.invitationUrl);
     await connectToWitness(sessionB, witness.invitationUrl);
     await witness.waitForParticipants(2, 120000);
@@ -249,6 +290,17 @@ export async function runWitnessedExchange({
       assertWitnessShareMarkers(sessionA),
       assertWitnessShareMarkers(sessionB),
     ]);
+
+    // locality-plan.md §10.3 item 12: both wallets' co-presence must be
+    // CONFIRMED, not merely attempted — WITNESS_LOCALITY_REQUIRED=true is
+    // the caller's job to have set before startWitness() ran above.
+    if (assertLocality) {
+      await Promise.all([
+        assertLocalityConfirmedMarker(sessionA),
+        assertLocalityConfirmedMarker(sessionB),
+      ]);
+    }
+
     await assertContactShields(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`, 120000, {
       requireSecureExchange: false,
     });
