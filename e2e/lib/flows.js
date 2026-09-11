@@ -142,15 +142,25 @@ export async function pickRCardPhoto(driver) {
   await sleep(2000);
 
   try {
-    // Android's system Photo Picker (com.google.android.providers.media.module)
-    // wraps each grid thumbnail in a clickable FrameLayout carrying a
-    // "Photo taken on ..." content-desc; the ImageView thumbnail inside it
-    // is NOT itself clickable, confirmed via a live uiautomator dump against
-    // this exact picker on 2026-09-04.
+    // Android ships two different system photo pickers and their view trees
+    // are INVERTED with respect to each other, so do not constrain on
+    // clickable() here:
+    //
+    //   com.google.android.providers.media.module (seen 2026-09-04) wraps each
+    //     grid thumbnail in a CLICKABLE FrameLayout that carries the
+    //     "Photo taken on ..." content-desc.
+    //   com.google.android.photopicker (seen 2026-09-11, API 36) puts the
+    //     content-desc on a NON-clickable View, whose clickable parent carries
+    //     no description at all.
+    //
+    // Matching on the description alone works for both: the described node and
+    // its clickable ancestor share identical bounds, so a tap on either lands
+    // on the same pixel and the picker receives it. Both confirmed via live
+    // uiautomator dumps.
     const photoCell =
       driver.e2ePlatform === "android"
         ? driver.$(
-            'android=new UiSelector().clickable(true).descriptionContains("Photo")'
+            'android=new UiSelector().descriptionContains("Photo taken on")'
           )
         : driver.$("-ios class chain:**/XCUIElementTypeCell[1]");
     await photoCell.waitForExist({ timeout: 8000 });
