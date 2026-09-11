@@ -27,6 +27,7 @@ import { AttestationMonitor } from './types/attestation'
 import { CredentialProvisioningMonitor } from './types/auto-credential'
 import { Config, HistoryEventsLoggerConfig } from './types/config'
 import { ContactCardProps } from './types/contact-card'
+import { ContactDetailsFooterProps } from './types/contact-details-footer'
 import { CredentialListFooterProps } from './types/credential-list-footer'
 import { InlineErrorConfig } from './types/error'
 import { GenericFn } from './types/fn'
@@ -94,7 +95,18 @@ export const COMPONENT_TOKENS = {
   // COMPONENT_CONTACT_LIST_ITEM above, which draws a DIDComm connection.
   COMPONENT_CONTACT_CARD: 'component.contact-card',
   COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM: 'component.contact-details-cred-list-item',
+  // Extra per-contact content at the bottom of the contact details screen —
+  // e.g. a demo profile's own contact-scoped action, distinct from
+  // COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM above, which draws one row in
+  // that screen's credential list.
+  COMPONENT_CONTACT_DETAILS_FOOTER: 'component.contact-details-footer',
   COMPONENT_CONNECTION_ALERT: 'component.connection-alert',
+  // Mounted once, always, regardless of which tab/screen is active — for a
+  // profile that needs to observe app-wide events (e.g. an incoming request
+  // on a connection the user isn't currently viewing) and surface a toast or
+  // other passive notification. Mirrors InAppMessageNotifier's own role, but
+  // as an extension seam rather than hardcoded into TabStack.
+  COMPONENT_APP_GLOBAL_LISTENER: 'component.app-global-listener',
 } as const
 
 export const NOTIFICATION_TOKENS = {
@@ -258,9 +270,11 @@ export type TokenMapping = {
   [TOKENS.COMPONENT_CONTACT_LIST_ITEM]: React.FC<ContactListItemProps>
   [TOKENS.COMPONENT_CONTACT_CARD]: React.FC<ContactCardProps>
   [TOKENS.COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM]: React.FC<ContactCredentialListItemProps>
+  [TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER]: React.FC<ContactDetailsFooterProps>
   [TOKENS.INLINE_ERRORS]: InlineErrorConfig
   [TOKENS.CUSTOM_NAV_STACK_1]: React.FC
   [TOKENS.COMPONENT_CONNECTION_ALERT]: React.FC<{ connectionLabel?: string }>
+  [TOKENS.COMPONENT_APP_GLOBAL_LISTENER]: React.FC
   [TOKENS.UTIL_AGENT_BRIDGE]: AgentBridge
   [TOKENS.UTIL_REFRESH_ORCHESTRATOR]: IRefreshOrchestrator
   [TOKENS.FN_PIN_HASH_ALGORITHM]: FN_PIN_HASH_ALGORITHM

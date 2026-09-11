@@ -7,6 +7,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { useTranslation } from 'react-i18next'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
+import { TOKENS, useServices } from '../../../container-api'
 import { useTheme } from '../../../contexts/theme'
 import { ContactStackParams, Screens } from '../../../types/navigators'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
@@ -37,6 +38,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   const { ColorPalette, TextTheme, Assets } = useTheme()
   const { agent } = useAgent()
   const { t } = useTranslation()
+  const [ContactDetailsFooter] = useServices([TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER])
   const [connectionId, setConnectionId] = useState<string | null>(null)
   const [isRemoveModalDisplayed, setIsRemoveModalDisplayed] = useState<boolean>(false)
   const { deleteContact } = useDeleteContact()
@@ -451,6 +453,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
             {t('ContactDetails.ViewMessages')}
           </ThemedText>
         </TouchableOpacity>
+
+        <ContactDetailsFooter contact={contact} connectionId={connectionId} />
 
         {/* Remove Contact */}
         <TouchableOpacity

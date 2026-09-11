@@ -30,9 +30,10 @@ import { BaseTourID } from '../types/tour'
 import QRCodeExchangeSlider from '../modules/vrc/components/QRCodeExchangeSlider'
 
 const TabStack: React.FC = () => {
-  const [{ enableImplicitInvitations, enableReuseConnections }, logger] = useServices([
+  const [{ enableImplicitInvitations, enableReuseConnections }, logger, GlobalListener] = useServices([
     TOKENS.CONFIG,
     TOKENS.UTIL_LOGGER,
+    TOKENS.COMPONENT_APP_GLOBAL_LISTENER,
   ])
   const { t } = useTranslation()
   const Tab = createBottomTabNavigator<TabStackParams>()
@@ -299,6 +300,7 @@ const TabStack: React.FC = () => {
         navigation={navigation}
       />
       <InAppMessageNotifier />
+      <GlobalListener />
     </SafeAreaView>
   )
 }
