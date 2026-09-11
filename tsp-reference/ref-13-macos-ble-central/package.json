@@ -1,0 +1,13 @@
+{
+  "name": "ref-13-macos-ble-central",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Does a macOS host work as the locality sensor's BLE central, the way the Linux/BlueZ witness does?",
+  "scripts": {
+    "start": "node run.mjs"
+  },
+  "dependencies": {
+    "@abandonware/noble": "^1.9.2-26"
+  }
+}
