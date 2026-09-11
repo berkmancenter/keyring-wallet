@@ -1239,6 +1239,8 @@ export async function assertContactPhotoReceived(driver, peerName, timeout = 600
     `${driver.e2ePlatform}: no photo (ContactAvatarImage) shown for "${peerName}" within ${timeout}ms`
   );
 }
+
+/**
  * `assertVrcReceived`'s text match isn't scoped to the Contacts list — the
  * moment the VRC lands, Chat.tsx auto-pushes the peer's chat screen (header
  * text: the peer's own name) on top of the Contacts tab with a "Relationship
