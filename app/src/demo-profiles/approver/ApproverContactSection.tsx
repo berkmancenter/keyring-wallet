@@ -46,6 +46,14 @@ import {
   respondToAccessRequest,
 } from './ceremony'
 
+// The demo's one fixed scenario — every request this profile ever sends asks
+// for the same resource (docs/plans/reference-app-sdk-packaging/2026-09-06-agent.md's
+// own worked example). Named here, rather than inlined at the call site, so
+// the "Last decision" line below can say what was actually decided rather
+// than just approved/denied in the abstract.
+const REQUEST_RESOURCE = "the shared photo album 'Family 2026'"
+const REQUEST_REASON = 'planning a get-together'
+
 const ApproverContactSection: React.FC<ContactDetailsFooterProps> = ({ connectionId }) => {
   const { agent } = useAppAgent()
   const { ColorPalette, TextTheme } = useTheme()
@@ -58,6 +66,10 @@ const ApproverContactSection: React.FC<ContactDetailsFooterProps> = ({ connectio
   // haven't answered yet, is untouched and they can still approve/deny it.
   const [awaitingResponse, setAwaitingResponse] = useState(false)
   const [lastDecision, setLastDecision] = useState<AccessRequestDecisionEvent['decision'] | undefined>(undefined)
+  // What the outstanding request actually asked for — set right before it's
+  // sent, read when its decision lands, so "Last decision" names the
+  // resource rather than just saying approved/denied in the abstract.
+  const [lastDecisionResource, setLastDecisionResource] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     if (!connectionId) return
@@ -162,7 +174,8 @@ const ApproverContactSection: React.FC<ContactDetailsFooterProps> = ({ connectio
     setSending(true)
     setLastDecision(undefined)
     try {
-      await proposeAccessRequest(agent, connectionId, "the shared photo album 'Family 2026'", 'planning a get-together')
+      await proposeAccessRequest(agent, connectionId, REQUEST_RESOURCE, REQUEST_REASON)
+      setLastDecisionResource(REQUEST_RESOURCE)
       setAwaitingResponse(true)
     } finally {
       setSending(false)
@@ -207,7 +220,9 @@ const ApproverContactSection: React.FC<ContactDetailsFooterProps> = ({ connectio
       )}
       {lastDecision && (
         <Text style={styles.lastDecision} testID={testIdWithKey('ApproverLastDecision')}>
-          Last decision: {lastDecision}
+          {lastDecisionResource
+            ? `Last decision: ${lastDecision} — "${lastDecisionResource}"`
+            : `Last decision: ${lastDecision}`}
         </Text>
       )}
       {pending && (
