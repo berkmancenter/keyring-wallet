@@ -49,11 +49,7 @@ import {
 const ApproverContactSection: React.FC<ContactDetailsFooterProps> = ({ connectionId }) => {
   const { agent } = useAppAgent()
   const { ColorPalette, TextTheme } = useTheme()
-  const [pending, setPending] = useState<PendingTrustTaskPrompt | undefined>(
-    connectionId
-      ? trustTaskPromptStore.list().find((p) => p.typeUri === TYPE_URI && p.connectionId === connectionId)
-      : undefined
-  )
+  const [pending, setPending] = useState<PendingTrustTaskPrompt | undefined>(undefined)
   const [sending, setSending] = useState(false)
   // True from the moment `proposeAccessRequest` resolves until either a
   // signed decision lands (approverDecisionEvents) or the person cancels.
@@ -65,6 +61,12 @@ const ApproverContactSection: React.FC<ContactDetailsFooterProps> = ({ connectio
 
   useEffect(() => {
     if (!connectionId) return
+    // `connectionId` starts null and resolves asynchronously (ContactDetails'
+    // own lookup effect) — often AFTER the request already arrived, e.g. via
+    // ApproverGlobalListener's toast landing here straight from the pending
+    // 'prompt' event. Sync with whatever's already in the store for this
+    // connection right now, not just events that fire from this point on.
+    setPending(trustTaskPromptStore.getPending(connectionId, TYPE_URI))
     const onPrompt = (prompt: PendingTrustTaskPrompt) => {
       if (prompt.typeUri === TYPE_URI && prompt.connectionId === connectionId) setPending(prompt)
     }
