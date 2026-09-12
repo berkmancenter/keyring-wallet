@@ -47,11 +47,11 @@ jest.mock('@bifold/react-native-attestation', () => ({
 }))
 
 import {
-  AndroidBleDeviceLocalityProvider,
+  BleDeviceLocalityProvider,
   createDeviceLocalityProvider,
   determineHardwareAttestationState,
   type NativeLocalityPeripheralBridge,
-} from '../AndroidBleDeviceLocalityProvider'
+} from '../BleDeviceLocalityProvider'
 import { NullDeviceLocalityProvider } from '../deviceLocality'
 import {
   deriveEid,
@@ -83,7 +83,7 @@ function makeBridge(overrides?: Partial<NativeLocalityPeripheralBridge>): {
   return { bridge, respondToSensor }
 }
 
-describe('AndroidBleDeviceLocalityProvider (design sketch â€” locality-plan.md Â§10.3 item 9)', () => {
+describe('BleDeviceLocalityProvider (design sketch â€” locality-plan.md Â§10.3 item 9)', () => {
   test('marshals the native params correctly, including the derived service UUID', async () => {
     const { bridge, respondToSensor } = makeBridge()
     respondToSensor.mockResolvedValue({
@@ -92,7 +92,7 @@ describe('AndroidBleDeviceLocalityProvider (design sketch â€” locality-plan.md Â
       signatureBase64Url: 'ZmFrZS1zaWduYXR1cmU',
     })
     const getHardwareAttestationState = jest.fn(async () => 'verified' as const)
-    const provider = new AndroidBleDeviceLocalityProvider(bridge, getHardwareAttestationState)
+    const provider = new BleDeviceLocalityProvider(bridge, getHardwareAttestationState)
 
     await provider.respondToSensor({
       taskDigestMultibase: 'sha256:deadbeef',
@@ -122,7 +122,7 @@ describe('AndroidBleDeviceLocalityProvider (design sketch â€” locality-plan.md Â
     })
     mockResolveHardwareSigningAuthMode.mockClear()
     mockResolveHardwareSigningAuthMode.mockResolvedValueOnce('passcode')
-    const provider = new AndroidBleDeviceLocalityProvider(bridge, async () => 'verified')
+    const provider = new BleDeviceLocalityProvider(bridge, async () => 'verified')
 
     await provider.respondToSensor({
       taskDigestMultibase: 'sha256:deadbeef',
@@ -141,7 +141,7 @@ describe('AndroidBleDeviceLocalityProvider (design sketch â€” locality-plan.md Â
       devicePublicKeyBase64: 'ZGV2aWNlLXB1YmxpYy1rZXk',
       signatureBase64Url: 'ZGV2aWNlLXNpZ25hdHVyZQ',
     })
-    const provider = new AndroidBleDeviceLocalityProvider(bridge, async () => 'present-unverified')
+    const provider = new BleDeviceLocalityProvider(bridge, async () => 'present-unverified')
 
     const transcript = await provider.respondToSensor({
       taskDigestMultibase: 'sha256:cafebabe',
@@ -164,7 +164,7 @@ describe('AndroidBleDeviceLocalityProvider (design sketch â€” locality-plan.md Â
   test('passes null straight through on window-lost/declined, matching NullDeviceLocalityProvider\'s contract', async () => {
     const { bridge, respondToSensor } = makeBridge()
     respondToSensor.mockResolvedValue(null)
-    const provider = new AndroidBleDeviceLocalityProvider(bridge, async () => 'absent')
+    const provider = new BleDeviceLocalityProvider(bridge, async () => 'absent')
 
     const transcript = await provider.respondToSensor({
       taskDigestMultibase: 'sha256:00',
@@ -178,7 +178,7 @@ describe('AndroidBleDeviceLocalityProvider (design sketch â€” locality-plan.md Â
   test('a native rejection (genuine implementation error, not a normal outcome) propagates rather than being swallowed', async () => {
     const { bridge, respondToSensor } = makeBridge()
     respondToSensor.mockRejectedValue(new Error('no hardware key exists yet'))
-    const provider = new AndroidBleDeviceLocalityProvider(bridge, async () => 'absent')
+    const provider = new BleDeviceLocalityProvider(bridge, async () => 'absent')
 
     await expect(
       provider.respondToSensor({ taskDigestMultibase: 'sha256:00', challenge: 'c', directive: DIRECTIVE })
@@ -228,7 +228,7 @@ describe('createDeviceLocalityProvider', () => {
   test('returns the real Android provider when the platform is supported and the native module is linked', () => {
     mockIsSupportedPlatform.mockReturnValue(true)
     const provider = createDeviceLocalityProvider(FAKE_AGENT)
-    expect(provider).toBeInstanceOf(AndroidBleDeviceLocalityProvider)
+    expect(provider).toBeInstanceOf(BleDeviceLocalityProvider)
   })
 
   test('falls back to NullDeviceLocalityProvider when the platform is not supported (iOS)', () => {

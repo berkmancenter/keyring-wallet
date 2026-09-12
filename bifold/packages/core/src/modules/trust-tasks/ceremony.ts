@@ -60,7 +60,7 @@ import { credentialExchangeStore } from './credentialExchangeStore'
 import type { CarriageDocumentHandler } from '@bifold/trust-tasks'
 
 import { LOCALITY_EXT_NAMESPACE } from './deviceLocality'
-import { createDeviceLocalityProvider } from './AndroidBleDeviceLocalityProvider'
+import { createDeviceLocalityProvider } from './BleDeviceLocalityProvider'
 import { digestMultibase, signDocumentProof, verifyDocumentProof } from './documentProof'
 import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'

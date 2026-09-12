@@ -10,15 +10,25 @@
  * be split from the actual signing operation, why this had to be its own
  * package rather than an addition to `@bifold/react-native-attestation`).
  *
- * NATIVE MODULES: Android is real — `LocalityPeripheralModule.kt` compiles
- * against real TurboModule codegen and autolinks into the app (verified
- * 2026-08-21). Two things remain unverified on a real device before this
- * should be trusted in production: whether the authorized `CryptoObject`
- * genuinely survives being held across an entire advertising window (see
- * that file's own doc comment), and a live round trip against
- * witness-server's real `BleLocalityProvider`. iOS has no native
- * implementation (out of scope for now — no Xcode available to build or
- * verify it in this environment).
+ * NATIVE MODULES: both platforms are now real.
+ *
+ * Android — `LocalityPeripheralModule.kt`, real TurboModule codegen,
+ * autolinks into the app (verified 2026-08-21). Still unverified on a real
+ * device: whether the authorized `CryptoObject` survives being held across an
+ * entire advertising window (see that file's doc comment), and a live round
+ * trip against witness-server's real `BleLocalityProvider`.
+ *
+ * iOS — `ios/LocalityPeripheral.swift`, a legacy-style bridge module reached
+ * through RN's interop layer rather than TurboModule codegen (see the
+ * podspec for why). Type-checked against the iOS 14 SDK; NOT yet run on a
+ * device. Two things differ from Android and both need a live run to settle:
+ * the biometric prompt cannot pre-authorize the signature the way a
+ * `CryptoObject` can, so `generateAssertion` runs inside the RTT-bound window
+ * (the Swift logs `signingElapsedMs` for exactly this), and the signature is
+ * a CBOR App Attest assertion rather than bare DER — which witness-server
+ * learned to verify in `trustTasks/appAttest.ts`. Read that file's header
+ * and `docs/plans/locality-plan/2026-09-12-al.md` before changing either
+ * side.
  */
 
 import { NativeModules, Platform } from 'react-native';
@@ -40,10 +50,10 @@ const isTurboModuleEnabled = global.__turboModuleProxy != null;
 
 const LocalityPeripheralModule = isTurboModuleEnabled ? NativeLocalityPeripheralSpec : NativeModules.LocalityPeripheral;
 
-/** True only once a real native module answers — never true today. */
+/** True only once a real native module answers on this platform. */
 export const isNativeModuleLinked = (): boolean => LocalityPeripheralModule != null;
 
-/** Whether this platform/OS version can run the peripheral role at all — always false until the native side exists. */
+/** Whether this platform/OS version can run the peripheral role at all. */
 export const isPeripheralSupported = async (): Promise<boolean> => {
   if (!LocalityPeripheralModule) return false;
   return LocalityPeripheralModule.isSupported();
@@ -55,7 +65,8 @@ export const isPeripheralSupported = async (): Promise<boolean> => {
  * contract exactly (resolve with the transcript fields, or `null` on
  * window-lost/declined) so the wrapping implementation in core stays thin.
  *
- * Throws `LINKING_ERROR` today, always — there is no native side to call.
+ * Throws `LINKING_ERROR` when no native module answers — a build without the
+ * pod/Gradle module linked, or a platform this package does not implement.
  */
 export const respondToSensor = async (
   params: NativeRespondToSensorParams
@@ -74,12 +85,18 @@ export const stopAdvertising = async (): Promise<void> => {
   }
 };
 
-/** iOS is out of scope for now (locality-plan.md §10.3 — deferred, no Xcode available to build/verify it). */
-export const isSupportedPlatform = (): boolean => Platform.OS === 'android';
+/**
+ * The platforms this package ships a peripheral implementation for. Says
+ * nothing about whether the device can actually do it — that is
+ * `isPeripheralSupported()`, which asks the native side (BLE advertising
+ * support on Android; App Attest plus Bluetooth authorization on iOS, where
+ * the simulator answers false because it has no App Attest).
+ */
+export const isSupportedPlatform = (): boolean => Platform.OS === 'android' || Platform.OS === 'ios';
 
 /**
  * The three functions above, bundled as one object matching the shape
- * `@bifold/core`'s `AndroidBleDeviceLocalityProvider` (and its
+ * `@bifold/core`'s `BleDeviceLocalityProvider` (and its
  * `NativeLocalityPeripheralBridge` injection port) expects — so that class
  * can take this module as a single import rather than three named ones.
  *

@@ -27,6 +27,8 @@ import { p256 } from '@noble/curves/nist.js'
 
 import { jcsCanonicalize } from '@bifold/trust-tasks'
 
+import { looksLikeAppAttestAssertion, parseAppAttestAssertion, verifyAppAttestAssertion } from './appAttest'
+
 // ------------------------------------------------------------- the namespace
 
 /** Reverse-DNS of atl.seas.harvard.edu — the ext namespace root (plan §6). */
@@ -83,7 +85,15 @@ export interface LocalityTranscript {
    * the SAME platform's own convention, not because this is normalized.
    */
   devicePublicKey: string
-  /** Base64url, the P-256 ECDSA signature over `bindingFor(this)`. */
+  /**
+   * Base64url. On Android, a DER P-256 ECDSA signature directly over
+   * `bindingFor(this)`. On iOS, a CBOR App Attest assertion wrapping a
+   * signature over `SHA256(authenticatorData ‖ SHA256(bindingFor(this)))` —
+   * iOS cannot produce the Android shape with an App Attest key, and using a
+   * different key would break `transcriptKeyMatchesVrcSigner`. `appAttest.ts`
+   * explains the whole asymmetry; `verifyTranscript` tells the two apart from
+   * the first byte, so this stays one field and the wire format is unchanged.
+   */
   signature: string
   hardwareAttestation: HardwareAttestationState
 }
@@ -110,7 +120,27 @@ export function bindingFor(t: {
   )
 }
 
-export type TranscriptVerdict = { ok: true } | { ok: false; reason: string }
+/**
+ * `detail` is operator-facing only — a narrower cause for the server log when
+ * `reason` has been deliberately collapsed (see `verifyTranscript`). Nothing
+ * that reaches a VWC ever reads it.
+ */
+export type TranscriptVerdict = { ok: true } | { ok: false; reason: string; detail?: string }
+
+export interface VerifyTranscriptOptions {
+  /**
+   * `"<teamId>.<bundleId>"` of the wallet app. When set, an iOS assertion
+   * must have been produced by THAT app, not merely by some App Attest key
+   * on some device. Unset today at the only call site — the witness has no
+   * configured notion of which wallet build it is talking to, and inventing
+   * one would refuse legitimate wallets (TestFlight, a dev build, a fork)
+   * rather than catch an attacker who, per `appAttest.ts`, still has to
+   * produce a signature over the witness's own fresh challenge.
+   */
+  iosAppId?: string
+  /** Highest App Attest counter already seen for this device key, if tracked. */
+  lastSignCount?: number
+}
 
 /**
  * `devicePublicKey` is whatever THIS PLATFORM's `getHardwarePublicKey()`
@@ -151,7 +181,8 @@ function rawPointFromDevicePublicKey(bytes: Uint8Array): Uint8Array {
  */
 export function verifyTranscript(
   transcript: LocalityTranscript,
-  expected: { taskDigestMultibase: string; challenge: string; sensorNonce: string; sensorDid: string }
+  expected: { taskDigestMultibase: string; challenge: string; sensorNonce: string; sensorDid: string },
+  options: VerifyTranscriptOptions = {}
 ): TranscriptVerdict {
   if (transcript.taskDigestMultibase !== expected.taskDigestMultibase) return { ok: false, reason: 'taskDigestMismatch' }
   if (transcript.challenge !== expected.challenge) return { ok: false, reason: 'challengeMismatch' }
@@ -170,6 +201,27 @@ export function verifyTranscript(
     return { ok: false, reason: 'malformedSignature' }
   }
   const message = bindingFor(transcript)
+
+  // iOS: a CBOR App Attest assertion, not a bare DER signature. Sniffed from
+  // the first byte rather than flagged on the wire (see
+  // `looksLikeAppAttestAssertion`), so Android transcripts reach the
+  // original path below byte-identically to before this branch existed.
+  if (looksLikeAppAttestAssertion(signatureBytes)) {
+    const assertion = parseAppAttestAssertion(signatureBytes)
+    if (!assertion) return { ok: false, reason: 'malformedAppAttestAssertion' }
+    const verdict = verifyAppAttestAssertion(assertion, message, publicKeyBytes, {
+      appId: options.iosAppId,
+      lastSignCount: options.lastSignCount,
+    })
+    // Collapsed to the same reason the Android path uses, deliberately: this
+    // value reaches the ceremony's decline reasons and, through them, the
+    // VWC, and "which platform failed how" is not something a verifier of
+    // the credential should be able to read off a failure. The specific
+    // reason stays available to operators through the returned detail below.
+    if (!verdict.ok) return { ok: false, reason: 'transcriptSignatureInvalid', detail: verdict.reason }
+    return { ok: true }
+  }
+
   let valid: boolean
   try {
     valid = p256.verify(signatureBytes, message, publicKeyBytes, { format: 'der', prehash: true, lowS: false })
