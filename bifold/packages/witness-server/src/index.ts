@@ -164,7 +164,7 @@ async function main(): Promise<void> {
   if (localityService?.isEnabled()) {
     console.log('')
     console.log('Co-Locality Transport:')
-    console.log('  • Bluetooth BLE (TODO — not yet implemented)')
+    console.log('  • Bluetooth BLE — BleLocalityProvider (node-ble/BlueZ; Linux hosts only)')
     console.log('  • Proofs arrive via provider callback, not HTTP')
   }
   console.log('')
@@ -204,13 +204,15 @@ async function main(): Promise<void> {
   // submitted in THIS session, NOT the historical reportingGraph which contains all
   // historical registrations (including parties who may have turned reporting off).
   // Only add edges when BOTH parties submitted a reportingDid in their presentation.
-  witnessService.onSessionCompletedWithAttestations((sessionId, walletAId, walletBId, attestationCount, receivedReportingDids) => {
-    if (receivedReportingDids && receivedReportingDids.length === 2) {
-      // Both parties included reportingDids in their presentations - record the edge
-      broadcaster.recordReportingEdge(receivedReportingDids[0], receivedReportingDids[1], sessionId, attestationCount)
+  witnessService.onSessionCompletedWithAttestations(
+    (sessionId, walletAId, walletBId, attestationCount, receivedReportingDids) => {
+      if (receivedReportingDids && receivedReportingDids.length === 2) {
+        // Both parties included reportingDids in their presentations - record the edge
+        broadcaster.recordReportingEdge(receivedReportingDids[0], receivedReportingDids[1], sessionId, attestationCount)
+      }
+      // If either party didn't include a reportingDid in their presentation, no dashboard update.
     }
-    // If either party didn't include a reportingDid in their presentation, no dashboard update.
-  })
+  )
 
   // Handle graceful shutdown
   process.on('SIGINT', async () => {

@@ -32,7 +32,20 @@ jobs:
 
       - name: Run formatter
         run: |
-          yarn prettier
+          # The root `yarn prettier` script has no --check: it prints formatted output and
+          # exits 0, so this step passed on every PR regardless of formatting. Check for real,
+          # scoped to changed files on PRs (repo-wide has pre-existing debt, same as lint).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${{ github.base_ref }}"
+            CHANGED="$(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '\.(js|jsx|json|ts|tsx|md|yml|yaml)$' | grep -vE '^(samples/app/(ios|android)/|.*/node_modules/)' || true)"
+            if [ -z "$CHANGED" ]; then
+              echo "No formattable files changed; skipping prettier"
+              exit 0
+            fi
+            echo "$CHANGED" | xargs npx prettier --check
+          else
+            yarn prettier --check || echo "::warning::Repo-wide prettier check failed (known debt); not blocking main pushes yet"
+          fi
 
       - name: Run linter
         run: |

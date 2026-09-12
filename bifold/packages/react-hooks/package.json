@@ -21,11 +21,12 @@
     "bifold": "bin/bifold"
   },
   "scripts": {
-    "build": "echo 'building react-hooks 🏗️' && yarn run clean && yarn run compile && echo 'react-hooks built ✅'",
+    "build": "echo 'building react-hooks \ud83c\udfd7\ufe0f' && yarn run clean && yarn run compile && echo 'react-hooks built \u2705'",
     "clean": "rimraf -rf ./build",
     "compile": "tsc -p tsconfig.build.json",
     "prepublishOnly": "yarn run build",
-    "test": "jest"
+    "test": "jest",
+    "coverage": "jest --coverage"
   },
   "dependencies": {
     "rxjs": "^7.2.0"

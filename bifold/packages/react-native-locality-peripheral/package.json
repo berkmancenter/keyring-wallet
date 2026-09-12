@@ -32,7 +32,8 @@
   "homepage": "https://github.com/berkmancenter/keyring-bifold",
   "scripts": {
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "coverage": "jest --coverage"
   },
   "devDependencies": {
     "@types/jest": "~29.5.14",
