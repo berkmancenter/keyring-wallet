@@ -24,7 +24,8 @@
     "test:unit": "jest __tests__/unit",
     "test:integration": "node scripts/run-integration.mjs",
     "test:ci": "jest __tests__/unit --ci --coverage && node scripts/run-integration.mjs --ci",
-    "clean:wallets": "trash .wallets/* 2>/dev/null || true"
+    "clean:wallets": "trash .wallets/* 2>/dev/null || true",
+    "coverage": "jest __tests__/unit --coverage --coverageThreshold='{}'"
   },
   "dependencies": {
     "@bifold/vrc-contexts": "workspace:*",

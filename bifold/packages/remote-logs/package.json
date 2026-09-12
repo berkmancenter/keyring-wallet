@@ -10,12 +10,13 @@
   ],
   "license": "Apache-2.0",
   "scripts": {
-    "build": "echo 'building remote-logs 🏗️' && yarn run clean && yarn run compile && echo 'remote-logs built ✅'",
+    "build": "echo 'building remote-logs \ud83c\udfd7\ufe0f' && yarn run clean && yarn run compile && echo 'remote-logs built \u2705'",
     "clean": "rimraf ./build",
     "compile": "tsc",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "coverage": "jest --coverage"
   },
   "repository": {
     "type": "git",
