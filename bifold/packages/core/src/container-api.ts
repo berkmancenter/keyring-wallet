@@ -26,6 +26,8 @@ import { BifoldLogger } from './services/logger'
 import { AttestationMonitor } from './types/attestation'
 import { CredentialProvisioningMonitor } from './types/auto-credential'
 import { Config, HistoryEventsLoggerConfig } from './types/config'
+import { ContactCardProps } from './types/contact-card'
+import { ContactDetailsFooterProps } from './types/contact-details-footer'
 import { CredentialListFooterProps } from './types/credential-list-footer'
 import { InlineErrorConfig } from './types/error'
 import { GenericFn } from './types/fn'
@@ -34,6 +36,7 @@ import { CustomNotification } from './types/notification'
 import { State } from './types/state'
 import { IVersionCheckService } from './types/version-check'
 import { ICredentialDisplayRegistry } from './types/credential-display'
+import { ITrustTaskDisplayRegistry } from './types/trust-task-display'
 
 export type FN_ONBOARDING_DONE = (
   dispatch: React.Dispatch<ReducerAction<unknown>>,
@@ -88,8 +91,22 @@ export const COMPONENT_TOKENS = {
   COMPONENT_RECORD: 'component.record',
   COMPONENT_PIN_HEADER: 'component.pin-create-header',
   COMPONENT_CONTACT_LIST_ITEM: 'component.contact-list-item',
+  // How one exchanged R-Card is drawn in the VRC contacts list. Distinct from
+  // COMPONENT_CONTACT_LIST_ITEM above, which draws a DIDComm connection.
+  COMPONENT_CONTACT_CARD: 'component.contact-card',
   COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM: 'component.contact-details-cred-list-item',
+  // Extra per-contact content at the bottom of the contact details screen —
+  // e.g. a demo profile's own contact-scoped action, distinct from
+  // COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM above, which draws one row in
+  // that screen's credential list.
+  COMPONENT_CONTACT_DETAILS_FOOTER: 'component.contact-details-footer',
   COMPONENT_CONNECTION_ALERT: 'component.connection-alert',
+  // Mounted once, always, regardless of which tab/screen is active — for a
+  // profile that needs to observe app-wide events (e.g. an incoming request
+  // on a connection the user isn't currently viewing) and surface a toast or
+  // other passive notification. Mirrors InAppMessageNotifier's own role, but
+  // as an extension seam rather than hardcoded into TabStack.
+  COMPONENT_APP_GLOBAL_LISTENER: 'component.app-global-listener',
 } as const
 
 export const NOTIFICATION_TOKENS = {
@@ -147,6 +164,7 @@ export const UTILITY_TOKENS = {
   UTIL_AGENT_BRIDGE: 'utility.agent-bridge',
   UTIL_REFRESH_ORCHESTRATOR: 'utility.refresh-orchestrator',
   UTIL_CREDENTIAL_DISPLAY_REGISTRY: 'utility.credential-display-registry',
+  UTIL_TRUST_TASK_DISPLAY_REGISTRY: 'utility.trust-task-display-registry',
 } as const
 
 export const CONFIG_TOKENS = {
@@ -250,16 +268,20 @@ export type TokenMapping = {
   [TOKENS.COMPONENT_CRED_EMPTY_LIST]: React.FC
   [TOKENS.COMPONENT_RECORD]: React.FC
   [TOKENS.COMPONENT_CONTACT_LIST_ITEM]: React.FC<ContactListItemProps>
+  [TOKENS.COMPONENT_CONTACT_CARD]: React.FC<ContactCardProps>
   [TOKENS.COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM]: React.FC<ContactCredentialListItemProps>
+  [TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER]: React.FC<ContactDetailsFooterProps>
   [TOKENS.INLINE_ERRORS]: InlineErrorConfig
   [TOKENS.CUSTOM_NAV_STACK_1]: React.FC
   [TOKENS.COMPONENT_CONNECTION_ALERT]: React.FC<{ connectionLabel?: string }>
+  [TOKENS.COMPONENT_APP_GLOBAL_LISTENER]: React.FC
   [TOKENS.UTIL_AGENT_BRIDGE]: AgentBridge
   [TOKENS.UTIL_REFRESH_ORCHESTRATOR]: IRefreshOrchestrator
   [TOKENS.FN_PIN_HASH_ALGORITHM]: FN_PIN_HASH_ALGORITHM
   [TOKENS.FN_ATTESTATION_GET_CHALLENGE]: FN_ATTESTATION_GET_CHALLENGE
   [TOKENS.FN_ATTESTATION_GET_JWT]: FN_ATTESTATION_GET_JWT
   [TOKENS.UTIL_CREDENTIAL_DISPLAY_REGISTRY]: ICredentialDisplayRegistry | undefined
+  [TOKENS.UTIL_TRUST_TASK_DISPLAY_REGISTRY]: ITrustTaskDisplayRegistry | undefined
 }
 
 export interface Container {

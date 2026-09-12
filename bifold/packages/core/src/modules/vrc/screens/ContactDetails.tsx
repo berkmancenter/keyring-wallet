@@ -7,6 +7,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { useTranslation } from 'react-i18next'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
+import { TOKENS, useServices } from '../../../container-api'
 import { useTheme } from '../../../contexts/theme'
 import { ContactStackParams, Screens } from '../../../types/navigators'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
@@ -14,7 +15,12 @@ import CommonRemoveModal from '../../../components/modals/CommonRemoveModal'
 import { ModalUsage } from '../../../types/remove'
 import { useDeleteContact } from '../hooks/useDeleteContact'
 import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
-import { getWitnessCredentialsForSubject, extractWitnessInfo, getVrcCredentialJsonForSubject, WitnessRecord } from '../utils/witnessCredentialUtils'
+import {
+  getWitnessCredentialsForSubject,
+  extractWitnessInfo,
+  getVrcCredentialJsonForSubject,
+  WitnessRecord,
+} from '../utils/witnessCredentialUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { testIdWithKey } from '../../../utils/testable'
@@ -38,6 +44,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   const { ColorPalette, TextTheme, Assets } = useTheme()
   const { agent } = useAgent()
   const { t } = useTranslation()
+  const [ContactDetailsFooter] = useServices([TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER])
   const [connectionId, setConnectionId] = useState<string | null>(null)
   const [isRemoveModalDisplayed, setIsRemoveModalDisplayed] = useState<boolean>(false)
   const { deleteContact } = useDeleteContact()
@@ -91,7 +98,9 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
         console.log(`[VRC:Badge] ContactDetails: raw credential keys: ${Object.keys(rawCred).sort().join(', ')}`)
         const result = await verifyVrcHardwareEvidence(rawCred as any)
         // eslint-disable-next-line no-console
-        console.log(`[VRC:Badge] ContactDetails: verification result valid=${result?.valid}, error=${result?.error ?? 'none'}`)
+        console.log(
+          `[VRC:Badge] ContactDetails: verification result valid=${result?.valid}, error=${result?.error ?? 'none'}`
+        )
         if (!cancelled) {
           setHwVerified(result?.valid === true)
         }
@@ -102,7 +111,9 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
       }
     }
     verify()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [w3cCredentialRecords, contact.issuer.id])
 
   useEffect(() => {
@@ -118,7 +129,10 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
         }
       } catch (error) {
         // eslint-disable-next-line no-console
-        console.warn('[VRC:ContactDetails] Connection lookup error:', error instanceof Error ? error.message : String(error))
+        console.warn(
+          '[VRC:ContactDetails] Connection lookup error:',
+          error instanceof Error ? error.message : String(error)
+        )
       }
     }
 
@@ -479,10 +493,10 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
               <Icon name="message-text-outline" size={18} color="#000000" />
             )}
           </View>
-          <ThemedText style={styles.viewMessagesText}>
-            {t('ContactDetails.ViewMessages')}
-          </ThemedText>
+          <ThemedText style={styles.viewMessagesText}>{t('ContactDetails.ViewMessages')}</ThemedText>
         </TouchableOpacity>
+
+        <ContactDetailsFooter contact={contact} connectionId={connectionId} />
 
         {/* Remove Contact */}
         <TouchableOpacity

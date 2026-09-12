@@ -17,7 +17,7 @@ import {
 } from '../../../src/modules/openid/credentialRecord'
 import { getCredentialForDisplay } from '../../../src/modules/openid/display'
 import { buildFieldsFromW3cCredsCredential } from '../../../src/utils/oca'
-import { recordsAddedByType, recordsRemovedByType } from '@bifold/react-hooks/build/recordUtils'
+import { recordsAddedByType, recordsRemovedByType } from '@bifold/react-hooks'
 
 jest.mock('../../../src/utils/agent', () => ({
   useAppAgent: jest.fn(),
@@ -46,7 +46,7 @@ jest.mock('../../../src/utils/oca', () => ({
   buildFieldsFromW3cCredsCredential: jest.fn(),
 }))
 
-jest.mock('@bifold/react-hooks/build/recordUtils', () => ({
+jest.mock('@bifold/react-hooks', () => ({
   recordsAddedByType: jest.fn(),
   recordsRemovedByType: jest.fn(),
 }))

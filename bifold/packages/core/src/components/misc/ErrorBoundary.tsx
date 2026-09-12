@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react'
 import { StyleSheet, Text, useWindowDimensions, ScrollView, View, TouchableOpacity } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { GenericFn } from 'types/fn'
+import { GenericFn } from '../../types/fn'
 import { useTranslation } from 'react-i18next'
 import Button, { ButtonType } from '../buttons/Button'
 import Icon from 'react-native-vector-icons/MaterialIcons'

@@ -2,11 +2,13 @@ import { Agent, W3cCredentialRecord } from '@credo-ts/core'
 import { DidCommConnectionRecord } from '@credo-ts/didcomm'
 import { isDTGCredential, isRelationshipCredential } from '../credentialTypes'
 import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
+import { ContactCredentialDetails } from '../../../types/navigators'
+import { getWitnessCredentialsForSubject, hasVrcHardwareAttestation } from './witnessCredentialUtils'
 import { resolveContactDisplayInfo, toRawCredential } from './rcardDisplayUtils'
 
 /**
  * Extract issuer information from a W3C credential
- * 
+ *
  * @param credential - The W3C credential record
  * @returns Object containing issuer id and optional name, or null if extraction fails
  */
@@ -35,7 +37,7 @@ export function extractIssuerFromCredential(credential: W3cCredentialRecord): { 
 
 /**
  * Check if a W3C credential is a VRC (Verifiable Relationship Credential)
- * 
+ *
  * @param credential - The W3C credential record to check
  * @returns true if the credential is a VRC, false otherwise
  */
@@ -56,7 +58,7 @@ export function isVrcCredential(credential: W3cCredentialRecord): boolean {
 /**
  * Get the VRC name for a connection by looking up the counterparty's relationship DID
  * and finding the matching W3C credential with issuer.name
- * 
+ *
  * @param agent - The Credo agent instance
  * @param connectionId - The connection ID to look up
  * @param w3cCredentialRecords - Array of W3C credential records to search
@@ -74,7 +76,7 @@ export async function getVrcNameForConnection(
   try {
     // Get the relationship DID repository
     const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
-    
+
     // Find the relationship record for this connection
     const allRecords = await repository.getAll(agent.context)
     const relationshipRecord = allRecords.find((r) => r.connectionId === connectionId)
@@ -99,9 +101,49 @@ export async function getVrcNameForConnection(
 }
 
 /**
+ * Build the same `ContactCredentialDetails` shape `ListContacts.tsx` builds
+ * for its rows, but for ONE already-known connection rather than grouping
+ * every credential in the wallet — for a non-React caller (a notification
+ * listener, say) that needs to navigate to `Screens.ContactDetails`, which
+ * takes a full `{ contact: ContactCredentialDetails }` route param, not just
+ * a connectionId.
+ *
+ * Returns null if this connection has no established VRC relationship on
+ * file (no relationship DID, no credential) — the caller should fall back to
+ * something connectionId-only (e.g. `Screens.Chat`) in that case.
+ */
+export async function getContactCredentialDetailsForConnection(
+  agent: Agent,
+  connectionId: string,
+  w3cCredentialRecords: W3cCredentialRecord[]
+): Promise<ContactCredentialDetails | null> {
+  try {
+    const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
+    const allRecords = await repository.getAll(agent.context)
+    const issuerId = allRecords.find((r) => r.connectionId === connectionId)?.counterpartyRelationshipDid
+    if (!issuerId) return null
+
+    const displayInfo = resolveContactDisplayInfo(w3cCredentialRecords, issuerId)
+    return {
+      issuer: {
+        id: issuerId,
+        name: displayInfo.name || `Unknown ...${issuerId.slice(-8)}`,
+        email: displayInfo.email,
+        organization: displayInfo.organization,
+        photo: displayInfo.photo,
+      },
+      hasWitnessCredentials: getWitnessCredentialsForSubject(w3cCredentialRecords, issuerId).length > 0,
+      hasHardwareAttestation: hasVrcHardwareAttestation(w3cCredentialRecords, issuerId),
+    }
+  } catch (_error) {
+    return null
+  }
+}
+
+/**
  * Synchronously get VRC name from a connection record if it was previously cached in metadata
  * This is a fallback for non-React contexts where hooks cannot be used
- * 
+ *
  * @param connection - The connection record
  * @returns The cached VRC name, or null if not available
  */
@@ -123,16 +165,12 @@ export function getVrcNameFromConnectionMetadata(connection: DidCommConnectionRe
 /**
  * Store VRC name in connection metadata for faster synchronous access
  * This should be called when a VRC is received/processed
- * 
+ *
  * @param agent - The Credo agent instance
  * @param connectionId - The connection ID
  * @param vrcName - The VRC name to cache
  */
-export async function cacheVrcNameInConnection(
-  agent: Agent,
-  connectionId: string,
-  vrcName: string
-): Promise<void> {
+export async function cacheVrcNameInConnection(agent: Agent, connectionId: string, vrcName: string): Promise<void> {
   try {
     const connection = await agent.modules.didcomm.connections.getById(connectionId)
     await connection.metadata.set('vrcName', { name: vrcName })

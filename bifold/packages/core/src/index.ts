@@ -95,6 +95,7 @@ export { useDeepLinks } from './hooks/deep-links'
 export { useConnectionDisplayName } from './hooks/connections'
 export { useRCardCredential } from './modules/vrc/hooks/useRCardCredential'
 export { VrcNameCacheProvider, useVrcNameCache } from './modules/vrc/context/VrcNameCacheProvider'
+export { getContactCredentialDetailsForConnection } from './modules/vrc/utils/vrcNameHelper'
 export { initLanguages, initStoredLanguage, Locales, translationResources } from './localization'
 export * from './navigators'
 export { createStyles } from './screens/OnboardingPages'
@@ -105,7 +106,7 @@ export * from './types/auto-credential'
 export { BifoldError } from './types/error'
 export { Screens, Stacks, TabStacks } from './types/navigators'
 export * from './types/version-check'
-export { createLinkSecretIfRequired, getAgentModules } from './utils/agent'
+export { createLinkSecretIfRequired, getAgentModules, useAppAgent } from './utils/agent'
 export { getCredentialIdentifiers, isValidAnonCredsCredential } from './utils/credential'
 export {
   connectFromScanOrDeepLink,
@@ -208,7 +209,38 @@ export {
   loadVrcLocalization,
   getCredentialDisplayRegistry,
 } from './modules/vrc'
-export { setupTrustTasksInbound, setTspCarriageEnabled, TRUST_TASKS_MIN_RCE_VERSION } from './modules/trust-tasks'
+export {
+  setupTrustTasksInbound,
+  setTspCarriageEnabled,
+  TRUST_TASKS_MIN_RCE_VERSION,
+  sendTrustTaskDocument,
+  getTrustTasksService,
+  TrustTaskDocumentRepository,
+  trustTaskRegistry,
+  registerTrustTask,
+  createApprovalRequestHandler,
+  respondToPendingTrustTask,
+  trustTaskPromptStore,
+  trustTaskDisplayRegistry,
+  registerTrustTaskDisplay,
+} from './modules/trust-tasks'
+export type {
+  TrustTaskRegistration,
+  TrustTaskOrchestration,
+  TrustTaskDocumentHandler,
+  InboundContext as TrustTaskInboundContext,
+  RegisterTrustTaskOptions,
+  PendingTrustTaskPrompt,
+} from './modules/trust-tasks'
+export type {
+  ITrustTaskDisplayHandler,
+  ITrustTaskDisplayRegistry,
+  TrustTaskDisplayResult,
+} from './types/trust-task-display'
+export { default as TrustTaskApprovalCard, TrustTaskFields } from './screens/TrustTaskApprovalCard'
+export type { TrustTaskFieldsProps } from './screens/TrustTaskApprovalCard'
+export { default as TrustTaskApprovalModal } from './screens/TrustTaskApprovalModal'
+export type { TrustTaskApprovalModalProps } from './screens/TrustTaskApprovalModal'
 export type {
   RelationshipDidRecordProps,
   CustomTags,
@@ -233,13 +265,36 @@ export {
   isHardwareSigningAvailable,
   prepareHardwareKeyForSigning,
 } from './modules/vrc/vrc-hardware-signing'
-export type { 
+export type {
   VrcHardwareSignature,
   HardwareKeyGenerationResult,
   HardwareSignatureResult,
   HardwareKeyInfo,
   HardwareSigningResult,
 } from './modules/vrc/vrc-hardware-signing'
+
+// Standalone hardware signing — Credo-free; also published as
+// `@bifold/core/hardware-signing`. See src/hardware-signing/index.ts.
+export {
+  createHardwareSigningService,
+  createInMemoryAttestationCache,
+  ensureHardwareKey,
+  signPayloadWithHardwareKey,
+  verifySignedPayload,
+  HardwareEvidenceBuilder,
+} from './hardware-signing'
+export type {
+  AttestationCache,
+  AttestationCacheEntry,
+  HardwareKeyHandle,
+  HardwareKeySignature,
+  HardwareSigningLogger,
+  HardwareSigningService,
+  HardwareSigningServiceOptions,
+  SignPayloadOutcome,
+  SignPayloadRequest,
+  SignedPayloadAttestation,
+} from './hardware-signing'
 
 // Biometric Confirmation UI Context and Modal
 export {
@@ -268,7 +323,9 @@ export { MainContainer } from './container-impl'
 export type { CredentialListFooterProps }
 
 export type { Config, HistoryEventsLoggerConfig } from './types/config'
-export type { OnboardingTask, ScreenLayoutConfig } from './types/navigators'
+export type { ContactCardProps } from './types/contact-card'
+export type { ContactDetailsFooterProps } from './types/contact-details-footer'
+export type { ContactCredentialDetails, OnboardingTask, ScreenLayoutConfig } from './types/navigators'
 
 export { LockoutReason } from './contexts/auth'
 export type { OnboardingStackProps } from './navigators/OnboardingStack'

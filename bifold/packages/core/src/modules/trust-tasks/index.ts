@@ -32,3 +32,17 @@ export {
   isTspCarriageEnabled,
   TRUST_TASKS_MIN_RCE_VERSION,
 } from './ceremony'
+
+// R5 — the open type→handler registry and its render/approve-deny scaffold.
+// See docs/plans/reference-app-sdk-packaging.md and its 2026-09-01-al.md /
+// 2026-09-06-agent.md companions.
+export { TrustTaskRegistry, trustTaskRegistry } from './registry'
+export type { TrustTaskRegistration, TrustTaskOrchestration, TrustTaskDocumentHandler, InboundContext } from './registry'
+export { registerTrustTask } from './registerTrustTask'
+export type { RegisterTrustTaskOptions } from './registerTrustTask'
+export { createApprovalRequestHandler, respondToPendingTrustTask } from './genericApproval'
+export type { CreateApprovalRequestHandlerOptions } from './genericApproval'
+export { trustTaskPromptStore } from './trustTaskPromptStore'
+export type { PendingTrustTaskPrompt } from './trustTaskPromptStore'
+export { trustTaskDisplayRegistry } from './display/trustTaskDisplayRegistry'
+export { registerTrustTaskDisplay } from './display/register'

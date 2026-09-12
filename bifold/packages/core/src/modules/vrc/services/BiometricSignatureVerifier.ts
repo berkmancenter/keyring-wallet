@@ -1,167 +1,27 @@
 /**
- * BiometricSignatureVerifier
+ * BiometricSignatureVerifier — the VRC-shaped view of hardware evidence
+ * verification.
  *
- * Thin wrapper around native verification.
- * All actual verification (X.509 chain, ECDSA signatures, public key binding,
- * attestation extension parsing) is done natively by iOS SecTrust / Android CertPathValidator.
+ * The verifier itself was always Credo-free and now lives in
+ * `src/hardware-signing/verify.ts`, where a relying party can use it without
+ * pulling in an agent framework. It is re-exported here so every existing
+ * import path keeps working.
  *
- * VERIFICATION PERFORMED NATIVELY:
- * 1. Full X.509 certificate chain validation (signatures, expiry, constraints)
- * 2. Public key extraction from leaf cert → comparison with evidence public key
- * 3. ECDSA-SHA256 signature verification (or iOS App Attest assertion verification)
- * 4. Android: Attestation extension parsing (security level, verified boot, biometric enforcement)
- * 5. Android: Google CRL revocation checking
- *
- * VERIFICATION LEVELS:
- * - cryptographic: Native verification passed (chain + signature + pubkey match)
- * - none: Verification failed
- *
- * PLATFORM ASYMMETRIES:
- * - Public key encoding: iOS uses raw 65-byte EC point, Android uses SPKI-wrapped.
- *   Native verifyHardwareEvidence normalizes both formats.
- * - Signature format: iOS sends CBOR App Attest assertions, Android sends DER ECDSA.
- *   Both are labeled 'ECDSA-SHA256' in evidence but handled differently by native code.
+ * What stays VRC-specific, and therefore stays here, is
+ * `verifyVrcHardwareEvidence`: finding the hardware evidence inside a
+ * credential's `evidence` array and reconstructing the exact content that was
+ * signed by stripping the `evidence`/`proof` blocks and undoing Credo's
+ * JSON-LD key normalisation.
  */
 
 import type { HardwareAttestationEvidence } from '../types/evidence'
-import { verifyHardwareEvidence, type NativeVerificationResult } from '@bifold/react-native-attestation'
+import { HardwareSignatureVerifier } from '../../../hardware-signing'
+import type { SignatureVerificationResult, VerificationLevel } from '../../../hardware-signing'
+
+export { HardwareSignatureVerifier }
+export type { SignatureVerificationResult, VerificationLevel }
 
 const LOG_PREFIX = '[VRC:Verify]'
-
-export type VerificationLevel = 'cryptographic' | 'none'
-
-export interface SignatureVerificationResult {
-  valid: boolean
-  details: {
-    certificateChainValid: boolean
-    publicKeyMatchesCert: boolean
-    signatureValid: boolean
-    verificationLevel: VerificationLevel
-    cryptoLibraryAvailable: boolean
-  }
-  error?: string
-  verifiedAt: string
-  platform?: 'ios' | 'android'
-  securityLevel?: string
-  // Android attestation extension data
-  attestationExtension?: {
-    attestationSecurityLevel?: string
-    keymasterSecurityLevel?: string
-    verifiedBootState?: string
-    deviceLocked?: boolean
-    attestationChallengeBase64?: string
-    userAuthType?: string
-    authTimeout?: number
-  }
-  revocationChecked?: boolean
-}
-
-export class HardwareSignatureVerifier {
-  private log: { info: (...args: any[]) => void; warn: (...args: any[]) => void; error: (...args: any[]) => void }
-
-  constructor(logger?: {
-    info: (...args: any[]) => void
-    warn: (...args: any[]) => void
-    error: (...args: any[]) => void
-  }) {
-    // eslint-disable-next-line no-console
-    this.log = logger ?? { info: console.log, warn: console.warn, error: console.error }
-  }
-
-  /**
-   * Verify VRC hardware attestation evidence via native verification.
-   */
-  public async verifyEvidence(
-    evidence: HardwareAttestationEvidence,
-    vrcContent?: string
-  ): Promise<SignatureVerificationResult> {
-    const { platform, keyStorage } = evidence.hardwareBinding
-    this.log.info(`${LOG_PREFIX} ▶ Verifying [${platform}/${keyStorage}, ${evidence.attestation.format}]`)
-
-    const startTime = Date.now()
-    const verifiedAt = new Date().toISOString()
-
-    try {
-      const nativeResult: NativeVerificationResult = await verifyHardwareEvidence(
-        evidence.attestation.certificateChain,
-        evidence.signature.value,
-        vrcContent || '',
-        evidence.hardwareBinding.publicKey,
-        evidence.attestation.format,
-        evidence.signature.signedContentHash
-      )
-
-      const elapsed = Date.now() - startTime
-      const level: VerificationLevel = nativeResult.valid ? 'cryptographic' : 'none'
-
-      if (nativeResult.valid) {
-        this.log.info(`${LOG_PREFIX} ✓ Native verification passed [${level}] (${elapsed}ms)`)
-      } else {
-        this.log.warn(`${LOG_PREFIX} ✗ Native verification failed: ${nativeResult.errors?.join(', ')} (${elapsed}ms)`)
-      }
-
-      return {
-        valid: nativeResult.valid,
-        details: {
-          certificateChainValid: nativeResult.certificateChainValid,
-          publicKeyMatchesCert: nativeResult.publicKeyMatchesLeafCert,
-          signatureValid: nativeResult.signatureValid,
-          verificationLevel: level,
-          cryptoLibraryAvailable: true, // Always true — native crypto is always available
-        },
-        error: nativeResult.valid ? undefined : nativeResult.errors?.join('; '),
-        verifiedAt,
-        platform,
-        securityLevel: keyStorage,
-        attestationExtension: nativeResult.attestationSecurityLevel
-          ? {
-              attestationSecurityLevel: nativeResult.attestationSecurityLevel,
-              keymasterSecurityLevel: nativeResult.keymasterSecurityLevel,
-              verifiedBootState: nativeResult.verifiedBootState,
-              deviceLocked: nativeResult.deviceLocked,
-              attestationChallengeBase64: nativeResult.attestationChallengeBase64,
-              userAuthType: nativeResult.userAuthType,
-              authTimeout: nativeResult.authTimeout,
-            }
-          : undefined,
-        revocationChecked: nativeResult.revocationChecked,
-      }
-    } catch (error) {
-      const elapsed = Date.now() - startTime
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      this.log.error(`${LOG_PREFIX} ✗ Native verification error: ${errorMsg} (${elapsed}ms)`)
-
-      return {
-        valid: false,
-        details: {
-          certificateChainValid: false,
-          publicKeyMatchesCert: false,
-          signatureValid: false,
-          verificationLevel: 'none',
-          cryptoLibraryAvailable: true,
-        },
-        error: `Native verification error: ${errorMsg}`,
-        verifiedAt,
-        platform,
-        securityLevel: keyStorage,
-      }
-    }
-  }
-
-  /** Quick format validation for evidence structure */
-  public hasValidEvidenceFormat(evidence: HardwareAttestationEvidence): boolean {
-    const hasAuthMethod = Boolean(evidence.authenticationMethod?.type || evidence.biometricMethod?.type)
-    return Boolean(
-      evidence.id &&
-        Array.isArray(evidence.type) &&
-        evidence.type.length > 0 &&
-        evidence.created &&
-        hasAuthMethod &&
-        evidence.hardwareBinding?.publicKey &&
-        evidence.signature?.value
-    )
-  }
-}
 
 /**
  * Extract the VRC content that was signed (removes evidence and proof blocks).

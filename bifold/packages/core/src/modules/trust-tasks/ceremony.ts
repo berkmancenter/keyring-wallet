@@ -68,6 +68,8 @@ import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
 import { createTspCarriage } from './module/TspCarriage'
 import { TrustTasksModule } from './module/TrustTasksModule'
+import { trustTaskRegistry } from './registry'
+import type { InboundContext as RegistryInboundContext } from './registry'
 import { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
 import { TrustTasksService, respondWith, rejectWith, extendedCode } from './services/TrustTasksService'
 
@@ -472,70 +474,29 @@ export function setupTrustTasksInbound(agent: Agent): void {
       return
     }
 
-    if (type === propose.TYPE_URI) {
-      await handleInboundPropose(agent, service, document, {
+    // The open registry (R5, docs/plans/reference-app-sdk-packaging.md):
+    // every task type this wallet understands — including the VRC/witness/
+    // discovery types below, registered at the bottom of this file — is
+    // looked up here rather than matched in an if/else. A demo profile adds
+    // a new type by calling `registerTrustTask(...)`; it never edits this
+    // dispatch.
+    const resolved = trustTaskRegistry.resolveForDocumentType(type)
+    if (resolved) {
+      const ctx: RegistryInboundContext = {
         connectionId: context.connectionId,
         senderDid: context.senderDid,
         recipientDid: context.recipientDid,
-      })
-      return
-    }
-    if (type === `${propose.TYPE_URI}#response`) {
-      await handleInboundProposeResponse(agent, service, document, {
-        connectionId: context.connectionId,
-        senderDid: context.senderDid,
-        recipientDid: context.recipientDid,
-      })
-      return
-    }
-
-    if (type === discovery.TYPE_URI) {
-      await handleInboundDiscovery(agent, service, document, {
-        connectionId: context.connectionId,
-        senderDid: context.senderDid,
-        recipientDid: context.recipientDid,
-      })
-      return
-    }
-    if (type === `${discovery.TYPE_URI}#response`) {
-      await handleInboundDiscoveryResponse(agent, service, document, {
-        connectionId: context.connectionId,
-        senderDid: context.senderDid,
-        recipientDid: context.recipientDid,
-      })
-      return
-    }
-    if (type === issue.TYPE_URI) {
-      await handleInboundIssue(agent, service, document, {
-        connectionId: context.connectionId,
-        senderDid: context.senderDid,
-        recipientDid: context.recipientDid,
-      })
-      return
-    }
-    if (type === `${issue.TYPE_URI}#response`) {
-      await handleInboundIssueReceipt(agent, service, document, {
-        connectionId: context.connectionId,
-        senderDid: context.senderDid,
-        recipientDid: context.recipientDid,
-      })
-      return
-    }
-
-    if (type === witnessShare.TYPE_URI) {
-      await handleInboundWitnessShare(agent, service, document, {
-        connectionId: context.connectionId,
-        senderDid: context.senderDid,
-        recipientDid: context.recipientDid,
-      })
-      return
-    }
-    if (type === witnessShare.RESPONSE_TYPE_URI) {
-      await handleInboundWitnessShareReceipt(agent, service, document, {
-        connectionId: context.connectionId,
-        senderDid: context.senderDid,
-        recipientDid: context.recipientDid,
-      })
+      }
+      if (resolved.isResponse) {
+        if (resolved.registration.handleResponse) {
+          await resolved.registration.handleResponse(agent, service, document, ctx)
+        } else {
+          logger.info(`${LOG_PREFIX} ${type} has no registered response handler — retained`)
+          await service.retain(agent.context, document, 'response', context.connectionId)
+        }
+      } else {
+        await resolved.registration.handleRequest(agent, service, document, ctx)
+      }
       return
     }
 
@@ -611,7 +572,13 @@ async function handleInboundDiscovery(
     handler: async (doc) => {
       const patterns = (doc as { payload?: { patterns?: string[] } }).payload?.patterns
       const effective = patterns && patterns.length > 0 ? patterns : ['*']
-      const supportedTypes = SUPPORTED_TASK_TYPES.filter((typeUri) =>
+      // The registry is authoritative — SUPPORTED_TASK_TYPES itself is
+      // registered into it below, so a type registered by a demo profile
+      // (e.g. the Approver's access-request) is advertised the same way the
+      // built-in VRC/witness types are, with no separate list to keep in
+      // sync.
+      const allTypes = [...new Set([...SUPPORTED_TASK_TYPES, ...trustTaskRegistry.listTypeUris()])]
+      const supportedTypes = allTypes.filter((typeUri) =>
         effective.some((pattern) => slugMatchesPattern(slugOfTypeUri(typeUri), pattern))
       )
       return respondWith(doc as never, utils.uuid(), { supportedTypes: [...supportedTypes] }, () =>
@@ -1415,6 +1382,68 @@ async function handleInboundProposeResponse(
     )
   }
 }
+
+/**
+ * Register the built-in VRC/witness/discovery types into the same open
+ * registry a demo profile registers into (R5). This is what proves the
+ * registry is real dispatch rather than a decoration sitting beside the old
+ * if/else: these five entries ARE the dispatch for the exchange this whole
+ * file implements, looked up by `setupTrustTasksInbound`'s
+ * `handleInboundDocument` exactly like any later registration would be.
+ *
+ * Guarded against a duplicate call (`register` throws on one) rather than
+ * relying on "this file is only ever imported once" — a defensive no-op,
+ * since re-registering the same handlers is harmless if it ever happened.
+ */
+function registerBuiltinTrustTasks(): void {
+  if (trustTaskRegistry.get(propose.TYPE_URI)) return
+
+  trustTaskRegistry.register({
+    typeUri: propose.TYPE_URI,
+    spec: propose.SPEC as never,
+    responseSpec: propose.RESPONSE_SPEC as never,
+    orchestration: {
+      isDeterministicProposer,
+      minRceVersion: TRUST_TASKS_MIN_RCE_VERSION,
+    },
+    handleRequest: handleInboundPropose,
+    handleResponse: handleInboundProposeResponse,
+  })
+
+  trustTaskRegistry.register({
+    typeUri: discovery.TYPE_URI,
+    spec: discovery.SPEC as never,
+    responseSpec: discovery.RESPONSE_SPEC as never,
+    orchestration: {
+      minRceVersion: TRUST_TASKS_MIN_RCE_VERSION,
+      // Discovery answers the "does the peer support X" question itself —
+      // it would be circular for discovery to require discovery first.
+      requiresDiscovery: false,
+    },
+    handleRequest: handleInboundDiscovery,
+    handleResponse: handleInboundDiscoveryResponse,
+  })
+
+  trustTaskRegistry.register({
+    typeUri: issue.TYPE_URI,
+    spec: issue.SPEC as never,
+    responseSpec: issue.RESPONSE_SPEC as never,
+    orchestration: { minRceVersion: TRUST_TASKS_MIN_RCE_VERSION },
+    handleRequest: handleInboundIssue,
+    handleResponse: handleInboundIssueReceipt,
+  })
+
+  trustTaskRegistry.register({
+    typeUri: witnessShare.TYPE_URI,
+    spec: witnessShare.SPEC as never,
+    responseSpec: witnessShare.RESPONSE_SPEC as never,
+    orchestration: { minRceVersion: TRUST_TASKS_MIN_RCE_VERSION },
+    handleRequest: handleInboundWitnessShare,
+    handleResponse: handleInboundWitnessShareReceipt,
+  })
+}
+
+registerBuiltinTrustTasks()
 
 /**
  * Pending credential-exchange queries awaiting the user's consent, keyed by
