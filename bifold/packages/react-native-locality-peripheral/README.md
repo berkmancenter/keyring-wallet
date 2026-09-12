@@ -1,84 +1,151 @@
 # @bifold/react-native-locality-peripheral
 
-**Design sketch only. No native implementation exists.** This package is
-`src/NativeLocalityPeripheral.ts` (the TurboModule `Spec`) and `src/index.ts`
-(the JS wrapper) — written first, and written to be reviewed, before any
-Android Kotlin or iOS Swift exists to satisfy them. There is no `android/`
-or `ios/` directory here yet, unlike this monorepo's other native packages
-(`@bifold/react-native-attestation` is the template this one's TS-facing
-shape mirrors).
-
-## What this is for
-
-`docs/plans/locality-plan.md` §10.3 item 9 — the device's BLE **peripheral**
-role in the locality co-presence ceremony: advertise the rendezvous EID as a
-128-bit service UUID, serve one GATT characteristic (the sensor writes a
+The device's BLE **peripheral** role in the locality co-presence ceremony
+(`docs/plans/locality-plan.md` §10.3 item 9): advertise the rendezvous EID as
+a 128-bit service UUID, serve two GATT characteristics (the sensor writes a
 nonce, then reads back a signed transcript), sign that transcript with the
-same hardware-attestation key the device already uses for VRC evidence, all
-inside the ceremony window and foreground-only. The wallet-side consumer is
-`@bifold/core`'s `DeviceLocalityProvider` interface
-(`src/modules/trust-tasks/deviceLocality.ts`) — this package exists so a real
-implementation of that interface has a native module to call through.
+same hardware-attestation key the device already uses for VRC evidence — all
+inside the ceremony window and foreground-only.
+
+The wallet-side consumer is `@bifold/core`'s `BleDeviceLocalityProvider`,
+implementing the `DeviceLocalityProvider` interface in
+`src/modules/trust-tasks/deviceLocality.ts`. The other end of the wire is
+witness-server's `BleLocalityProvider`.
+
+## Status
+
+| | Android | iOS |
+|---|---|---|
+| Native implementation | `android/…/LocalityPeripheralModule.kt` | `ios/LocalityPeripheral.swift` |
+| Bridge style | TurboModule codegen | legacy `RCT_EXTERN_MODULE`, via RN interop |
+| Signature produced | DER ECDSA over the binding | CBOR App Attest assertion |
+| Verified on a real device | **yes**, end to end, 2026-08-21 | **no** — type-checked only |
+
+Neither platform should be trusted in production yet, for different reasons.
+
+**Android** has had a real live round trip — advertised, witness-server
+connected, wrote the nonce, read back the transcript, `verifyTranscript()`
+confirmed it. What is still unproven is whether the authorized `CryptoObject`
+reliably survives being held across an entire advertising window; see that
+file's own doc comment.
+
+**iOS** has never run on a device. It type-checks against the iOS 14 SDK and
+its JSON/binding literals are asserted character-for-character against the
+Kotlin ones by `src/jcsBindingParity.test.ts`, which is not the same thing as
+working. Two specific things need a live run:
+
+- **`signingElapsedMs`.** iOS cannot pre-authorize the signature the way
+  Android's `CryptoObject` can, so `DCAppAttestService.generateAssertion`
+  runs *inside* witness-server's RTT bound (provisionally 400ms). The Swift
+  logs this number on every run for exactly this reason. If it does not fit,
+  the bound moves or the design does.
+- **Foreground advertising of a 128-bit service UUID.** iOS moves 128-bit
+  UUIDs into the advertisement's "overflow" area when the app is
+  backgrounded, where only other iOS devices scanning for that exact UUID can
+  see them — invisible to the witness's central. The ceremony is
+  foreground-only by design, so this should be fine, and should be confirmed.
+
+`tsp-reference/ref-13-macos-ble-central` exists so this can be exercised from
+a Mac acting as the central, without a Linux host.
+
+## The signature is a different shape on each platform
+
+This is the one substantive asymmetry, and it reaches all the way to the
+witness.
+
+Android signs the binding directly with `SHA256withECDSA`; the result is a DER
+ECDSA signature that witness-server's `p256.verify` reads as is.
+
+iOS cannot do that. The key the VRC evidence already commits to is an App
+Attest key, and App Attest keys are reachable only through
+`generateAssertion`, which returns a CBOR map `{signature, authenticatorData}`
+whose signature covers `SHA256(authenticatorData ‖ SHA256(binding))`. Handed
+straight to `p256.verify` that does not throw — it silently returns false.
+
+Minting a second, ordinary Secure Enclave key on iOS *would* produce
+Android-shaped bytes. It would also produce a public key that differs from the
+one in the VRC evidence, so `transcriptKeyMatchesVrcSigner` on the witness
+would never match — discarding the single check that ties the device on the
+radio to the device in the credential. So the witness learns App Attest
+instead: `witness-server/src/trustTasks/appAttest.ts`. The full reasoning is
+in `docs/plans/locality-plan/2026-09-12-al.md`.
+
+`verifyTranscript` tells the two apart from the first byte — DER is always
+`0x30`, a CBOR map is `0xa0|n` — so the wire format is unchanged and Android
+transcripts take the path they always did.
 
 ## Why this is its own package
 
-Not an addition to `@bifold/react-native-attestation`: that package's
-concern is hardware-key attestation and signing; BLE
-advertising/GATT-server APIs are a different Android/iOS surface with their
-own manifest permissions and lifecycle rules. It does need read access to
-the *same* KeyStore alias that package's `AttestationModule.kt` creates —
-see the design note in `NativeLocalityPeripheral.ts` and
-`docs/plans/locality-plan/2026-08-21-bam.md` for why, and for the specific
-conflict this whole package exists to resolve (the hardware key's
-per-operation biometric authorization cannot happen inside a live BLE GATT
-round trip — authorization and signing have to be split in time).
+Not an addition to `@bifold/react-native-attestation`: that package's concern
+is hardware-key attestation and signing; BLE advertising and GATT-server APIs
+are a different platform surface with their own permissions and lifecycle
+rules.
 
-## What building the native side actually requires
+It does need to reach the *same* key that package manages, which is the
+package's most fragile property:
 
-Not attempted here — this pass stopped at the interface. In order, roughly:
+- **Android** reads the same KeyStore alias `AttestationModule.kt` creates,
+  duplicated as a private constant in both files.
+- **iOS** reads the same keychain items `Attestation.mm` writes — service
+  `AriesAttestation`, accounts `<bundleId>.AttestationKey` and
+  `<bundleId>.AppAttestPublicKey`.
 
-1. **Android manifest**: `BLUETOOTH_ADVERTISE` (API 31+, dangerous, runtime-
-   requested) is not declared anywhere in `app/`'s manifest today, and there
-   is no existing Bluetooth runtime-permission-request flow in the app to
-   extend — this is greenfield permission UX, not a rewire.
-2. **The KeyStore alias needs to move somewhere shared** between this
-   package and `@bifold/react-native-attestation`'s `AttestationModule.kt` —
-   currently a private constant in that one file.
-3. **The biometric-authorization split**: obtain an authorized `Signature`
-   via `BiometricPrompt` + `CryptoObject` when `respondToSensor` is called,
-   *before* advertising starts; hold it in native memory; sign synchronously
-   inside the GATT write callback once the sensor's nonce arrives.
-4. **The GATT server + advertiser**, as one internal state machine —
-   `BluetoothLeAdvertiser` + `BluetoothGattServer`, one characteristic,
-   write-then-read, matching `ref-06p2-ble-observation`'s protocol (that
-   rung's README documents the phone-side shape this needs to have, since it
-   stood in a phone running nRF Connect for exactly this role).
-5. **The binding assembly is a third deliberate duplicate.** Only the native
-   side ever learns `sensorNonce` (the sensor writes it over BLE), so it
-   must assemble the same JCS-canonicalized five-value binding
-   `deviceLocality.ts`'s `bindingFor()` computes, itself, in Kotlin — a
-   third copy of that one algorithm alongside the wallet (Hermes) and
-   witness-server (Node) copies, for the same cross-runtime reason those two
-   already are. Check it against the same frozen fixture
-   `__tests__/deviceLocality.test.ts` in `@bifold/core` uses
-   (`CHALLENGE`/`TASK_DIGEST`/`SENSOR_NONCE`/`SENSOR_DID` → the exact
-   `bindingUtf8`/`bindingHex` values there) — don't just eyeball agreement
-   with the other two copies.
-6. **Validation**: point witness-server's real `BleLocalityProvider`
-   (already built, §10.2 item 2 — not a reference-rung stand-in) at this
-   native peripheral on a physical device, before reaching for the full
-   `e2e:vrc:devices` suite (item 12).
+Reading a *different* key would not fail loudly. It would sign successfully,
+produce a public key the witness cannot match, and report
+`localityKeyMatchesCredentialSigner: false` on every ceremony while everything
+else looked healthy. `src/jcsBindingParity.test.ts` asserts the iOS strings
+against `Attestation.mm` for this reason; the Android alias is still checked
+by convention only.
 
-## Not wired into the workspace
+## The binding is duplicated four times, on purpose
 
-This package is not a dependency of `@bifold/core` or `app/` yet, and
-nothing in this pass ran `yarn install` against it. It also deliberately
-has no `scripts` entry — `bifold`'s root `build`/`test`/`typecheck`/
-`coverage` all run via `yarn workspaces foreach run <script>`, which skips
-any workspace member missing that script rather than erroring, so this
-package won't break those until it actually has something for them to run.
-(Its own TypeScript was still checked directly — `tsc --noEmit` against a
-temporary symlink to `@bifold/core`'s `node_modules`, removed immediately
-after — it's just not wired into the shared scripts.) Wiring it in for real
-is a decision for whoever picks up the native implementation, not something
-to do speculatively ahead of there being a native module to actually call.
+Only the native side ever learns `sensorNonce` — the sensor writes it over
+BLE — so only the native side can assemble the JCS binding once it arrives.
+That puts the same five-value algorithm in four places:
+
+1. `@bifold/core`'s `deviceLocality.ts` (wallet, Hermes)
+2. `witness-server`'s `trustTasks/locality.ts` (Node)
+3. `LocalityPeripheralModule.kt` (Android)
+4. `ios/LocalityPeripheral.swift` (iOS)
+
+Both native copies hand-write the canonical JSON rather than canonicalizing at
+runtime. `src/jcsBindingParity.test.ts` reads both native sources as text and
+asserts their key order matches RFC 8785 and each other — because the failure
+mode is a signature the witness rejects with no hint as to why, on a path that
+only runs on real hardware in a room with two people in it.
+
+## Running the tests
+
+```sh
+yarn test        # jest — the JS bridge and the cross-language parity assertions
+yarn typecheck   # tsc --noEmit
+```
+
+The Swift has no test target of its own. To type-check it against the real
+SDK without a full app build:
+
+```sh
+xcrun swiftc -typecheck -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+  -target arm64-apple-ios14.0 ios/LocalityPeripheral.swift
+```
+
+That needs the two React promise typedefs stubbed, since they normally arrive
+through `ios/LocalityPeripheralBridge.h`:
+
+```swift
+typealias RCTPromiseResolveBlock = (Any?) -> Void
+typealias RCTPromiseRejectBlock = (String?, String?, Error?) -> Void
+```
+
+## Permissions
+
+**Android**: `BLUETOOTH_ADVERTISE` and `BLUETOOTH_CONNECT` are API 31+ runtime
+permissions. The native side only *checks* whether they are already granted
+and resolves `null` if not — a normal ceremony outcome, not an error. The OS
+request dialog is a JS-level, pre-ceremony UX decision (§10.3 item 8's
+pre-flight sheet), deliberately not a bare popup mid-ceremony.
+
+**iOS**: `NSBluetoothAlwaysUsageDescription` in `app/ios/AriesBifold/Info.plist`.
+The prompt appears the first time a `CBPeripheralManager` is constructed,
+which this module defers until the user has already authorized the ceremony —
+so the purpose string needs to describe co-presence, not Bluetooth in general.

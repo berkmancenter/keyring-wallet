@@ -2,13 +2,22 @@
  * The wallet-side `DeviceLocalityProvider` implementation wrapping
  * `@bifold/react-native-locality-peripheral` (locality-plan.md §10.3 item 9).
  *
- * Proven live end to end on a physical device (2026-08-21, see
+ * Platform-neutral: everything below is the same on Android and iOS, because
+ * the entire platform difference lives behind the native module's one
+ * `respondToSensor` call. Named `Android…` until 2026-09-12 only because
+ * Android was the only implementation.
+ *
+ * Proven live end to end on a physical Android device (2026-08-21, see
  * `docs/plans/locality-plan/2026-08-21-bam.md`): the native peripheral
  * advertised, witness-server's real `BleLocalityProvider` connected, wrote
  * the nonce, read back the signed transcript, and `verifyTranscript()`
- * confirmed it. `createDeviceLocalityProvider()` below is what
- * `ceremony.ts`'s real call site now uses.
+ * confirmed it. iOS has not had that run yet — see
+ * `docs/plans/locality-plan/2026-09-12-al.md`.
+ * `createDeviceLocalityProvider()` below is what `ceremony.ts`'s real call
+ * site uses.
  */
+
+import { Platform } from 'react-native'
 
 import { Agent } from '@credo-ts/core'
 import type {
@@ -51,8 +60,15 @@ export interface NativeLocalityPeripheralBridge {
  */
 export type GetHardwareAttestationState = () => Promise<HardwareAttestationState>
 
-export class AndroidBleDeviceLocalityProvider implements DeviceLocalityProvider {
-  readonly name = 'android-ble-peripheral'
+export class BleDeviceLocalityProvider implements DeviceLocalityProvider {
+  /**
+   * Carries the platform because this string reaches operator-facing logs and
+   * the two platforms fail in genuinely different ways — an iOS ceremony that
+   * times out is usually App Attest or foreground advertising, an Android one
+   * usually the held `CryptoObject`. A single 'ble-peripheral' would make
+   * those indistinguishable in a log from a room you were not in.
+   */
+  readonly name = `${Platform.OS}-ble-peripheral`
 
   constructor(
     private readonly bridge: NativeLocalityPeripheralBridge,
@@ -132,9 +148,9 @@ export async function determineHardwareAttestationState(agent: Agent): Promise<H
 
 /**
  * What `ceremony.ts`'s real `runWitnessSession(...)` call site constructs.
- * Android with the native module linked gets the real peripheral; every
- * other case (iOS — deferred outright, no Xcode in this environment; or
- * Android without the module for some reason) gets the no-op, matching
+ * Android or iOS with the native module linked gets the real peripheral;
+ * anything else (an unsupported platform, or a build where the Gradle module
+ * or pod was not linked) gets the no-op, matching
  * §7.1's `declinedByHolder`/`windowLost` outcome rather than throwing.
  */
 export function createDeviceLocalityProvider(agent: Agent): DeviceLocalityProvider {
@@ -150,7 +166,7 @@ export function createDeviceLocalityProvider(agent: Agent): DeviceLocalityProvid
     isNativeModuleLinked: () => boolean
   }
   if (isSupportedPlatform() && isNativeModuleLinked()) {
-    return new AndroidBleDeviceLocalityProvider(getBridge(), () => determineHardwareAttestationState(agent))
+    return new BleDeviceLocalityProvider(getBridge(), () => determineHardwareAttestationState(agent))
   }
   return new NullDeviceLocalityProvider()
 }

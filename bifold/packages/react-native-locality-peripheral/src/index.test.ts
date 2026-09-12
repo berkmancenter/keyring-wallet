@@ -1,6 +1,6 @@
 /**
  * `index.ts` is the JS↔native bridge and had zero test coverage: every
- * caller (`AndroidBleDeviceLocalityProvider.test.ts` in `@bifold/core`)
+ * caller (`BleDeviceLocalityProvider.test.ts` in `@bifold/core`)
  * mocks this whole module rather than importing it for real, so its own
  * branching — the turbo-vs-legacy module lookup, the throw-when-unlinked
  * path, `isSupportedPlatform`, and `getBridge`'s "fresh object each call"
@@ -179,14 +179,24 @@ describe('isSupportedPlatform', () => {
     expect(mod.isSupportedPlatform()).toBe(true)
   })
 
-  test('false on ios (no native implementation yet)', () => {
+  test('true on ios — `ios/LocalityPeripheral.swift` ships a real implementation', () => {
     const { mod } = loadIndex({ platformOS: 'ios' })
-    expect(mod.isSupportedPlatform()).toBe(false)
+    expect(mod.isSupportedPlatform()).toBe(true)
   })
 
   test('false on any other platform', () => {
     const { mod } = loadIndex({ platformOS: 'windows' })
     expect(mod.isSupportedPlatform()).toBe(false)
+  })
+
+  test('says nothing about whether the DEVICE can do it — that is isPeripheralSupported', () => {
+    // The distinction matters on iOS in particular: the simulator is a
+    // supported platform with no App Attest, so this returns true there
+    // while the native `isSupported()` returns false. A caller that conflates
+    // the two would try to run a ceremony that cannot produce a signature.
+    const { mod } = loadIndex({ platformOS: 'ios' })
+    expect(mod.isSupportedPlatform()).toBe(true)
+    expect(mod.isNativeModuleLinked()).toBe(false)
   })
 })
 
