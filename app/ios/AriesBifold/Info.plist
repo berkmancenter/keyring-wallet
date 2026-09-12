@@ -67,9 +67,9 @@
 		</dict>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>$(PRODUCT_NAME) needs access to Bluetooth to manage audio routing during calls</string>
+	<string>$(PRODUCT_NAME) uses Bluetooth to confirm that you and the person you are exchanging credentials with are in the same room. It is only used while a witnessed exchange is on screen.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>$(PRODUCT_NAME) needs access to Bluetooth to connect to audio devices during calls</string>
+	<string>$(PRODUCT_NAME) uses Bluetooth to confirm that you and the person you are exchanging credentials with are in the same room. It is only used while a witnessed exchange is on screen.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_witness._tcp</string>
