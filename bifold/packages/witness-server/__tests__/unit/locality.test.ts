@@ -255,3 +255,126 @@ describe('verifyTranscript against a real on-device capture (2026-08-21)', () =>
     expect(verifyTranscript(tampered, REAL_CAPTURE_EXPECTED)).toEqual({ ok: false, reason: 'transcriptSignatureInvalid' })
   })
 })
+
+/**
+ * The iOS branch of verifyTranscript. `appAttest.test.ts` covers the
+ * assertion format itself; these cover the thing that file cannot — that a
+ * transcript carrying an assertion instead of a bare DER signature takes the
+ * right path, that the Android path is untouched by the branch existing, and
+ * that the collapsed failure reason is what reaches the caller.
+ */
+describe('verifyTranscript — iOS App Attest transcripts', () => {
+  const expected = { taskDigestMultibase: TASK_DIGEST, challenge: CHALLENGE, sensorNonce: SENSOR_NONCE, sensorDid: SENSOR_DID }
+
+  /** Same CBOR subset `appAttest.test.ts` builds; an assertion is a two-key map of byte strings. */
+  function cborMap(entries: [string, Uint8Array][]): Buffer {
+    const head = (major: number, length: number) =>
+      length < 24 ? Buffer.from([(major << 5) | length]) : Buffer.from([(major << 5) | 24, length])
+    return Buffer.concat([
+      head(5, entries.length),
+      ...entries.map(([k, v]) =>
+        Buffer.concat([head(3, Buffer.byteLength(k)), Buffer.from(k, 'utf8'), head(2, v.length), Buffer.from(v)])
+      ),
+    ])
+  }
+
+  /**
+   * An iOS transcript. Two things differ from `makeSignedTranscript` above,
+   * and both are the point: `devicePublicKey` is a RAW 65-byte point (what
+   * `SecKeyCopyExternalRepresentation` returns on iOS, where Android returns
+   * SPKI DER), and the signature is the assertion wrapper, not the bare DER.
+   */
+  function makeIosTranscript(privateKey: Uint8Array, overrides: Partial<LocalityTranscript> = {}): LocalityTranscript {
+    const base: LocalityTranscript = {
+      method: 'ble-challenge-response/0.1',
+      taskDigestMultibase: TASK_DIGEST,
+      challenge: CHALLENGE,
+      sensorNonce: SENSOR_NONCE,
+      sensorDid: SENSOR_DID,
+      devicePublicKey: Buffer.from(p256.getPublicKey(privateKey, false)).toString('base64'),
+      signature: '',
+      hardwareAttestation: 'verified',
+      ...overrides,
+    }
+    const authenticatorData = Buffer.alloc(37)
+    createHash('sha256').update('ABCDE12345.org.keyring.wallet', 'utf8').digest().copy(authenticatorData, 0)
+    authenticatorData.writeUInt32BE(3, 33)
+    const clientDataHash = createHash('sha256').update(Buffer.from(bindingFor(base))).digest()
+    const nonce = createHash('sha256').update(authenticatorData).update(clientDataHash).digest()
+    const signature = p256.sign(createHash('sha256').update(nonce).digest(), privateKey, {
+      format: 'der',
+      prehash: false,
+    })
+    const assertion = cborMap([
+      ['signature', Buffer.from(signature)],
+      ['authenticatorData', authenticatorData],
+    ])
+    return { ...base, signature: assertion.toString('base64url') }
+  }
+
+  test('a genuine iOS transcript verifies', () => {
+    expect(verifyTranscript(makeIosTranscript(randomBytes(32)), expected)).toEqual({ ok: true })
+  })
+
+  test('the raw 65-byte iOS public key needs no SPKI unwrapping and still verifies', () => {
+    const privateKey = randomBytes(32)
+    const transcript = makeIosTranscript(privateKey)
+    expect(Buffer.from(transcript.devicePublicKey, 'base64').length).toBe(65)
+    expect(verifyTranscript(transcript, expected)).toEqual({ ok: true })
+  })
+
+  test('an iOS transcript signed by a different key fails, with the reason collapsed to the Android one', () => {
+    const transcript = makeIosTranscript(randomBytes(32))
+    const forged = {
+      ...transcript,
+      devicePublicKey: Buffer.from(p256.getPublicKey(randomBytes(32), false)).toString('base64'),
+    }
+    const verdict = verifyTranscript(forged, expected)
+    expect(verdict).toMatchObject({ ok: false, reason: 'transcriptSignatureInvalid' })
+  })
+
+  test('the operator-facing detail names the narrower cause the public reason hides', () => {
+    const transcript = makeIosTranscript(randomBytes(32))
+    const forged = {
+      ...transcript,
+      devicePublicKey: Buffer.from(p256.getPublicKey(randomBytes(32), false)).toString('base64'),
+    }
+    expect(verifyTranscript(forged, expected)).toEqual({
+      ok: false,
+      reason: 'transcriptSignatureInvalid',
+      detail: 'assertionSignatureInvalid',
+    })
+  })
+
+  test('a tampered iOS transcript fails — the binding is inside the signed nonce', () => {
+    const tampered = { ...makeIosTranscript(randomBytes(32)), sensorDid: 'did:peer:4imposter' }
+    expect(verifyTranscript(tampered, { ...expected, sensorDid: 'did:peer:4imposter' })).toMatchObject({
+      ok: false,
+      reason: 'transcriptSignatureInvalid',
+    })
+  })
+
+  test('a CBOR map that is not an assertion is malformed, distinctly from a bad signature', () => {
+    const transcript = makeIosTranscript(randomBytes(32))
+    const notAnAssertion = cborMap([['somethingElse', Buffer.from([1, 2, 3])]])
+    expect(verifyTranscript({ ...transcript, signature: notAnAssertion.toString('base64url') }, expected)).toEqual({
+      ok: false,
+      reason: 'malformedAppAttestAssertion',
+    })
+  })
+
+  test('the app id pin rejects an assertion from another app when the witness configures one', () => {
+    const transcript = makeIosTranscript(randomBytes(32))
+    expect(verifyTranscript(transcript, expected, { iosAppId: 'ZZZZZ99999.com.someone.else' })).toEqual({
+      ok: false,
+      reason: 'transcriptSignatureInvalid',
+      detail: 'appIdMismatch',
+    })
+  })
+
+  test('an Android transcript is unaffected by the iOS branch existing', () => {
+    const android = makeSignedTranscript(randomBytes(32))
+    expect(Buffer.from(android.signature, 'base64url')[0]).toBe(0x30)
+    expect(verifyTranscript(android, expected)).toEqual({ ok: true })
+  })
+})
