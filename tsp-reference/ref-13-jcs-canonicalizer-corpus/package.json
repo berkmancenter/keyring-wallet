@@ -1,0 +1,12 @@
+{
+  "name": "ref-13-jcs-canonicalizer-corpus",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "dependencies": {
+    "canonicalize": "^1.0.8"
+  }
+}

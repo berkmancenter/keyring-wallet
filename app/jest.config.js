@@ -35,6 +35,7 @@ module.exports = {
     '^@bifold/oca/build/legacy$': '<rootDir>/../bifold/packages/oca/src/legacy/index.ts',
     '^@bifold/oca$': '<rootDir>/../bifold/packages/oca/src/index.ts',
     '^@bifold/react-hooks$': '<rootDir>/../bifold/packages/react-hooks/src/index.ts',
+    '^@bifold/credo-tsp-adapter$': '<rootDir>/../bifold/packages/credo-tsp-adapter/src/index.ts',
     '@bifold/remote-logs': '<rootDir>/__mocks__/@bifold/remote-logs.ts',
     '@openwallet-foundation/askar-react-native': require.resolve('@openwallet-foundation/askar-react-native'),
     // CRITICAL: Force Jest to use app's React instead of bifold's

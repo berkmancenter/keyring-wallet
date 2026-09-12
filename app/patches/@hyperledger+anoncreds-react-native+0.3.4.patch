@@ -1,0 +1,12 @@
+diff --git a/node_modules/@hyperledger/anoncreds-react-native/android/build.gradle b/node_modules/@hyperledger/anoncreds-react-native/android/build.gradle
+index d5328b0..88b8c7c 100644
+--- a/node_modules/@hyperledger/anoncreds-react-native/android/build.gradle
++++ b/node_modules/@hyperledger/anoncreds-react-native/android/build.gradle
+@@ -73,6 +73,7 @@ def resolveBuildType() {
+ }
+ 
+ android {
++  namespace "org.hyperledger.anoncreds"
+   compileSdkVersion getExt('compileSdkVersion')
+   buildToolsVersion getExt('buildToolsVersion')
+   ndkVersion getExt('ndkVersion')
