@@ -1225,32 +1225,6 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
 }
 
 /**
- * Assert the peer's R-Card photo made it through the exchange: opens the
- * contact's detail screen and checks for the ContactAvatarImage element
- * (rendered only when resolveContactDisplayInfo found a photo attribute on
- * the received RCard — see rcardDisplayUtils.ts). This checks the data
- * arrived, not what it looks like — no pixel/visual assertion is made.
- */
-export async function assertContactPhotoReceived(driver, peerName, timeout = 60000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    await openContactDetail(driver, peerName);
-    if (await existsTestId(driver, "ContactAvatarImage", 4000)) {
-      console.log(`[e2e] ${driver.e2ePlatform}: photo present for "${peerName}"`);
-      return;
-    }
-    if (await existsTestId(driver, "BackButton", 2000)) {
-      await tapTestId(driver, "BackButton");
-    }
-    await sleep(3000);
-  }
-  await screenshot(driver, "photo-missing");
-  throw new Error(
-    `${driver.e2ePlatform}: no photo (ContactAvatarImage) shown for "${peerName}" within ${timeout}ms`
-  );
-}
-
-/**
  * `assertVrcReceived`'s text match isn't scoped to the Contacts list — the
  * moment the VRC lands, Chat.tsx auto-pushes the peer's chat screen (header
  * text: the peer's own name) on top of the Contacts tab with a "Relationship
@@ -1505,4 +1479,30 @@ export async function acceptRelationshipProposalOnEitherSide(driverA, driverB, t
       `${driverA.e2ePlatform}/${driverB.e2ePlatform}: neither side saw a relationship proposal prompt within ${timeout}ms — discovery likely failed`
     );
   }
+}
+
+/**
+ * Assert the peer's R-Card photo made it through the exchange: opens the
+ * contact's detail screen and checks for the ContactAvatarImage element
+ * (rendered only when resolveContactDisplayInfo found a photo attribute on
+ * the received RCard — see rcardDisplayUtils.ts). This checks the data
+ * arrived, not what it looks like — no pixel/visual assertion is made.
+ */
+export async function assertContactPhotoReceived(driver, peerName, timeout = 60000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    await openContactDetail(driver, peerName);
+    if (await existsTestId(driver, "ContactAvatarImage", 4000)) {
+      console.log(`[e2e] ${driver.e2ePlatform}: photo present for "${peerName}"`);
+      return;
+    }
+    if (await existsTestId(driver, "BackButton", 2000)) {
+      await tapTestId(driver, "BackButton");
+    }
+    await sleep(3000);
+  }
+  await screenshot(driver, "photo-missing");
+  throw new Error(
+    `${driver.e2ePlatform}: no photo (ContactAvatarImage) shown for "${peerName}" within ${timeout}ms`
+  );
 }
