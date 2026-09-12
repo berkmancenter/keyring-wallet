@@ -1225,7 +1225,6 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
 }
 
 /**
-/**
  * `assertVrcReceived`'s text match isn't scoped to the Contacts list — the
  * moment the VRC lands, Chat.tsx auto-pushes the peer's chat screen (header
  * text: the peer's own name) on top of the Contacts tab with a "Relationship
