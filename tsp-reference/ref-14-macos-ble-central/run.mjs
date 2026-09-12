@@ -1,5 +1,5 @@
 /**
- * ref-13 — can a macOS host be the locality sensor's BLE central?
+ * ref-14 — can a macOS host be the locality sensor's BLE central?
  *
  * The witness's shipped `BleLocalityProvider` (witness-server) talks BlueZ
  * over D-Bus via `node-ble`, which is Linux-only. That makes a Linux box a
@@ -128,8 +128,8 @@ async function runTranscriptExchange(peripheral, serviceUuid) {
 }
 
 const wanted = eid ? flat(serviceUuidFromEid(eid)) : undefined
-if (wanted) console.log(`[ref-13] looking for service ${serviceUuidFromEid(eid)}`)
-else console.log('[ref-13] scan-only: listing every advertising peer')
+if (wanted) console.log(`[ref-14] looking for service ${serviceUuidFromEid(eid)}`)
+else console.log('[ref-14] scan-only: listing every advertising peer')
 
 const seen = new Set()
 let settled = false
@@ -143,7 +143,7 @@ const finish = async (code, message) => {
 }
 
 noble.on('stateChange', async (state) => {
-  console.log(`[ref-13] CoreBluetooth state: ${state}`)
+  console.log(`[ref-14] CoreBluetooth state: ${state}`)
   if (state === 'poweredOn') {
     await noble.startScanningAsync(wanted ? [wanted] : [], false)
   } else if (state === 'unauthorized') {
@@ -165,19 +165,19 @@ noble.on('discover', async (peripheral) => {
   if (settled) return
   settled = true
   await noble.stopScanningAsync()
-  console.log(`[ref-13] found ${id} (rssi ${peripheral.rssi}) — running the transcript exchange`)
+  console.log(`[ref-14] found ${id} (rssi ${peripheral.rssi}) — running the transcript exchange`)
   try {
     const result = await runTranscriptExchange(peripheral, serviceUuidFromEid(eid))
-    console.log(`[ref-13] PASS — round trip ${result.rttMs}ms`)
+    console.log(`[ref-14] PASS — round trip ${result.rttMs}ms`)
     console.log(`  sensorNonce   ${result.sensorNonce}`)
     console.log(`  transcript    ${JSON.stringify(result.transcript, null, 2).split('\n').join('\n                ')}`)
     process.exit(0)
   } catch (err) {
-    console.error(`[ref-13] FAIL — ${err.message}`)
+    console.error(`[ref-14] FAIL — ${err.message}`)
     process.exit(1)
   }
 })
 
 setTimeout(() => {
-  finish(scanOnly ? 0 : 1, scanOnly ? `[ref-13] scan window closed — ${seen.size} peer(s) seen` : '[ref-13] FAIL — nothing advertising that EID within 30s')
+  finish(scanOnly ? 0 : 1, scanOnly ? `[ref-14] scan window closed — ${seen.size} peer(s) seen` : '[ref-14] FAIL — nothing advertising that EID within 30s')
 }, SCAN_TIMEOUT_MS)

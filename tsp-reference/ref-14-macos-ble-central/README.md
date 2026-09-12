@@ -1,4 +1,4 @@
-# ref-13-macos-ble-central
+# ref-14-macos-ble-central
 
 **Can a macOS host be the locality sensor's BLE central, the way the Linux
 witness is?**
