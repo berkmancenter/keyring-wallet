@@ -45,7 +45,7 @@ working. Two specific things need a live run:
   see them — invisible to the witness's central. The ceremony is
   foreground-only by design, so this should be fine, and should be confirmed.
 
-`tsp-reference/ref-13-macos-ble-central` exists so this can be exercised from
+`tsp-reference/ref-14-macos-ble-central` exists so this can be exercised from
 a Mac acting as the central, without a Linux host.
 
 ## The signature is a different shape on each platform

@@ -7,7 +7,7 @@
  * `node-ble`, which is Linux-only by construction. That made a Linux box a
  * hard prerequisite for any locality run, and it meant the iOS peripheral
  * (landed 2026-09-12, keyring-bifold #47) could not be exercised from the
- * Mac it is built on. tsp-reference/ref-13-macos-ble-central proved the
+ * Mac it is built on. tsp-reference/ref-14-macos-ble-central proved the
  * narrow question first — a Mac driven through noble performs the exact GATT
  * exchange `runTranscriptExchange` needs — and this file is that probe grown
  * into the provider it anticipated.
