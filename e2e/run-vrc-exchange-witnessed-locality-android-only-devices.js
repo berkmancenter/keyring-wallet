@@ -13,14 +13,15 @@
  *     merely attempted (assertLocalityConfirmedMarker), from Android's
  *     logcat.
  *
- * Android-only for two independent reasons, not one: the native peripheral
- * (item 9) has no iOS implementation, AND the witness's own BLE SENSOR
- * (witness-server's BleLocalityProvider, over BlueZ's D-Bus interface via
- * `node-ble`) only runs on Linux — see docs/plans/locality-plan/2026-08-20-bam.md
- * for why. **The machine running this script needs a real Bluetooth adapter
- * and a Linux host** (BlueZ), unlike the plain witnessed flow, which needs
- * neither — this is the one witnessed-exchange variant where the HOST
- * machine's own hardware matters, not just the phones'.
+ * Android-only because it asserts BOTH peripherals confirmed, and only the
+ * Android peripheral has been verified end to end so far. The iOS peripheral
+ * (bifold #47) and a macOS-hosted witness (bifold #49, CoreBluetooth via
+ * noble — BlueZ/Linux is no longer the only option) get their first run in
+ * run-vrc-exchange-witnessed-locality-devices.js, the `offered` variant that
+ * reports each side's outcome rather than gating on it. **The machine running
+ * this script needs a real Bluetooth adapter** — this is the one
+ * witnessed-exchange variant where the HOST machine's own hardware matters,
+ * not just the phones'.
  *
  * ATTENDED: satisfy the OS biometric/PIN prompts at the OPERATOR banners on
  * BOTH phones, and grant the Bluetooth permission prompt on each phone when
