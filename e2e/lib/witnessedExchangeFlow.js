@@ -66,6 +66,64 @@ async function ensureMetro() {
 }
 
 /** Filter + save the witness/attestation-relevant logcat lines for one or more android udids. */
+/**
+ * Report (never assert) what one wallet's locality peripheral did, for the
+ * `offered`-policy variant where the VWC was issued either way.
+ *
+ * Android: the same `[TrustTasks:Witness] locality (not )?confirmed` markers
+ * `assertLocalityConfirmedMarker` gates on, read from run-scoped logcat, but
+ * a miss is printed rather than thrown.
+ *
+ * iOS: there is no adb; the peripheral's own NSLog lines
+ * (`[Locality:Peripheral:iOS]`) come back through Appium's syslog. Every line
+ * is saved, and `signingElapsedMs` — the one number the iOS design cannot
+ * settle for itself (locality-plan/2026-09-12-al.md) — is pulled out and
+ * printed on its own. A first live run of that peripheral is exactly what
+ * this exists to capture.
+ */
+async function reportLocalityOutcome(driver, timeout = 60000) {
+  const tag = `[e2e] ${driver.e2ePlatform}: locality`;
+  if (driver.e2ePlatform === "android" && driver.e2eUdid) {
+    const confirmed = /\[TrustTasks:Witness\] locality confirmed for session[^\n]*/;
+    const notConfirmed = /\[TrustTasks:Witness\] locality not confirmed for session[^\n]*/;
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const hit = log.match(confirmed) || log.match(notConfirmed);
+      if (hit) {
+        console.log(`${tag} → ${hit[0]}`);
+        return;
+      }
+      await sleep(3000);
+    }
+    console.log(`${tag} → no marker within ${timeout}ms (the ceremony never reached the radio phase?)`);
+    return;
+  }
+  if (driver.e2ePlatform === "ios") {
+    try {
+      const logs = await driver.getLogs("syslog");
+      const lines = logs
+        .map((l) => (typeof l === "string" ? l : l.message || ""))
+        .filter((l) => /Locality:Peripheral:iOS|TrustTasks:Witness\] locality/.test(l));
+      mkdirSync("artifacts", { recursive: true });
+      const file = `artifacts/locality-ios-syslog-${Date.now()}.txt`;
+      writeFileSync(file, lines.join("\n"));
+      const elapsed = lines.map((l) => l.match(/signingElapsedMs=(\d+)/)).filter(Boolean).map((m) => Number(m[1]));
+      const outcome = lines.find((l) => /locality (not )?confirmed/.test(l));
+      console.log(`${tag} → ${outcome ? outcome.replace(/^.*\[TrustTasks/, "[TrustTasks") : "no ceremony marker seen"}`);
+      console.log(
+        `${tag} peripheral: ${lines.length} log line(s) saved to ${file}` +
+          (elapsed.length ? ` — signingElapsedMs=${elapsed.join(",")} (bound: 400)` : " — no signingElapsedMs (assertion never generated)")
+      );
+    } catch (e) {
+      console.warn(`${tag} → ios syslog capture failed (non-fatal): ${e.message}`);
+    }
+  }
+}
+
 export function dumpAndroidWitnessLogs(udids) {
   for (const udid of udids) {
     try {
@@ -160,6 +218,7 @@ export async function runWitnessedExchange({
   dumpWitnessLogs: dumpLogs,
   name,
   assertLocality = false,
+  reportLocality = false,
   useTspCarriage = false,
 }) {
   let sessionA, sessionB, witness;
@@ -225,7 +284,7 @@ export async function runWitnessedExchange({
     // exchange silently falls back to direct (no VWC). Confirm BOTH connections
     // completed via the witness's own log (no "connected" banner exists in the
     // app — witness participation only surfaces as a VWC after the exchange).
-    if (assertLocality) {
+    if (assertLocality || reportLocality) {
       // The witness-connect locality pre-flight sheet (locality-plan.md §8.4)
       // fires on EACH phone right after ITS OWN connectToWitness resolves —
       // no automation taps it, and while it's up it blocks the rest of the
@@ -299,6 +358,11 @@ export async function runWitnessedExchange({
         assertLocalityConfirmedMarker(sessionA),
         assertLocalityConfirmedMarker(sessionB),
       ]);
+    } else if (reportLocality) {
+      // The `offered` variant: locality was attempted but nothing was gated on
+      // it, so REPORT each side's outcome instead of asserting — the point of
+      // that run is to see what each peripheral actually did.
+      await Promise.all([reportLocalityOutcome(sessionA), reportLocalityOutcome(sessionB)]);
     }
 
     await assertContactShields(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`, 120000, {
