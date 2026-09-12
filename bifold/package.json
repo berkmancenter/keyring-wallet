@@ -13,7 +13,7 @@
   },
   "homepage": "https://github.com/berkmancenter/keyring-bifold/",
   "scripts": {
-    "clean": "yarn workspaces foreach --all --topological-dev -p run clean && echo 'Cleaned all packages \ud83e\uddf9'",
+    "clean": "yarn workspaces foreach --all --topological-dev -p run clean && echo 'Cleaned all packages 🧹'",
     "build": "yarn workspaces foreach --all --topological-dev -p run build",
     "test": "yarn workspaces foreach --all --topological-dev run test",
     "test:watch": "cd packages/core && yarn test:watch",

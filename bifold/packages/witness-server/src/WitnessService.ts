@@ -84,6 +84,7 @@ import { LocalityService, LocalityEvidence } from './LocalityService'
 import { LLMService, createLLMService } from './LLMService'
 import { LocalityAssertion } from './trustTasks/locality'
 import { BleLocalityProvider, TaskLocalityProvider } from './trustTasks/BleLocalityProvider'
+import { NobleLocalityProvider } from './trustTasks/NobleLocalityProvider'
 
 // Import shared modules from @bifold/vrc-contexts and @bifold/vrc-shared
 import {
@@ -244,7 +245,8 @@ export function buildWitnessCredentialJson(
   observedPresentation: any,
   buildContext: WitnessCredentialBuildContext
 ): any {
-  const { issuerDid, witnessName, sessionId, verificationMethod, eventName, localityEvidence, localityAssertion } = buildContext
+  const { issuerDid, witnessName, sessionId, verificationMethod, eventName, localityEvidence, localityAssertion } =
+    buildContext
 
   const vwcId = `urn:uuid:${utils.uuid()}`
 
@@ -587,9 +589,7 @@ export class WitnessService {
     // deliberately does not trust the module config above: credo lets a strategy
     // persisted on this wallet's MediationRecord outrank config, which is what made
     // this bug look machine-specific. Passing the strategy explicitly bypasses both.
-    const pickup = await startMediatorMessagePickup(this.agent, (message) =>
-      console.log(`[${this.name}] ${message}`)
-    )
+    const pickup = await startMediatorMessagePickup(this.agent, (message) => console.log(`[${this.name}] ${message}`))
     this.pickupStrategy = pickup.strategy
 
     // Register debug event listeners for mediation
@@ -610,12 +610,23 @@ export class WitnessService {
     // reachable, still runs; it just never confirms locality (§7.1's
     // `windowLost`/absent path, not a crash).
     if (this.config.localityPolicy !== 'off') {
-      const bleProvider = new BleLocalityProvider()
+      // Two radio stacks, one wire protocol: BlueZ over D-Bus (`node-ble`,
+      // Linux) or CoreBluetooth via noble (macOS). Chosen by platform, and
+      // overridable with WITNESS_LOCALITY_BLE_BACKEND=bluez|noble for a Linux
+      // host that wants noble's HCI path or a test that wants to force one.
+      // See NobleLocalityProvider.ts's header for why noble is not simply the
+      // default everywhere.
+      const backend = process.env.WITNESS_LOCALITY_BLE_BACKEND ?? (process.platform === 'darwin' ? 'noble' : 'bluez')
+      const bleProvider: TaskLocalityProvider =
+        backend === 'noble' ? new NobleLocalityProvider() : new BleLocalityProvider()
       try {
         await bleProvider.start()
         this.taskLocalityProvider = bleProvider
+        console.log(`[${this.name}] BLE locality sensor: ${bleProvider.name}`)
       } catch (error) {
-        console.warn(`[${this.name}] BLE locality sensor unavailable, continuing without it: ${(error as Error).message}`)
+        console.warn(
+          `[${this.name}] BLE locality sensor (${bleProvider.name}) unavailable, continuing without it: ${(error as Error).message}`
+        )
       }
     }
 
@@ -1087,7 +1098,6 @@ export class WitnessService {
     console.log(`[${this.name}]   ✓ DID imported successfully`)
   }
 
-
   /**
    * Get the seed file path (derives from invitation file path)
    */
@@ -1388,7 +1398,10 @@ export class WitnessService {
               timestamp: new Date().toISOString(),
             }
 
-            await this.agent.modules.didcomm.basicMessages.sendMessage(connectionRecord.id, JSON.stringify(announcement))
+            await this.agent.modules.didcomm.basicMessages.sendMessage(
+              connectionRecord.id,
+              JSON.stringify(announcement)
+            )
             console.log(`[${this.name}] ✓ Sent witness-announcement to ${peerLabel}`)
 
             // Send human-readable welcome messages after the machine-readable announcement
@@ -2615,7 +2628,9 @@ export class WitnessService {
 
         const senderRelDid = this.getRelationshipDidForConnection(senderConnectionId)
         const recipientRelDid = this.getRelationshipDidForConnection(recipientConnectionId)
-        console.log(`[${this.name}] VWC: ${senderRelDid?.substring(0, 20) ?? 'unknown'}... → ${recipientRelDid?.substring(0, 20) ?? 'unknown'}...`)
+        console.log(
+          `[${this.name}] VWC: ${senderRelDid?.substring(0, 20) ?? 'unknown'}... → ${recipientRelDid?.substring(0, 20) ?? 'unknown'}...`
+        )
         console.log(`[${this.name}]   Registered in credential registry: ${witnessCredential.id}`)
       }
 

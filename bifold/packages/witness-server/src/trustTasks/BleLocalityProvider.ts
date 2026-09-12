@@ -161,8 +161,8 @@ export async function readFullValue(characteristic: BleCharacteristic): Promise<
  * `signature`, read-only, no write. Deriving `LocalityTranscript` needs
  * both.
  */
-const GATT_CORE_CHARACTERISTIC_UUID = '4b524c32-0000-1000-8000-2a2b3c4d5e6f'
-const GATT_SIGNATURE_CHARACTERISTIC_UUID = '4b524c33-0000-1000-8000-2a2b3c4d5e6f'
+export const GATT_CORE_CHARACTERISTIC_UUID = '4b524c32-0000-1000-8000-2a2b3c4d5e6f'
+export const GATT_SIGNATURE_CHARACTERISTIC_UUID = '4b524c33-0000-1000-8000-2a2b3c4d5e6f'
 
 type CoreTranscriptFields = Pick<
   LocalityTranscript,

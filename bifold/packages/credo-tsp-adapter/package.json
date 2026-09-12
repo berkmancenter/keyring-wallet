@@ -1,7 +1,7 @@
 {
   "name": "@bifold/credo-tsp-adapter",
   "version": "0.1.0-alpha.1",
-  "description": "Askar-backed implementations of @bifold/trust-tasks's tsp-core ports (SigningKey, KeyAgreement, VidResolver) \u2014 the credo-tsp-adapter package from the OpenVTC integration plan's Phase D.",
+  "description": "Askar-backed implementations of @bifold/trust-tasks's tsp-core ports (SigningKey, KeyAgreement, VidResolver) — the credo-tsp-adapter package from the OpenVTC integration plan's Phase D.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "files": [
@@ -9,7 +9,7 @@
   ],
   "license": "Apache-2.0",
   "scripts": {
-    "build": "echo 'building credo-tsp-adapter \ud83c\udfd7\ufe0f' && yarn run clean && yarn run compile && echo 'credo-tsp-adapter built \u2705'",
+    "build": "echo 'building credo-tsp-adapter 🏗️' && yarn run clean && yarn run compile && echo 'credo-tsp-adapter built ✅'",
     "clean": "rimraf ./build",
     "compile": "tsc",
     "typecheck": "tsc --noEmit",

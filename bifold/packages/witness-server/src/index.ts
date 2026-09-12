@@ -164,7 +164,9 @@ async function main(): Promise<void> {
   if (localityService?.isEnabled()) {
     console.log('')
     console.log('Co-Locality Transport:')
-    console.log('  • Bluetooth BLE — BleLocalityProvider (node-ble/BlueZ; Linux hosts only)')
+    console.log(
+      '  • Bluetooth BLE — BlueZ/node-ble on Linux, CoreBluetooth/noble on macOS (WITNESS_LOCALITY_BLE_BACKEND overrides)'
+    )
     console.log('  • Proofs arrive via provider callback, not HTTP')
   }
   console.log('')
