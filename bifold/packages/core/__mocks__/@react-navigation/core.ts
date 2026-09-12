@@ -37,4 +37,14 @@ const CommonActions = {
   goBack: jest.fn(),
 }
 
-export { useNavigation, useIsFocused, CommonActions }
+// `createNavigatorFactory` lives HERE, not in @react-navigation/native — native
+// only re-exports it. A test that mocks native with `...jest.requireActual(native)`
+// gets the real native, whose inner require of this package still resolves to
+// this mock; without this export, anything that then loads @react-navigation/stack
+// (createStackNavigator calls it at module scope) dies with
+// "createNavigatorFactory is not a function". The sibling native.ts mock already
+// defines it; the two were inconsistent. Found via ContactDetails.test.tsx once
+// it began importing container-impl (2026-09-12).
+const createNavigatorFactory = jest.fn()
+
+export { useNavigation, useIsFocused, CommonActions, createNavigatorFactory }

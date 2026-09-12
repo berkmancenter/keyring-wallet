@@ -115,7 +115,9 @@ describe('ContactDetails Screen', () => {
       issuer: { ...TEST_CONTACTS.alice.issuer, photo },
     }
 
-    const { findByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { findByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(async () => {
       const image = await findByTestId(testIdWithKey('ContactAvatarImage'))
@@ -130,7 +132,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { findByText, queryByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { findByText, queryByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(async () => {
       expect(await findByText('Alice Smith')).toBeTruthy()
@@ -164,7 +168,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(() => {
       const button = getByLabelText('ContactDetails.ViewMessages')
@@ -184,7 +190,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(() => {
       const button = getByLabelText('ContactDetails.ViewMessages')
@@ -219,7 +227,9 @@ describe('ContactDetails Screen', () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
 
     expect(() => {
-      render(<ContactDetails route={undefined as any} navigation={undefined as any} />)
+      render(<ContactDetails route={undefined as any} navigation={undefined as any} />, {
+        wrapper: TestContainerWrapper,
+      })
     }).toThrow('ContactDetails route params were not set properly')
 
     consoleError.mockRestore()
@@ -232,7 +242,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(() => {
       // Button should be visible but disabled after error
@@ -298,7 +310,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.charlie.issuer, // charlie has organization but no email
     }
 
-    const { queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(async () => {
       // Should display name
@@ -317,7 +331,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.bob.issuer, // bob has email but no organization
     }
 
-    const { queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(async () => {
       // Should display name
@@ -336,7 +352,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.diana.issuer, // diana has neither email nor organization
     }
 
-    const { queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(async () => {
       // Should display name
@@ -359,7 +377,9 @@ describe('ContactDetails Screen', () => {
         issuer: testContact.issuer,
       }
 
-      const { findByText, unmount } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+      const { findByText, unmount } = render(<ContactDetails {...createRouteParams(contact)} />, {
+        wrapper: TestContainerWrapper,
+      })
 
       await waitFor(async () => {
         expect(await findByText(testContact.issuer.name)).toBeTruthy()
@@ -394,7 +414,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(() => {
       expect(mockRepository.findByCounterpartyRelationshipDid).not.toHaveBeenCalled()
@@ -417,7 +439,9 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { getByLabelText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(() => {
       const button = getByLabelText('ContactDetails.ViewMessages')
@@ -438,7 +462,9 @@ describe('ContactDetails Screen', () => {
       } as any)
 
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
-      const { findByTestId, findByText } = render(<ContactDetails {...createRouteParams(contact)} />)
+      const { findByTestId, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+        wrapper: TestContainerWrapper,
+      })
 
       await waitFor(async () => {
         expect(await findByTestId('LocalityConfirmedBadge')).toBeTruthy()
@@ -459,7 +485,9 @@ describe('ContactDetails Screen', () => {
       } as any)
 
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
-      const { queryByTestId, findByText } = render(<ContactDetails {...createRouteParams(contact)} />)
+      const { queryByTestId, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+        wrapper: TestContainerWrapper,
+      })
 
       await waitFor(async () => {
         expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
@@ -479,7 +507,9 @@ describe('ContactDetails Screen', () => {
       } as any)
 
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
-      const { findByText, queryByText } = render(<ContactDetails {...createRouteParams(contact)} />)
+      const { findByText, queryByText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+        wrapper: TestContainerWrapper,
+      })
 
       await waitFor(async () => {
         expect(await findByText('Interrupted')).toBeTruthy()
@@ -495,7 +525,9 @@ describe('ContactDetails Screen', () => {
       } as any)
 
       const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
-      const { queryByTestId, queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />)
+      const { queryByTestId, queryByText, findByText } = render(<ContactDetails {...createRouteParams(contact)} />, {
+        wrapper: TestContainerWrapper,
+      })
 
       await waitFor(async () => {
         // Still shows the Witnessed badge/section (a VWC exists) —
