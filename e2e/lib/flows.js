@@ -724,31 +724,105 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
     await tapTestId(driver, "ScanQRCode", 15000);
   }
   await tapTestId(driver, "PasteUrlButton", 30000);
-  // XCUITest's simulated typing occasionally drops characters on ~1000-char
-  // strings, corrupting the base64 payload — the app then shows the
-  // "URL not recognized" ErrorModal. Clear, retype and resubmit until it takes.
+  // Simulated typing corrupts long strings on both platforms, differently:
+  // XCUITest occasionally drops characters mid-string; Android's single
+  // `setText` of a ~700-char URL into RN's controlled TextInput lost the
+  // FIRST 159 characters outright on a slow phone (Galaxy A03s, 2026-09-12 —
+  // scheme, host and `?oob=` all gone, so the app's "URL not recognized" was
+  // correct). Android therefore types in chunks, giving RN's state a moment
+  // to settle between them. Either way the field is READ BACK and compared
+  // to the URL before submitting: the earlier version inferred success from
+  // the ErrorModal not appearing within 5s, and on that same phone the modal
+  // simply appeared later — the harness walked off with it still up and the
+  // run died 10 steps downstream as "could not land on Contacts".
   for (let attempt = 0; attempt < 4; attempt++) {
     const input = await waitForTestId(driver, "PastedUrl", 15000);
     if (attempt > 0) await input.clearValue();
-    await input.setValue(invitationUrl);
+    if (driver.e2ePlatform === "android") {
+      // A real paste, not simulated typing. Chunked typing was tried first
+      // (2026-09-12, same phone): the native field then read back the full
+      // URL while the app still rejected it — React Native's controlled
+      // TextInput had lost part of the string in JS state even though the
+      // native view showed all of it, and no read-back can see that split.
+      // A clipboard paste lands as ONE change event with the whole string,
+      // which is what a person does on this screen anyway.
+      await driver.setClipboard(Buffer.from(invitationUrl, "utf8").toString("base64"), "plaintext");
+      await input.click();
+      await driver.pressKeyCode(279); // KEYCODE_PASTE
+      await sleep(800);
+    } else {
+      await input.setValue(invitationUrl);
+    }
     // multiline input: don't send \n — tap a neutral spot to dismiss the keyboard
     await hideKeyboard(driver);
+    let typed = "";
+    try {
+      typed = (await input.getText()) ?? "";
+    } catch {
+      /* fall through to the modal check below */
+    }
+    if (typed && typed !== invitationUrl) {
+      console.log(
+        `[e2e] ${driver.e2ePlatform}: field holds ${typed.length}/${invitationUrl.length} chars of the URL — retyping (attempt ${attempt + 1}/4)`
+      );
+      if (attempt === 3) {
+        await screenshot(driver, "paste-url-mangled");
+        throw new Error(`invitation URL could not be entered intact after 4 attempts (last: ${typed.length}/${invitationUrl.length} chars)`);
+      }
+      continue;
+    }
     // the long URL grows the input; the button may be below the fold
     const submit = await scrollToTestId(driver, "ScanPastedUrl");
     await submit.click();
     // detect the rejection via the modal's CTA button — RN Modal testIDs
-    // (ErrorModal) don't reliably surface on iOS, but children do
-    if (!(await existsTestId(driver, "Try Again", 5000))) break;
+    // (ErrorModal) don't reliably surface on iOS, but children do. 10s, not
+    // 5: a slow phone shows the modal late, and mistaking "not yet" for
+    // "never" is the failure this whole block exists to prevent.
+    if (!(await existsTestId(driver, "Try Again", 10000))) break;
     if (attempt === 3) {
       await screenshot(driver, "paste-url-rejected");
       throw new Error("invitation URL rejected 4 times (ErrorModal persisted)");
     }
-    console.log(
-      `[e2e] ${driver.e2ePlatform}: URL not recognized (typing flake) — retrying`
-    );
+    // "URL not recognized" is the app's label for ANY failure inside
+    // connectFromScanOrDeepLink — PasteUrl.tsx catches everything and shows
+    // this one message. On 2026-09-12 it was a mediator round trip timing
+    // out (credo TimeoutError), and three attempts went into the URL and the
+    // paste before anyone read the app's own log. Read it here, once, so the
+    // real reason is in the run output next to the retry.
+    await dumpConnectStrategyError(driver);
+    console.log(`[e2e] ${driver.e2ePlatform}: URL not recognized — retrying`);
     await tapTestId(driver, "Try Again", 5000);
   }
   console.log(`[e2e] ${driver.e2ePlatform}: invitation pasted & submitted`);
+}
+
+/**
+ * Android only (iOS syslog is captured elsewhere): the app logs the actual
+ * exception behind "URL not recognized" as `Problem during connect strategy`.
+ * Print the most recent one — name, message, first stack frame — and never
+ * throw: this is diagnostics for a failure already in progress.
+ */
+async function dumpConnectStrategyError(driver) {
+  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
+  try {
+    const { execSync } = await import("node:child_process");
+    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const idx = log.lastIndexOf("Problem during connect strategy");
+    if (idx < 0) {
+      console.log(`[e2e] android: no "Problem during connect strategy" in logcat — the rejection was not from connectFromScanOrDeepLink`);
+      return;
+    }
+    const block = log.slice(idx, idx + 1200).split("\n").slice(0, 8)
+      .map((l) => l.replace(/^.*ReactNativeJS:\s*/, ""))
+      .filter((l) => /Problem during|"name"|"message"|"at /.test(l))
+      .slice(0, 4);
+    console.log(`[e2e] android: app-side reason →\n      ${block.join("\n      ")}`);
+  } catch (e) {
+    console.log(`[e2e] android: could not read logcat for the reason (${e.message})`);
+  }
 }
 
 /**
