@@ -81,3 +81,21 @@ index ef75c086b244014c31cbaa5ef3ca3d83f0b96507..64af8e41977562d2b64e93acbb733e85
  		if (credential.proof.proofPurpose !== request.options.proofPurpose) throw new CredoError("Received credential proof purpose does not match proof purpose from credential request");
  		if (!utils.areObjectsEqual(jsonCredential, request.credential)) throw new CredoError("Received credential does not match credential request");
  	}
+diff --git a/build/modules/routing/DidCommMediationRecipientApi.mjs b/build/modules/routing/DidCommMediationRecipientApi.mjs
+index 1f4452ab9630d7a13598b187f1ad7efebd471fba..47e5bdd330dd5f5fae591daa9ce96d122e774e51 100644
+--- a/build/modules/routing/DidCommMediationRecipientApi.mjs
++++ b/build/modules/routing/DidCommMediationRecipientApi.mjs
+@@ -136,6 +136,13 @@ let DidCommMediationRecipientApi = class DidCommMediationRecipientApi {
+ 		switch (mediatorPickupStrategy) {
+ 			case DidCommMediatorPickupStrategy.PickUpV1:
+ 			case DidCommMediatorPickupStrategy.PickUpV2: {
++				// keyring: a call while a loop is already running must REPLACE it, not
++				// stack another. Every caller that restarts pickup (agent init, each
++				// foreground resume, each OS permission dialog) otherwise adds one more
++				// interval — multiplying this wallet's poll rate against the mediator
++				// and the inbound work on the device (a Galaxy A03s fell 50 s behind
++				// with two loops, 2026-09-13). Stop whatever is running first.
++				this.stopMessagePickup$.next(true);
+ 				const stopConditions$ = merge(this.stop$, this.stopMessagePickup$).pipe();
+ 				const protocolVersion = mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV2 ? "v2" : "v1";
+ 				this.logger.info(`Starting explicit pickup of messages from mediator '${mediatorRecord.id}' using ${protocolVersion}`);
