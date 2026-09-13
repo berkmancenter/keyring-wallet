@@ -205,7 +205,7 @@ describe('NobleLocalityProvider', () => {
     const { provider, noble } = await startedProvider()
     const result = await provider.observeSession({ ...params, windowSeconds: 0.05 })
     expect(result).toBeNull()
-    expect(noble.startScanningAsync).toHaveBeenCalledWith([], false)
+    expect(noble.startScanningAsync).toHaveBeenCalledWith([], true)
     await tick()
     expect(noble.stopScanningAsync).toHaveBeenCalled()
     expect(noble.listenerCount('discover')).toBe(0)
@@ -244,6 +244,23 @@ describe('NobleLocalityProvider', () => {
     await tick()
     noble.emit('discover', peripheral)
     await expect(pending).resolves.not.toBeNull()
+  })
+
+  test('a peripheral first seen WITHOUT our service UUID is matched when a later advert carries it (duplicates on)', async () => {
+    // The iPhone case: CoreBluetooth already reports the phone for its
+    // continuity adverts before the wallet starts advertising our UUID. With
+    // duplicates off that first report was the only one and the window lapsed
+    // (device run 2026-09-13, attempt 21); with them on the later advert lands.
+    const { provider, noble } = await startedProvider()
+    const { peripheral } = workingPeripheral(matchingService, params.challenge, params.sessionTaskDigestMultibase)
+    const pending = provider.observeSession({ ...params, windowSeconds: 5 })
+    await tick()
+    noble.emit('discover', { ...peripheral, advertisement: { serviceUuids: [] } })
+    await tick()
+    expect(peripheral.connectAsync).not.toHaveBeenCalled()
+    noble.emit('discover', peripheral)
+    await expect(pending).resolves.not.toBeNull()
+    expect(peripheral.connectAsync).toHaveBeenCalledTimes(1)
   })
 
   test('a non-matching peripheral is never connected to', async () => {
