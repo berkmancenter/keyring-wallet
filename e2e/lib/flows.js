@@ -775,10 +775,11 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
     const submit = await scrollToTestId(driver, "ScanPastedUrl");
     await submit.click();
     // detect the rejection via the modal's CTA button — RN Modal testIDs
-    // (ErrorModal) don't reliably surface on iOS, but children do. 10s, not
-    // 5: a slow phone shows the modal late, and mistaking "not yet" for
-    // "never" is the failure this whole block exists to prevent.
-    if (!(await existsTestId(driver, "Try Again", 10000))) break;
+    // (ErrorModal) don't reliably surface on iOS, but children do. 20s, not
+    // 5: the modal appears when credo's mediator wait times out (~14s on a
+    // slow phone, 2026-09-13), and mistaking "not yet" for "never" is the
+    // failure this whole block exists to prevent.
+    if (!(await existsTestId(driver, "Try Again", 20000))) break;
     if (attempt === 3) {
       await screenshot(driver, "paste-url-rejected");
       throw new Error("invitation URL rejected 4 times (ErrorModal persisted)");
