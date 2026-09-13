@@ -43,7 +43,7 @@
  */
 
 import React, { useState } from 'react'
-import { Linking, StyleSheet, View } from 'react-native'
+import { Linking, Platform, StyleSheet, View } from 'react-native'
 import { PERMISSIONS, RESULTS, request } from 'react-native-permissions'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -54,8 +54,17 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { useWitnessConnection } from '../context/WitnessConnectionProvider'
 
-/** Best-effort: request both permissions the manifest declares; granted only if both are. */
+/**
+ * Best-effort. Android: request both permissions the manifest declares,
+ * granted only if both are. iOS: the single Bluetooth authorization —
+ * react-native-permissions' handler stands up a CBCentralManager to raise the
+ * system prompt, which is the same authorization the peripheral later runs
+ * under (CoreBluetooth authorization is per app, not per role).
+ */
 async function requestBluetoothPermissions(): Promise<boolean> {
+  if (Platform.OS === 'ios') {
+    return (await request(PERMISSIONS.IOS.BLUETOOTH)) === RESULTS.GRANTED
+  }
   const advertise = await request(PERMISSIONS.ANDROID.BLUETOOTH_ADVERTISE)
   const scan = await request(PERMISSIONS.ANDROID.BLUETOOTH_SCAN)
   return advertise === RESULTS.GRANTED && scan === RESULTS.GRANTED
@@ -184,8 +193,8 @@ const LocalityPreflightModal: React.FC = () => {
                 </ThemedText>
                 <ThemedText style={styles.body}>
                   Exchanges here can use Bluetooth to confirm you were physically present. If you allow it, that
-                  confirmation records the venue, a time window, and this witness — never your exact location or
-                  who else you meet.
+                  confirmation records the venue, a time window, and this witness — never your exact location or who
+                  else you meet.
                 </ThemedText>
                 <Button
                   title="Allow"

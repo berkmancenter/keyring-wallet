@@ -15,7 +15,6 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import type { Agent } from '@credo-ts/core'
 import { PeerDidNumAlgo } from '@credo-ts/core'
 import { DidCommConnectionRepository, DidCommDidExchangeState } from '@credo-ts/didcomm'
-import { Platform } from 'react-native'
 
 import {
   registerWitnessSessionCallback,
@@ -334,10 +333,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
     const activeId = activeWitnessConnectionIdRef.current
     const activeW = allWitnessConnectionsRef.current.find((w) => w.connectionId === activeId)
     const settings = witnessStoreRef.current
-    const reportingDid =
-      activeId && settings?.enableReporting
-        ? settings?.reportingDids?.[activeId]
-        : undefined
+    const reportingDid = activeId && settings?.enableReporting ? settings?.reportingDids?.[activeId] : undefined
     return {
       connectedWitness: activeW,
       activeSession: activeSessionRef.current,
@@ -437,17 +433,21 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
           logger.current.warn(`Witness discovery query failed: ${e.message}`)
         )
 
-        // Witness-connect pre-flight sheet (§8.4 row 2, §10.3 item 8): Android
-        // only (no native peripheral on iOS yet), only if the user hasn't
-        // already answered it this install, and only if the locality setting
-        // is still on (off means "never request Bluetooth permission" per
-        // §8.1 — nothing to prime). One `localityPreflightPendingRef` guard
-        // keeps two witnesses connecting in quick succession from both
-        // scheduling a prompt. A witness that discovery-declares no locality
-        // leg at all (`off`) skips the sheet entirely — there is nothing for
-        // Bluetooth permission to enable behind this witness.
+        // Witness-connect pre-flight sheet (§8.4 row 2, §10.3 item 8): both
+        // platforms — on iOS the sheet's Allow is what triggers CoreBluetooth's
+        // one-time system prompt, and priming it here is the difference
+        // between a locality leg and none: left to the peripheral's first
+        // start, the prompt lands mid-exchange and the radio phase times out
+        // before the user answers it (iPhone, 2026-09-13 device run). Only if
+        // the user hasn't already answered it this install, and only if the
+        // locality setting is still on (off means "never request Bluetooth
+        // permission" per §8.1 — nothing to prime). One
+        // `localityPreflightPendingRef` guard keeps two witnesses connecting in
+        // quick succession from both scheduling a prompt. A witness that
+        // discovery-declares no locality leg at all (`off`) skips the sheet
+        // entirely — there is nothing for Bluetooth permission to enable
+        // behind this witness.
         if (
-          Platform.OS === 'android' &&
           !preferencesRef.current?.hasSeenLocalityPreflight &&
           (preferencesRef.current?.useLocalityConfirmation ?? true) &&
           !localityPreflightPendingRef.current
@@ -521,9 +521,7 @@ export const WitnessConnectionProvider: React.FC<WitnessConnectionProviderProps>
             logger.current.info(`✓ Reporting DID registered with witness: ${newReportingDid}`)
           } catch (reportingError) {
             // Non-fatal — reporting is best-effort
-            logger.current.warn(
-              `Could not register reporting DID with witness: ${(reportingError as Error).message}`
-            )
+            logger.current.warn(`Could not register reporting DID with witness: ${(reportingError as Error).message}`)
           }
         } else if (existingReportingDid) {
           logger.current.info(`Reporting DID already exists for witness ${connectionId}: ${existingReportingDid}`)

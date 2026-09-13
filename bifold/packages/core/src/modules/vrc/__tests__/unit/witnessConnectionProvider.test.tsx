@@ -14,10 +14,7 @@ import { renderHook, act } from '@testing-library/react-native'
 import { Platform } from 'react-native'
 import type { Agent } from '@credo-ts/core'
 
-import {
-  WitnessConnectionProvider,
-  useWitnessConnection,
-} from '../../context/WitnessConnectionProvider'
+import { WitnessConnectionProvider, useWitnessConnection } from '../../context/WitnessConnectionProvider'
 
 // Capture the announcement callback the provider registers, so tests can
 // invoke it directly the way vrc-manager would on a real `witness-announcement`.
@@ -25,8 +22,7 @@ const mockRegisterWitnessConnectionDetectedCallback = jest.fn()
 jest.mock('../../vrc-manager', () => ({
   registerWitnessSessionCallback: jest.fn(),
   registerWitnessStateGetter: jest.fn(),
-  registerWitnessConnectionDetectedCallback: (cb: unknown) =>
-    mockRegisterWitnessConnectionDetectedCallback(cb),
+  registerWitnessConnectionDetectedCallback: (cb: unknown) => mockRegisterWitnessConnectionDetectedCallback(cb),
   registerWitnessValidationCallback: jest.fn(),
 }))
 
@@ -300,10 +296,7 @@ describe('WitnessConnectionProvider', () => {
 
     it('should restore active witness from stored ID on mount', async () => {
       const { useStore } = require('../../../../contexts/store')
-      useStore.mockReturnValue([
-        { witness: { activeWitnessConnectionId: 'conn-123' } },
-        mockDispatch,
-      ])
+      useStore.mockReturnValue([{ witness: { activeWitnessConnectionId: 'conn-123' } }, mockDispatch])
 
       const mockConn = {
         id: 'conn-123',
@@ -396,11 +389,15 @@ describe('WitnessConnectionProvider', () => {
       expect(result.current.localityPreflight?.required).toBe(false)
     })
 
-    it('does not schedule a prompt on iOS', async () => {
+    it('schedules the same prompt on iOS — its Allow is what raises the CoreBluetooth prompt', async () => {
+      // Left to the peripheral's first start, iOS's one-time Bluetooth prompt
+      // lands mid-exchange and the radio phase times out before it is answered
+      // (iPhone device run, 2026-09-13) — so the sheet primes it at connect.
       Platform.OS = 'ios'
-      const result = await announceWitness()
+      const result = await announceWitness({ eventName: 'IIW Fall 2026' })
 
-      expect(result.current.localityPreflight).toBeUndefined()
+      expect(result.current.localityPreflight?.witness.eventName).toBe('IIW Fall 2026')
+      expect(result.current.localityPreflight?.required).toBe(false)
     })
 
     it('does not schedule a prompt once already seen this install', async () => {
