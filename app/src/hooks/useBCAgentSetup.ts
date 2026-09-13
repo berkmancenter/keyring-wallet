@@ -70,7 +70,7 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
   }
 }
 
-// Pickup V2 periodic polling (10s, set in bc-agent-modules). Live mode held a
+// Pickup V2 periodic polling (1s, set in bc-agent-modules). Live mode held a
 // WebSocket open for mediator push, but a socket that dies silently (NAT/proxy
 // idle reaping) leaves the wallet deaf for minutes AND the mediator live-pushes
 // into the dead socket without requeueing — the message is lost outright
@@ -80,11 +80,13 @@ const loadCachedLedgers = async (): Promise<IndyVdrPoolConfig[] | undefined> => 
 // socket. Revisit live mode once the mediator requeues unacked live deliveries.
 const configureMessagePickup = async (agent: Agent): Promise<void> => {
   // Stop the pickup credo already started during agent.initialize() before
-  // starting ours. initiateMessagePickup SUBSCRIBES A NEW polling interval on
-  // every call — it does not replace the previous one — so without this we run
-  // two concurrent loops and double this wallet's request rate against the
-  // shared mediator (at the 1s interval below, ~172k requests/day per idle
-  // wallet instead of ~86k). Observed on the witness-server 2026-08-31.
+  // starting ours. Stock initiateMessagePickup SUBSCRIBES A NEW polling
+  // interval on every call without replacing the previous one — two loops
+  // doubled this wallet's request rate against the shared mediator (observed
+  // on the witness-server 2026-08-31). Our credo patch now makes
+  // initiateMessagePickup stop any running loop itself (guarded by
+  // mediatorPickupStrategy.guard.test.ts); the explicit stop stays as the
+  // belt to that suspender.
   await agent.modules.didcomm.mediationRecipient.stopMessagePickup()
 
   // Pass the strategy EXPLICITLY: credo otherwise resolves it as
@@ -330,6 +332,11 @@ const useBCAgentSetup = () => {
   // 24-minute stall that drained instantly on restart.
   //
   // stopMessagePickup() first so a resumed loop never stacks on a stale one.
+  // Note bifold core's ActivityProvider restarts pickup on the same transition
+  // (background → foreground); both handlers racing their stop→start once
+  // left a Galaxy A03s with two loops and 50 s of inbound lag (2026-09-13).
+  // The credo patch (initiateMessagePickup stops the running loop first) is
+  // what makes the pair safe — see configureMessagePickup.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState) => {
       if (nextAppState !== 'active') return

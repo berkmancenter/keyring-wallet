@@ -18,7 +18,7 @@
  * See docs/spikes/e2e-vrc-connect-findings.md ("fourth failure layer").
  */
 import { readdirSync, readFileSync, statSync } from 'fs'
-import { join, relative, resolve } from 'path'
+import { dirname, join, relative, resolve } from 'path'
 
 /** Strategies that cannot reliably receive from a queueing mediator. */
 const UNRECEIVABLE = new Set(['Implicit', 'PickUpV2LiveMode', 'None'])
@@ -140,5 +140,27 @@ describe('mediator pickup strategy (app guard)', () => {
     }
 
     expect(offenders).toEqual([])
+  })
+
+  it('initiateMessagePickup replaces a running explicit loop instead of stacking one', () => {
+    // Guards the credo patch (.yarn/patches/@credo-ts-didcomm-*.patch). Stock
+    // credo subscribes a fresh interval on every call and never stops the
+    // previous one, so each restart site (agent init, foreground resume, an OS
+    // permission dialog closing) added a poll loop; a low-end phone fell 50 s
+    // behind the mediator with two of them (2026-09-13). If a credo upgrade
+    // drops the patch, this fails before a device does.
+    // Resolve from the package entry (build/index.mjs): jest's moduleNameMapper
+    // rewrites any '@credo-ts/didcomm…' specifier to that file, so a
+    // '/package.json' lookup would silently land there too.
+    const api = readFileSync(
+      join(dirname(require.resolve('@credo-ts/didcomm')), 'modules/routing/DidCommMediationRecipientApi.mjs'),
+      'utf8'
+    )
+    const start = api.indexOf('async initiateMessagePickup(')
+    const explicitLoop = api.indexOf('return interval(mediatorPollingInterval)', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(explicitLoop).toBeGreaterThan(start)
+    const stopBeforeLoop = api.slice(start, explicitLoop).includes('this.stopMessagePickup$.next(true)')
+    expect(stopBeforeLoop).toBe(true)
   })
 })
