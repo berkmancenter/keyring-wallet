@@ -129,10 +129,21 @@ try {
   /* non-fatal */
 }
 
+// E2E_IOS_FIRST=1 makes the iPhone wallet A — it then connects to the witness
+// (and hits the pre-flight sheet) before the Android phone does. Useful when
+// one phone's witness connect is the thing under investigation: the other
+// phone's outcome lands first instead of never being reached (2026-09-13, a
+// Galaxy A03s timing out on the mediator round trip on every attempt).
+const iosFirst = process.env.E2E_IOS_FIRST === "1";
+const android = { detect: () => androidUdid, create: (udid) => createSession("android", androidDeviceCaps(udid)) };
+const ios = { detect: () => detectIosUdid(), create: (udid) => createSession("ios", iosDeviceCaps(udid)) };
+const [first, second] = iosFirst ? [ios, android] : [android, ios];
+if (iosFirst) console.log("[e2e] E2E_IOS_FIRST=1 — iPhone is wallet A, Android is wallet B");
+
 await runWitnessedExchange({
-  detectDevices: () => ({ a: androidUdid, b: detectIosUdid() }),
-  createSessionA: (udid) => createSession("android", androidDeviceCaps(udid)),
-  createSessionB: (udid) => createSession("ios", iosDeviceCaps(udid)),
+  detectDevices: () => ({ a: first.detect(), b: second.detect() }),
+  createSessionA: first.create,
+  createSessionB: second.create,
   dumpWitnessLogs: () => dumpAndroidWitnessLogs([androidUdid]),
   name: "vrc-exchange:witnessed:locality:devices",
   reportLocality: true,
