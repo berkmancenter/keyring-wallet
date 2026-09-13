@@ -1,6 +1,6 @@
 import { render, fireEvent, waitFor } from '@testing-library/react-native'
 import React from 'react'
-import { Linking } from 'react-native'
+import { Linking, Platform } from 'react-native'
 
 import LocalityPreflightModal from '../../../../src/modules/vrc/components/LocalityPreflightModal'
 import { useWitnessConnection } from '../../../../src/modules/vrc/context/WitnessConnectionProvider'
@@ -16,6 +16,7 @@ jest.mock('react-native-permissions', () => ({
       BLUETOOTH_ADVERTISE: 'android.permission.BLUETOOTH_ADVERTISE',
       BLUETOOTH_SCAN: 'android.permission.BLUETOOTH_SCAN',
     },
+    IOS: { BLUETOOTH: 'ios.permission.BLUETOOTH' },
   },
   RESULTS: { GRANTED: 'granted', DENIED: 'denied' },
   request: (...args: unknown[]) => mockRequest(...args),
@@ -29,7 +30,12 @@ function withPreflight(overrides?: { eventName?: string; required?: boolean }) {
   const resolveLocalityPreflight = jest.fn()
   mockUseWitnessConnection.mockReturnValue({
     localityPreflight: {
-      witness: { name: 'e2e-witness', eventName: overrides?.eventName, connectionId: 'conn-1', connectedAt: new Date() },
+      witness: {
+        name: 'e2e-witness',
+        eventName: overrides?.eventName,
+        connectionId: 'conn-1',
+        connectedAt: new Date(),
+      },
       required: overrides?.required ?? false,
     },
     resolveLocalityPreflight,
@@ -38,6 +44,11 @@ function withPreflight(overrides?: { eventName?: string; required?: boolean }) {
 }
 
 describe('LocalityPreflightModal', () => {
+  const originalPlatformOs = Platform.OS
+  afterEach(() => {
+    Platform.OS = originalPlatformOs
+  })
+
   beforeEach(() => {
     jest.clearAllMocks()
     mockRequest.mockResolvedValue('granted')
@@ -67,7 +78,8 @@ describe('LocalityPreflightModal', () => {
     expect(getByText("Allow Bluetooth to confirm you're at e2e-witness?")).toBeTruthy()
   })
 
-  it('Allow requests both BLE permissions and resolves with allow:true', async () => {
+  it('Allow on Android requests both BLE permissions and resolves with allow:true', async () => {
+    Platform.OS = 'android'
     const { resolveLocalityPreflight } = withPreflight()
 
     const { getByLabelText } = render(<LocalityPreflightModal />)
@@ -78,7 +90,22 @@ describe('LocalityPreflightModal', () => {
     expect(mockRequest).toHaveBeenCalledWith('android.permission.BLUETOOTH_SCAN')
   })
 
+  it('Allow on iOS requests the single Bluetooth authorization and resolves with allow:true', async () => {
+    // This is what raises CoreBluetooth's one-time system prompt at witness
+    // connect instead of mid-exchange (device run, 2026-09-13).
+    Platform.OS = 'ios'
+    const { resolveLocalityPreflight } = withPreflight()
+
+    const { getByLabelText } = render(<LocalityPreflightModal />)
+    fireEvent.press(getByLabelText('Allow'))
+
+    await waitFor(() => expect(resolveLocalityPreflight).toHaveBeenCalledWith(true))
+    expect(mockRequest).toHaveBeenCalledTimes(1)
+    expect(mockRequest).toHaveBeenCalledWith('ios.permission.BLUETOOTH')
+  })
+
   it('Allow resolves allow:true even if the OS denies the permission', async () => {
+    Platform.OS = 'android'
     mockRequest.mockResolvedValue('denied')
     const { resolveLocalityPreflight } = withPreflight()
 
