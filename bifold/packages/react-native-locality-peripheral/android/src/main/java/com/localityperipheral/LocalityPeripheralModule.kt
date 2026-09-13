@@ -18,6 +18,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.security.keystore.KeyInfo
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.UserNotAuthenticatedException
 import android.util.Base64
@@ -33,6 +34,7 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import java.nio.charset.StandardCharsets
+import java.security.KeyFactory
 import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.PublicKey
@@ -305,6 +307,15 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     return Pair(privateKey, publicKey)
   }
 
+  /** The key's auth-window length in seconds (0 = per-operation auth, i.e. a key enrolled before the window existed). */
+  private fun keyAuthWindowSeconds(key: PrivateKey): Int = try {
+    KeyFactory.getInstance(key.algorithm, ANDROID_KEYSTORE)
+      .getKeySpec(key, KeyInfo::class.java)
+      .userAuthenticationValidityDurationSeconds
+  } catch (e: Exception) {
+    0
+  }
+
   /**
    * Authorize a `Signature` bound to the hardware key via one `BiometricPrompt`
    * + `CryptoObject` round trip, right now — *before* advertising starts,
@@ -334,9 +345,32 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     // on the SAME authMode rather than only comparing the two prompts by eye.
     Log.i(TAG, "▶ Authorizing with ${if (call.authMode == "passcode") "passcode" else "biometric"} auth [authMode=${call.authMode}]")
 
+    // A key enrolled with an auth window (AttestationModule's
+    // USER_AUTH_REUSE_WINDOW_SECONDS) is usable without a prompt while the
+    // window opened by the exchange's earlier VRC-signing prompt is still
+    // open — one prompt per exchange. `initSign` succeeding on such a key IS
+    // the authorization; UserNotAuthenticatedException means the window has
+    // closed and the user must be prompted, without a CryptoObject (which
+    // would bind the auth to one operation instead of re-opening the window).
+    // Keys enrolled with per-operation auth (window 0) take the original
+    // CryptoObject path.
+    val timeBasedAuth = keyAuthWindowSeconds(privateKey) > 0
     val signature = Signature.getInstance("SHA256withECDSA")
     try {
       signature.initSign(privateKey)
+      if (timeBasedAuth) {
+        Log.i(TAG, "✓ Auth window still open from the exchange's earlier prompt — no second prompt")
+        call.authorizedSignature = signature
+        onResult(true)
+        return
+      }
+    } catch (e: UserNotAuthenticatedException) {
+      if (!timeBasedAuth) {
+        Log.e(TAG, "initSign failed: ${e.message}")
+        onResult(false)
+        return
+      }
+      Log.i(TAG, "Auth window closed — prompting")
     } catch (e: Exception) {
       Log.e(TAG, "initSign failed: ${e.message}")
       onResult(false)
@@ -346,6 +380,19 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     val executor = ContextCompat.getMainExecutor(reactContext)
     val callback = object : BiometricPrompt.AuthenticationCallback() {
       override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+        if (timeBasedAuth) {
+          // The prompt re-opened the key's auth window; bind a fresh operation.
+          try {
+            val opened = Signature.getInstance("SHA256withECDSA")
+            opened.initSign(privateKey)
+            call.authorizedSignature = opened
+            onResult(true)
+          } catch (e: Exception) {
+            Log.e(TAG, "initSign after prompt failed: ${e.message}")
+            onResult(false)
+          }
+          return
+        }
         val authorizedSignature = result.cryptoObject?.signature
         if (authorizedSignature == null) {
           Log.e(TAG, "Biometric succeeded but no crypto object in result")
@@ -380,7 +427,11 @@ class LocalityPeripheralModule : LocalityPeripheralSpec {
     activity.runOnUiThread {
       try {
         val biometricPrompt = BiometricPrompt(activity, executor, callback)
-        biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
+        if (timeBasedAuth) {
+          biometricPrompt.authenticate(promptInfo)
+        } else {
+          biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
+        }
       } catch (e: Exception) {
         Log.e(TAG, "Failed to show biometric prompt: ${e.message}")
         onResult(false)

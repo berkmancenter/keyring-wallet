@@ -3,6 +3,40 @@
 #import <CommonCrypto/CommonCrypto.h>
 #import <Security/Security.h>
 #import <LocalAuthentication/LocalAuthentication.h>
+#include <unistd.h>
+
+// One OS prompt per exchange. Both of a witnessed exchange's App Attest
+// assertions — the VRC content here and the locality transcript in
+// LocalityPeripheral.swift — are POLICY-gated (generateAssertion cannot be
+// biometry-bound), so the second gate may honour the first prompt while it is
+// recent. The record lives in NSUserDefaults so the two pods share it with no
+// dependency either way; the pid check keeps it from outliving the process.
+// Deliberate duplicate of the constant in LocalityPeripheral.swift (and of
+// AttestationModule.kt's, where it is the key's real auth window).
+static const NSTimeInterval kUserAuthReuseWindowSeconds = 300;
+static NSString *const kUserAuthDefaultsKey = @"org.keyring.userAuth.last";
+
+static void recordUserAuth(NSString *authMode, NSString *authMethod) {
+    NSDictionary *record = @{
+        @"at": @([NSDate timeIntervalSinceReferenceDate]),
+        @"mode": authMode,
+        @"method": authMethod ?: @"",
+        @"pid": @(getpid()),
+    };
+    [[NSUserDefaults standardUserDefaults] setObject:record forKey:kUserAuthDefaultsKey];
+}
+
+/** The last successful prompt in THIS process for this authMode, if still inside the window; `ageOut` gets its age. */
+static NSDictionary *reusableUserAuth(NSString *authMode, NSTimeInterval *ageOut) {
+    NSDictionary *record = [[NSUserDefaults standardUserDefaults] dictionaryForKey:kUserAuthDefaultsKey];
+    if (![record isKindOfClass:[NSDictionary class]]) return nil;
+    if ([record[@"pid"] intValue] != getpid()) return nil;
+    if (![record[@"mode"] isEqualToString:authMode]) return nil;
+    NSTimeInterval age = [NSDate timeIntervalSinceReferenceDate] - [record[@"at"] doubleValue];
+    if (age < 0 || age > kUserAuthReuseWindowSeconds) return nil;
+    if (ageOut) *ageOut = age;
+    return record;
+}
 
 @implementation Attestation
 RCT_EXPORT_MODULE()
@@ -416,7 +450,41 @@ RCT_EXPORT_METHOD(signWithHardwareBiometricAuth:(NSArray<NSNumber *> *)dataToSig
         }
     }
     NSLog(@"[VRC:iOS] Auth mode: %@, evidence method: %@", passcodeMode ? @"passcode" : @"biometric", authMethod);
-    
+    NSString *normalizedMode = passcodeMode ? @"passcode" : @"biometric";
+    void (^generate)(NSString *) = ^(NSString *evidenceMethod) {
+            [attestService generateAssertion:keyId clientDataHash:clientDataHash completionHandler:^(NSData * _Nullable assertion, NSError * _Nullable error) {
+                if (error) {
+                    NSLog(@"[VRC:iOS] ✗ Assertion failed: %@", error);
+                    _signingInProgress = NO;
+                    reject(@"error", @"Failed to generate assertion", error);
+                    return;
+                }
+                if (assertion == nil || assertion.length == 0) {
+                    _signingInProgress = NO;
+                    reject(@"error", @"Empty assertion", errorWithReason(@"Empty assertion", 104));
+                    return;
+                }
+                NSLog(@"[VRC:iOS] ✓ Assertion created [%lu bytes, auth=%@]",
+                      (unsigned long)assertion.length, evidenceMethod);
+
+                _signingInProgress = NO;
+                resolve(@{
+                    @"success": @YES,
+                    @"signature": dataToBytes(assertion),
+                    @"algorithm": @"ECDSA-SHA256",
+                    @"clientDataHash": [clientDataHash base64EncodedStringWithOptions:0],
+                    @"authenticationMethod": evidenceMethod
+                });
+            }];
+    };
+    NSTimeInterval reuseAge = 0;
+    NSDictionary *reusable = reusableUserAuth(normalizedMode, &reuseAge);
+    if (reusable != nil) {
+        NSLog(@"[VRC:iOS] ▶ Reusing user authentication from %.0fs ago (window %.0fs) — no prompt", reuseAge, kUserAuthReuseWindowSeconds);
+        NSString *recordedMethod = reusable[@"method"];
+        generate(recordedMethod.length > 0 ? recordedMethod : authMethod);
+        return;
+    }
     [laContext evaluatePolicy:LAPolicyDeviceOwnerAuthentication
               localizedReason:@"Confirm your identity to sign this relationship credential"
                         reply:^(BOOL success, NSError * _Nullable authError) {
@@ -432,30 +500,8 @@ RCT_EXPORT_METHOD(signWithHardwareBiometricAuth:(NSArray<NSNumber *> *)dataToSig
             }
             return;
         }
-        [attestService generateAssertion:keyId clientDataHash:clientDataHash completionHandler:^(NSData * _Nullable assertion, NSError * _Nullable error) {
-            if (error) {
-                NSLog(@"[VRC:iOS] ✗ Assertion failed: %@", error);
-                _signingInProgress = NO;
-                reject(@"error", @"Failed to generate assertion", error);
-                return;
-            }
-            if (assertion == nil || assertion.length == 0) {
-                _signingInProgress = NO;
-                reject(@"error", @"Empty assertion", errorWithReason(@"Empty assertion", 104));
-                return;
-            }
-            NSLog(@"[VRC:iOS] ✓ Assertion created [%lu bytes, auth=%@]",
-                  (unsigned long)assertion.length, authMethod);
-
-            _signingInProgress = NO;
-            resolve(@{
-                @"success": @YES,
-                @"signature": dataToBytes(assertion),
-                @"algorithm": @"ECDSA-SHA256",
-                @"clientDataHash": [clientDataHash base64EncodedStringWithOptions:0],
-                @"authenticationMethod": authMethod
-            });
-        }];
+        recordUserAuth(normalizedMode, authMethod);
+        generate(authMethod);
     }];
 }
 

@@ -6,6 +6,7 @@ import android.security.keystore.KeyInfo
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
+import android.security.keystore.UserNotAuthenticatedException
 import android.util.Log
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -73,6 +74,27 @@ class AttestationModule : AttestationSpec {
      * for a given `authMode` so the two OS prompts stay consistent with each
      * other and with the caller's resolved preference.
      */
+    /**
+     * How long one successful OS prompt keeps the hardware key usable — the
+     * key's `setUserAuthenticationParameters` timeout. Both signatures of a
+     * witnessed exchange (the VRC content here, the locality transcript in
+     * LocalityPeripheralModule a minute or two later) happen inside it, so the
+     * user authenticates ONCE per exchange rather than once per signature.
+     * The trade is deliberate: evidence now attests "user presence within the
+     * window", not "per signature". Keys enrolled before this change keep
+     * per-operation auth — and two prompts — until re-created. Deliberate
+     * duplicate of the constant in Attestation.mm / LocalityPeripheral.swift,
+     * where it gates a policy prompt rather than a key.
+     */
+    const val USER_AUTH_REUSE_WINDOW_SECONDS = 300
+
+    /**
+     * Result type of the last successful prompt in this process, so a later
+     * signature that rides the open window silently still records how the
+     * user authenticated in its evidence block.
+     */
+    @Volatile var lastAuthenticationMethod: String? = null
+
     fun allowedAuthenticatorsFor(authMode: String?): Int {
       return if (authMode == "passcode") {
         BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -243,12 +265,12 @@ class AttestationModule : AttestationSpec {
 
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         builder.setUserAuthenticationParameters(
-          0,
+          USER_AUTH_REUSE_WINDOW_SECONDS,
           KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
         )
       } else {
         @Suppress("DEPRECATION")
-        builder.setUserAuthenticationValidityDurationSeconds(-1)
+        builder.setUserAuthenticationValidityDurationSeconds(USER_AUTH_REUSE_WINDOW_SECONDS)
       }
 
       builder.setInvalidatedByBiometricEnrollment(true)
@@ -295,7 +317,7 @@ class AttestationModule : AttestationSpec {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
           fallbackBuilder.setUserAuthenticationParameters(
-            0,
+            USER_AUTH_REUSE_WINDOW_SECONDS,
             KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL
           )
         }
@@ -371,6 +393,15 @@ class AttestationModule : AttestationSpec {
   }
 
   @ReactMethod
+  /** The key's auth-window length in seconds (0 = per-operation auth, i.e. a key enrolled before the window existed). */
+  private fun keyAuthWindowSeconds(key: PrivateKey): Int = try {
+    KeyFactory.getInstance(key.algorithm, ANDROID_KEYSTORE)
+      .getKeySpec(key, KeyInfo::class.java)
+      .userAuthenticationValidityDurationSeconds
+  } catch (e: Exception) {
+    0
+  }
+
   override fun signWithHardwareBiometricAuth(dataToSign: ReadableArray, authMode: String?, promise: Promise) {
     val passcodeOnly = authMode == "passcode"
     Log.i(TAG, "▶ Signing with ${if (passcodeOnly) "passcode" else "biometric"} auth [${dataToSign.size()} bytes]")
@@ -410,11 +441,7 @@ class AttestationModule : AttestationSpec {
       }
 
       val dataBytes = readableArrayToBytes(dataToSign)
-      val signature = Signature.getInstance("SHA256withECDSA")
-      signature.initSign(privateKey)
-
       val executor = ContextCompat.getMainExecutor(reactContext)
-
       // Detect available authentication method for evidence metadata (biometric mode only)
       val biometricManager = BiometricManager.from(reactContext)
       val hasBiometric = if (passcodeOnly) {
@@ -423,33 +450,63 @@ class AttestationModule : AttestationSpec {
         biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
           BiometricManager.BIOMETRIC_SUCCESS
       }
+      val fallbackAuthMethod = if (passcodeOnly || !hasBiometric) "DevicePasscode" else "Fingerprint"
 
+      fun resolveSigned(signatureBytes: ByteArray, authMethod: String, how: String) {
+        Log.i(TAG, "✓ Signature created [${signatureBytes.size} bytes, auth=$authMethod, $how]")
+        val contentHash = java.security.MessageDigest.getInstance("SHA-256").digest(dataBytes)
+        val resultMap = Arguments.createMap()
+        resultMap.putBoolean("success", true)
+        resultMap.putArray("signature", bytesToWritableArray(signatureBytes))
+        resultMap.putString("algorithm", "ECDSA-SHA256")
+        resultMap.putString("clientDataHash", android.util.Base64.encodeToString(contentHash, android.util.Base64.NO_WRAP))
+        resultMap.putString("authenticationMethod", authMethod)
+
+        promise.resolve(resultMap)
+      }
+
+      // A key enrolled with an auth window (USER_AUTH_REUSE_WINDOW_SECONDS) is
+      // usable without a prompt while the window opened by the last successful
+      // prompt is still open — one prompt per exchange. `initSign` throws
+      // UserNotAuthenticatedException once it has closed (or never opened),
+      // which is the cue to prompt. Keys enrolled with per-operation auth
+      // (window 0) take the CryptoObject path below, unchanged.
+      val timeBasedAuth = keyAuthWindowSeconds(privateKey) > 0
+      if (timeBasedAuth) {
+        try {
+          val silent = Signature.getInstance("SHA256withECDSA")
+          silent.initSign(privateKey)
+          silent.update(dataBytes)
+          resolveSigned(silent.sign(), lastAuthenticationMethod ?: fallbackAuthMethod, "auth window still open — no prompt")
+          return
+        } catch (e: UserNotAuthenticatedException) {
+          Log.i(TAG, "Auth window closed — prompting")
+        }
+      }
+
+      val signature = Signature.getInstance("SHA256withECDSA")
+      if (!timeBasedAuth) signature.initSign(privateKey)
       val callback = object : BiometricPrompt.AuthenticationCallback() {
         override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
           try {
+            val authMethod = when (result.authenticationType) {
+              BiometricPrompt.AUTHENTICATION_RESULT_TYPE_BIOMETRIC -> "Fingerprint"
+              BiometricPrompt.AUTHENTICATION_RESULT_TYPE_DEVICE_CREDENTIAL -> "DevicePasscode"
+              else -> fallbackAuthMethod
+            }
+            lastAuthenticationMethod = authMethod
+            if (timeBasedAuth) {
+              // The prompt opened the key's auth window; sign with a fresh operation.
+              val opened = Signature.getInstance("SHA256withECDSA")
+              opened.initSign(privateKey)
+              opened.update(dataBytes)
+              resolveSigned(opened.sign(), authMethod, "prompt opened a ${USER_AUTH_REUSE_WINDOW_SECONDS}s auth window")
+              return
+            }
             val cryptoSignature = result.cryptoObject?.signature
             if (cryptoSignature != null) {
               cryptoSignature.update(dataBytes)
-              val signatureBytes = cryptoSignature.sign()
-
-              val authMethod = when (result.authenticationType) {
-                BiometricPrompt.AUTHENTICATION_RESULT_TYPE_BIOMETRIC -> "Fingerprint"
-                BiometricPrompt.AUTHENTICATION_RESULT_TYPE_DEVICE_CREDENTIAL -> "DevicePasscode"
-                else -> if (passcodeOnly || !hasBiometric) "DevicePasscode" else "Fingerprint"
-              }
-
-              Log.i(TAG, "✓ Signature created [${signatureBytes.size} bytes, auth=$authMethod]")
-
-              val contentHash = java.security.MessageDigest.getInstance("SHA-256").digest(dataBytes)
-
-              val resultMap = Arguments.createMap()
-              resultMap.putBoolean("success", true)
-              resultMap.putArray("signature", bytesToWritableArray(signatureBytes))
-              resultMap.putString("algorithm", "ECDSA-SHA256")
-              resultMap.putString("clientDataHash", android.util.Base64.encodeToString(contentHash, android.util.Base64.NO_WRAP))
-              resultMap.putString("authenticationMethod", authMethod)
-
-              promise.resolve(resultMap)
+              resolveSigned(cryptoSignature.sign(), authMethod, "per-operation auth")
             } else {
               promise.reject("error", "No crypto object in result")
             }
@@ -500,8 +557,13 @@ class AttestationModule : AttestationSpec {
       activity.runOnUiThread {
         try {
           val biometricPrompt = BiometricPrompt(activity, executor, callback)
-          val cryptoObject = BiometricPrompt.CryptoObject(signature)
-          biometricPrompt.authenticate(promptInfo, cryptoObject)
+          if (timeBasedAuth) {
+            // A time-based key is unlocked by the prompt itself; a CryptoObject
+            // would bind the auth to one operation and defeat the window.
+            biometricPrompt.authenticate(promptInfo)
+          } else {
+            biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
+          }
         } catch (e: Exception) {
           promise.reject("error", "Failed to show biometric prompt: ${e.message}", e)
         }
