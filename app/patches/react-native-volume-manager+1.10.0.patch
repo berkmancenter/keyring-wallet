@@ -1,0 +1,25 @@
+diff --git a/node_modules/react-native-volume-manager/android/src/main/java/com/reactnativevolumemanager/VolumeManagerModule.java b/node_modules/react-native-volume-manager/android/src/main/java/com/reactnativevolumemanager/VolumeManagerModule.java
+index b081cfa..8f21642 100644
+--- a/node_modules/react-native-volume-manager/android/src/main/java/com/reactnativevolumemanager/VolumeManagerModule.java
++++ b/node_modules/react-native-volume-manager/android/src/main/java/com/reactnativevolumemanager/VolumeManagerModule.java
+@@ -54,13 +54,19 @@ public class VolumeManagerModule
+   public VolumeManagerModule(ReactApplicationContext reactContext) {
+     super(reactContext);
+     mContext = reactContext;
+-    reactContext.addLifecycleEventListener(this);
+     am =
+       (AudioManager) mContext
+         .getApplicationContext()
+         .getSystemService(Context.AUDIO_SERVICE);
+     volumeBR = new VolumeBroadcastReceiver();
+     this.category = null;
++    // Register LAST: if the host activity is already resumed when this module
++    // is constructed (a slow device loading a large release bundle), RN posts
++    // onHostResume to the UI thread immediately, and with the listener added
++    // before volumeBR was assigned that callback NPE'd in
++    // registerVolumeReceiver() and killed the app at startup (Galaxy A03s,
++    // 2026-09-13, reproducible on every launch).
++    reactContext.addLifecycleEventListener(this);
+   }
+ 
+   private void registerVolumeReceiver() {
