@@ -73,6 +73,35 @@ class LocalityPeripheral: NSObject {
 
   private static let logPrefix = "[Locality:Peripheral:iOS]"
 
+  /// One OS prompt per exchange — see Attestation.mm's kUserAuthReuseWindowSeconds
+  /// (deliberate duplicate; the two pods share the record through UserDefaults so
+  /// neither depends on the other, and the pid check keeps it process-local).
+  private static let userAuthReuseWindowSeconds: TimeInterval = 300
+  private static let userAuthDefaultsKey = "org.keyring.userAuth.last"
+
+  private static func recordUserAuth(mode: String) {
+    UserDefaults.standard.set(
+      [
+        "at": Date.timeIntervalSinceReferenceDate,
+        "mode": mode,
+        "method": "",
+        "pid": Int(ProcessInfo.processInfo.processIdentifier),
+      ] as [String: Any],
+      forKey: userAuthDefaultsKey
+    )
+  }
+
+  /// Seconds since the last successful prompt in this process for `mode`, or nil if none / expired.
+  private static func reusableUserAuthAge(mode: String) -> TimeInterval? {
+    guard let record = UserDefaults.standard.dictionary(forKey: userAuthDefaultsKey),
+          (record["pid"] as? Int) == Int(ProcessInfo.processInfo.processIdentifier),
+          (record["mode"] as? String) == mode,
+          let at = record["at"] as? Double
+    else { return nil }
+    let age = Date.timeIntervalSinceReferenceDate - at
+    return (age >= 0 && age <= userAuthReuseWindowSeconds) ? age : nil
+  }
+
   /**
    DELIBERATE DUPLICATES of `Attestation.mm`'s own keychain coordinates —
    `KeychainServiceName`, `keychainIdentifier2()` and
@@ -332,8 +361,16 @@ class LocalityPeripheral: NSObject {
    remains a fallback, matching `allowedAuthenticatorsFor` on Android.
    */
   private func authorize(authMode: String, completion: @escaping (Bool) -> Void) {
-    let context = LAContext()
     let passcodeOnly = authMode == "passcode"
+    let mode = passcodeOnly ? "passcode" : "biometric"
+    // The VRC-signing prompt of this same exchange (Attestation.mm) is usually
+    // a minute or two old by the time the radio phase starts; honour it.
+    if let age = Self.reusableUserAuthAge(mode: mode) {
+      NSLog("\(Self.logPrefix) ▶ Reusing user authentication from \(Int(age))s ago (window \(Int(Self.userAuthReuseWindowSeconds))s) — no second prompt")
+      completion(true)
+      return
+    }
+    let context = LAContext()
     // iOS has no DEVICE_CREDENTIAL-only policy to match Android's. With
     // biometrics enrolled it will still offer Face ID first and let the user
     // fall back to the passcode — `Attestation.mm` documents the same
@@ -346,7 +383,9 @@ class LocalityPeripheral: NSObject {
       ? "Enter your device passcode to sign the locality confirmation"
       : "Authenticate to sign the locality confirmation"
     context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, error in
-      if !success {
+      if success {
+        Self.recordUserAuth(mode: mode)
+      } else {
         NSLog("\(Self.logPrefix) Authorization declined/failed: \(error?.localizedDescription ?? "unknown")")
       }
       completion(success)
