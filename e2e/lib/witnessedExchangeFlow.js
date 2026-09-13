@@ -18,6 +18,7 @@ import net from "node:net";
 import { ensureAppium, stopAppium, screenshot, dumpSource, sleep } from "./driver.js";
 import {
   acceptInvitationViaPaste,
+  acceptLocalityPreflightIfPresent,
   assertLocalityConfirmedMarker,
   acceptRelationshipProposalOnEitherSide,
   assertTrustTaskExchangeMarkers,
@@ -301,7 +302,14 @@ export async function runWitnessedExchange({
       );
     }
     await connectToWitness(sessionA, witness.invitationUrl);
+    if (assertLocality || reportLocality) await acceptLocalityPreflightIfPresent(sessionA);
     await connectToWitness(sessionB, witness.invitationUrl);
+    if (assertLocality || reportLocality) {
+      await acceptLocalityPreflightIfPresent(sessionB);
+      // A slow phone can raise its sheet after the other's connect finished —
+      // one short re-check on both before the exchange's first tap.
+      await Promise.all([acceptLocalityPreflightIfPresent(sessionA, 3000), acceptLocalityPreflightIfPresent(sessionB, 3000)]);
+    }
     await witness.waitForParticipants(2, 120000);
     console.log("[e2e] both wallets connected to the witness");
 
@@ -317,9 +325,14 @@ export async function runWitnessedExchange({
     );
     await acceptRelationshipProposalOnEitherSide(sessionA, sessionB);
 
+    // A locality leg adds a radio phase + attestation on EACH side, and on a
+    // low-end phone the whole witnessed ceremony ran 3+ minutes after the
+    // paste (Galaxy A03s, 2026-09-13: VWC stored and the contact rendered —
+    // 16 s after the 120 s default expired). Attended runs can afford it.
+    const vrcTimeout = assertLocality || reportLocality ? 300000 : 120000;
     await Promise.all([
-      assertVrcReceived(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`),
-      assertVrcReceived(sessionB, `${IDENTITY_A.firstName} ${IDENTITY_A.lastName}`),
+      assertVrcReceived(sessionA, `${IDENTITY_B.firstName} ${IDENTITY_B.lastName}`, vrcTimeout),
+      assertVrcReceived(sessionB, `${IDENTITY_A.firstName} ${IDENTITY_A.lastName}`, vrcTimeout),
     ]);
 
     // The crypto gates, from Android's run-scoped logcat (covers both

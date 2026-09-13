@@ -1035,6 +1035,11 @@ export async function returnToContacts(driver) {
       if (await existsTestId(driver, "Contacts", 2000)) return;
       continue;
     }
+    // The witness-connect Bluetooth pre-flight sheet (Android) can be up by
+    // the time we get here — on a phone that keeps up with the mediator it
+    // appears the moment the witness connection completes, i.e. mid-landing,
+    // and it blocks everything under it (attempt 13, 2026-09-13).
+    if (await acceptLocalityPreflightIfPresent(driver, 1500)) continue;
     await unlockIfLocked(driver);
     if (await existsTestId(driver, "BackButton", 2000)) {
       await tapTestIdReliable(driver, "BackButton", () => leftStackedScreen(driver)).catch(() => {});
@@ -1486,6 +1491,27 @@ export async function assertWitnessShareMarkers(driver, timeout = 120000) {
  * one — a silent fallback to unconfirmed is exactly the failure mode this
  * assertion exists to catch, not something to wait out.
  */
+/**
+ * The witness-connect Bluetooth pre-flight sheet (locality-plan.md §8.4,
+ * `LocalityPreflightModal`) appears on each phone right after its own
+ * connectToWitness resolves against a witness whose policy is `offered` or
+ * `required`, and blocks the UI until answered. It was left to the operator
+ * on purpose (the flow's own banner) — and on 2026-09-13 the first run that
+ * got both phones connected died at the very next tap because the sheet was
+ * still up on one of them. The OS-level prompts that follow are already
+ * automatic (`autoGrantPermissions` on Android, `autoAcceptAlerts` on iOS),
+ * so this is the one remaining manual step, and it has a testID. Tap Allow
+ * if the sheet is showing; do nothing if it is not (a witness with locality
+ * `off` never shows it).
+ */
+export async function acceptLocalityPreflightIfPresent(driver, timeout = 20000) {
+  if (!(await existsTestId(driver, "LocalityPreflightAllow", timeout))) return false;
+  await tapTestId(driver, "LocalityPreflightAllow", 5000);
+  console.log(`[e2e] ${driver.e2ePlatform}: Bluetooth pre-flight sheet — tapped Allow`);
+  await sleep(1500); // let the sheet dismiss and any OS prompt auto-resolve
+  return true;
+}
+
 export async function assertLocalityConfirmedMarker(driver, timeout = 60000) {
   if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
   const { execSync } = await import("node:child_process");
