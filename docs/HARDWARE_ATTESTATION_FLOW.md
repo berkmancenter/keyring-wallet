@@ -13,7 +13,7 @@ multi-root trust anchors + real-device E2E).
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Hardware key generation | ✅ | iOS Secure Enclave, Android StrongBox → TEE → Software fallback |
-| User-verified signing | ✅ | Biometric **or** device passcode (`DevicePasscode`) |
+| User-verified signing | ✅ | Biometric **or** device passcode (`DevicePasscode`) — **one prompt per exchange**: a successful prompt keeps the key usable for 300 s (Android: the key's `setUserAuthenticationParameters` window; iOS: both App Attest gates are policy prompts and the second honours the first while it is recent), so the VRC signature and the locality transcript signature of one witnessed exchange share a single authentication. Evidence therefore attests user presence *within that window*, not per signature. Keys enrolled before this change keep per-operation auth (two prompts) until re-created. |
 | Attestation retrieval | ✅ | Apple App Attest, Android Key Attestation |
 | Evidence block (W3C) | ✅ | Attached to VRC before Credo LD proof |
 | Full X.509 chain verification | ✅ | **Native** — iOS `SecTrust`, Android `CertPathValidator` |
