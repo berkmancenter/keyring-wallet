@@ -281,11 +281,38 @@ export function byTestId(driver, key) {
 
 export async function waitForTestId(driver, key, timeout = 30000) {
   const el = byTestId(driver, key);
-  await el.waitForExist({
-    timeout,
-    timeoutMsg: `element testID=${key} not found in ${timeout}ms`,
-  });
+  const timeoutMsg = `element testID=${key} not found in ${timeout}ms`;
+  try {
+    await el.waitForExist({ timeout, timeoutMsg });
+  } catch (err) {
+    // A miss is how the witness-connect Bluetooth pre-flight sheet shows up:
+    // it arrives whenever the witness's discovery round trip completes —
+    // anywhere from seconds to over a minute after the connect (attempts
+    // 13 and 16, 2026-09-13) — and blocks every tap under it. Clear it and
+    // look once more before giving up.
+    if (key !== PREFLIGHT_ALLOW_KEY && (await clearLocalityPreflightIfUp(driver))) {
+      await el.waitForExist({ timeout: Math.min(timeout, 10000), timeoutMsg });
+    } else {
+      throw err;
+    }
+  }
   return el;
+}
+
+const PREFLIGHT_ALLOW_KEY = "LocalityPreflightAllow";
+
+/**
+ * If the witness-connect Bluetooth pre-flight sheet (LocalityPreflightModal,
+ * Android — iOS has none) is on screen, tap Allow. Returns whether it was.
+ * The OS permission dialog that follows is auto-granted by the Appium caps.
+ */
+export async function clearLocalityPreflightIfUp(driver) {
+  const allow = byTestId(driver, PREFLIGHT_ALLOW_KEY);
+  if (!(await allow.isExisting())) return false;
+  await allow.click();
+  console.log(`[e2e] ${deviceTag(driver)}: Bluetooth pre-flight sheet — tapped Allow`);
+  await new Promise((r) => setTimeout(r, 1500));
+  return true;
 }
 
 /** `android:emulator-5554` (or just the platform, e.g. `ios`, when no udid
