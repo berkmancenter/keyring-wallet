@@ -24,7 +24,7 @@ prepare_react_native_project!
 # uncomment wanted permissions (also from RNP docs linked above)
 setup_permissions([
   # 'AppTrackingTransparency',
-  # 'Bluetooth',
+  'Bluetooth',
   # 'Calendars',
   # 'CalendarsWriteOnly',
   'Camera',
