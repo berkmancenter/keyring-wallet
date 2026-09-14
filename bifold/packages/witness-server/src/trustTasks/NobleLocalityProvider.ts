@@ -227,10 +227,16 @@ export class NobleLocalityProvider implements TaskLocalityProvider {
     // Scan for everything and match ourselves: the set of expected UUIDs
     // changes as sessions come and go, and restarting the scan with a new
     // filter each time is a real interruption on CoreBluetooth. Duplicates
-    // are not requested — a peripheral is reported once per scan, and a
-    // retry reuses the peripheral object rather than waiting to see it again.
+    // ARE requested: without them CoreBluetooth reports a peripheral once per
+    // scan, and an iPhone is already being reported — for its continuity
+    // adverts — before the wallet's service UUID ever appears in its
+    // advertisement, so the advert that matters was never delivered and the
+    // window lapsed with nothing seen (device run 2026-09-13, attempt 21:
+    // the Galaxy, a fresh peripheral, matched in 2 s; the iPhone advertised
+    // for the full 120 s unseen). `inFlight` is what keeps a repeated advert
+    // from starting a second exchange with the same phone.
     try {
-      await this.noble.startScanningAsync([], false)
+      await this.noble.startScanningAsync([], true)
     } catch (error) {
       this.scanning = false
       this.noble.removeListener('discover', this.onDiscover)
