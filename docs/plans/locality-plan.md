@@ -38,6 +38,7 @@ specifically, so the coupling can be checked rather than assumed:
 | [2026-09-01-bam.md](./locality-plan/2026-09-01-bam.md) | Item 12 run live on real hardware, both witnessed e2e variants passing. Four things found and fixed: the witness-connect pre-flight sheet (item 8) fired for witnesses with no locality leg at all (superseding its "always shown first" text); the sheet then had no operator cue, stalling an attended run; a locality-confirmed Contacts badge, which exposed a dead-code bug in the existing per-record display; and item 2's stale-`Device`-object fix, claimed "folded into" `BleLocalityProvider` since `ref-06p4` but never actually applied there — now is, with a bounded retry |
 | [2026-09-12-al.md](./locality-plan/2026-09-12-al.md) | Scoping the iOS peripheral (item 9) found that **iOS cannot sign the locality binding at all**: the platform key is an App Attest key, and `DCAppAttestService` returns a CBOR assertion over Apple's own `SHA256(authenticatorData ‖ clientDataHash)` construction, never caller-supplied bytes — so `p256.verify` cannot succeed. Not an encoding mismatch; a different signing primitive. The verification side is already iOS-ready (`rawPointFromDevicePublicKey` accepts raw 65-byte points); only signing has no path. Three options, with option 2 (teach the witness App Attest) researched into two jobs: assertion verification plus new per-key counter state, and the Apple attestation-chain verification that would make it meaningful — which would be the first Apple verification anywhere server-side. Corrects this author's own first framing: tier 3 is a base64 comparison of two **unverified** keys on both platforms, so option 1 concedes less than claimed |
 | [2026-09-13-al.md](./locality-plan/2026-09-13-al.md) | The iOS peripheral's first live runs (77 / 63 / 72 ms App Attest assertions, both legs confirmed from `main`), and what it took: a stacked mediator pickup loop and a native startup NPE on a slow Android, the iOS pre-flight sheet, one OS prompt per exchange (the model change), the noble scan's duplicates, and the witness-share's discovery wait. |
+| [2026-09-14-al.md](./locality-plan/2026-09-14-al.md) | The simulator suite on `main` after the device runs: a fresh wallet whose first mediation provisioning is interrupted could never initialize again (fixed in the credo patch, keyring-wallet #50, reproduced and verified on the emulator), both simulator suites green, and the dispositions of the day's remaining follow-ups (§10.4). |
 
 ---
 
@@ -1418,6 +1419,32 @@ Android/iOS tooling asymmetry in this environment.**
   withholding expectation (§9.1), and it showed that `taskDigestMultibase` is
   **not** in the merged credential schema yet (§3) — a fact the plan would
   otherwise have asserted from memory.
+
+- **Follow-ups from the first Android + iPhone device runs (2026-09-13/14)** —
+  reasoning in [`locality-plan/2026-09-13-al.md`](./locality-plan/2026-09-13-al.md)
+  and [`2026-09-14-al.md`](./locality-plan/2026-09-14-al.md):
+  - **Witness-share re-trigger.** `sendWitnessShareForExchange` runs once, from
+    "witness session complete", and now waits up to 2 min for the peer's
+    discovery answer (keyring-bifold #53). The robust shape: the
+    discovery-answer consumer re-triggers any share still owed for that
+    connection, so no wait is involved.
+  - **Existing Android installs keep per-operation keys** — and two OS prompts
+    per exchange — until the hardware key is re-created (keyring-bifold #51
+    only changes new enrolments). Decide: re-create on the next
+    hardware-attestation toggle, or leave.
+  - **A `required`-policy Android + iPhone runner.** Only the two-Android
+    variant asserts confirmation today; `locality:devices` reports.
+  - **Harness gaps.** A release build cannot be wallet A (the QR's
+    `InvitationUrl` text is `__DEV__`-only — gate it on an E2E flag instead);
+    the paste retry re-submits an invitation already stored ("out of band
+    record … already received") and should ask for a fresh one.
+  - **Mediator poll interval on low-end devices** — parked 2026-09-14 (demo
+    apps only). 1 s PickUpV2 is most of a Galaxy A03s's JS thread (median
+    inbound lag 0.9 s, p90 9 s); options are a longer interval on low-end
+    devices, skip-while-busy, or live mode once the mediator requeues unacked
+    pushes.
+  - **BlueZ/Linux witness path** — not re-run with the 09-13 changes; Brendan
+    runs that path on his machine.
 
 ---
 
