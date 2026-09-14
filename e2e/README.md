@@ -494,9 +494,9 @@ asserts that confirmation happened, not merely that it was attempted
 
 **Android-only for two independent reasons, not one:**
 
-- The native BLE peripheral (item 9 — advertise the rendezvous EID, serve
-  the GATT transcript, sign with the hardware-attestation key) has no iOS
-  implementation.
+- This variant asserts `required` on two Android phones. The iOS peripheral
+  exists (since 2026-09) and is exercised by the Android + iPhone variant
+  below, which reports rather than asserts.
 - The witness's own BLE **sensor** — `witness-server`'s `BleLocalityProvider`,
   over BlueZ's D-Bus interface via `node-ble` — only runs on **Linux**. See
   `docs/plans/locality-plan/2026-08-20-bam.md` for why a raw-HCI-socket
@@ -527,6 +527,42 @@ ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
 Everything else — invitation, hardware attestation, the Trust Task ceremony
 markers — is identical to the plain android-only witnessed variant above;
 see that section and "The Trust Task dialect" below for what those assert.
+### Locality, Android + iPhone (`yarn e2e:vrc:witnessed:locality:devices`) — offered, reported
+
+The first-run variant for the iOS peripheral and for a macOS-hosted witness
+(CoreBluetooth/noble, bifold #49): policy `offered`, each side's outcome
+reported — Android's confirmed/not-confirmed marker from logcat, iOS's own
+`[Locality:Peripheral:iOS]` lines incl. `signingElapsedMs`. Passed from
+`main` on 2026-09-13 with both legs confirmed (77 / 63 / 72 ms assertions).
+What that day taught, so the next run does not relearn it:
+
+- **A slow Android phone needs the release APK** (`ANDROID_APK=…/app-release.apk`):
+  a Galaxy A03s could not keep up with the dev bundle for timing-sensitive
+  DIDComm. A release build cannot be wallet A (the QR's `InvitationUrl` text is
+  `__DEV__`-only) — run with `E2E_IOS_FIRST=1` so the debug-built iPhone
+  generates the QR and the Android phone pastes it.
+- **The release APK bundles `@bifold/core` from its built `lib/`, not `src/`.**
+  After any bifold pointer move: `cd bifold && yarn workspace @bifold/core build`,
+  then `./gradlew app:createBundleReleaseJsAndAssets --rerun-tasks`, then
+  `assembleRelease`. Check the packager sourcemap
+  (`app/build/intermediates/sourcemaps/react/release/…packager.map`) for
+  `packages/core/lib/commonjs` and a string from the change you expect.
+- **Both pre-flight sheets are tapped by the harness** (every element lookup
+  clears the sheet on a miss — its timing follows the witness discovery round
+  trip, seconds to over a minute). You still authenticate at the biometric
+  banners: one prompt per phone per exchange.
+- **iPhone must be on USB** (Appium needs the wired tunnel), unlocked, with
+  Settings → Developer → *Enable UI Automation* on — see Troubleshooting for
+  the `Not authorized for performing UI testing actions` case.
+- The iOS readout uses `idevicesyslog` when installed (`brew install
+  libimobiledevice`); Appium's `syslog` log on a real device evicts the
+  peripheral's lines and reports "0 log line(s)" even on success.
+
+```sh
+ANDROID_APK=$PWD/../app/android/app/build/outputs/apk/release/app-release.apk \
+  E2E_IOS_FIRST=1 yarn e2e:vrc:witnessed:locality:devices   # from the repo root
+```
+
 ### TSP + witnessed (`yarn e2e:vrc:witnessed:tsp:android-only`)
 
 Same witnessed + attested exchange as above (same two physical phones, same
@@ -695,4 +731,14 @@ xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \
 - **Wallet locks mid-test**: expected — flows call `unlockIfLocked` between
   polls (5-minute inactivity lock).
 - **`could not read invitation URL`**: the invitation text is exposed via a
-  `__DEV__`-only element — make sure you're using Debug builds, not Release.
+  `__DEV__`-only element — make sure you're using Debug builds, not Release
+  (a release build can only be wallet B — `E2E_IOS_FIRST=1` when the iPhone
+  is the debug build).
+- **Real device: "Unable to start WebDriverAgent session … XCTDaemonErrorDomain
+  Code=41 Not authorized for performing UI testing actions"**: the iPhone's
+  UI-automation authorization dropped (seen after a re-plug). Unlock the phone,
+  toggle Settings → Developer → *Enable UI Automation* off and on, and start a
+  fresh `appium` (a long-running server keeps a dead WDA handle).
+- **Android app dies at launch on a slow phone, no JS error**: check
+  `adb logcat -d | grep FATAL` — a native module's lifecycle race (the
+  `react-native-volume-manager` one is patched) shows up here, not in Metro.
