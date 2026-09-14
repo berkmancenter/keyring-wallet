@@ -82,6 +82,46 @@ async function ensureMetro() {
  * printed on its own. A first live run of that peripheral is exactly what
  * this exists to capture.
  */
+// `idevicesyslog` capture of the iPhone's peripheral lines, started when the
+// iOS session exists (real device only). Appium's own `syslog` log type on a
+// real device evicts the app's lines long before the run ends — it reported
+// "0 log line(s)" on a run whose peripheral had logged signingElapsedMs=77 —
+// so the readout below prefers this and falls back to Appium's log.
+let iosSyslogCapture = null;
+
+function startIosSyslogCapture(udid) {
+  try {
+    execSync("which idevicesyslog", { stdio: "ignore" });
+  } catch {
+    console.log("[e2e] ios: idevicesyslog not installed — locality readout will use Appium's syslog (lossy)");
+    return null;
+  }
+  const proc = spawn("idevicesyslog", ["-u", udid], { stdio: ["ignore", "pipe", "ignore"] });
+  const capture = { proc, lines: [], partial: "" };
+  proc.stdout.on("data", (chunk) => {
+    const text = capture.partial + chunk.toString();
+    const parts = text.split("\n");
+    capture.partial = parts.pop();
+    for (const line of parts) {
+      if (/Locality:Peripheral:iOS|VRC:iOS|TrustTasks:Witness\] locality/.test(line)) capture.lines.push(line);
+    }
+  });
+  proc.on("error", () => {});
+  return capture;
+}
+
+function stopIosSyslogCapture() {
+  if (!iosSyslogCapture) return [];
+  const { proc, lines } = iosSyslogCapture;
+  try {
+    proc.kill();
+  } catch {
+    /* already gone */
+  }
+  iosSyslogCapture = null;
+  return lines;
+}
+
 async function reportLocalityOutcome(driver, timeout = 60000) {
   const tag = `[e2e] ${driver.e2ePlatform}: locality`;
   if (driver.e2ePlatform === "android" && driver.e2eUdid) {
@@ -105,10 +145,12 @@ async function reportLocalityOutcome(driver, timeout = 60000) {
   }
   if (driver.e2ePlatform === "ios") {
     try {
-      const logs = await driver.getLogs("syslog");
+      const captured = stopIosSyslogCapture();
+      const logs = captured.length ? captured : await driver.getLogs("syslog");
       const lines = logs
         .map((l) => (typeof l === "string" ? l : l.message || ""))
         .filter((l) => /Locality:Peripheral:iOS|TrustTasks:Witness\] locality/.test(l));
+      if (captured.length) console.log(`${tag} peripheral: read from idevicesyslog (${captured.length} matching lines)`);
       mkdirSync("artifacts", { recursive: true });
       const file = `artifacts/locality-ios-syslog-${Date.now()}.txt`;
       writeFileSync(file, lines.join("\n"));
@@ -259,6 +301,10 @@ export async function runWitnessedExchange({
 
     sessionA = await createSessionA(udidA);
     sessionB = await createSessionB(udidB);
+    if (assertLocality || reportLocality) {
+      const iosUdid = sessionA.e2ePlatform === "ios" ? udidA : sessionB.e2ePlatform === "ios" ? udidB : null;
+      if (iosUdid && !/^[0-9A-F-]{36}$/i.test(iosUdid)) iosSyslogCapture = startIosSyslogCapture(iosUdid); // real devices only (simulator udids are UUIDs)
+    }
 
     await Promise.all([
       completeOnboarding(sessionA, IDENTITY_A),
@@ -407,6 +453,7 @@ export async function runWitnessedExchange({
     }
     process.exitCode = 1;
   } finally {
+    stopIosSyslogCapture();
     for (const d of [sessionA, sessionB].filter(Boolean)) {
       try {
         await d.deleteSession();
