@@ -338,8 +338,8 @@ export async function runWitnessedExchange({
     // The crypto gates, from Android's run-scoped logcat (covers both
     // directions of the exchange; iOS has no logcat path).
     await Promise.all([
-      assertTrustTaskExchangeMarkers(sessionA, 120000),
-      assertTrustTaskExchangeMarkers(sessionB, 120000),
+      assertTrustTaskExchangeMarkers(sessionA, vrcTimeout),
+      assertTrustTaskExchangeMarkers(sessionB, vrcTimeout),
     ]);
     if (useTspCarriage) {
       await Promise.all([
