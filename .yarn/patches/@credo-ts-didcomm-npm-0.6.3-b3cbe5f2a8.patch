@@ -99,3 +99,39 @@ index 1f4452ab9630d7a13598b187f1ad7efebd471fba..47e5bdd330dd5f5fae591daa9ce96d12
  				const stopConditions$ = merge(this.stop$, this.stopMessagePickup$).pipe();
  				const protocolVersion = mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV2 ? "v2" : "v1";
  				this.logger.info(`Starting explicit pickup of messages from mediator '${mediatorRecord.id}' using ${protocolVersion}`);
+diff --git a/build/modules/routing/DidCommMediationRecipientModule.mjs b/build/modules/routing/DidCommMediationRecipientModule.mjs
+index 5a6e2c28e4aeaedd89040da1eb2abe820a1a57a9..4760f47c98d2d0fa37e9fb6e32d35ac1dc6f0550 100644
+--- a/build/modules/routing/DidCommMediationRecipientModule.mjs
++++ b/build/modules/routing/DidCommMediationRecipientModule.mjs
+@@ -64,13 +64,30 @@ var DidCommMediationRecipientModule = class {
+ 			agentContext.config.logger.warn(`Error initiating message pickup with mediator ${defaultMediator.id}`, { error });
+ 		});
+ 	}
+-	async getMediationConnection(agentContext, mediatorInvitationUrl) {
++	async getMediationConnection(agentContext, mediatorInvitationUrl, retried = false) {
+ 		const oobApi = agentContext.dependencyManager.resolve(DidCommOutOfBandApi);
+ 		const connectionsApi = agentContext.dependencyManager.resolve(DidCommConnectionsApi);
+ 		const mediationRecipientApi = agentContext.dependencyManager.resolve(DidCommMediationRecipientApi);
+ 		const outOfBandInvitation = await oobApi.parseInvitation(mediatorInvitationUrl);
+ 		const outOfBandRecord = await oobApi.findByReceivedInvitationId(outOfBandInvitation.id);
+ 		const [connection] = outOfBandRecord ? await connectionsApi.findAllByOutOfBandId(outOfBandRecord.id) : [];
++		// keyring: a connection left behind by an interrupted first provisioning
++		// (the didexchange request never reached the mediator — an emulator
++		// with no network yet, a killed process) never completes, and the stock
++		// code below waits on it on EVERY launch: the wallet is bricked with
++		// "Error during call to 'onInitializeContext'" (2026-09-14). Give it a
++		// short wait, then discard the connection and its out-of-band record so
++		// the invitation can be received again, once.
++		if (connection && !connection.isReady && !retried) {
++			try {
++				return await connectionsApi.returnWhenIsConnected(connection.id, { timeoutMs: 15e3 });
++			} catch {
++				agentContext.config.logger.warn(`Mediation connection ${connection.id} never completed (state ${connection.state}) — discarding it and receiving the mediator invitation again`);
++				await connectionsApi.deleteById(connection.id).catch(() => {});
++				if (outOfBandRecord) await oobApi.deleteById(outOfBandRecord.id).catch(() => {});
++				return this.getMediationConnection(agentContext, mediatorInvitationUrl, true);
++			}
++		}
+ 		if (!connection) {
+ 			agentContext.config.logger.debug("Mediation connection does not exist, creating connection");
+ 			const routing = await mediationRecipientApi.getRouting({ useDefaultMediator: false });
