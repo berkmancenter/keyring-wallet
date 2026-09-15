@@ -56,6 +56,11 @@ async function waitForKeyboardGone(driver, timeout = 5000) {
 async function hideKeyboard(driver, inputEl) {
   try {
     if (driver.e2ePlatform === "ios") {
+      const { width, height } = await driver.getWindowRect();
+      if (Math.min(width, height) >= 700) {
+        await hideTabletKeyboard(driver, width, height);
+        return;
+      }
       // XCUITest can't reliably hide the keyboard on home-button-less iPhones.
       // Text keyboards: press return. Numeric keypads have no return key, so
       // fall back to tapping a neutral spot (the nav header) to blur the input.
@@ -75,6 +80,43 @@ async function hideKeyboard(driver, inputEl) {
   } catch {
     /* keyboard may not be shown */
   }
+}
+
+/**
+ * iPad (iPadOS 26, 2026-09-15). The iPhone recipe misfires twice here: return
+ * moves focus to the NEXT field (the R-Card's email) instead of closing the
+ * keyboard, and a fixed tap point lands on the keyboard — the full keyboard
+ * covers the bottom ~40% in landscape and the PIN pad floats over the form —
+ * typing a character instead of dismissing. So: the system hide action first
+ * (the iPad keyboard has a dismiss key), and only if a keyboard is still up,
+ * one tap on the right margin ABOVE the keyboard's own frame.
+ */
+async function hideTabletKeyboard(driver, width, height) {
+  const shown = async () => {
+    try {
+      return await driver.isKeyboardShown();
+    } catch {
+      return false;
+    }
+  };
+  if (!(await shown())) return;
+  await driver.execute("mobile: hideKeyboard", {}).catch(() => {});
+  await sleep(700);
+  if (!(await shown())) return;
+  let keyboardTop = Math.round(height * 0.5);
+  try {
+    const keyboard = await driver.$("-ios class chain:**/XCUIElementTypeKeyboard");
+    if (await keyboard.isExisting()) {
+      const rect = await driver.getElementRect(keyboard.elementId);
+      // A full-width keyboard: tap just above it. A floating pad (narrow):
+      // its top says nothing about free space, so keep the mid-height default.
+      if (rect.width >= width * 0.8) keyboardTop = Math.round(rect.y);
+    }
+  } catch {
+    /* keep the default */
+  }
+  await driver.execute("mobile: tap", { x: width - 24, y: Math.max(Math.round(height * 0.2), keyboardTop - 40) });
+  await sleep(700);
 }
 
 function androidUdid(driver) {
@@ -399,7 +441,14 @@ export async function restartApp(driver) {
   // PIN screen to actually appear (or definitively not, within a generous
   // budget) before deciding whether to unlock — existsTestId's own polling,
   // not a fixed delay, absorbs however long this particular boot takes.
-  await existsTestId(driver, "EnterPIN", 15000);
+  // 45 s, not 15: a real iPhone/iPad relaunching a baked JS bundle while
+  // another device runs beside it took longer than 15 s to mount the PIN
+  // screen, so the unlock below was skipped and the wallet sat locked
+  // (2026-09-15). 120 s, not 45: a debug build loads its JS from metro, and a
+  // cold metro bundle took 54 s to reach both devices later that day (the
+  // runners now warm it first; this is the backstop). existsTestId returns as
+  // soon as the screen appears.
+  await existsTestId(driver, "EnterPIN", 120000);
   await unlockIfLocked(driver);
   await dismissTourIfPresent(driver);
 }
@@ -473,25 +522,42 @@ export async function enableHardwareAttestation(driver) {
  * the Settings screen.
  */
 async function setAutoLockNever(driver) {
-  await tapTestId(driver, "Lockout", 15000);
+  // The preference persists across app restarts, so once per session is
+  // enough — and a second visit to Settings (developer toggles one after the
+  // other) starts from a list this helper already scrolled, where "Lockout"
+  // can be off-screen (iOS, 2026-09-14).
+  if (driver.e2eAutoLockNeverSet) return;
   // Settings is a SectionList (virtualized) — "Never" is the last of 5
-  // inline options and isn't mounted until scrolled into view.
+  // inline options and isn't mounted until scrolled into view. The Lockout
+  // tap itself occasionally does not land on a loaded emulator (seen once on
+  // two-emulator runs), so the whole tap + scroll search gets one retry, and
+  // the retry scrolls the Lockout row back into view first.
   let neverEl;
-  for (let i = 0; i < 6; i++) {
-    neverEl = byText(driver, "Never");
-    if ((await neverEl.isExisting()) && (await neverEl.isDisplayed())) break;
-    const { width, height } = await driver.getWindowRect();
-    await driver
-      .action("pointer")
-      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
-      .down()
-      .pause(100)
-      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
-      .up()
-      .perform();
-    await sleep(500);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    // Always bring the row into view first: on a real iPhone Settings can open
+    // with "Auto lock time" under the tab bar — present but not displayed, so
+    // the tap times out (2026-09-15).
+    await findRowEitherDirection(driver, "Lockout");
+    await tapTestId(driver, "Lockout", 15000);
+    for (let i = 0; i < 6; i++) {
+      neverEl = byText(driver, "Never");
+      if ((await neverEl.isExisting()) && (await neverEl.isDisplayed())) break;
+      const { width, height } = await driver.getWindowRect();
+      await driver
+        .action("pointer")
+        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
+        .down()
+        .pause(100)
+        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
+        .up()
+        .perform();
+      await sleep(500);
+    }
+    if (await neverEl.isExisting()) break;
+    console.log(`[e2e] ${deviceTag(driver)}: "Never" not found after Lockout tap, retrying once`);
   }
   await neverEl.click();
+  driver.e2eAutoLockNeverSet = true;
   console.log(`[e2e] ${driver.e2ePlatform}: auto-lock set to Never`);
 }
 
@@ -524,11 +590,88 @@ async function setAutoLockNever(driver) {
  * restarts the app before returning.
  */
 export async function enableTspCarriage(driver) {
+  await openDeveloperScreen(driver);
+
+  // Near the bottom of the Developer screen's long ScrollView — same
+  // scroll-into-view need as the Version footer above.
+  const tspToggle = await scrollToTestId(driver, "ToggleEnableTspCarriage");
+  await tspToggle.click();
+  console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope carriage enabled (developer setting)`);
+
+  await returnToContacts(driver);
+  await restartApp(driver);
+}
+
+/**
+ * Enable the "DIDComm v2" developer setting (didcomm_v2_subtask.md C12/C14):
+ * the agent restarts with didcommVersions ['v1','v2'], provisions Coordinate
+ * Mediation 2.0 with MEDIATOR_V2_URL when the build has one, and new
+ * relationship invitations become out-of-band/2.0 on did:peer:2. Restarts the
+ * app: the agent's DIDComm versions are fixed at construction.
+ */
+export async function enableDidCommV2(driver) {
+  await openDeveloperScreen(driver);
+
+  const toggle = await scrollToTestId(driver, "ToggleEnableDidCommV2");
+  await toggle.click();
+  console.log(`[e2e] ${driver.e2ePlatform}: DIDComm v2 enabled (developer setting)`);
+
+  await returnToContacts(driver);
+  await restartApp(driver);
+}
+
+/**
+ * Is Settings' "Developer" row present? Settings is a virtualized SectionList,
+ * and setAutoLockNever leaves it scrolled to the bottom, so on a second visit
+ * (developer mode already on) the row can be unmounted above the viewport —
+ * and tapping Version then does nothing, because developer mode is already
+ * on. Search upward first, then downward, before concluding it is absent.
+ */
+async function findDeveloperOptionsRow(driver) {
+  return findRowEitherDirection(driver, "DeveloperOptions");
+}
+
+/** Bring a Settings row into view, searching upward then downward. */
+async function findRowEitherDirection(driver, testId) {
+  // DISPLAYED, not merely present: XCUITest reports rows scrolled off-screen
+  // as existing (Android's virtualized list unmounts them instead), and a tap
+  // on an off-screen row times out (iOS, 2026-09-14).
+  const displayed = async () => {
+    const el = byTestId(driver, testId);
+    return (await el.isExisting()) && (await el.isDisplayed());
+  };
+  await existsTestId(driver, testId, 2000);
+  if (await displayed()) return true;
+  const { width, height } = await driver.getWindowRect();
+  const swipe = async (fromY, toY) =>
+    driver
+      .action("pointer")
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * fromY) })
+      .down()
+      .pause(100)
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * toY), duration: 400 })
+      .up()
+      .perform();
+  for (const [fromY, toY] of [[0.3, 0.75], [0.7, 0.25]]) {
+    for (let i = 0; i < 5; i++) {
+      await swipe(fromY, toY);
+      await sleep(400);
+      if (await displayed()) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Settings → Developer screen (Auto-lock off on the way), whether developer
+ * mode is already on or has to be tripped by tapping the Version footer.
+ */
+async function openDeveloperScreen(driver) {
   await dismissTourIfPresent(driver);
   await tapTestId(driver, "Settings", 15000);
   await setAutoLockNever(driver);
 
-  if (await existsTestId(driver, "DeveloperOptions", 3000)) {
+  if (await findDeveloperOptionsRow(driver)) {
     // Developer mode was already enabled in a prior session (persisted store).
     await tapTestId(driver, "DeveloperOptions", 15000);
   } else {
@@ -560,15 +703,6 @@ export async function enableTspCarriage(driver) {
       await waitForTestId(driver, "ToggleDeveloper", 5000);
     }
   }
-
-  // Near the bottom of the Developer screen's long ScrollView — same
-  // scroll-into-view need as the Version footer above.
-  const tspToggle = await scrollToTestId(driver, "ToggleEnableTspCarriage");
-  await tspToggle.click();
-  console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope carriage enabled (developer setting)`);
-
-  await returnToContacts(driver);
-  await restartApp(driver);
 }
 
 /** The QR exchange bottom sheet is open if any of its content is visible. */
@@ -619,6 +753,7 @@ async function openQrSheet(driver) {
 export async function showRelationshipInvitation(driver) {
   // The app can be watchdog-restarted between onboarding and this step under
   // CPU contention, landing on the unlock screen — recover before tapping.
+  await ensureAppForeground(driver);
   await unlockIfLocked(driver);
   await dismissTourIfPresent(driver);
   // A lingering tour overlay can swallow the first tab tap (older builds attach
@@ -677,7 +812,29 @@ export async function showRelationshipInvitation(driver) {
 }
 
 /** On the receiving wallet: open scan → paste URL → connect. */
+/**
+ * Bring Keyring back to the foreground if something else took the screen —
+ * on an attended real-device run a tapped notification opened Mail mid-paste
+ * and cost the run (iPhone, 2026-09-15). XCUITest app state 4 = foreground.
+ * Returns whether it had to.
+ */
+export async function ensureAppForeground(driver) {
+  const { APP_ID } = await import("./config.js");
+  try {
+    const state = await driver.queryAppState(APP_ID);
+    if (state === 4) return false;
+    console.log(`[e2e] ${driver.e2ePlatform}: Keyring was not in the foreground (state ${state}) — reactivating`);
+    await driver.activateApp(APP_ID);
+    await sleep(3000);
+    await unlockIfLocked(driver);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function acceptInvitationViaPaste(driver, invitationUrl) {
+  await ensureAppForeground(driver);
   await dismissTourIfPresent(driver);
   // A lingering tour overlay can swallow the first tab tap — retry until the
   // bottom sheet actually shows.
@@ -736,6 +893,7 @@ export async function acceptInvitationViaPaste(driver, invitationUrl) {
   // simply appeared later — the harness walked off with it still up and the
   // run died 10 steps downstream as "could not land on Contacts".
   for (let attempt = 0; attempt < 4; attempt++) {
+    await ensureAppForeground(driver);
     const input = await waitForTestId(driver, "PastedUrl", 15000);
     if (attempt > 0) await input.clearValue();
     if (driver.e2ePlatform === "android") {
@@ -1125,44 +1283,46 @@ async function existsRawId(driver, key, timeout = 2000) {
 }
 
 export async function assertContactShields(driver, peerName, timeout = 240000, options = {}) {
+  // The contact screen's three badges (ContactDetails.tsx): "Secure Exchange"
+  // (SecureExchangeBadge — the peer's hardware attestation verified here),
+  // "Verified" (WitnessedBadge — a witness credential exists for the contact)
+  // and "In-Person" (LocalityConfirmedBadge — the witness confirmed Bluetooth
+  // co-presence). Each is required by its own option; the badges themselves
+  // are checked, not the witness section below them.
   const requireSecureExchange = options.requireSecureExchange ?? true;
+  const requireLocality = options.requireLocality ?? false;
   const deadline = Date.now() + timeout;
   let sawAttestation = false;
   let sawWitness = false;
+  let sawLocality = false;
+  // ContactDetails declares these testIDs BARE (no com.ariesbifold:id/ prefix),
+  // so the raw accessibility id is checked as well as the prefixed one.
+  const badge = async (id) => (await existsTestId(driver, id, 2000)) || (await existsRawId(driver, id, 2000));
   while (Date.now() < deadline) {
     await openContactDetail(driver, peerName);
-    // ContactDetails declares these testIDs BARE (no com.ariesbifold:id/
-    // prefix), so check the raw accessibility id too — the prefixed lookup
-    // misses them on iOS, and the text fallback fails there because the
-    // section header renders uppercased ("WITNESS RECORDS").
-    sawAttestation =
-      (await existsTestId(driver, "SecureExchangeBadge", 3000)) ||
-      (await existsRawId(driver, "SecureExchangeBadge", 2000)) ||
-      (await byTextContains(driver, "Secure Exchange").isExisting());
-    sawWitness =
-      (await existsTestId(driver, "WitnessSection", 3000)) ||
-      (await existsRawId(driver, "WitnessSection", 2000)) ||
-      (await existsRawId(driver, "WitnessedBadge", 2000)) ||
-      (await byTextContains(driver, "Witness Records").isExisting());
-    if ((sawAttestation || !requireSecureExchange) && sawWitness) {
+    sawAttestation = await badge("SecureExchangeBadge");
+    sawWitness = await badge("WitnessedBadge");
+    sawLocality = await badge("LocalityConfirmedBadge");
+    if ((sawAttestation || !requireSecureExchange) && sawWitness && (sawLocality || !requireLocality)) {
+      const shown = [sawAttestation && "Secure Exchange", "Verified (Witnessed)", sawLocality && "In-Person"].filter(Boolean);
       console.log(
-        `[e2e] ${driver.e2ePlatform}: "${peerName}" shows Witnessed` +
-          (sawAttestation
-            ? " + Secure Exchange"
-            : " (Secure Exchange not required — peer reported a hardware verification warning upstream)")
+        `[e2e] ${driver.e2ePlatform}: "${peerName}" badges: ${shown.join(" + ")}` +
+          (sawAttestation || !requireSecureExchange ? "" : "") +
+          (!sawAttestation && !requireSecureExchange ? " (Secure Exchange not required)" : "") +
+          (!sawLocality && !requireLocality ? " (In-Person not required: no locality check on this run)" : "")
       );
       return;
     }
-    // Either shield may lag (VWC is issued after the VRC; hw verify is async) —
+    // Any badge may lag (VWC is issued after the VRC; hw verify is async) —
     // pop back to the list and re-open the contact to re-render.
     if (await existsTestId(driver, "BackButton", 2000)) {
       await tapTestId(driver, "BackButton");
     }
     await sleep(3000);
   }
-  await screenshot(driver, "shields-missing");
+  await screenshot(driver, "badges-missing");
   throw new Error(
-    `${driver.e2ePlatform}: "${peerName}" missing a shield — Secure Exchange=${sawAttestation}, Witnessed=${sawWitness}`
+    `${driver.e2ePlatform}: "${peerName}" missing a badge — Secure Exchange=${sawAttestation}, Verified=${sawWitness}, In-Person=${sawLocality}`
   );
 }
 
@@ -1336,8 +1496,6 @@ export async function dismissVrcConfirmationOverlayIfPresent(driver, timeout = 5
  * No-op on iOS drivers (no logcat; the Android log covers both directions).
  */
 export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
-  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
-  const { execSync } = await import("node:child_process");
   const required = [
     [/\[TrustTasks:Ceremony\] discovery (sent|answered|confirmed propose support)/, "discovery"],
     [/\[TrustTasks:Ceremony\] propose (sent|accepted|received|#response consumed)/, "propose"],
@@ -1349,21 +1507,19 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
   const deadline = Date.now() + timeout;
   let missing = required;
   while (Date.now() < deadline) {
-    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const log = await readAppJsLog(driver);
+    if (log === null) return;
     missing = required.filter(([re]) => !re.test(log));
     if (missing.length === 0) {
       console.log(
-        "[e2e] android: trust-task exchange markers all present (propose + issue legs)"
+        `[e2e] ${driver.e2ePlatform}: trust-task exchange markers all present (propose + issue legs)`
       );
       return;
     }
     await sleep(3000);
   }
   throw new Error(
-    `android: trust-task markers missing after ${timeout}ms: ${missing
+    `${driver.e2ePlatform}: trust-task markers missing after ${timeout}ms: ${missing
       .map(([, name]) => name)
       .join(", ")}`
   );
@@ -1378,8 +1534,6 @@ export async function assertTrustTaskExchangeMarkers(driver, timeout = 60000) {
  * iOS drivers (no logcat; the Android log covers both directions).
  */
 export async function assertTspCarriageMarkers(driver, timeout = 60000) {
-  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
-  const { execSync } = await import("node:child_process");
   const required = [
     [/\[TrustTasks:TspCarriage\] envelope sent/, "envelope sent"],
     [/\[TrustTasks:TspCarriage\] envelope received/, "envelope received"],
@@ -1387,24 +1541,212 @@ export async function assertTspCarriageMarkers(driver, timeout = 60000) {
   const deadline = Date.now() + timeout;
   let missing = required;
   while (Date.now() < deadline) {
-    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const log = await readAppJsLog(driver);
+    if (log === null) return;
     missing = required.filter(([re]) => !re.test(log));
     if (missing.length === 0) {
       console.log(
-        "[e2e] android: TSP envelope carriage markers present (sent + received)"
+        `[e2e] ${driver.e2ePlatform}: TSP envelope carriage markers present (sent + received)`
       );
       return;
     }
     await sleep(3000);
   }
   throw new Error(
-    `android: TSP carriage markers missing after ${timeout}ms: ${missing
+    `${driver.e2ePlatform}: TSP carriage markers missing after ${timeout}ms: ${missing
       .map(([, name]) => name)
       .join(", ")}`
   );
+}
+
+/**
+ * The app's JS log for marker assertions: Android's run-scoped logcat, or —
+ * for the iOS SIMULATOR — the unified log, where the app's logger lines land
+ * as `[com.facebook.react.log:javascript]` entries (verified 2026-09-14).
+ * Physical iPhones have neither from the host; returns null there, and the
+ * v2 marker assertions below skip on null (same as they do for logcat-less
+ * drivers elsewhere in this file).
+ */
+export async function readAppJsLog(driver) {
+  const { execSync } = await import("node:child_process");
+  if (driver.e2ePlatform === "android" && driver.e2eUdid) {
+    return execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  }
+  if (driver.e2ePlatform === "ios" && driver.e2eIosLogFile) {
+    const { readFileSync } = await import("node:fs");
+    try {
+      return readFileSync(driver.e2eIosLogFile, "utf8");
+    } catch {
+      return "";
+    }
+  }
+  return null;
+}
+
+/**
+ * Start capturing the iOS SIMULATOR app's JS log with `log stream` into a
+ * file the marker assertions read. Needed because the unified log does not
+ * persist the app's info-level lines: `log show` minutes later returns only
+ * the last few seconds (observed 2026-09-14), so a post-hoc read misses the
+ * markers. Call right after createSession("ios"); stopIosLogCapture in the
+ * runner's finally. No-op for physical iPhones (no simctl).
+ */
+export async function startIosLogCapture(driver, deviceUdid) {
+  if (driver.e2ePlatform !== "ios") return;
+  if (deviceUdid) return startIosDeviceLogCapture(driver, deviceUdid);
+  const { spawn } = await import("node:child_process");
+  const { openSync, mkdirSync } = await import("node:fs");
+  mkdirSync("artifacts", { recursive: true });
+  const file = `artifacts/ios-js-${Date.now()}.log`;
+  const fd = openSync(file, "a");
+  const sim = process.env.IOS_UDID || "booted";
+  const proc = spawn(
+    "xcrun",
+    [
+      "simctl", "spawn", sim, "log", "stream", "--level", "info", "--style", "compact",
+      "--predicate", 'process == "KeyRing" AND subsystem == "com.facebook.react.log"',
+    ],
+    { stdio: ["ignore", fd, fd] }
+  );
+  driver.e2eIosLogFile = file;
+  driver.e2eIosLogProc = proc;
+  console.log(`[e2e] ios: JS log capture started (${file})`);
+}
+
+/**
+ * Real iPhone/iPad: `idevicesyslog -u <udid>` (libimobiledevice) into a file
+ * the marker assertions read. Appium's own `syslog` log type evicts the app's
+ * lines on a real device (device-run notes, 2026-09-13), and os_log's
+ * info-level JS lines do reach the syslog relay for this app. Only the app's
+ * own process lines are kept.
+ */
+async function startIosDeviceLogCapture(driver, udid) {
+  const { spawn, execSync } = await import("node:child_process");
+  const { createWriteStream, mkdirSync } = await import("node:fs");
+  try {
+    execSync("which idevicesyslog", { stdio: "ignore" });
+  } catch {
+    throw new Error("idevicesyslog is required for iOS device marker assertions: brew install libimobiledevice");
+  }
+  mkdirSync("artifacts", { recursive: true });
+  const file = `artifacts/ios-device-${udid.slice(-8)}-${Date.now()}.log`;
+  const out = createWriteStream(file, { flags: "a" });
+  const proc = spawn("idevicesyslog", ["-u", udid], { stdio: ["ignore", "pipe", "ignore"] });
+  // A syslog entry starts with its timestamp ("Sep 15 13:35:44.396093 …");
+  // a logger that pretty-prints JSON continues on unprefixed lines, which
+  // belong to the entry above them — keep them when that entry was ours.
+  let partial = "";
+  let keeping = false;
+  proc.stdout.on("data", (chunk) => {
+    const parts = (partial + chunk.toString()).split("\n");
+    partial = parts.pop();
+    for (const line of parts) {
+      if (/^[A-Z][a-z]{2} +\d+ \d\d:\d\d:\d\d/.test(line)) keeping = /\bKeyRing\(KeyRing/.test(line);
+      if (keeping) out.write(line + "\n");
+    }
+  });
+  proc.on("error", () => {});
+  driver.e2eIosLogFile = file;
+  driver.e2eIosLogProc = proc;
+  console.log(`[e2e] ios (${udid.slice(-8)}): device log capture started (${file})`);
+}
+
+export function stopIosLogCapture(driver) {
+  try {
+    driver?.e2eIosLogProc?.kill();
+  } catch {
+    /* already gone */
+  }
+}
+
+/**
+ * The DIDComm v2 carriage's own markers (binding/didcomm 0.2 envelope over a
+ * v2 connection): [TrustTasks:DidCommV2Carriage] envelope sent + received,
+ * from the device's JS log. Requires enableDidCommV2() on the device(s)
+ * under test. No-op where no log is reachable (physical iPhones).
+ */
+export async function assertDidCommV2CarriageMarkers(driver, timeout = 60000) {
+  const required = [
+    [/\[TrustTasks:DidCommV2Carriage\] envelope sent/, "envelope sent"],
+    [/\[TrustTasks:DidCommV2Carriage\] envelope received/, "envelope received"],
+  ];
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = await readAppJsLog(driver);
+    if (log === null) return;
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(`[e2e] ${driver.e2ePlatform}: DIDComm v2 carriage markers present (sent + received)`);
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `${driver.e2ePlatform}: DIDComm v2 carriage markers missing after ${timeout}ms: ${missing
+      .map(([, name]) => name)
+      .join(", ")}`
+  );
+}
+
+/**
+ * The TSP envelope rode a DIDComm v2 connection (didcomm_v2_subtask.md T5/T6):
+ * `[TrustTasks:TspCarriage] envelope sent/received on v2 connection`, and no
+ * `[TrustTasks:DidCommV2Carriage]` envelope lines — with the TSP flag on, no
+ * Trust Task document may have taken the plain v2 binding. No-op where no
+ * log is reachable (physical iPhones).
+ */
+export async function assertTspOverDidCommV2Markers(driver, timeout = 90000) {
+  const required = [
+    [/\[TrustTasks:TspCarriage\] envelope sent on v2 connection/, "TSP envelope sent on v2"],
+    [/\[TrustTasks:TspCarriage\] envelope received on v2 connection/, "TSP envelope received on v2"],
+  ];
+  const forbidden = /\[TrustTasks:DidCommV2Carriage\] envelope (sent|received)/;
+  const deadline = Date.now() + timeout;
+  let missing = required;
+  while (Date.now() < deadline) {
+    const log = await readAppJsLog(driver);
+    if (log === null) return;
+    if (forbidden.test(log)) {
+      throw new Error(`${driver.e2ePlatform}: a Trust Task document took the plain DIDComm v2 binding with TSP carriage on`);
+    }
+    missing = required.filter(([re]) => !re.test(log));
+    if (missing.length === 0) {
+      console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope over DIDComm v2 markers present (sent + received, no plain v2 binding)`);
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(
+    `${driver.e2ePlatform}: TSP-over-v2 markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
+  );
+}
+
+/**
+ * The v2 mediation marker: the wallet provisioned Coordinate Mediation 2.0
+ * with MEDIATOR_V2_URL ([TrustTasks:V2Mediation] ... granted). Proves the
+ * exchange went through the v2 mediator rather than unmediated routing.
+ * No-op where no log is reachable (physical iPhones).
+ */
+export async function assertV2MediationMarker(driver, timeout = 60000) {
+  const re = /\[TrustTasks:V2Mediation\] Coordinate Mediation 2\.0 granted/;
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    // Provisioning runs at agent start, which only happens after unlock: a
+    // wallet left on its PIN screen would make this wait pointless.
+    await unlockIfLocked(driver).catch(() => false);
+    const log = await readAppJsLog(driver);
+    if (log === null) return;
+    if (re.test(log)) {
+      console.log(`[e2e] ${driver.e2ePlatform}: Coordinate Mediation 2.0 provisioned`);
+      return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(`${driver.e2ePlatform}: no Coordinate Mediation 2.0 grant marker after ${timeout}ms`);
 }
 
 /**
@@ -1414,8 +1756,6 @@ export async function assertTspCarriageMarkers(driver, timeout = 60000) {
  * and verified). No-op on iOS drivers.
  */
 export async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
-  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
-  const { execSync } = await import("node:child_process");
   const required = [
     [/\[TrustTasks:Witness\] session opened/, "session opened"],
     [/\[TrustTasks:Witness\] challenge received/, "challenge received"],
@@ -1426,21 +1766,19 @@ export async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
   const deadline = Date.now() + timeout;
   let missing = required;
   while (Date.now() < deadline) {
-    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const log = await readAppJsLog(driver);
+    if (log === null) return;
     missing = required.filter(([re]) => !re.test(log));
     if (missing.length === 0) {
       console.log(
-        "[e2e] android: witness ceremony markers all present (session → challenge → VP → VWC → evidence self-check)"
+        `[e2e] ${driver.e2ePlatform}: witness ceremony markers all present (session → challenge → VP → VWC → evidence self-check)`
       );
       return;
     }
     await sleep(3000);
   }
   throw new Error(
-    `android: witness ceremony markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
+    `${driver.e2ePlatform}: witness ceremony markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
   );
 }
 
@@ -1451,8 +1789,6 @@ export async function assertWitnessCeremonyMarkers(driver, timeout = 90000) {
  * matched back to our share. No-op on iOS drivers.
  */
 export async function assertWitnessShareMarkers(driver, timeout = 120000) {
-  if (driver.e2ePlatform !== "android" || !driver.e2eUdid) return;
-  const { execSync } = await import("node:child_process");
   const required = [
     [/\[TrustTasks:Ceremony\] witness-share sent/, "witness-share sent"],
     [/\[TrustTasks:Ceremony\] witness-share verified and stored/, "witness-share verified and stored"],
@@ -1462,19 +1798,17 @@ export async function assertWitnessShareMarkers(driver, timeout = 120000) {
   const deadline = Date.now() + timeout;
   let missing = required;
   while (Date.now() < deadline) {
-    const log = execSync(`adb -s ${driver.e2eUdid} logcat -d -s ReactNativeJS:*`, {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const log = await readAppJsLog(driver);
+    if (log === null) return;
     missing = required.filter(([re]) => !re.test(log));
     if (missing.length === 0) {
-      console.log("[e2e] android: witness-share markers all present (shared → verified → stored → receipted)");
+      console.log(`[e2e] ${driver.e2ePlatform}: witness-share markers all present (shared → verified → stored → receipted)`);
       return;
     }
     await sleep(3000);
   }
   throw new Error(
-    `android: witness-share markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
+    `${driver.e2ePlatform}: witness-share markers missing after ${timeout}ms: ${missing.map(([, n]) => n).join(", ")}`
   );
 }
 
