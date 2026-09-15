@@ -212,6 +212,13 @@ export {
 export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,
+  setDidCommV2Enabled,
+  findV2MediationRecord,
+  getRoutingForV2,
+  provisionV2Mediation,
+  startV2MessagePickup,
+  isDidCommV2Enabled,
+  selectCarriage,
   TRUST_TASKS_MIN_RCE_VERSION,
   sendTrustTaskDocument,
   getTrustTasksService,

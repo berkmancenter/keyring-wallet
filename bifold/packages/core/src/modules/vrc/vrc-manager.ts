@@ -1337,7 +1337,10 @@ export function setupVrcConnectionHandler(agent: Agent) {
   }
 
   // Set up basic message handler to receive relationshipDid from counterparty AND witness protocol messages
-  agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, async ({ payload }: any) => {
+  // One handler for both BasicMessage events: 1.0 on v1 connections and 2.0 on
+  // v2 connections, which Credo emits as a SEPARATE event with the same
+  // { message, basicMessageRecord } payload (tsp-reference/ref-15 finding 2).
+  const onBasicMessageStateChanged = async ({ payload }: any) => {
     const record = payload.basicMessageRecord as DidCommBasicMessageRecord
 
     // Only process received messages
@@ -2029,7 +2032,9 @@ export function setupVrcConnectionHandler(agent: Agent) {
         logger.error(`Failed to store counterparty relationshipDid: ${(error as Error).message}`, error)
       }
     }
-  })
+  }
+  agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, onBasicMessageStateChanged)
+  agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged, onBasicMessageStateChanged)
 
   // Set up global credential state change listener for both logging and request handling
   agent.events.on(DidCommCredentialEventTypes.DidCommCredentialStateChanged, async ({ payload }: CredentialStateChangedEvent) => {
@@ -2404,7 +2409,27 @@ export function setupVrcConnectionHandler(agent: Agent) {
       const isVrcConnection =
         goalCode === 'relationship.credential' || goalCode === 'relationship.credential.bidirectional'
 
-      if (!isVrcConnection) return
+      if (!isVrcConnection) {
+        // DIDComm v2 has no handshake: accepting an invitation creates only OUR
+        // record, and the inviter (a witness, say) learns we exist from our first
+        // authenticated message. VRC invitations send the relationship DID right
+        // away; any other v2 invitation we accepted gets a trust ping so the
+        // inviter's connection materializes and its own follow-up (the witness
+        // announcement) can reach us (didcomm_v2_subtask.md V2 step 4).
+        if (connectionRecord.didcommVersion === 'v2' && outOfBandRecord.role === DidCommOutOfBandRole.Receiver) {
+          try {
+            await agent.modules.didcomm.connections.sendPing(connectionRecord.id, { responseRequested: false })
+            agent.config.logger.info(
+              `[TrustTasks:v2FirstContact] trust ping sent as first contact on v2 connection ${connectionRecord.id}`
+            )
+          } catch (pingError) {
+            agent.config.logger.warn(
+              `[TrustTasks:v2FirstContact] first-contact ping failed on ${connectionRecord.id}: ${(pingError as Error).message}`
+            )
+          }
+        }
+        return
+      }
 
       // Determine side: If we created the OOB invitation, we're INVITER; otherwise RECEIVER
       const side = outOfBandRecord.role === DidCommOutOfBandRole.Sender ? 'INVITER' : 'RECEIVER'
@@ -2515,7 +2540,24 @@ export const createRelationshipInvitation = async (
   const goalCode = mode === 'bidirectional' ? 'relationship.credential.bidirectional' : 'relationship.credential'
   agent.config.logger.info(`[VRC] Creating out-of-band invitation with goalCode: ${goalCode}`)
 
+  // Developer-flagged DIDComm v2 (didcomm_v2_subtask.md C12): an Out-of-Band 2.0
+  // invitation on did:peer:2. Off, this is the v1 invitation it has always been.
+  // Lazy require, like the other ceremony imports in this file: ceremony.ts imports
+  // this module's DID helpers, so a static import would be circular.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { isDidCommV2Enabled } = require('../trust-tasks/ceremony') as typeof import('../trust-tasks/ceremony')
+  const didCommVersion = isDidCommV2Enabled() ? ('v2' as const) : ('v1' as const)
+  if (didCommVersion === 'v2')
+    agent.config.logger.info('[VRC] DIDComm v2 enabled — creating an out-of-band/2.0 invitation')
+  // A v2 invitation routes through the v2 mediator (or unmediated), never the
+  // v1 default — see trust-tasks/v2Routing.ts. Left undefined for v1 so Credo
+  // keeps using the default mediator exactly as before.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { getRoutingForV2 } = require('../trust-tasks/v2Routing') as typeof import('../trust-tasks/v2Routing')
+  const routing = didCommVersion === 'v2' ? await getRoutingForV2(agent) : undefined
   const record = await agent.modules.didcomm.oob.createInvitation({
+    didCommVersion,
+    routing,
     label: walletName,
     goalCode,
     goal:

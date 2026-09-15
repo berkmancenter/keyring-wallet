@@ -253,6 +253,7 @@ describe('VRC Manager', () => {
       )
 
       expect(mockAgent.modules.didcomm.oob.createInvitation).toHaveBeenCalledWith({
+        didCommVersion: 'v1',
         label: 'My Wallet',
         goalCode: 'relationship.credential.bidirectional',
         goal: 'Establish connection and exchange relationship credentials',
@@ -269,6 +270,7 @@ describe('VRC Manager', () => {
       )
 
       expect(mockAgent.modules.didcomm.oob.createInvitation).toHaveBeenCalledWith({
+        didCommVersion: 'v1',
         label: 'My Wallet',
         goalCode: 'relationship.credential',
         goal: 'Establish connection and issue relationship credential',

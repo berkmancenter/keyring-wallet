@@ -14,6 +14,11 @@ export {
   TRUST_TASK_BINDING_URI,
   isTransportRepresentable,
 } from './messages/TrustTaskMessage'
+export {
+  TrustTaskEnvelopeV2Message,
+  TRUST_TASK_V2_BINDING_URI,
+  TRUST_TASK_V2_ENVELOPE_TYPE,
+} from './messages/TrustTaskEnvelopeV2Message'
 export { TrustTaskDocumentRecord } from './services/TrustTaskDocumentRecord'
 export type { TrustTaskDocumentRole, TrustTaskDocumentRecordTags } from './services/TrustTaskDocumentRecord'
 export { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
@@ -30,6 +35,9 @@ export {
   isDeterministicProposer,
   setTspCarriageEnabled,
   isTspCarriageEnabled,
+  setDidCommV2Enabled,
+  isDidCommV2Enabled,
+  selectCarriage,
   TRUST_TASKS_MIN_RCE_VERSION,
 } from './ceremony'
 
@@ -37,7 +45,12 @@ export {
 // See docs/plans/reference-app-sdk-packaging.md and its 2026-09-01-al.md /
 // 2026-09-06-agent.md companions.
 export { TrustTaskRegistry, trustTaskRegistry } from './registry'
-export type { TrustTaskRegistration, TrustTaskOrchestration, TrustTaskDocumentHandler, InboundContext } from './registry'
+export type {
+  TrustTaskRegistration,
+  TrustTaskOrchestration,
+  TrustTaskDocumentHandler,
+  InboundContext,
+} from './registry'
 export { registerTrustTask } from './registerTrustTask'
 export type { RegisterTrustTaskOptions } from './registerTrustTask'
 export { createApprovalRequestHandler, respondToPendingTrustTask } from './genericApproval'
@@ -46,3 +59,4 @@ export { trustTaskPromptStore } from './trustTaskPromptStore'
 export type { PendingTrustTaskPrompt } from './trustTaskPromptStore'
 export { trustTaskDisplayRegistry } from './display/trustTaskDisplayRegistry'
 export { registerTrustTaskDisplay } from './display/register'
+export { findV2MediationRecord, getRoutingForV2, provisionV2Mediation, startV2MessagePickup } from './v2Routing'
