@@ -17,9 +17,24 @@
  * with an AEAD `invalid tag` error, not a type error, so it is easy to get
  * wrong silently).
  *
+ * **That rule is true of v1 peer DIDs and `did:key`, not of every DID.** A
+ * DIDComm v2 connection DID minted by Credo (`did:peer:2`, credo-ts PR #2704)
+ * publishes a SEPARATELY generated X25519 key as `keyAgreement` (`#key-2`,
+ * its own KMS key). The general rule, which covers both, is the one
+ * `identityFromDid` applies: key agreement uses the private key behind the
+ * DID document's `keyAgreement` method — converting it only when that key is
+ * Ed25519 — so our public key always equals what a `VidResolver` resolves.
+ * `tsp-reference/ref-19` measured the v2 case (didcomm_v2_subtask.md V2T).
+ *
  * @module credo-tsp-adapter/identity
  */
-import { getPublicJwkFromVerificationMethod, Kms, TypedArrayEncoder, type Agent, type VerificationMethod } from '@credo-ts/core'
+import {
+  getPublicJwkFromVerificationMethod,
+  Kms,
+  TypedArrayEncoder,
+  type Agent,
+  type VerificationMethod,
+} from '@credo-ts/core'
 import { AskarStoreManager } from '@credo-ts/askar'
 import { Key, KeyAlgorithm } from '@openwallet-foundation/askar-shared'
 import { convertPublicKeyToX25519 } from '@stablelib/ed25519'
@@ -31,7 +46,11 @@ import { tsp } from '@bifold/trust-tasks'
  * id backing the identity's signing key (e.g. a relationship DID's owning
  * key); the private key never leaves Askar.
  */
-export function keyAgreementFromEd25519Key(agent: Agent, signingKeyId: string, ed25519PublicKeyBytes: Uint8Array): tsp.KeyAgreement {
+export function keyAgreementFromEd25519Key(
+  agent: Agent,
+  signingKeyId: string,
+  ed25519PublicKeyBytes: Uint8Array
+): tsp.KeyAgreement {
   const storeManager = agent.dependencyManager.resolve(AskarStoreManager)
   const publicKey = convertPublicKeyToX25519(ed25519PublicKeyBytes)
   return {
@@ -47,7 +66,10 @@ export function keyAgreementFromEd25519Key(agent: Agent, signingKeyId: string, e
         // backing ArrayBuffer, not a copy) crosses the JSI boundary as that
         // whole larger buffer and gets rejected as "Invalid key data". Force
         // a real copy regardless of what the caller handed us.
-        const peerKey = Key.fromPublicBytes({ algorithm: KeyAlgorithm.X25519, publicKey: Uint8Array.from(peerPublicKey) })
+        const peerKey = Key.fromPublicBytes({
+          algorithm: KeyAlgorithm.X25519,
+          publicKey: Uint8Array.from(peerPublicKey),
+        })
         return x25519Key.keyFromKeyExchange({ algorithm: KeyAlgorithm.Chacha20C20P, publicKey: peerKey }).secretBytes
       })
       if (sharedSecret.every((b: number) => b === 0)) {
@@ -59,6 +81,38 @@ export function keyAgreementFromEd25519Key(agent: Agent, signingKeyId: string, e
 }
 
 /** Wrap an existing Ed25519 Askar key (by its KMS key id) as a `SigningKey` port. */
+/**
+ * A `KeyAgreement` port from the Askar key named `kmsKeyId`, whatever its
+ * type: an X25519 key is used as-is (DIDComm v2's independent key agreement
+ * key); an Ed25519 key is converted, exactly as `keyAgreementFromEd25519Key`
+ * does. `publicKey` is the X25519 public key the DID document publishes.
+ */
+export function keyAgreementFromAskarKey(agent: Agent, kmsKeyId: string, publicKey: Uint8Array): tsp.KeyAgreement {
+  const storeManager = agent.dependencyManager.resolve(AskarStoreManager)
+  return {
+    publicKey,
+    async agree(peerPublicKey) {
+      const sharedSecret = await storeManager.withSession(agent.context, async (session) => {
+        const entry = await session.fetchKey({ name: kmsKeyId })
+        if (!entry) throw new Error(`credo-tsp-adapter: no askar key stored under keyId ${kmsKeyId}`)
+        const x25519Key =
+          entry.key.algorithm === KeyAlgorithm.X25519
+            ? entry.key
+            : entry.key.convertkey({ algorithm: KeyAlgorithm.X25519 })
+        const peerKey = Key.fromPublicBytes({
+          algorithm: KeyAlgorithm.X25519,
+          publicKey: Uint8Array.from(peerPublicKey),
+        })
+        return x25519Key.keyFromKeyExchange({ algorithm: KeyAlgorithm.Chacha20C20P, publicKey: peerKey }).secretBytes
+      })
+      if (sharedSecret.every((b: number) => b === 0)) {
+        throw new Error('keyAgreement: DH produced the all-zero shared secret')
+      }
+      return sharedSecret
+    },
+  }
+}
+
 export function signingKeyFromEd25519Key(agent: Agent, signingKeyId: string, publicKey: Uint8Array): tsp.SigningKey {
   const kms = agent.dependencyManager.resolve(Kms.KeyManagementApi)
   return {
@@ -93,8 +147,13 @@ function firstSigningVerificationMethod(didDocument: {
   authentication?: Array<string | VerificationMethod>
   assertionMethod?: Array<string | VerificationMethod>
 }): VerificationMethod | undefined {
-  const embedded = (arr?: Array<string | VerificationMethod>) => (arr ?? []).find((entry): entry is VerificationMethod => typeof entry === 'object' && entry !== null)
-  return embedded(didDocument.verificationMethod) ?? embedded(didDocument.assertionMethod) ?? embedded(didDocument.authentication)
+  const embedded = (arr?: Array<string | VerificationMethod>) =>
+    (arr ?? []).find((entry): entry is VerificationMethod => typeof entry === 'object' && entry !== null)
+  return (
+    embedded(didDocument.verificationMethod) ??
+    embedded(didDocument.assertionMethod) ??
+    embedded(didDocument.authentication)
+  )
 }
 
 /**
@@ -116,15 +175,54 @@ export async function identityFromDid(agent: Agent, did: string): Promise<tsp.Ts
   }
 
   const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
-  const relativeKeyId = verificationMethod.id.startsWith(did) ? verificationMethod.id.slice(did.length) : verificationMethod.id
+  const relativeKeyId = verificationMethod.id.startsWith(did)
+    ? verificationMethod.id.slice(did.length)
+    : verificationMethod.id
   const [didRecord] = await agent.dids.getCreatedDids({ did })
-  const keyId = didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ?? publicJwk.legacyKeyId
+  const keyId =
+    didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ??
+    publicJwk.legacyKeyId
   if (!keyId) {
     throw new Error(`credo-tsp-adapter: no KMS key id resolvable for ${did}`)
   }
 
   const publicKey = (publicJwk.publicKey as { publicKey: Uint8Array }).publicKey
+
+  // Key agreement follows the DID document's own keyAgreement method when we
+  // hold its private key (DIDComm v2's did:peer:2 publishes an independent
+  // X25519 key there); otherwise it is derived from the signing key (v1 peer
+  // DIDs, did:key), which is what those documents publish anyway.
+  const keyAgreementVm = firstKeyAgreementVerificationMethod(didDocument)
+  if (keyAgreementVm) {
+    const agreementRelativeId = keyAgreementVm.id.startsWith(did) ? keyAgreementVm.id.slice(did.length) : keyAgreementVm.id
+    const agreementJwk = getPublicJwkFromVerificationMethod(keyAgreementVm)
+    const agreementKeyId =
+      didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === agreementRelativeId)
+        ?.kmsKeyId ?? agreementJwk.legacyKeyId
+    const agreementPublicKey = (agreementJwk.publicKey as { publicKey: Uint8Array }).publicKey
+    if (agreementKeyId && agreementJwk.is(Kms.X25519PublicJwk)) {
+      return {
+        signingKey: signingKeyFromEd25519Key(agent, keyId, publicKey),
+        keyAgreement: keyAgreementFromAskarKey(agent, agreementKeyId, agreementPublicKey),
+      }
+    }
+  }
   return identityFromEd25519Key(agent, keyId, publicKey)
+}
+
+/** The document's first keyAgreement method, embedded or referenced by id. */
+function firstKeyAgreementVerificationMethod(didDocument: {
+  keyAgreement?: Array<string | VerificationMethod>
+  verificationMethod?: VerificationMethod[]
+}): VerificationMethod | undefined {
+  for (const entry of didDocument.keyAgreement ?? []) {
+    if (typeof entry === 'object' && entry !== null) return entry
+    const referenced = (didDocument.verificationMethod ?? []).find(
+      (vm) => vm.id === entry || (entry.startsWith('#') && vm.id.endsWith(entry))
+    )
+    if (referenced) return referenced
+  }
+  return undefined
 }
 
 /**
@@ -138,7 +236,7 @@ export async function createAskarIdentity(agent: Agent): Promise<{ vid: string }
   const kms = agent.dependencyManager.resolve(Kms.KeyManagementApi)
   const { keyId, publicJwk } = await kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' }, backend: 'askar' })
   if (!publicJwk.x) throw new Error('credo-tsp-adapter: created key has no public x coordinate')
-  const publicKey = TypedArrayEncoder.fromBase64(publicJwk.x)
+  const publicKey = TypedArrayEncoder.fromBase64Url(publicJwk.x)
 
   const created = await agent.dids.create({ method: 'key', options: { keyId } })
   if (created.didState.state !== 'finished' || !created.didState.did) {
