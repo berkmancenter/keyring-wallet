@@ -25,14 +25,15 @@
     "access": "public"
   },
   "dependencies": {
-    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
-    "@credo-ts/didcomm": "0.6.3",
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch",
+    "@credo-ts/didcomm": "patch:@credo-ts/didcomm@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-didcomm-npm-0.7.1-pr-2704-20260909134930-b4e8afd4d1.patch",
     "@noble/ciphers": "^2.0.0",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
     "@openvtc/vti-tsp-js": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch",
     "ajv": "^8.17.1",
-    "canonicalize": "^1.0.8"
+    "canonicalize": "^1.0.8",
+    "class-transformer": "0.5.1"
   },
   "devDependencies": {
     "rimraf": "~5.0.10",

@@ -17,7 +17,16 @@ module.exports = {
     // out of service entirely (found 2026-09-12 while adding the iOS path).
     '^.+\\.m?js$': ['babel-jest', { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }],
   },
+  moduleNameMapper: {
+    // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
+    // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
+    '^@verifiables/request-converter$': require('fs').existsSync(
+      __dirname + '/node_modules/@verifiables/request-converter'
+    )
+      ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
+      : '<rootDir>/../../node_modules/@verifiables/request-converter/dist/index.js',
+  },
   transformIgnorePatterns: [
-    'node_modules/(?!(@credo-ts|@openvtc|@openwallet-foundation|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj)/)',
+    'node_modules/(?!(@credo-ts|@openvtc|@openwallet-foundation|@noble|@scure|@owf|@verifiables|ky|cbor-x|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj)/)',
   ],
 }

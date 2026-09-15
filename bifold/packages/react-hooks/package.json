@@ -32,23 +32,23 @@
     "rxjs": "^7.2.0"
   },
   "devDependencies": {
-    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
-    "@credo-ts/didcomm": "0.6.3",
-    "@credo-ts/question-answer": "0.6.3",
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch",
+    "@credo-ts/didcomm": "patch:@credo-ts/didcomm@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-didcomm-npm-0.7.1-pr-2704-20260909134930-b4e8afd4d1.patch",
+    "@credo-ts/question-answer": "0.7.1-pr-2704-20260909134930",
     "@jest/types": "^29.6.3",
     "@types/jest": "^29.5.12",
     "@types/react": "^18.2.14",
     "@types/react-test-renderer": "~19.1.0",
     "jest": "^29.7.0",
     "react-test-renderer": "~19.1.4",
-    "rimraf": "^6.1.2",
+    "rimraf": "~5.0.10",
     "ts-jest": "^29.2.5",
-    "typescript": "~5.3.3"
+    "typescript": "~5.9.2"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.6.3",
-    "@credo-ts/didcomm": "0.6.3",
-    "@credo-ts/question-answer": "0.6.3",
+    "@credo-ts/core": "0.7.1-pr-2704-20260909134930",
+    "@credo-ts/didcomm": "0.7.1-pr-2704-20260909134930",
+    "@credo-ts/question-answer": "0.7.1-pr-2704-20260909134930",
     "react": ">=17.0.0 <19.0.0"
   }
 }

@@ -115,7 +115,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
         const validationAgent = new Agent({
           config: {
-            logger: new ConsoleLogger(LogLevel.off),
+            logger: new ConsoleLogger(LogLevel.Off),
             autoUpdateStorageOnStartup: false,
           },
           modules: {
@@ -134,7 +134,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
             await storeManager.openStore(validationAgent.context)
           } catch (openError) {
             // DIAGNOSTIC (2026-08-26): openStore's real error is otherwise lost —
-            // the validation agent logs at LogLevel.off and the outer catch below
+            // the validation agent logs at LogLevel.Off and the outer catch below
             // is bare. Without this a store that refuses to open is indistinguishable
             // from a wrong PIN, which is exactly the ambiguity we hit on device.
             logger?.error?.(

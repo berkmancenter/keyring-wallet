@@ -1,6 +1,8 @@
 const presets = ['module:@react-native/babel-preset']
 const plugins = [
   '@babel/plugin-transform-export-namespace-from',
+  // credo 0.7's @owf/mdoc ships static class blocks, which the RN preset does not lower
+  '@babel/plugin-transform-class-static-block',
   [
     'module-resolver',
     {

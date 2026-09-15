@@ -50,7 +50,15 @@ export class BaseAgent {
   public mediatorInvitationUrl?: string
   private httpTransportTimer?: NodeJS.Timeout
 
-  public constructor({ port, name, mediatorInvitationUrl }: { port: number; name: string; mediatorInvitationUrl?: string }) {
+  public constructor({
+    port,
+    name,
+    mediatorInvitationUrl,
+  }: {
+    port: number
+    name: string
+    mediatorInvitationUrl?: string
+  }) {
     this.name = name
     this.port = port
     this.mediatorInvitationUrl = mediatorInvitationUrl
@@ -76,7 +84,9 @@ export class BaseAgent {
     // Configure transport based on whether we're using a mediator
     if (mediatorInvitationUrl) {
       // Mediated transport: Use WebSocket for mediator communication
-      console.log(greenText(`[${this.name}] Using mediated transport via: ${mediatorInvitationUrl.substring(0, 50)}...`))
+      console.log(
+        greenText(`[${this.name}] Using mediated transport via: ${mediatorInvitationUrl.substring(0, 50)}...`)
+      )
       this.agent.modules.didcomm.registerOutboundTransport(new DidCommWsOutboundTransport())
       this.agent.modules.didcomm.registerOutboundTransport(new DidCommHttpOutboundTransport())
     } else {
@@ -103,7 +113,9 @@ export class BaseAgent {
 
     // If using mediator, ensure proper setup with provision() and initiateMessagePickup()
     // This is the correct pattern per Credo-ts expert guidance
-    console.log(purpleText(`[${this.name}] 🔍 DEBUG: Mediator URL check: ${this.mediatorInvitationUrl ? 'PRESENT' : 'MISSING'}`))
+    console.log(
+      purpleText(`[${this.name}] 🔍 DEBUG: Mediator URL check: ${this.mediatorInvitationUrl ? 'PRESENT' : 'MISSING'}`)
+    )
     if (this.mediatorInvitationUrl) {
       console.log(purpleText(`[${this.name}] 🔍 DEBUG: Calling setupMediation()...`))
       await this.setupMediation()
@@ -121,14 +133,14 @@ export class BaseAgent {
    * 1. Find mediator connection
    * 2. Call provision() to set up mediation record
    * 3. Call initiateMessagePickup() to enable message delivery
-   * 
+   *
    * This is REQUIRED for proper mediator functionality per Credo-ts expert guidance.
    */
   private async setupMediation(): Promise<void> {
     try {
       // Find default mediator connection (created automatically during initialize)
       const mediatorConnection = await this.agent.modules.didcomm.mediationRecipient.findDefaultMediatorConnection()
-      
+
       if (!mediatorConnection) {
         console.log(purpleText(`[${this.name}] ⚠️  No mediator connection found yet`))
         return
@@ -137,8 +149,10 @@ export class BaseAgent {
       console.log(greenText(`[${this.name}] ✓ Mediator connection found`))
 
       // Check if mediation already provisioned
-      let mediationRecord = await this.agent.modules.didcomm.mediationRecipient.findByConnectionId(mediatorConnection.id)
-      
+      let mediationRecord = await this.agent.modules.didcomm.mediationRecipient.findByConnectionId(
+        mediatorConnection.id
+      )
+
       if (!mediationRecord) {
         // Provision mediation (requests and waits for mediation grant)
         console.log(purpleText(`[${this.name}] Provisioning mediation...`))
@@ -157,7 +171,6 @@ export class BaseAgent {
         console.log(greenText(`[${this.name}] ${message}`))
       )
       console.log(greenText(`[${this.name}] ✓ Message pickup initiated (${pickup.strategy})`))
-      
     } catch (error) {
       // Log warning but don't fail - mediator setup can retry later
       console.log(purpleText(`[${this.name}] ⚠️  Mediation setup: ${(error as Error).message}`))
@@ -200,7 +213,7 @@ export class BaseAgent {
       clearTimeout(this.httpTransportTimer)
       this.httpTransportTimer = undefined
     }
-    
+
     await this.agent.shutdown()
   }
 }
@@ -208,17 +221,17 @@ export class BaseAgent {
 function getLogLevelFromEnv(): LogLevel {
   const levelFromEnv = process.env.CREDO_LOG_LEVEL?.toLowerCase()
   const mapping: Record<string, LogLevel> = {
-    fatal: LogLevel.fatal,
-    error: LogLevel.error,
-    warn: LogLevel.warn,
-    warning: LogLevel.warn,
-    info: LogLevel.info,
-    debug: LogLevel.debug,
-    trace: LogLevel.trace,
-    test: LogLevel.test,
+    fatal: LogLevel.Fatal,
+    error: LogLevel.Error,
+    warn: LogLevel.Warn,
+    warning: LogLevel.Warn,
+    info: LogLevel.Info,
+    debug: LogLevel.Debug,
+    trace: LogLevel.Trace,
+    test: LogLevel.Test,
   }
 
-  return levelFromEnv ? mapping[levelFromEnv] ?? LogLevel.info : LogLevel.info
+  return levelFromEnv ? (mapping[levelFromEnv] ?? LogLevel.Info) : LogLevel.Info
 }
 
 interface GetDemoModulesOptions {

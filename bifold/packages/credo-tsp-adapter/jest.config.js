@@ -6,6 +6,14 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts', '**/src/**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'mjs', 'json', 'node'],
   moduleNameMapper: {
+    // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
+    // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
+    '^@verifiables/request-converter$': require('fs').existsSync(
+      __dirname + '/node_modules/@verifiables/request-converter'
+    )
+      ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
+      : '<rootDir>/../../node_modules/@verifiables/request-converter/dist/index.js',
+
     // @openvtc/vti-tsp-js is ESM-only with an import-condition-only exports
     // map, which jest's require-based resolver cannot see through — same
     // reason @bifold/core's jest config maps it, and the same reason that
@@ -25,6 +33,6 @@ module.exports = {
     // Matches @bifold/witness-server's jest config, plus @bifold (this
     // package's own workspace dependency, @bifold/trust-tasks) — @credo-ts
     // 0.6's transitive deps (e.g. uuid) ship ESM-only too.
-    'node_modules/(?!(@credo-ts|@openvtc|@openwallet-foundation|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj|@bifold)/)',
+    'node_modules/(?!(@credo-ts|@openvtc|@openwallet-foundation|@noble|@scure|@owf|@verifiables|ky|cbor-x|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj|@bifold)/)',
   ],
 }

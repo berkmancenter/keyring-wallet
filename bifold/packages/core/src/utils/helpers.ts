@@ -49,6 +49,7 @@ import {
 import { ChildFn } from '../types/tour'
 
 import { BifoldAgent } from './agent'
+import { getRoutingForV2 } from '../modules/trust-tasks/v2Routing'
 import {
   createAnonCredsProofRequest,
   filterInvalidProofRequestMatches,
@@ -286,7 +287,9 @@ export function getConnectionName(
   alternateContactNames: Record<string, string>
 ): string {
   const theirLabel = connection?.theirLabel !== OOB_INVITATION_LABEL ? connection?.theirLabel : undefined
-  return (connection?.id && alternateContactNames[connection?.id]) || theirLabel || connection?.alias || connection?.id || ''
+  return (
+    (connection?.id && alternateContactNames[connection?.id]) || theirLabel || connection?.alias || connection?.id || ''
+  )
 }
 
 export function useCredentialConnectionLabel(
@@ -1130,7 +1133,9 @@ export const connectFromInvitation = async (
     throw new Error('Could not parse invitation from URL')
   }
 
-  if (implicitInvitations) {
+  // The implicit (did-only) path is a v1 handshake shortcut; a v2 invitation
+  // has no handshake and needs the routing passed below.
+  if (implicitInvitations && !invitation.v2Invitation) {
     try {
       if (invitation.getDidServices().length > 0) {
         const did = parseDid(invitation.getDidServices()[0])
@@ -1147,18 +1152,37 @@ export const connectFromInvitation = async (
     }
   }
 
+  // An out-of-band/2.0 invitation needs explicit routing: the v2 mediator when
+  // provisioned, else unmediated — a v1 default mediator cannot route a
+  // did:peer:2 (trust-tasks/v2Routing.ts). v1 invitations keep Credo's default.
+  const routing = invitation.v2Invitation && agent ? await getRoutingForV2(agent) : undefined
   const record = await agent?.modules.didcomm.oob.receiveInvitation(invitation, {
     reuseConnection,
     label: walletLabel || OOB_INVITATION_LABEL,
+    routing,
   })
   return record?.outOfBandRecord as DidCommOutOfBandRecord
+}
+
+const looksLikeV2Invitation = (uri: string): boolean => {
+  try {
+    const encoded = parseUrl(uri)?.query?.['_oob']
+    if (typeof encoded !== 'string') return false
+    const json = b64decode(encoded.replace(/-/g, '+').replace(/_/g, '/'))
+    return json.includes('out-of-band/2.0')
+  } catch {
+    return false
+  }
 }
 
 const processBetaUrlIfRequired = (uri: string): string => {
   let aUrl = uri
 
-  // _oob is a beta query param, not supported by Credo.
-  aUrl = uri.replace('_oob', 'oob')
+  // `_oob` is the DIDComm v2 out-of-band/2.0 query parameter, which Credo's
+  // DIDComm v2 (PR #2704) parses natively; it was once rewritten to `oob`
+  // for the v1 parser. Leave a v2 invitation alone (base64url JSON with
+  // "out-of-band/2.0"); rewrite anything else as before.
+  if (uri.includes('_oob=') && !looksLikeV2Invitation(uri)) aUrl = uri.replace('_oob', 'oob')
 
   // _url is a beta query param, not supported by Credo.
   if (uri.includes('_url')) {

@@ -106,9 +106,11 @@ const InAppMessageNotifier: React.FC = () => {
     }
 
     agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, handleMessage)
+    agent.events.on(DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged, handleMessage)
 
     return () => {
       agent.events.off(DidCommBasicMessageEventTypes.DidCommBasicMessageStateChanged, handleMessage)
+      agent.events.off(DidCommBasicMessageEventTypes.DidCommBasicMessageV2StateChanged, handleMessage)
     }
   }, [agent, navigation])
 

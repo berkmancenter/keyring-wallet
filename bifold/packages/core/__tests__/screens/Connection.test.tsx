@@ -75,11 +75,14 @@ describe('Connection Screen', () => {
       timeTravel(1000)
     })
 
-    // Wait for state transition to proof request loading
-    const view = await tree.findByTestId(testIdWithKey('ProofRequestLoading'), { timeout: 5000 }).catch(() => {
-      // If ProofRequestLoading not found, check if we're still at ConnectionLoading (which is also valid)
-      return tree.findByTestId(testIdWithKey('ConnectionLoading'))
-    })
+    // Wait for the proof leg: its loading placeholder, the connection one if we
+    // are still ahead of it, or the rendered proof request itself — on credo 0.7
+    // the proof formats resolve fast enough that the placeholder can be gone by
+    // the time we look. What this case asserts is the navigation below.
+    const view = await tree
+      .findByTestId(testIdWithKey('ProofRequestLoading'), { timeout: 5000 })
+      .catch(() => tree.findByTestId(testIdWithKey('ConnectionLoading')))
+      .catch(() => tree.findByTestId(testIdWithKey('HeaderText')))
 
     expect(view).not.toBeNull()
     expect(navigation.navigate).toBeCalledTimes(0)

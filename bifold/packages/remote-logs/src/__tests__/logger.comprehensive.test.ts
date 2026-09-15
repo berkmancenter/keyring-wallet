@@ -24,65 +24,66 @@ jest.mock('react-native-logs', () => ({
 }))
 
 jest.mock('@credo-ts/core', () => ({
+  // 0.7 renamed the members to PascalCase; the values are unchanged.
   LogLevel: {
-    test: 0,
-    trace: 1,
-    debug: 2,
-    info: 3,
-    warn: 4,
-    error: 5,
-    fatal: 6,
-    off: 7,
+    Test: 0,
+    Trace: 1,
+    Debug: 2,
+    Info: 3,
+    Warn: 4,
+    Error: 5,
+    Fatal: 6,
+    Off: 7,
   },
 }))
 
 jest.mock(
   '@bifold/core',
   () => ({
-  BifoldLogger: class BifoldLogger {},
-  AbstractBifoldLogger: class AbstractBifoldLogger {
-    public logLevel = 2 // LogLevel.debug
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    protected _log: any
-    protected _config = {
-      levels: {
-        test: 0,
-        trace: 0,
-        debug: 0,
-        info: 1,
-        warn: 2,
-        error: 3,
-        fatal: 4,
-      },
-      severity: 'debug',
-      async: true,
-      dateFormat: 'time',
-      printDate: false,
-    }
+    BifoldLogger: class BifoldLogger {},
+    AbstractBifoldLogger: class AbstractBifoldLogger {
+      public logLevel = 2 // LogLevel.Debug
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      protected _log: any
+      protected _config = {
+        levels: {
+          test: 0,
+          trace: 0,
+          debug: 0,
+          info: 1,
+          warn: 2,
+          error: 3,
+          fatal: 4,
+        },
+        severity: 'debug',
+        async: true,
+        dateFormat: 'time',
+        printDate: false,
+      }
 
-    public isEnabled(logLevel: number): boolean {
-      return logLevel >= this.logLevel
-    }
+      public isEnabled(logLevel: number): boolean {
+        return logLevel >= this.logLevel
+      }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
-    public report(_bifoldError: any): void {
-      // Mock implementation
-    }
-  },
-  BifoldError: class BifoldError {
-    title: string
-    description: string
-    code: number
-    message: string
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+      public report(_bifoldError: any): void {
+        // Mock implementation
+      }
+    },
+    BifoldError: class BifoldError {
+      title: string
+      description: string
+      code: number
+      message: string
 
-    constructor(title: string, description: string, message: string, code: number) {
-      this.title = title
-      this.description = description
-      this.code = code
-      this.message = message
-    }
-  },
-}),
+      constructor(title: string, description: string, message: string, code: number) {
+        this.title = title
+        this.description = description
+        this.code = code
+        this.message = message
+      }
+    },
+  }),
   { virtual: true }
 )
 
