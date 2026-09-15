@@ -8,6 +8,20 @@ module.exports = {
   // This is necessary when using portal: with a submodule that has its own node_modules
   modulePaths: ['<rootDir>/node_modules'],
   moduleNameMapper: {
+    // class-transformer keeps its @Expose metadata in a MODULE-LOCAL store (0.5.1), and
+    // this tree carries nested copies under the @credo-ts packages. @bifold/trust-tasks'
+    // v2 envelope registers Expose renames that Credo's JsonTransformer must see, so every
+    // import of class-transformer has to land on one copy (Metro does the same via its
+    // singleton list; see didcomm_v2_subtask.md C10).
+    '^class-transformer$': '<rootDir>/node_modules/class-transformer',
+    // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
+    // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
+    '^@verifiables/request-converter$': require('fs').existsSync(
+      __dirname + '/node_modules/@verifiables/request-converter'
+    )
+      ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
+      : '<rootDir>/../../node_modules/@verifiables/request-converter/dist/index.js',
+
     // @openvtc/trust-tasks is ESM-only with an import-condition exports map
     // (reached through @bifold/core's portal source) — map to dist, as the
     // core package's own jest config does.
@@ -94,7 +108,7 @@ module.exports = {
     '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(.*react-native.*|@credo-ts|@openwallet-foundation|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|@openvtc|expo(nent)?|@expo(nent)?/.*)/)',
+    'node_modules/(?!(.*react-native.*|@credo-ts|@openwallet-foundation|@openid4vc|@noble|@scure|@owf|@verifiables|ky|cbor-x|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|@openvtc|expo(nent)?|@expo(nent)?/.*)/)',
   ],
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]sx?$',
   testPathIgnorePatterns: ['\\.snap$', '<rootDir>/node_modules/', '<rootDir>/lib', '<rootDir>/__tests__/contexts/'],

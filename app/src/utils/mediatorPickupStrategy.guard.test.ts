@@ -163,4 +163,20 @@ describe('mediator pickup strategy (app guard)', () => {
     const stopBeforeLoop = api.slice(start, explicitLoop).includes('this.stopMessagePickup$.next(true)')
     expect(stopBeforeLoop).toBe(true)
   })
+
+  it('an interrupted first mediation provisioning is discarded and retried on the next launch', () => {
+    // Guards the second hunk of the credo patch: getMediationConnection used to
+    // wait forever on a connection whose didexchange request never reached
+    // the mediator, bricking a fresh wallet on every launch (2026-09-14).
+    const mod = readFileSync(
+      join(dirname(require.resolve('@credo-ts/didcomm')), 'modules/routing/DidCommMediationRecipientModule.mjs'),
+      'utf8'
+    )
+    const fn = mod.indexOf('async getMediationConnection(')
+    expect(fn).toBeGreaterThan(-1)
+    const body = mod.slice(fn, mod.indexOf('\n\t}', fn))
+    expect(body).toContain('returnWhenIsConnected(connection.id, { timeoutMs: 15e3 })')
+    expect(body).toContain('connectionsApi.deleteById(connection.id)')
+    expect(body).toContain('oobApi.deleteById(outOfBandRecord.id)')
+  })
 })
