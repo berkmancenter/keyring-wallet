@@ -1,11 +1,11 @@
 # Community vetting — Keyring as a PNM, admitted to a community through peer identity vetting
 
-**Status:** Proposal for review. Not a commitment to implement.
-**Parent:** [`keyring-on-the-vta-farm.md`](../keyring-on-the-vta-farm.md) — this subtask carries the parent's F2 (enrolment) and F4 (membership) for the ecosystem's **peer identity vetting** ceremony, and the development environment that ceremony needs before a Farm can host it.
-**Siblings consulted:** [`pnm_cnm_subtask.md`](../openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client architecture this subtask instantiates; [`trust_tasks_subtask.md`](../openvtc-integration-plan/trust_tasks_subtask.md) owns the Trust Task carriage it rides on.
-**Reasoning:** [`2026-09-15-al.md`](./2026-09-15-al.md) — the measurements behind §2–§3, and which positions of the parent plan they supersede. This document states current design only; see [`CLAUDE.md`](../CLAUDE.md).
+**Status:** Proposal for review in [#53](https://github.com/berkmancenter/keyring-wallet/pull/53). Not a commitment to implement.
+**Parent:** `[keyring-on-the-vta-farm.md](../keyring-on-the-vta-farm.md)` — this subtask carries the parent's F2 (enrolment) and F4 (membership) for the ecosystem's **peer identity vetting** ceremony, and the development environment that ceremony needs before a Farm can host it.
+**Siblings consulted:** `[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` owns the VTA client architecture this subtask instantiates; `[trust_tasks_subtask.md](../openvtc-integration-plan/trust_tasks_subtask.md)` owns the Trust Task carriage it rides on.
+**Reasoning:** `[2026-09-15-al.md](./2026-09-15-al.md)` — the measurements behind §2–§3, and which positions of the parent plan they supersede. This document states current design only; see `[CLAUDE.md](../CLAUDE.md)`.
 **Dependency direction:** inherits the parent's non-core constraint unchanged. Nothing in the parent's sibling plans waits on this subtask.
-**Baseline (read 2026-09-15):** VTI `origin/main` **53a7cde4** (vta-service 0.27.0, vtc-service 0.11.58, vta-sdk 0.38 — no coordinated `VTI-*` tag after `VTI-Dogwood-R1`) · `OpenVTC/openvtc` **9a2d174e** · `dtgwg-trust-tasks-tf` **6e667c1d** · `vta-browser-plugin` **21b0465** (`@openvtc/pnm-core` 0.9.1) · `ic3software/vtafarm-api` **a3b8e52**. Upstream is changing these specs deliberately and weekly; every claim below is re-measured before it is acted on, per [`scripts/openvtc/README.md`](../../../scripts/openvtc/README.md).
+**Baseline (read 2026-09-15):** VTI `origin/main` **53a7cde4** (vta-service 0.27.0, vtc-service 0.11.58, vta-sdk 0.38 — no coordinated `VTI-`* tag after `VTI-Dogwood-R1`) · `OpenVTC/openvtc` **9a2d174e** · `dtgwg-trust-tasks-tf` **6e667c1d** · `vta-browser-plugin` **21b0465** (`@openvtc/pnm-core` 0.9.1) · `ic3software/vtafarm-api` **a3b8e52**. Upstream is changing these specs deliberately and weekly; every claim below is re-measured before it is acted on, per `[scripts/openvtc/README.md](../../../scripts/openvtc/README.md)`.
 
 **References:**
 
@@ -17,6 +17,8 @@
 - **[[DRY-RUN]]** — *Vetting Dry Run* (OpenVTC · Peer Identity Vetting · V0), upstream's step-by-step runbook for one applicant, one vetter and one statement, revised 2026-09-14 and shared with the team as a PDF. Not vendored here; §3.8 carries what this subtask depends on.
 
 ---
+
+
 
 ## 1. What this subtask is for
 
@@ -32,15 +34,19 @@ Three consequences shape everything below:
 
 ---
 
+
+
 ## 2. Positions
+
+
 
 ### 2.1 Keyring consumes the ecosystem's TypeScript client
 
-Keyring embeds `@openvtc/pnm-core` in a new bifold package, `vti-client`, behind a DI token — the architecture [`pnm_cnm_subtask.md`](../openvtc-integration-plan/pnm_cnm_subtask.md) §3 already selects. `pnm-core` 0.9.1 already implements the member side of joining (`packages/core/src/vtc/membership.ts`: manifest, submit 0.2, status, receipt, request-vmc, vmc, self-remove), persona disclosure with its step-up retry, onboarding by key swap, and the consent view model. It has **no vetting client**: the vetting task URIs appear only in its `task-surface.json` catalogue. The vetting client logic exists only in Rust (`openvtc-core/src/vetting/`, `vta_sdk::vetting`); §6 P6 ports the applicant half.
+Keyring embeds `@openvtc/pnm-core` in a new bifold package, `vti-client`, behind a DI token — the architecture `[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` §3 already selects. `pnm-core` 0.9.1 already implements the member side of joining (`packages/core/src/vtc/membership.ts`: manifest, submit 0.2, status, receipt, request-vmc, vmc, self-remove), persona disclosure with its step-up retry, onboarding by key swap, and the consent view model. It has **no vetting client**: the vetting task URIs appear only in its `task-surface.json` catalogue. The vetting client logic exists only in Rust (`openvtc-core/src/vetting/`, `vta_sdk::vetting`); §6 P6 ports the applicant half.
 
 ### 2.2 The development environment is a local VTI stack, not a local Farm
 
-A Farm is orchestration around four services — VTA, mediator, DID hosting, VTC. Reproducing its orchestration locally needs a DNS provider, a secrets vault, a Kubernetes cluster and publicly trusted certificates for every hostname (`ic3software/vtafarm-api` `CLAUDE.md`, `internal/setup/`), which buys nothing the ceremony needs. The local stack runs the **same four services, configured from the Farm's own service templates** (`vtafarm-api/internal/setup/templates*.go`), so a flow that works locally transfers. It replaces [`ref-05-local-vta`](../../../tsp-reference/ref-05-local-vta/) as the offline twin for this path (parent §8).
+A Farm is orchestration around four services — VTA, mediator, DID hosting, VTC. Reproducing its orchestration locally needs a DNS provider, a secrets vault, a Kubernetes cluster and publicly trusted certificates for every hostname (`ic3software/vtafarm-api` `CLAUDE.md`, `internal/setup/`), which buys nothing the ceremony needs. The local stack runs the **same four services, configured from the Farm's own service templates** (`vtafarm-api/internal/setup/templates*.go`), so a flow that works locally transfers. It replaces `[ref-05-local-vta](../../../tsp-reference/ref-05-local-vta/)` as the offline twin for this path (parent §8).
 
 ### 2.3 The Farm is the production target, after it can run vetting
 
@@ -57,20 +63,26 @@ Persona and join-DID keys are **held by the VTA**, as upstream designs them: a p
 
 ---
 
+
+
 ## 3. Constraints
+
+
 
 ### 3.1 Membership ceremony
 
 From [[ONBOARDING-CEREMONY]]; all task URIs are `https://trusttasks.org/spec/<slug>/<version>`:
 
-| Step | Task | Direction |
-|---|---|---|
-| discover | `vtc/join-requests/manifest/0.2` (adds `vetting`, `branding`, `requirementsDigest`) | applicant → community |
-| apply | `vtc/join-requests/submit/0.2` — the applicant is the proof signer; response `{requestId, verdict}` with `effect ∈ allow \| deny \| refer \| requestMore` | applicant → community |
-| acknowledge | `vtc/join-requests/submit-receipt/0.1` | community → applicant |
-| poll | `vtc/join-requests/status/0.1` | applicant → community |
-| deliver | `credential-exchange/issue` — `MembershipCredential` (VMC) and a role `EndorsementCredential` (VEC), sent to the holder's mediator, best-effort (VTI `vtc-service/src/credentials/delivery.rs`) | community → applicant |
-| reciprocate | `vtc/members/request-vmc/0.1` → `vtc/members/vmc/0.1` | community ↔ member |
+
+| Step        | Task                                                                                                                                                                                            | Direction             |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| discover    | `vtc/join-requests/manifest/0.2` (adds `vetting`, `branding`, `requirementsDigest`)                                                                                                             | applicant → community |
+| apply       | `vtc/join-requests/submit/0.2` — the applicant is the proof signer; response `{requestId, verdict}` with `effect ∈ allow | deny | refer | requestMore`                                          | applicant → community |
+| acknowledge | `vtc/join-requests/submit-receipt/0.1`                                                                                                                                                          | community → applicant |
+| poll        | `vtc/join-requests/status/0.1`                                                                                                                                                                  | applicant → community |
+| deliver     | `credential-exchange/issue` — `MembershipCredential` (VMC) and a role `EndorsementCredential` (VEC), sent to the holder's mediator, best-effort (VTI `vtc-service/src/credentials/delivery.rs`) | community → applicant |
+| reciprocate | `vtc/members/request-vmc/0.1` → `vtc/members/vmc/0.1`                                                                                                                                           | community ↔ member    |
+
 
 This answers the parent's §9 Q3: the `trusttasks.org/openvtc/vtc/join-requests/submit/1.0` form in the developer guide is not the current wire. Delivery arrives over the mediator, so **a client that only polls cannot complete the ceremony** — Keyring needs a live mediator session.
 
@@ -102,13 +114,15 @@ The ceremony is exercised end to end server-side by [[VETTING-JOURNEY]] and clie
 
 ### 3.6 TSP Rev 3 is a hard cutover
 
-[[TSP-REV3]]: *"Rev 3 removes HPKE-Auth, which is the only mode we implement"*; implementations *"MUST support HPKE-Base mode"*; *"a message is either wholly Rev 2 or wholly Rev 3"*. The CESR envelope codes, the AEAD `info`/`aad`, the ciphertext layout, the thread digest (now an embedded SAID) and routed-mode exit VIDs all change. Upstream keeps `main` on Rev 2 *"until `tsp-sdk` cuts an official Rev 3 release"*; spec review is open and test vectors are deferred.
+[[TSP-REV3]]: *"Rev 3 removes HPKE-Auth, which is the only mode we implement"*; implementations *"MUST support HPKE-Base mode"*; *"a message is either wholly Rev 2 or wholly Rev 3"*. The CESR envelope codes, the AEAD `info`/`aad`, the ciphertext layout, the thread digest (now an embedded SAID) and routed-mode exit VIDs all change. Upstream keeps `main` on Rev 2 *"until* `tsp-sdk` *cuts an official Rev 3 release"*; spec review is open and test vectors are deferred.
 
 Consequences for this subtask:
 
 - **The vetting path does not depend on TSP.** Every leg has a DIDComm v2 route; TSP legs are optional until Rev 3 settles, and fixtures record which TSP revision produced them.
-- **Keyring's existing TSP work is Rev 2 throughout** — the HPKE-Auth crypto proven against the CFRG Auth-mode vector in [`ref-03-noble-crypto`](../../../tsp-reference/ref-03-noble-crypto/), the envelope fixtures in `ref-00…04`, and the TSP carriage. Its migration belongs to [`openvtc-integration-plan.md`](../openvtc-integration-plan.md), triggered by upstream's Rev 3 release, and is not scheduled here.
+- **Keyring's existing TSP work is Rev 2 throughout** — the HPKE-Auth crypto proven against the CFRG Auth-mode vector in `[ref-03-noble-crypto](../../../tsp-reference/ref-03-noble-crypto/)`, the envelope fixtures in `ref-00…04`, and the TSP carriage. Its migration belongs to `[openvtc-integration-plan.md](../openvtc-integration-plan.md)`, triggered by upstream's Rev 3 release, and is not scheduled here.
 - **Rev 3 helps hardware custody.** HPKE-Base authenticates the sender by signature rather than by a static X25519 key agreement, and X25519 cannot live in the Secure Enclave or StrongBox; under Rev 3 the key a device must hold in hardware to send is a signing key.
+
+
 
 ### 3.7 Non-public hosts are refused
 
@@ -116,72 +130,84 @@ VTI #1448 (`3415fb57`) refuses `did:webvh` resolution to localhost, `.local` and
 
 ### 3.8 The runbook this subtask reproduces
 
-[[DRY-RUN]] is written against **vtc-service 0.11.58 · vta-service 0.27.0 · vta-sdk 0.38 with the `vetting` feature**, with three actors — **admin**, **alice** (applicant) and **bob** (vetter). Its 2026-09-14 revision covers VTI #1465 and #1467 (console authoring of criteria and vetter eligibility), #1471 (join dry-run vetting inputs) and #1472 (the Flow view). All of these are on VTI `origin/main`, so *latest upstream* and *the runbook's versions* are the same build today. Keyring takes alice's part; §2.5 fills bob's and the admin's.
+[[DRY-RUN]] is written against **vtc-service 0.11.58 · vta-service 0.27.0 · vta-sdk 0.38 with the** `vetting` **feature**, with three actors — **admin**, **alice** (applicant) and **bob** (vetter). Its 2026-09-14 revision covers VTI #1465 and #1467 (console authoring of criteria and vetter eligibility), #1471 (join dry-run vetting inputs) and #1472 (the Flow view). All of these are on VTI `origin/main`, so *latest upstream* and *the runbook's versions* are the same build today. Keyring takes alice's part; §2.5 fills bob's and the admin's.
 
 **Topology comes first** — the runbook's own warning is that most failures in a three-party flow are topology, not protocol:
 
 - bob is already a member and alice is not; only a member can be named a vetter.
 - **Two VTAs, not one** — each client profile authenticates to its own VTA, and `device/register` refuses a re-claim. Two terminal-client profiles (`openvtc -p alice`, `openvtc -p bob`) on one machine are fine if they point at separate VTAs.
 - **Both parties on the same mediator for the first run**; a cross-mediator reply has a known refusal, so that is tested deliberately as a variant.
-- **alice needs a persona face carrying `name.legal` with a readable value** — a predicate-only release is refused, because a vetter reads the value off a document.
+- **alice needs a persona face carrying** `name.legal` **with a readable value** — a predicate-only release is refused, because a vetter reads the value off a document.
 - Preflight both sides with `openvtc -p <profile> health`, which resolves the messaging chain and reports the transport each pair negotiates.
 - Prove the community will admit before involving two people (step 00).
 
 **Steps and what must be true at each:**
 
-| # | Actor | Step | Expect |
-|---|---|---|---|
-| 00 | admin | Dry-run the join verdict (console *Ceremonies → Join → Flow*, peer identity vetting = requirements met) | `ADMIT · as member`. If it lands on `REFER · to the moderator queue`, the installed join policy predates vetting: upload `vtc-service/policies/default/join.rego` as raw Rego **and activate it** (uploading does not activate) |
-| 01 | admin | Register the statement type — `POST /v1/endorsement-types` `{typeUri: "https://firstperson.network/endorsements/identity-vetting/…", description}`; a criterion cannot name an unregistered type | — |
-| 02 | admin | Publish a criterion needing one vetter — `POST /v1/schemas/accepts` `{id: "vetted-member", query: {credentials: [{format: "ldp_vc", meta: {type_values: ["EndorsementCredential"]}}]}, vetting: {version: "0.1", statementType, minStatements: 1, acceptedMethods: ["inPerson","video"], requiredClaims: ["name.legal"], maxStatementAge: "P120D", eligibleVetters: {role: "vetter"}, independence: {requireConsistentIdentityCommitment: true}}}`. Leave `invitation` out. **Disable any other criterion that would admit without vetting** | the route refuses unsatisfiable requirements (`minStatements: 0`, a `minByMethod` floor on a method not accepted, month-based durations such as `P4M`, an unregistered type) |
-| 03 | admin | Confirm the applicant can read it — `GET /v1/schemas/accepts` and `vtc/join-requests/manifest/0.2`; re-check the Flow view | the criterion carries a `vetting` object and a `requirementsDigest`; `manifest/0.1` is unchanged; the Flow now turns on the vetting questions |
-| 04 | admin | Grant the role — `cnm vetting vetters grant did:webvh:…:bob --validity 180d` (or `POST /v1/vetting/vetters`, task `vtc/vetting/vetters/grant/0.1`); validity defaults to one year, range one day to two years; re-granting returns the live grant | `cnm vetting vetters list` shows bob `live: true`, `origin: "manual"`; audit `VetterGranted` with `VecIssued` |
-| 05 | bob | Check the role credential arrived over `credential-exchange/issue`; if bob was offline, `cnm vetting vetters resend <memberDid>` re-sends the same credential | bob holds a `CommunityRole: vetter` VEC with a `credentialStatus` |
-| 06 | bob | Cut a ticket — the vetter's consent to be asked; defaults one use, fourteen days; available as a `vetting-ticket:` link, an `XXXX-XXXX` code and a QR; optionally publish a vetter profile so applicants can find bob | — |
-| 07 | alice | Start the application (**the join DID is chosen or minted here**), choose a face, refresh requirements, request a vetter by pasting bob's ticket link; a link for another community is refused before anything is sent | bob's desk shows the request `Accepted` automatically (the ticket was the consent); alice's row reads *named a vetter until … not revoked when checked on …* |
-| 08 | bob | Open the session | both screens show the same `XXXX-XXXX` match code, derived from the session document id under a domain-separation tag; read aloud, it ties the person on the call to the client holding the join DID. The same id must **not** yield the same code in the personhood ceremony |
-| 09 | alice | Review and send the card — the disclosure preview shows exactly what bob will see; nothing leaves until alice confirms; a `stepUpRequired` refusal keeps the preview so she can approve on her device and present again; the card is signed as the join persona DID | bob's desk moves to `CardReceived`; the card verifies against the session's challenge, audience and community |
-| 10 | bob | Check the human, then attest — mark `name.legal` verified against the document relied on, record which documentation, confirm liveness; signing is never automatic. Trip each refusal once: attesting before confirming the match code, marking a claim the card does not carry, leaving a required claim unverified, leaving documentation blank | a signed statement issued to alice, which her client verifies against her own card before storing |
-| 11 | alice | Submit — the checklist reads *1 of 1 · meets the published requirements* (advisory: only the community knows whether bob was eligible); the statement goes in the presentation, the `requirementsDigest` in `extensions` | verdict `allow` → VMC grant + role VEC → reciprocal VMC; the admin decision records the vetting facts relied on and the requirements version |
+
+| #   | Actor | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Expect                                                                                                                                                                                                                                                                        |
+| --- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 00  | admin | Dry-run the join verdict (console *Ceremonies → Join → Flow*, peer identity vetting = requirements met)                                                                                                                                                                                                                                                                                                                                                                                                                                      | `ADMIT · as member`. If it lands on `REFER · to the moderator queue`, the installed join policy predates vetting: upload `vtc-service/policies/default/join.rego` as raw Rego **and activate it** (uploading does not activate)                                               |
+| 01  | admin | Register the statement type — `POST /v1/endorsement-types` `{typeUri: "https://firstperson.network/endorsements/identity-vetting/…", description}`; a criterion cannot name an unregistered type                                                                                                                                                                                                                                                                                                                                             | —                                                                                                                                                                                                                                                                             |
+| 02  | admin | Publish a criterion needing one vetter — `POST /v1/schemas/accepts` `{id: "vetted-member", query: {credentials: [{format: "ldp_vc", meta: {type_values: ["EndorsementCredential"]}}]}, vetting: {version: "0.1", statementType, minStatements: 1, acceptedMethods: ["inPerson","video"], requiredClaims: ["name.legal"], maxStatementAge: "P120D", eligibleVetters: {role: "vetter"}, independence: {requireConsistentIdentityCommitment: true}}}`. Leave `invitation` out. **Disable any other criterion that would admit without vetting** | the route refuses unsatisfiable requirements (`minStatements: 0`, a `minByMethod` floor on a method not accepted, month-based durations such as `P4M`, an unregistered type)                                                                                                  |
+| 03  | admin | Confirm the applicant can read it — `GET /v1/schemas/accepts` and `vtc/join-requests/manifest/0.2`; re-check the Flow view                                                                                                                                                                                                                                                                                                                                                                                                                   | the criterion carries a `vetting` object and a `requirementsDigest`; `manifest/0.1` is unchanged; the Flow now turns on the vetting questions                                                                                                                                 |
+| 04  | admin | Grant the role — `cnm vetting vetters grant did:webvh:…:bob --validity 180d` (or `POST /v1/vetting/vetters`, task `vtc/vetting/vetters/grant/0.1`); validity defaults to one year, range one day to two years; re-granting returns the live grant                                                                                                                                                                                                                                                                                            | `cnm vetting vetters list` shows bob `live: true`, `origin: "manual"`; audit `VetterGranted` with `VecIssued`                                                                                                                                                                 |
+| 05  | bob   | Check the role credential arrived over `credential-exchange/issue`; if bob was offline, `cnm vetting vetters resend <memberDid>` re-sends the same credential                                                                                                                                                                                                                                                                                                                                                                                | bob holds a `CommunityRole: vetter` VEC with a `credentialStatus`                                                                                                                                                                                                             |
+| 06  | bob   | Cut a ticket — the vetter's consent to be asked; defaults one use, fourteen days; available as a `vetting-ticket:` link, an `XXXX-XXXX` code and a QR; optionally publish a vetter profile so applicants can find bob                                                                                                                                                                                                                                                                                                                        | —                                                                                                                                                                                                                                                                             |
+| 07  | alice | Start the application (**the join DID is chosen or minted here**), choose a face, refresh requirements, request a vetter by pasting bob's ticket link; a link for another community is refused before anything is sent                                                                                                                                                                                                                                                                                                                       | bob's desk shows the request `Accepted` automatically (the ticket was the consent); alice's row reads *named a vetter until … not revoked when checked on …*                                                                                                                  |
+| 08  | bob   | Open the session                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | both screens show the same `XXXX-XXXX` match code, derived from the session document id under a domain-separation tag; read aloud, it ties the person on the call to the client holding the join DID. The same id must **not** yield the same code in the personhood ceremony |
+| 09  | alice | Review and send the card — the disclosure preview shows exactly what bob will see; nothing leaves until alice confirms; a `stepUpRequired` refusal keeps the preview so she can approve on her device and present again; the card is signed as the join persona DID                                                                                                                                                                                                                                                                          | bob's desk moves to `CardReceived`; the card verifies against the session's challenge, audience and community                                                                                                                                                                 |
+| 10  | bob   | Check the human, then attest — mark `name.legal` verified against the document relied on, record which documentation, confirm liveness; signing is never automatic. Trip each refusal once: attesting before confirming the match code, marking a claim the card does not carry, leaving a required claim unverified, leaving documentation blank                                                                                                                                                                                            | a signed statement issued to alice, which her client verifies against her own card before storing                                                                                                                                                                             |
+| 11  | alice | Submit — the checklist reads *1 of 1 · meets the published requirements* (advisory: only the community knows whether bob was eligible); the statement goes in the presentation, the `requirementsDigest` in `extensions`                                                                                                                                                                                                                                                                                                                     | verdict `allow` → VMC grant + role VEC → reciprocal VMC; the admin decision records the vetting facts relied on and the requirements version                                                                                                                                  |
+
 
 **Where to assert:**
 
-| Stop | Client side | Community side |
-|---|---|---|
-| Requirements read | the vetting page names one statement and `name.legal`; digest stored | `manifest/0.2` carries `vetting` + `requirementsDigest` |
-| Vetter named | bob holds a `CommunityRole: vetter` VEC with `credentialStatus` | `cnm vetting vetters list` → `live: true`, `origin: manual` |
-| Request accepted | eligibility presentation verifies; grant recorded as not revoked | — |
-| Session open | same match code on both screens; differs from a personhood code for the same id | — |
-| Statement issued | statement verifies against alice's card; checklist 1/1 | — |
-| Verdict | membership appears; reciprocal VMC issued | decision records vetting facts + requirements version |
+
+| Stop              | Client side                                                                     | Community side                                              |
+| ----------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Requirements read | the vetting page names one statement and `name.legal`; digest stored            | `manifest/0.2` carries `vetting` + `requirementsDigest`     |
+| Vetter named      | bob holds a `CommunityRole: vetter` VEC with `credentialStatus`                 | `cnm vetting vetters list` → `live: true`, `origin: manual` |
+| Request accepted  | eligibility presentation verifies; grant recorded as not revoked                | —                                                           |
+| Session open      | same match code on both screens; differs from a personhood code for the same id | —                                                           |
+| Statement issued  | statement verifies against alice's card; checklist 1/1                          | —                                                           |
+| Verdict           | membership appears; reciprocal VMC issued                                       | decision records vetting facts + requirements version       |
+
 
 **Negative cases, ordered by what they catch** (the first four are cheap; the last ones are where the interesting defects live):
 
-| Class | Case | Expected |
-|---|---|---|
-| anti-spam | Ask with no ticket | the gate runs before a task exists, so the request never reaches the vetter; five bad codes from one sender in an hour drops that sender silently for the hour |
-| anti-spam | Ticket from another community | refused client-side before sending — sending would tie the join DID to a community the applicant is not applying to |
-| counting | Raise the criterion to two statements, submit with one | `request_more`, with the generic `vetting` need expanded to `vetting:statements:1`; gather a second and resubmit |
-| counting | Statement past `maxStatementAge` | stops counting at submit without invalidating anything else |
-| revocation | Revoke the grant before submit (`cnm vetting vetters revoke <endorsementId>`) | alice's row flips to *the community has revoked this vetter's grant*; the statement stops counting; bob's profile is deleted with the grant |
-| revocation | Withdraw after admission | `cnm vetting revocations` shows the admission as `needsReview` — flagged, not removed |
-| consistency | Two vetters, two identities (different `name.legal` between cards) | commitments diverge; verdict `refer` to the `vetting-review` queue, not a denial |
-| networking | Stop the VTC mid-question | a manifest, directory or resend question unanswered after 30 s is reported as *unanswered*, never a hang, and says whether it was unreachable, auth-rejected or a contract mismatch |
-| topology | Put bob on a second mediator | if a reply vanishes, read the *sending* mediator's forward log — `Sent` is not delivery |
+
+| Class       | Case                                                                          | Expected                                                                                                                                                                            |
+| ----------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| anti-spam   | Ask with no ticket                                                            | the gate runs before a task exists, so the request never reaches the vetter; five bad codes from one sender in an hour drops that sender silently for the hour                      |
+| anti-spam   | Ticket from another community                                                 | refused client-side before sending — sending would tie the join DID to a community the applicant is not applying to                                                                 |
+| counting    | Raise the criterion to two statements, submit with one                        | `request_more`, with the generic `vetting` need expanded to `vetting:statements:1`; gather a second and resubmit                                                                    |
+| counting    | Statement past `maxStatementAge`                                              | stops counting at submit without invalidating anything else                                                                                                                         |
+| revocation  | Revoke the grant before submit (`cnm vetting vetters revoke <endorsementId>`) | alice's row flips to *the community has revoked this vetter's grant*; the statement stops counting; bob's profile is deleted with the grant                                         |
+| revocation  | Withdraw after admission                                                      | `cnm vetting revocations` shows the admission as `needsReview` — flagged, not removed                                                                                               |
+| consistency | Two vetters, two identities (different `name.legal` between cards)            | commitments diverge; verdict `refer` to the `vetting-review` queue, not a denial                                                                                                    |
+| networking  | Stop the VTC mid-question                                                     | a manifest, directory or resend question unanswered after 30 s is reported as *unanswered*, never a hang, and says whether it was unreachable, auth-rejected or a contract mismatch |
+| topology    | Put bob on a second mediator                                                  | if a reply vanishes, read the *sending* mediator's forward log — `Sent` is not delivery                                                                                             |
+
+
+
 
 **Upstream coverage the runbook names:** server side end to end in `vtc-service/tests/vetting_journey.rs` ("the executable version of this document"); client side in unit tests under `openvtc-core/src/vetting/`, and, since #322, over a real mediator in `openvtc-core/tests/vetting_e2e.rs`. The manual run remains the only proof against **running** services — which is what P2 turns into repeatable fixtures and P6 into a phone e2e.
 
 ---
 
+
+
 ## 4. The local stack
 
-| Service | Built from | Instances |
-|---|---|---|
-| `vta-service` (features including `vetting`, `tsp`, `webvh`) | VTI `origin/main` at a recorded SHA | 3 — the community's host VTA, the applicant's, the vetter's |
-| `vtc-service` | VTI `origin/main` | 1 |
-| Mediator | Affinidi messaging mediator, latest release | 1, shared by all parties for the first runs |
-| DID hosting | `affinidi/affinidi-webvh-service`, latest | 1 |
-| `cnm`, `pnm`, `openvtc` | VTI / openvtc `origin/main` | CLIs |
+
+| Service                                                      | Built from                                  | Instances                                                   |
+| ------------------------------------------------------------ | ------------------------------------------- | ----------------------------------------------------------- |
+| `vta-service` (features including `vetting`, `tsp`, `webvh`) | VTI `origin/main` at a recorded SHA         | 3 — the community's host VTA, the applicant's, the vetter's |
+| `vtc-service`                                                | VTI `origin/main`                           | 1                                                           |
+| Mediator                                                     | Affinidi messaging mediator, latest release | 1, shared by all parties for the first runs                 |
+| DID hosting                                                  | `affinidi/affinidi-webvh-service`, latest   | 1                                                           |
+| `cnm`, `pnm`, `openvtc`                                      | VTI / openvtc `origin/main`                 | CLIs                                                        |
+
 
 - **Native builds** — the published prebuilt server binaries are Linux x86-64 only.
 - **Headless provisioning in upstream's own two-phase shape** — `vtc setup --setup-key-out`, an operator grant, then `vtc setup --from <toml>` (VTI `docs/03-vtc/non-interactive-setup.md`); the mediator and DID hosting follow the same pattern.
@@ -191,15 +217,19 @@ VTI #1448 (`3415fb57`) refuses `did:webvh` resolution to localhost, `.local` and
 
 ---
 
+
+
 ## 5. Client architecture
 
 - **Package:** `bifold/packages/vti-client` wraps `@openvtc/pnm-core` behind a DI token with React Native implementations of its platform seams; the app adds a **My Agent** stack. The VRC and witness modules are unchanged.
-- **Carriage:** Trust Task documents are byte-identical across REST, DIDComm and TSP ([`pnm_cnm_subtask.md`](../openvtc-integration-plan/pnm_cnm_subtask.md) §2.1). Keyring carries them over Credo DIDComm v2 — the in-progress Credo 0.7 / DIDComm v2 line (credo-ts PR #2704 snapshots; not yet on `main`) — plus a Credo transport to the VTI mediator (mediator login, one socket per DID, Pickup 3.0) proven in Node by a reference rung on that same line. `pnm-core`'s own channels are the fallback where that path does not reach. Which carries each leg is **measured in P4**, not assumed.
+- **Carriage:** Trust Task documents are byte-identical across REST, DIDComm and TSP (`[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` §2.1). Keyring carries them over Credo DIDComm v2 — the in-progress Credo 0.7 / DIDComm v2 line (credo-ts PR #2704 snapshots; not yet on `main`) — plus a Credo transport to the VTI mediator (mediator login, one socket per DID, Pickup 3.0) proven in Node by a reference rung on that same line. `pnm-core`'s own channels are the fallback where that path does not reach. Which carries each leg is **measured in P4**, not assumed.
 - **Versions move together:** VTI `origin/main` with `pnm-core` 0.9.1 (both on vta-sdk 0.38). `pnm-core` 0.9.0 is avoided — its published tarball is a partial build (`vta-browser-plugin` `b379f2c`).
 - **React Native seams**, measured at `vta-browser-plugin` 21b0465: `node:fs`/`fs` resolved to an empty module (`@openvtc/vti-didcomm-js` → `didwebvh-ts`, whose `react-native` export condition resolves to a build that `require`s `node:fs`; the chain now also reaches the REST path via reply verification, `packages/core/src/trust-tasks/verify.ts`); `crypto.subtle` AES-KW / AES-CBC / HMAC / HKDF / SHA-256 for DIDComm legs; `getRandomValues` / `randomUUID`; `AbortSignal.timeout` (`packages/core/src/http/timeout-fetch.ts`); `structuredClone`; a key-value store adapter; and whether React Native's `fetch` honours `redirect: "manual"`, on which the egress guard's no-redirect guarantee depends — to be measured before it is relied on.
-- **`did:webvh`:** the app already registers `@credo-ts/webvh`'s resolver (`app/src/utils/bc-agent-modules.ts`, `bifold/packages/core/src/utils/agent.ts`); P4 measures it on Hermes against the stack's real DIDs, with a tampered-log fixture, before building on it.
+- `did:webvh`**:** the app already registers `@credo-ts/webvh`'s resolver (`app/src/utils/bc-agent-modules.ts`, `bifold/packages/core/src/utils/agent.ts`); P4 measures it on Hermes against the stack's real DIDs, with a tampered-log fixture, before building on it.
 
 ---
+
+
 
 ## 6. Phases
 
@@ -266,6 +296,8 @@ Enrolment contract proposed to the Farm operator with P4 as evidence; a prototyp
 
 ---
 
+
+
 ## 7. User experience
 
 **My Agent** is a top-level tab with three sections: *Agent* (connected or not; the agent's DID with its host shown, never a name derived from the DID; health), *Communities* (member, applying, pending review), *Applications* (each vetting application with its checklist and next action). Pending states refresh by pull; push notification is later work. Membership cards use Keyring's existing credential card with the community's name from its manifest.
@@ -282,46 +314,55 @@ Enrolment contract proposed to the Farm operator with P4 as evidence; a prototyp
 
 Keyring's tab bar today is Contacts, Messages, Connect (the centre scan tab), Credentials and Settings (`bifold/packages/core/src/navigators/TabStack.tsx`). **My Agent** is added as a sixth tab; scanning stays on Connect. Every string ships in the app's three locales (en, fr, pt-br), and every screen meets the app's existing accessibility bar (labels on all controls, font scaling).
 
-| # | Screen | Reached from | Shows | Actions | Phase |
-|---|---|---|---|---|---|
-| S1 | **My Agent — not connected** | My Agent tab, first visit | what an agent is, in one sentence; why a community needs one | *Connect my agent* → S2 | P4 |
-| S2 | **Connect my agent** | S1; Connect tab when an enrolment code is scanned | scan prompt, or the scanned agent's host and DID for confirmation; typed-link fallback | *Connect* (biometric) → S3; *Cancel* | P4 |
-| S3 | **Connecting** | S2 | progress through grant → key swap → session → health, each step named; a clear failure with *Details* and *Try again* | — | P4 |
-| S4 | **My Agent — home** | My Agent tab once connected | *Agent* card (host, health, transport); *Communities* list (member / applying / pending review); *Applications* list (checklist summary, next action) | open a community → S5; open an application → S7; *Join a community* → S6; pull to refresh | P4–P6 |
-| S5 | **Community** | S4 | community name and branding text; membership card (existing credential card) or join status; requirements in sentences | *Apply* → S7 (vetting communities) or *Join* (others, biometric); pull to refresh | P5 |
-| S6 | **Join a community** | S4 | scan or paste a community link or a vetter's ticket | ticket → S7 pre-filled; community → S5 | P5–P6 |
-| S7 | **Application** | S5, S6, S4; Connect tab when a `vetting-ticket:` link is scanned | the community's requirements in sentences; the checklist (*0 of 1 statements*); the named vetter and *named a vetter until … not revoked when checked on …*; the current step | *Choose face* → S8; *Request a vetter* (scan/paste ticket); *Submit* → S12 when the checklist is met | P6 |
-| S8 | **Your legal name** | S7, first time per application | *"Your legal name, exactly as on your ID"*, pre-filled from the relationship-card name; note that only vetters see it | *Confirm* (writes the vetting face to the VTA); edit warning if a statement already exists | P6 |
-| S9 | **Match code** | S7, when the vetter opens the session | full-screen `XXXX-XXXX`; *"Read this to your vetter — their screen shows the same code"* | *Continue* → S10 once confirmed; *Cancel session* | P6 |
-| S10 | **Review your card** | S9 | exactly what the vetter will see (the disclosure preview) | *Send* (biometric; again after a step-up) → back to S7 *waiting for statement*; *Cancel* | P6 |
-| S11 | **Statement received** | S7, when the statement arrives | who vetted, how (*in person*, *video*), which claims were verified; *verified against your card* | *Done* → S7 with the checklist updated | P6 |
-| S12 | **Submit application** | S7 | checklist *meets the published requirements*; what will be shared | *Submit* (biometric) → S13 | P6 |
-| S13 | **Result** | S12; S5 on refresh | *Admitted* (membership card, then *sending your membership confirmation* for the reciprocal credential, biometric) · *Pending review* (pull to refresh) · *More needed* (the needs, with *Request another vetter*) · *Referred for review* · *Not admitted* | *View card* → S5; *Back to My Agent* → S4 | P5–P6 |
-| — | **Refusal sheet** | any screen | the plain sentence of §7 with *Details* (upstream code and message) | *Try again* where it can succeed; *Close* | P4–P6 |
+
+| #   | Screen                       | Reached from                                                     | Shows                                                                                                                                                                                                                                                       | Actions                                                                                              | Phase |
+| --- | ---------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----- |
+| S1  | **My Agent — not connected** | My Agent tab, first visit                                        | what an agent is, in one sentence; why a community needs one                                                                                                                                                                                                | *Connect my agent* → S2                                                                              | P4    |
+| S2  | **Connect my agent**         | S1; Connect tab when an enrolment code is scanned                | scan prompt, or the scanned agent's host and DID for confirmation; typed-link fallback                                                                                                                                                                      | *Connect* (biometric) → S3; *Cancel*                                                                 | P4    |
+| S3  | **Connecting**               | S2                                                               | progress through grant → key swap → session → health, each step named; a clear failure with *Details* and *Try again*                                                                                                                                       | —                                                                                                    | P4    |
+| S4  | **My Agent — home**          | My Agent tab once connected                                      | *Agent* card (host, health, transport); *Communities* list (member / applying / pending review); *Applications* list (checklist summary, next action)                                                                                                       | open a community → S5; open an application → S7; *Join a community* → S6; pull to refresh            | P4–P6 |
+| S5  | **Community**                | S4                                                               | community name and branding text; membership card (existing credential card) or join status; requirements in sentences                                                                                                                                      | *Apply* → S7 (vetting communities) or *Join* (others, biometric); pull to refresh                    | P5    |
+| S6  | **Join a community**         | S4                                                               | scan or paste a community link or a vetter's ticket                                                                                                                                                                                                         | ticket → S7 pre-filled; community → S5                                                               | P5–P6 |
+| S7  | **Application**              | S5, S6, S4; Connect tab when a `vetting-ticket:` link is scanned | the community's requirements in sentences; the checklist (*0 of 1 statements*); the named vetter and *named a vetter until … not revoked when checked on …*; the current step                                                                               | *Choose face* → S8; *Request a vetter* (scan/paste ticket); *Submit* → S12 when the checklist is met | P6    |
+| S8  | **Your legal name**          | S7, first time per application                                   | *"Your legal name, exactly as on your ID"*, pre-filled from the relationship-card name; note that only vetters see it                                                                                                                                       | *Confirm* (writes the vetting face to the VTA); edit warning if a statement already exists           | P6    |
+| S9  | **Match code**               | S7, when the vetter opens the session                            | full-screen `XXXX-XXXX`; *"Read this to your vetter — their screen shows the same code"*                                                                                                                                                                    | *Continue* → S10 once confirmed; *Cancel session*                                                    | P6    |
+| S10 | **Review your card**         | S9                                                               | exactly what the vetter will see (the disclosure preview)                                                                                                                                                                                                   | *Send* (biometric; again after a step-up) → back to S7 *waiting for statement*; *Cancel*             | P6    |
+| S11 | **Statement received**       | S7, when the statement arrives                                   | who vetted, how (*in person*, *video*), which claims were verified; *verified against your card*                                                                                                                                                            | *Done* → S7 with the checklist updated                                                               | P6    |
+| S12 | **Submit application**       | S7                                                               | checklist *meets the published requirements*; what will be shared                                                                                                                                                                                           | *Submit* (biometric) → S13                                                                           | P6    |
+| S13 | **Result**                   | S12; S5 on refresh                                               | *Admitted* (membership card, then *sending your membership confirmation* for the reciprocal credential, biometric) · *Pending review* (pull to refresh) · *More needed* (the needs, with *Request another vetter*) · *Referred for review* · *Not admitted* | *View card* → S5; *Back to My Agent* → S4                                                            | P5–P6 |
+| —   | **Refusal sheet**            | any screen                                                       | the plain sentence of §7 with *Details* (upstream code and message)                                                                                                                                                                                         | *Try again* where it can succeed; *Close*                                                            | P4–P6 |
+
 
 ---
+
+
 
 ## 8. End-to-end tests
 
 New runners in `e2e/`, each run with the applicant on the Android emulator and then on the iOS simulator, against the local stack with the headless vetter and `cnm` as admin:
 
-| Script | Asserts |
-|---|---|
-| `e2e:agent:connect` | enrolment, key swap, health, persona list |
-| `e2e:community:join` | submit → receipt → VMC and VEC delivered → reciprocal VMC |
-| `e2e:vetting:applicant` | ticket → request → session and match code → card → statement → submit → admitted |
-| `e2e:vetting:neg:no-ticket`, `:other-community`, `:two-statements`, `:revoked-grant` | the refusal and its on-screen message |
-| later: statement too old, withdrawal after admission, inconsistent identities, community unreachable, parties on different mediators | |
+
+| Script                                                                                                                               | Asserts                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `e2e:agent:connect`                                                                                                                  | enrolment, key swap, health, persona list                                        |
+| `e2e:community:join`                                                                                                                 | submit → receipt → VMC and VEC delivered → reciprocal VMC                        |
+| `e2e:vetting:applicant`                                                                                                              | ticket → request → session and match code → card → statement → submit → admitted |
+| `e2e:vetting:neg:no-ticket`, `:other-community`, `:two-statements`, `:revoked-grant`                                                 | the refusal and its on-screen message                                            |
+| later: statement too old, withdrawal after admission, inconsistent identities, community unreachable, parties on different mediators |                                                                                  |
+
 
 QR payloads are injected by deep link on simulators; camera scanning is proven on the P7 devices. Existing harness constraints carry over: a VTA's default port collides with WebDriverAgent's, Metro must belong to the worktree under test, and `app/.env` is baked at build.
 
 ---
+
+
 
 ## 9. Requests to upstream
 
 Collected as they arise and sent together after P6, each with its evidence.
 
 **Farm**
+
 1. Vetting-capable service images selectable in a Farm session (§2.3).
 2. A client-generic enrolment contract replacing the copy-and-paste of DIDs: the console issues a short-lived, single-use, session-bound enrolment link rendered as a QR; the client posts its admin `did:key` with proof of possession; the console shows the key's fingerprint and the logged-in user confirms before the grant is written. Terminal clients use the same link; Keyring scans it.
 3. Whether a VTA may carry one admin grant per device, and hold a hardware-bound key.
@@ -331,27 +372,10 @@ Collected as they arise and sent together after P6, each with its evidence.
 5. Whether a TypeScript port of the applicant-side card, statement and match-code logic belongs in `pnm-core`.
 6. Every divergence P2 finds between the documentation and the running services.
 
-**React Native portability of `pnm-core`**
+**React Native portability of** `pnm-core`
 7. A route to the transport-agnostic core that does not pull `didwebvh-ts`'s `node:fs` references.
 8. A policy parameter on the `did:webvh` host guard, matching the one mediator and VTA endpoints already take.
 9. A release of `@openvtc/vti-tsp-js` carrying the pluggable signing and key-agreement seam.
 
 ---
 
-## 10. Open questions
-
-1. **Which community hosts the Prague run** — a Farm-hosted community, or the local stack. Decided after P6; blocks nothing before it.
-2. **When vetting-capable Farm images ship.** Blocks P8's vetting half. **Blocked on the Farm operator.**
-3. **How far the terminal client's vetting flow moves before P6** (§3.5). Changes fixtures, not architecture. **Blocked on upstream.**
-4. **TSP Rev 3 release timing** (§3.6). Blocks nothing in this subtask by design.
-5. **The hardware custody option** (§2.4). **Ours to measure — P4.**
-
-## 11. Sources
-
-- [[VETTING-DESIGN]] — `OpenVTC/openvtc` @ 9a2d174e, `docs/design/vetting-process.md`; `openvtc-core/src/vetting/`; `openvtc-core/tests/vetting_e2e.rs` (#322).
-- [[VETTING-OPS]], [[VETTING-JOURNEY]] — VTI @ 53a7cde4: `docs/03-vtc/vetting.md`, `docs/03-vtc/non-interactive-setup.md`, `docs/02-vta/claim-type-registry.md`, `vtc-service/tests/vetting_journey.rs`, `vtc-service/src/credentials/delivery.rs`; release tags `vta-service-v0.27.0`, `vta-sdk-v0.38.0`, `cnm-cli-v0.15.0`; commits `5a6d4923`, `14ef89a6`, `7a5d8aa0`, `3415fb57`.
-- [[ONBOARDING-CEREMONY]] — `dtgwg-trust-tasks-tf` @ 6e667c1d.
-- [[TSP-REV3]] — `docs.fpp.storm.ws/tsp-rev3-migration.html`, read 2026-09-15.
-- [[DRY-RUN]] — *Vetting Dry Run*, OpenVTC · Peer Identity Vetting · V0, revision of 2026-09-14 (PDF, shared with the team).
-- `vta-browser-plugin` @ 21b0465 — `packages/core/src/vtc/membership.ts`, `did/egress-guard.ts`, `trust-tasks/verify.ts`, `http/timeout-fetch.ts`, `task-surface.json`; `b379f2c`.
-- `ic3software/vtafarm-api` @ a3b8e52 — `internal/setup/templates*.go`, `CLAUDE.md`; GHCR tag lists for `ic3software/vta` and `ic3software/vtc`, read 2026-09-15.
