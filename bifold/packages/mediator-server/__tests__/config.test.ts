@@ -55,6 +55,13 @@ describe('resolveConfig', () => {
     })
   })
 
+  it('reads the v2 invitation path only when set, beside the v1 one', () => {
+    expect(resolveConfig(withUrl()).invitationV2Path).toBeUndefined()
+    expect(
+      resolveConfig(withUrl({ MEDIATOR_INVITATION_PATH: '/tmp/inv', MEDIATOR_INVITATION_V2_PATH: '/tmp/inv-v2' }))
+    ).toMatchObject({ invitationPath: '/tmp/inv', invitationV2Path: '/tmp/inv-v2' })
+  })
+
   it('derives the wallet key from the wallet id when only the id is set', () => {
     expect(resolveConfig(withUrl({ MEDIATOR_WALLET_ID: 'demo' })).walletKey).toBe('demo-key')
   })

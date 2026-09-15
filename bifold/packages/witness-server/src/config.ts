@@ -20,6 +20,13 @@ export interface WitnessServerConfig {
   /** Public URL for the witness (used in DIDComm endpoints) */
   publicUrl: string
 
+  /**
+   * DIDComm versions served: ['v1'] (default) or ['v1','v2'] — WITNESS_DIDCOMM_VERSIONS=v1,v2.
+   * With v2 the witness also publishes an out-of-band/2.0 invitation and accepts the
+   * Trust Task envelope on v2 connections (didcomm_v2_subtask.md V2 step 4).
+   */
+  didcommVersions: Array<'v1' | 'v2'>
+
   /** Session expiration time in minutes */
   sessionExpirationMinutes: number
 
@@ -443,6 +450,7 @@ export function loadConfig(): WitnessServerConfig {
     webPort,
     name: process.env.WITNESS_NAME || 'witness-server',
     publicUrl: process.env.WITNESS_PUBLIC_URL || `http://localhost:${port}`,
+    didcommVersions: parseDidCommVersions(process.env.WITNESS_DIDCOMM_VERSIONS),
     sessionExpirationMinutes: parseInt(process.env.WITNESS_SESSION_EXPIRATION || '30', 10),
     verbose: process.env.WITNESS_VERBOSE === 'true',
     eventName: process.env.WITNESS_EVENT_NAME || undefined,
@@ -505,6 +513,7 @@ export const defaultConfig: WitnessServerConfig = {
   invitationFile: '.oob-invitation.json',
   reportingDir: '.reporting',
   mediatorInvitationUrl: undefined,
+  didcommVersions: ['v1'],
   mediatorConnectionTimeout: 10000,
   tlsEnabled: true,
   tlsCertPath: undefined,
@@ -581,4 +590,17 @@ export function getDidSourceDescription(config: WitnessServerConfig): { didSourc
   }
 
   return { didSource, keySource }
+}
+
+/** WITNESS_DIDCOMM_VERSIONS → ['v1'] | ['v1','v2']; v1 is mandatory (every existing wallet). */
+export function parseDidCommVersions(raw: string | undefined): Array<'v1' | 'v2'> {
+  const versions = (raw ?? 'v1')
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+  for (const v of versions) {
+    if (v !== 'v1' && v !== 'v2') throw new Error(`WITNESS_DIDCOMM_VERSIONS must list only v1 and/or v2, got "${raw}"`)
+  }
+  if (!versions.includes('v1')) throw new Error('WITNESS_DIDCOMM_VERSIONS must include v1')
+  return versions as Array<'v1' | 'v2'>
 }

@@ -28,6 +28,12 @@ async function main(): Promise<void> {
   const config = resolveConfig(process.env)
   const mediator = await MediatorService.build(config)
 
+  // The v2 file is written FIRST: the harness resolves on the v1 file and
+  // reads the v2 one right after, so it must already be there.
+  if (config.invitationV2Path && mediator.mediatorV2Url) {
+    mkdirSync(dirname(config.invitationV2Path), { recursive: true })
+    writeFileSync(config.invitationV2Path, mediator.mediatorV2Url, 'utf8')
+  }
   if (config.invitationPath) {
     mkdirSync(dirname(config.invitationPath), { recursive: true })
     writeFileSync(config.invitationPath, mediator.mediatorUrl, 'utf8')
@@ -44,7 +50,9 @@ async function main(): Promise<void> {
   console.log('Put this in app/.env:')
   console.log('')
   console.log(`MEDIATOR_URL=${mediator.mediatorUrl}`)
+  if (mediator.mediatorV2Url) console.log(`MEDIATOR_V2_URL=${mediator.mediatorV2Url}`)
   console.log('')
+  console.log(`didcomm        ${config.didcommVersions.join(', ')}`)
   console.log('='.repeat(60))
 
   // A harness that kills the process group (`timeout`, and yarn forwarding to

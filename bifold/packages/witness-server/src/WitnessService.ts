@@ -117,6 +117,9 @@ const DEFAULT_CREDENTIAL_EXPIRATION_MS = DEFAULT_CREDENTIAL_EXPIRATION_DAYS * 24
 export interface PersistedInvitation {
   invitationUrl: string
   outOfBandId: string
+  /** The out-of-band/2.0 invitation, present when the witness serves DIDComm v2. */
+  invitationV2Url?: string
+  outOfBandV2Id?: string
   createdAt: string
   configHash?: string // Hash of config values that affect the invitation
 }
@@ -166,6 +169,7 @@ interface GetWitnessModulesOptions {
   walletKey: string
   endpoints?: string[]
   mediatorInvitationUrl?: string
+  didcommVersions?: Array<'v1' | 'v2'>
 }
 
 // ============================================
@@ -375,7 +379,13 @@ function extractVrcHardwareAttestationPublicKey(presentation: Record<string, unk
   return undefined
 }
 
-function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationUrl }: GetWitnessModulesOptions) {
+function getWitnessModules({
+  walletId,
+  walletKey,
+  endpoints,
+  mediatorInvitationUrl,
+  didcommVersions = ['v1'],
+}: GetWitnessModulesOptions) {
   return {
     askar: new AskarModule({
       askar,
@@ -392,12 +402,21 @@ function getWitnessModules({ walletId, walletKey, endpoints, mediatorInvitationU
     }),
     didcomm: new DidCommModule({
       endpoints,
+      // DIDComm v2 beside v1 when WITNESS_DIDCOMM_VERSIONS says so; did:peer:2
+      // for the v2 invitation (the VTI stack resolves numalgo 2 only).
+      didcommVersions,
+      peerDidNumAlgoForV2OOB: PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc,
       // CRITICAL: Enable concurrent message processing for multi-use invitations
       // Without this, connections get stuck at "request-received" state when multiple
       // devices connect via the same multi-use invitation (especially with mediator)
       processDidCommMessagesConcurrently: true,
       connections: {
         autoAcceptConnections: true,
+        // v2 has no handshake: a wallet that accepted our v2 invitation gets its
+        // connection here on its first authenticated message (the wallet sends
+        // its relationship DID right after accepting), which also fires the
+        // connection-completed event the witness announcement listens for.
+        autoCreateConnectionOnFirstMessage: didcommVersions.includes('v2'),
       },
       credentials: {
         autoAcceptCredentials: DidCommAutoAcceptCredential.Never,
@@ -472,6 +491,8 @@ export class WitnessService {
   private pickupStrategy?: MediatorPickupStrategyName
   private taskSessions?: WitnessTaskSessions
   private invitationUrl?: string
+  private invitationV2Url?: string
+  private outOfBandV2Id?: string
 
   // Registry: relationship DID → witness connection ID
   private relationshipDidRegistry: Map<string, string> = new Map()
@@ -524,7 +545,7 @@ export class WitnessService {
     const walletId = `${config.name}-wallet`
 
     const agentConfig: InitConfig = {
-      logger: new ConsoleLogger(config.verbose ? LogLevel.debug : LogLevel.warn),
+      logger: new ConsoleLogger(config.verbose ? LogLevel.Debug : LogLevel.Warn),
     }
 
     this.agent = new Agent({
@@ -536,6 +557,7 @@ export class WitnessService {
         // When using mediator, endpoints are provided by the mediator
         endpoints: useMediator ? undefined : [config.publicUrl],
         mediatorInvitationUrl: config.mediatorInvitationUrl,
+        didcommVersions: config.didcommVersions,
       }),
     })
 
@@ -1171,7 +1193,7 @@ export class WitnessService {
       privateJwk: {
         kty: 'OKP',
         crv: 'Ed25519',
-        d: TypedArrayEncoder.toBase64URL(seedBytes),
+        d: TypedArrayEncoder.toBase64Url(seedBytes),
         x: publicJwk.x,
       },
     })
@@ -2018,6 +2040,8 @@ export class WitnessService {
       try {
         const savedInvitation = this.loadPersistedInvitation(invitationFile)
         this.invitationUrl = savedInvitation.invitationUrl
+        this.invitationV2Url = savedInvitation.invitationV2Url
+        this.outOfBandV2Id = savedInvitation.outOfBandV2Id
         this.outOfBandId = savedInvitation.outOfBandId
 
         console.log(`[${this.name}] Loaded existing invitation from ${invitationFile}`)
@@ -2062,6 +2086,10 @@ export class WitnessService {
 
     // Create new invitation
     const outOfBand = await this.agent.modules.didcomm.oob.createInvitation({
+      // Explicit: with DIDComm v2 enabled, Credo infers v2 for a bare
+      // createInvitation (no handshake protocols, attachments or routing), and
+      // this invitation must stay v1 for every existing wallet.
+      didCommVersion: 'v1',
       // The wallet stores this as the connection's theirLabel and shows it as
       // the contact name. Without it the invitation carries no label and the
       // wallet falls back to the raw connection UUID, which is what the
@@ -2078,6 +2106,21 @@ export class WitnessService {
 
     console.log(`[${this.name}] Created reusable invitation`)
     console.log(`[${this.name}] Invitation URL: ${this.invitationUrl}`)
+
+    // A second, out-of-band/2.0 invitation when v2 is served — reusable: each
+    // wallet's first message creates its own connection here. `goal` is what
+    // a wallet shows as the contact name for a v2 invitation (theirLabel).
+    if (this.config.didcommVersions.includes('v2')) {
+      const outOfBandV2 = await this.agent.modules.didcomm.oob.createInvitation({
+        didCommVersion: 'v2',
+        goal: this.config.name,
+        multiUseInvitation: true,
+      })
+      this.outOfBandV2Id = outOfBandV2.id
+      this.invitationV2Url = outOfBandV2.outOfBandInvitation.toUrl({ domain: this.config.publicUrl })
+      console.log(`[${this.name}] Created reusable DIDComm v2 invitation`)
+      console.log(`[${this.name}] Invitation URL (v2): ${this.invitationV2Url}`)
+    }
 
     // Persist invitation to disk for stability across restarts
     if (invitationFile) {
@@ -2118,6 +2161,8 @@ export class WitnessService {
       port: this.config.port,
       name: this.config.name,
       mediatorInvitationUrl: this.config.mediatorInvitationUrl,
+      // Serving v2 adds a second invitation; a saved file without it is stale.
+      didcommVersions: this.config.didcommVersions.join(','),
     }
     const configString = JSON.stringify(relevantConfig, Object.keys(relevantConfig).sort())
     return createHash('sha256').update(configString).digest('hex').substring(0, 16)
@@ -2158,6 +2203,8 @@ export class WitnessService {
     const data: PersistedInvitation = {
       invitationUrl: this.invitationUrl,
       outOfBandId: this.outOfBandId,
+      invitationV2Url: this.invitationV2Url,
+      outOfBandV2Id: this.outOfBandV2Id,
       createdAt: new Date().toISOString(),
       configHash: this.computeConfigHash(),
     }
@@ -2211,7 +2258,10 @@ export class WitnessService {
    * Create a single-use connection invitation
    */
   public async createConnectionInvitation(): Promise<string> {
-    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation({ label: this.config.name })
+    const outOfBand = await this.agent.modules.didcomm.oob.createInvitation({
+      didCommVersion: 'v1',
+      label: this.config.name,
+    })
     const invitationUrl = outOfBand.outOfBandInvitation.toUrl({
       domain: this.config.publicUrl,
     })
@@ -2223,6 +2273,11 @@ export class WitnessService {
   /**
    * Get the current reusable invitation URL
    */
+  /** The out-of-band/2.0 invitation URL, when WITNESS_DIDCOMM_VERSIONS includes v2. */
+  public getInvitationV2Url(): string | undefined {
+    return this.invitationV2Url
+  }
+
   public getInvitationUrl(): string | undefined {
     return this.invitationUrl
   }
@@ -2424,7 +2479,11 @@ export class WitnessService {
           presentation: vpPresentation as any,
           challenge: sessionData.challenge,
           domain: sessionData.domain,
-        })
+          // Credo 0.7's holder-must-authenticate-subject check cannot hold for a
+          // VRC (the presenter is its issuer); party checks happen below. Option
+          // from Keyring's core patch (W3cJsonLdCredentialService).
+          verifyCredentialSubjectAuthentication: false,
+        } as any)
 
         console.log(`[${this.name}]   VP verification result:`)
         console.log(`[${this.name}]     isValid: ${vpVerificationResult.isValid}`)

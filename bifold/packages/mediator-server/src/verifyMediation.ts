@@ -73,12 +73,18 @@ async function main(): Promise<void> {
       invitation['@type'] === 'https://didcomm.org/connections/1.0/invitation',
       'the invitation is a connections/1.0 invitation'
     )
-    check(invitation.serviceEndpoint === PUBLIC_URL, 'the invitation carries this run’s public endpoint, not a stale one')
-    check(Array.isArray(invitation.recipientKeys) && invitation.recipientKeys.length === 1, 'it carries one recipient key')
+    check(
+      invitation.serviceEndpoint === PUBLIC_URL,
+      'the invitation carries this run’s public endpoint, not a stale one'
+    )
+    check(
+      Array.isArray(invitation.recipientKeys) && invitation.recipientKeys.length === 1,
+      'it carries one recipient key'
+    )
 
     console.log('[verify] connecting a wallet-shaped agent to it')
     recipient = new Agent({
-      config: { logger: new ConsoleLogger(LogLevel.error) },
+      config: { logger: new ConsoleLogger(LogLevel.Error) },
       dependencies: agentDependencies,
       modules: {
         askar: new AskarModule({
@@ -104,7 +110,10 @@ async function main(): Promise<void> {
 
     const mediationRecord = await recipient.modules.didcomm.mediationRecipient.findDefaultMediator()
     check(mediationRecord !== null, 'the wallet has a default mediator')
-    check(mediationRecord?.state === DidCommMediationState.Granted, `mediation was granted (state: ${mediationRecord?.state})`)
+    check(
+      mediationRecord?.state === DidCommMediationState.Granted,
+      `mediation was granted (state: ${mediationRecord?.state})`
+    )
 
     console.log('\n[verify] PASSED — a wallet pointed at this MEDIATOR_URL gets mediation')
   } finally {

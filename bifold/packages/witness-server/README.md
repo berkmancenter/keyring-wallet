@@ -175,6 +175,7 @@ Copy `.env.sample` to `.env` and customize. All options can be set via environme
 | `WITNESS_EVENT_NAME` | _(optional)_ | Event name included in VWC (e.g., "EthDenver 2024") |
 | `WITNESS_VERIFICATION_METHOD` | `session-based-challenge` | Verification method in VWC |
 | `WITNESS_VERBOSE` | `false` | Enable verbose logging |
+| `WITNESS_DIDCOMM_VERSIONS` | `v1` | `v1,v2` serves DIDComm v2 beside v1: the witness publishes a second, out-of-band/2.0 invitation (`Invitation URL (v2)` in the log, `invitationV2Url` in the persisted invitation file) and accepts the Trust Task envelope on v2 connections. v1 is always served. |
 | `WITNESS_INVITATION_FILE` | `.oob-invitation.json` | File to persist invitation URL for stability |
 | `MEDIATOR_INVITATION_URL` | _(optional)_ | Mediator OOB invitation URL (enables mediation) |
 

@@ -23,7 +23,11 @@ export interface MediatorConfig {
   storagePath: string
   /** If set, the invitation URL is written here on boot for a harness to read. */
   invitationPath?: string
+  /** If set (and v2 is served), the out-of-band/2.0 invitation URL is written here on boot. */
+  invitationV2Path?: string
   verbose: boolean
+  /** DIDComm versions to serve: ['v1'] (default) or ['v1','v2'] — MEDIATOR_DIDCOMM_VERSIONS=v1,v2 (didcomm_v2_subtask.md §7.1, C13). */
+  didcommVersions: Array<'v1' | 'v2'>
 }
 
 export const DEFAULT_PORT = 3010
@@ -65,11 +69,26 @@ export function resolveConfig(env: NodeJS.ProcessEnv): MediatorConfig {
     walletKey: env.MEDIATOR_WALLET_KEY?.trim() || `${walletId}-key`,
     storagePath: env.MEDIATOR_WALLET_PATH?.trim() || join(packageRoot, '.wallet'),
     invitationPath: env.MEDIATOR_INVITATION_PATH?.trim() || undefined,
+    invitationV2Path: env.MEDIATOR_INVITATION_V2_PATH?.trim() || undefined,
     verbose: env.MEDIATOR_VERBOSE === 'true',
+    didcommVersions: parseDidCommVersions(env.MEDIATOR_DIDCOMM_VERSIONS),
   }
 }
 
 /** Absolute path of the askar sqlite file for a resolved config. */
+function parseDidCommVersions(raw: string | undefined): Array<'v1' | 'v2'> {
+  const versions = (raw ?? 'v1')
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+  for (const v of versions) {
+    if (v !== 'v1' && v !== 'v2') throw new Error(`MEDIATOR_DIDCOMM_VERSIONS must list only v1 and/or v2, got "${raw}"`)
+  }
+  if (!versions.includes('v1'))
+    throw new Error('MEDIATOR_DIDCOMM_VERSIONS must include v1: every existing wallet routes through v1')
+  return versions as Array<'v1' | 'v2'>
+}
+
 export function walletFilePath(config: MediatorConfig): string {
   return join(config.storagePath, `${config.walletId}.db`)
 }
