@@ -37,6 +37,8 @@ specifically, so the coupling can be checked rather than assumed:
 | [2026-08-21-bam.md](./locality-plan/2026-08-21-bam.md) | `ref-06p3`, `ref-06p4`, and `ref-06p5` built and run: the §7.3 verifier's three-state coverage, the one-real-leg simplification `ref-06p4` uses for the relay trial and why, the measured numbers (100ms first fully caught against a 224.7ms bound), a reconnect-retry bug (stale `Device` object across retries) that feeds back into §10.2 item 2, the App-Attest-vs-Play-Integrity offline-verifiability asymmetry behind new Q7, and why a summarizing web fetch is unsafe for pinning cryptographic material |
 | [2026-09-01-bam.md](./locality-plan/2026-09-01-bam.md) | Item 12 run live on real hardware, both witnessed e2e variants passing. Four things found and fixed: the witness-connect pre-flight sheet (item 8) fired for witnesses with no locality leg at all (superseding its "always shown first" text); the sheet then had no operator cue, stalling an attended run; a locality-confirmed Contacts badge, which exposed a dead-code bug in the existing per-record display; and item 2's stale-`Device`-object fix, claimed "folded into" `BleLocalityProvider` since `ref-06p4` but never actually applied there — now is, with a bounded retry |
 | [2026-09-12-al.md](./locality-plan/2026-09-12-al.md) | Scoping the iOS peripheral (item 9) found that **iOS cannot sign the locality binding at all**: the platform key is an App Attest key, and `DCAppAttestService` returns a CBOR assertion over Apple's own `SHA256(authenticatorData ‖ clientDataHash)` construction, never caller-supplied bytes — so `p256.verify` cannot succeed. Not an encoding mismatch; a different signing primitive. The verification side is already iOS-ready (`rawPointFromDevicePublicKey` accepts raw 65-byte points); only signing has no path. Three options, with option 2 (teach the witness App Attest) researched into two jobs: assertion verification plus new per-key counter state, and the Apple attestation-chain verification that would make it meaningful — which would be the first Apple verification anywhere server-side. Corrects this author's own first framing: tier 3 is a base64 comparison of two **unverified** keys on both platforms, so option 1 concedes less than claimed |
+| [2026-09-13-al.md](./locality-plan/2026-09-13-al.md) | The iOS peripheral's first live runs (77 / 63 / 72 ms App Attest assertions, both legs confirmed from `main`), and what it took: a stacked mediator pickup loop and a native startup NPE on a slow Android, the iOS pre-flight sheet, one OS prompt per exchange (the model change), the noble scan's duplicates, and the witness-share's discovery wait. |
+| [2026-09-14-al.md](./locality-plan/2026-09-14-al.md) | The simulator suite on `main` after the device runs: a fresh wallet whose first mediation provisioning is interrupted could never initialize again (fixed in the credo patch, keyring-wallet #50, reproduced and verified on the emulator), both simulator suites green, and the dispositions of the day's remaining follow-ups (§10.4). |
 
 ---
 
@@ -892,11 +894,16 @@ line in the existing progress overlay.
 | **Afterwards** (contact detail / VWC view) | The witness record renders the tier as a plain badge with exactly three user-facing states: **Confirmed in person** (method shown on tap: BLE / kiosk), **Not confirmed** (with the reason: not offered / declined / interrupted), or nothing at all when the event ran with locality off. | `WitnessCredentialHandler` renders from the typed assertion — the three states of §7.1 mapped one-to-one, never collapsed into a boolean. |
 | **Gated event, refused entry** | If the witness policy is `required` and the ceremony proceeds anyway without locality, the refusal arrives as a task error — the wallet shows it as an event rule, not a technical fault: *"⟨Event⟩ requires in-person confirmation for exchanges here."* | The framework's `malformedRequest`-on-missing-namespace path (§8.2), translated to human language once, in one place. |
 
-**Two boundaries, stated so they hold:** the ceremony window never blocks on
+**Three boundaries, stated so they hold:** the ceremony window never blocks on
 a human (no tap, no prompt, no modal inside it — if anything is missing, the
-exchange degrades per §8.3 and the evidence records why); and the Bluetooth
+exchange degrades per §8.3 and the evidence records why); the Bluetooth
 permission dialog appears exactly once per install, at witness-connect,
-never later. Visual design is deliberately not specified here — this section
+never later (on both platforms since 2026-09-13); and the OS authentication
+prompt is **one per exchange** — the locality signature rides the 300 s
+window the VRC signature's prompt opens (Android: the hardware key's own
+auth window; iOS: the second policy gate honours the first), so evidence
+attests user presence within that window rather than per signature
+(decision and trade-off: 2026-09-13-al; `HARDWARE_ATTESTATION_FLOW.md`). Visual design is deliberately not specified here — this section
 fixes *when* and *what*, not *how it looks*.
 
 ---
@@ -1161,7 +1168,11 @@ Android/iOS tooling asymmetry in this environment.**
    (mounted at root beside `RelationshipProposalModal`), shown at most once
    per install — a new `hasSeenLocalityPreflight` preference, one-way once
    set, sibling to `useLocalityConfirmation`'s own store/reducer pattern —
-   Android only, only while `useLocalityConfirmation` is on. It merges items 8
+   on both platforms, only while `useLocalityConfirmation` is on (the
+   Android-only gate came off 2026-09-13 once the iOS peripheral existed —
+   on iOS the sheet's Allow is what raises CoreBluetooth's one-time system
+   prompt, and left to the peripheral's first start that prompt landed
+   mid-exchange and cost the leg; see the 2026-09-13-al companion). It merges items 8
    and 11's remaining sheet into one (see item 11's own entry for why: §8.4's
    own "only new prompt surface" language settles this as one sheet, not two).
    `WitnessConnectionProvider` schedules it from `handleWitnessAnnouncement`
@@ -1176,8 +1187,8 @@ Android/iOS tooling asymmetry in this environment.**
    through the same dispatch action Settings uses, which
    `isLocalityConfirmationPreferred()` already reads. Allowing requests the
    two Android 31+ permissions the native module's manifest actually declares
-   (`BLUETOOTH_ADVERTISE`, `BLUETOOTH_SCAN`, via `react-native-permissions`)
-   regardless of the OS grant outcome — a denial surfaces later as
+   (`BLUETOOTH_ADVERTISE`, `BLUETOOTH_SCAN`, via `react-native-permissions`) —
+   on iOS the single `BLUETOOTH` authorization — regardless of the OS grant outcome — a denial surfaces later as
    `windowLost`, not as a second prompt. **Known gap, stated rather than
    papered over:** pre-API-31 `ACCESS_FINE_LOCATION` is not requested — the
    manifest doesn't declare it at all (item 9's own write-up), so requesting
@@ -1205,8 +1216,15 @@ Android/iOS tooling asymmetry in this environment.**
    against witness-server's copy (`__tests__/deviceLocality.test.ts`, 5
    cases); `AndroidBleDeviceLocalityProvider` (in `core`) imports the real
    `@bifold/react-native-locality-peripheral` package and is unit-tested
-   against a mocked bridge (4 cases). iOS has no native implementation
-   (deferred outright — no Xcode available in this environment).
+   against a mocked bridge (4 cases). **iOS: proven live 2026-09-13** —
+   `react-native-locality-peripheral/ios` (CoreBluetooth peripheral, App
+   Attest assertion as the binding signature per the 2026-09-12-al
+   companion) ran against the macOS witness (CoreBluetooth/noble sensor,
+   keyring-bifold #49) on a physical iPhone: matched within 1 s of
+   advertising, `signingElapsedMs` = 77 / 63 / 72 across three runs — the
+   assertion sits well inside the witness's 400 ms RTT bound. Two witness-side
+   fixes were needed to get there (duplicates on in the noble scan; the
+   witness-share waiting for the peer's discovery answer) — 2026-09-13-al.
 
    Getting from "compiles" to "verified" surfaced three real bugs along the
    way, each fixed and now covered by a permanent test using the actual
@@ -1355,11 +1373,13 @@ Android/iOS tooling asymmetry in this environment.**
     confirmed" once it processes the witness's response — distinct from the
     existing "radio phase produced a transcript" line, which only reports
     the device's own half). Fails loudly on a "not confirmed" line, not just
-    on a missing one. Android-only for two independent reasons: item 9 has
-    no iOS peripheral, AND the witness's own BLE sensor (`node-ble`/BlueZ)
-    only runs on Linux — this is the one witnessed-exchange variant where the
-    machine running the test needs its own real Bluetooth adapter, not just
-    the phones. The first live run found the witness-connect sheet had no
+    on a missing one. The Android-only variant is the BlueZ/Linux path; since
+    2026-09-13 there is also `yarn e2e:vrc:witnessed:locality:devices` —
+    Android phone + iPhone against a macOS-hosted witness (CoreBluetooth/noble,
+    keyring-bifold #49), policy `offered`, each side's outcome reported — which
+    passed from `main` with both legs confirmed (2026-09-13-al). Either way
+    this is the one witnessed-exchange variant where the machine running the
+    test needs its own real Bluetooth adapter, not just the phones. The first live run found the witness-connect sheet had no
     operator cue (item 8's dated companion, 2026-09-01) — fixed with a loud
     banner before either phone connects to the witness, same treatment as
     the existing biometric banner. Second attempt passed clean.
@@ -1399,6 +1419,32 @@ Android/iOS tooling asymmetry in this environment.**
   withholding expectation (§9.1), and it showed that `taskDigestMultibase` is
   **not** in the merged credential schema yet (§3) — a fact the plan would
   otherwise have asserted from memory.
+
+- **Follow-ups from the first Android + iPhone device runs (2026-09-13/14)** —
+  reasoning in [`locality-plan/2026-09-13-al.md`](./locality-plan/2026-09-13-al.md)
+  and [`2026-09-14-al.md`](./locality-plan/2026-09-14-al.md):
+  - **Witness-share re-trigger.** `sendWitnessShareForExchange` runs once, from
+    "witness session complete", and now waits up to 2 min for the peer's
+    discovery answer (keyring-bifold #53). The robust shape: the
+    discovery-answer consumer re-triggers any share still owed for that
+    connection, so no wait is involved.
+  - **Existing Android installs keep per-operation keys** — and two OS prompts
+    per exchange — until the hardware key is re-created (keyring-bifold #51
+    only changes new enrolments). Decide: re-create on the next
+    hardware-attestation toggle, or leave.
+  - **A `required`-policy Android + iPhone runner.** Only the two-Android
+    variant asserts confirmation today; `locality:devices` reports.
+  - **Harness gaps.** A release build cannot be wallet A (the QR's
+    `InvitationUrl` text is `__DEV__`-only — gate it on an E2E flag instead);
+    the paste retry re-submits an invitation already stored ("out of band
+    record … already received") and should ask for a fresh one.
+  - **Mediator poll interval on low-end devices** — parked 2026-09-14 (demo
+    apps only). 1 s PickUpV2 is most of a Galaxy A03s's JS thread (median
+    inbound lag 0.9 s, p90 9 s); options are a longer interval on low-end
+    devices, skip-while-busy, or live mode once the mediator requeues unacked
+    pushes.
+  - **BlueZ/Linux witness path** — not re-run with the 09-13 changes; Brendan
+    runs that path on his machine.
 
 ---
 
