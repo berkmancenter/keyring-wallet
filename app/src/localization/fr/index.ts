@@ -192,6 +192,7 @@ const translation = {
     "EnableProxy": "Enable proxy (FR)",
     "EnableAppToAppPersonFlow": "App-to-app Person flow (FR)",
     "EnableTspCarriage": "Enable TSP envelope carriage (FR)",
+    "EnableDidCommV2": "Activer DIDComm v2 (expérimental)",
   },
   "Tips": {
     "Header": "Conseils",

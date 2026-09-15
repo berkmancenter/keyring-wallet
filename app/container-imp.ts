@@ -331,7 +331,7 @@ export class AppContainer implements Container {
       let tours = initialState.tours
       let onboarding = initialState.onboarding
       let personCredOfferDissmissed = initialState.dismissPersonCredentialOffer
-      let { environment, remoteDebugging, enableProxy, enableAppToAppPersonFlow, enableTspCarriage } =
+      let { environment, remoteDebugging, enableProxy, enableAppToAppPersonFlow, enableTspCarriage, enableDidCommV2 } =
         initialState.developer
       let witness = initialState.witness
 
@@ -354,6 +354,7 @@ export class AppContainer implements Container {
         loadState<boolean>(BCLocalStorageKeys.EnableProxy, (val) => (enableProxy = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableAppToAppPersonFlow, (val) => (enableAppToAppPersonFlow = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableTspCarriage, (val) => (enableTspCarriage = val)),
+        loadState<boolean>(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -377,6 +378,7 @@ export class AppContainer implements Container {
           enableProxy,
           enableAppToAppPersonFlow,
           enableTspCarriage,
+          enableDidCommV2,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState

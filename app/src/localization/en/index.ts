@@ -195,6 +195,7 @@ const translation = {
     "EnableProxy": "Enable proxy",
     "EnableAppToAppPersonFlow": "App-to-app Person flow",
     "EnableTspCarriage": "Enable TSP envelope carriage",
+    "EnableDidCommV2": "Enable DIDComm v2 (experimental)",
     "SwitchMode": "Switch mode",
     "SwitchTheme": "Switch theme",
   },
