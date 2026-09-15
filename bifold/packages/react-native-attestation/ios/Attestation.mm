@@ -789,6 +789,8 @@ RCT_EXPORT_METHOD(attestHardwareSigningKey:(NSString *)challenge
     
     if (keyId == nil) {
         NSLog(@"[VRC:iOS]   Generating new App Attest key...");
+        // A cached public key / chain here belongs to a key that no longer exists.
+        clearAppAttestPublicKeyCache();
         
         dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
         __block NSString *generatedKeyId = nil;
@@ -872,6 +874,7 @@ RCT_EXPORT_METHOD(attestHardwareSigningKey:(NSString *)challenge
                 
                 if (error.code == 2) {
                     clearStoredKeyIfExists(keychainId);
+                    clearAppAttestPublicKeyCache();
                 }
                 
                 NSLog(@"[VRC:iOS] ✗ Attestation failed: %@", error);
@@ -909,6 +912,40 @@ RCT_EXPORT_METHOD(attestHardwareSigningKey:(NSString *)challenge
     };
     
     attemptAttestation();
+}
+
+/**
+ * Return the certificate chain cached for the current App Attest key without
+ * contacting Apple and without touching the key.
+ *
+ * Evidence is assembled after a signature exists, and at that point the key
+ * that signed must survive: attestHardwareSigningKey clears and regenerates
+ * the key on some errors, which leaves the signature pointing at a key whose
+ * chain is gone. Callers compare `publicKey` with the key that signed.
+ */
+RCT_EXPORT_METHOD(getCachedHardwareKeyAttestation:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject)
+{
+    NSString *keyId = stringFromKeychainWithIdentifier(keychainIdentifier2());
+    NSData *cachedPubKey = dataFromKeychainWithIdentifier(keychainIdentifierAppAttestPublicKey());
+    NSArray<NSString *> *cachedChain = loadCertChainFromKeychain();
+    if (keyId.length == 0 || cachedPubKey.length == 0 || cachedChain.count == 0) {
+        NSLog(@"[VRC:iOS] ℹ No cached attestation [key=%@, pubkey=%@, chain=%lu]",
+              keyId.length > 0 ? @"YES" : @"NO", cachedPubKey.length > 0 ? @"YES" : @"NO",
+              (unsigned long)cachedChain.count);
+        resolve(@{ @"success": @NO, @"certificateChain": @[], @"publicKey": @"" });
+        return;
+    }
+    NSLog(@"[VRC:iOS] ✓ Cached attestation [%lu certs]", (unsigned long)cachedChain.count);
+    resolve(@{
+        @"success": @YES,
+        @"format": @"apple-appattest-v1",
+        @"certificateChain": cachedChain,
+        @"attestationObject": @"",
+        @"publicKey": [cachedPubKey base64EncodedStringWithOptions:0],
+        @"keyId": keyId,
+        @"alreadyAttested": @YES
+    });
 }
 
 RCT_EXPORT_METHOD(isHardwareAttestationAvailable:(RCTPromiseResolveBlock)resolve

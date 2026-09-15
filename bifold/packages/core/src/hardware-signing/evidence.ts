@@ -19,6 +19,7 @@
  */
 
 import {
+  getCachedHardwareKeyAttestation,
   getHardwareKeyAttestation,
   isHardwareAttestationAvailable,
   type HardwareKeyAttestationResult,
@@ -146,8 +147,9 @@ export class HardwareEvidenceBuilder {
     const signature = signingResult.signature
     logger.info(`${LOG_PREFIX} ▶ Building evidence [${signature.platform}/${signature.keyStorage}]`)
 
-    // Get attestation certificate chain (cached or fresh)
-    const attestationResult = await this.getOrFetchAttestation(signature.publicKey)
+    // Get attestation certificate chain (cached or fresh). The signature already
+    // exists, so this must neither replace the key nor use another key's chain.
+    const attestationResult = await this.getOrFetchAttestation(signature.publicKey, { afterSignature: true })
     const hasChain = attestationResult.certificateChain.length > 0
 
     if (hasChain) {
@@ -185,11 +187,23 @@ export class HardwareEvidenceBuilder {
   /**
    * Get attestation from cache or fetch from Apple/Google.
    * Retries up to 3 times with exponential backoff.
+   *
+   * With `afterSignature`, the chain the platform already holds for the current
+   * key is tried before any fetch: the key that signed is known to be valid,
+   * and an iOS fetch can replace that key (App Attest errors clear it), which
+   * would orphan the signature. A chain is only returned for `publicKey` when
+   * the attested key is that key — a rotated key's chain is cached under its
+   * own public key instead, ready for the next signing.
    */
-  private async getOrFetchAttestation(publicKey: string): Promise<{
+  private async getOrFetchAttestation(
+    publicKey: string,
+    options: { afterSignature?: boolean } = {}
+  ): Promise<{
     success: boolean
     certificateChain: string[]
     source: 'cached' | 'fetched' | 'none'
+    /** The key the platform attested, when it differs from `publicKey`. */
+    rotatedPublicKey?: string
     error?: string
   }> {
     try {
@@ -197,6 +211,31 @@ export class HardwareEvidenceBuilder {
       const cached = await this.cache.find(publicKey)
       if (cached) {
         return { success: true, certificateChain: cached.certificateChain, source: 'cached' }
+      }
+
+      if (options.afterSignature) {
+        let held: HardwareKeyAttestationResult | null = null
+        try {
+          held = await getCachedHardwareKeyAttestation()
+        } catch {
+          // A native module without the cached read falls through to a fetch.
+        }
+        if (held && held.certificateChain.length > 0) {
+          if (held.publicKey && held.publicKey !== publicKey) {
+            // The key was replaced after it signed; no chain can vouch for this signature.
+            this.logger.warn(`${LOG_PREFIX} Held attestation is for a different key than the one that signed`)
+            await this.saveAttestation(held.publicKey, held)
+            return {
+              success: false,
+              certificateChain: [],
+              source: 'none',
+              rotatedPublicKey: held.publicKey,
+              error: 'Signing key no longer matches the attested key',
+            }
+          }
+          await this.saveAttestation(publicKey, held)
+          return { success: true, certificateChain: held.certificateChain, source: 'cached' }
+        }
       }
 
       // Check if attestation is available
@@ -232,19 +271,21 @@ export class HardwareEvidenceBuilder {
         return { success: false, certificateChain: [], source: 'none', error: 'Failed to fetch attestation' }
       }
 
-      // Cache attestation (expires in 72 hours)
-      const expiresAt = new Date()
-      expiresAt.setHours(expiresAt.getHours() + 72)
+      if (attestation.publicKey && attestation.publicKey !== publicKey) {
+        // The fetch attested a different key (iOS regenerated it). Cache the chain
+        // under the key it belongs to; it must never be paired with `publicKey`.
+        this.logger.warn(`${LOG_PREFIX} Attestation was issued for a different key than requested (key replaced)`)
+        await this.saveAttestation(attestation.publicKey, attestation)
+        return {
+          success: false,
+          certificateChain: [],
+          source: 'none',
+          rotatedPublicKey: attestation.publicKey,
+          error: 'Attested key differs from the requested key',
+        }
+      }
 
-      await this.cache.save({
-        publicKey,
-        certificateChain: attestation.certificateChain,
-        format: attestation.format,
-        platform: attestation.platform,
-        securityLevel: attestation.securityLevel,
-        expiresAt: expiresAt.toISOString(),
-        rawAttestationObject: attestation.rawAttestationObject,
-      })
+      await this.saveAttestation(publicKey, attestation)
 
       return { success: true, certificateChain: attestation.certificateChain, source: 'fetched' }
     } catch (error) {
@@ -255,6 +296,22 @@ export class HardwareEvidenceBuilder {
         error: error instanceof Error ? error.message : String(error),
       }
     }
+  }
+
+  /** Cache an attestation under the public key it certifies (expires in 72 hours). */
+  private async saveAttestation(publicKey: string, attestation: HardwareKeyAttestationResult): Promise<void> {
+    const expiresAt = new Date()
+    expiresAt.setHours(expiresAt.getHours() + 72)
+
+    await this.cache.save({
+      publicKey,
+      certificateChain: attestation.certificateChain,
+      format: attestation.format,
+      platform: attestation.platform,
+      securityLevel: attestation.securityLevel,
+      expiresAt: expiresAt.toISOString(),
+      rawAttestationObject: attestation.rawAttestationObject,
+    })
   }
 
   /** Build the W3C evidence block structure */
@@ -318,12 +375,20 @@ export class HardwareEvidenceBuilder {
     return (await this.cache.find(publicKey)) !== null
   }
 
-  /** Pre-fetch and cache attestation (call during setup when network is available) */
+  /**
+   * Pre-fetch and cache attestation (call during setup when network is available).
+   *
+   * Succeeds when the current key ends up with a cached chain — including when
+   * the platform replaced the key during the fetch, in which case the chain is
+   * cached under the replacement key (the one the next signature will use).
+   */
   public async prefetchAttestation(publicKey: string): Promise<boolean> {
     this.logger.info(`${LOG_PREFIX} Prefetching attestation...`)
     const result = await this.getOrFetchAttestation(publicKey)
-    const success = result.success && result.certificateChain.length > 0
-    this.logger.info(`${LOG_PREFIX} Prefetch: ${success ? 'success' : 'failed'}`)
+    const success = (result.success && result.certificateChain.length > 0) || Boolean(result.rotatedPublicKey)
+    this.logger.info(
+      `${LOG_PREFIX} Prefetch: ${success ? 'success' : 'failed'}${result.rotatedPublicKey ? ' (key replaced)' : ''}`
+    )
     return success
   }
 }

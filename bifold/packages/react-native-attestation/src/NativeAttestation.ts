@@ -90,6 +90,8 @@ export interface Spec extends TurboModule {
     challenge: string
   ): Promise<NativeHardwareKeyAttestationResult>; // iOS
   getKeyAttestation(): Promise<NativeHardwareKeyAttestationResult>; // Android
+  /** Chain already held for the current key; never contacts Apple/Google or changes the key. */
+  getCachedHardwareKeyAttestation(): Promise<NativeHardwareKeyAttestationResult>;
 
   // Cross-platform: Native hardware evidence verification
   verifyHardwareEvidence(

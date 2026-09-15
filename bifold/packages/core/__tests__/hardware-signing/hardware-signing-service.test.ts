@@ -11,6 +11,7 @@ const mockNativeSign = jest.fn()
 const mockNativeGetKeyInfo = jest.fn()
 const mockNativeDeleteKey = jest.fn()
 const mockGetHardwareKeyAttestation = jest.fn()
+const mockGetCachedHardwareKeyAttestation = jest.fn()
 const mockIsHardwareAttestationAvailable = jest.fn()
 const mockVerifyHardwareEvidence = jest.fn()
 
@@ -22,6 +23,7 @@ jest.mock('@bifold/react-native-attestation', () => ({
   getHardwareKeyInfo: (...args: unknown[]) => mockNativeGetKeyInfo(...args),
   deleteHardwareSigningKey: (...args: unknown[]) => mockNativeDeleteKey(...args),
   getHardwareKeyAttestation: (...args: unknown[]) => mockGetHardwareKeyAttestation(...args),
+  getCachedHardwareKeyAttestation: (...args: unknown[]) => mockGetCachedHardwareKeyAttestation(...args),
   isHardwareAttestationAvailable: (...args: unknown[]) => mockIsHardwareAttestationAvailable(...args),
   verifyHardwareEvidence: (...args: unknown[]) => mockVerifyHardwareEvidence(...args),
 }))
@@ -77,6 +79,7 @@ function givenAvailableAttestation() {
 describe('createHardwareSigningService', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockGetCachedHardwareKeyAttestation.mockResolvedValue(null)
   })
 
   describe('isAvailable', () => {
@@ -237,6 +240,94 @@ describe('createHardwareSigningService', () => {
           expiresAt: expect.any(String),
         })
       )
+    })
+
+    it('uses the chain the device holds for the signing key without fetching', async () => {
+      givenAnExistingKey()
+      givenASuccessfulSignature()
+      givenAvailableAttestation()
+      mockGetCachedHardwareKeyAttestation.mockResolvedValue({
+        success: true,
+        certificateChain: CERT_CHAIN,
+        publicKey: PUBLIC_KEY_B64,
+        format: 'apple-appattest-v1',
+        platform: 'ios',
+        securityLevel: 'SecureEnclave',
+      })
+
+      const cache: AttestationCache = { find: jest.fn().mockResolvedValue(null), save: jest.fn() }
+      const service = createHardwareSigningService({ logger: silentLogger, attestationCache: cache })
+      const outcome = await service.signPayload('nonce:42')
+
+      expect(mockGetHardwareKeyAttestation).not.toHaveBeenCalled()
+      expect(outcome.attestation?.evidence.attestation.certificateChain).toEqual(CERT_CHAIN)
+      expect(cache.save).toHaveBeenCalledWith(expect.objectContaining({ publicKey: PUBLIC_KEY_B64 }))
+    })
+
+    // Device run 2026-09-15 (iPad): the prefetch replaced the App Attest key,
+    // and after signing a fetch replaced it again, so the evidence paired the
+    // signing key with another key's chain and peers rejected it.
+    it('never pairs a signature with a chain attested for a different key', async () => {
+      givenAnExistingKey()
+      givenASuccessfulSignature()
+      mockIsHardwareAttestationAvailable.mockResolvedValue(true)
+      mockGetHardwareKeyAttestation.mockResolvedValue({
+        success: true,
+        certificateChain: ['-----BEGIN CERTIFICATE-----\nother\n-----END CERTIFICATE-----'],
+        publicKey: 'b3RoZXJLZXk=',
+        format: 'apple-appattest-v1',
+        platform: 'ios',
+        securityLevel: 'SecureEnclave',
+      })
+
+      const cache: AttestationCache = { find: jest.fn().mockResolvedValue(null), save: jest.fn() }
+      const service = createHardwareSigningService({ logger: silentLogger, attestationCache: cache })
+      const outcome = await service.signPayload('nonce:42')
+
+      expect(outcome.success).toBe(true)
+      expect(outcome.hasAttestation).toBe(false)
+      expect(cache.save).not.toHaveBeenCalledWith(expect.objectContaining({ publicKey: PUBLIC_KEY_B64 }))
+      expect(cache.save).toHaveBeenCalledWith(expect.objectContaining({ publicKey: 'b3RoZXJLZXk=' }))
+    })
+
+    it('does not fetch after signing when the held chain belongs to a replaced key', async () => {
+      givenAnExistingKey()
+      givenASuccessfulSignature()
+      givenAvailableAttestation()
+      mockGetCachedHardwareKeyAttestation.mockResolvedValue({
+        success: true,
+        certificateChain: CERT_CHAIN,
+        publicKey: 'cmVwbGFjZWQ=',
+        format: 'apple-appattest-v1',
+        platform: 'ios',
+        securityLevel: 'SecureEnclave',
+      })
+
+      const service = createHardwareSigningService({ logger: silentLogger })
+      const outcome = await service.signPayload('nonce:42')
+
+      expect(mockGetHardwareKeyAttestation).not.toHaveBeenCalled()
+      expect(outcome.hasAttestation).toBe(false)
+    })
+
+    it('caches a prefetched chain under the replacement key when the platform replaced the key', async () => {
+      givenAnExistingKey()
+      mockIsHardwareAttestationAvailable.mockResolvedValue(true)
+      mockGetHardwareKeyAttestation.mockResolvedValue({
+        success: true,
+        certificateChain: CERT_CHAIN,
+        publicKey: 'bmV3S2V5',
+        format: 'apple-appattest-v1',
+        platform: 'ios',
+        securityLevel: 'SecureEnclave',
+      })
+
+      const cache: AttestationCache = { find: jest.fn().mockResolvedValue(null), save: jest.fn() }
+      const service = createHardwareSigningService({ logger: silentLogger, attestationCache: cache })
+      await service.prepare()
+
+      expect(cache.save).toHaveBeenCalledTimes(1)
+      expect(cache.save).toHaveBeenCalledWith(expect.objectContaining({ publicKey: 'bmV3S2V5' }))
     })
 
     it('honours the expiry on the default in-memory cache', async () => {

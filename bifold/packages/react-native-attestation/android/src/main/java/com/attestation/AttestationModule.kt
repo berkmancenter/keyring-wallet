@@ -673,6 +673,12 @@ class AttestationModule : AttestationSpec {
   // Hardware Key Attestation with Certificate Chain
   // =============================================================================
 
+  /** The KeyStore chain is local and read-only, so the cached read is the regular one. */
+  @ReactMethod
+  override fun getCachedHardwareKeyAttestation(promise: Promise) {
+    getKeyAttestation(promise)
+  }
+
   @ReactMethod
   override fun getKeyAttestation(promise: Promise) {
     Log.i(TAG, "▶ Hardware key attestation")
