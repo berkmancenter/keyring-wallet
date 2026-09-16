@@ -103,8 +103,17 @@ signer Keyring ships.
     `<stack>/mediator`. Measured as *"Couldn't ready database functions_file
     (./conf/atm-functions.lua)"* on a restart from elsewhere.
 
-Findings 10 and 11 came out of driving this wire from the app rather than from
-Node — see `e2e/run-agent-connect.js`.
+12. **A second application from the same member DID is refused, not answered.**
+    While a request is open — and a `requestMore` request stays open, since
+    finding 8 says nothing withdraws it — the VTC answers a `submit/0.2` with a
+    `trust-task-error` (`taskFailed`, *"…already exists"*) rather than a
+    verdict. Upstream's own `vtc-service/tests/join_didcomm.rs` asserts exactly
+    this, so it is intended; it matters to a wallet because the applicant's only
+    way forward is a new member DID, and the person is left holding an
+    application they cannot advance or withdraw.
+
+Findings 10, 11 and 12 came out of driving this wire from the app rather than
+from Node — see `e2e/run-agent-connect.js` and `e2e/run-my-agent.js`.
 
 ## Running it
 

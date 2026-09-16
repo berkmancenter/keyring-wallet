@@ -39,6 +39,11 @@ stop_stack() {
     # Kill by PID only — never by name pattern.
     [ -n "$pid" ] && kill "$pid" && echo "  stopped :$port (pid $pid)"
   done
+  if [ -f "$STACK_DIR/ngrok.pid" ]; then
+    # Kill by PID only — never by name pattern.
+    kill "$(cat "$STACK_DIR/ngrok.pid")" 2>/dev/null && echo "  stopped ngrok"
+    rm -f "$STACK_DIR/ngrok.pid"
+  fi
   pkill -f "cloudflared tunnel --url http://localhost:81" 2>/dev/null || true
   pkill -f "cloudflared tunnel --url http://localhost:8200" 2>/dev/null || true
   pkill -f "cloudflared tunnel --url http://localhost:8534" 2>/dev/null || true
@@ -71,12 +76,30 @@ open_tunnel() { # name port -> echoes hostname
 }
 
 log "opening tunnels"
-ALICE_HOST=$(open_tunnel alice 8110)
-COMMUNITY_HOST=$(open_tunnel community 8111)
-BOB_HOST=$(open_tunnel bob 8112)
-VTC_HOST=$(open_tunnel vtc 8200)
-DIDS_HOST=$(open_tunnel dids 8534)
-MED_HOST=$(open_tunnel mediator 7037)
+# Reserved ngrok domains if there is a config for them, quick tunnels otherwise.
+# The difference is not convenience: a did:webvh is bound to the host it was
+# minted behind, so a per-run hostname re-mints every DID in the stack and
+# forces `app/.env` re-baked and both apps rebuilt. Reserved domains survive a
+# restart, which is what makes this a fixture you can come back to.
+if [ -f "$STACK_DIR/ngrok.yml" ]; then
+  nohup ngrok start --all --config "$HOME/.config/ngrok/ngrok.yml" --config "$STACK_DIR/ngrok.yml" \
+    > "$STACK_DIR/logs/ngrok.log" 2>&1 &
+  echo $! > "$STACK_DIR/ngrok.pid"
+  sleep 8
+  ALICE_HOST=keyring-vti-alice.ngrok.app
+  COMMUNITY_HOST=keyring-vti-community.ngrok.app
+  BOB_HOST=keyring-vti-bob.ngrok.app
+  VTC_HOST=keyring-vti-vtc.ngrok.app
+  DIDS_HOST=keyring-vti-dids.ngrok.app
+  MED_HOST=keyring-vti-mediator.ngrok.app
+else
+  ALICE_HOST=$(open_tunnel alice 8110)
+  COMMUNITY_HOST=$(open_tunnel community 8111)
+  BOB_HOST=$(open_tunnel bob 8112)
+  VTC_HOST=$(open_tunnel vtc 8200)
+  DIDS_HOST=$(open_tunnel dids 8534)
+  MED_HOST=$(open_tunnel mediator 7037)
+fi
 echo "  alice=$ALICE_HOST community=$COMMUNITY_HOST bob=$BOB_HOST"
 echo "  vtc=$VTC_HOST dids=$DIDS_HOST mediator=$MED_HOST"
 
