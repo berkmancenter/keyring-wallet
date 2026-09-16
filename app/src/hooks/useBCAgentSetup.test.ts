@@ -36,21 +36,21 @@ describe('provisionV2MediationIfConfigured', () => {
   })
 
   it('does nothing when the developer flag is off', async () => {
-    ;(Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
+    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
     await provisionV2MediationIfConfigured(fakeAgent(), false)
     expect(mockProvisionV2Mediation).not.toHaveBeenCalled()
     expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
   })
 
   it('does nothing when MEDIATOR_V2_URL is unset', async () => {
-    ;(Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = undefined
+    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = undefined
     await provisionV2MediationIfConfigured(fakeAgent(), true)
     expect(mockProvisionV2Mediation).not.toHaveBeenCalled()
     expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
   })
 
   it('starts pickup once when newly provisioning a v2 mediation record', async () => {
-    ;(Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
+    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
     mockFindV2MediationRecord.mockResolvedValueOnce(undefined) // none yet
     mockProvisionV2Mediation.mockResolvedValueOnce({ id: 'm-v2' })
 
@@ -61,7 +61,7 @@ describe('provisionV2MediationIfConfigured', () => {
   })
 
   it('does NOT start a second pickup loop when the v2 record already existed (the bug)', async () => {
-    ;(Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
+    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
     mockFindV2MediationRecord.mockResolvedValueOnce({ id: 'm-v2' }) // already provisioned on a prior launch
     mockProvisionV2Mediation.mockResolvedValueOnce({ id: 'm-v2' }) // idempotent no-op, per provisionV2Mediation's own contract
 
@@ -74,7 +74,7 @@ describe('provisionV2MediationIfConfigured', () => {
   })
 
   it('logs and swallows a provisioning failure without starting pickup', async () => {
-    ;(Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
+    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
     mockFindV2MediationRecord.mockResolvedValueOnce(undefined)
     mockProvisionV2Mediation.mockRejectedValueOnce(new Error('mediator unreachable'))
 
