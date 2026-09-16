@@ -374,7 +374,25 @@ export class VtiMediatorSession {
     }
   }
 
+  /**
+   * An idle socket does not survive indefinitely: a tunnel, a proxy or a dozing
+   * phone closes it, and the mediator can still believe it is open — so the
+   * first symptom is a send failing rather than a close arriving. Reopening is
+   * cheap and keeps the same DID, so the community still sees one applicant.
+   */
+  private async ensureOpen(): Promise<void> {
+    if (this.socket?.readyState === 1) return
+    try {
+      this.socket?.close()
+    } catch {
+      /* already gone */
+    }
+    this.socket = undefined
+    await this.start()
+  }
+
   private async send(plaintext: DidCommV2PlaintextMessage): Promise<void> {
+    await this.ensureOpen()
     if (!this.socket || this.socket.readyState !== 1) {
       throw new Error(`${LOG_PREFIX} socket is not open`)
     }
