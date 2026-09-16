@@ -1,0 +1,72 @@
+# ref-20 — the vetting ceremony against a local VTI stack
+
+Backs `docs/plans/keyring-on-the-vta-farm/community_vetting_subtask.md` P1–P2:
+a six-service local stack built from upstream `main`, the community-admin setup
+of the vetting runbook (steps 01–04), and the applicant's wire (manifest →
+submit) that Keyring performs as Alice.
+
+## What ran
+
+Built from VTI `origin/main` **53a7cde4** — `vta-service` 0.28.0,
+`vtc-service` 0.11.58, `pnm-cli` 0.16.5, `cnm-cli` 0.15.2 — plus
+`affinidi-webvh-service` 0.8.3 (`cb8a6f4`) for DID hosting and
+`affinidi-tdk-rs`'s `affinidi-messaging-mediator` 0.25.0. Three VTAs (applicant,
+community, vetter), one VTC, one mediator, one DID host, each behind its own
+HTTPS tunnel because upstream refuses `did:webvh` on non-public hosts.
+
+| Proof | Result |
+|---|---|
+| `pnm health` against the community VTA | DID resolves, REST ok, token valid |
+| `cnm health` after the sealed-transfer bootstrap | **trust-ping → pong, 99 ms** |
+| Runbook 01 — register the statement type | `201`, `identity-vetting/0.1` |
+| Runbook 02 — publish the criterion | `201`, one vetter / inPerson\|video / `name.legal` / `P120D` |
+| Runbook 03 — the manifest an applicant reads | carries `vetting` + `requirementsDigest zQmXe6M8GUW…` |
+| Applicant `manifest/0.2` over DIDComm | `#response` with the criteria (`fixtures/manifest-0.2-response.log`) |
+| Applicant `submit/0.2` over DIDComm | **`requestMore`, needs `vetting:statements:1`**, signed `eddsa-jcs-2022` (`fixtures/submit-0.2-response.log`) |
+
+That last row is the contract Keyring is built against: the community enforces
+its vetting criterion, and says exactly what is missing.
+
+## The two scripts
+
+- **`vtc-admin.mjs`** — the community-admin REST surface: `/v1/auth/challenge`
+  → an `eddsa-jcs-2022`-signed `auth/authenticate/0.1` → bearer, then
+  endorsement-type registration, the accepts criterion, the manifest, and
+  vetter grants. Every route carries its per-route `Trust-Task` header.
+- **`join.mjs`** — the applicant: `connectVtaViaMediator` from
+  `@openvtc/vti-didcomm-js`, then `manifest/0.2`, `submit/0.2`, `status/0.1`.
+
+Both reuse `di-proof.mjs` from `ref-08`, which mirrors
+`@bifold/trust-tasks/src/documentProof.ts` — so the signer proven here is the
+signer Keyring ships.
+
+## Findings (see the subtask's §9)
+
+1. **`vta-service` 0.28.0 overflows its stack** handling
+   `vta/contexts/create/1.0`; `RUST_MIN_STACK=33554432` works around it.
+2. **`cnm --url` / `VTA_URL` are ignored by `vetting` subcommands** — the VTC's
+   log shows no request — and the error blames the VTC's version. The routes
+   exist: an anonymous `GET /v1/vetting/vetters` answers `401`, not `404`.
+3. **A VTC DID cannot be a `cnm` community**: its `VTCRest` service entry omits
+   `/v1`, which `vtc-client` requires, so `cnm` posts `/auth/challenge` → `405`.
+4. **A freshly provisioned VTC has an empty ACL** — its own `admin_did` cannot
+   authenticate until added with `vtc acl add` on the stopped daemon.
+5. **VTA and VTC disagree on the DIDComm body**: the VTA accepts a bare payload,
+   the VTC parses the body as a whole Trust Task document and otherwise answers
+   `malformedRequest: missing field 'id'`.
+6. **An ACL `member` role is not community membership** — `vetting/vetters`
+   refuses a grant with "is not a current member of this community", so a vetter
+   must be admitted through a join request first.
+7. **A community's advertised transports are fixed at mint** (`vtc setup`'s
+   `[messaging] transports`), so enabling DIDComm afterwards means re-provisioning.
+
+## Running it
+
+The stack lives outside the repo (`~/vti-stack`), since its DIDs are bound to
+per-run tunnel hostnames. `stack.env` there records every DID and URL.
+
+```sh
+node vtc-admin.mjs <vtcBase/v1> <vtcDid> <adminCredential.json> manifest
+node join.mjs <communityDid> <mediatorDid> manifest
+node join.mjs <communityDid> <mediatorDid> submit <requirementsDigest>
+```
