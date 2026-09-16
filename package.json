@@ -71,7 +71,9 @@
     "e2e:vrc:witnessed:locality:android-only": "cd e2e && npm run vrc-exchange:witnessed:locality:android-only",
     "e2e:vrc:witnessed:locality:devices": "cd e2e && npm run vrc-exchange:witnessed:locality:devices",
     "e2e:vrc:witnessed:tsp:android-only": "cd e2e && npm run vrc-exchange:witnessed:tsp:android-only",
-    "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator"
+    "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator",
+    "e2e:agent:connect": "cd e2e && npm run agent-connect",
+    "e2e:agent:connect:ios": "cd e2e && npm run agent-connect:ios"
   },
   "devDependencies": {
     "@commitlint/cli": "~19.8.1",

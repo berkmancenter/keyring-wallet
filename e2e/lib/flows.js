@@ -666,7 +666,7 @@ async function findRowEitherDirection(driver, testId) {
  * Settings → Developer screen (Auto-lock off on the way), whether developer
  * mode is already on or has to be tripped by tapping the Version footer.
  */
-async function openDeveloperScreen(driver) {
+export async function openDeveloperScreen(driver) {
   await dismissTourIfPresent(driver);
   await tapTestId(driver, "Settings", 15000);
   await setAutoLockNever(driver);
