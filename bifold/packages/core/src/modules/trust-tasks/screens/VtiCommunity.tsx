@@ -19,7 +19,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
-import { vtiAgent, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
+import { vtiAgent, VtiRefusal, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
 
 const VtiCommunity: React.FC = () => {
   const { t } = useTranslation()
@@ -31,6 +31,9 @@ const VtiCommunity: React.FC = () => {
   const [verdict, setVerdict] = useState<VtiVerdict>()
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string>()
+  // A refusal's framework code belongs behind Details, not in the sentence.
+  const [refusalCode, setRefusalCode] = useState<string>()
+  const [showDetails, setShowDetails] = useState(false)
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -51,7 +54,10 @@ const VtiCommunity: React.FC = () => {
         const result = await vtiAgent.fetchManifest(communityDid)
         if (!cancelled) setManifest(result)
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err))
+          if (err instanceof VtiRefusal) setRefusalCode(err.code)
+        }
       } finally {
         if (!cancelled) setBusy(false)
       }
@@ -70,6 +76,7 @@ const VtiCommunity: React.FC = () => {
       setVerdict(await vtiAgent.apply(communityDid, manifest))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      if (err instanceof VtiRefusal) setRefusalCode(err.code)
     } finally {
       setBusy(false)
     }
@@ -118,9 +125,25 @@ const VtiCommunity: React.FC = () => {
         ) : null}
 
         {error ? (
-          <Text style={styles.error} testID={testIdWithKey('CommunityError')}>
-            {error}
-          </Text>
+          <View style={styles.card}>
+            <Text style={styles.error} testID={testIdWithKey('CommunityError')}>
+              {error}
+            </Text>
+            {refusalCode ? (
+              <Pressable
+                accessibilityRole="button"
+                testID={testIdWithKey('CommunityRefusalDetails')}
+                onPress={() => setShowDetails((shown) => !shown)}
+              >
+                <Text style={{ ...TextTheme.normal, color: ColorPalette.brand.link }}>{t('MyAgent.Details')}</Text>
+              </Pressable>
+            ) : null}
+            {showDetails && refusalCode ? (
+              <Text style={styles.label} testID={testIdWithKey('CommunityRefusalCode')}>
+                {refusalCode}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
 
         {manifest && !verdict ? (

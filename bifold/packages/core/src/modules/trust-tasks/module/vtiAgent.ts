@@ -28,6 +28,30 @@ import {
 
 const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
 const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
+const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+
+/**
+ * A community refusing, in its own terms. `code` is the framework's — e.g.
+ * `taskFailed` for a business-rule conflict such as an application that is
+ * already open — and belongs behind a Details control rather than in the
+ * sentence a person reads.
+ */
+export class VtiRefusal extends Error {
+  constructor(
+    readonly code: string,
+    message: string
+  ) {
+    super(message)
+    this.name = 'VtiRefusal'
+  }
+}
+
+/** A refusal arrives as a document in its own right, not as a verdict. */
+const refusalOf = (plaintext: DidCommV2PlaintextMessage): VtiRefusal | undefined => {
+  if (!String(plaintext.type ?? '').startsWith(TASK_ERROR)) return undefined
+  const payload = (plaintext.body as { payload?: { code?: string; message?: string } } | undefined)?.payload
+  return new VtiRefusal(payload?.code ?? 'unknown', payload?.message ?? 'The community refused the request.')
+}
 
 /** How far the connection has got, in the words the Connecting screen uses. */
 export type VtiAgentStatus = 'disconnected' | 'resolving' | 'authenticating' | 'connected' | 'failed'
@@ -176,6 +200,8 @@ class VtiAgentController {
   async fetchManifest(communityDid: string): Promise<VtiManifest> {
     const answer = await this.ask(communityDid, MANIFEST, {})
     if (!answer) throw new Error('vtiAgent: the community did not answer')
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
     const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
     return {
       communityDid: payload?.communityDid,
@@ -201,6 +227,8 @@ class VtiAgentController {
       extensions: manifest.requirementsDigest ? { requirementsDigest: manifest.requirementsDigest } : {},
     })
     if (!answer) throw new Error('vtiAgent: the community did not answer')
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
     const payload = (
       answer.body as
         | { payload?: { requestId?: string; verdict?: { effect?: string; with?: { needs?: string[] } } } }
