@@ -3,7 +3,12 @@
 *Owned by [`../openvtc-integration-plan.md`](../openvtc-integration-plan.md)
 (§5.4 stage 3, §1.6 coexistence, §4.2 envelope selection). Reasoning and the
 evidence behind every position here:
-[`2026-09-13-al.md`](./2026-09-13-al.md). Sibling subtasks:
+[`2026-09-13-al.md`](./2026-09-13-al.md),
+[`2026-09-14-al.md`](./2026-09-14-al.md),
+[`2026-09-15-al.md`](./2026-09-15-al.md),
+[`2026-09-16-bam.md`](./2026-09-16-bam.md) (the `identityFromDid` /
+`checkV2ThreadCorrelation` / first-contact-identity fixes from the
+`feat/credo-0.7` code review). Sibling subtasks:
 [`trust_tasks_subtask.md`](./trust_tasks_subtask.md) (the documents this
 carries), [`pnm_cnm_subtask.md`](./pnm_cnm_subtask.md) (P1 stands up the VTA
 leg this plan's V3 replaces or adopts), [`vta-carriage_subtask.md`](./vta-carriage_subtask.md)
@@ -342,7 +347,7 @@ self-check pass, since they verify party membership themselves.
    time out only under machine load and pass in isolation), trust-tasks,
    credo-tsp-adapter 4/4 and witness-server 713 green — all on Node 20.19.2.
    What the hop actually required, for the record (reasoning in
-   [`2026-09-13-al.md`](./2026-09-13-al.md)):
+   [`2026-09-14-al.md`](./2026-09-14-al.md)):
    - none of the six patched fixes is upstream in 0.7.0; all three patches
      re-applied with `yarn patch` without a single rejected hunk;
    - **native libraries move with Credo**: `@credo-ts/anoncreds` 0.7 peers on
@@ -435,7 +440,7 @@ self-check pass, since they verify party membership themselves.
 
 **V2 status (2026-09-14, same worktree, uncommitted):** steps 1–5 are
 built and step 5's simulator run is **green** (two Android emulators, the
-local mediator in v2 mode — `2026-09-13-al.md`, "C14 simulator runs"); the
+local mediator in v2 mode — `2026-09-14-al.md`, "C14 simulator runs"); the
 witnessed variant of 5 is not built. What landed, and what it taught:
 
 - `@bifold/trust-tasks` gains `TrustTaskEnvelopeV2Message` (the binding-0.2
@@ -556,7 +561,7 @@ witnessed variant of 5 is not built. What landed, and what it taught:
   opts out of Credo 0.7's holder-binding rule at the three call sites.
 - Device runs are done (2026-09-15, iPhone 16 + iPad A16): v1, TSP over v2,
   and TSP over v2 with locality, all green with the badge assertions made
-  strict. See the V2T status below and `2026-09-13-al.md`, "Real devices"
+  strict. See the V2T status below and `2026-09-15-al.md`, "Real devices"
   and "The attestation bug the strict badge check found".
 - Still open in V2: from V1, B8's mixed-fleet check (a 0.7 wallet against a
   0.6.3 build over v1) and the gradle lockfile for the native bumps.
@@ -660,7 +665,7 @@ just signed, so the evidence carried a different key's certificate chain and
 every verifier rejected it. Evidence assembly now reuses the chain the
 device already holds for the signing key — no Apple call, no key mutation —
 and never pairs a chain with a public key it does not certify
-(`2026-09-13-al.md` has the log trace, the fix and its regression tests).
+(`2026-09-15-al.md` has the log trace, the fix and its regression tests).
 
 V2T is done on simulators and on devices. What it does not cover: the
 `TSPTransport` resolver of parent §4.2 (selection stays flag-driven), and
@@ -713,7 +718,7 @@ VTA side and depends on step 5's answer.
 | **T4** ✅ | Carriage: sender check over `theirDid` + `previousTheirDids`, receiver identity chosen by the envelope's receiver VID, delivery version in the log line, TSP flag honoured on v2 connections; the v2 message class only if T2 requires it; the witness gets the same changes | `TspCarriage.ts`, `ceremony.ts` `selectCarriage`, `WitnessTaskSessions.ts` | core, trust-tasks, credo-tsp-adapter and witness-server suites green; a selection test covers all four combinations of connection version × TSP flag |
 | **T5** ✅ | e2e: relationship exchange with both the DIDComm v2 and TSP developer settings on | `yarn e2e:vrc:didcomm-v2:tsp` (two Android emulators, local mediator in v2 mode) | Mediation 2.0 granted on both; `[TrustTasks:TspCarriage] envelope sent/received on v2 connection` on both; no `[TrustTasks:DidCommV2Carriage]` envelope markers for the exchange; both VRCs |
 | **T6** ✅ | e2e: the witnessed exchange, same settings, Android emulator + iOS simulator | `yarn e2e:vrc:witnessed:didcomm-v2:tsp` (tunnel mediator in v2 mode, witness on v1+v2) | VWC issued for both sessions; TSP-over-v2 markers on both platforms (iOS via its live log capture); Witnessed shields on both; on the same build, `yarn e2e:vrc:tsp` (v1) and `yarn e2e:vrc:witnessed:didcomm-v2` (plain v2, Android + iOS) still green |
-| **T7** ✅ | The same witnessed exchange on **physical** devices, badges asserted rather than logged | `yarn e2e:vrc:witnessed:ios-devices:didcomm-v2:tsp` and `…:tsp:locality` (iPhone 16 + iPad A16, tunnel mediator in v2 mode, witness on v1+v2) | Mediation 2.0 on both; TSP-over-v2 markers on both; **Secure Exchange + Verified** on both contacts, plus **In-Person** on the locality run; `yarn e2e:vrc:witnessed:ios-devices` (v1) green on the same build. Found and fixed the iOS App Attest evidence/key bug (`2026-09-13-al.md`) |
+| **T7** ✅ | The same witnessed exchange on **physical** devices, badges asserted rather than logged | `yarn e2e:vrc:witnessed:ios-devices:didcomm-v2:tsp` and `…:tsp:locality` (iPhone 16 + iPad A16, tunnel mediator in v2 mode, witness on v1+v2) | Mediation 2.0 on both; TSP-over-v2 markers on both; **Secure Exchange + Verified** on both contacts, plus **In-Person** on the locality run; `yarn e2e:vrc:witnessed:ios-devices` (v1) green on the same build. Found and fixed the iOS App Attest evidence/key bug (`2026-09-15-al.md`) |
 | **D15** | A5 passed, so: one Credo transport pair, productionised from ref-18's 150 lines — ATM login packed by Credo, one socket per DID, live pickup with the queue-id ack, the mediator's own Pickup 3.0 frames opened by the transport, reconnect and token refresh, and TSP frames (`-E`/`0xF8`) handed to `TspCarriage` without the double wrap | `vti-client` (parent §5.2) | ref-08's query reaches a local VTA from a Credo agent in one run; a TSP ping crosses the same socket; a dropped socket reconnects and re-enables live delivery |
 
 ## 7. Which mediator, per mode
