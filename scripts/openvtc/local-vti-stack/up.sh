@@ -129,7 +129,22 @@ echo "$MED_DID" > mediator/did.txt
 # /ws with 403 "Origin not permitted by CORS policy". Auth here is a bearer
 # subprotocol rather than an ambient cookie, so a wildcard is safe for a local
 # stack — a real deployment names the origins it serves instead.
-printf '\ncors_allow_origin = "*"\n' >> mediator/conf/mediator.toml
+# The key belongs to the config's [security] table — the generated file
+# documents it there, commented out. Put anywhere else (appended at the end,
+# or at the top level) TOML scopes it to a different table, the mediator
+# never sees it, and /ws goes on answering 403 with the setting apparently
+# in the file.
+python3 - "$STACK_DIR/mediator/conf/mediator.toml" <<'PYEOF'
+import sys
+path = sys.argv[1]
+lines = [l for l in open(path).read().splitlines() if not l.startswith("cors_allow_origin")]
+marker = next((i for i, l in enumerate(lines) if l.startswith("# cors_allow_origin")), None)
+if marker is None:
+    security = lines.index("[security]")
+    marker = security
+lines.insert(marker + 1, 'cors_allow_origin = "*"')
+open(path, "w").write("\n".join(lines) + "\n")
+PYEOF
 # `functions_file` in that config is relative, so the mediator only finds
 # ./conf/atm-functions.lua when it runs from its own directory.
 (cd "$STACK_DIR/mediator" && nohup "$MEDIATOR_BIN" -c "$STACK_DIR/mediator/conf/mediator.toml" > "$STACK_DIR/logs/mediator.log" 2>&1 &)

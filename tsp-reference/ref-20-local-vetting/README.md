@@ -101,7 +101,12 @@ signer Keyring ships.
 11. **The mediator resolves `functions_file` relative to its working
     directory**, not to its config file, so it only starts from
     `<stack>/mediator`. Measured as *"Couldn't ready database functions_file
-    (./conf/atm-functions.lua)"* on a restart from elsewhere.
+    (./conf/atm-functions.lua)"* on a restart from elsewhere. And
+    `cors_allow_origin` belongs to the config's `[security]` table, where the
+    generated file documents it: set anywhere else — appended at the end of the
+    file, or at the top level — TOML scopes it to another table, the mediator
+    never sees it, and `/ws` goes on refusing with the setting apparently in
+    place.
 
 12. **A second application from the same member DID is refused, not answered.**
     While a request is open — and a `requestMore` request stays open, since
