@@ -65,5 +65,6 @@ export {
   VtiMediatorOutboundTransport,
   resolveVtiMediator,
   vtiClientIdentityFromDid,
+  createVtiClientDid,
 } from './module/VtiMediatorTransport'
 export type { VtiMediatorEndpoints, VtiClientIdentity } from './module/VtiMediatorTransport'

@@ -29,7 +29,13 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import { getPublicJwkFromVerificationMethod, Kms } from '@credo-ts/core'
+import {
+  createPeerDidDocumentFromServices,
+  getPublicJwkFromVerificationMethod,
+  Kms,
+  PeerDidNumAlgo,
+  utils,
+} from '@credo-ts/core'
 import type { DidCommV2KeyAgreementJwk, DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didcomm'
 
@@ -39,11 +45,14 @@ const ATM_AUTHENTICATE = 'https://affinidi.com/atm/1.0/authenticate'
 const FORWARD = 'https://didcomm.org/routing/2.0/forward'
 const LIVE_DELIVERY_CHANGE = 'https://didcomm.org/messagepickup/3.0/live-delivery-change'
 const MESSAGES_RECEIVED = 'https://didcomm.org/messagepickup/3.0/messages-received'
+const PICKUP_STATUS = 'https://didcomm.org/messagepickup/3.0/status'
 const PLAIN = 'application/didcomm-plain+json'
 const WS_APP_SUBPROTOCOL = 'didcomm'
 
 const nowSec = () => Math.floor(Date.now() / 1000)
-const uuid = () => `urn:uuid:${globalThis.crypto.randomUUID()}`
+// Hermes has no `crypto.randomUUID` — react-native-get-random-values polyfills
+// `getRandomValues` and nothing else — so ids come from Credo's own helper.
+const uuid = () => `urn:uuid:${utils.uuid()}`
 
 /** What the mediator's DID document tells a client, resolved through Credo. */
 export interface VtiMediatorEndpoints {
@@ -113,6 +122,40 @@ export interface VtiClientIdentity {
   /** The DID's own key-agreement verification method id (the `skid` we sign with). */
   kid: string
   senderKey: Kms.PublicJwk<Kms.X25519PublicJwk>
+}
+
+/**
+ * Mint the DID this wallet presents to a VTA's mediator.
+ *
+ * Not an OOB invitation: that path demands Coordinate Mediation 2.0 routing
+ * through *our* mediator, which has nothing to do with this leg — here the ATM
+ * socket is the routing, because the mediator delivers to whichever DID logged
+ * in. So this builds the `did:peer:2` directly: one Ed25519 key in Askar, the
+ * matching X25519 keyAgreement derived by Credo, and the mediator's own
+ * endpoint as the service.
+ */
+export async function createVtiClientDid(agent: Agent, mediator: VtiMediatorEndpoints): Promise<string> {
+  const key = await agent.kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' } })
+  const publicJwk = Kms.PublicJwk.fromPublicJwk(key.publicJwk) as Kms.PublicJwk<Kms.Ed25519PublicJwk>
+  const { didDocument, keys } = createPeerDidDocumentFromServices(
+    [
+      {
+        id: 'vti',
+        serviceEndpoint: mediator.wsEndpoint,
+        recipientKeys: [publicJwk],
+        routingKeys: [],
+      },
+    ],
+    true
+  )
+  const created = await agent.dids.create({
+    method: 'peer',
+    didDocument,
+    options: { numAlgo: PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc, keys },
+  })
+  const did = created.didState.did
+  if (!did) throw new Error(`${LOG_PREFIX} could not create a client DID: ${created.didState.state}`)
+  return did
 }
 
 /**
@@ -216,16 +259,27 @@ export class VtiMediatorSession {
         cleanup()
         resolve()
       }
-      const onError = () => {
+      // React Native's error event carries the reason as `message`, and a
+      // handshake the mediator rejects arrives as a close rather than an error —
+      // so both are reported, or the failure reads as a bare "it didn't open".
+      const onError = (event: unknown) => {
         cleanup()
-        reject(new Error(`${LOG_PREFIX} socket failed to open`))
+        const detail = (event as { message?: string } | undefined)?.message
+        reject(new Error(`${LOG_PREFIX} socket failed to open${detail ? `: ${detail}` : ''}`))
+      }
+      const onClose = (event: unknown) => {
+        cleanup()
+        const { code, reason } = (event ?? {}) as { code?: number; reason?: string }
+        reject(new Error(`${LOG_PREFIX} socket closed during handshake (${code ?? '?'}${reason ? ` ${reason}` : ''})`))
       }
       const cleanup = () => {
         socket.removeEventListener('open', onOpen)
         socket.removeEventListener('error', onError)
+        socket.removeEventListener('close', onClose)
       }
       socket.addEventListener('open', onOpen)
       socket.addEventListener('error', onError)
+      socket.addEventListener('close', onClose)
     })
 
     socket.onmessage = (event: WebSocketMessageEvent) => {
@@ -251,6 +305,11 @@ export class VtiMediatorSession {
   private async handleFrame(raw: string): Promise<void> {
     try {
       const frame = JSON.parse(raw) as Record<string, unknown>
+      // The mediator answers `live-delivery-change` with a Pickup 3.0 `status`,
+      // which is this transport's own bookkeeping rather than a message for the
+      // agent: Credo has no handler for it and rejects it as invalid. Frames
+      // carrying a peer's message are JWEs, so a plaintext `status` is ours.
+      if (frame.type === PICKUP_STATUS) return
       const receiver = this.agent.dependencyManager.resolve(DidCommMessageReceiver)
       await receiver.receiveMessage(frame)
       const queueId = (frame as { id?: string }).id
@@ -316,7 +375,7 @@ export class VtiMediatorSession {
       created_time: nowSec(),
       expires_time: nowSec() + 300,
       body: { next },
-      attachments: [{ id: globalThis.crypto.randomUUID(), data: { json: inner } }],
+      attachments: [{ id: utils.uuid(), data: { json: inner } }],
     })
   }
 

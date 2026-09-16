@@ -234,6 +234,7 @@ export {
   VtiMediatorOutboundTransport,
   resolveVtiMediator,
   vtiClientIdentityFromDid,
+  createVtiClientDid,
 } from './modules/trust-tasks'
 export type {
   TrustTaskRegistration,
