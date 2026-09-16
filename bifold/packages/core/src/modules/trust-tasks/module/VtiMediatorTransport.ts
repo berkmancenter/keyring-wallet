@@ -29,8 +29,8 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import { Kms } from '@credo-ts/core'
-import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { getPublicJwkFromVerificationMethod, Kms } from '@credo-ts/core'
+import type { DidCommV2KeyAgreementJwk, DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didcomm'
 
 const LOG_PREFIX = '[TrustTasks:VtiMediatorTransport]'
@@ -52,8 +52,8 @@ export interface VtiMediatorEndpoints {
   authEndpoint: string
   /** `wss://…/mediator/v1/ws` — one socket per DID. */
   wsEndpoint: string
-  /** The mediator's X25519 key agreement key, and its kid. */
-  x25519PublicKey: Uint8Array
+  /** The mediator's key-agreement key, as Credo reads it, and its kid. */
+  publicJwk: DidCommV2KeyAgreementJwk
   kid: string
 }
 
@@ -64,33 +64,47 @@ export interface VtiMediatorEndpoints {
  */
 export async function resolveVtiMediator(agent: Agent, mediatorDid: string): Promise<VtiMediatorEndpoints> {
   const doc = await agent.dids.resolveDidDocument(mediatorDid)
-  const uris: string[] = []
-  for (const service of doc.service ?? []) {
-    const endpoint = (service as { serviceEndpoint?: unknown }).serviceEndpoint
-    if (typeof endpoint === 'string') uris.push(endpoint)
-    else if (Array.isArray(endpoint)) uris.push(...endpoint.filter((e): e is string => typeof e === 'string'))
-    else if (endpoint && typeof endpoint === 'object' && typeof (endpoint as { uri?: string }).uri === 'string') {
-      uris.push((endpoint as { uri: string }).uri)
+
+  /**
+   * A `serviceEndpoint` is a string, an object with `uri`, or — for a
+   * `did:peer:2` mediator, which is the common case — an **array of objects**,
+   * one per transport. Measured on a live mediator: the `DIDCommMessaging`
+   * service carries both the HTTPS base and the `wss://` socket that way, and
+   * the ATM auth URL is a separate `Authentication` service.
+   */
+  const urisOf = (endpoint: unknown): string[] => {
+    if (typeof endpoint === 'string') return [endpoint]
+    if (Array.isArray(endpoint)) return endpoint.flatMap(urisOf)
+    if (endpoint && typeof endpoint === 'object' && typeof (endpoint as { uri?: string }).uri === 'string') {
+      return [(endpoint as { uri: string }).uri]
     }
+    return []
   }
-  const httpUri = uris.find((u) => u.startsWith('http://') || u.startsWith('https://'))
-  const wsUri = uris.find((u) => u.startsWith('ws://') || u.startsWith('wss://'))
+
+  const services = doc.service ?? []
+  const isDidComm = (type: string) => type === 'DIDCommMessaging' || type === 'dm'
+  const didCommUris = services.filter((s) => isDidComm(String(s.type))).flatMap((s) => urisOf(s.serviceEndpoint))
+  const authUris = services.filter((s) => String(s.type) === 'Authentication').flatMap((s) => urisOf(s.serviceEndpoint))
+
+  const httpUri = didCommUris.find((u) => u.startsWith('http://') || u.startsWith('https://'))
+  const wsUri = didCommUris.find((u) => u.startsWith('ws://') || u.startsWith('wss://'))
   if (!httpUri || !wsUri) {
     throw new Error(
       `${LOG_PREFIX} ${mediatorDid} advertises no usable DIDCommMessaging pair (http: ${httpUri ?? 'none'}, ws: ${wsUri ?? 'none'})`
     )
   }
+  // The mediator publishes its ATM auth URL as an `Authentication` service; the
+  // challenge hangs off it. Without one, it is conventionally `<base>/authenticate`.
+  const authEndpoint = (authUris[0] ?? `${httpUri.replace(/\/$/, '')}/authenticate`).replace(/\/$/, '')
 
   const keyAgreement = doc.keyAgreement?.[0]
-  const vmId = typeof keyAgreement === 'string' ? keyAgreement : keyAgreement?.id
-  const vm = doc.dereferenceKey ? doc.dereferenceKey(vmId as string) : undefined
-  const jwk = vm?.publicKeyJwk as { x?: string } | undefined
-  if (!jwk?.x) {
-    throw new Error(`${LOG_PREFIX} ${mediatorDid} has no X25519 keyAgreement key this client can read`)
-  }
-  const x25519PublicKey = Uint8Array.from(Buffer.from(jwk.x.replace(/-/g, '+').replace(/_/g, '/'), 'base64'))
+  const vm = typeof keyAgreement === 'string' ? doc.dereferenceKey(keyAgreement, ['keyAgreement']) : keyAgreement
+  if (!vm) throw new Error(`${LOG_PREFIX} ${mediatorDid} publishes no keyAgreement verification method`)
+  // A did:peer:2 key arrives as `publicKeyMultibase`, a did:webvh one as a JWK.
+  // Credo's own helper reads either, so neither shape has to be decoded here.
+  const publicJwk = getPublicJwkFromVerificationMethod(vm) as DidCommV2KeyAgreementJwk
 
-  return { did: mediatorDid, authEndpoint: httpUri.replace(/\/$/, ''), wsEndpoint: wsUri, x25519PublicKey, kid: vm?.id ?? (vmId as string) }
+  return { did: mediatorDid, authEndpoint, wsEndpoint: wsUri, publicJwk, kid: vm.id }
 }
 
 /** The client identity this transport speaks as — a v2 DID Credo already holds. */
@@ -114,7 +128,7 @@ export async function vtiClientIdentityFromDid(agent: Agent, did: string): Promi
   if (!vm) throw new Error(`${LOG_PREFIX} ${did} has no keyAgreement verification method`)
   const kmsKey = (keys ?? []).find((key) => vm.id.endsWith(key.didDocumentRelativeKeyId))
   if (!kmsKey) throw new Error(`${LOG_PREFIX} no KMS key backs ${vm.id}`)
-  const senderKey = Kms.PublicJwk.fromPublicKey(vm.publicKeyJwk as never) as Kms.PublicJwk<Kms.X25519PublicJwk>
+  const senderKey = getPublicJwkFromVerificationMethod(vm) as Kms.PublicJwk<Kms.X25519PublicJwk>
   senderKey.keyId = kmsKey.kmsKeyId
   return { did, kid: vm.id, senderKey }
 }
@@ -145,11 +159,7 @@ export class VtiMediatorSession {
   /** Authcrypt a v2 plaintext to the mediator with Credo's envelope service. */
   private async packForMediator(plaintext: DidCommV2PlaintextMessage): Promise<unknown> {
     const envelopeService = this.agent.dependencyManager.resolve(DidCommV2EnvelopeService)
-    const recipientKey = Kms.PublicJwk.fromPublicKey({
-      kty: 'OKP',
-      crv: 'X25519',
-      publicKey: this.mediator.x25519PublicKey,
-    })
+    const recipientKey = this.mediator.publicJwk
     recipientKey.keyId = this.mediator.kid
     return envelopeService.pack(this.agent.context, plaintext, {
       recipientKey,
@@ -278,14 +288,9 @@ export class VtiMediatorSession {
     const doc = await this.agent.dids.resolveDidDocument(peerDid)
     const keyAgreementRef = doc.keyAgreement?.[0]
     const vm = typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
-    const jwk = vm?.publicKeyJwk as { x?: string } | undefined
-    if (!jwk?.x) throw new Error(`${LOG_PREFIX} ${peerDid} publishes no X25519 keyAgreement key`)
-    const recipientKey = Kms.PublicJwk.fromPublicKey({
-      kty: 'OKP',
-      crv: 'X25519',
-      publicKey: Uint8Array.from(Buffer.from(jwk.x.replace(/-/g, '+').replace(/_/g, '/'), 'base64')),
-    })
-    recipientKey.keyId = vm?.id as string
+    if (!vm) throw new Error(`${LOG_PREFIX} ${peerDid} publishes no keyAgreement verification method`)
+    const recipientKey = getPublicJwkFromVerificationMethod(vm) as DidCommV2KeyAgreementJwk
+    recipientKey.keyId = vm.id
 
     const envelopeService = this.agent.dependencyManager.resolve(DidCommV2EnvelopeService)
     const inner = await envelopeService.pack(this.agent.context, plaintext, {
