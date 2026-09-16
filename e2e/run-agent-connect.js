@@ -12,6 +12,7 @@
  * Usage: PLATFORM=android node run-agent-connect.js   (or PLATFORM=ios)
  */
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, existsTestId } from "./lib/driver.js";
+import { androidCaps, iosCaps } from "./lib/config.js";
 import { completeOnboarding, openDeveloperScreen } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
@@ -44,9 +45,12 @@ function assertMarker(log, marker) {
 let driver;
 try {
   await ensureAppium();
+  // createSession replaces the capability set rather than merging, so build the
+  // platform's own caps and turn off just the reset flags.
+  const caps = platform === "android" ? androidCaps() : iosCaps();
   driver = await createSession(
     platform,
-    keepState ? { "appium:fullReset": false, "appium:noReset": true } : undefined
+    keepState ? { ...caps, "appium:fullReset": false, "appium:noReset": true } : undefined
   );
 
   if (await existsTestId(driver, "Contacts", 5000)) {
