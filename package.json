@@ -61,6 +61,7 @@
     "e2e:plain-build:android-only": "cd e2e && npm run plain-build-smoke:android-only",
     "e2e:vrc:devices": "cd e2e && npm run vrc-exchange:devices",
     "e2e:vrc:devices:android-only": "cd e2e && npm run vrc-exchange:devices:android-only",
+    "e2e:vrc:devices:android-only:didcomm-v2": "cd e2e && npm run vrc-exchange:devices:android-only:didcomm-v2",
     "e2e:migration": "cd e2e && npm run store-migration",
     "e2e:migration:android-only": "cd e2e && npm run store-migration:android-only",
     "e2e:smoke": "cd e2e && npm run onboarding-smoke",
