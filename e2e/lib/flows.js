@@ -1432,6 +1432,16 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
   // we may still be on a stacked screen (chat) — pop back until the tab bar is reachable
   let onTab = false;
   for (let backs = 0; backs < 3 && !onTab; backs++) {
+    // The "Relationship confirmed" overlay (Chat.tsx) sits on top of the tab
+    // bar with no way past it except its own "View contacts" button — a
+    // stray "Contacts"/"BackButton" tap underneath is swallowed by the
+    // overlay's pointerEvents="auto" and leaves this loop spinning until
+    // timeout even though the VRC already landed (seen on real devices).
+    if (await byTextContains(driver, "Relationship confirmed").isExisting()) {
+      await dismissVrcConfirmationOverlayIfPresent(driver);
+      onTab = true;
+      break;
+    }
     if (await existsTestId(driver, "Contacts", 3000)) {
       await tapTestId(driver, "Contacts");
       onTab = true;
@@ -1454,6 +1464,9 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
       );
       return;
     }
+    // Same overlay race as above: it can still appear here if the peer's
+    // delivery lands mid-loop, after the initial nav attempts above gave up.
+    await dismissVrcConfirmationOverlayIfPresent(driver);
     await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
     await sleep(3000);
