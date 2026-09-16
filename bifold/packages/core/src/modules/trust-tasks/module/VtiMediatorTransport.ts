@@ -270,6 +270,33 @@ export class VtiMediatorSession {
   }
 
   /**
+   * Authcrypt a plaintext to a peer (its keyAgreement key, resolved through
+   * Credo) and forward it through the mediator. This is the whole outbound
+   * path for a VTA or a VTC: they are reached by DID, never dialled directly.
+   */
+  async sendTo(peerDid: string, plaintext: DidCommV2PlaintextMessage): Promise<void> {
+    const doc = await this.agent.dids.resolveDidDocument(peerDid)
+    const keyAgreementRef = doc.keyAgreement?.[0]
+    const vm = typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
+    const jwk = vm?.publicKeyJwk as { x?: string } | undefined
+    if (!jwk?.x) throw new Error(`${LOG_PREFIX} ${peerDid} publishes no X25519 keyAgreement key`)
+    const recipientKey = Kms.PublicJwk.fromPublicKey({
+      kty: 'OKP',
+      crv: 'X25519',
+      publicKey: Uint8Array.from(Buffer.from(jwk.x.replace(/-/g, '+').replace(/_/g, '/'), 'base64')),
+    })
+    recipientKey.keyId = vm?.id as string
+
+    const envelopeService = this.agent.dependencyManager.resolve(DidCommV2EnvelopeService)
+    const inner = await envelopeService.pack(this.agent.context, plaintext, {
+      recipientKey,
+      senderKey: this.identity.senderKey,
+      senderKeySkid: this.identity.kid,
+    })
+    await this.forward(peerDid, inner)
+  }
+
+  /**
    * Wrap an already-packed JWE for `next` in a Routing 2.0 forward, pack the
    * forward to the mediator, and ship it over this socket.
    */

@@ -230,6 +230,10 @@ export {
   trustTaskPromptStore,
   trustTaskDisplayRegistry,
   registerTrustTaskDisplay,
+  VtiMediatorSession,
+  VtiMediatorOutboundTransport,
+  resolveVtiMediator,
+  vtiClientIdentityFromDid,
 } from './modules/trust-tasks'
 export type {
   TrustTaskRegistration,
@@ -238,6 +242,8 @@ export type {
   InboundContext as TrustTaskInboundContext,
   RegisterTrustTaskOptions,
   PendingTrustTaskPrompt,
+  VtiMediatorEndpoints,
+  VtiClientIdentity,
 } from './modules/trust-tasks'
 export type {
   ITrustTaskDisplayHandler,
