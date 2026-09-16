@@ -62,6 +62,12 @@ signer Keyring ships.
 6. **An ACL `member` role is not community membership** — `vetting/vetters`
    refuses a grant with "is not a current member of this community", so a vetter
    must be admitted through a join request first.
+> **Corrected 2026-09-16.** Finding 7 below is right that the *administrator*
+> cannot be made a vetter, but wrong that there is no path: invite a *different*
+> identity into an invitation-only community, it is auto-admitted with `allow`,
+> and the vetter grant then succeeds. See `docs/VTI_UPSTREAM_FINDINGS.md` VTI-01
+> and `fixtures/vetter-grant-after-invitation.log`.
+
 7. **Seeding the first vetter is a dead end on the documented surfaces.** The
    two membership checks disagree: `POST /v1/invitations` refuses with
    "already a current member" for any DID in the ACL

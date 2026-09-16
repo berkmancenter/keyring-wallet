@@ -1,5 +1,5 @@
 [ref-20] applicant did:key:z6MkkxszoLhuxPqdJcba81pfJRbxTN9PPjBf2SPfTFGKgUWu
-[ref-20] (new holder — export APPLICANT_X25519_SECRET_KEY=f7ff075273c66445597e32604cbcdbfd1614093798bcc54344937a2392838707 to reuse it)
+[ref-20] (new holder — export APPLICANT_X25519_SECRET_KEY=<redacted — throwaway local test key> to reuse it)
 [ref-20] connecting to did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72… via the mediator …
 [ref-20] connected.
 {

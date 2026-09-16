@@ -71,6 +71,26 @@ brew install redis && brew services start redis
   setup (statement type, criteria, ACL) is not restored automatically — see
   `tsp-reference/ref-20-local-vetting/`.
 
+## The admin portal
+
+`vtc-service` ships a browser console at **`https://<vtc host>/admin/`** — on
+this stack `https://keyring-vti-vtc.ngrok.app/admin/` — covering members, join
+requests, invitations, vetting, ACL, policies and the audit log. Sign-in is by
+**passkey**, so a first administrator enrols one through a single-use URL:
+
+```sh
+# on a STOPPED daemon — the command opens the store directly
+kill <vtc pid>
+vtc --config ~/vti-stack/vtc/config.toml admin invite \
+    --did <admin did:key> --ttl 14400
+# prints an install URL and a separate claim code; both are required
+nohup vtc --config ~/vti-stack/vtc/config.toml &   # must be running to claim
+```
+
+Open the install URL on the hostname, not on `127.0.0.1` — a passkey is bound to
+the host it was created on. Stopping the daemon to mint the URL is an upstream
+papercut, recorded as VTI-16 in `docs/VTI_UPSTREAM_FINDINGS.md`.
+
 ## Driving it
 
 `tsp-reference/ref-20-local-vetting/` holds both halves: `vtc-admin.mjs` for the
