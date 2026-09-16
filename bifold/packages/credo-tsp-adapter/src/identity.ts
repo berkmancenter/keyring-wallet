@@ -196,9 +196,18 @@ export async function identityFromDid(agent: Agent, did: string): Promise<tsp.Ts
   if (keyAgreementVm) {
     const agreementRelativeId = keyAgreementVm.id.startsWith(did) ? keyAgreementVm.id.slice(did.length) : keyAgreementVm.id
     const agreementJwk = getPublicJwkFromVerificationMethod(keyAgreementVm)
-    const agreementKeyId =
-      didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === agreementRelativeId)
-        ?.kmsKeyId ?? agreementJwk.legacyKeyId
+    // Unlike the signing-key lookup above, there is no legacy fallback here:
+    // only did:peer:2 (DIDComm v2) registers a SEPARATE Askar key for its
+    // keyAgreement verification method. did:key / did:peer:0 publish a
+    // DERIVED X25519 key at this method (Edwards→Montgomery of the signing
+    // key) with no independent storage at all — Askar never stored anything
+    // under a "legacy" name for it, so treating agreementJwk.legacyKeyId as
+    // a real key id made `.agree()` throw at use time instead of falling
+    // through to the Ed25519-derivation path below, which is what these DID
+    // types actually need.
+    const agreementKeyId = didRecord?.keys?.find(
+      ({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === agreementRelativeId
+    )?.kmsKeyId
     const agreementPublicKey = (agreementJwk.publicKey as { publicKey: Uint8Array }).publicKey
     if (agreementKeyId && agreementJwk.is(Kms.X25519PublicJwk)) {
       return {
