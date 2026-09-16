@@ -89,7 +89,15 @@ log "provisioning the mediator"
   --config "$STACK_DIR/mediator/conf/mediator.toml" >/dev/null
 MED_DID=$(grep '^mediator_did' mediator/conf/mediator.toml | sed 's/.*did:\/\///; s/"$//')
 echo "$MED_DID" > mediator/did.txt
-nohup "$MEDIATOR_BIN" -c "$STACK_DIR/mediator/conf/mediator.toml" > logs/mediator.log 2>&1 &
+# A phone's WebSocket upgrade carries an Origin header (React Native sends one;
+# Node's `ws` does not), and with `cors_allow_origin` unset the mediator answers
+# /ws with 403 "Origin not permitted by CORS policy". Auth here is a bearer
+# subprotocol rather than an ambient cookie, so a wildcard is safe for a local
+# stack — a real deployment names the origins it serves instead.
+printf '\ncors_allow_origin = "*"\n' >> mediator/conf/mediator.toml
+# `functions_file` in that config is relative, so the mediator only finds
+# ./conf/atm-functions.lua when it runs from its own directory.
+(cd "$STACK_DIR/mediator" && nohup "$MEDIATOR_BIN" -c "$STACK_DIR/mediator/conf/mediator.toml" > "$STACK_DIR/logs/mediator.log" 2>&1 &)
 sleep 8
 
 # ------------------------------------------------------------ DID hosting ---

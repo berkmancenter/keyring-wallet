@@ -13,11 +13,12 @@ import {
   setDidCommV2Enabled,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
-import { resolveVtiMediator, vtiClientIdentityFromDid, VtiMediatorSession } from '@bifold/core'
+import { createVtiClientDid, resolveVtiMediator, vtiClientIdentityFromDid, VtiMediatorSession } from '@bifold/core'
+import { utils } from '@credo-ts/core'
 import Config from 'react-native-config'
 import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   DeviceEventEmitter,
@@ -356,9 +357,7 @@ const Developer: React.FC = () => {
       // eslint-disable-next-line no-console
       console.log('[VTI-PROBE] mediator endpoints', mediator.authEndpoint, mediator.wsEndpoint)
 
-      const routing = await agent.didcomm.mediationRecipient.getRouting({ useDefaultMediator: false })
-      const created = await agent.dids.create({ method: 'peer', options: { numAlgo: 2 }, secret: {} })
-      const ourDid = created.didState.did ?? routing.endpoints[0]
+      const ourDid = await createVtiClientDid(agent, mediator)
       // eslint-disable-next-line no-console
       console.log('[VTI-PROBE] our did', ourDid)
 
@@ -372,7 +371,7 @@ const Developer: React.FC = () => {
       console.log('[VTI-PROBE] socket open, live delivery on')
 
       await session.sendTo(communityDid, {
-        id: `urn:uuid:${globalThis.crypto.randomUUID()}`,
+        id: `urn:uuid:${utils.uuid()}`,
         typ: 'application/didcomm-plain+json',
         type: 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2',
         from: ourDid as string,
@@ -382,7 +381,7 @@ const Developer: React.FC = () => {
         // The VTC reads the body as a whole Trust Task document, where a VTA
         // takes a bare payload — measured in tsp-reference/ref-20.
         body: {
-          id: `urn:uuid:${globalThis.crypto.randomUUID()}`,
+          id: `urn:uuid:${utils.uuid()}`,
           type: 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2',
           payload: {},
           issuer: ourDid as string,
@@ -403,6 +402,17 @@ const Developer: React.FC = () => {
       setIsProbingVta(false)
     }
   }
+
+  // Dev convenience: with VTI_PROBE_ON_START=1 baked in, the probe runs as soon
+  // as this screen mounts. Driving a button through Appium costs an onboarding
+  // lap per iteration; the transport it exercises is the same either way.
+  const autoProbed = useRef(false)
+  useEffect(() => {
+    if (Config.VTI_PROBE_ON_START !== '1' || autoProbed.current || !agent) return
+    autoProbed.current = true
+    void handleProbeVtaMediator()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agent])
 
   const handleSeedTestContacts = async () => {
     if (!agent) {

@@ -11,9 +11,9 @@
  *
  * Usage: PLATFORM=android node run-agent-connect.js   (or PLATFORM=ios)
  */
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, existsTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, existsTestId, waitForTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
-import { completeOnboarding, openDeveloperScreen } from "./lib/flows.js";
+import { completeOnboarding, openDeveloperScreen, enableDidCommV2, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
 
@@ -53,17 +53,46 @@ try {
     keepState ? { ...caps, "appium:fullReset": false, "appium:noReset": true } : undefined
   );
 
-  if (await existsTestId(driver, "Contacts", 5000)) {
+  // A reused install boots into the agent, not into onboarding. Its tab bar only
+  // appears once the agent has finished initialising, and a cold start after a
+  // force-stop took over two minutes on a machine also running the VTI stack —
+  // so E2E_KEEP_STATE waits for the tab bar rather than falling back to an
+  // onboarding flow that would only be driving a screen that is never coming.
+  if (keepState) {
+    console.log(`[e2e] ${driver.e2ePlatform}: reusing state, waiting for the agent to come up`);
+    // A cold start of an onboarded install opens on the unlock screen, so the
+    // PIN comes before the tab bar can appear at all.
+    await waitForTestId(driver, "EnterPIN", 120000).catch(() => undefined);
+    await unlockIfLocked(driver);
+    await waitForTestId(driver, "Contacts", 300000);
+    await sleep(5000);
+  } else if (await existsTestId(driver, "Contacts", 5000)) {
     console.log(`[e2e] ${driver.e2ePlatform}: already onboarded, reusing state`);
+    await sleep(5000);
   } else {
     await completeOnboarding(driver, { firstName: "Vti", lastName: "Probe" });
   }
   await screenshot(driver, "agent-connect-onboarded");
 
+  // The agent only speaks v2 when the developer flag is on, and the flag is
+  // read at agent start — so this toggles and restarts before the probe runs.
+  // Idempotent it is not: the helper flips the switch, so pass this once per
+  // install (E2E_KEEP_STATE runs afterwards inherit the flag).
+  if (process.env.E2E_ENABLE_V2 === "1") {
+    await enableDidCommV2(driver);
+  }
+
   await openDeveloperScreen(driver);
-  const probe = await scrollToTestId(driver, "ProbeVtaMediatorButton");
-  await probe.click();
-  console.log(`[e2e] ${driver.e2ePlatform}: probe tapped`);
+  // With VTI_PROBE_ON_START baked in, the screen fires the probe itself as it
+  // mounts; the tap is then a no-op against a disabled button, so it is
+  // best-effort rather than a gate.
+  try {
+    const probe = await scrollToTestId(driver, "ProbeVtaMediatorButton");
+    await probe.click();
+    console.log(`[e2e] ${driver.e2ePlatform}: probe tapped`);
+  } catch (err) {
+    console.log(`[e2e] ${driver.e2ePlatform}: probe button not tappable (${err.message}) — relying on the auto-run`);
+  }
 
   // Login + socket + forward is a handful of round trips through a tunnel.
   await sleep(25000);
