@@ -42,6 +42,11 @@ signer Keyring ships.
 
 ## Findings (see the subtask's §9)
 
+> The numbered, versioned, upstream-facing list lives in
+> [`docs/VTI_UPSTREAM_FINDINGS.md`](../../docs/VTI_UPSTREAM_FINDINGS.md) — cite
+> that from reports and issues. What follows is this rung's own narrative, kept
+> because it records how each one was found.
+
 1. **`vta-service` 0.28.0 overflows its stack** handling
    `vta/contexts/create/1.0`; `RUST_MIN_STACK=33554432` works around it.
 2. **`cnm --url` / `VTA_URL` are ignored by `vetting` subcommands** — the VTC's
