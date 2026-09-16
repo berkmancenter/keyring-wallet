@@ -9,7 +9,7 @@
  * inbound reassembly (Credo spreads the v2 body next to @id/@type) are what
  * is exercised, not a stand-in.
  */
-import { JsonTransformer } from '@credo-ts/core'
+import { getX25519KeyAgreementKey2019, JsonTransformer, Kms, TypedArrayEncoder } from '@credo-ts/core'
 import {
   DidCommConnectionService,
   DidCommMessageHandlerRegistry,
@@ -59,9 +59,25 @@ function inboundInstance(
 
 type Handler = (ctx: Record<string, unknown>) => Promise<unknown>
 
+/** A real (Askar-free) X25519 keyAgreement key: pure JWK/VerificationMethod
+ *  construction is enough for getPublicJwkFromVerificationMethod to parse —
+ *  no agent, no Askar backend needed for public-key-only comparisons. */
+function fakeX25519KeyAgreementKey(seed: number) {
+  const publicKeyBytes = new Uint8Array(32).fill(seed)
+  const publicJwk = Kms.PublicJwk.fromPublicJwk({ kty: 'OKP', crv: 'X25519', x: TypedArrayEncoder.toBase64Url(publicKeyBytes) })
+  const verificationMethod = getX25519KeyAgreementKey2019({
+    id: '#key-2',
+    publicJwk: publicJwk as never,
+    controller: '#id',
+  })
+  return { publicJwk, verificationMethod }
+}
+
 function makeFakeAgent(options: {
   connections?: Array<{ id: string; did: string; theirDid: string; didcommVersion?: 'v1' | 'v2' }>
   ownInvitationDids?: string[]
+  /** DID → its resolved keyAgreement verification methods, for senderKeyBelongsToClaimedDid. */
+  didDocuments?: Record<string, { keyAgreement: unknown[] }>
 }) {
   const sent: unknown[] = []
   const created: Array<Record<string, unknown>> = []
@@ -109,6 +125,13 @@ function makeFakeAgent(options: {
     context: {},
     config: { logger: { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() } },
     dependencyManager: { container },
+    dids: {
+      resolveDidDocument: async (did: string) => {
+        const doc = options.didDocuments?.[did]
+        if (!doc) throw new Error(`no such did: ${did}`)
+        return doc
+      },
+    },
     modules: {
       didcomm: {
         connections: {
@@ -149,24 +172,47 @@ describe('TrustTaskEnvelopeV2Message', () => {
 })
 
 describe('checkV2ThreadCorrelation (binding §3.1)', () => {
+  // Real inbound message instances (via inboundInstance, a real
+  // TrustTaskEnvelopeV2Message with a real `~thread` decorator) rather than
+  // plain object literals: Credo's `message.threadId` is a GETTER that
+  // defaults to the message `@id` whenever `~thread.thid` is absent on the
+  // wire, so a plain `{ threadId: … }` fixture can't distinguish "thid was
+  // set" from "thid was never on the wire at all" — exactly the distinction
+  // this check depends on. A prior version of these tests used such a
+  // literal and passed while the implementation read the getter, silently
+  // masking the false-rejection bug fixed below.
   test('agreeing headers pass', () => {
-    expect(checkV2ThreadCorrelation({ threadId: DOC.threadId }, DOC)).toBe('ok')
+    const message = inboundInstance(DOC, { thid: DOC.threadId })
+    expect(checkV2ThreadCorrelation(message, DOC)).toBe('ok')
   })
   test('disagreeing thid is malformedRequest', () => {
-    expect(checkV2ThreadCorrelation({ threadId: 'other' }, DOC)).toBe('malformedRequest:thid')
+    // ~thread.thid is format-validated (RFC 0008 shape); a same-shaped but
+    // different id is enough to exercise a genuine mismatch.
+    const message = inboundInstance(DOC, { thid: '22222222-2222-2222-2222-222222222222' })
+    expect(checkV2ThreadCorrelation(message, DOC)).toBe('malformedRequest:thid')
   })
   test('disagreeing pthid is malformedRequest', () => {
+    const message = inboundInstance(DOC, {
+      thid: DOC.threadId,
+      pthid: '33333333-3333-3333-3333-333333333333',
+    })
     expect(
-      checkV2ThreadCorrelation(
-        { threadId: DOC.threadId, thread: { parentThreadId: 'x' } },
-        { ...DOC, parentThreadId: 'y' }
-      )
+      checkV2ThreadCorrelation(message, { ...DOC, parentThreadId: '44444444-4444-4444-4444-444444444444' })
     ).toBe('malformedRequest:pthid')
   })
   test('a missing member on either side is never compared (and never filled)', () => {
     const { threadId: _t, ...noThread } = DOC
-    expect(checkV2ThreadCorrelation({ threadId: noThread.id }, noThread)).toBe('ok')
-    expect(checkV2ThreadCorrelation({}, DOC)).toBe('ok')
+    expect(checkV2ThreadCorrelation(inboundInstance(noThread, { thid: noThread.id }), noThread)).toBe('ok')
+    expect(checkV2ThreadCorrelation(inboundInstance(DOC, {}), DOC)).toBe('ok')
+  })
+  test('a conforming producer that omits thid entirely (relying on the document id) is never falsely rejected', () => {
+    // The regression this binding's own comment anticipates: the message's
+    // own @id differs from the document's threadId, so `message.threadId`
+    // (the getter) would read as a MISMATCH. Reading the raw `~thread.thid`
+    // header (absent here) must see no thid at all and pass.
+    const message = inboundInstance(DOC, {}) // no ~thread on the wire
+    expect((message as { threadId: string }).threadId).not.toBe(DOC.threadId) // getter defaults to @id
+    expect(checkV2ThreadCorrelation(message, DOC)).toBe('ok')
   })
 })
 
@@ -230,8 +276,12 @@ describe('DidCommV2Carriage', () => {
     expect(handler).not.toHaveBeenCalled()
   })
 
-  test('first contact: a message on one of our own v2 invitations mints the inviter-side connection', async () => {
-    const fake = makeFakeAgent({ ownInvitationDids: [ALICE] })
+  test('first contact: a message on one of our own v2 invitations, from a key BOB\'s own DID document lists, mints the inviter-side connection', async () => {
+    const bobsKey = fakeX25519KeyAgreementKey(1)
+    const fake = makeFakeAgent({
+      ownInvitationDids: [ALICE],
+      didDocuments: { [BOB]: { keyAgreement: [bobsKey.verificationMethod] } },
+    })
     const verdicts: V2InboundVerdict[] = []
     const received: Record<string, unknown>[] = []
     createDidCommV2Carriage(fake.agent, (v) => verdicts.push(v)).onDocument(async (_document, peer) => {
@@ -239,7 +289,7 @@ describe('DidCommV2Carriage', () => {
     })
     await fake.handler()({
       message: inboundInstance(DOC, { thid: DOC.threadId, from: BOB, to: [ALICE] }),
-      senderKey: {},
+      senderKey: bobsKey.publicJwk,
       senderDid: BOB,
     })
     expect(verdicts).toEqual(['ok'])
@@ -255,13 +305,40 @@ describe('DidCommV2Carriage', () => {
   })
 
   test('first contact on a DID that is not one of our invitations is refused, and nothing is created', async () => {
-    const fake = makeFakeAgent({ ownInvitationDids: [] })
+    const bobsKey = fakeX25519KeyAgreementKey(1)
+    const fake = makeFakeAgent({ ownInvitationDids: [], didDocuments: { [BOB]: { keyAgreement: [bobsKey.verificationMethod] } } })
     const verdicts: V2InboundVerdict[] = []
     const handler = jest.fn()
     createDidCommV2Carriage(fake.agent, (v) => verdicts.push(v)).onDocument(handler)
     await fake.handler()({
       message: inboundInstance(DOC, { thid: DOC.threadId, from: BOB, to: [ALICE] }),
-      senderKey: {},
+      senderKey: bobsKey.publicJwk,
+      senderDid: BOB,
+    })
+    expect(verdicts).toEqual(['no-connection'])
+    expect(fake.created).toHaveLength(0)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  test('security — first contact plaintext-claiming to be BOB, authenticated by a key BOB\'s DID document does NOT list, is refused (no connection minted, no document processed)', async () => {
+    // The vulnerability this closes: DIDComm v2 first contact has no
+    // handshake, and ensureV2ConnectionForFirstContact used to bind
+    // theirDid straight from the plaintext `from` header — an attacker
+    // authenticated with ANY key could claim to be BOB. Now it must be
+    // refused because the actual authenticating key (mallory's) is absent
+    // from BOB's own resolved keyAgreement set.
+    const bobsRealKey = fakeX25519KeyAgreementKey(1)
+    const malloryKey = fakeX25519KeyAgreementKey(2)
+    const fake = makeFakeAgent({
+      ownInvitationDids: [ALICE],
+      didDocuments: { [BOB]: { keyAgreement: [bobsRealKey.verificationMethod] } },
+    })
+    const verdicts: V2InboundVerdict[] = []
+    const handler = jest.fn()
+    createDidCommV2Carriage(fake.agent, (v) => verdicts.push(v)).onDocument(handler)
+    await fake.handler()({
+      message: inboundInstance(DOC, { thid: DOC.threadId, from: BOB, to: [ALICE] }),
+      senderKey: malloryKey.publicJwk, // authenticated, but NOT a key BOB's document lists
       senderDid: BOB,
     })
     expect(verdicts).toEqual(['no-connection'])

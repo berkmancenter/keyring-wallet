@@ -185,7 +185,12 @@ export class WitnessTaskSessions {
         if (!connection && context.senderKey) {
           const from = context.message.plaintextFrom ?? context.senderDid
           const to = context.message.plaintextTo?.[0]
-          if (from && to) connection = await ensureV2ConnectionForFirstContact(this.host.agent, { from, to })
+          if (from && to)
+            connection = await ensureV2ConnectionForFirstContact(this.host.agent, {
+              from,
+              to,
+              senderKey: context.senderKey,
+            })
         }
         if (!document || !context.senderKey || !connection?.did || !connection.theirDid) return undefined
         if (checkV2ThreadCorrelation(context.message, document) !== 'ok') return undefined

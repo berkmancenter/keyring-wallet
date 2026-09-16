@@ -112,7 +112,8 @@ async function receive(
   if (!connection) {
     const from = message.plaintextFrom ?? ctx.senderDid
     const to = message.plaintextTo?.[0]
-    if (from && to) connection = await ensureV2ConnectionForFirstContact(agent as never, { from, to })
+    if (from && to)
+      connection = await ensureV2ConnectionForFirstContact(agent as never, { from, to, senderKey: ctx.senderKey })
   }
   if (!connection?.did || !connection.theirDid) return 'no-connection'
 
