@@ -371,9 +371,14 @@ const Developer: React.FC = () => {
       mark('[VTI-PROBE] our did', ourDid as string)
 
       const identity = await vtiClientIdentityFromDid(agent, ourDid as string)
+      let resolveReply: ((plaintext: { type?: string; body?: unknown }) => void) | undefined
+      const reply = new Promise<{ type?: string; body?: unknown }>((resolve) => {
+        resolveReply = resolve
+      })
       session = new VtiMediatorSession(agent, identity, mediator, {
         // eslint-disable-next-line no-console
         onError: (error: Error) => console.log('[VTI-PROBE] session error', error.message),
+        onMessage: (plaintext) => resolveReply?.(plaintext),
       })
       await session.start()
       mark('[VTI-PROBE] socket open, live delivery on')
@@ -398,7 +403,32 @@ const Developer: React.FC = () => {
         },
       })
       mark('[VTI-PROBE] manifest request forwarded to', communityDid)
-      Alert.alert('VTI probe', 'Logged in, socket open, manifest request sent. See the log for markers.')
+
+      // The manifest comes back through the mediator on the same socket. A
+      // reply that never arrives is a result too, so this is a race with a
+      // deadline rather than an open-ended wait.
+      const answer = await Promise.race([
+        reply,
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 30000)),
+      ])
+      if (answer) {
+        // A manifest's payload carries the community's join criteria — the
+        // thing a join screen has to render.
+        const criteria = (answer.body as { payload?: { criteria?: { description?: string }[] } } | undefined)?.payload
+          ?.criteria
+        mark(
+          '[VTI-PROBE] manifest received',
+          String(answer.type),
+          Array.isArray(criteria) ? `${criteria.length} criterion(a)` : 'no criteria listed'
+        )
+        for (const criterion of criteria ?? []) {
+          mark('[VTI-PROBE] criterion:', String(criterion.description ?? 'unnamed'))
+        }
+        Alert.alert('VTI probe', `Manifest received: ${String(answer.type)}`)
+      } else {
+        mark('[VTI-PROBE] no manifest within 30s')
+        Alert.alert('VTI probe', 'Logged in, socket open, manifest request sent — but nothing came back.')
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       mark('[VTI-PROBE] failed', message)

@@ -111,8 +111,9 @@ try {
     console.log(`[e2e] ${driver.e2ePlatform}: probe button not tappable (${err.message}) — relying on the auto-run`);
   }
 
-  // Login + socket + forward is a handful of round trips through a tunnel.
-  await sleep(25000);
+  // Login + socket + forward is a handful of round trips through a tunnel, and
+  // the probe then waits up to 30s for the community's answer.
+  await sleep(50000);
   await screenshot(driver, "agent-connect-result");
 
   // The screen is the primary evidence (it works on both platforms); the
@@ -131,6 +132,7 @@ try {
   assertMarker(log, "[VTI-PROBE] mediator endpoints");
   assertMarker(log, "[VTI-PROBE] socket open, live delivery on");
   assertMarker(log, "[VTI-PROBE] manifest request forwarded to");
+  assertMarker(log, "[VTI-PROBE] manifest received");
 
   printSuccess("agent-connect");
   process.exitCode = 0;
