@@ -57,6 +57,11 @@ for bin in "$VTA_BIN" "$VTC_BIN" "$PNM_BIN" "$MEDIATOR_BIN" "$MEDIATOR_SETUP_BIN
 done
 redis-cli ping >/dev/null 2>&1 || { echo "redis is not running: brew services start redis"; exit 1; }
 
+# Re-running this script re-provisions, and a running daemon holds a lock on the
+# store being rewritten ("FjallError: Locked"). So stop first, always.
+stop_stack
+sleep 3
+
 mkdir -p "$STACK_DIR"/{alice,community,bob,vtc,dids,mediator/conf,logs}
 cd "$STACK_DIR"
 
@@ -105,7 +110,14 @@ echo "  vtc=$VTC_HOST dids=$DIDS_HOST mediator=$MED_HOST"
 
 # --------------------------------------------------------------- mediator ---
 log "provisioning the mediator"
-"$MEDIATOR_SETUP_BIN" --non-interactive --deployment local --protocol didcomm \
+# A second run refuses to overwrite an existing setup, since re-running the
+# wizard rotates every key it holds. On this stack that is exactly what is
+# wanted: the mediator's DID encodes its endpoints, so a moved host is a new
+# mediator either way.
+FORCE_MEDIATOR=""
+[ -f "$STACK_DIR/mediator/conf/mediator.toml" ] && FORCE_MEDIATOR="--force-reprovision"
+# shellcheck disable=SC2086
+"$MEDIATOR_SETUP_BIN" $FORCE_MEDIATOR --non-interactive --deployment local --protocol didcomm \
   --did-method peer --public-url "https://$MED_HOST" --mediator-url "https://$MED_HOST" \
   --secret-storage file --ssl none --database-url redis://127.0.0.1/ \
   --admin generate --listen-address 127.0.0.1:7037 \
@@ -156,7 +168,12 @@ confirm_plaintext = true
 [admin]
 mode = "generate"
 EOF
-"$WEBVH_BIN" setup --from dids/recipe.toml --non-interactive >/dev/null
+# Same story as the mediator: a provisioned install refuses to be overwritten,
+# and a moved host means new DIDs regardless.
+FORCE_DIDS=""
+[ -f "$STACK_DIR/dids/config.toml" ] && FORCE_DIDS="--force-reprovision"
+# shellcheck disable=SC2086
+"$WEBVH_BIN" setup --from dids/recipe.toml --non-interactive $FORCE_DIDS >/dev/null
 nohup "$WEBVH_BIN" --config dids/config.toml > logs/dids.log 2>&1 &
 sleep 6
 
@@ -204,7 +221,14 @@ sleep 14
 # ------------------------------------------------------------------- PNM ----
 log "enrolling the community admin (the paste a QR would replace)"
 export PNM_HOME="$STACK_DIR/pnm-community"
+# A pnm profile remembers the mediator DID it enrolled against. Re-provisioning
+# the mediator mints a new one, and a stale profile then packs to keys the
+# mediator no longer holds — which surfaces as a bare 403 on /authenticate
+# ("No local secret matches any JWE recipient" in the mediator's own log).
+[ -n "$PNM_HOME" ] && rm -rf "${PNM_HOME:?}"
 mkdir -p "$PNM_HOME"
+# pnm also keeps a profile outside PNM_HOME (macOS: ~/Library/Application
+# Support/pnm), and refuses `setup` while one exists for this name.
 yes | "$PNM_BIN" vta remove community >/dev/null 2>&1 || true
 PNM_DID=$("$PNM_BIN" setup --name community 2>&1 | grep -o 'did:key:z[A-Za-z0-9]*' | head -1)
 pid=$(lsof -nP -iTCP:8111 -sTCP:LISTEN -t | head -1); kill "$pid"; sleep 3
