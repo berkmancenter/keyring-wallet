@@ -267,6 +267,17 @@ Branch `feat/prague-farm-membership` in both repos from `feat/credo-0.7` — wal
 
 ### P4 — Keyring connects to its agent (target 09-22)
 
+**Started 2026-09-15.** The VTA/VTC leg needed a transport of its own: those
+agents publish an Affinidi-style mediator, not an Aries one, so
+`DidCommV2Carriage` cannot reach them. `VtiMediatorSession` /
+`VtiMediatorOutboundTransport` / `vtiClientIdentityFromDid` now live in
+`bifold/packages/core/src/modules/trust-tasks/module/VtiMediatorTransport.ts`:
+ATM login, one socket per DID with Pickup 3.0 live delivery, Routing 2.0
+forwards, and `sendTo(peerDid, plaintext)` for an agent reached only by DID.
+Credo-only by design — the app already resolves `did:webvh`, so the bundle gains
+no second `didwebvh-ts` copy. A developer probe on the app's Developer screen
+drives it, and `e2e:agent:connect` asserts its markers.
+
 `vti-client`; `did:webvh` measured on Hermes; enrolment by QR against a local stand-in for the enrolment contract in §9; authenticated session; agent health; persona list; mediator session that persists an inbound message before acknowledging it.
 
 **Done when:** unit tests cover the platform seams, the store adapter, and byte-equality of Keyring-built documents against P2's fixtures; `e2e:agent:connect` passes on the Android emulator **and** the iOS simulator; the hardware-custody measurement of §2.4 is recorded.
