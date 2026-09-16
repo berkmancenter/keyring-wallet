@@ -22,6 +22,7 @@
     "plain-build-smoke:android-only": "PLATFORMS=android,android node run-plain-build-smoke.js",
     "vrc-exchange:devices": "node run-vrc-exchange-devices.js",
     "vrc-exchange:devices:android-only": "node run-vrc-exchange-devices-android-only.js",
+    "vrc-exchange:devices:android-only:didcomm-v2": "node run-vrc-exchange-devices-android-only-didcomm-v2.js",
     "store-migration": "node run-store-migration.js",
     "store-migration:android-only": "node run-store-migration-android-only.js",
     "onboarding-smoke": "node run-onboarding-smoke.js",

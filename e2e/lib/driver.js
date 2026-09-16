@@ -331,6 +331,34 @@ export async function tapTestId(driver, key, timeout = 30000) {
 }
 
 /**
+ * Tap an element via a raw coordinate touch gesture instead of WebDriver's
+ * .click(). On some real devices, uiautomator2's click is dispatched as an
+ * accessibility action (View.performClick()) rather than a real touch —
+ * React Native's gesture responder system, which most Touchables/Pressables
+ * rely on to fire onPress, never sees it, so the tap silently has no effect
+ * even though WebDriver reports success. Confirmed on a real device for a
+ * SectionRow rendered as a native android.widget.Button: onPress never
+ * fired across many plain .click() attempts (verified via a temporary debug
+ * log in the handler itself), while a coordinate gesture worked immediately.
+ * Android only — iOS's XCUITest click doesn't have this failure mode.
+ */
+export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
+  const el = await waitForTestId(driver, key, timeout);
+  await el.waitForDisplayed({ timeout });
+  const { x, y } = await el.getLocation();
+  const { width, height } = await el.getSize();
+  await driver
+    .action("pointer")
+    .move({ x: Math.floor(x + width / 2), y: Math.floor(y + height / 2) })
+    .down()
+    .pause(80)
+    .up()
+    .perform();
+  console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (by coordinates)`);
+  return el;
+}
+
+/**
  * Tap an element by testID, then confirm the tap actually took effect via
  * `verify`, re-tapping if it didn't. Some real devices (seen on Android 16)
  * silently drop an occasional tap: the WebDriver click command returns

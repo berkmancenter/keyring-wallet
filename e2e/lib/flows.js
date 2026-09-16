@@ -10,12 +10,13 @@ import {
   sleep,
   tapText,
   tapTestId,
+  tapTestIdByCoordinates,
   tapTestIdReliable,
   waitForTestId,
   screenshot,
 } from "./driver.js";
 export { sleep };
-import { PIN, APP_ID } from "./config.js";
+import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -527,34 +528,67 @@ async function setAutoLockNever(driver) {
   // other) starts from a list this helper already scrolled, where "Lockout"
   // can be off-screen (iOS, 2026-09-14).
   if (driver.e2eAutoLockNeverSet) return;
-  // Settings is a SectionList (virtualized) — "Never" is the last of 5
-  // inline options and isn't mounted until scrolled into view. The Lockout
-  // tap itself occasionally does not land on a loaded emulator (seen once on
-  // two-emulator runs), so the whole tap + scroll search gets one retry, and
-  // the retry scrolls the Lockout row back into view first.
+  // Each dropdown option (Settings.tsx) has its own stable testID
+  // (AutoLockTime<Id>) rather than relying on matching its visible label
+  // text — added after a blind swipe-and-check search for the "Never" text
+  // proved unreliable on a real device (see below).
+  const neverKey = "AutoLockTimeNever";
   let neverEl;
   for (let attempt = 0; attempt < 2; attempt++) {
     // Always bring the row into view first: on a real iPhone Settings can open
     // with "Auto lock time" under the tab bar — present but not displayed, so
     // the tap times out (2026-09-15).
     await findRowEitherDirection(driver, "Lockout");
-    await tapTestId(driver, "Lockout", 15000);
-    for (let i = 0; i < 6; i++) {
-      neverEl = byText(driver, "Never");
-      if ((await neverEl.isExisting()) && (await neverEl.isDisplayed())) break;
-      const { width, height } = await driver.getWindowRect();
-      await driver
-        .action("pointer")
-        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
-        .down()
-        .pause(100)
-        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
-        .up()
-        .perform();
+    // The row's onPress TOGGLES its dropdown open/closed (Settings.tsx). If
+    // attempt 1's tap actually opened it but the lookup below was too slow
+    // to catch it in time, blindly re-tapping "Lockout" on retry closes the
+    // dropdown instead of helping. Only tap it if it looks collapsed.
+    if (!(await byTestId(driver, neverKey).isExisting())) {
+      if (driver.e2ePlatform === "android") {
+        // This row renders as a native android.widget.Button. On at least
+        // one real device, uiautomator2's plain .click() on it never
+        // reached React Native's gesture responder at all — onPress simply
+        // never fired, confirmed via a temporary debug log in the handler
+        // itself, no matter how many times it was retried. A raw coordinate
+        // touch gesture (a real synthetic finger tap, not an accessibility
+        // click action) worked immediately.
+        await tapTestIdByCoordinates(driver, "Lockout", 15000);
+      } else {
+        await tapTestId(driver, "Lockout", 15000);
+      }
+      // Let the dropdown's expand animation settle before searching for its
+      // options — on a slower real device the row's re-render can lag well
+      // behind the tap, and querying immediately can miss it even though
+      // it's about to render (seen on an older Android phone specifically;
+      // a newer phone with identical code needed no such wait).
+      await sleep(500);
+    }
+    for (let i = 0; i < 3; i++) {
+      if (driver.e2ePlatform === "android") {
+        // A blind swipe-and-check loop here could overshoot straight past a
+        // just-collapsed/re-rendering Lockout row to the bottom of the whole
+        // Settings list (seen on a real device: 6 scrolls landed on "About
+        // this App"/"Export Wallet", nowhere near Lockout). UiAutomator's own
+        // UiScrollable knows how to scroll a SectionList to a specific
+        // resource-id directly — far more reliable than guessing gesture
+        // distances against an unknown current scroll position.
+        neverEl = driver.$(
+          `android=new UiScrollable(new UiSelector().scrollable(true).instance(0))` +
+            `.scrollIntoView(new UiSelector().resourceId("${TEST_ID_PREFIX}${neverKey}"))`
+        );
+      } else {
+        // XCUITest scrolls an off-screen-but-existing element into view on
+        // interaction on its own — no manual scroll needed here.
+        neverEl = byTestId(driver, neverKey);
+      }
+      if (await neverEl.isExisting()) break;
       await sleep(500);
     }
     if (await neverEl.isExisting()) break;
-    console.log(`[e2e] ${deviceTag(driver)}: "Never" not found after Lockout tap, retrying once`);
+    console.log(`[e2e] ${deviceTag(driver)}: "${neverKey}" not found after Lockout tap, retrying once`);
+  }
+  if (!(await neverEl.isExisting())) {
+    throw new Error(`${deviceTag(driver)}: "${neverKey}" option never appeared after opening the Lockout dropdown`);
   }
   await neverEl.click();
   driver.e2eAutoLockNeverSet = true;
@@ -1174,6 +1208,16 @@ async function leftStackedScreen(driver) {
 export async function returnToContacts(driver) {
   const MAX_ATTEMPTS = 10; // comfortably more than the witness's <=5-message burst
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    // Same overlay race as assertVrcReceived/openContactDetail: a peer's VRC
+    // landing right around a witness message can leave the "Relationship
+    // confirmed" overlay up, and its pointerEvents="auto" swallows a
+    // Contacts-tab/BackButton tap underneath — dismiss it before anything
+    // else so this loop doesn't spin for the full MAX_ATTEMPTS.
+    if (await byTextContains(driver, "Relationship confirmed").isExisting()) {
+      await dismissVrcConfirmationOverlayIfPresent(driver);
+      if (await existsTestId(driver, "Contacts", 2000)) return;
+      continue;
+    }
     if (await existsTestId(driver, "Contacts", 3000)) {
       try {
         await tapTestIdReliable(driver, "Contacts", () => leftStackedScreen(driver));
@@ -1225,6 +1269,15 @@ export async function openContactDetail(driver, peerName) {
   if (!alreadyOnPeerChat) {
     let onTab = false;
     for (let backs = 0; backs < 3 && !onTab; backs++) {
+      // Same overlay race as assertVrcReceived: a "Relationship confirmed"
+      // overlay's pointerEvents="auto" swallows a Contacts-tab/BackButton
+      // tap underneath, spinning this loop until it gives up and the row
+      // lookup below times out — even though the peer is already there.
+      if (await byTextContains(driver, "Relationship confirmed").isExisting()) {
+        await dismissVrcConfirmationOverlayIfPresent(driver);
+        onTab = true;
+        break;
+      }
       if (await existsTestId(driver, "Contacts", 3000)) {
         await tapTestId(driver, "Contacts");
         onTab = true;
@@ -1896,6 +1949,19 @@ export async function acceptRelationshipProposalIfPrompted(driver, timeout = 900
     if (await existsTestId(driver, "ProposalAccept", 3000)) {
       await tapTestId(driver, "ProposalAccept");
       console.log(`[e2e] ${driver.e2ePlatform}: relationship proposal accepted`);
+      return true;
+    }
+    // The whole ceremony (propose → accept → sign → confirm) can complete
+    // before this loop's first ProposalAccept check ever catches the bottom
+    // sheet — seen on a real device with attestation on, where the extra
+    // biometric round trip changes the timing enough that BOTH sides can
+    // race straight to "Relationship confirmed" and neither ever reports
+    // true, which the caller (acceptRelationshipProposalOnEitherSide) reads
+    // as "discovery failed" despite the exchange having genuinely succeeded.
+    if (await byTextContains(driver, "Relationship confirmed").isExisting()) {
+      console.log(
+        `[e2e] ${driver.e2ePlatform}: relationship already confirmed (proposal was accepted before this loop caught it)`
+      );
       return true;
     }
     // Real devices only: signing may request biometric confirmation while
