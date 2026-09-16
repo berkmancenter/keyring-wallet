@@ -68,3 +68,5 @@ export {
   createVtiClientDid,
 } from './module/VtiMediatorTransport'
 export type { VtiMediatorEndpoints, VtiClientIdentity } from './module/VtiMediatorTransport'
+export { vtiAgent } from './module/vtiAgent'
+export type { VtiAgentState, VtiAgentStatus, VtiCriterion, VtiManifest, VtiVerdict } from './module/vtiAgent'

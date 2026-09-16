@@ -233,6 +233,7 @@ export {
   VtiMediatorSession,
   VtiMediatorOutboundTransport,
   resolveVtiMediator,
+  vtiAgent,
   vtiClientIdentityFromDid,
   createVtiClientDid,
 } from './modules/trust-tasks'
@@ -244,6 +245,11 @@ export type {
   RegisterTrustTaskOptions,
   PendingTrustTaskPrompt,
   VtiMediatorEndpoints,
+  VtiAgentState,
+  VtiAgentStatus,
+  VtiCriterion,
+  VtiManifest,
+  VtiVerdict,
   VtiClientIdentity,
 } from './modules/trust-tasks'
 export type {

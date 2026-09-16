@@ -843,7 +843,7 @@
     "HardwareAttestationPINConfirmNotice": "You will need to enter your PIN to enable or disable this feature.",
     "ToggleHardwareAttestation": "Toggle secure exchanges",
     "WitnessReporting": "Reporting",
-    "WitnessReportingDescription": "When enabled, the app sends a stable, pseudonymous identifier to the witness server. This lets the witness record which connections were verified \u2014 helping build a trustworthy network.",
+    "WitnessReportingDescription": "When enabled, the app sends a stable, pseudonymous identifier to the witness server. This lets the witness record which connections were verified — helping build a trustworthy network.",
     "WitnessReportingPrivacyNotice": "Your reporting identifier is unique per witness and never shared across witnesses, protecting your privacy while allowing opt-in accountability.",
     "ToggleWitnessReporting": "Toggle witness reporting",
     "Witnessing": "Witnessing",
@@ -892,7 +892,8 @@
     "Scan": "Scan",
     "QRCode": "QR Code",
     "Credentials": "Credentials",
-    "Wallet": "Wallet"
+    "Wallet": "Wallet",
+    "MyAgent": "My Agent"
   },
   "RootStack": {
     "Contacts": "Contacts",
@@ -988,7 +989,9 @@
     "History": "History",
     "HistoryDetails": "History Details",
     "UpdateAvailable": "Update Available",
-    "JSONDetails": "JSON details"
+    "JSONDetails": "JSON details",
+    "MyAgent": "My Agent",
+    "Community": "Community"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -1024,9 +1027,9 @@
       "EmailRequired": "Enter an email address.",
       "EmailInvalid": "Enter a valid email address.",
       "OrganizationRequired": "Enter your organization.",
-      "Generic": "We couldn\u2019t save your profile details. Please try again.",
+      "Generic": "We couldn’t save your profile details. Please try again.",
       "PhotoTooLarge": "This photo is too large even at the lowest quality. Please choose a smaller or simpler photo.",
-      "PhotoGeneric": "We couldn\u2019t use that photo. Please try again.",
+      "PhotoGeneric": "We couldn’t use that photo. Please try again.",
       "PhotoPermissionDenied": "Keyring needs permission to access your photos to add a profile picture."
     }
   },
@@ -1078,7 +1081,7 @@
     "ReportingPseudonymRegisteredSuffix": "registered with {{name}}",
     "ReportingStatusOn": "Reporting: On",
     "ReportingStatusOff": "Reporting: Off",
-    "ReportingDIDSettingsNote": "Adjust in Settings \u2192 Witness Reporting",
+    "ReportingDIDSettingsNote": "Adjust in Settings → Witness Reporting",
     "CredentialReceivedTitle": "Credential received",
     "CredentialOfferTitle": "Credential offer received",
     "CredentialFromSuffix": "from {{name}}",
@@ -1140,5 +1143,25 @@
   },
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts"
+  },
+  "MyAgent": {
+    "Title": "Your agent",
+    "WhatItIs": "An agent holds your identity for a community and carries messages to it. You need one before you can join or be vetted.",
+    "Connect": "Connect my agent",
+    "TryAgain": "Try again",
+    "Resolving": "Finding your agent…",
+    "Authenticating": "Signing in and opening a channel…",
+    "Connected": "Connected",
+    "Host": "Agent host",
+    "YourIdentity": "The identity you present",
+    "Communities": "Communities",
+    "NoCommunities": "No communities yet.",
+    "NotAMember": "Not a member yet",
+    "NotConfigured": "No agent is configured for this build.",
+    "Community": "Community",
+    "WhatIsAsked": "What this community asks",
+    "Apply": "Apply to join",
+    "Verdict": "Their answer",
+    "StillNeeded": "Still needed"
   }
 }

@@ -25,6 +25,7 @@ import InAppMessageNotifier from '../components/InAppMessageNotifier'
 import ContactStack from './ContactStack'
 import CredentialStack from './CredentialStack'
 import MessageStack from './MessageStack'
+import MyAgentStack from './MyAgentStack'
 import SettingStack from './SettingStack'
 import { BaseTourID } from '../types/tour'
 import QRCodeExchangeSlider from '../modules/vrc/components/QRCodeExchangeSlider'
@@ -271,6 +272,35 @@ const TabStack: React.FC = () => {
             tabBarShowLabel: false,
             tabBarAccessibilityLabel: t('TabStack.Wallet'),
             tabBarTestID: testIdWithKey(t('TabStack.Wallet')),
+          }}
+        />
+        <Tab.Screen
+          name={TabStacks.MyAgentStack}
+          component={MyAgentStack}
+          options={{
+            tabBarIconStyle: styles.tabBarIcon,
+            tabBarIcon: ({ color, focused }) => (
+              <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
+                <Icon name={focused ? 'shield-account' : 'shield-account-outline'} size={24} color={color} />
+                {showLabels && (
+                  <Text
+                    style={{
+                      ...TabTheme.tabBarTextStyle,
+                      color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
+                      fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
+                    }}
+                  >
+                    {t('TabStack.MyAgent')}
+                  </Text>
+                )}
+              </View>
+            ),
+            tabBarShowLabel: false,
+            tabBarAccessibilityLabel: t('TabStack.MyAgent'),
+            // A literal key, not the translated label: the tabs that pass a
+            // translated string into testIdWithKey have locale-dependent
+            // testIDs, which the e2e harness already works around.
+            tabBarTestID: testIdWithKey('MyAgent'),
           }}
         />
         <Tab.Screen

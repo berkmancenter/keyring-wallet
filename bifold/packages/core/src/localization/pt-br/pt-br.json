@@ -754,7 +754,8 @@
     "Scan": "Scanear",
     "QRCode": "Código QR",
     "Credentials": "Credenciais",
-    "Wallet": "Carteira"
+    "Wallet": "Carteira",
+    "MyAgent": "Meu agente"
   },
   "RootStack": {
     "Contacts": "Contatos",
@@ -839,7 +840,9 @@
     "History": "History (PT-BR)",
     "HistoryDetails": "History Details (PT-BR)",
     "UpdateAvailable": "Update Available (PT-BR)",
-    "JSONDetails": "JSON details (PT-BR)"
+    "JSONDetails": "JSON details (PT-BR)",
+    "MyAgent": "Meu agente",
+    "Community": "Comunidade"
   },
   "Loading": {
     "TakingTooLong": "Isso esta demorando mais que o normal. Você pode voltar para a home ou continuar esperando.",
@@ -987,5 +990,25 @@
   },
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts (PT-BR)"
+  },
+  "MyAgent": {
+    "Title": "Seu agente",
+    "WhatItIs": "Um agente guarda sua identidade em uma comunidade e leva suas mensagens até ela. Você precisa de um antes de entrar ou ser verificado.",
+    "Connect": "Conectar meu agente",
+    "TryAgain": "Tentar novamente",
+    "Resolving": "Localizando seu agente…",
+    "Authenticating": "Entrando e abrindo um canal…",
+    "Connected": "Conectado",
+    "Host": "Host do agente",
+    "YourIdentity": "A identidade que você apresenta",
+    "Communities": "Comunidades",
+    "NoCommunities": "Nenhuma comunidade ainda.",
+    "NotAMember": "Ainda não é membro",
+    "NotConfigured": "Nenhum agente configurado nesta versão.",
+    "Community": "Comunidade",
+    "WhatIsAsked": "O que esta comunidade pede",
+    "Apply": "Pedir para entrar",
+    "Verdict": "A resposta deles",
+    "StillNeeded": "Ainda necessário"
   }
 }

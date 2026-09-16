@@ -829,7 +829,8 @@
     "Scan": "Numériser",
     "QRCode": "Code QR",
     "Credentials": "Justificatifs",
-    "Wallet": "Portefeuille"
+    "Wallet": "Portefeuille",
+    "MyAgent": "Mon agent"
   },
   "TabStackAccessibility": {
     "Home": "Notifications tab {{notifications}} notifications (FR)",
@@ -927,7 +928,9 @@
     "History": "History (FR)",
     "HistoryDetails": "History Details (FR)",
     "UpdateAvailable": "Update Available (FR)",
-    "JSONDetails": "JSON details (FR)"
+    "JSONDetails": "JSON details (FR)",
+    "MyAgent": "Mon agent",
+    "Community": "Communauté"
   },
   "Loading": {
     "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
@@ -1088,5 +1091,25 @@
       "Title": "{{cardName}} has expired (FR)",
       "CTA": "View offer (FR)"
     }
+  },
+  "MyAgent": {
+    "Title": "Votre agent",
+    "WhatItIs": "Un agent détient votre identité auprès d'une communauté et lui transmet vos messages. Il en faut un avant de pouvoir adhérer ou être vérifié.",
+    "Connect": "Connecter mon agent",
+    "TryAgain": "Réessayer",
+    "Resolving": "Recherche de votre agent…",
+    "Authenticating": "Connexion et ouverture d'un canal…",
+    "Connected": "Connecté",
+    "Host": "Hôte de l'agent",
+    "YourIdentity": "L'identité que vous présentez",
+    "Communities": "Communautés",
+    "NoCommunities": "Aucune communauté pour l'instant.",
+    "NotAMember": "Pas encore membre",
+    "NotConfigured": "Aucun agent n'est configuré pour cette version.",
+    "Community": "Communauté",
+    "WhatIsAsked": "Ce que cette communauté demande",
+    "Apply": "Demander à adhérer",
+    "Verdict": "Leur réponse",
+    "StillNeeded": "Encore nécessaire"
   }
 }

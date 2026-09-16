@@ -74,6 +74,8 @@ export enum Screens {
   About = 'About',
   ExportWallet = 'Export Wallet',
   ImportWallet = 'Import Wallet',
+  MyAgent = 'My Agent',
+  VtiCommunity = 'Community',
 }
 
 export enum Stacks {
@@ -97,6 +99,7 @@ export enum TabStacks {
   HomeStack = 'Tab Home Stack',
   ConnectStack = 'Tab Connect Stack',
   CredentialStack = 'Tab Credential Stack',
+  MyAgentStack = 'Tab My Agent Stack',
   SettingStack = 'Tab Setting Stack',
 }
 
@@ -123,7 +126,14 @@ export type TabStackParams = {
   [TabStacks.HomeStack]: NavigatorScreenParams<HomeStackParams>
   [TabStacks.ConnectStack]: NavigatorScreenParams<ConnectStackParams>
   [TabStacks.CredentialStack]: NavigatorScreenParams<CredentialStackParams>
+  [TabStacks.MyAgentStack]: NavigatorScreenParams<MyAgentStackParams>
   [TabStacks.SettingStack]: NavigatorScreenParams<SettingStackParams>
+}
+
+/** My Agent: the wallet's VTI agent, the communities it reaches, applications. */
+export type MyAgentStackParams = {
+  [Screens.MyAgent]: undefined
+  [Screens.VtiCommunity]: { communityDid: string }
 }
 
 export type OnboardingStackParams = {

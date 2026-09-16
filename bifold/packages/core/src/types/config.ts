@@ -58,6 +58,16 @@ export interface Config {
     values: [AutoLockTimer, ...AutoLockTimer[]]
   }
   enableAttestation: boolean
+  /**
+   * The VTI agent this wallet connects to: the mediator a VTA or a VTC
+   * advertises, and a community to offer. Both are DIDs bound to whatever host
+   * the stack runs behind, so they are deployment configuration rather than
+   * anything the wallet can discover.
+   */
+  vti?: {
+    mediatorDid?: string
+    communityDid?: string
+  }
 }
 
 export interface AutoLockTimer {
