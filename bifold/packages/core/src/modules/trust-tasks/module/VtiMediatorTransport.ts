@@ -36,7 +36,7 @@ import {
   PeerDidNumAlgo,
   utils,
 } from '@credo-ts/core'
-import type { DidCommV2KeyAgreementJwk, DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import type { DidCommV2EncryptedMessage, DidCommV2KeyAgreementJwk, DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didcomm'
 
 const LOG_PREFIX = '[TrustTasks:VtiMediatorTransport]'
@@ -45,11 +45,12 @@ const ATM_AUTHENTICATE = 'https://affinidi.com/atm/1.0/authenticate'
 const FORWARD = 'https://didcomm.org/routing/2.0/forward'
 const LIVE_DELIVERY_CHANGE = 'https://didcomm.org/messagepickup/3.0/live-delivery-change'
 const MESSAGES_RECEIVED = 'https://didcomm.org/messagepickup/3.0/messages-received'
-const PICKUP_STATUS = 'https://didcomm.org/messagepickup/3.0/status'
+const PICKUP_PROTOCOL = 'https://didcomm.org/messagepickup/3.0/'
 const PLAIN = 'application/didcomm-plain+json'
 const WS_APP_SUBPROTOCOL = 'didcomm'
 
 const nowSec = () => Math.floor(Date.now() / 1000)
+const isPickup = (type: unknown) => typeof type === 'string' && type.startsWith(PICKUP_PROTOCOL)
 // Hermes has no `crypto.randomUUID` — react-native-get-random-values polyfills
 // `getRandomValues` and nothing else — so ids come from Credo's own helper.
 const uuid = () => `urn:uuid:${utils.uuid()}`
@@ -192,7 +193,17 @@ export class VtiMediatorSession {
     private readonly agent: Agent,
     private readonly identity: VtiClientIdentity,
     private readonly mediator: VtiMediatorEndpoints,
-    private readonly options: { onError?: (error: Error) => void } = {}
+    private readonly options: {
+      onError?: (error: Error) => void
+      /**
+       * A message addressed to this client, already decrypted. Set it to read
+       * what a VTA or a VTC answers: Credo has no handler registered for Trust
+       * Task types, so handing those to its receiver only raises "Error
+       * validating message". Without it, frames still go to Credo — which is
+       * what a v1-shaped message wants.
+       */
+      onMessage?: (plaintext: DidCommV2PlaintextMessage) => void
+    } = {}
   ) {}
 
   get isOpen(): boolean {
@@ -301,6 +312,30 @@ export class VtiMediatorSession {
     })
   }
 
+  /**
+   * Decrypt a JWE addressed to this client. The sender is a VTA or a VTC, so
+   * its key is resolved from its DID document the same way an outbound
+   * recipient key is.
+   */
+  private async unpack(encrypted: DidCommV2EncryptedMessage): Promise<DidCommV2PlaintextMessage> {
+    const envelopeService = this.agent.dependencyManager.resolve(DidCommV2EnvelopeService)
+    const recipientKey = this.identity.senderKey as DidCommV2KeyAgreementJwk & { keyId: string }
+    const matchedKid =
+      encrypted.recipients?.find((recipient) => recipient.header?.kid === this.identity.kid)?.header?.kid ??
+      encrypted.recipients?.[0]?.header?.kid ??
+      this.identity.kid
+    const { plaintext } = await envelopeService.unpack(this.agent.context, encrypted, {
+      recipientKey,
+      matchedKid,
+      resolveSenderKey: async (skid: string) => {
+        const doc = await this.agent.dids.resolveDidDocument(skid.split('#')[0])
+        const vm = doc.dereferenceKey(skid, ['keyAgreement'])
+        return vm ? getPublicJwkFromVerificationMethod(vm) : null
+      },
+    })
+    return plaintext
+  }
+
   /** Hand a delivered frame to Credo, then acknowledge it — never the other way round. */
   private async handleFrame(raw: string): Promise<void> {
     try {
@@ -309,9 +344,17 @@ export class VtiMediatorSession {
       // which is this transport's own bookkeeping rather than a message for the
       // agent: Credo has no handler for it and rejects it as invalid. Frames
       // carrying a peer's message are JWEs, so a plaintext `status` is ours.
-      if (frame.type === PICKUP_STATUS) return
-      const receiver = this.agent.dependencyManager.resolve(DidCommMessageReceiver)
-      await receiver.receiveMessage(frame)
+      if (isPickup(frame.type)) return
+      if (this.options.onMessage && typeof frame.protected === 'string') {
+        const plaintext = await this.unpack(frame as unknown as DidCommV2EncryptedMessage)
+        // The mediator authcrypts its own bookkeeping too, so a frame's type is
+        // only visible once it is open: a Pickup `status` answering
+        // `live-delivery-change` looks exactly like a peer's message until then.
+        if (!isPickup(plaintext.type)) this.options.onMessage(plaintext)
+      } else {
+        const receiver = this.agent.dependencyManager.resolve(DidCommMessageReceiver)
+        await receiver.receiveMessage(frame)
+      }
       const queueId = (frame as { id?: string }).id
       if (queueId) {
         await this.send({
