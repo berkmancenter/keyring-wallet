@@ -371,14 +371,16 @@ const Developer: React.FC = () => {
       mark('[VTI-PROBE] our did', ourDid as string)
 
       const identity = await vtiClientIdentityFromDid(agent, ourDid as string)
-      let resolveReply: ((plaintext: { type?: string; body?: unknown }) => void) | undefined
+      // One socket, several legs: each leg installs its own listener rather
+      // than opening a second session the community would see as a new member.
+      let onVtiMessage: ((plaintext: { type?: string; body?: unknown }) => void) | undefined
       const reply = new Promise<{ type?: string; body?: unknown }>((resolve) => {
-        resolveReply = resolve
+        onVtiMessage = resolve
       })
       session = new VtiMediatorSession(agent, identity, mediator, {
         // eslint-disable-next-line no-console
         onError: (error: Error) => console.log('[VTI-PROBE] session error', error.message),
-        onMessage: (plaintext) => resolveReply?.(plaintext),
+        onMessage: (plaintext) => onVtiMessage?.(plaintext),
       })
       await session.start()
       mark('[VTI-PROBE] socket open, live delivery on')
@@ -424,7 +426,70 @@ const Developer: React.FC = () => {
         for (const criterion of criteria ?? []) {
           mark('[VTI-PROBE] criterion:', String(criterion.description ?? 'unnamed'))
         }
-        Alert.alert('VTI probe', `Manifest received: ${String(answer.type)}`)
+
+        // Apply. With no credentials in hand the honest presentation is an
+        // empty one: the community should answer `requestMore` naming what it
+        // still needs, which is the verdict ref-20 measured from Node.
+        const manifestPayload = (answer.body as { payload?: { requirementsDigest?: string } } | undefined)?.payload
+        const submitType = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
+        let resolveVerdict: ((plaintext: { type?: string; body?: unknown }) => void) | undefined
+        const verdictReply = new Promise<{ type?: string; body?: unknown }>((resolve) => {
+          resolveVerdict = resolve
+        })
+        onVtiMessage = (plaintext) => resolveVerdict?.(plaintext)
+        await session.sendTo(communityDid, {
+          id: `urn:uuid:${utils.uuid()}`,
+          typ: 'application/didcomm-plain+json',
+          type: submitType,
+          from: ourDid as string,
+          to: [communityDid],
+          created_time: Math.floor(Date.now() / 1000),
+          expires_time: Math.floor(Date.now() / 1000) + 300,
+          body: {
+            id: `urn:uuid:${utils.uuid()}`,
+            type: submitType,
+            issuer: ourDid as string,
+            recipient: communityDid,
+            issuedAt: new Date().toISOString(),
+            payload: {
+              vp: {
+                '@context': ['https://www.w3.org/ns/credentials/v2'],
+                type: ['VerifiablePresentation'],
+                holder: ourDid as string,
+                verifiableCredential: [],
+              },
+              registryConsent: false,
+              extensions: manifestPayload?.requirementsDigest
+                ? { requirementsDigest: manifestPayload.requirementsDigest }
+                : {},
+            },
+          },
+        })
+        mark('[VTI-PROBE] join request submitted')
+
+        const verdictAnswer = await Promise.race([
+          verdictReply,
+          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 30000)),
+        ])
+        // A verdict is `{ effect, with: { needs } }`: the effect says what the
+        // community decided, `needs` names what it is still waiting for.
+        const payload = (
+          verdictAnswer?.body as
+            | { payload?: { requestId?: string; verdict?: { effect?: string; with?: { needs?: string[] } } } }
+            | undefined
+        )?.payload
+        if (payload?.verdict) {
+          mark(
+            '[VTI-PROBE] verdict',
+            String(payload.verdict.effect ?? 'unstated'),
+            `needs: ${(payload.verdict.with?.needs ?? []).join(', ') || 'nothing stated'}`
+          )
+          mark('[VTI-PROBE] request id', String(payload.requestId ?? 'none'))
+          Alert.alert('VTI probe', `Join verdict: ${String(payload.verdict.effect ?? 'unstated')}`)
+        } else {
+          mark('[VTI-PROBE] no verdict within 30s')
+          Alert.alert('VTI probe', 'Join request submitted, but no verdict came back.')
+        }
       } else {
         mark('[VTI-PROBE] no manifest within 30s')
         Alert.alert('VTI probe', 'Logged in, socket open, manifest request sent — but nothing came back.')

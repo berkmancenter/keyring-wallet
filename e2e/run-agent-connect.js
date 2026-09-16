@@ -113,7 +113,7 @@ try {
 
   // Login + socket + forward is a handful of round trips through a tunnel, and
   // the probe then waits up to 30s for the community's answer.
-  await sleep(50000);
+  await sleep(80000);
   await screenshot(driver, "agent-connect-result");
 
   // The screen is the primary evidence (it works on both platforms); the
@@ -133,6 +133,8 @@ try {
   assertMarker(log, "[VTI-PROBE] socket open, live delivery on");
   assertMarker(log, "[VTI-PROBE] manifest request forwarded to");
   assertMarker(log, "[VTI-PROBE] manifest received");
+  assertMarker(log, "[VTI-PROBE] join request submitted");
+  assertMarker(log, "[VTI-PROBE] verdict");
 
   printSuccess("agent-connect");
   process.exitCode = 0;
