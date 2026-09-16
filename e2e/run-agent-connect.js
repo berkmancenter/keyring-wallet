@@ -26,12 +26,21 @@ const keepState = process.env.E2E_KEEP_STATE === "1";
 
 /** The app's own log is the evidence: every probe stage marks itself. */
 function readMarkers(driver) {
-  if (driver.e2ePlatform !== "android") return "";
   try {
-    return execFileSync("adb", ["-s", process.env.ANDROID_SERIAL || "emulator-5554", "logcat", "-d", "-s", "ReactNativeJS"], {
-      encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
-    });
+    if (driver.e2ePlatform === "android") {
+      return execFileSync("adb", ["-s", process.env.ANDROID_SERIAL || "emulator-5554", "logcat", "-d", "-s", "ReactNativeJS"], {
+        encoding: "utf8",
+        maxBuffer: 32 * 1024 * 1024,
+      });
+    }
+    // A simulator has no logcat: console.log lands in the unified log, where
+    // the last few minutes can be replayed after the fact rather than streamed
+    // alongside the run.
+    return execFileSync(
+      "xcrun",
+      ["simctl", "spawn", "booted", "log", "show", "--style", "compact", "--last", "10m", "--predicate", 'process == "KeyRing"'],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+    );
   } catch {
     return "";
   }
@@ -50,7 +59,15 @@ try {
   const caps = platform === "android" ? androidCaps() : iosCaps();
   driver = await createSession(
     platform,
-    keepState ? { ...caps, "appium:fullReset": false, "appium:noReset": true } : undefined
+    keepState
+      ? {
+          ...caps,
+          "appium:fullReset": false,
+          "appium:noReset": true,
+          // iOS reinstalls wipe the container, which is the state being reused.
+          "appium:enforceAppInstall": false,
+        }
+      : undefined
   );
 
   // A reused install boots into the agent, not into onboarding. Its tab bar only
@@ -98,7 +115,18 @@ try {
   await sleep(25000);
   await screenshot(driver, "agent-connect-result");
 
-  const log = readMarkers(driver);
+  // The screen is the primary evidence (it works on both platforms); the
+  // platform log is the fallback and carries anything logged before the screen
+  // started recording.
+  let log = "";
+  try {
+    const probeLog = await scrollToTestId(driver, "VtaProbeLog", 8);
+    log = (await probeLog.getAttribute(driver.e2ePlatform === "ios" ? "label" : "text")) || "";
+    console.log(`[e2e] ${driver.e2ePlatform}: on-screen probe log:\n${log}`);
+  } catch {
+    console.log(`[e2e] ${driver.e2ePlatform}: no on-screen probe log — falling back to the platform log`);
+  }
+  log += `\n${readMarkers(driver)}`;
   assertMarker(log, "[VTI-PROBE] resolving mediator");
   assertMarker(log, "[VTI-PROBE] mediator endpoints");
   assertMarker(log, "[VTI-PROBE] socket open, live delivery on");

@@ -63,6 +63,10 @@ const Developer: React.FC = () => {
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isProbingVta, setIsProbingVta] = useState(false)
+  // The probe's stages, on screen as well as in the log: a simulator has no
+  // logcat and React Native's console output never reaches the unified log, so
+  // a run on iOS can only assert what the screen shows.
+  const [vtaProbeLog, setVtaProbeLog] = useState<string[]>([])
   const [isClearingContacts, setIsClearingContacts] = useState(false)
   const navigation = useNavigation()
 
@@ -349,17 +353,22 @@ const Developer: React.FC = () => {
     }
 
     setIsProbingVta(true)
+    setVtaProbeLog([])
+    // A DID is most of a screen; the log keeps it whole, the screen keeps its ends.
+    const short = (part: string) => (part.length > 44 ? `${part.slice(0, 28)}…${part.slice(-12)}` : part)
+    const mark = (...parts: string[]) => {
+      // eslint-disable-next-line no-console
+      console.log(parts.join(' '))
+      setVtaProbeLog((previous) => [...previous, parts.map(short).join(' ')])
+    }
     let session: VtiMediatorSession | undefined
     try {
-      // eslint-disable-next-line no-console
-      console.log('[VTI-PROBE] resolving mediator', mediatorDid)
+      mark('[VTI-PROBE] resolving mediator', mediatorDid)
       const mediator = await resolveVtiMediator(agent, mediatorDid)
-      // eslint-disable-next-line no-console
-      console.log('[VTI-PROBE] mediator endpoints', mediator.authEndpoint, mediator.wsEndpoint)
+      mark('[VTI-PROBE] mediator endpoints', mediator.authEndpoint, mediator.wsEndpoint)
 
       const ourDid = await createVtiClientDid(agent, mediator)
-      // eslint-disable-next-line no-console
-      console.log('[VTI-PROBE] our did', ourDid)
+      mark('[VTI-PROBE] our did', ourDid as string)
 
       const identity = await vtiClientIdentityFromDid(agent, ourDid as string)
       session = new VtiMediatorSession(agent, identity, mediator, {
@@ -367,8 +376,7 @@ const Developer: React.FC = () => {
         onError: (error: Error) => console.log('[VTI-PROBE] session error', error.message),
       })
       await session.start()
-      // eslint-disable-next-line no-console
-      console.log('[VTI-PROBE] socket open, live delivery on')
+      mark('[VTI-PROBE] socket open, live delivery on')
 
       await session.sendTo(communityDid, {
         id: `urn:uuid:${utils.uuid()}`,
@@ -389,13 +397,11 @@ const Developer: React.FC = () => {
           issuedAt: new Date().toISOString(),
         },
       })
-      // eslint-disable-next-line no-console
-      console.log('[VTI-PROBE] manifest request forwarded to', communityDid)
+      mark('[VTI-PROBE] manifest request forwarded to', communityDid)
       Alert.alert('VTI probe', 'Logged in, socket open, manifest request sent. See the log for markers.')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      // eslint-disable-next-line no-console
-      console.log('[VTI-PROBE] failed', message)
+      mark('[VTI-PROBE] failed', message)
       Alert.alert('VTI probe failed', message)
     } finally {
       await session?.stop()
@@ -754,6 +760,15 @@ const Developer: React.FC = () => {
               <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Probe VTA mediator</Text>
             )}
           </Pressable>
+          {vtaProbeLog.length > 0 && (
+            <Text
+              testID={testIdWithKey('VtaProbeLog')}
+              accessibilityLabel={vtaProbeLog.join('\n')}
+              style={{ color: TextTheme.normal.color, fontSize: 12, marginTop: 12 }}
+            >
+              {vtaProbeLog.join('\n')}
+            </Text>
+          )}
         </View>
         <View style={styles.section}>
           <Pressable

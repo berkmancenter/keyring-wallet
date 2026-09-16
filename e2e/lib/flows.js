@@ -556,6 +556,14 @@ async function setAutoLockNever(driver) {
     if (await neverEl.isExisting()) break;
     console.log(`[e2e] ${deviceTag(driver)}: "Never" not found after Lockout tap, retrying once`);
   }
+  if (!(await neverEl.isExisting())) {
+    // On a reused install the preference is already "Never", and the expanded
+    // row can render without a tappable option. Not worth failing a run over:
+    // the wallet either locks (and unlockIfLocked recovers it) or it doesn't.
+    console.log(`[e2e] ${deviceTag(driver)}: leaving auto-lock as it is — "Never" never appeared`);
+    driver.e2eAutoLockNeverSet = true;
+    return;
+  }
   await neverEl.click();
   driver.e2eAutoLockNeverSet = true;
   console.log(`[e2e] ${driver.e2ePlatform}: auto-lock set to Never`);

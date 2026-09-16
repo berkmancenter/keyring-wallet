@@ -87,6 +87,25 @@ signer Keyring ships.
 9. **A community's advertised transports are fixed at mint** (`vtc setup`'s
    `[messaging] transports`), so enabling DIDComm afterwards means re-provisioning.
 
+10. **An Affinidi mediator refuses a phone's WebSocket upgrade.** React Native
+    sends an `Origin` header on a WS handshake where Node's `ws` does not, so
+    the mediator's CORS check reads a mobile client as a browser and answers
+    `/mediator/v1/ws` with 403 — *"Origin not permitted by CORS policy"* — while
+    the same client's HTTP `authenticate` succeeds. With `cors_allow_origin`
+    unset (the default) cross-origin is refused outright, so **every** mobile
+    DIDComm client is locked out of a stock deployment until an operator sets
+    it. That is an operator-side setting on the Farm's mediator as much as on
+    this stack; upstream may prefer to exempt an upgrade that carries a bearer
+    subprotocol, since its credential is not an ambient cookie.
+
+11. **The mediator resolves `functions_file` relative to its working
+    directory**, not to its config file, so it only starts from
+    `<stack>/mediator`. Measured as *"Couldn't ready database functions_file
+    (./conf/atm-functions.lua)"* on a restart from elsewhere.
+
+Findings 10 and 11 came out of driving this wire from the app rather than from
+Node — see `e2e/run-agent-connect.js`.
+
 ## Running it
 
 The stack lives outside the repo (`~/vti-stack`), since its DIDs are bound to
