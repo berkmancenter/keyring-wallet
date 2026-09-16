@@ -69,6 +69,10 @@ function givenAvailableAttestation() {
   mockGetHardwareKeyAttestation.mockResolvedValue({
     success: true,
     certificateChain: CERT_CHAIN,
+    // The reported key the chain certifies — must equal the signing key for
+    // getOrFetchAttestation to accept the chain (an absent/empty publicKey
+    // now fails closed rather than being treated as a match; see evidence.ts).
+    publicKey: PUBLIC_KEY_B64,
     format: 'apple-appattest-v1',
     platform: 'ios',
     securityLevel: 'SecureEnclave',

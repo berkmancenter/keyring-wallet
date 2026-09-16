@@ -221,16 +221,28 @@ export class HardwareEvidenceBuilder {
           // A native module without the cached read falls through to a fetch.
         }
         if (held && held.certificateChain.length > 0) {
-          if (held.publicKey && held.publicKey !== publicKey) {
-            // The key was replaced after it signed; no chain can vouch for this signature.
-            this.logger.warn(`${LOG_PREFIX} Held attestation is for a different key than the one that signed`)
-            await this.saveAttestation(held.publicKey, held)
+          // `!held.publicKey ||` — not `held.publicKey &&` — deliberately: an
+          // empty/missing reported key must fail closed, never be treated as
+          // "matches ours". The old `held.publicKey && …` short-circuited on
+          // an empty string and vouched for a signature with a chain that
+          // doesn't actually certify our key (a native leaf-parse failure
+          // can report a non-empty chain alongside an empty public key).
+          if (!held.publicKey || held.publicKey !== publicKey) {
+            this.logger.warn(
+              held.publicKey
+                ? `${LOG_PREFIX} Held attestation is for a different key than the one that signed`
+                : `${LOG_PREFIX} Held attestation reported no public key — cannot confirm it certifies the signing key`
+            )
+            if (held.publicKey) {
+              // The key was replaced after it signed; cache the chain under the key it actually belongs to.
+              await this.saveAttestation(held.publicKey, held)
+            }
             return {
               success: false,
               certificateChain: [],
               source: 'none',
-              rotatedPublicKey: held.publicKey,
-              error: 'Signing key no longer matches the attested key',
+              rotatedPublicKey: held.publicKey || undefined,
+              error: held.publicKey ? 'Signing key no longer matches the attested key' : 'Attestation reported no public key',
             }
           }
           await this.saveAttestation(publicKey, held)
@@ -271,17 +283,25 @@ export class HardwareEvidenceBuilder {
         return { success: false, certificateChain: [], source: 'none', error: 'Failed to fetch attestation' }
       }
 
-      if (attestation.publicKey && attestation.publicKey !== publicKey) {
-        // The fetch attested a different key (iOS regenerated it). Cache the chain
-        // under the key it belongs to; it must never be paired with `publicKey`.
-        this.logger.warn(`${LOG_PREFIX} Attestation was issued for a different key than requested (key replaced)`)
-        await this.saveAttestation(attestation.publicKey, attestation)
+      // See the matching comment above: an empty/missing reported key must
+      // fail closed, never be treated as "matches ours".
+      if (!attestation.publicKey || attestation.publicKey !== publicKey) {
+        this.logger.warn(
+          attestation.publicKey
+            ? `${LOG_PREFIX} Attestation was issued for a different key than requested (key replaced)`
+            : `${LOG_PREFIX} Attestation reported no public key — cannot confirm this chain certifies the requested key`
+        )
+        if (attestation.publicKey) {
+          // The fetch attested a different key (iOS regenerated it). Cache the chain
+          // under the key it belongs to; it must never be paired with `publicKey`.
+          await this.saveAttestation(attestation.publicKey, attestation)
+        }
         return {
           success: false,
           certificateChain: [],
           source: 'none',
-          rotatedPublicKey: attestation.publicKey,
-          error: 'Attested key differs from the requested key',
+          rotatedPublicKey: attestation.publicKey || undefined,
+          error: attestation.publicKey ? 'Attested key differs from the requested key' : 'Attestation reported no public key',
         }
       }
 
