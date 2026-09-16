@@ -60,3 +60,10 @@ export type { PendingTrustTaskPrompt } from './trustTaskPromptStore'
 export { trustTaskDisplayRegistry } from './display/trustTaskDisplayRegistry'
 export { registerTrustTaskDisplay } from './display/register'
 export { findV2MediationRecord, getRoutingForV2, provisionV2Mediation, startV2MessagePickup } from './v2Routing'
+export {
+  VtiMediatorSession,
+  VtiMediatorOutboundTransport,
+  resolveVtiMediator,
+  vtiClientIdentityFromDid,
+} from './module/VtiMediatorTransport'
+export type { VtiMediatorEndpoints, VtiClientIdentity } from './module/VtiMediatorTransport'
