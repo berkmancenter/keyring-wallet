@@ -13,6 +13,8 @@ import {
   setDidCommV2Enabled,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
+import { resolveVtiMediator, vtiClientIdentityFromDid, VtiMediatorSession } from '@bifold/core'
+import Config from 'react-native-config'
 import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useState } from 'react'
@@ -59,6 +61,7 @@ const Developer: React.FC = () => {
   const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
   const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
+  const [isProbingVta, setIsProbingVta] = useState(false)
   const [isClearingContacts, setIsClearingContacts] = useState(false)
   const navigation = useNavigation()
 
@@ -322,6 +325,83 @@ const Developer: React.FC = () => {
     // relationship invitations read the flag live (isDidCommV2Enabled).
     setDidCommV2Enabled(next)
     setEnableDidCommV2(next)
+  }
+
+  /**
+   * Dev probe for the VTA/VTC leg: resolve the mediator a VTI agent advertises,
+   * log in, hold the socket, and ask the community for its join manifest. Marks
+   * every stage in the log so an e2e run can assert on it.
+   *
+   * VTI_MEDIATOR_DID and VTI_COMMUNITY_DID come from `app/.env`, like the
+   * mediator URLs — the local stack mints new DIDs whenever its tunnels change.
+   */
+  const handleProbeVtaMediator = async () => {
+    if (!agent) {
+      Alert.alert('Error', 'Agent not initialized')
+      return
+    }
+    const mediatorDid = Config.VTI_MEDIATOR_DID
+    const communityDid = Config.VTI_COMMUNITY_DID
+    if (!mediatorDid || !communityDid) {
+      Alert.alert('Not configured', 'Set VTI_MEDIATOR_DID and VTI_COMMUNITY_DID in app/.env and rebuild.')
+      return
+    }
+
+    setIsProbingVta(true)
+    let session: VtiMediatorSession | undefined
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[VTI-PROBE] resolving mediator', mediatorDid)
+      const mediator = await resolveVtiMediator(agent, mediatorDid)
+      // eslint-disable-next-line no-console
+      console.log('[VTI-PROBE] mediator endpoints', mediator.authEndpoint, mediator.wsEndpoint)
+
+      const routing = await agent.didcomm.mediationRecipient.getRouting({ useDefaultMediator: false })
+      const created = await agent.dids.create({ method: 'peer', options: { numAlgo: 2 }, secret: {} })
+      const ourDid = created.didState.did ?? routing.endpoints[0]
+      // eslint-disable-next-line no-console
+      console.log('[VTI-PROBE] our did', ourDid)
+
+      const identity = await vtiClientIdentityFromDid(agent, ourDid as string)
+      session = new VtiMediatorSession(agent, identity, mediator, {
+        // eslint-disable-next-line no-console
+        onError: (error: Error) => console.log('[VTI-PROBE] session error', error.message),
+      })
+      await session.start()
+      // eslint-disable-next-line no-console
+      console.log('[VTI-PROBE] socket open, live delivery on')
+
+      await session.sendTo(communityDid, {
+        id: `urn:uuid:${globalThis.crypto.randomUUID()}`,
+        typ: 'application/didcomm-plain+json',
+        type: 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2',
+        from: ourDid as string,
+        to: [communityDid],
+        created_time: Math.floor(Date.now() / 1000),
+        expires_time: Math.floor(Date.now() / 1000) + 300,
+        // The VTC reads the body as a whole Trust Task document, where a VTA
+        // takes a bare payload — measured in tsp-reference/ref-20.
+        body: {
+          id: `urn:uuid:${globalThis.crypto.randomUUID()}`,
+          type: 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2',
+          payload: {},
+          issuer: ourDid as string,
+          recipient: communityDid,
+          issuedAt: new Date().toISOString(),
+        },
+      })
+      // eslint-disable-next-line no-console
+      console.log('[VTI-PROBE] manifest request forwarded to', communityDid)
+      Alert.alert('VTI probe', 'Logged in, socket open, manifest request sent. See the log for markers.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      // eslint-disable-next-line no-console
+      console.log('[VTI-PROBE] failed', message)
+      Alert.alert('VTI probe failed', message)
+    } finally {
+      await session?.stop()
+      setIsProbingVta(false)
+    }
   }
 
   const handleSeedTestContacts = async () => {
@@ -636,6 +716,32 @@ const Developer: React.FC = () => {
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Seed Test Contacts</Text>
+            )}
+          </Pressable>
+        </View>
+        <View style={styles.section}>
+          <Pressable
+            style={[
+              {
+                backgroundColor: ColorPalette.brand.primary,
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                marginBottom: 10,
+              },
+              isProbingVta && { backgroundColor: ColorPalette.brand.primaryDisabled },
+            ]}
+            onPress={handleProbeVtaMediator}
+            disabled={isProbingVta}
+            testID={testIdWithKey('ProbeVtaMediatorButton')}
+          >
+            {isProbingVta ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Probe VTA mediator</Text>
             )}
           </Pressable>
         </View>
