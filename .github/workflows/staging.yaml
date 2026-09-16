@@ -3,10 +3,10 @@ name: Staging - Internal Testing Build & Deploy
 on:
   push:
     branches: [staging]
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   calculate-build-number:
@@ -17,15 +17,18 @@ jobs:
       - name: Calculate build number
         id: calc
         run: |
-          OFFSET=5
-          MIN_BUILD_NUMBER=34
+          # The run counter restarted at 1 when the pipeline moved from
+          # AdvancedIdentity, whose uploads reached build ~151. OFFSET must keep
+          # every build above the highest build either store has accepted, and is
+          # only ever raised. A floor alone would repeat the same number on every
+          # run until the counter caught up, and the stores reject a repeat.
+          OFFSET=200
+          MIN_BUILD_NUMBER=201
 
-          CALCULATED_BUILD=$((GITHUB_RUN_NUMBER + OFFSET))
-
-          if [ $CALCULATED_BUILD -lt $MIN_BUILD_NUMBER ]; then
-            BUILD_NUMBER=$MIN_BUILD_NUMBER
-          else
-            BUILD_NUMBER=$CALCULATED_BUILD
+          BUILD_NUMBER=$((GITHUB_RUN_NUMBER + OFFSET))
+          if [ $BUILD_NUMBER -lt $MIN_BUILD_NUMBER ]; then
+            echo "Build number $BUILD_NUMBER is below the floor $MIN_BUILD_NUMBER"
+            exit 1
           fi
 
           echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
@@ -41,13 +44,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Extract version from package.json
         id: get_version
@@ -59,6 +55,7 @@ jobs:
 
   check-secrets:
     runs-on: ubuntu-22.04
+    environment: internal
     steps:
       - name: Check required secrets
         shell: bash
@@ -77,13 +74,21 @@ jobs:
             "MEDIATOR_URL"
           )
 
+          missing=0
           for secret in "${required_secrets[@]}"; do
             if [ -z "${!secret}" ]; then
-              echo "⚠️ Warning: Secret $secret is not set"
+              echo "❌ Secret $secret is not set"
+              missing=1
             else
               echo "✅ Secret $secret is set"
             fi
           done
+
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "ℹ️ SLACK_WEBHOOK_URL is not set; the Slack notification will be skipped"
+          fi
+
+          exit $missing
         env:
           APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
@@ -96,6 +101,7 @@ jobs:
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   test:
     runs-on: ubuntu-22.04
@@ -103,13 +109,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - uses: actions/setup-python@v5
         with:
@@ -131,6 +130,7 @@ jobs:
   build-android-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
     runs-on: ubuntu-22.04
+    environment: internal
     timeout-minutes: 60
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
@@ -140,13 +140,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Verify bifold submodule commit
         run: |
@@ -321,8 +314,12 @@ jobs:
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
+          # Optional: the DIDComm v2 mediator, used only when the developer
+          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
+          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
 
       - name: Create release keystore
         working-directory: app/android/app
@@ -605,7 +602,10 @@ jobs:
 
   build-ios-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
-    runs-on: macos-14
+    # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
+    # since 2026-04-28; macos-26 ships Xcode 26 as its default.
+    runs-on: macos-26
+    environment: internal
     timeout-minutes: 60
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
@@ -614,13 +614,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Verify bifold submodule commit
         run: |
@@ -645,10 +638,10 @@ jobs:
         with:
           working-directory: ./app
 
-      - name: Switch to correct Xcode
+      - name: Show Xcode version
         run: |
-          sudo xcode-select --switch /Applications/Xcode_16.2.app
-          sudo xcode-select -p
+          xcode-select -p
+          xcodebuild -version
 
       - name: Cache pod dependencies
         id: pod-cache
@@ -739,15 +732,21 @@ jobs:
           CURRENT_PROJECT_VERSION: ${{ env.APP_BUILD_NUMBER }}
           MARKETING_VERSION: ${{ env.APP_VERSION }}
         run: |
+          # App Store Connect rejects a pre-release suffix (ITMS-90060), so iOS
+          # gets MAJOR.MINOR.PATCH only; Android and the tag keep the full version.
           agvtool new-version ${CURRENT_PROJECT_VERSION}
-          agvtool new-marketing-version ${MARKETING_VERSION}
+          agvtool new-marketing-version ${MARKETING_VERSION%%-*}
 
       - name: Create environment settings
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
+          # Optional: the DIDComm v2 mediator, used only when the developer
+          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
+          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
 
       - name: Update APS environment
         run: |
@@ -858,8 +857,10 @@ jobs:
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: github.event_name == 'push' && success()
+    if: success()
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     env:
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
     steps:
@@ -867,12 +868,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive
 
       - name: Extract version
         id: get_version
@@ -893,19 +888,12 @@ jobs:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
     if: success() # Only notify on successful builds
     runs-on: ubuntu-22.04
+    environment: internal
     env:
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Extract version
         id: get_version
@@ -950,8 +938,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Send Slack Notification
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: env.SLACK_WEBHOOK_URL != ''
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data "{
