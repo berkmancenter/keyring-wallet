@@ -28,6 +28,7 @@ this folder is a small standalone npm package.
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
 | `yarn e2e:vrc:witnessed:devices` | Witnessed + hardware-attested exchange on a **physical Android phone + iPhone**, routed through a locally-run witness server — both wallets end up with a Verifiable Witness Credential (VWC) in addition to the peer VRC | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
+| `yarn e2e:vrc:witnessed:android-only:didcomm-v2` | Same witnessed + attested exchange as above, but the wallet-to-wallet connection is DIDComm v2 (Coordinate Mediation 2.0) instead of the default v1 connection — the witness serves v1+v2 and replies on whichever carriage it received. Same **two physical Android phones** requirement. The wallet-to-*witness* protocol (session/challenge/VP) is unaffected. | **Yes** |
 | `yarn e2e:vrc:witnessed:locality:android-only` | Same witnessed + attested exchange on **two physical Android phones**, with BLE co-presence (locality) **required and asserted confirmed** — the one variant where the machine running the test needs its own real Bluetooth adapter, not just the phones (Linux/BlueZ or macOS/CoreBluetooth since bifold #49) | **Yes** |
 | `yarn e2e:vrc:witnessed:locality:devices` | Witnessed + attested exchange on a **physical Android phone + iPhone** with BLE co-presence **offered** — attempted on both, gated on neither, each side's outcome **reported** (Android: the confirmed/not-confirmed marker; iOS: the peripheral's own log incl. `signingElapsedMs`). The first-run variant for the iOS peripheral and for a macOS-hosted witness (CoreBluetooth/noble, bifold #49) — the machine running this needs a real Bluetooth adapter; Linux is no longer required | **Yes** |
 | `yarn e2e:vrc:witnessed:tsp:android-only` | Same witnessed + attested exchange as above, but the wallet-to-wallet VRC documents (discovery/propose/issue) are carried over the real TSP envelope stack instead of the default DIDComm-v1 binding — same **two physical Android phones** requirement. The wallet-to-*witness* protocol (session/challenge/VP) is a separate channel and is unaffected either way — see "TSP + witnessed" below. | **Yes** |
@@ -39,6 +40,7 @@ The same scripts exist inside this folder as `npm run vrc-exchange`,
 `vrc-exchange:devices:android-only`, `vrc-exchange:devices:android-only:didcomm-v2`, `store-migration`,
 `store-migration:android-only`, `onboarding-smoke`,
 `vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`,
+`vrc-exchange:witnessed:android-only:didcomm-v2`,
 `vrc-exchange:witnessed:tsp:android-only`,
 `vrc-exchange:witnessed:android-only:mediator`.
 
@@ -581,6 +583,25 @@ found, set `ANDROID_UDID` and `ANDROID_UDID2` explicitly:
 adb devices                                      # list connected serials
 ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
   yarn e2e:vrc:witnessed:android-only
+```
+
+### DIDComm v2 variant (`yarn e2e:vrc:witnessed:android-only:didcomm-v2`)
+
+Same witnessed + attested exchange, but the wallet-to-wallet connection is
+DIDComm v2 (Coordinate Mediation 2.0) instead of v1 — the witness serves
+v1+v2 and replies on whichever carriage it received, so the ceremony and
+witness share stay consistent with the connection the wallets used. Needs
+the same tunnel-mode v2 mediator and APK rebuild as
+[`yarn e2e:vrc:devices:android-only:didcomm-v2`](#didcomm-v2-variant-yarn-e2evrcdevicesandroid-onlydidcomm-v2)
+above:
+
+```sh
+yarn mediator --didcomm-v2                       # tunnel mode, real devices
+cd app/android && ./gradlew :app:assembleDebug   # bake MEDIATOR_V2_URL in
+
+adb devices                                      # list connected serials
+ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
+  yarn e2e:vrc:witnessed:android-only:didcomm-v2
 ```
 
 ### Locality variant (`yarn e2e:vrc:witnessed:locality:android-only`) — BLE co-presence required
