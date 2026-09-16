@@ -42,6 +42,10 @@ const TASK = {
   vettersGrant: "https://trusttasks.org/spec/vtc/vetting/vetters/grant/0.1",
   vettersList: "https://trusttasks.org/spec/vtc/vetting/vetters/list/0.1",
   manifest: "https://trusttasks.org/spec/vtc/join-requests/manifest/0.2",
+  joinList: "https://trusttasks.org/spec/vtc/join-requests/list/0.1",
+  joinDecide: "https://trusttasks.org/spec/vtc/join-requests/decide/0.1",
+  invitationIssue: "https://trusttasks.org/spec/vtc/invitations/issue/0.1",
+  membersList: "https://trusttasks.org/spec/vtc/members/list/0.1",
 };
 
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -183,6 +187,33 @@ async function main() {
       );
     case "manifest":
       return void show("GET /join-requests/manifest", await call(base, TASK.manifest, "/join-requests/manifest", { token }));
+    case "join-list":
+      return void show("GET /join-requests", await call(base, TASK.joinList, args[0] ? `/join-requests?status=${args[0]}` : "/join-requests", { token }));
+    case "join-decide":
+      return void show(
+        `POST /join-requests/${args[0]}/decide`,
+        await call(base, TASK.joinDecide, `/join-requests/${args[0]}/decide`, {
+          method: "POST",
+          token,
+          body: { decision: args[1] ?? "approved", role: args[2] ?? "member", reason: "ref-20: seed the vetter" },
+        })
+      );
+    case "delete-criterion":
+      return void show(
+        `DELETE /schemas/accepts/${args[0]}`,
+        await call(base, TASK.typeRegister, `/schemas/accepts/${args[0]}`, { method: "DELETE", token })
+      );
+    case "invite":
+      return void show(
+        "POST /invitations",
+        await call(base, TASK.invitationIssue, "/invitations", {
+          method: "POST",
+          token,
+          body: { subjectDid: args[0], role: args[1] ?? "member", validityDays: 30 },
+        })
+      );
+    case "members":
+      return void show("GET /members", await call(base, TASK.membersList, "/members", { token }));
     case "vetters-list":
       return void show("GET /vetting/vetters", await call(base, TASK.vettersList, "/vetting/vetters", { token }));
     case "vetter-grant":

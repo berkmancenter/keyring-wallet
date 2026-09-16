@@ -23,7 +23,7 @@
  */
 import { connectVtaViaMediator } from "@openvtc/vti-didcomm-js/vta-didcomm";
 import * as multibase from "@openvtc/vti-didcomm-js/multibase";
-import { x25519 } from "@noble/curves/ed25519.js";
+import { x25519, ed25519 } from "@noble/curves/ed25519.js";
 import { readFileSync } from "node:fs";
 import WebSocketImpl from "ws";
 
@@ -33,6 +33,25 @@ const TASK_STATUS = "https://trusttasks.org/spec/vtc/join-requests/status/0.1";
 
 const bytesToHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const hexToBytes = (h) => new Uint8Array(h.match(/.{2}/g).map((b) => parseInt(b, 16)));
+
+/**
+ * One identity, two key types. The VTC refuses a document whose `issuer` is not
+ * the DIDComm sender ("document issuer does not match the authenticated
+ * holder"), so an applicant's member DID *is* its messaging DID. A `did:key`
+ * Ed25519 identity carries a derived X25519 keyAgreement, which is what
+ * authcrypt uses — the same shape Keyring's join persona needs.
+ */
+function ed25519Holder(seedHex) {
+  const seed = hexToBytes(seedHex);
+  const edPub = ed25519.getPublicKey(seed);
+  const did = "did:key:" + multibase.encodeMultikey(multibase.MULTICODEC.ED25519_PUB, edPub);
+  return {
+    did,
+    privateKey: ed25519.utils.toMontgomerySecret(seed),
+    publicKey: ed25519.utils.toMontgomery(edPub),
+    secretKeyHex: seedHex,
+  };
+}
 
 function applicantHolder(secretKeyHex) {
   const privateKey = secretKeyHex ? hexToBytes(secretKeyHex) : x25519.utils.randomSecretKey();
@@ -48,7 +67,9 @@ async function main() {
     process.exit(1);
   }
 
-  const holder = applicantHolder(process.env.APPLICANT_X25519_SECRET_KEY);
+  const holder = process.env.APPLICANT_ED25519_SECRET_KEY
+    ? ed25519Holder(process.env.APPLICANT_ED25519_SECRET_KEY)
+    : applicantHolder(process.env.APPLICANT_X25519_SECRET_KEY);
   console.log(`[ref-20] applicant ${holder.did}`);
   if (!process.env.APPLICANT_X25519_SECRET_KEY) {
     console.log(`[ref-20] (new holder — export APPLICANT_X25519_SECRET_KEY=${holder.secretKeyHex} to reuse it)`);
@@ -67,11 +88,15 @@ async function main() {
 
   // The VTC parses the DIDComm body as a whole Trust Task document
   // (`missing field \`id\`` otherwise), where a VTA accepts a bare payload.
+  // The DIDComm identity (X25519) and the identity the community records as
+  // the member (Ed25519, which can sign statements) are different keys. The
+  // document says who is applying; the envelope says who sent it.
+  const memberDid = process.env.APPLICANT_MEMBER_DID || holder.did;
   const doc = (type, payload) => ({
     id: `urn:uuid:${crypto.randomUUID()}`,
     type,
     payload,
-    issuer: holder.did,
+    issuer: memberDid,
     recipient: communityDid,
     issuedAt: new Date().toISOString(),
   });

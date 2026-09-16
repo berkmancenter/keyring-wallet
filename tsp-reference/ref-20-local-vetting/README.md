@@ -57,7 +57,34 @@ signer Keyring ships.
 6. **An ACL `member` role is not community membership** — `vetting/vetters`
    refuses a grant with "is not a current member of this community", so a vetter
    must be admitted through a join request first.
-7. **A community's advertised transports are fixed at mint** (`vtc setup`'s
+7. **Seeding the first vetter is a dead end on the documented surfaces.** The
+   two membership checks disagree: `POST /v1/invitations` refuses with
+   "already a current member" for any DID in the ACL
+   (`routes/invitations.rs:105-120` gates on `acl_ks`), while
+   `POST /v1/vetting/vetters` refuses the same DID with "is not a current
+   member" (`vetting/vetters.rs:332-338` gates on the `members_ks` row). So a
+   DID added by the documented offline path (`vtc acl add`) is simultaneously
+   both. Admission therefore needs a real join — and:
+   - a `requestMore` verdict leaves the request **Deferred**, which
+     `POST /join-requests/{id}/decide` refuses ("is Deferred, not Pending"),
+     `GET /join-requests` does not list, and no REST route withdraws. The
+     applicant is told to "withdraw or await its decision"; neither is
+     reachable. **Practical rule: do not submit before you hold the statements.**
+   - an `invitation`-shaped accepts criterion (a query for
+     `InvitationCredential`) is not honoured — an invited applicant presenting
+     the community's own signed `InvitationCredential` still gets
+     `requestMore … vetting:statements:1`
+     (`fixtures/submit-0.2-invited-requestMore.log`).
+   The runbook sidesteps this by assuming the vetter "is already a member".
+   **Open question for upstream: how is the first vetter admitted?**
+8. **The document issuer must equal the DIDComm sender.** A submit whose
+   `issuer` is a different DID than the envelope's is refused with
+   `permissionDenied: document issuer … does not match the authenticated
+   holder`. An applicant's member DID *is* its messaging identity — so
+   Keyring's join persona needs one `did:key` Ed25519 identity whose derived
+   X25519 key carries authcrypt, which is what `join.mjs`'s
+   `APPLICANT_ED25519_SECRET_KEY` mode does.
+9. **A community's advertised transports are fixed at mint** (`vtc setup`'s
    `[messaging] transports`), so enabling DIDComm afterwards means re-provisioning.
 
 ## Running it
