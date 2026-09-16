@@ -1,9 +1,9 @@
 # Community vetting — Keyring as a PNM, admitted to a community through peer identity vetting
 
-**Status:** Proposal for review in [#53](https://github.com/berkmancenter/keyring-wallet/pull/53). Not a commitment to implement.
+**Status:** In execution on `feat/prague-farm-membership` (both repositories, pushed; wallet `ae42501`, bifold `7fd7798`). Reviewed in [#53](https://github.com/berkmancenter/keyring-wallet/pull/53). One decision is open — §2.4.
 **Parent:** `[keyring-on-the-vta-farm.md](../keyring-on-the-vta-farm.md)` — this subtask carries the parent's F2 (enrolment) and F4 (membership) for the ecosystem's **peer identity vetting** ceremony, and the development environment that ceremony needs before a Farm can host it.
 **Siblings consulted:** `[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` owns the VTA client architecture this subtask instantiates; `[trust_tasks_subtask.md](../openvtc-integration-plan/trust_tasks_subtask.md)` owns the Trust Task carriage it rides on.
-**Reasoning:** `[2026-09-15-al.md](./2026-09-15-al.md)` — the measurements behind §2–§3, and which positions of the parent plan they supersede. This document states current design only; see `[CLAUDE.md](../CLAUDE.md)`.
+**Reasoning:** `[2026-09-15-al.md](./2026-09-15-al.md)` — the measurements behind §2–§3, and which positions of the parent plan they supersede; `[2026-09-16-al.md](./2026-09-16-al.md)` — what the first two days of execution measured, the positions it changed (§2.1, §2.4, §2.5, §3.2, §5) and the open decision in §2.4. Upstream-facing findings, numbered and versioned: `[docs/VTI_UPSTREAM_FINDINGS.md](https://github.com/berkmancenter/keyring-wallet/blob/feat/prague-farm-membership/docs/VTI_UPSTREAM_FINDINGS.md)`. This document states current design only; see `[CLAUDE.md](../CLAUDE.md)`.
 **Dependency direction:** inherits the parent's non-core constraint unchanged. Nothing in the parent's sibling plans waits on this subtask.
 **Starting point:** the DIDComm v2 + TSP-over-v2 line is now committed and in review — **[keyring-wallet#54](https://github.com/berkmancenter/keyring-wallet/pull/54)** (`feat/credo-0.7`, head `d359e2ba9`: app wiring, the v2 developer setting with its own mediation, the v2/TSP e2e suites, `didcomm_v2_subtask.md`) and **[keyring-bifold#54](https://github.com/berkmancenter/keyring-bifold/pull/54)** (`feat/credo-0.7`, head `5a90b9f36`: the credo-ts `0.7.1-pr-2704` snapshot hop, `DidCommV2Carriage`, TSP over a v2 connection, mediator and witness serving v2 beside v1). This subtask assumes both land as they stand; review fixes are folded in as they arrive rather than waited on. The reference rungs behind them (`ref-15…19`) are **not** in those PRs and remain local.
 **Baseline (read 2026-09-15):** VTI `origin/main` **53a7cde4** (vta-service 0.27.0, vtc-service 0.11.58, vta-sdk 0.38 — no coordinated `VTI-`* tag after `VTI-Dogwood-R1`) · `OpenVTC/openvtc` **9a2d174e** · `dtgwg-trust-tasks-tf` **6e667c1d** · `vta-browser-plugin` **21b0465** (`@openvtc/pnm-core` 0.9.1) · `ic3software/vtafarm-api` **a3b8e52**. Upstream is changing these specs deliberately and weekly; every claim below is re-measured before it is acted on, per `[scripts/openvtc/README.md](../../../scripts/openvtc/README.md)`.
@@ -41,9 +41,9 @@ Three consequences shape everything below:
 
 
 
-### 2.1 Keyring consumes the ecosystem's TypeScript client
+### 2.1 Keyring speaks to a community with its own Credo transport; upstream's TypeScript client is a reference, not a dependency
 
-Keyring embeds `@openvtc/pnm-core` in a new bifold package, `vti-client`, behind a DI token — the architecture `[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` §3 already selects. `pnm-core` 0.9.1 already implements the member side of joining (`packages/core/src/vtc/membership.ts`: manifest, submit 0.2, status, receipt, request-vmc, vmc, self-remove), persona disclosure with its step-up retry, onboarding by key swap, and the consent view model. It has **no vetting client**: the vetting task URIs appear only in its `task-surface.json` catalogue. The vetting client logic exists only in Rust (`openvtc-core/src/vetting/`, `vta_sdk::vetting`); §6 P6 ports the applicant half.
+The community leg is `VtiMediatorTransport.ts` (mediator sign-in, one socket per DID, Pickup 3.0 live delivery, Routing 2.0 forward, opening replies, reopening a dropped socket) and `vtiAgent.ts` (connect, manifest, apply, verdict, refusal), both in `bifold/packages/core/src/modules/trust-tasks/module/`, written against Credo alone. No `@openvtc/*` package is bundled: the app already resolves `did:webvh`, Credo's envelope service seals and opens, and the mediator's four message shapes are literals. `@openvtc/pnm-core` and `@openvtc/vti-didcomm-js` are read for shapes (`pnm-core` 0.9.1 implements the member side of joining in `packages/core/src/vtc/membership.ts`; neither has a vetting client — that exists only in Rust, `vta_sdk::vetting`, which P6 ports). The React Native seams that consuming them would have cost are listed in `[2026-09-15-al.md](./2026-09-15-al.md)` and were avoided rather than solved; the departure from `[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` §3 is recorded in `[2026-09-16-al.md](./2026-09-16-al.md)` F12.
 
 ### 2.2 The development environment is a local VTI stack, not a local Farm
 
@@ -53,13 +53,20 @@ A Farm is orchestration around four services — VTA, mediator, DID hosting, VTC
 
 The newest images a Farm session can select (GHCR `ic3software/vta`, `vtc`: `0.24.1-0af2cce7`, built from VTI commit `0af2cce7` of 2026-09-09) **predate** the vetting implementation (VTI #1425 `5a6d4923`, #1430 `14ef89a6`, #1439 `7a5d8aa0`). The first release batch that contains it is the 2026-09-12 one (`vta-service-v0.27.0`, `vta-sdk-v0.38.0`, `cnm-cli-v0.15.0`). Until vetting-capable images are selectable, a Farm run can exercise enrolment and plain membership (parent F2, F4) but not this ceremony.
 
-### 2.4 Keys
+### 2.4 Keys — and an open decision on who the member is
 
-Persona and join-DID keys are **held by the VTA**, as upstream designs them: a persona is a `did:webvh` minted by the member's own VTA, one per community (`vti-setup` `developer/03-joining-a-community.md`), and the join persona is fixed at the start of an application ([[VETTING-DESIGN]]). The phone's own admin `did:key` is software Ed25519 first; the hardware target is chosen in P4 by measurement among: a P-256 `did:key` in the Secure Enclave (if the VTA accepts one), StrongBox Ed25519 (Android API 33+), or software Ed25519 wrapped by a hardware key. The parent's custody position (§3.2) is unchanged; this subtask sequences it. §3.6 records why TSP Rev 3 eases the hardware case.
+**Open.** Two architectures are in play, and the choice gates P6 (`[2026-09-16-al.md](./2026-09-16-al.md)` F14):
+
+- **A — the phone is the agent.** What P4 built: the phone's own `did:peer:2` is the member, the community mails the card to the phone, and everything the ceremony signs is signed on the phone. No VTA.
+- **B — Keyring drives the user's VTA.** What the rest of this section, §7 and the parent assume: the VTA is the member and holds the card, Keyring enrols as its manager and is the control surface. Needs the enrolment step (§9 request 2) first.
+
+The transport, the screens and the invitation flow are the same under both; the Vetting Card is a signed object, so the choice decides which side the ceremony code lives on. Until it is made, the rungs that are identical under both go first (§6 P5).
+
+Under B, persona and join-DID keys are **held by the VTA**, as upstream designs them: a persona is a `did:webvh` minted by the member's own VTA, one per community (`vti-setup` `developer/03-joining-a-community.md`), and the join persona is fixed at the start of an application ([[VETTING-DESIGN]]). The phone's own admin `did:key` is software Ed25519 first; the hardware target is chosen in P4 by measurement among: a P-256 `did:key` in the Secure Enclave (if the VTA accepts one), StrongBox Ed25519 (Android API 33+), or software Ed25519 wrapped by a hardware key. The parent's custody position (§3.2) is unchanged; this subtask sequences it. §3.6 records why TSP Rev 3 eases the hardware case.
 
 ### 2.5 Counterparties in test are upstream's own code
 
-- **Admin:** the `cnm` CLI and the VTC REST routes ([[VETTING-OPS]] §7) — scripted, no console.
+- **Admin:** the VTC REST routes ([[VETTING-OPS]] §7), scripted through `tsp-reference/ref-20-local-vetting/vtc-admin.mjs` (the `cnm` CLI cannot reach a VTC on this build — VTI-14, VTI-15); and the community's own **admin portal** at `/admin/`, a passkey-authenticated console baked into `vtc-service`, for the secretary's side of a demonstration.
 - **Vetter:** a headless binary built on `openvtc-core`'s vetter module, so Keyring is tested against the ecosystem's implementation rather than against a second copy of itself. Upstream's own client-side ceremony test, `openvtc-core/tests/vetting_e2e.rs` (openvtc #322 — Alice and Bob over an in-process mediator), is the scaffolding it starts from; the difference is that ours talks to a real VTC and to a phone.
 
 ---
@@ -89,7 +96,7 @@ This answers the parent's §9 Q3: the `trusttasks.org/openvtc/vtc/join-requests/
 
 ### 3.2 What a community configures
 
-[[VETTING-OPS]] §1–§3: register the statement type (`POST /v1/endorsement-types`, type `https://firstperson.network/endorsements/identity-vetting/0.1`); publish an accepts criterion with a `vetting` requirements object (`POST /v1/schemas/accepts`: `minStatements`, `acceptedMethods`, `requiredClaims`, `maxStatementAge`, `eligibleVetters`, `independence`); name vetters (`cnm vetting vetters grant <memberDid>`), who receive a revocable `CommunityRole: vetter` credential. A community that should vet must not also carry a criterion that admits without vetting.
+[[VETTING-OPS]] §1–§3: register the statement type (`POST /v1/endorsement-types`, type `https://firstperson.network/endorsements/identity-vetting/0.1`); publish an accepts criterion with a `vetting` requirements object (`POST /v1/schemas/accepts`: `minStatements`, `acceptedMethods`, `requiredClaims`, `maxStatementAge`, `eligibleVetters`, `independence`); name vetters (`cnm vetting vetters grant <memberDid>`), who receive a revocable `CommunityRole: vetter` credential. Criteria are **conjunctive**: an applicant must satisfy every one. So a vetting community is stood up in an order — an invitation-only criterion first, the first vetter invited and auto-admitted, the vetter role granted, and only then the vetting criterion added — because a community that asks for vetting from the start can never admit its first vetter, and the administrator's own identity cannot be granted the role (VTI-01). Once the vetting criterion is in place, no non-vetting criterion should remain beside it.
 
 ### 3.3 The applicant's side
 
@@ -225,8 +232,8 @@ VTI #1448 (`3415fb57`) refuses `did:webvh` resolution to localhost, `.local` and
 
 ## 5. Client architecture
 
-- **Package:** `bifold/packages/vti-client` wraps `@openvtc/pnm-core` behind a DI token with React Native implementations of its platform seams; the app adds a **My Agent** stack. The VRC and witness modules are unchanged.
-- **Carriage:** Trust Task documents are byte-identical across REST, DIDComm and TSP (`[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` §2.1). Keyring carries them over Credo DIDComm v2 — the in-progress Credo 0.7 / DIDComm v2 line (credo-ts PR #2704 snapshots; not yet on `main`) — plus a Credo transport to the VTI mediator (mediator login, one socket per DID, Pickup 3.0). That transport is the one piece of the v2 line **not** in [keyring-bifold#54](https://github.com/berkmancenter/keyring-bifold/pull/54): it is proven in Node only (a local rung) and is phase V3 of [`didcomm_v2_subtask.md`](../openvtc-integration-plan/didcomm_v2_subtask.md), which this subtask's P4 builds for the app. `pnm-core`'s own channels are the fallback where that path does not reach. Which carries each leg is **measured in P4**, not assumed.
+- **Module:** the community leg lives in `bifold/packages/core/src/modules/trust-tasks/module/` (`VtiMediatorTransport.ts`, `vtiAgent.ts`) and its screens in `modules/trust-tasks/screens/`; the app adds a **My Agent** tab (`navigators/MyAgentStack.tsx`, sixth tab in `TabStack.tsx`) and passes the agent's address through bifold's `Config.vti`. The VRC and witness modules are unchanged. The `vtiAgent` session lives outside React because one socket serves every screen.
+- **Carriage:** Trust Task documents are byte-identical across REST, DIDComm and TSP (`[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` §2.1). Keyring carries them over Credo DIDComm v2 — the in-progress Credo 0.7 / DIDComm v2 line (credo-ts PR #2704 snapshots; not yet on `main`) — plus a Credo transport to the VTI mediator (mediator login, one socket per DID, Pickup 3.0). That transport is built and proven on both platforms (P4); it is phase V3 of [`didcomm_v2_subtask.md`](../openvtc-integration-plan/didcomm_v2_subtask.md). The community leg is DIDComm v2 only — authcrypt to the community, wrapped in a Routing 2.0 forward authcrypted to the mediator; TSP is not used on it.
 - **Versions move together:** VTI `origin/main` with `pnm-core` 0.9.1 (both on vta-sdk 0.38). `pnm-core` 0.9.0 is avoided — its published tarball is a partial build (`vta-browser-plugin` `b379f2c`).
 - **React Native seams**, measured at `vta-browser-plugin` 21b0465: `node:fs`/`fs` resolved to an empty module (`@openvtc/vti-didcomm-js` → `didwebvh-ts`, whose `react-native` export condition resolves to a build that `require`s `node:fs`; the chain now also reaches the REST path via reply verification, `packages/core/src/trust-tasks/verify.ts`); `crypto.subtle` AES-KW / AES-CBC / HMAC / HKDF / SHA-256 for DIDComm legs; `getRandomValues` / `randomUUID`; `AbortSignal.timeout` (`packages/core/src/http/timeout-fetch.ts`); `structuredClone`; a key-value store adapter; and whether React Native's `fetch` honours `redirect: "manual"`, on which the egress guard's no-redirect guarantee depends — to be measured before it is relied on.
 - `did:webvh`**:** the app already registers `@credo-ts/webvh`'s resolver (`app/src/utils/bc-agent-modules.ts`, `bifold/packages/core/src/utils/agent.ts`); P4 measures it on Hermes against the stack's real DIDs, with a tampered-log fixture, before building on it.
@@ -246,12 +253,16 @@ Branch `feat/prague-farm-membership` in both repos from `feat/credo-0.7` — wal
 **Done when:** `yarn lint`, `yarn typecheck`, `yarn test` and `bifold/packages/core` `yarn test` pass on the branch point before anything is added; `sync-external.mjs` reports the new pins with reasons.
 **Blocked on:** nothing.
 
-### P1 — The local stack (target 09-17)
+### P1 — The local stack (target 09-17) — **done 09-16**
+
+Six services on reserved ngrok hostnames, one script (`scripts/openvtc/local-vti-stack/up.sh`) that re-provisions from scratch. `cargo test -p vtc-service --test vetting_journey` is not yet run at the built SHA — it stays a gate.
 
 **Done when:** `cargo test -p vtc-service --test vetting_journey` and the touched crates' tests pass at the built SHA; every DID resolves over its public hostname; `pnm health` is green for all three VTAs; the terminal client's `health` reports the negotiated transport for the applicant and vetter profiles.
 **Blocked on:** nothing.
 
-### P2 — Reference run with upstream's clients (target 09-18)
+### P2 — Reference run with upstream's clients (target 09-18) — **steps 00–05 done; 06–11 open**
+
+Community setup, the first vetter admitted (by invitation, then granted — `[2026-09-16-al.md](./2026-09-16-al.md)` F13), and plain membership both ways are frozen as fixtures. The vetting steps 06–11 have not been run by any client of ours.
 
 [[DRY-RUN]] as written (§3.8): community setup steps 00–05 via `cnm` and REST, the vetter admitted first, then steps 06–11 with two terminal-client profiles, then the first four negative cases. Every task document and reply is captured as a frozen fixture under `tsp-reference/ref-20-local-vetting/` (numbering starts at 20: `ref-15…19` are taken on the DIDComm v2 line, which also makes the parent's reserved `ref-16-farm-membership` name collide).
 
@@ -265,7 +276,9 @@ Branch `feat/prague-farm-membership` in both repos from `feat/credo-0.7` — wal
 **Done when:** P2's ceremony re-runs with the headless vetter and produces fixtures of the same shape; its README lists the refusals it preserves.
 **Blocked on:** §3.5, as P2.
 
-### P4 — Keyring connects to its agent (target 09-22)
+### P4 — Keyring connects to its agent (target 09-22) — **done as architecture A; enrolment not done**
+
+`e2e:agent:connect` and `e2e:my-agent` pass on the Android emulator and the iOS simulator against the local stack: resolve the mediator, sign in, hold the socket, manifest, apply, verdict — from a **My Agent** tab (S1/S3/S4/S5 as scaffolding). The phone connected to the community *directly* (§2.4 A); enrolment against a VTA by QR — the B half of this phase — is not started. The hardware-custody measurement is not recorded.
 
 **Started 2026-09-15.** The VTA/VTC leg needed a transport of its own: those
 agents publish an Affinidi-style mediator, not an Aries one, so
@@ -283,9 +296,9 @@ drives it, and `e2e:agent:connect` asserts its markers.
 **Done when:** unit tests cover the platform seams, the store adapter, and byte-equality of Keyring-built documents against P2's fixtures; `e2e:agent:connect` passes on the Android emulator **and** the iOS simulator; the hardware-custody measurement of §2.4 is recorded.
 **Blocked on:** P1.
 
-### P5 — Keyring joins a community (target 09-24)
+### P5 — Keyring joins a community (target 09-24) — **wire proven; card not held**
 
-Plain membership (§3.1) against a criterion that does not require vetting.
+Plain membership (§3.1) is proven on the wire two ways (`[2026-09-16-al.md](./2026-09-16-al.md)` F13); the phone does not yet keep the card (F14). The rungs, identical under §2.4 A and B: (1) one member identity persisted across restarts; (2) credentials read out of an `allow` verdict and a later `credential-exchange/issue` accepted; (3) the invitation flow end to end — show my identity as a QR, the administrator invites in the portal, scan the invitation, apply, admitted.
 
 **Done when:** `e2e:community:join` passes on both platforms; the membership card renders from the stored VMC; `cnm` lists the applicant as a member.
 **Blocked on:** P4.
@@ -359,7 +372,8 @@ New runners in `e2e/`, each run with the applicant on the Android emulator and t
 
 | Script                                                                                                                               | Asserts                                                                          |
 | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `e2e:agent:connect`                                                                                                                  | enrolment, key swap, health, persona list                                        |
+| `e2e:agent:connect` (`run-agent-connect.js`, **exists**)                                                                            | resolve mediator → sign in → socket → manifest → apply → verdict, from the Developer screen |
+| `e2e:my-agent` (`run-my-agent.js`, **exists**)                                                                                       | the same through the My Agent tab: connect → community → criteria → apply → verdict or refusal |
 | `e2e:community:join`                                                                                                                 | submit → receipt → VMC and VEC delivered → reciprocal VMC                        |
 | `e2e:vetting:applicant`                                                                                                              | ticket → request → session and match code → card → statement → submit → admitted |
 | `e2e:vetting:neg:no-ticket`, `:other-community`, `:two-statements`, `:revoked-grant`                                                 | the refusal and its on-screen message                                            |
@@ -374,7 +388,7 @@ QR payloads are injected by deep link on simulators; camera scanning is proven o
 
 ## 9. Requests to upstream
 
-Collected as they arise and sent together after P6, each with its evidence.
+The numbered, versioned list — with the reproduction, the observation and the upstream source line for each — is `[docs/VTI_UPSTREAM_FINDINGS.md](https://github.com/berkmancenter/keyring-wallet/blob/feat/prague-farm-membership/docs/VTI_UPSTREAM_FINDINGS.md)` (VTI-01…VTI-16 at v1.1). What follows is the shorter list of asks this subtask makes; findings are cited by number.
 
 **Farm**
 
@@ -385,7 +399,10 @@ Collected as they arise and sent together after P6, each with its evidence.
 **Vetting**
 4. Whether a headless vetter mode (the P3 binary's behaviour) is wanted in the terminal client itself, for scripted community rehearsals.
 5. Whether a TypeScript port of the applicant-side card, statement and match-code logic belongs in `pnm-core`.
-6. Every divergence P2 finds between the documentation and the running services.
+6. Every divergence P2 finds between the documentation and the running services — VTI-01…VTI-16, of which: the undocumented order a vetting community must be stood up in and that an administrator cannot be granted the vetter role (VTI-01); a `requestMore` request that can never be closed (VTI-03); that a criterion cannot express open enrolment (VTI-13).
+
+**Mediator** (to its maintainers, and as an operator setting on any Farm)
+6a. A phone's WebSocket upgrade is refused as a cross-origin browser unless `cors_allow_origin` is set — and that key is silently ignored outside the `[security]` table (VTI-05, VTI-06).
 
 **React Native portability of** `pnm-core`
 7. A route to the transport-agnostic core that does not pull `didwebvh-ts`'s `node:fs` references.
