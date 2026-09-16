@@ -300,6 +300,23 @@ describe('RemoteLogger', () => {
       remoteLogger = new RemoteLogger({})
     })
 
+    // Regression guard: an arrow-function class field (`public info = (...) => {...}`)
+    // becomes an OWN property that shadows AbstractBifoldLogger's prototype method of
+    // the same name. That shadowing form was observed, on this codebase's Metro/Hermes
+    // toolchain (not reproducible under Jest, which never compiles through Hermes), to
+    // silently no-op on every call — no exception, no output — while the identical
+    // logic reached as a plain prototype method worked. See the
+    // remotelogger-info-silently-broken session notes. This test can't catch the Hermes
+    // behavior itself, but it does catch the one thing that's under our control and
+    // known to correlate with it: don't let these regress back to class fields.
+    it.each(['test', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'])(
+      '%s is inherited from the prototype chain, not own',
+      (method) => {
+        expect(Object.prototype.hasOwnProperty.call(remoteLogger, method)).toBe(false)
+        expect(typeof (remoteLogger as unknown as Record<string, unknown>)[method]).toBe('function')
+      }
+    )
+
     it('should call test method', () => {
       remoteLogger.test('test message', { key: 'value' })
 
