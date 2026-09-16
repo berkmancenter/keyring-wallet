@@ -4,7 +4,7 @@
 > effort with zero conversation context. Update it at every phase gate and whenever a
 > significant decision or discovery is made. Keep it factual and current.
 
-Last updated: 2026-07-13 (real-device attestation E2E green; HARDWARE_ATTESTATION_FLOW rewritten for native verify; DataIntegrityProof cryptosuite explicitly deferred — see docs/CRYPTO_SUITE_FOLLOWUP.md)
+Last updated: 2026-09-16 (Phase 6 — credo-ts 0.7 + DIDComm v2 + TSP-over-v2 landed on `feat/credo-0.7`; see §6)
 
 ---
 
@@ -18,8 +18,10 @@ bundles AND runs on both platforms, verified by an Appium E2E script that does f
 onboarding + a VRC exchange between two devices/emulators.
 
 Secondary goal (last phase): move VRC issuance to W3C VC Data Model 2.0.
-DIDComm v2 is **out of scope** — not shipped in any stable credo release (PR
-openwallet-foundation/credo-ts#2704 still open as of 2026-06).
+DIDComm v2 **landed in Phase 6** (2026-09) on a `credo-ts#2704`-tagged
+prerelease build, developer-flag gated — see §6 Phase 6. It is not yet on a
+stable credo-ts release; the pin tracks that PR's own prerelease tag until
+credo-ts cuts one.
 
 ## 2. Decisions already made (by Alberto, 2026-07-04)
 
@@ -39,7 +41,7 @@ openwallet-foundation/credo-ts#2704 still open as of 2026-06).
 | Component           | Current                                       | Target (upstream, 2026-07)                                                                               |
 | ------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `@bifold/*`         | 2.7.4 (fork, portal: to `bifold/packages/*`)  | 3.0.16                                                                                                   |
-| credo-ts            | 0.5.17 (+ yarn patches)                       | 0.6.3 (DIDComm split into `@credo-ts/didcomm`; agent API moves to `agent.modules.*` / `agent.didcomm.*`) |
+| credo-ts            | `0.7.1-pr-2704-20260909134930` (+ yarn patches, Phase 6) | Track the stable credo-ts release once credo-ts#2704 (DIDComm v2) ships one |
 | React Native        | 0.73.11                                       | 0.81.5                                                                                                   |
 | React               | 18.3.1                                        | 19.1.0                                                                                                   |
 | askar               | `@hyperledger/aries-askar-react-native` 0.2.3 | renamed `@openwallet-foundation/askar-*` 0.6.0                                                           |
@@ -538,6 +540,39 @@ babel/metro/jest configs, `.env.sample`.
   - [x] **Real-device hardware attestation E2E (2026-07-13)**: `yarn e2e:vrc:devices`
         green — Secure Exchange both directions; native verify; Google multi-root
         anchors. Docs: `docs/HARDWARE_ATTESTATION_FLOW.md` rewritten to match.
+
+- [x] **Phase 6 — credo-ts 0.7 bump: DIDComm v2 + TSP-over-v2** (`feat/credo-0.7`,
+      bifold → `5a90b9f`). Bumps `@credo-ts/{core,didcomm,askar,indy-vdr,node,react-native}`
+      to the `0.7.1-pr-2704-20260909134930` prerelease build of credo-ts#2704 (the DIDComm
+      v2 PR referenced as "still open" above until this phase).
+  - [x] **DIDComm v2 support, developer-flag gated**: a Developer-screen toggle
+        (`setDidCommV2Enabled`/`isDidCommV2Enabled`, `app/src/screens/Developer.tsx`)
+        turns on `didcommVersions: ['v1','v2']` on the NEXT agent construction — fixed
+        at construction, not live, so a toggle needs a restart to take effect; VRC
+        invitation-minting (`createRelationshipInvitation`) now double-checks the
+        agent's own `agent.modules.didcomm.config.isSupported('v2')` before minting a
+        v2 invitation, rather than trusting the flag alone, so a toggle-without-restart
+        falls back to v1 instead of minting an invitation the agent can't process.
+        Second (v2) mediation record provisioned alongside the v1 default
+        (`trust-tasks/v2Routing.ts`); its own Pickup 4.0 polling loop.
+  - [x] **Trust Tasks carried over DIDComm v2** (`trust-tasks/module/DidCommV2Carriage.ts`,
+        binding/didcomm 0.2's v2 envelope `TrustTaskEnvelopeV2Message`) beside the
+        existing v1 binding and the TSP envelope carriage — `ceremony.ts`'s
+        `selectCarriage` picks per connection. DIDComm v2 first contact (no
+        handshake) mints the inviter-side connection on the first authenticated
+        message; the claimed sender identity is verified against the resolved DID's
+        own keyAgreement key before a connection is minted for it
+        (`senderKeyBelongsToClaimedDid`, `@bifold/trust-tasks`'s `v2Binding.ts`) —
+        fails closed on any resolution failure or key mismatch.
+  - [x] **Hardware attestation fix**: `hardware-signing/evidence.ts`'s two
+        "does this chain certify the signing key?" guards now fail closed on an
+        empty/missing reported public key instead of vacuously matching it (a
+        native leaf-parse failure could report a non-empty chain with no key).
+  - [x] **e2e**: new `yarn e2e:vrc:didcomm-v2` / `:witnessed:didcomm-v2` /
+        `:didcomm-v2:tsp` suites and a two-iOS-device runner.
+  - Gates: see keyring-wallet PR #54 / keyring-bifold PR #54 for the code-review
+    record (7 bugs + 2 process gaps found and fixed 2026-09-16, this doc update
+    among them) and this phase's e2e results.
 
 ## 7. Baseline test results (Phase 0 gate — all green, recorded 2026-07-04)
 
