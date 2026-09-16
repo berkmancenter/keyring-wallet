@@ -52,13 +52,24 @@ brew install redis && brew services start redis
   adding it afterwards means provisioning the VTC again.
 - **A fresh VTC has an empty ACL.** Its own `admin_did` cannot authenticate
   until it is added with `vtc acl add` on a stopped daemon.
-- **Every hostname must be public.** Upstream refuses `did:webvh` on localhost
-  and private addresses, so each service sits behind a tunnel. Quick tunnels
-  mint a new hostname per run and **a `did:webvh` is bound to its hostname**, so
-  a restart re-mints every DID and `app/.env` has to be re-baked. Reserved
-  domains are what makes a stack survive a restart; ngrok's Hobbyist plan allows
-  three online endpoints, which is enough if only DID hosting, the mediator and
-  one REST endpoint face the phone (subtask §4).
+- **Every hostname must be public, and should be stable.** Upstream refuses
+  `did:webvh` on localhost and private addresses, so each service sits behind a
+  tunnel — and **a `did:webvh` is bound to its hostname**, so a quick tunnel's
+  per-run name re-mints every DID in the stack and forces `app/.env` re-baked
+  and both apps rebuilt. With `~/vti-stack/ngrok.yml` present the script uses
+  six reserved ngrok domains instead, and the stack survives a restart.
+- **A phone cannot open the mediator's WebSocket by default.** React Native
+  sends an `Origin` header on the upgrade where Node's `ws` does not, so the
+  mediator reads it as a browser and answers `/ws` with 403 unless
+  `cors_allow_origin` is set — and that key belongs to the config's
+  `[security]` table, where the generated file documents it. Set anywhere else,
+  TOML scopes it to a different table and the mediator never sees it.
+- **Re-running the script re-provisions.** The mediator and the DID-hosting
+  daemon each refuse to overwrite a provisioned install, a running daemon holds
+  a lock on the store being rewritten, and a stale `pnm` profile still points at
+  the old mediator DID. The script handles all three; the community's vetting
+  setup (statement type, criteria, ACL) is not restored automatically — see
+  `tsp-reference/ref-20-local-vetting/`.
 
 ## Driving it
 
