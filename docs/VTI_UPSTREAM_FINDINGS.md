@@ -83,6 +83,12 @@ Recorded so upstream can tell a real defect from us being behind:
   are `trust-task-error/0.3` while `vtc-service` emits `trust-task-error/0.5`
   (`vtc-service/src/trust_tasks/helpers.rs`). Keyring reads refusals by the
   `trust-task-error/` prefix, so it copes, but it is not current.
+- **Client-side, recorded here for the next developer, not an upstream defect:**
+  iOS refuses to finish agent initialisation when Keyring's *own* mediator URL
+  (`MEDIATOR_URL` in `app/.env`, a `yarn mediator` cloudflared quick tunnel) has
+  died — the DIDComm module throws and the app shows its error boundary. Android
+  tolerates it (the mediation-recovery path). Restart `yarn mediator` and rebuild
+  before an iOS run. Unrelated to the VTI mediator.
 - **Upstream itself emits two error versions.** `vta-service` produces
   `trust-task-error/0.5` in `trust_tasks/mod.rs` and `/0.3` in
   `trust_tasks/wire_v0_2.rs`. Possibly intentional for the older wire; worth
