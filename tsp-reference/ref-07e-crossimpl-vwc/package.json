@@ -1,0 +1,11 @@
+{
+  "name": "ref-07e-crossimpl-vwc",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node run.mjs", "check": "node run.mjs", "mint": "cd mint-rs && cargo run -q -- mint ../fixtures/vwc-minted-by-reference-impl.json" },
+  "dependencies": {
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.3.0",
+    "@scure/base": "^2.3.0"
+  }
+}

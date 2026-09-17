@@ -26,7 +26,7 @@
         "created": "2026-08-20T10:00:00Z",
         "verificationMethod": "did:peer:2.Ez6LSbysKZAliceToBob11111111111111111111111111#key-1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "z3E9X9uuhXgPuPF7QxmYZWFACnYTZqzqXuDALSBQ84i7KY2FR7ryy9gjcFCcdNr7eyQ1LAq3PJE4HU5UHEQz8iBgJ"
+        "proofValue": "z4CY4UqKZYtPW668cReiozFm7QZMCxBiCMKnFpNiRG7zBVbB8zNcpJyacAysYCcCn97ZqMpVf34VGHzBRDXhkJJ8w"
       }
     },
     {
@@ -50,7 +50,7 @@
         "created": "2026-08-20T10:00:05Z",
         "verificationMethod": "did:peer:2.Ez6LSpSrLxnBobToAlice1111111111111111111111111#key-1",
         "proofPurpose": "assertionMethod",
-        "proofValue": "z4L6iQjxcS33ydMvvqw7Etavrob8SuCxix3QZyKBacvHtdXABRWiQ4pbGcqBqnuKAH33kCw9kHyZ4Z2G5hjQ4XSyM"
+        "proofValue": "z2ywiLKGBSrxf2JSZpfZQYssq2LwMSdtwbN1SixM2uyJVbpVgXBPwqWWrqNKMY8Ai2spNxZtwYW99CX6DXHqvRNgk"
       }
     }
   ]
