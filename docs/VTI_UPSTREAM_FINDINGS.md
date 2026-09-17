@@ -525,8 +525,15 @@ approver, but the VTA logs "no mediator route for consent approver — NOT
 notifying" and the request lands in the approver's mediator queue rather than
 its live socket. A client that only enables Pickup 3.0 *live* delivery never
 sees it; an explicit `delivery-request` on connect is needed to drain the
-backlog. (Keyring now sends one.) Whether the VTA should also live-notify a
-connected approver is the open question. **Measured:** 2026-09-17.
+backlog. (Keyring now sends one.) A second, sharper cause: the VTA only knows
+a reply route for a DID that has **authenticated to it at least once** — a
+consent request pushed to an approver that has never spoken to the VTA is
+dropped ("no mediator route — NOT notifying"), not queued. The client
+mitigation is to say hello (`whoami`) when the approver's session opens, so the
+VTA caches its route before any request; whether the VTA should instead resolve
+and queue for a never-seen DID is the open upstream question. **Measured:**
+vta-service 0.28.0, 2026-09-17: manager held for consent proven on the phone;
+delivery to a second device pending this route being warm at push time.
 
 ## Changelog
 
