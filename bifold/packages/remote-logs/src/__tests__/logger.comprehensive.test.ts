@@ -93,6 +93,8 @@ jest.mock('../transports', () => ({
 }))
 
 // Import after mocks to ensure they're applied
+import { LogLevel } from '@credo-ts/core'
+
 import { RemoteLogger, RemoteLoggerEventTypes } from '../logger'
 import { lokiTransport } from '../transports'
 import { BifoldError } from '@bifold/core'
@@ -522,6 +524,106 @@ describe('RemoteLogger', () => {
           },
         })
       )
+    })
+  })
+
+  describe('setLogLevel', () => {
+    it('applies the new level immediately when remote logging is off', () => {
+      const remoteLogger = new RemoteLogger({})
+
+      remoteLogger.setLogLevel(LogLevel.Warn)
+
+      expect(remoteLogger.logLevel).toBe(LogLevel.Warn)
+    })
+
+    it('keeps the forced debug level while remote logging is on, and remembers the new base', () => {
+      const remoteLogger = new RemoteLogger({})
+      remoteLogger.remoteLoggingEnabled = true
+
+      remoteLogger.setLogLevel(LogLevel.Error)
+
+      // Remote logging pins the level to Debug; the requested level is the base
+      // to fall back to, not the level in force.
+      expect(remoteLogger.logLevel).toBe(LogLevel.Debug)
+
+      remoteLogger.remoteLoggingEnabled = false
+      expect(remoteLogger.logLevel).toBe(LogLevel.Error)
+    })
+
+    it('reconfigures the underlying transport', () => {
+      const remoteLogger = new RemoteLogger({})
+      mockCreateLogger.mockClear()
+
+      remoteLogger.setLogLevel(LogLevel.Info)
+
+      expect(mockCreateLogger).toHaveBeenCalled()
+    })
+  })
+
+  describe('dispose', () => {
+    it('removes the event listener and disables remote logging', () => {
+      const remove = jest.fn()
+      ;(DeviceEventEmitter.addListener as jest.Mock).mockReturnValueOnce({ remove })
+      const remoteLogger = new RemoteLogger({})
+      remoteLogger.startEventListeners()
+      remoteLogger.remoteLoggingEnabled = true
+
+      remoteLogger.dispose()
+
+      expect(remove).toHaveBeenCalled()
+      expect(remoteLogger.remoteLoggingEnabled).toBe(false)
+    })
+
+    it('clears a pending auto-disable timer', () => {
+      jest.useFakeTimers()
+      try {
+        // The auto-disable timer is only armed for a remote transport, so a loki url is part of the setup.
+        const remoteLogger = new RemoteLogger({ lokiUrl: 'http://localhost:3100', autoDisableRemoteLoggingIntervalInMinutes: 5 })
+        remoteLogger.remoteLoggingEnabled = true
+        expect(jest.getTimerCount()).toBeGreaterThan(0)
+
+        remoteLogger.dispose()
+
+        expect(jest.getTimerCount()).toBe(0)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('is safe to call when nothing was started', () => {
+      const remoteLogger = new RemoteLogger({})
+
+      expect(() => remoteLogger.dispose()).not.toThrow()
+    })
+  })
+
+  describe('overrideCurrentAutoDisableExpiration', () => {
+    it('ignores a non-positive expiration', () => {
+      jest.useFakeTimers()
+      try {
+        const remoteLogger = new RemoteLogger({})
+        remoteLogger.overrideCurrentAutoDisableExpiration(0)
+
+        expect(jest.getTimerCount()).toBe(0)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('replaces a pending timer and disables remote logging when it fires', () => {
+      jest.useFakeTimers()
+      try {
+        const remoteLogger = new RemoteLogger({ lokiUrl: 'http://localhost:3100', autoDisableRemoteLoggingIntervalInMinutes: 60 })
+        remoteLogger.remoteLoggingEnabled = true
+
+        remoteLogger.overrideCurrentAutoDisableExpiration(1)
+        expect(jest.getTimerCount()).toBe(1)
+
+        jest.advanceTimersByTime(60000)
+        expect(remoteLogger.remoteLoggingEnabled).toBe(false)
+      } finally {
+        jest.useRealTimers()
+      }
     })
   })
 })
