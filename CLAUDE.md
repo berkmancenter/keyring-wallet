@@ -66,6 +66,41 @@ Note: emulators/simulators cannot do hardware attestation — the app silently f
 
 ## Commit conventions
 
+**Non-negotiable, no exceptions: every commit, in either repo, made by a human or an
+agent, carries both a valid cryptographic signature and a `Signed-off-by:` trailer as the
+last line.** This has already slipped twice on the root repo (two `main`-bound commits
+merged with no trailer at all) — both predate the fix below and were made while this file
+still documented the rule as bifold-only; that gap is now closed, so there is no longer a
+documented excuse for it to happen again.
+
+- **Never bypass the check instead of satisfying it.** Do not use `--no-verify`,
+  `--no-gpg-sign`, `-c commit.gpgsign=false`, or `HUSKY=0`/`SKIP=...` to get an ordinary
+  commit created faster or to route around a failing hook. `HUSKY=0` has exactly one
+  sanctioned use in this repo — the bifold message-only rewrite case two bullets down,
+  and even there only alongside `-S` and a trailer, never on its own. If a hook blocks a
+  commit, the fix is to satisfy it (add `-s`, fix `commit.gpgsign`), not to skip it.
+- **Verify every commit right after making it**, before treating the work as done:
+  `git log -1 --format='%H %G? %(trailers:key=Signed-off-by,valueonly)'`. The middle field
+  must be `G` or `U` (any letter meaning "the cryptographic signature itself checks out" —
+  `U` just means this machine's local key store doesn't vouch for the signer, which is
+  normal for a teammate's key and is not a failure; `B`/`E`/`N`/blank are), and the last
+  field must be non-empty. If either is missing on a commit **not yet pushed**, fix it in
+  place — `git commit --amend -s` (re-signed automatically if `commit.gpgsign` is on) —
+  rather than leaving it and moving on. If it's already pushed, don't rewrite it
+  unilaterally; flag it and let a human decide, since rewriting published history needs a
+  force-push and affects whoever already has it.
+- **Before the first commit in a fresh clone or worktree**, confirm `git config
+  commit.gpgsign` is `true` (this repo's `.git/config` sets it once for every worktree,
+  so a fresh worktree of an already-configured clone inherits it automatically —
+  `scripts/check-commit-signing.sh`, run from `.husky/pre-commit`, checks this on every
+  commit and tells you how to fix it if not). **There is no git config that adds the
+  `Signed-off-by:` trailer for you** — `format.signOff` looks like it would, but it only
+  changes `format-patch`'s default, not `commit`. The `.husky/prepare-commit-msg` →
+  `lefthook run prepare-commit-msg` chain that could auto-inject it exists as unused
+  scaffolding today: `lefthook.yml` has no real jobs, and `lefthook` isn't even an
+  installed dependency, so that hook silently no-ops (`Can't find lefthook in PATH`)
+  rather than doing anything. Until someone wires that up for real, always pass `-s` (or
+  write the trailer by hand) — there is no shortcut that does it for you.
 - Conventional commits enforced by commitlint: `feat|fix|docs|style|refactor|perf|test|chore|revert`, lower-case type.
 - **Both repos** require a `Signed-off-by:` trailer as the **last line** of the message (commitlint rejects anything after it), naming the commit's own author — i.e. your configured `user.name` / `user.email`, the same as `git commit -s` produces. A sign-off is an attestation by whoever made the commit, so never sign off as another contributor. Do not add agent co-author trailers to bifold commits.
 - The sign-off rule is easy to miss on the root repo, because it is the `bifold/` convention that gets talked about. It is enforced there too: a root commit without the trailer fails `commit-msg` with `message must be signed off [signed-off-by]`.
