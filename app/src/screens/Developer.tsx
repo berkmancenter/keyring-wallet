@@ -356,7 +356,7 @@ const Developer: React.FC = () => {
           setIsClearingContacts(true)
           try {
             const count = await clearTestContacts(agent)
-            Alert.alert('Success', `Cleared ${count} test contacts`)
+            Alert.alert('Success', `Cleared ${count} test credentials`)
           } catch (error) {
             Alert.alert(
               'Error',
