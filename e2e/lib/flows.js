@@ -582,7 +582,14 @@ async function setAutoLockNever(driver) {
         neverEl = byTestId(driver, neverKey);
       }
       if (await neverEl.isExisting()) break;
-      await sleep(500);
+      // UiScrollable's scrollIntoView runs against the NATIVE view hierarchy
+      // and can outrun React Native's JS thread mounting newly-scrolled-into-
+      // view rows of a virtualized SectionList — on a slower real device the
+      // native scroll can finish and report "not found" before the JS side
+      // has actually rendered the row that would have appeared a moment
+      // later. 2s (not 500ms) gives that cross-thread render room to
+      // land before the next scrollIntoView attempt.
+      await sleep(2000);
     }
     if (await neverEl.isExisting()) break;
     console.log(`[e2e] ${deviceTag(driver)}: "${neverKey}" not found after Lockout tap, retrying once`);
@@ -631,6 +638,13 @@ export async function enableTspCarriage(driver) {
   const tspToggle = await scrollToTestId(driver, "ToggleEnableTspCarriage");
   await tspToggle.click();
   console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope carriage enabled (developer setting)`);
+  // The toggle's dispatch updates React state immediately, but persisting it
+  // to disk is a separate async side effect — restartApp's terminateApp()
+  // below is a hard force-kill, and on a slow real device (or a fast
+  // returnToContacts that leaves little natural buffer) it can race ahead of
+  // that write, silently losing the toggle (confirmed via device logcat
+  // reading the flag back as still "off" post-restart).
+  await sleep(1000);
 
   await returnToContacts(driver);
   await restartApp(driver);
@@ -649,6 +663,11 @@ export async function enableDidCommV2(driver) {
   const toggle = await scrollToTestId(driver, "ToggleEnableDidCommV2");
   await toggle.click();
   console.log(`[e2e] ${driver.e2ePlatform}: DIDComm v2 enabled (developer setting)`);
+  // See the same wait in enableTspCarriage above: the toggle's persistence
+  // write is async and can race restartApp's hard force-kill, silently
+  // losing the flag on a slow device (confirmed via device logcat reading
+  // the flag back as still "off" post-restart, on a real witnessed run).
+  await sleep(1000);
 
   await returnToContacts(driver);
   await restartApp(driver);
@@ -779,8 +798,18 @@ async function openQrSheet(driver) {
       return;
     }
   }
-  // fallback: accessibility label from TabStack.QRCode translation
-  await byText(driver, "QR Code").click();
+  // fallback: accessibility label from TabStack.QRCode translation. All
+  // four call sites wrap this function in their own retry loop that checks
+  // for the sheet's actual content afterward and restarts on a miss — none
+  // of them catch an exception from here, so throwing on a plain "nothing
+  // rendered in time yet" miss (seen on a real device under heavier
+  // combined load: attestation + DIDComm v2 + locality) killed the whole
+  // attempt outright instead of letting that retry loop do its job. No-op
+  // here instead; the caller's own follow-up check surfaces the miss.
+  const qrCodeText = byText(driver, "QR Code");
+  if (await qrCodeText.isExisting()) {
+    await qrCodeText.click();
+  }
 }
 
 /** Open the QR bottom sheet from the center tab and show "my QR" for a relationship exchange. */
