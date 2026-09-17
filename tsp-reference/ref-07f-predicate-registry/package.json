@@ -1,0 +1,14 @@
+{
+  "name": "ref-07f-predicate-registry",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs"
+  },
+  "dependencies": {
+    "@scure/base": "^2.3.0",
+    "ajv": "^8.20.0",
+    "typescript": "^5.9.3"
+  }
+}
