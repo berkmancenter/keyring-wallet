@@ -64,9 +64,16 @@ export {
   VtiMediatorSession,
   VtiMediatorOutboundTransport,
   resolveVtiMediator,
+  vtiClientIdentityFromPersona,
   vtiClientIdentityFromDid,
   createVtiClientDid,
 } from './module/VtiMediatorTransport'
 export type { VtiMediatorEndpoints, VtiClientIdentity } from './module/VtiMediatorTransport'
-export { vtiAgent } from './module/vtiAgent'
+export { vtiAgent, VtiRefusal } from './module/vtiAgent'
+export { VtaClient, VTA_TASK, resolveVtaMediator } from './module/VtaClient'
+export type { VtaWhoAmI, VtaContext, VtaMintedDid } from './module/VtaClient'
+export { GenericRecordsIdentityStore } from './module/VtiIdentityStore'
+export type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './module/VtiIdentityStore'
+export { importVtaKey, decodeMultibaseKey } from './module/vtaKeys'
+export type { VtaExportedKey } from './module/vtaKeys'
 export type { VtiAgentState, VtiAgentStatus, VtiCriterion, VtiManifest, VtiVerdict } from './module/vtiAgent'

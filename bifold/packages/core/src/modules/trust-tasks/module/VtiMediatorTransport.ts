@@ -178,6 +178,26 @@ export async function vtiClientIdentityFromDid(agent: Agent, did: string): Promi
 }
 
 /**
+ * The identity a persona presents, when its key was borrowed from a VTA rather
+ * than minted here: the persona's own keyAgreement verification method, and the
+ * KMS id of the borrowed copy. A `did:webvh` persona is resolved, not created,
+ * so Credo holds no record of it — the caller supplies the key it imported.
+ */
+export async function vtiClientIdentityFromPersona(
+  agent: Agent,
+  personaDid: string,
+  keyAgreementKmsKeyId: string
+): Promise<VtiClientIdentity> {
+  const doc = await agent.dids.resolveDidDocument(personaDid)
+  const keyAgreementRef = doc.keyAgreement?.[0]
+  const vm = typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
+  if (!vm) throw new Error(`${LOG_PREFIX} ${personaDid} has no keyAgreement verification method`)
+  const senderKey = getPublicJwkFromVerificationMethod(vm) as Kms.PublicJwk<Kms.X25519PublicJwk>
+  senderKey.keyId = keyAgreementKmsKeyId
+  return { did: personaDid, kid: vm.id, senderKey }
+}
+
+/**
  * One authenticated socket to one mediator, for one DID.
  *
  * `start()` performs the login and opens the socket; inbound frames are handed

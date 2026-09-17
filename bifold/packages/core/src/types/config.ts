@@ -67,6 +67,10 @@ export interface Config {
   vti?: {
     mediatorDid?: string
     communityDid?: string
+    /** The personal VTA this phone manages (§2.4 B). Enrolment binds a phone to it. */
+    vtaDid?: string
+    /** Where a persona minted serverlessly is served from — the VTA's own host. */
+    personaBaseUrl?: string
   }
 }
 

@@ -23,6 +23,7 @@ import {
   resolveVtiMediator,
   vtiClientIdentityFromDid,
   VtiMediatorSession,
+  type VtiClientIdentity,
   type VtiMediatorEndpoints,
 } from './VtiMediatorTransport'
 
@@ -97,8 +98,15 @@ class VtiAgentController {
   private listeners = new Set<Listener>()
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
-  /** One inbound handler at a time: each leg waits for its own answer. */
-  private awaiting?: (plaintext: DidCommV2PlaintextMessage) => void
+  /** One request in flight; a message that predates it is a stale redelivery (see VtaClient). */
+  private pending?: { resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
+
+  private deliver(plaintext: DidCommV2PlaintextMessage): void {
+    const pending = this.pending
+    if (!pending || Date.now() < pending.sentAt) return
+    this.pending = undefined
+    pending.resolve(plaintext)
+  }
 
   getState = (): VtiAgentState => this.state
 
@@ -118,21 +126,28 @@ class VtiAgentController {
    * Resolve the mediator a VTI agent advertises, mint this wallet's member DID,
    * log in and hold the socket. Idempotent while the socket is open.
    */
-  async connect(agent: Agent, mediatorDid: string): Promise<void> {
-    if (this.session?.isOpen) return
+  async connect(agent: Agent, mediatorDid: string, options: { identity?: VtiClientIdentity } = {}): Promise<void> {
+    if (this.session?.isOpen && (!options.identity || options.identity.did === this.state.did)) return
+    if (this.session) await this.disconnect()
     try {
       this.set({ status: 'resolving', error: undefined })
       const mediator = await resolveVtiMediator(agent, mediatorDid)
       this.mediator = mediator
       this.set({ status: 'authenticating', host: hostOf(mediator.wsEndpoint) })
 
-      const did = await createVtiClientDid(agent, mediator)
-      const identity = await vtiClientIdentityFromDid(agent, did)
+      // Under §2.4 B the identity a community sees is a persona the VTA minted
+      // and whose key the phone borrowed; the phone-minted did:peer is what the
+      // proof-of-transport used, and stays as the fallback when no persona is given.
+      const identity = options.identity ?? (await vtiClientIdentityFromDid(agent, await createVtiClientDid(agent, mediator)))
+      const did = identity.did
       const session = new VtiMediatorSession(agent, identity, mediator, {
         onError: (error) => this.set({ error: error.message }),
-        onMessage: (plaintext) => this.awaiting?.(plaintext),
+        onMessage: (plaintext) => this.deliver(plaintext),
       })
       await session.start()
+      // Discard any stale backlog the mediator flushes on live delivery before
+      // a request could have a reply (see VtaClient.connect).
+      await new Promise((resolve) => setTimeout(resolve, 2000))
       this.session = session
       this.set({ status: 'connected', did })
     } catch (error) {
@@ -144,7 +159,7 @@ class VtiAgentController {
   async disconnect(): Promise<void> {
     await this.session?.stop()
     this.session = undefined
-    this.awaiting = undefined
+    this.pending = undefined
     this.set({ status: 'disconnected', did: undefined, error: undefined })
   }
 
@@ -167,8 +182,10 @@ class VtiAgentController {
     const did = this.state.did
     if (!session || !did) throw new Error('vtiAgent: not connected')
 
+    const threadId = `urn:uuid:${utils.uuid()}`
+    const sentAt = Date.now()
     const answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
-      this.awaiting = resolve
+      this.pending = { resolve, sentAt }
     })
     const now = Math.floor(Date.now() / 1000)
     await session.sendTo(communityDid, {
@@ -177,11 +194,13 @@ class VtiAgentController {
       type,
       from: did,
       to: [communityDid],
+      thid: threadId,
       created_time: now,
       expires_time: now + 300,
       body: {
         id: `urn:uuid:${utils.uuid()}`,
         type,
+        threadId,
         payload,
         issuer: did,
         recipient: communityDid,
@@ -192,7 +211,7 @@ class VtiAgentController {
       answer,
       new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
     ])
-    this.awaiting = undefined
+    this.pending = undefined
     return result
   }
 
