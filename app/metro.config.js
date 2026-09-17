@@ -201,6 +201,10 @@ module.exports = (async () => {
           '@hyperledger/anoncreds-react-native',
           '@hyperledger/indy-vdr-shared',
           '@hyperledger/indy-vdr-react-native',
+          // class-transformer's @Expose metadata store is module-local: @bifold/trust-tasks'
+          // DIDComm v2 envelope registers renames Credo's JsonTransformer must see, so the
+          // bundle needs exactly one copy (didcomm_v2_subtask.md C10).
+          'class-transformer',
         ]
         const isSingleton = singletonPrefixes.some((pkg) => moduleName === pkg || moduleName.startsWith(`${pkg}/`))
         if (isSingleton && !context.originModulePath.startsWith(__dirname)) {

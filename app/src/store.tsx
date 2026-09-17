@@ -26,6 +26,7 @@ export interface Developer {
   enableProxy: boolean
   enableAppToAppPersonFlow: boolean
   enableTspCarriage: boolean
+  enableDidCommV2: boolean
 }
 
 export interface DismissPersonCredentialOffer {
@@ -42,6 +43,7 @@ enum DeveloperDispatchAction {
   TOGGLE_PROXY = 'developer/toggleProxy',
   TOGGLE_APP_TO_APP_PERSON_FLOW = 'developer/toggleAppToAppPersonFlow',
   TOGGLE_TSP_CARRIAGE = 'developer/toggleTspCarriage',
+  TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -101,6 +103,7 @@ const developerState: Developer = {
   remoteDebugging: remoteDebuggingState,
   enableAppToAppPersonFlow: false,
   enableTspCarriage: false,
+  enableDidCommV2: false,
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -115,6 +118,7 @@ export enum BCLocalStorageKeys {
   EnableProxy = 'EnableProxy',
   EnableAppToAppPersonFlow = 'EnableAppToAppPersonFlow',
   EnableTspCarriage = 'EnableTspCarriage',
+  EnableDidCommV2 = 'EnableDidCommV2',
   UserDeniedPushNotifications = 'userDeniedPushNotifications',
   DeviceToken = 'deviceToken',
 }
@@ -177,6 +181,14 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableTspCarriage }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableTspCarriage, developer.enableTspCarriage)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_DIDCOMM_V2: {
+      const enableDidCommV2: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableDidCommV2 }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableDidCommV2, developer.enableDidCommV2)
 
       return { ...state, developer }
     }

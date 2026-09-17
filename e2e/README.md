@@ -10,6 +10,10 @@ this folder is a small standalone npm package.
 | `yarn e2e:vrc` | Two-device VRC exchange on the **Android emulator + iOS simulator** | No |
 | `yarn e2e:vrc:android-only` | Same exchange on **two Android emulators** (no macOS/Xcode needed; see below for the two-AVD setup) | No |
 | `yarn e2e:vrc:tsp` | Same exchange, but the VRC/witness Trust Task documents are carried over the real TSP envelope stack (HPKE-Auth, Askar custody, CESR framing) instead of the default DIDComm-v1 binding — both **Android emulators** (logcat-based marker assertion needs it; see below for the two-AVD setup). Wallet-to-wallet only, not an ecosystem-interop test — see `docs/plans/openvtc-integration-plan/2026-09-02-bam.md` | No |
+| `yarn e2e:vrc:didcomm-v2` | Same exchange over **DIDComm v2**: both wallets turn on the "Enable DIDComm v2" developer setting, provision Coordinate Mediation 2.0 with the local mediator (`yarn mediator --didcomm-v2`, whose `MEDIATOR_V2_URL` must be baked into the APK), and exchange over an out-of-band/2.0 invitation on `did:peer:2` — both **Android emulators** (logcat markers). Gated on the Mediation 2.0 grant marker before the invitation is minted. | No |
+| `yarn e2e:vrc:witnessed:didcomm-v2` | The witnessed exchange over DIDComm v2 on an **Android emulator + iOS simulator**: witness on `WITNESS_DIDCOMM_VERSIONS=v1,v2`, both wallets on Coordinate Mediation 2.0 (tunnel mediator, `yarn mediator --didcomm-v2`, so one `MEDIATOR_V2_URL` serves both platforms). | No |
+| `yarn e2e:vrc:didcomm-v2:tsp` | Same exchange as `e2e:vrc:didcomm-v2` with "Enable TSP envelope carriage" also on: every Trust Task document is a TSP envelope delivered on the DIDComm v2 connection. Asserts `[TrustTasks:TspCarriage] envelope sent/received on v2 connection` and no plain v2 binding line — both **Android emulators**. | No |
+| `yarn e2e:vrc:witnessed:didcomm-v2:tsp` | The witnessed exchange on an **Android emulator + iOS simulator** with DIDComm v2 and TSP carriage on both wallets; the witness (v1+v2) replies on the carriage it received, so the ceremony and witness share are TSP-over-v2 too. iOS markers come from a live `log stream` capture. | No |
 | `yarn e2e:vrc:photo` | Same exchange, with wallet A attaching an R-Card profile photo — asserts the photo attribute survives the exchange (data only, no visual assertion). Native photo-picker automation is experimental — see the caveat in `lib/flows.js`'s `pickRCardPhoto` | No |
 | `yarn e2e:vrc:photo:android-only` | Same photo-exchange test on **two Android emulators** | No |
 | `yarn e2e:vrc:trading-card` | Same exchange with the `trading-card` demo profile (`app/src/demo-profiles/trading-card/`) active — asserts the exchanged R-Card renders as a `TradingCard` (rarity badge, photo) on **both** sides, not the default `ContactCard` | No |
@@ -18,22 +22,26 @@ this folder is a small standalone npm package.
 | `yarn e2e:plain-build:android-only` | Same plain-build negative test on **two Android emulators** | No |
 | `yarn e2e:vrc:devices` | Same exchange on a **physical Android phone + iPhone**, proving hardware attestation + biometric signing | **Yes** — you authenticate on the phones |
 | `yarn e2e:vrc:devices:android-only` | Same hardware-attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
+| `yarn e2e:vrc:devices:android-only:didcomm-v2` | Same hardware-attested exchange as `yarn e2e:vrc:devices:android-only`, but both wallets turn on the "Enable DIDComm v2" developer setting, provision Coordinate Mediation 2.0 with the local mediator (`yarn mediator --didcomm-v2`, in tunnel mode for real devices), and exchange over an out-of-band/2.0 invitation on `did:peer:2` — proves a real hardware-attested signature carries over the DIDComm v2 stack, not just the emulator pair in `yarn e2e:vrc:didcomm-v2` | **Yes** |
 | `yarn e2e:migration` | Askar 0.2→0.6 store migration: old app → exchange → in-place upgrade (Android emulator + iOS simulator peer) | No |
 | `yarn e2e:migration:android-only` | Same migration test, **two Android emulators** (no macOS/Xcode needed) | No |
 | `yarn e2e:smoke` | Single device: install → onboarding → main tabs | No |
 | `yarn e2e:vrc:witnessed:devices` | Witnessed + hardware-attested exchange on a **physical Android phone + iPhone**, routed through a locally-run witness server — both wallets end up with a Verifiable Witness Credential (VWC) in addition to the peer VRC | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only` | Same witnessed + attested exchange on **two physical Android phones** (no macOS/Xcode needed; two *physical* phones are required — emulators can't do hardware attestation) | **Yes** |
+| `yarn e2e:vrc:witnessed:android-only:didcomm-v2` | Same witnessed + attested exchange as above, but the wallet-to-wallet connection is DIDComm v2 (Coordinate Mediation 2.0) instead of the default v1 connection — the witness serves v1+v2 and replies on whichever carriage it received. Same **two physical Android phones** requirement. The wallet-to-*witness* protocol (session/challenge/VP) is unaffected. | **Yes** |
 | `yarn e2e:vrc:witnessed:locality:android-only` | Same witnessed + attested exchange on **two physical Android phones**, with BLE co-presence (locality) **required and asserted confirmed** — the one variant where the machine running the test needs its own real Bluetooth adapter, not just the phones (Linux/BlueZ or macOS/CoreBluetooth since bifold #49) | **Yes** |
+| `yarn e2e:vrc:witnessed:locality:android-only:didcomm-v2` | Same locality-required exchange as above, but the wallet-to-wallet connection is DIDComm v2 (Coordinate Mediation 2.0) instead of v1 — same **two physical Android phones**, same real-Bluetooth-adapter requirement on the host. | **Yes** |
 | `yarn e2e:vrc:witnessed:locality:devices` | Witnessed + attested exchange on a **physical Android phone + iPhone** with BLE co-presence **offered** — attempted on both, gated on neither, each side's outcome **reported** (Android: the confirmed/not-confirmed marker; iOS: the peripheral's own log incl. `signingElapsedMs`). The first-run variant for the iOS peripheral and for a macOS-hosted witness (CoreBluetooth/noble, bifold #49) — the machine running this needs a real Bluetooth adapter; Linux is no longer required | **Yes** |
 | `yarn e2e:vrc:witnessed:tsp:android-only` | Same witnessed + attested exchange as above, but the wallet-to-wallet VRC documents (discovery/propose/issue) are carried over the real TSP envelope stack instead of the default DIDComm-v1 binding — same **two physical Android phones** requirement. The wallet-to-*witness* protocol (session/challenge/VP) is a separate channel and is unaffected either way — see "TSP + witnessed" below. | **Yes** |
 | `yarn e2e:vrc:witnessed:android-only:mediator` | Same as above, but the witness runs in **MEDIATOR mode** (through the shared production mediator) instead of the default DIRECT mode — confirms the mediator-mode fallback still works, on demand, without hand-setting an env var. See "Confirming the mediator-mode fallback" below. | **Yes** |
 
 The same scripts exist inside this folder as `npm run vrc-exchange`,
-`vrc-exchange:android-only`, `vrc-exchange:tsp`, `vrc-exchange:photo`,
+`vrc-exchange:android-only`, `vrc-exchange:tsp`, `vrc-exchange:didcomm-v2`, `vrc-exchange:witnessed:didcomm-v2`, `vrc-exchange:didcomm-v2:tsp`, `vrc-exchange:witnessed:didcomm-v2:tsp`, `vrc-exchange:photo`,
 `vrc-exchange:photo:android-only`, `vrc-exchange:devices`,
-`vrc-exchange:devices:android-only`, `store-migration`,
+`vrc-exchange:devices:android-only`, `vrc-exchange:devices:android-only:didcomm-v2`, `store-migration`,
 `store-migration:android-only`, `onboarding-smoke`,
 `vrc-exchange:witnessed:devices`, `vrc-exchange:witnessed:android-only`,
+`vrc-exchange:witnessed:android-only:didcomm-v2`,
 `vrc-exchange:witnessed:tsp:android-only`,
 `vrc-exchange:witnessed:android-only:mediator`.
 
@@ -323,6 +331,66 @@ Appium attaches to the two already-running emulators by matching each
 session's `appium:avd` capability to that AVD's instance, rather than
 launching its own — so both must already be up before you run the command.
 
+## Two iOS devices, witnessed (`yarn e2e:vrc:witnessed:ios-devices`) — attended
+
+The witnessed, hardware-attested exchange between an **iPhone** (wallet A) and
+an **iPad** (wallet B), with every Trust Task marker read from each device's
+own log. It is also the device-level check for the DIDComm v2 and TSP work
+(`docs/plans/openvtc-integration-plan/didcomm_v2_subtask.md`):
+
+| Script | Carriage |
+|---|---|
+| `yarn e2e:vrc:witnessed:ios-devices` | DIDComm v1 |
+| `yarn e2e:vrc:witnessed:ios-devices:didcomm-v2` | DIDComm v2 (wallets on Coordinate Mediation 2.0, witness on v1+v2) |
+| `yarn e2e:vrc:witnessed:ios-devices:didcomm-v2:tsp` | TSP envelope over DIDComm v2 |
+| `yarn e2e:vrc:witnessed:ios-devices:didcomm-v2:tsp:locality` | the same, with the witness **requiring** Bluetooth co-presence: both devices' confirmation is asserted and the **In-Person** badge is required (Bluetooth on, devices near this Mac) |
+
+Every run requires the **Secure Exchange** and **Verified** badges on both
+contact screens (both are real devices); the locality run also requires
+**In-Person**.
+
+**Each device, once:**
+
+1. Settings → Privacy & Security → **Developer Mode** on (the device restarts;
+   confirm "Turn On" after it).
+2. Settings → Developer → **Enable UI Automation** on.
+3. A **passcode and Face ID/Touch ID** enrolled — hardware-attested keys refuse
+   to be created without a secure lock screen.
+4. Settings → Display & Brightness → **Auto-Lock → Never**.
+5. Plugged into this Mac, "Trust This Computer" accepted, unlocked, on Wi-Fi,
+   **no screen streaming** (Vysor breaks DIDComm on a real device).
+
+**A device new to the Berkman team** also needs registering in the development
+provisioning profile and WebDriverAgent signed for it — one build pointed at
+that device does both:
+
+```bash
+cd app/ios
+FORCE_BUNDLING=1 xcodebuild -workspace AriesBifold.xcworkspace -scheme AriesBifold \
+  -configuration Debug -destination "id=<DEVICE_UDID>" -derivedDataPath build/device-dd \
+  DEVELOPMENT_TEAM=947XHQ9DVC -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
+cd ~/.appium/node_modules/appium-xcuitest-driver/node_modules/appium-webdriveragent
+xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \
+  -destination "id=<DEVICE_UDID>" DEVELOPMENT_TEAM=947XHQ9DVC \
+  PRODUCT_BUNDLE_IDENTIFIER=asml.bkc.harvard.WebDriverAgentRunner \
+  -derivedDataPath ~/Library/Developer/Xcode/DerivedData/WDA-e2e-<last 8 of UDID> \
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration build-for-testing
+```
+
+**The build.** One `FORCE_BUNDLING=1` device build serves all three scripts,
+as long as `app/.env` was written by `yarn mediator --didcomm-v2` (tunnel mode)
+before building: the v1 run uses `MEDIATOR_URL`, the v2 runs `MEDIATOR_V2_URL`.
+Restarting the mediator changes the tunnel URL and needs a rebuild.
+
+**How the harness runs two iOS devices on one Appium:** each device gets its
+own WebDriverAgent port (8123/8124), MJPEG port (9123/9124) and WDA
+derived-data folder (concurrent WDA builds into one folder collide). Each
+device's JS log is captured with `idevicesyslog` into
+`artifacts/ios-device-<udid tail>-<time>.log` (`brew install libimobiledevice`),
+and the Trust Task, witness ceremony, witness-share, hardware-evidence and
+carriage markers are asserted from those files. `IOS_UDID`/`IOS_UDID2` pick the
+devices explicitly; `E2E_IPAD_FIRST=1` makes the iPad wallet A.
+
 ## Real devices (`yarn e2e:vrc:devices`) — attended
 
 Proves the security-critical path end to end:
@@ -397,6 +465,42 @@ adb devices                                      # list connected serials
 ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
   yarn e2e:vrc:devices:android-only
 ```
+
+### DIDComm v2 variant (`yarn e2e:vrc:devices:android-only:didcomm-v2`)
+
+Same two-physical-phone hardware attestation as `yarn e2e:vrc:devices:android-only`,
+but the connection is DIDComm v2 (OOB 2.0, `did:peer:2`, Coordinate Mediation
+2.0 + Pickup 4.0) instead of the default v1 connection — the real-device
+counterpart to the emulator-pair `yarn e2e:vrc:didcomm-v2`.
+
+Physical phones can't reach `10.0.2.2`, so the mediator needs **tunnel
+mode** (`cloudflared` installed, no `--endpoint`):
+
+```sh
+yarn mediator --didcomm-v2
+```
+
+Then rebuild the Android debug APK so the new `MEDIATOR_V2_URL` is baked
+in — restarting Metro alone does **not** pick it up, since
+`react-native-config` reads `app/.env` into a native `BuildConfig` at
+Gradle build time, not at JS-bundle time:
+
+```sh
+cd app/android && ./gradlew :app:assembleDebug
+```
+
+Then run the suite the same way as the plain variant:
+
+```sh
+adb devices                                      # list connected serials
+ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
+  yarn e2e:vrc:devices:android-only:didcomm-v2
+```
+
+Restarting the mediator mints a new tunnel URL each time, so a rebuild is
+needed again after any `yarn mediator` restart — same caveat as the
+plain-mediator "Restarting changes the address" note in
+`bifold/packages/mediator-server/README.md`.
 
 ## Store migration (`yarn e2e:migration`)
 
@@ -482,6 +586,25 @@ ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
   yarn e2e:vrc:witnessed:android-only
 ```
 
+### DIDComm v2 variant (`yarn e2e:vrc:witnessed:android-only:didcomm-v2`)
+
+Same witnessed + attested exchange, but the wallet-to-wallet connection is
+DIDComm v2 (Coordinate Mediation 2.0) instead of v1 — the witness serves
+v1+v2 and replies on whichever carriage it received, so the ceremony and
+witness share stay consistent with the connection the wallets used. Needs
+the same tunnel-mode v2 mediator and APK rebuild as
+[`yarn e2e:vrc:devices:android-only:didcomm-v2`](#didcomm-v2-variant-yarn-e2evrcdevicesandroid-onlydidcomm-v2)
+above:
+
+```sh
+yarn mediator --didcomm-v2                       # tunnel mode, real devices
+cd app/android && ./gradlew :app:assembleDebug   # bake MEDIATOR_V2_URL in
+
+adb devices                                      # list connected serials
+ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
+  yarn e2e:vrc:witnessed:android-only:didcomm-v2
+```
+
 ### Locality variant (`yarn e2e:vrc:witnessed:locality:android-only`) — BLE co-presence required
 
 Same Android-only witnessed + attested exchange, plus locality-plan.md
@@ -527,6 +650,21 @@ ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
 Everything else — invitation, hardware attestation, the Trust Task ceremony
 markers — is identical to the plain android-only witnessed variant above;
 see that section and "The Trust Task dialect" below for what those assert.
+
+#### DIDComm v2 variant (`yarn e2e:vrc:witnessed:locality:android-only:didcomm-v2`)
+
+Same BLE-required locality exchange, but the wallet-to-wallet connection is
+DIDComm v2 instead of v1 — same tunnel-mode v2 mediator and APK rebuild as
+the other didcomm-v2 real-device variants:
+
+```sh
+yarn mediator --didcomm-v2                       # tunnel mode, real devices
+cd app/android && ./gradlew :app:assembleDebug   # bake MEDIATOR_V2_URL in
+
+adb devices                                      # list connected serials
+ANDROID_UDID=<phone-a-serial> ANDROID_UDID2=<phone-b-serial> \
+  yarn e2e:vrc:witnessed:locality:android-only:didcomm-v2
+```
 ### Locality, Android + iPhone (`yarn e2e:vrc:witnessed:locality:devices`) — offered, reported
 
 The first-run variant for the iOS peripheral and for a macOS-hosted witness
@@ -742,3 +880,18 @@ xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \
 - **Android app dies at launch on a slow phone, no JS error**: check
   `adb logcat -d | grep FATAL` — a native module's lifecycle race (the
   `react-native-volume-manager` one is patched) shows up here, not in Metro.
+- **`app/.env`'s `MEDIATOR_URL`/`MEDIATOR_V2_URL` changed but the app still
+  talks to the old mediator**: `react-native-config` bakes these into the
+  native Android `BuildConfig` at **Gradle build time**, not the JS bundle —
+  a Metro restart does nothing for them. Rebuild after any `yarn mediator`
+  restart: `cd app/android && ./gradlew :app:assembleDebug`.
+- **A real-device tap or retry loop behaves strangely** — a `.click()`
+  reports success but nothing happens, a toggle row's own retry closes what
+  it just opened, or a wait loop times out even though the device visibly
+  succeeded: see
+  [`docs/E2E_REAL_DEVICE_FLAKINESS.md`](../docs/E2E_REAL_DEVICE_FLAKINESS.md)
+  for three patterns hit getting `yarn e2e:vrc:devices:android-only:didcomm-v2`
+  to a clean pass, how each was diagnosed, and the fix (`tapTestIdByCoordinates`,
+  `setAutoLockNever`'s collapsed-check, the `dismissVrcConfirmationOverlayIfPresent`
+  checks in `assertVrcReceived`/`acceptRelationshipProposalIfPrompted`/
+  `openContactDetail`/`returnToContacts`).

@@ -10,6 +10,7 @@ import {
   seedTestContacts,
   clearTestContacts,
   setTspCarriageEnabled,
+  setDidCommV2Enabled,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
 import { useAgent } from '@bifold/react-hooks'
@@ -56,6 +57,7 @@ const Developer: React.FC = () => {
   const [enableProxy, setEnableProxy] = useState(!!store.developer.enableProxy)
   const [enableAppToAppPersonFlow, setEnableAppToAppPersonFlow] = useState(!!store.developer.enableAppToAppPersonFlow)
   const [enableTspCarriage, setEnableTspCarriage] = useState(!!store.developer.enableTspCarriage)
+  const [enableDidCommV2, setEnableDidCommV2] = useState(!!store.developer.enableDidCommV2)
   const [isSeedingContacts, setIsSeedingContacts] = useState(false)
   const [isClearingContacts, setIsClearingContacts] = useState(false)
   const navigation = useNavigation()
@@ -307,6 +309,19 @@ const Developer: React.FC = () => {
     // most of this screen's other developer toggles.
     setTspCarriageEnabled(next)
     setEnableTspCarriage(next)
+  }
+
+  const toggleEnableDidCommV2Switch = () => {
+    const next = !enableDidCommV2
+    dispatch({
+      type: BCDispatchAction.TOGGLE_DIDCOMM_V2,
+      payload: [next],
+    })
+    // The agent's `didcommVersions` is fixed at construction, so a restart is
+    // needed for the agent to accept and produce v2 envelopes; new
+    // relationship invitations read the flag live (isDidCommV2Enabled).
+    setDidCommV2Enabled(next)
+    setEnableDidCommV2(next)
   }
 
   const handleSeedTestContacts = async () => {
@@ -563,6 +578,9 @@ const Developer: React.FC = () => {
           title={t('Developer.EnableTspCarriage')}
           accessibilityLabel={t('Developer.EnableTspCarriage')}
           testID={testIdWithKey('ToggleEnableTspCarriage')}
+          // The row toggles too: iOS hides the Switch behind the accessible row
+          // from automation (same fix as the DIDComm v2 row, 2026-09-14).
+          onPress={toggleEnableTspCarriageSwitch}
         >
           <Switch
             trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
@@ -570,6 +588,26 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableTspCarriageSwitch}
             value={enableTspCarriage}
+          />
+        </SectionRow>
+
+        <View style={styles.sectionSeparator}></View>
+
+        <SectionRow
+          title={t('Developer.EnableDidCommV2')}
+          accessibilityLabel={t('Developer.EnableDidCommV2')}
+          testID={testIdWithKey('ToggleEnableDidCommV2')}
+          // The row itself toggles too: on iOS the accessible row hides the
+          // Switch from automation, and a tap on the row did nothing (the
+          // Android+iOS DIDComm v2 e2e came back with the flag off, 2026-09-14).
+          onPress={toggleEnableDidCommV2Switch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableDidCommV2 ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableDidCommV2Switch}
+            value={enableDidCommV2}
           />
         </SectionRow>
 

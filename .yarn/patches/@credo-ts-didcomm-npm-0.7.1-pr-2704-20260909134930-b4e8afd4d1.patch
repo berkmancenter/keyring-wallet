@@ -1,0 +1,708 @@
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.d.mts b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.d.mts
+index 1175bf65bbd5328b3dc3c08d6bfbba65e460c949..286beea925df63ee4303800f355c4989f9411b44 100644
+--- a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.d.mts
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.d.mts
+@@ -13,6 +13,7 @@ interface DidCommJsonLdCredentialDetailOptionsOptions {
+   challenge?: string;
+   credentialStatus?: DidCommJsonLdCredentialDetailCredentialStatus;
+   proofType: string;
++  cryptosuite?: string;
+ }
+ declare class DidCommJsonLdCredentialDetailOptions {
+   constructor(options: DidCommJsonLdCredentialDetailOptionsOptions);
+@@ -21,6 +22,7 @@ declare class DidCommJsonLdCredentialDetailOptions {
+   domain?: string;
+   challenge?: string;
+   proofType: string;
++  cryptosuite?: string;
+   credentialStatus?: DidCommJsonLdCredentialDetailCredentialStatus;
+ }
+ //#endregion
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.mjs b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.mjs
+index 16e977f4701e036b2d67b147c6bc4fb921256afa..96a2185d1c41642fc323be053cbc4eedb18439a4 100644
+--- a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.mjs
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialDetailOptions.mjs
+@@ -19,6 +19,10 @@ var DidCommJsonLdCredentialDetailOptions = class {
+ 			this.challenge = options.challenge;
+ 			this.credentialStatus = options.credentialStatus;
+ 			this.proofType = options.proofType;
++			// KEYRING PATCH (Data Integrity): DataIntegrityProof proofs carry the
++			// concrete algorithm in proof.cryptosuite; the request options must be
++			// able to pin it (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 5 Option B).
++			this.cryptosuite = options.cryptosuite;
+ 		}
+ 	}
+ };
+@@ -39,6 +43,11 @@ __decorate([
+ 	__decorateMetadata("design:type", String)
+ ], DidCommJsonLdCredentialDetailOptions.prototype, "challenge", void 0);
+ __decorate([IsString(), __decorateMetadata("design:type", String)], DidCommJsonLdCredentialDetailOptions.prototype, "proofType", void 0);
++__decorate([
++	IsString(),
++	IsOptional(),
++	__decorateMetadata("design:type", String)
++], DidCommJsonLdCredentialDetailOptions.prototype, "cryptosuite", void 0);
+ __decorate([
+ 	IsOptional(),
+ 	IsObject(),
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts
+index f2a16ee0eb74d16250781cf22d5db0a35019cb01..0ca0427b617be4b33cb73dff8dae22f23b17a2f8 100644
+--- a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts
+@@ -20,6 +20,7 @@ interface DidCommJsonLdCredentialDetailFormat {
+   options: {
+     proofPurpose: string;
+     proofType: string;
++    cryptosuite?: string;
+   };
+ }
+ type EmptyObject = Record<string, never>;
+@@ -81,6 +82,7 @@ interface JsonLdFormatDataCredentialDetail {
+ interface JsonLdFormatDataCredentialDetailOptions {
+   proofPurpose?: DidPurpose;
+   proofType: string;
++  cryptosuite?: string;
+   created?: string;
+   domain?: string;
+   challenge?: string;
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts.orig b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts.orig
+new file mode 100644
+index 0000000000000000000000000000000000000000..f2a16ee0eb74d16250781cf22d5db0a35019cb01
+--- /dev/null
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.mts.orig
+@@ -0,0 +1,94 @@
++import { DidCommCredentialFormat } from "../DidCommCredentialFormat.mjs";
++import { DidPurpose, JsonObject, SingleOrArray, W3cIssuerOptions } from "@credo-ts/core";
++
++//#region src/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormat.d.ts
++interface JsonCredential {
++  '@context': Array<string> | JsonObject;
++  id?: string;
++  type: Array<string>;
++  issuer: string | W3cIssuerOptions;
++  issuanceDate: string;
++  expirationDate?: string;
++  credentialSubject: SingleOrArray<JsonObject>;
++  [key: string]: unknown;
++}
++/**
++ * Format for creating a jsonld proposal, offer or request.
++ */
++interface DidCommJsonLdCredentialDetailFormat {
++  credential: JsonCredential;
++  options: {
++    proofPurpose: string;
++    proofType: string;
++  };
++}
++type EmptyObject = Record<string, never>;
++/**
++ * Format for accepting a jsonld credential request. Optionally allows the verification
++ * method to use to sign the credential.
++ */
++interface DidCommJsonLdAcceptRequestFormat {
++  verificationMethod?: string;
++}
++interface DidCommJsonLdCredentialFormat extends DidCommCredentialFormat {
++  formatKey: 'jsonld';
++  credentialRecordType: 'w3c';
++  credentialFormats: {
++    createProposal: DidCommJsonLdCredentialDetailFormat;
++    acceptProposal: EmptyObject;
++    createOffer: DidCommJsonLdCredentialDetailFormat;
++    acceptOffer: EmptyObject;
++    createRequest: DidCommJsonLdCredentialDetailFormat;
++    acceptRequest: DidCommJsonLdAcceptRequestFormat;
++  };
++  formatData: {
++    proposal: JsonLdFormatDataCredentialDetail;
++    offer: JsonLdFormatDataCredentialDetail;
++    request: JsonLdFormatDataCredentialDetail;
++    credential: JsonLdFormatDataVerifiableCredential;
++  };
++}
++/**
++ * Represents a signed verifiable credential. Only meant to be used for credential
++ * format data interfaces.
++ */
++interface JsonLdFormatDataVerifiableCredential extends JsonCredential {
++  proof: {
++    type: string;
++    proofPurpose: string;
++    verificationMethod: string;
++    created: string;
++    domain?: string;
++    challenge?: string;
++    jws?: string;
++    proofValue?: string;
++    nonce?: string;
++    [key: string]: unknown;
++  };
++}
++/**
++ * Represents the jsonld credential detail. Only meant to be used for credential
++ * format data interfaces.
++ */
++interface JsonLdFormatDataCredentialDetail {
++  credential: JsonCredential;
++  options: JsonLdFormatDataCredentialDetailOptions;
++}
++/**
++ * Represents the jsonld credential detail options. Only meant to be used for credential
++ * format data interfaces.
++ */
++interface JsonLdFormatDataCredentialDetailOptions {
++  proofPurpose?: DidPurpose;
++  proofType: string;
++  created?: string;
++  domain?: string;
++  challenge?: string;
++  credentialStatus?: {
++    type: string;
++    [key: string]: unknown;
++  };
++}
++//#endregion
++export { DidCommJsonLdAcceptRequestFormat, DidCommJsonLdCredentialDetailFormat, DidCommJsonLdCredentialFormat, JsonCredential, JsonLdFormatDataCredentialDetail, JsonLdFormatDataCredentialDetailOptions, JsonLdFormatDataVerifiableCredential };
++//# sourceMappingURL=DidCommJsonLdCredentialFormat.d.mts.map
+\ No newline at end of file
+diff --git a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormatService.mjs b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormatService.mjs
+index ef8c7c1b07893e2323e88abc25781f81d1f5f075..354d7b7643d99f5d3fdb10b2bbb1a578408b0f74 100644
+--- a/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormatService.mjs
++++ b/build/modules/credentials/formats/jsonld/DidCommJsonLdCredentialFormatService.mjs
+@@ -188,6 +188,11 @@ var DidCommJsonLdCredentialFormatService = class {
+ 		if (credential.proof.domain !== request.options.domain) throw new CredoError("Received credential proof domain does not match domain from credential request");
+ 		if (credential.proof.challenge !== request.options.challenge) throw new CredoError("Received credential proof challenge does not match challenge from credential request");
+ 		if (credential.proof.type !== request.options.proofType) throw new CredoError("Received credential proof type does not match proof type from credential request");
++		// KEYRING PATCH (Data Integrity): when the request pins a cryptosuite
++		// (DataIntegrityProof), the received proof must carry the same one.
++		// Absent option (Ed25519Signature2018 path) keeps type-only matching
++		// (docs/CRYPTO_SUITE_FOLLOWUP.md, Decision 5 Option B).
++		if (request.options.cryptosuite !== void 0 && credential.proof.cryptosuite !== request.options.cryptosuite) throw new CredoError("Received credential proof cryptosuite does not match cryptosuite from credential request");
+ 		if (credential.proof.proofPurpose !== request.options.proofPurpose) throw new CredoError("Received credential proof purpose does not match proof purpose from credential request");
+ 		if (!utils.areObjectsEqual(jsonCredential, request.credential)) throw new CredoError("Received credential does not match credential request");
+ 	}
+diff --git a/build/modules/routing/DidCommMediationRecipientApi.mjs b/build/modules/routing/DidCommMediationRecipientApi.mjs
+index ec188170fa984fcee88d663ad21d917979f00cf3..e1d5250eb5274cd218c472bcbdbf44c22abec82b 100644
+--- a/build/modules/routing/DidCommMediationRecipientApi.mjs
++++ b/build/modules/routing/DidCommMediationRecipientApi.mjs
+@@ -153,6 +153,13 @@ let DidCommMediationRecipientApi = class DidCommMediationRecipientApi {
+ 		switch (mediatorPickupStrategy) {
+ 			case DidCommMediatorPickupStrategy.PickUpV1:
+ 			case DidCommMediatorPickupStrategy.PickUpV2: {
++				// keyring: a call while a loop is already running must REPLACE it, not
++				// stack another. Every caller that restarts pickup (agent init, each
++				// foreground resume, each OS permission dialog) otherwise adds one more
++				// interval — multiplying this wallet's poll rate against the mediator
++				// and the inbound work on the device (a Galaxy A03s fell 50 s behind
++				// with two loops, 2026-09-13). Stop whatever is running first.
++				this.stopMessagePickup$.next(true);
+ 				const stopConditions$ = merge(this.stop$, this.stopMessagePickup$).pipe();
+ 				const protocolVersion = mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV2 ? "v2" : "v1";
+ 				this.logger.info(`Starting explicit pickup of messages from mediator '${mediatorRecord.id}' using ${protocolVersion}`);
+diff --git a/build/modules/routing/DidCommMediationRecipientApi.mjs.orig b/build/modules/routing/DidCommMediationRecipientApi.mjs.orig
+new file mode 100644
+index 0000000000000000000000000000000000000000..ec188170fa984fcee88d663ad21d917979f00cf3
+--- /dev/null
++++ b/build/modules/routing/DidCommMediationRecipientApi.mjs.orig
+@@ -0,0 +1,463 @@
++import { __decorate } from "../../_virtual/_@oxc-project_runtime@0.112.0/helpers/decorate.mjs";
++import { __decorateMetadata } from "../../_virtual/_@oxc-project_runtime@0.112.0/helpers/decorateMetadata.mjs";
++import { DidCommModuleConfig } from "../../DidCommModuleConfig.mjs";
++import { __decorateParam } from "../../_virtual/_@oxc-project_runtime@0.112.0/helpers/decorateParam.mjs";
++import { DidCommTransportEventTypes } from "../../transport/DidCommTransportEventTypes.mjs";
++import "../../transport/index.mjs";
++import { assertDidCommV1Connection, assertDidCommV2Connection } from "../../util/didcommVersion.mjs";
++import { DidCommConnectionMetadataKeys } from "../connections/repository/DidCommConnectionMetadataTypes.mjs";
++import { KeylistUpdateActionV2 } from "./protocol/v2/messages/DidCommKeylistUpdateV2Message.mjs";
++import "./protocol/v2/messages/index.mjs";
++import { DidCommMediatorPickupStrategy } from "./DidCommMediatorPickupStrategy.mjs";
++import { DidCommMediationState } from "./models/DidCommMediationState.mjs";
++import { DidCommMediationRepository } from "./repository/DidCommMediationRepository.mjs";
++import "./repository/index.mjs";
++import { DidCommOutboundMessageContext } from "../../models/DidCommOutboundMessageContext.mjs";
++import "../../models/index.mjs";
++import { DidCommMessageSender } from "../../DidCommMessageSender.mjs";
++import { DidCommConnectionService } from "../connections/services/DidCommConnectionService.mjs";
++import { DidCommRoutingEventTypes } from "./DidCommRoutingEvents.mjs";
++import { DidCommMediationRole } from "./models/DidCommMediationRole.mjs";
++import { DidCommKeylistUpdate, DidCommKeylistUpdateAction, DidCommKeylistUpdateMessage } from "./protocol/v1/messages/DidCommKeylistUpdateMessage.mjs";
++import "./protocol/v1/messages/index.mjs";
++import { DidCommMediationRecipientService } from "./services/DidCommMediationRecipientService.mjs";
++import { DidCommRoutingService } from "./services/DidCommRoutingService.mjs";
++import "../connections/services/index.mjs";
++import { DidCommDiscoverFeaturesApi } from "../discover-features/DidCommDiscoverFeaturesApi.mjs";
++import "../discover-features/index.mjs";
++import { DidCommMessagePickupApi } from "../message-pickup/DidCommMessagePickupApi.mjs";
++import { DidCommBatchPickupMessage } from "../message-pickup/protocol/v1/messages/DidCommBatchPickupMessage.mjs";
++import "../message-pickup/protocol/v1/index.mjs";
++import { DidCommStatusV2Message } from "../message-pickup/protocol/v2/messages/DidCommStatusV2Message.mjs";
++import "../message-pickup/protocol/v2/index.mjs";
++import { DidCommMediationRecipientModuleConfig } from "./DidCommMediationRecipientModuleConfig.mjs";
++import { AgentContext, CredoError, DidCommV1Service, DidDocument, DidsApi, EventEmitter, IndyAgentService, InjectionSymbols, didDocumentToNumAlgo4Did, filterContextCorrelationId, getAlternativeDidsForNumAlgo4Did, inject, injectable, isShortFormDidPeer4, verkeyToDidKey } from "@credo-ts/core";
++import { ReplaySubject, Subject, firstValueFrom, interval, merge, timer } from "rxjs";
++import { delayWhen, filter as filter$1, first as first$1, takeUntil as takeUntil$1, tap, throttleTime, timeout as timeout$1 } from "rxjs/operators";
++
++//#region src/modules/routing/DidCommMediationRecipientApi.ts
++var _ref, _ref2, _ref3, _ref4, _ref5, _ref6, _ref7, _ref8, _ref9, _ref10, _ref11, _ref12;
++let DidCommMediationRecipientApi = class DidCommMediationRecipientApi {
++	constructor(mediationRecipientService, connectionService, dids, messageSender, eventEmitter, discoverFeaturesApi, messagePickupApi, mediationRepository, routingService, logger, agentContext, stop$, mediationRecipientModuleConfig) {
++		this.stopMessagePickup$ = new Subject();
++		this.connectionService = connectionService;
++		this.dids = dids;
++		this.mediationRecipientService = mediationRecipientService;
++		this.messageSender = messageSender;
++		this.eventEmitter = eventEmitter;
++		this.logger = logger;
++		this.discoverFeaturesApi = discoverFeaturesApi;
++		this.messagePickupApi = messagePickupApi;
++		this.mediationRepository = mediationRepository;
++		this.routingService = routingService;
++		this.agentContext = agentContext;
++		this.stop$ = stop$;
++		this.config = mediationRecipientModuleConfig;
++	}
++	async sendMessage(outboundMessageContext, pickupStrategy) {
++		const transportPriority = (pickupStrategy ?? this.config.mediatorPickupStrategy) === DidCommMediatorPickupStrategy.Implicit ? {
++			schemes: ["wss", "ws"],
++			restrictive: true
++		} : void 0;
++		await this.messageSender.sendMessage(outboundMessageContext, { transportPriority });
++	}
++	/**
++	* Implicit mode consists simply on initiating a long-lived session to a mediator and wait for the
++	* messages to arrive automatically.
++	*
++	* In order to do initiate this session, we open a suitable connection (using WebSocket transport) and
++	* send a Trust Ping message.
++	*
++	* @param mediator
++	*/
++	async initiateImplicitMode(mediator) {
++		const connection = await this.connectionService.getById(this.agentContext, mediator.connectionId);
++		const { message, connectionRecord } = await this.connectionService.createTrustPing(this.agentContext, connection, { responseRequested: false });
++		const websocketSchemes = ["ws", "wss"];
++		if (!((connectionRecord.theirDid && await this.dids.resolveDidDocument(connectionRecord.theirDid))?.didCommServices || [])?.some((s) => (s instanceof IndyAgentService || s instanceof DidCommV1Service) && websocketSchemes.includes(s.protocolScheme))) throw new CredoError("Cannot open websocket to connection without websocket service endpoint");
++		await this.messageSender.sendMessage(new DidCommOutboundMessageContext(message, {
++			agentContext: this.agentContext,
++			connection: connectionRecord
++		}), { transportPriority: {
++			schemes: websocketSchemes,
++			restrictive: true
++		} });
++	}
++	/**
++	* Keep track of a persistent transport session with a mediator, trying to reconnect to it as
++	* soon as it is disconnected, using a recursive back-off strategy
++	*
++	* @param mediator mediation record
++	* @param pickupStrategy chosen pick up strategy (should be Implicit or PickUp in Live Mode)
++	*/
++	async monitorMediatorWebSocketEvents(mediator, pickupStrategy) {
++		const { baseMediatorReconnectionIntervalMs, maximumMediatorReconnectionIntervalMs } = this.config;
++		let interval = baseMediatorReconnectionIntervalMs;
++		const stopConditions$ = merge(this.stop$, this.stopMessagePickup$).pipe();
++		this.eventEmitter.observable(DidCommTransportEventTypes.DidCommOutboundWebSocketOpenedEvent).pipe(takeUntil$1(stopConditions$), filter$1((e) => e.payload.connectionId === mediator.connectionId)).subscribe(() => {
++			interval = baseMediatorReconnectionIntervalMs;
++		});
++		this.eventEmitter.observable(DidCommTransportEventTypes.DidCommOutboundWebSocketClosedEvent).pipe(takeUntil$1(stopConditions$), filter$1((e) => e.payload.connectionId === mediator.connectionId), throttleTime(interval), delayWhen(() => timer(interval)), tap(() => {
++			interval = Math.min(interval * 2, maximumMediatorReconnectionIntervalMs);
++		})).subscribe({
++			next: async () => {
++				this.logger.debug(`Websocket connection to mediator with connectionId '${mediator.connectionId}' is closed, attempting to reconnect...`);
++				try {
++					if (pickupStrategy === DidCommMediatorPickupStrategy.PickUpV2LiveMode) {
++						await this.messagePickupApi.pickupMessages({
++							connectionId: mediator.connectionId,
++							protocolVersion: "v2",
++							awaitCompletion: true
++						});
++						await this.messagePickupApi.setLiveDeliveryMode({
++							connectionId: mediator.connectionId,
++							liveDelivery: true,
++							protocolVersion: "v2"
++						});
++					} else if (pickupStrategy === DidCommMediatorPickupStrategy.PickUpV4LiveMode) {
++						await this.messagePickupApi.pickupMessages({
++							connectionId: mediator.connectionId,
++							protocolVersion: "v4",
++							awaitCompletion: true
++						});
++						await this.messagePickupApi.setLiveDeliveryMode({
++							connectionId: mediator.connectionId,
++							liveDelivery: true,
++							protocolVersion: "v4"
++						});
++					} else await this.initiateImplicitMode(mediator);
++				} catch (error) {
++					this.logger.warn("Unable to re-open websocket connection to mediator", { error });
++				}
++			},
++			complete: () => this.logger.info(`Stopping pickup of messages from mediator '${mediator.id}'`)
++		});
++	}
++	/**
++	* Start a Message Pickup flow with a registered Mediator.
++	*
++	* @param mediator optional {MediationRecord} corresponding to the mediator to pick messages from. It will use
++	* default mediator otherwise
++	* @param pickupStrategy optional {DidCommMediatorPickupStrategy} to use in the loop. It will use Agent's default
++	* strategy or attempt to find it by Discover Features otherwise
++	* @returns
++	*/
++	async initiateMessagePickup(mediator, pickupStrategy) {
++		const { mediatorPollingInterval } = this.config;
++		const mediatorRecord = mediator ?? await this.findDefaultMediator();
++		if (!mediatorRecord) throw new CredoError("There is no mediator to pickup messages from");
++		const mediatorPickupStrategy = await this.getPickupStrategyForMediator(mediatorRecord, pickupStrategy);
++		const mediatorConnection = await this.connectionService.getById(this.agentContext, mediatorRecord.connectionId);
++		if (mediatorRecord.protocolVersion === "v2") assertDidCommV2Connection(mediatorConnection, "Mediation 2.0");
++		else assertDidCommV1Connection(mediatorConnection, "Mediation");
++		switch (mediatorPickupStrategy) {
++			case DidCommMediatorPickupStrategy.PickUpV1:
++			case DidCommMediatorPickupStrategy.PickUpV2: {
++				const stopConditions$ = merge(this.stop$, this.stopMessagePickup$).pipe();
++				const protocolVersion = mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV2 ? "v2" : "v1";
++				this.logger.info(`Starting explicit pickup of messages from mediator '${mediatorRecord.id}' using ${protocolVersion}`);
++				return interval(mediatorPollingInterval).pipe(takeUntil$1(stopConditions$)).subscribe({
++					next: async () => {
++						await this.messagePickupApi.pickupMessages({
++							connectionId: mediatorConnection.id,
++							batchSize: this.config.maximumMessagePickup,
++							protocolVersion
++						});
++					},
++					complete: () => this.logger.info(`Stopping pickup of messages from mediator '${mediatorRecord.id}'`)
++				});
++			}
++			case DidCommMediatorPickupStrategy.PickUpV4: {
++				const stopConditions$ = merge(this.stop$, this.stopMessagePickup$).pipe();
++				this.logger.info(`Starting explicit pickup of messages from mediator '${mediatorRecord.id}' using v4`);
++				return interval(mediatorPollingInterval).pipe(takeUntil$1(stopConditions$)).subscribe({
++					next: async () => {
++						await this.messagePickupApi.pickupMessages({
++							connectionId: mediatorConnection.id,
++							batchSize: this.config.maximumMessagePickup,
++							protocolVersion: "v4"
++						});
++					},
++					complete: () => this.logger.info(`Stopping pickup of messages from mediator '${mediatorRecord.id}'`)
++				});
++			}
++			case DidCommMediatorPickupStrategy.PickUpV2LiveMode:
++				this.logger.info(`Starting Live Mode pickup of messages from mediator '${mediatorRecord.id}'`);
++				await this.monitorMediatorWebSocketEvents(mediatorRecord, mediatorPickupStrategy);
++				await this.messagePickupApi.pickupMessages({
++					connectionId: mediatorConnection.id,
++					protocolVersion: "v2",
++					awaitCompletion: true
++				});
++				await this.messagePickupApi.setLiveDeliveryMode({
++					connectionId: mediatorConnection.id,
++					liveDelivery: true,
++					protocolVersion: "v2"
++				});
++				break;
++			case DidCommMediatorPickupStrategy.PickUpV4LiveMode:
++				this.logger.info(`Starting Live Mode pickup of messages from mediator '${mediatorRecord.id}' using v4`);
++				await this.monitorMediatorWebSocketEvents(mediatorRecord, mediatorPickupStrategy);
++				await this.messagePickupApi.pickupMessages({
++					connectionId: mediatorConnection.id,
++					protocolVersion: "v4",
++					awaitCompletion: true
++				});
++				await this.messagePickupApi.setLiveDeliveryMode({
++					connectionId: mediatorConnection.id,
++					liveDelivery: true,
++					protocolVersion: "v4"
++				});
++				break;
++			case DidCommMediatorPickupStrategy.Implicit:
++				this.logger.info(`Starting implicit pickup of messages from mediator '${mediatorRecord.id}'`);
++				await this.monitorMediatorWebSocketEvents(mediatorRecord, mediatorPickupStrategy);
++				await this.initiateImplicitMode(mediatorRecord);
++				break;
++			default: this.logger.info(`Skipping pickup of messages from mediator '${mediatorRecord.id}' due to pickup strategy none`);
++		}
++	}
++	/**
++	* Terminate all ongoing Message Pickup loops
++	*/
++	async stopMessagePickup() {
++		this.stopMessagePickup$.next(true);
++	}
++	/**
++	* Picks the pickup strategy for a mediator. Tries `requested`, then the stored strategy, then
++	* the config default, and adjusts it to match the mediator's CM version (CM 2.0 → Pickup v4,
++	* CM 1.0 → Pickup v2). Saves the adjusted strategy only when there's no `requested` override.
++	*/
++	async getPickupStrategyForMediator(mediator, requested) {
++		let mediatorPickupStrategy = requested ?? mediator.pickupStrategy ?? this.config.mediatorPickupStrategy;
++		const persistCoercion = requested === void 0;
++		if (mediator.protocolVersion === "v2") {
++			if (!mediatorPickupStrategy || mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV1 || mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV2) mediatorPickupStrategy = DidCommMediatorPickupStrategy.PickUpV4;
++			else if (mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV2LiveMode) mediatorPickupStrategy = DidCommMediatorPickupStrategy.PickUpV4LiveMode;
++			else if (mediatorPickupStrategy === DidCommMediatorPickupStrategy.Implicit) {
++				this.logger.warn(`Pickup strategy 'Implicit' is not compatible with Coordinate Mediation 2.0. Upgrading to 'PickUpV4LiveMode'.`);
++				mediatorPickupStrategy = DidCommMediatorPickupStrategy.PickUpV4LiveMode;
++			}
++			if (persistCoercion) {
++				mediator.pickupStrategy = mediatorPickupStrategy;
++				await this.mediationRepository.update(this.agentContext, mediator);
++			}
++			return mediatorPickupStrategy;
++		}
++		if (mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV4) {
++			this.logger.warn(`Pickup strategy 'PickUpV4' is not compatible with Coordinate Mediation 1.0. Downgrading to 'PickUpV2'.`);
++			mediatorPickupStrategy = DidCommMediatorPickupStrategy.PickUpV2;
++			if (persistCoercion) {
++				mediator.pickupStrategy = mediatorPickupStrategy;
++				await this.mediationRepository.update(this.agentContext, mediator);
++			}
++		} else if (mediatorPickupStrategy === DidCommMediatorPickupStrategy.PickUpV4LiveMode) {
++			this.logger.warn(`Pickup strategy 'PickUpV4LiveMode' is not compatible with Coordinate Mediation 1.0. Downgrading to 'PickUpV2LiveMode'.`);
++			mediatorPickupStrategy = DidCommMediatorPickupStrategy.PickUpV2LiveMode;
++			if (persistCoercion) {
++				mediator.pickupStrategy = mediatorPickupStrategy;
++				await this.mediationRepository.update(this.agentContext, mediator);
++			}
++		}
++		if (!mediatorPickupStrategy) {
++			if ((await this.discoverFeaturesApi.queryFeatures({
++				connectionId: mediator.connectionId,
++				protocolVersion: "v1",
++				queries: [{
++					featureType: "protocol",
++					match: DidCommStatusV2Message.type.protocolUri
++				}],
++				awaitDisclosures: true
++			})).features?.find((item) => item.id === DidCommStatusV2Message.type.protocolUri)) mediatorPickupStrategy = DidCommMediatorPickupStrategy.PickUpV2;
++			else mediatorPickupStrategy = (await this.discoverFeaturesApi.queryFeatures({
++				connectionId: mediator.connectionId,
++				protocolVersion: "v1",
++				queries: [{
++					featureType: "protocol",
++					match: DidCommBatchPickupMessage.type.protocolUri
++				}],
++				awaitDisclosures: true
++			})).features?.find((item) => item.id === DidCommBatchPickupMessage.type.protocolUri) ? DidCommMediatorPickupStrategy.PickUpV1 : DidCommMediatorPickupStrategy.Implicit;
++			mediator.pickupStrategy = mediatorPickupStrategy;
++			await this.mediationRepository.update(this.agentContext, mediator);
++		}
++		return mediatorPickupStrategy;
++	}
++	async discoverMediation() {
++		return this.mediationRecipientService.discoverMediation(this.agentContext);
++	}
++	async setDefaultMediator(mediatorRecord) {
++		return this.mediationRecipientService.setDefaultMediator(this.agentContext, mediatorRecord);
++	}
++	/**
++	* Send a mediation request for the given connection. Automatically selects
++	* v1 or v2 Coordinate Mediation based on the connection's DIDComm version.
++	*/
++	async requestMediation(connection) {
++		const { mediationRecord, message } = (connection.didcommVersion ?? "v1") === "v2" ? await this.mediationRecipientService.createRequestV2(this.agentContext, connection) : await this.mediationRecipientService.createRequest(this.agentContext, connection);
++		const outboundMessage = new DidCommOutboundMessageContext(message, {
++			agentContext: this.agentContext,
++			connection
++		});
++		await this.sendMessage(outboundMessage);
++		return mediationRecord;
++	}
++	/**
++	* CM2 keylist tags are exact strings; senders may use long or short did:peer:4 in forward `next`.
++	* Register every stable variant we can derive so the mediator finds the record.
++	*/
++	async recipientDidKeylistVariantsForProvision(recipientDid) {
++		const variants = new Set([recipientDid]);
++		for (const d of getAlternativeDidsForNumAlgo4Did(recipientDid) ?? []) variants.add(d);
++		if (isShortFormDidPeer4(recipientDid)) try {
++			const { didDocument } = await this.dids.resolve(recipientDid);
++			if (didDocument) {
++				const { longFormDid } = didDocumentToNumAlgo4Did(didDocument);
++				variants.add(longFormDid);
++				for (const d of getAlternativeDidsForNumAlgo4Did(longFormDid) ?? []) variants.add(d);
++			}
++		} catch {}
++		return [...variants];
++	}
++	/**
++	* Register (add/remove) a routing key or DID with the mediator. Automatically selects
++	* the v1 or v2 keylist-update flow based on the mediation record's protocol version.
++	*
++	* For v1 the key is a verkey (or did:key) and action defaults to add.
++	* For v2 the key is the recipient DID.
++	*/
++	async notifyKeylistUpdate(mediationRecord, recipientKeyOrDid, action = DidCommKeylistUpdateAction.add) {
++		mediationRecord.assertReady();
++		mediationRecord.assertRole(DidCommMediationRole.Recipient);
++		const connection = await this.connectionService.getById(this.agentContext, mediationRecord.connectionId);
++		if (mediationRecord.protocolVersion === "v2") {
++			const outboundMessageContext = new DidCommOutboundMessageContext(this.mediationRecipientService.createKeylistUpdateV2Message(mediationRecord, [{
++				recipientDid: recipientKeyOrDid,
++				action
++			}]), {
++				agentContext: this.agentContext,
++				connection
++			});
++			await this.sendMessage(outboundMessageContext);
++			return;
++		}
++		let useDidKey = this.agentContext.dependencyManager.resolve(DidCommModuleConfig).useDidKeyInProtocols;
++		const useDidKeysConnectionMetadata = connection.metadata.get(DidCommConnectionMetadataKeys.UseDidKeysForProtocol);
++		if (useDidKeysConnectionMetadata) useDidKey = useDidKeysConnectionMetadata[DidCommKeylistUpdateMessage.type.protocolUri] ?? useDidKey;
++		const outboundMessageContext = new DidCommOutboundMessageContext(this.mediationRecipientService.createKeylistUpdateMessage([new DidCommKeylistUpdate({
++			action,
++			recipientKey: useDidKey ? verkeyToDidKey(recipientKeyOrDid) : recipientKeyOrDid
++		})]), {
++			agentContext: this.agentContext,
++			connection
++		});
++		await this.sendMessage(outboundMessageContext);
++	}
++	/**
++	* Query the mediator's keylist. Only supported for Coordinate Mediation 2.0;
++	* v1 has no public keylist-query method.
++	*/
++	async keylistQuery(mediationRecord, paginate) {
++		mediationRecord.assertReady();
++		mediationRecord.assertRole(DidCommMediationRole.Recipient);
++		if (mediationRecord.protocolVersion !== "v2") throw new CredoError("keylistQuery is only supported for Coordinate Mediation 2.0");
++		const connection = await this.connectionService.getById(this.agentContext, mediationRecord.connectionId);
++		const outboundMessageContext = new DidCommOutboundMessageContext(this.mediationRecipientService.createKeylistQueryV2Message(mediationRecord, paginate), {
++			agentContext: this.agentContext,
++			connection
++		});
++		await this.sendMessage(outboundMessageContext);
++	}
++	async findByConnectionId(connectionId) {
++		return await this.mediationRecipientService.findByConnectionId(this.agentContext, connectionId);
++	}
++	async getMediators() {
++		return await this.mediationRecipientService.getMediators(this.agentContext);
++	}
++	async findDefaultMediator() {
++		return this.mediationRecipientService.findDefaultMediator(this.agentContext);
++	}
++	async findDefaultMediatorConnection() {
++		const mediatorRecord = await this.findDefaultMediator();
++		if (mediatorRecord) return this.connectionService.getById(this.agentContext, mediatorRecord.connectionId);
++		return null;
++	}
++	/**
++	* Send a mediation request and wait for a grant. Automatically selects
++	* v1 or v2 Coordinate Mediation based on the connection's DIDComm version.
++	*/
++	async requestAndAwaitGrant(connection, timeoutMs = 1e4) {
++		const { mediationRecord, message } = (connection.didcommVersion ?? "v1") === "v2" ? await this.mediationRecipientService.createRequestV2(this.agentContext, connection) : await this.mediationRecipientService.createRequest(this.agentContext, connection);
++		const observable = this.eventEmitter.observable(DidCommRoutingEventTypes.MediationStateChanged);
++		const subject = new ReplaySubject(1);
++		observable.pipe(filterContextCorrelationId(this.agentContext.contextCorrelationId), filter$1((event) => event.payload.mediationRecord.id === mediationRecord.id), filter$1((event) => event.payload.previousState === DidCommMediationState.Requested), filter$1((event) => event.payload.mediationRecord.state === DidCommMediationState.Granted), first$1(), timeout$1({
++			first: timeoutMs,
++			meta: "MediationRecipientApi.requestAndAwaitGrant"
++		})).subscribe(subject);
++		const outboundMessageContext = new DidCommOutboundMessageContext(message, {
++			agentContext: this.agentContext,
++			connection,
++			associatedRecord: mediationRecord
++		});
++		await this.sendMessage(outboundMessageContext);
++		return (await firstValueFrom(subject)).payload.mediationRecord;
++	}
++	/**
++	* Requests mediation for a given connection and sets that as default mediator.
++	* Automatically selects v1 or v2 flow based on the connection's DIDComm version.
++	* For v2, also performs the post-grant keylist-update required by the CM 2.0 spec.
++	*/
++	async provision(connection) {
++		const isV2 = (connection.didcommVersion ?? "v1") === "v2";
++		this.logger.debug(`Connection completed, requesting mediation (${isV2 ? "v2" : "v1"})`);
++		let mediation = await this.findByConnectionId(connection.id);
++		if (mediation) {
++			this.logger.debug(`Mediator invitation has already been ${mediation.isReady ? "granted" : "requested"}`);
++			return mediation;
++		}
++		this.logger.info(`Requesting mediation for connection ${connection.id}`);
++		mediation = await this.requestAndAwaitGrant(connection, 6e4);
++		this.logger.debug("Mediation granted, setting as default mediator");
++		await this.setDefaultMediator(mediation);
++		this.logger.debug("Default mediator set");
++		if (isV2) {
++			const recipientDid = (await this.connectionService.getById(this.agentContext, connection.id)).did;
++			if (recipientDid) {
++				const toRegister = await this.recipientDidKeylistVariantsForProvision(recipientDid);
++				this.logger.debug("Sending keylist-update to register recipient DID variant(s) with mediator", { toRegister });
++				mediation = await this.mediationRecipientService.keylistUpdateAndAwaitV2(this.agentContext, mediation, toRegister.map((did) => ({
++					recipientDid: did,
++					action: KeylistUpdateActionV2.add
++				})), 15e3);
++			}
++		}
++		return mediation;
++	}
++	async getRouting(options) {
++		return this.routingService.getRouting(this.agentContext, options);
++	}
++};
++DidCommMediationRecipientApi = __decorate([
++	injectable(),
++	__decorateParam(9, inject(InjectionSymbols.Logger)),
++	__decorateParam(11, inject(InjectionSymbols.Stop$)),
++	__decorateMetadata("design:paramtypes", [
++		typeof (_ref = typeof DidCommMediationRecipientService !== "undefined" && DidCommMediationRecipientService) === "function" ? _ref : Object,
++		typeof (_ref2 = typeof DidCommConnectionService !== "undefined" && DidCommConnectionService) === "function" ? _ref2 : Object,
++		typeof (_ref3 = typeof DidsApi !== "undefined" && DidsApi) === "function" ? _ref3 : Object,
++		typeof (_ref4 = typeof DidCommMessageSender !== "undefined" && DidCommMessageSender) === "function" ? _ref4 : Object,
++		typeof (_ref5 = typeof EventEmitter !== "undefined" && EventEmitter) === "function" ? _ref5 : Object,
++		typeof (_ref6 = typeof DidCommDiscoverFeaturesApi !== "undefined" && DidCommDiscoverFeaturesApi) === "function" ? _ref6 : Object,
++		typeof (_ref7 = typeof DidCommMessagePickupApi !== "undefined" && DidCommMessagePickupApi) === "function" ? _ref7 : Object,
++		typeof (_ref8 = typeof DidCommMediationRepository !== "undefined" && DidCommMediationRepository) === "function" ? _ref8 : Object,
++		typeof (_ref9 = typeof DidCommRoutingService !== "undefined" && DidCommRoutingService) === "function" ? _ref9 : Object,
++		Object,
++		typeof (_ref10 = typeof AgentContext !== "undefined" && AgentContext) === "function" ? _ref10 : Object,
++		typeof (_ref11 = typeof Subject !== "undefined" && Subject) === "function" ? _ref11 : Object,
++		typeof (_ref12 = typeof DidCommMediationRecipientModuleConfig !== "undefined" && DidCommMediationRecipientModuleConfig) === "function" ? _ref12 : Object
++	])
++], DidCommMediationRecipientApi);
++
++//#endregion
++export { DidCommMediationRecipientApi };
++//# sourceMappingURL=DidCommMediationRecipientApi.mjs.map
+\ No newline at end of file
+diff --git a/build/modules/routing/DidCommMediationRecipientModule.mjs b/build/modules/routing/DidCommMediationRecipientModule.mjs
+index 576c2ffe0484ebe0ef7bcbe9636fa8d287921d21..9f08ba82d076eb01c06aa0f603c3e17a361d3a59 100644
+--- a/build/modules/routing/DidCommMediationRecipientModule.mjs
++++ b/build/modules/routing/DidCommMediationRecipientModule.mjs
+@@ -79,13 +79,30 @@ var DidCommMediationRecipientModule = class {
+ 			agentContext.config.logger.warn(`Error initiating message pickup with mediator ${defaultMediator.id}`, { error });
+ 		});
+ 	}
+-	async getMediationConnection(agentContext, mediatorInvitationUrl) {
++	async getMediationConnection(agentContext, mediatorInvitationUrl, retried = false) {
+ 		const oobApi = agentContext.dependencyManager.resolve(DidCommOutOfBandApi);
+ 		const connectionsApi = agentContext.dependencyManager.resolve(DidCommConnectionsApi);
+ 		const mediationRecipientApi = agentContext.dependencyManager.resolve(DidCommMediationRecipientApi);
+ 		const outOfBandInvitation = await oobApi.parseInvitation(mediatorInvitationUrl);
+ 		const outOfBandRecord = await oobApi.findByReceivedInvitationId(outOfBandInvitation.id);
+ 		const [connection] = outOfBandRecord ? await connectionsApi.findAllByOutOfBandId(outOfBandRecord.id) : [];
++		// keyring: a connection left behind by an interrupted first provisioning
++		// (the didexchange request never reached the mediator — an emulator
++		// with no network yet, a killed process) never completes, and the stock
++		// code below waits on it on EVERY launch: the wallet is bricked with
++		// "Error during call to 'onInitializeContext'" (2026-09-14). Give it a
++		// short wait, then discard the connection and its out-of-band record so
++		// the invitation can be received again, once.
++		if (connection && !connection.isReady && !retried) {
++			try {
++				return await connectionsApi.returnWhenIsConnected(connection.id, { timeoutMs: 15e3 });
++			} catch {
++				agentContext.config.logger.warn(`Mediation connection ${connection.id} never completed (state ${connection.state}) — discarding it and receiving the mediator invitation again`);
++				await connectionsApi.deleteById(connection.id).catch(() => {});
++				if (outOfBandRecord) await oobApi.deleteById(outOfBandRecord.id).catch(() => {});
++				return this.getMediationConnection(agentContext, mediatorInvitationUrl, true);
++			}
++		}
+ 		if (!connection) {
+ 			agentContext.config.logger.debug("Mediation connection does not exist, creating connection");
+ 			const routing = await mediationRecipientApi.getRouting({ useDefaultMediator: false });

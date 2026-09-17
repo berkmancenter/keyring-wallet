@@ -76,6 +76,8 @@ export const IOS_PLATFORM_VERSION = process.env.IOS_PLATFORM_VERSION || "26.3";
 // UDIDs are auto-detected by the runner when unset (adb devices / devicectl).
 export const ANDROID_UDID = process.env.ANDROID_UDID || "";
 export const IOS_UDID = process.env.IOS_UDID || "";
+// Second physical iOS device (iPad + iPhone runs).
+export const IOS_UDID2 = process.env.IOS_UDID2 || "";
 // Second physical android device for the witnessed android-only devices run
 // (two phones can't share one udid).
 export const ANDROID_UDID2 = process.env.ANDROID_UDID2 || "";
@@ -140,7 +142,12 @@ export function androidDeviceCaps(udid) {
  * Developer Mode enabled on the phone. Appium builds + signs WebDriverAgent
  * with the same team on first run (can take a few minutes).
  */
-export function iosDeviceCaps(udid) {
+/**
+ * Real iPhone/iPad. `ports` lets TWO iOS devices share one Appium server:
+ * each needs its own WDA port, MJPEG port and WDA derived-data folder
+ * (concurrent WDA builds into one folder collide).
+ */
+export function iosDeviceCaps(udid, ports = {}) {
   return {
     platformName: "iOS",
     "appium:automationName": "XCUITest",
@@ -162,7 +169,9 @@ export function iosDeviceCaps(udid) {
     //     -allowProvisioningUpdates build-for-testing
     "appium:allowProvisioningDeviceRegistration": true,
     // default 8100 can be taken by other tooling on the host
-    "appium:wdaLocalPort": 8123,
+    "appium:wdaLocalPort": ports.wdaLocalPort ?? 8123,
+    ...(ports.mjpegServerPort ? { "appium:mjpegServerPort": ports.mjpegServerPort } : {}),
+    ...(ports.derivedDataPath ? { "appium:derivedDataPath": ports.derivedDataPath } : {}),
     "appium:newCommandTimeout": 600,
     "appium:autoAcceptAlerts": true,
     "appium:wdaLaunchTimeout": 300000,

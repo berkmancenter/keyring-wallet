@@ -1,5 +1,5 @@
 PODS:
-  - anoncreds (0.3.4):
+  - anoncreds (0.4.0):
     - React
     - React-callinvoker
     - React-Core
@@ -220,7 +220,7 @@ PODS:
   - hermes-engine (0.81.5):
     - hermes-engine/Pre-built (= 0.81.5)
   - hermes-engine/Pre-built (0.81.5)
-  - indy-vdr (0.2.4):
+  - indy-vdr (0.3.0):
     - React
     - React-callinvoker
     - React-Core
@@ -3764,7 +3764,7 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  anoncreds: d48fc0f3bde44f97aef5bb907f6821bf9191d758
+  anoncreds: 680287ebc5e2a6c46bca21d37b2dfec264b9bb76
   askar: d15c0dd9a376a8e3245030f0baf7ddca0058f76d
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
   BVLinearGradient: cb006ba232a1f3e4f341bb62c42d1098c284da70
@@ -3800,7 +3800,7 @@ SPEC CHECKSUMS:
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleUtilities: 766ace00c6b10d8148408f329d10c4f051931850
   hermes-engine: 9f4dfe93326146a1c99eb535b1cb0b857a3cd172
-  indy-vdr: 3606e7be9ed3b5fc67a80b198982015adfdadc7f
+  indy-vdr: a1b62288f24405efcca914da188edf3a9d0db1cf
   JitsiWebRTC: b47805ab5668be38e7ee60e2258f49badfe8e1d0
   libwebp: af5937a13536ef73f3784d69cc342b98961acf33
   Mute: 20135a96076f140cc82bfc8b810e2d6150d8ec7e
