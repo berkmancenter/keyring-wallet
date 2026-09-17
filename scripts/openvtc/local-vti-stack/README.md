@@ -71,6 +71,19 @@ brew install redis && brew services start redis
   setup (statement type, criteria, ACL) is not restored automatically — see
   `tsp-reference/ref-20-local-vetting/`.
 
+## Enrolling a phone as a VTA's manager
+
+`enrol-manager.sh <did> [alice|bob|community] [role]` is the stand-in for the
+enrolment QR the plan proposes to a farm: the phone mints its manager identity
+and shows it, this admits it on the VTA's ACL (stopping the VTA for the write),
+and the phone connects. `e2e/run-vta-enrol.js` drives the whole thing, reading
+the DID off the Developer screen.
+
+**Personas need a registered DID-hosting server.** A VTA mints a persona on a
+server it has registered (`pnm did-mgmt servers add --id dids --did <daemon
+DID>`), and the daemon's ACL must list the VTA; `up.sh` does the ACL half. A
+*serverless* mint (`--did-url`) prints a log the VTA does not serve — VTI-20.
+
 ## The admin portal
 
 `vtc-service` ships a browser console at **`https://<vtc host>/admin/`** — on

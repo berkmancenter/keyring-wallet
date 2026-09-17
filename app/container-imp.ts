@@ -146,6 +146,8 @@ export class AppContainer implements Container {
       vti: {
         mediatorDid: Config.VTI_MEDIATOR_DID,
         communityDid: Config.VTI_COMMUNITY_DID,
+        vtaDid: Config.VTI_VTA_DID,
+        personaBaseUrl: Config.VTI_PERSONA_BASE_URL,
       },
       settings: [
         /* Help section commented out — re-enable when help actions are wired up

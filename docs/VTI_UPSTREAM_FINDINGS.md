@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.1 — 2026-09-16.** A living document: every finding here was measured
+**Version 1.2 — 2026-09-16.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -40,6 +40,10 @@ from a report or an issue always lands on the right entry.
 | [VTI-14](#vti-14) | `cnm`'s vetting subcommands ignore `--url` / `VTA_URL` | Low | Open |
 | [VTI-15](#vti-15) | A VTC DID cannot be used as a `cnm` community | Low | Open |
 | [VTI-16](#vti-16) | Minting an admin portal sign-in needs the daemon stopped, then running | Low | Open |
+| [VTI-17](#vti-17) | A force re-provision keeps a DID bound to a hostname that no longer exists | Medium | Open |
+| [VTI-18](#vti-18) | A self-managed DID-hosting daemon without a mediator cannot be registered by a VTA | Medium | Open |
+| [VTI-19](#vti-19) | The DID resolver bursts a dozen fetches per operation and trips rate-limited hosts | Low | Open — operational |
+| [VTI-20](#vti-20) | A serverless persona mint prints a log nobody serves | Low | Open — documentation |
 
 ## Stack under test
 
@@ -398,6 +402,75 @@ outage.
 
 ---
 
+## VTI-17
+
+### A force re-provision keeps a DID bound to a hostname that no longer exists
+
+`did-hosting-daemon setup --force-reprovision` rotates the daemon's secrets and
+rewrites its config, but leaves the daemon's own `did:webvh` in the store —
+still bound to the old public hostname. The setup log says so, quietly:
+*"WARNING failed to import daemon DID: conflict: DID at path '.well-known'
+already exists"*. The new host then serves `404` for `/.well-known/did.jsonl`,
+and nothing that resolves the daemon's DID works, while the daemon itself
+reports healthy.
+
+**Reproduce:** move a self-managed daemon to a new `public_url`, re-run setup
+with `--force-reprovision`, resolve its DID at the new host.
+**Workaround:** delete the store (`data/`) before re-provisioning. Our stack
+script does this. A re-provision that changes `public_url` should re-mint the
+DID or refuse loudly.
+
+---
+
+## VTI-18
+
+### A self-managed DID-hosting daemon without a mediator cannot be registered by a VTA
+
+A VTA registers a hosting server by resolving the server's DID and requiring a
+`TSPTransport`, `DIDCommMessaging`, `WebVHHosting` or legacy `WebVHHostingService`
+service on it (`pnm did-mgmt servers add`: *"has no supported webvh endpoint"*).
+A self-managed daemon set up without a mediator mints its own DID with **no
+services at all** — so it hosts DIDs perfectly well and no VTA can be told about
+it. The recipe's `[identity] mediator_did` + `transport` add a
+`DIDCommMessaging` service and fix it; the recipe comment on `mediator_did`
+says *"required for daemon hosting external tenant DIDs"*, which is true and
+not where an operator looks. Either advertise `WebVHHosting` at `public_url`
+unconditionally (the daemon serves HTTP either way), or make the self-managed
+wizard ask for the mediator.
+
+---
+
+## VTI-19
+
+### The DID resolver bursts a dozen fetches per operation and trips rate-limited hosts
+
+One `pnm` command against a VTA fetched that VTA's `/.well-known/did.jsonl`
+forty times in five minutes; a burst of eight in a second is enough for an
+ngrok-fronted host to answer `429 Too Many Requests! Wait for 1s`, at which
+point the command fails with *"HTTP 429"* and retries make it worse. A phone
+resolving a DID once is unaffected; scripted tooling and anything behind a
+per-second rate limit is. A resolution cache with a short TTL in the resolver
+would remove it; until then our scripts retry with a pause.
+
+**Operational:** partly an artefact of tunnelled development hosting, recorded
+so the next person does not debug it as a stack fault.
+
+---
+
+## VTI-20
+
+### A serverless persona mint prints a log nobody serves
+
+`pnm did-mgmt dids create --did-url <url>` mints a `did:webvh` whose keys the
+VTA holds and prints its `did.jsonl` with *"To self-host this DID, place the log
+entry in a file named did.jsonl at the URL path corresponding to your DID URL."*
+The VTA that minted it does not serve it — the URL answers `404` — so a
+serverless persona does not resolve until an operator publishes the file by
+hand. The server-managed path (a registered hosting server) serves it at once.
+Worth stating in the mint's output that serverless means *you* host it.
+
+---
+
 ## Reporting these upstream
 
 Nothing here has been filed yet. When it is, file per finding rather than as one
@@ -411,5 +484,6 @@ operational request for anyone hosting a mediator that mobile clients must reach
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.1 | 2026-09-16 | **Corrects VTI-01**, which 1.0 called a blocker: the first vetter can be bootstrapped on documented surfaces — invitation-only community → invited identity auto-admitted with `allow` → vetter role granted → vetting criterion added. Severity lowered to medium; the finding is now that the obvious attempt dead-ends and the working order is undocumented. Adds **Stack under test** (every component's version and upstream commit) and a note on version drift, including our own Trust Tasks lag. Adds VTI-16 (admin portal sign-in requires an outage). Test keys redacted from fixtures. |
 | 1.0 | 2026-09-16 | First published: VTI-01…VTI-15, consolidating the nine findings from the terminal-side rehearsal with the six that only appear when a phone is the client. Records the 2026-09-16 measurement that membership completes on an unconditioned community. |

@@ -169,6 +169,11 @@ data_dir = "$STACK_DIR/dids/data"
 
 [identity]
 public_url = "https://$DIDS_HOST"
+# Without a mediator the daemon's own DID carries NO service entry, and a VTA
+# refuses to register it ("has no supported webvh endpoint") — so no persona
+# can be minted on it. With one, the DID advertises DIDCommMessaging.
+mediator_did = "$MED_DID"
+transport = "didcomm"
 
 [daemon]
 enable_control = true
@@ -184,13 +189,17 @@ confirm_plaintext = true
 mode = "generate"
 EOF
 # Same story as the mediator: a provisioned install refuses to be overwritten,
-# and a moved host means new DIDs regardless.
+# and a moved host means new DIDs regardless. The store has to go too: a force
+# re-provision keeps the daemon's old DID, bound to the old hostname, and the
+# new host then 404s on its own identity.
 FORCE_DIDS=""
-[ -f "$STACK_DIR/dids/config.toml" ] && FORCE_DIDS="--force-reprovision"
+[ -f "$STACK_DIR/dids/config.toml" ] && { FORCE_DIDS="--force-reprovision"; rm -rf "$STACK_DIR/dids/data"; }
 # shellcheck disable=SC2086
-"$WEBVH_BIN" setup --from dids/recipe.toml --non-interactive $FORCE_DIDS >/dev/null
+"$WEBVH_BIN" setup --from dids/recipe.toml --non-interactive $FORCE_DIDS 2>&1 | grep -E "admin did|Private key" | sed 's/^/  dids daemon /' || true
 nohup "$WEBVH_BIN" --config dids/config.toml > logs/dids.log 2>&1 &
 sleep 6
+DIDS_DID=$(curl -s "https://$DIDS_HOST/.well-known/did.jsonl" | tail -1 | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); print((d.get("state") or d).get("id",""))' 2>/dev/null || true)
+echo "  dids daemon DID: $DIDS_DID"
 
 # ------------------------------------------------------------------- VTAs ---
 # `messaging.kind = "existing"` at setup time, never `skip` + `services didcomm
@@ -283,7 +292,17 @@ VTC_ADMIN=$(cd "$STACK_DIR" && "$VTA_BIN" --config community/config.toml export-
 nohup "$VTC_BIN" --config vtc/config.toml > logs/vtc.log 2>&1 &
 sleep 12
 
+# Each VTA that will mint personas on the daemon needs an ACL entry there —
+# written offline, so the daemon is bounced once for all three.
+pid=$(lsof -nP -iTCP:8534 -sTCP:LISTEN -t | head -1); kill "$pid"; sleep 3
+for d in "$ALICE_DID" "$COMMUNITY_DID" "$BOB_DID"; do
+  "$WEBVH_BIN" add-acl --config dids/config.toml --did "$d" --role owner --label vta >/dev/null 2>&1 || true
+done
+nohup "$WEBVH_BIN" --config dids/config.toml > logs/dids.log 2>&1 &
+sleep 6
+
 cat > stack.env <<EOF
+DIDS_DID=$DIDS_DID
 ALICE_VTA_DID=$ALICE_DID
 ALICE_URL=https://$ALICE_HOST
 COMMUNITY_VTA_DID=$COMMUNITY_DID

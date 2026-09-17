@@ -13,7 +13,16 @@ import {
   setDidCommV2Enabled,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
-import { createVtiClientDid, resolveVtiMediator, vtiClientIdentityFromDid, VtiMediatorSession } from '@bifold/core'
+import {
+  createVtiClientDid,
+  resolveVtiMediator,
+  vtiClientIdentityFromDid,
+  VtiMediatorSession,
+  VtaClient,
+  GenericRecordsIdentityStore,
+  vtiClientIdentityFromPersona,
+  vtiAgent,
+} from '@bifold/core'
 import { utils } from '@credo-ts/core'
 import Config from 'react-native-config'
 import { useAgent } from '@bifold/react-hooks'
@@ -67,6 +76,12 @@ const Developer: React.FC = () => {
   // logcat and React Native's console output never reaches the unified log, so
   // a run on iOS can only assert what the screen shows.
   const [vtaProbeLog, setVtaProbeLog] = useState<string[]>([])
+  // The manager probe: the phone as the manager of ITS OWN VTA (§2.4 B). Two
+  // halves, because enrolment sits between them — the phone shows the identity
+  // it minted, the VTA's operator admits it, then the phone connects.
+  const [isProbingManager, setIsProbingManager] = useState(false)
+  const [managerProbeLog, setManagerProbeLog] = useState<string[]>([])
+  const vtaClientRef = useRef<VtaClient | undefined>(undefined)
   const [isClearingContacts, setIsClearingContacts] = useState(false)
   const navigation = useNavigation()
 
@@ -504,6 +519,106 @@ const Developer: React.FC = () => {
     }
   }
 
+  const vtaClientFor = (vtaDid: string): VtaClient => {
+    if (!agent) throw new Error('Agent not initialized')
+    if (!vtaClientRef.current || vtaClientRef.current.vtaDid !== vtaDid) {
+      vtaClientRef.current = new VtaClient(agent, vtaDid, new GenericRecordsIdentityStore(agent), {
+        // eslint-disable-next-line no-console
+        onError: (error) => console.log('[VTA-PROBE] session error', error.message),
+      })
+    }
+    return vtaClientRef.current
+  }
+
+  /** Half 1 — mint (or recall) the manager identity and show it, so it can be enrolled. */
+  const handleShowManagerIdentity = async () => {
+    const vtaDid = Config.VTI_VTA_DID
+    if (!vtaDid) {
+      Alert.alert('Not configured', 'Set VTI_VTA_DID in app/.env and rebuild.')
+      return
+    }
+    const short = (part: string) => (part.length > 44 ? `${part.slice(0, 28)}…${part.slice(-12)}` : part)
+    const mark = (...parts: string[]) => {
+      // eslint-disable-next-line no-console
+      console.log(parts.join(' '))
+      setManagerProbeLog((previous) => [...previous, parts.map(short).join(' ')])
+    }
+    setManagerProbeLog([])
+    try {
+      const did = await vtaClientFor(vtaDid).ensureManagerIdentity()
+      mark('[VTA-PROBE] manager did', did)
+      // The whole DID, unshortened, on its own line: the enrolment stand-in reads it off the screen.
+      setManagerProbeLog((previous) => [...previous, `MANAGER_DID=${did}`])
+    } catch (error) {
+      mark('[VTA-PROBE] failed', error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  /** Half 2 — after enrolment: connect, ask who we are, mint a persona, borrow its key. */
+  const handleProbeVtaManager = async () => {
+    const vtaDid = Config.VTI_VTA_DID
+    if (!agent || !vtaDid) {
+      Alert.alert('Not configured', 'Set VTI_VTA_DID in app/.env and rebuild.')
+      return
+    }
+    const short = (part: string) => (part.length > 44 ? `${part.slice(0, 28)}…${part.slice(-12)}` : part)
+    const mark = (...parts: string[]) => {
+      // eslint-disable-next-line no-console
+      console.log(parts.join(' '))
+      setManagerProbeLog((previous) => [...previous, parts.map(short).join(' ')])
+    }
+    setIsProbingManager(true)
+    try {
+      const client = vtaClientFor(vtaDid)
+      await client.connect()
+      mark('[VTA-PROBE] connected as', client.managerDid ?? '?')
+
+      const me = await client.whoAmI()
+      const roles = (me.roles ?? []).join(',') || String(me.role ?? '?')
+      const scopes = (me.scopes ?? []).join(',') || '*'
+      mark('[VTA-PROBE] whoami', `roles=${roles}`, `scopes=${scopes}`)
+
+      const contexts = await client.listContexts()
+      mark('[VTA-PROBE] contexts', String(contexts.length), contexts.map((c) => c.id).join(','))
+      const contextId = contexts[0]?.id ?? 'vta'
+
+      // A registered DID-hosting server is the documented path (the server
+      // serves the persona's log); a serverless mint is the fallback, and only
+      // resolves if something serves the log at that URL.
+      const servers = await client.listServers()
+      mark('[VTA-PROBE] servers', String(servers.length), servers.map((x) => x.id).join(','))
+      const base = Config.VTI_PERSONA_BASE_URL
+      const label = `keyring-${Date.now().toString(36)}`
+      const persona = await client.mintPersona(
+        servers[0] ? { contextId, serverId: servers[0].id, label } : { contextId, didUrl: `${base}/${label}`, label }
+      )
+      mark('[VTA-PROBE] persona minted', persona.did)
+      mark('[VTA-PROBE] persona keys', `signing=${persona.signingKeyId}`, `ka=${persona.kaKeyId}`)
+
+      const borrowed = await client.borrowKey(persona.kaKeyId)
+      mark('[VTA-PROBE] key borrowed', borrowed.curve, `kms=${borrowed.keyId}`)
+
+      // The community leg, wearing the persona: the phone seals with the key it
+      // just borrowed, and the community sees a VTA-hosted did:webvh as the
+      // applicant — the B shape end to end.
+      const communityDid = Config.VTI_COMMUNITY_DID
+      const mediatorDid = Config.VTI_MEDIATOR_DID
+      if (communityDid && mediatorDid) {
+        const identity = await vtiClientIdentityFromPersona(agent, persona.did, borrowed.keyId)
+        await vtiAgent.connect(agent, mediatorDid, { identity })
+        mark('[VTA-PROBE] community session as persona', vtiAgent.getState().did ?? '?')
+        const manifest = await vtiAgent.fetchManifest(communityDid)
+        mark('[VTA-PROBE] manifest as persona', `${manifest.criteria.length} criteria`)
+      }
+      Alert.alert('VTA probe', `Manager session up; persona ${short(persona.did)}; key borrowed.`)
+    } catch (error) {
+      mark('[VTA-PROBE] failed', error instanceof Error ? error.message : String(error))
+      Alert.alert('VTA probe failed', error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsProbingManager(false)
+    }
+  }
+
   // Dev convenience: with VTI_PROBE_ON_START=1 baked in, the probe runs as soon
   // as this screen mounts. Driving a button through Appium costs an onboarding
   // lap per iteration; the transport it exercises is the same either way.
@@ -855,6 +970,55 @@ const Developer: React.FC = () => {
               <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Probe VTA mediator</Text>
             )}
           </Pressable>
+          <Pressable
+            style={[
+              {
+                backgroundColor: ColorPalette.brand.primary,
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 8,
+                alignItems: 'center',
+                marginTop: 12,
+              },
+            ]}
+            onPress={handleShowManagerIdentity}
+            testID={testIdWithKey('ShowManagerIdentityButton')}
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>My VTA: show manager identity</Text>
+          </Pressable>
+          <Pressable
+            style={[
+              {
+                backgroundColor: ColorPalette.brand.primary,
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 8,
+                alignItems: 'center',
+                marginTop: 8,
+              },
+              isProbingManager && { backgroundColor: ColorPalette.brand.primaryDisabled },
+            ]}
+            onPress={handleProbeVtaManager}
+            disabled={isProbingManager}
+            testID={testIdWithKey('ProbeVtaManagerButton')}
+          >
+            {isProbingManager ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                My VTA: connect and mint a persona
+              </Text>
+            )}
+          </Pressable>
+          {managerProbeLog.length > 0 && (
+            <Text
+              testID={testIdWithKey('VtaManagerProbeLog')}
+              accessibilityLabel={managerProbeLog.join('\n')}
+              style={{ color: TextTheme.normal.color, fontSize: 12, marginTop: 12 }}
+            >
+              {managerProbeLog.join('\n')}
+            </Text>
+          )}
           {vtaProbeLog.length > 0 && (
             <Text
               testID={testIdWithKey('VtaProbeLog')}
