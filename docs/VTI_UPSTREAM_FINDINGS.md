@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.2 — 2026-09-16.** A living document: every finding here was measured
+**Version 1.3 — 2026-09-16.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -486,10 +486,21 @@ list, cite this document's anchor, and attach the fixture from
 rather than with the VTI maintainers, and [VTI-05](#vti-05) is also an
 operational request for anyone hosting a mediator that mobile clients must reach.
 
+
+### VTI-21 — No channel delivers an invitation to its invitee
+
+`POST /v1/invitations` issues an `InvitationCredential` bound to a DID and
+hands it to the *admin*. Nothing carries it to the invited DID: the operator
+copies it out of band. For a phone, that means a QR/link the admin shows
+(`keyring://vti/invitation?c=…`, our stand-in) — or, the ask: the VTC pushes
+the credential to the invitee's DID over DIDComm, which every persona already
+advertises a service for. **Measured:** vtc-service 0.11.58, 2026-09-16.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
+| 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.1 | 2026-09-16 | **Corrects VTI-01**, which 1.0 called a blocker: the first vetter can be bootstrapped on documented surfaces — invitation-only community → invited identity auto-admitted with `allow` → vetter role granted → vetting criterion added. Severity lowered to medium; the finding is now that the obvious attempt dead-ends and the working order is undocumented. Adds **Stack under test** (every component's version and upstream commit) and a note on version drift, including our own Trust Tasks lag. Adds VTI-16 (admin portal sign-in requires an outage). Test keys redacted from fixtures. |
 | 1.0 | 2026-09-16 | First published: VTI-01…VTI-15, consolidating the nine findings from the terminal-side rehearsal with the six that only appear when a phone is the client. Records the 2026-09-16 measurement that membership completes on an unconditioned community. |
