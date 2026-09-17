@@ -1,0 +1,728 @@
+Zero to Wallet
+
+    vta-browser-plugin · learning journey · rev 4
+
+    Zero to Wallet
+
+    Eight rungs from an empty machine to a React Native reference wallet running against a production agent you don't control — built locally first, on purpose. Along the way, a map of exactly where this stack is technical because it has to be and where it is technical because nobody has fixed it yet.
+
+      Rev 5 · 2026-09-03
+      Wallet VTI-Dogwood-R1 · agent vta 0.23.4
+      Local agent → VTA Farm at Phase 7
+      Phases 0–1 done and verified
+
+    Version truth, before anything else
+
+    You were right to push on Dogwood, and it changes one instruction from rev 1. It turns out the correction runs the opposite way from what you'd expect.
+
+    This repo is already there. HEAD is 3c15d6e, which is exactly the VTI-Dogwood-R1 tag, cut today — and nine commits past the VTI-Dogwood tag from 08-31. main matches origin/main. Nothing to pull on the wallet side; you are standing on the release.
+
+    The agent is what's stale. Keyring's VTI clone sits at Cypress 187ad9cd (08-17). Dogwood is de514540 — cut 08-18, shipped 08-30. So the prebuilt vta 0.17.0 binary rev 1 told you to copy is a Cypress binary, and pairing it with a Dogwood-R1 wallet is the worst of both worlds.
+
+      Why the mismatch would cost you a week
+      Dogwood's conformance pass carried 57 breaking changes. The ones that would hit you: Trust Task payloads now emit canonical lowerCamelCase; generated payload types closed to hand-construction, with string members becoming validated newtypes; response envelopes stopped approximating schemas and now match published structures with real nesting; error codes re-cased against the registry; and consumers must declare their freshness and replay posture rather than inherit a default.
+
+      Every one of those produces a refusal that reads like your bug. Build the agent at Dogwood and the whole class disappears.
+
+    There's also a free diff waiting for you. This repo's task-surface.json snapshot records vta-sdk 0.30.0; Dogwood ships 0.31/0.32. Running npm run tasks:sync against a fresh Dogwood clone produces a machine-checked list of exactly what moved under the wallet — which is a far better orientation exercise than reading a changelog.
+
+    Dogwood details that land directly on this plan
+
+      "Onboard over any transport the VTA advertises" and "advertise both receive transports on the holder DID" — Phase 4 gets easier, not harder. The wallet commits at #133–#135 are the same work.
+
+      "Receive executor-initiated requests over TSP as well as DIDComm" — your TSP-first RN path is now the supported direction, not a bet.
+
+      "The approve-request prompt sent to a phone is signed." That sentence is Phase 6's approval screen, and it is now a release guarantee rather than an aspiration.
+
+      did:webs arrives with KERI-verified key state behind a method-webs feature flag, and "derive alsoKnownAs from verified designated aliases" — the naming rule below extends to a whole new method family, unchanged in spirit.
+
+    The farm is the finish line, not the on-ramp
+
+    The VTA Farm is a managed Dogwood-R1 agent with a Community Mediator already wired — "no server, no public domain, no DID hosting, no mediator wiring on your side," treated as production and kept upgraded. It's tempting to start there. Don't.
+
+    Everything the farm does for you is something this journey exists to teach you. Provisioning an agent, hosting a did:webvh, wiring a mediator, granting an admin DID — start on the farm and those four become a web form you clicked through once. Build them yourself first and the farm stops being magic; it becomes a second implementation you can check your understanding against.
+
+    So the farm arrives as Phase 7, and it earns its place by answering a question nothing before it can: does what I built work against an agent I don't control? That's not a formality. It's the difference between a demo and a client.
+
+      Local proves you understand it. The farm proves you built it right. Only the second one transfers to Keyring.
+
+    What this settles about the extension
+
+    The extension never needs to meet the farm, which resolves a finding cleanly rather than leaving it as a blocker. For the record, since it cost a probe and is worth knowing: a request to vtafarm.firstperson.dev carrying Origin: chrome-extension://… returns 200 with no Access-Control-Allow-Origin header at all. Nothing there is configured for a browser-wallet origin.
+
+    That would have been a genuinely nasty afternoon — inside the extension it surfaces as a bare TypeError: Failed to fetch, indistinguishable from a dead host, with the real reason visible only in a devtools console. Since the extension stays on your own agent where you own cors_origins, the question simply doesn't arise. And React Native is unaffected either way: it sends no Origin, and no browser enforces CORS on it, which is why Phase 7 works at all.
+
+    Still worth mentioning to Geoff as ecosystem feedback rather than as a request — "the browser wallet can't reach the shared test environment" is true and cheap to fix, but nothing in this plan waits on it.
+
+    Read the farm's setup guides early anyway
+
+    Reading is free, and these three are evidence rather than instructions. 01-personal-vta.md is the agent. 02-openvtc-tui.md creates a persona DID for daily use, kept separate from the VTA's master keys. 03-joining-a-community.md is a join request under your persona, approved by a community admin.
+
+    That third one matters more than it looks, and the product map below comes back to it: the "self-service enrolment gated by a human approval" pattern that wallet onboarding lacks already exists one layer up, at the community.
+
+    What your machine already has
+
+    Checked, not assumed. One row changed from rev 1, and it's the expensive one.
+
+        ComponentStateStatusConsequence
+
+            Node
+            v20.19.2 on PATH
+v24.1.0 at /opt/homebrew/opt/node@24
+            switch
+            This repo's floor is 24; keyring pins <21. Never let one shell serve both.
+
+            Rust
+            1.97.1
+            ready
+            Above the 1.95 floor the agent needs.
+
+            Agent source
+            keyring's clone is Cypress 187ad9cd
+Dogwood is de514540
+            rebuild
+            Changed in rev 2. Fresh clone at the Dogwood tag, cold cargo build. Don't reuse the prebuilt binary.
+
+            Mediator crate
+            affinidi-messaging-test-mediator 0.2.4
+already in the cargo cache
+            ready
+            Phase 4's mediator is ~40 lines of Rust around TestMediator.
+
+            Docker
+            29.3.0 installed, daemon down
+            optional
+            Not needed. The native path is faster and shows you more.
+
+            Xcode / simulators
+            26.3, 5 iPhone devices
+            ready
+            Enough for Phases 5–6. No hardware attestation on a simulator, ever.
+
+            VTA Farm
+            reachable, 200, Cloudflare
+pnm macOS build refreshed 09-03
+            held for 7
+            A managed Dogwood-R1 agent with a Community Mediator. Deliberately saved for Phase 7 — see the section above.
+
+            Your CPU vs the pnm build
+            arm64 (Apple M5)
+downloads: x86/Linux + macOS only
+            check at 7
+            Run file ./pnm when you get there. If it's x86_64, Rosetta 2 covers it — a delay, not a blocker.
+
+            Farm CORS for a wallet
+            no Access-Control-Allow-Origin
+for a chrome-extension:// Origin
+            moot
+            Probed and recorded. The extension stays on your own agent, and RN sends no Origin — so this blocks nothing here.
+
+            QR anywhere in the stack
+            nothing — zero matches in
+the extension or core
+            greenfield
+            Every QR idea below is unbuilt. That's the opportunity, not a gap in my search.
+
+    The naming layer, and where your DNS analogy breaks
+
+    You called it "what IP is to DNS." The layer is exactly right. The direction of trust is inverted, and that inversion is the whole design.
+
+    An agent name is example.com/@alice. Three details are load-bearing and all three are easy to get wrong:
+
+      The marker is the two-character sequence /@, never a bare @ — so alice@example.com is deliberately not an agent name.
+
+      Trailing path segments are part of the identity: …/@drummond/h2hsummit is a different name from …/@drummond.
+
+      Case is preserved in the local part. @Alice and @alice are different names, because folding could silently merge two distinct identities — a strictly worse failure than one that occasionally fails to match.
+
+    Now the inversion. In DNS the zone owner is authoritative: whatever the name says, is. Here, name → DID proves nothing. It's an HTTP redirect served by the name's own web server, and anyone who controls a domain can point a name at somebody else's DID. Authority runs the other way:
+
+      DID → name is authoritative only via alsoKnownAs. Only the DID's controller can make a name true.
+
+    So the closer analogy is rel="me" / IndieAuth, or ACME's DNS-01 challenge: the pointer only counts because the target claims it back. That's why resolution has three stages and why stage 3 is mandatory — and why the hosting server itself refuses a binding whose document doesn't already carry the claim.
+
+    The wallet enforces this structurally rather than by convention. agent-name.ts exports extractAgentNames(doc) and deliberately offers no helper that guesses a name from a DID's host or path — an earlier version derived a handle from the DID's trailing segment, and that was a spoofing bug, not a shortcut. did-display.ts has no name display role for the same reason. And useAgentNames treats "claims no name", "didn't resolve" and "still loading" as indistinguishable, because none of the three licenses showing a name.
+
+    What you can build on it
+
+    Core already ships six Trust Tasks under vta/webvh/agent-name/* — set, remove, list, check, enable, disable. (check is a point-in-time availability answer, explicitly not a reservation.) That's more surface than any UI currently uses, and four things fall straight out of it:
+
+      Names in every consent prompt. The prompt's central question is "do I recognise who is asking," and today the answer is fifty characters of monospace in which the host — the only part a human can check — carries the same visual weight as the SCID. A verified name is the answer to that question. This is the highest-value use of the naming layer in the entire wallet.
+
+      Claim your name during onboarding. check then set. It converts the most alienating moment in the flow — "here is your did:key:z6Mk…" — into the most rewarding one: "you're keyring.app/@alberto." Your own plan already frames this as the agent-as-concierge beat.
+
+      Find-by-handle for the peer-to-peer exchange, so two people trade names rather than DIDs.
+
+      Rename without breaking anything. The DID is what gets stored; names are re-claimable. A user changing their handle doesn't sever a single relationship — which is a real product property, and worth saying out loud in the UI.
+
+    Where it's techy — and which kind of techy
+
+    This is the question you're actually trying to answer, so here's the map. Every moment in setup falls into one of three classes, and the classes matter more than the list.
+
+        Class A
+        Accidental
+
+        A UI gap. The security model doesn't require a human to do this by hand; nobody has built the alternative. Fixable now.
+
+        Class B
+        Essential but movable
+
+        Real security work that genuinely must happen — but not necessarily by this person, on this device, at this moment.
+
+        Class C
+        Irreducible
+
+        The friction is the feature. A human check that becomes frictionless has stopped being a check.
+
+    Setup today is four steps in forced dependency order — the agent's address first, because everything else is derived from resolving it. That ordering is already good design; the README used to have to warn "set your mediator DID before doing anything else" as install step 5, and the reordering deleted that whole class of confusion.
+
+        MomentWhat a person faces todayClassWhat replaces it
+
+            Enter the agent
+            Paste a did:webvh:…, or type domain/@name
+            A
+            A QR code. Highest-value scan in the flow. And names exist precisely so that a human never types a DID — the field already accepts either form without asking which.
+
+            Host permission
+            Chrome dialog; must be the first await or the gesture is spent
+            C → gone
+            Irreducible in a browser. Simply does not exist on RN — there is no origin model to grant. One whole step deleted by moving to a phone.
+
+            "How to reach it"
+            Only asked when the agent publishes no mediator
+            C
+            Already right. The common path never asks. Leave it alone.
+
+            Passkey lock
+            Off by default, flagged experimental, WebAuthn from a hidden context doesn't work
+            B
+            On a phone this is Face ID plus the Keychain — the easiest step rather than the most broken one. The extension's whole popup-driven-enrol workaround evaporates.
+
+            Message routing
+            Under Advanced, collapsed by default
+            C
+            Correctly hidden. An operator running two relays is the only audience.
+
+            Prepare → grant → Connect
+            Wallet prints acl create --did did:key:z… --role admin --expires 1h and waits for someone with a shell. On the farm: paste the same DID into a web form instead
+            A + B
+            The wall — and the farm has already put a door in it. Three ladders below, two already built.
+
+            Approve a request
+            Read a signed document, decide
+            C
+            Irreducible — and it's the product. Should feel like nothing but a notification and a tap.
+
+    The wall, and three ladders — two of which are already built
+
+    The ACL grant is genuinely two-party: the ephemeral did:key is minted per installation, so it cannot be granted in advance. But two-party does not imply type a command, and that conflation is the accidental half.
+
+    Here's the finding that fell out of reading the farm's own setup guides, and it's much stronger than a recommendation: the stack has already solved this twice, in two other places, and wallet onboarding has inherited neither.
+
+        Ladder 1 · nobody has built this
+        QR in both directions
+
+        The wallet renders its ephemeral DID as a QR; an operator's already-onboarded wallet scans it and grants. Needs nothing new upstream — acl/grant is already a Trust Task and the operator's device already holds admin. Not one QR code exists anywhere in this stack today, which makes this the cheapest visible win available.
+
+        Ladder 2 · shipped, on the farm
+        Paste a DID into a web UI
+
+        The farm's "Admin DID → Provision agent" form is this. The same grant that reads as acl create --role admin on your own agent is a text field and a button on the farm — so the security model plainly permits a GUI here, because it is already permitting one. What remains is a human ferrying a did:key:z6Mk… between two windows. You'll do it both ways, in Phases 2 and 7.
+
+        Ladder 3 · shipped, one layer up
+        Request, then human approval
+
+        03-joining-a-community.md: "submit a join request under your persona, and get approved by a community admin." That is exactly self-service-under-policy — at the community layer. The same shape aimed at agent enrolment turns "run this command" into "tap Approve." Nothing needs inventing; it needs pointing one level down.
+
+      Why this reframes the contribution
+      "Make onboarding friendlier" is a taste argument, and taste arguments lose to shipping deadlines. "The grant already has a GUI on the farm and an approval ceremony at the community layer — wallet enrolment is the one place that inherited neither" is a consistency argument with two working precedents inside the same stack. That version is much harder to wave away, and it's the one worth taking to Prague.
+
+    The thing worth taking away
+
+    The techiness is not evenly distributed, and it isn't where it looks. Nearly every genuinely technical step is operator work — provisioning an agent, granting ACLs, configuring a mediator, pinning an extension key. Nearly every user step is already simple, or could be. What the stack lacks isn't simplicity; it's a seam.
+
+      One surface currently does both jobs, which is why a person meets a --role admin --expires 1h flag. Drawing that line may be the reference app's most valuable contribution.
+
+    The phone shows only what a person owns and decides. Everything else belongs to a console that person never opens. Hold that rule while you build Phases 5–6 and the answer to "where should this be normie-friendly" stops being a judgement call each time.
+
+    Three calls I made so you don't have to
+
+        Extension or React Native first
+
+        Extension, and it isn't close.
+
+        The plugin is the only client where this flow works end to end, which makes it your oracle: when the RN app misbehaves against the same agent, you need a known-good second client to tell you whose bug it is. Its diagnostics panel is also the only instrument that distinguishes a CORS refusal from a dead host.
+
+        Where the agent lives
+
+        A sibling clone at the Dogwood tag.
+
+        ~/Documents/verifiable-trust-infrastructure — exactly where this repo's npm run tasks:sync already looks for vta-sdk. Built fresh at Dogwood, never copied from keyring's Cypress clone. Keyring stays untouched throughout.
+
+        RN transport
+
+        REST first, TSP second, DIDComm never.
+
+        The measured porting surface for a REST Trust-Task client on Hermes is one shim. vti-tsp-js is noble-only and explicitly RN-safe — your own team's HPKE work — and Dogwood makes TSP receive a first-class path. vti-didcomm-js is the WebCrypto-backed piece that would fight you.
+
+    The ladder
+
+    Phases are numbered because they're genuinely ordered — each one's done-when is the next one's precondition. The ordering inside Phase 1 is forced too, for a reason worth reading before you type anything.
+
+      0
+
+        Green on your own machine
+
+        done · 2026-09-03
+
+      Before any network exists, get the tests passing and read the three files that explain why the codebase is shaped the way it is. The mechanical parts are already run and green; step 3 is left for you, because doing it yourself is the point.
+
+        Already verified on this machine
+        Under Node v24.1.0 / npm 11.3.0: npm install, npm run build and npm test all exit 0. 696 tests, 696 passing, 0 failing — core 481, extension 155, tsp-js 51, reviewer-demo 9. The extension bundles built clean, including the single-file background worker.
+
+        All six smokes pass in plain Node with no network — five from the vta entry point, plus smokeAuthcryptRoundtrip from didcomm (the README lists all six together; they live in two modules, which is the layering doing its job). Note this proves something the README doesn't claim: the whole simulated stack runs headless, so it can gate CI rather than needing a browser at /smokes.
+
+        Two build warnings, both pre-existing and neither an error: Vite notes __dirname in vite.config.background.ts won't survive its future native config loader, and didwebvh-ts imports fs/node:fs, which Vite externalises for the browser. Worth knowing so you don't mistake them for something you caused.
+
+        Give this repo its own shell. Don't change your global Node — keyring needs 20.
+          # per-repo shell, not .zshrc
+export PATH=/opt/homebrew/opt/node@24/bin:$PATH
+node -v   # v24.1.0
+
+        Build and test. tsc -b walks the project references, so core builds before anything depending on it.
+          cd ~/Documents/vta-browser-plugin
+npm install && npm run build && npm test
+
+        Break the layering on purpose, then put it back. Add an import from store/ into util/ and run the core tests. The boundary test names the file and the rule — the fastest way to internalise the seven layers.
+
+        Run the smokes with no network at all. InMemoryDidcommBridge simulates both mediator and VTA: mediator enrolment, forward envelopes, a full WalletSession boot and resume.
+
+        The trap that reports success
+        Never rm -rf packages/core/dist. The .tsbuildinfo survives, so the next tsc -b believes the output is current, prints nothing, exits 0 and emits no files — and every dependent workspace then fails with "cannot find module @openvtc/pnm-core" across dozens of files. Use npm run clean, which removes both.
+
+        Done when
+
+          npm test green across all six workspaces.
+
+          You can say why trust-tasks sits below vta rather than beside it.
+
+          You can name the difference between send and notify on a channel.
+
+      Read in this order
+        packages/core/tests/package.module-boundaries.mjs — the layering, with its argument ·
+        packages/core/src/vta/channel.ts — the one abstraction everything funnels through ·
+        CLAUDE.md § "How persist-before-ack is held" — the invariant Phase 4 will make you feel.
+
+      1
+
+        An agent at Dogwood — farm, then local
+
+        1A: 30 min · 1B: a day
+
+      Do both, in this order. The farm gets you a real agent this morning so nothing downstream is blocked on a Rust build. The local one you build afterwards, because owning the config is what lets you own CORS — and because a stack you provisioned yourself is the one you actually understand.
+
+        Do this first either way
+        Pin the extension's identity before anything asks for an origin. The id comes from a key that doesn't exist yet, it's what you'll ask Geoff to allowlist, and it's also the WebAuthn PRF rpId — so changing it later orphans every passkey-wrapped secret.
+
+        npm run generate:key -w @openvtc/pnm-extension
+
+      1A · The farm path
+
+      Three actors, and the handoffs between them are the whole lesson: a web UI you authenticate to with a passkey, a CLI on your laptop, and one did:key copied from the second into the first.
+
+        Get the pnm binary and check it runs native. The macOS build was refreshed today; you're on an M5, and only x86/Linux and macOS are published.
+          curl -LO https://download.firstperson.dev/releases/dogwood/macOS/pnm
+chmod +x pnm
+file ./pnm     # arm64? or x86_64 under Rosetta 2?
+./pnm --version
+
+        Create the VTA in the web UI. vtafarm.firstperson.dev → Create account (any email; a passkey is the real credential) → Create VTA → name it → Create session. Copy the Personal VTA DID.
+
+        Point pnm at it. Choose "Connect to an existing non-TEE VTA", give the same name, paste the VTA DID. pnm mints a temporary did:key:z6Mk… and prints an import-did command — on this path you don't run it.
+          ./pnm setup
+
+        Grant it in the web UI. Paste that did:key into Admin DID → Provision agent → wait for "Agent is online."
+
+            Stop and notice what just happened
+            That paste is the ACL grant — the same act as acl create --role admin, wearing a web form instead of a shell. Ladder 2 from the product map is already built, upstream, and you just used it. It's also still a human copying a did:key:z6Mk… between two windows, which is exactly the QR-shaped hole.
+
+        Verify, and read what it verifies. pnm health checks the VTA, the Mediator, and DIDComm/TSP trust pings. That mediator line is the thing you would otherwise have spent Phase 4 building.
+          ./pnm health
+
+        1A done when
+
+          "Agent is online" in the web UI, and pnm health is green including the mediator and trust pings.
+
+          You've asked Geoff about the two CORS entries, so the extension can follow later.
+
+          You've written down every value you moved by hand between windows.
+
+      1B · The local path
+
+      Now build one you own. Same release, but you control cors_origins, you can stop the daemon and poke the keystore, and you can turn transports on and watch the DID log change.
+
+        Clone and build the agent at Dogwood-R1. Sibling directory, so tasks:sync finds it later. Take the -R1 tag, not plain VTI-Dogwood — VTI-Dogwood-R1 (d294ecb3, 09-01) is the matched pair for this repo's own VTI-Dogwood-R1, and it carries vta 0.23.4 / vta-sdk 0.32.3.
+          cd ~/Documents
+git clone https://github.com/OpenVTC/verifiable-trust-infrastructure
+cd verifiable-trust-infrastructure
+git checkout VTI-Dogwood-R1
+
+# webvh is NOT a default feature, and the recipe below needs it.
+# With two -p flags cargo requires package-qualified features:
+cargo build -p vta-service -p pnm-cli \
+  --features vta-service/tsp,vta-service/webvh
+
+            Measured
+            1m50s cold on an M5 — far cheaper than budgeted, so the "most of it cargo" cost estimate was pessimistic. If GitHub times out mid-clone, seeding from another local clone with git clone --no-hardlinks and then fetching the delta works and touches nothing in the source repo.
+
+        Read the task-surface diff. Your snapshot says vta-sdk 0.30.0; Dogwood ships 0.31/0.32. This diff is the orientation exercise.
+          cd ~/Documents/vta-browser-plugin
+npm run tasks:sync -w @openvtc/pnm-core
+git diff packages/core/task-surface.json
+
+        Write the setup recipe. Adapted from keyring's ref-05-local-vta, with two deliberate changes: a durable data dir instead of /tmp, and reuse so your holder survives a restart.
+          # ~/Documents/vti-local/vta-setup.toml
+config_path      = "/Users/albertoleon/Documents/vti-local/config.toml"
+data_dir         = "/Users/albertoleon/Documents/vti-local/data"
+public_url       = "http://localhost:8100"
+vta_name         = "local-lab"
+data_dir_exists  = "reuse"
+overwrite_config = true
+
+[server]
+host = "127.0.0.1"
+port = 8100
+
+[secrets]
+backend = "plaintext"   # dev only, never anything real
+
+[messaging]
+kind = "skip"           # no mediator yet — that's Phase 4
+
+[vta_did]
+kind = "create_webvh"   # serverless: the VTA serves its own DID doc
+url  = "http://localhost:8100"
+
+        Provision, then add your origin. cors_origins is a [server] key in the generated config.toml, not a setup-wizard input. It's matched exactly against the Origin header — no wildcards, deliberately, because bearer credentials must not flow to arbitrary origins. This one line is why the extension works against your own agent and would not against the farm — which is the whole reason it stays here.
+          vta setup --from vta-setup.toml
+# append to config.toml's [server] block:
+#   cors_origins = ["chrome-extension://<id from step 1>"]
+vta --config config.toml
+
+        Read the capability ladder back. The DID document's service entries are exactly what a client reads to pick a transport.
+          curl -s http://localhost:8100/.well-known/did.jsonl | tail -1 | jq .
+curl -s -o /dev/null -w '%{http_code}\n' \
+  http://localhost:8100/health/details
+# 401 — nothing is readable anonymously, by design
+
+        1B done when
+
+          The DID log resolves and you can point at its VTARest service entry.
+
+          vta services list shows REST only. Correct for now.
+
+          You've read the task-surface diff and know what Dogwood moved.
+
+          You can state the difference between what the farm did for you and what you just did yourself.
+
+      2
+
+        Onboard the wallet, as both parties
+
+        half a day
+
+      Onboarding is a two-party handshake and locally you play both — which is the best possible way to feel where the wall is. The wallet mints an ephemeral did:key and asks an operator to grant it; you are that operator. Then provision/integration returns your long-term holder identity in an HPKE-sealed bundle.
+
+        Build and side-load. Then confirm at chrome://extensions that the id matches what Phase 1 printed. If it doesn't, manifest assembly didn't pick up the key and your CORS entry points at nothing.
+          npm run build -w @openvtc/pnm-extension
+# chrome://extensions → Developer mode → Load unpacked
+#   → packages/extension/dist/
+
+        In Setup, paste the full did:webvh:… — not a name. Name resolution's third stage requires the document to claim the name back via alsoKnownAs, and your local agent publishes no name server. A correct refusal, not a bug — and a good moment to re-read the naming section above.
+
+        Press Prepare. Read provision/request.ts while it waits: the ephemeral's Ed25519 seed is also the secret that will open the sealed bundle.
+
+        Grant it, as the operator. The offline CLI needs the fjall lock, so stop the daemon first.
+          # stop the daemon, then:
+vta --config config.toml acl create \
+  --did did:key:z…  --role admin --expires 1h
+# restart the daemon
+
+        Press Connect. Four round trips. The VTA mints a did:key holder, seals the keys to your ephemeral, and the wallet cross-checks the bundle id against its own request nonce before adopting anything.
+
+        Then write down what you just did by hand. This is the Class-A/Class-B moment from the map. Note every place you typed or pasted something a QR could have carried — that list is Phase 6's design brief.
+
+        Where the gestures go
+        Onboarding runs in a tab, not the toolbar popup, because Chrome tears the popup down whenever a native dialog takes focus — and this flow raises two. Separately, chrome.permissions.request needs a live user gesture and must be the first await in the click handler or the gesture is already spent. Both constraints vanish on RN.
+
+        Done when
+
+          The popup shows a connected agent with a holder DID.
+
+          vta acl list shows that holder, and the ephemeral is gone or expired.
+
+          You can explain why the wallet checks the X25519 secret derives from the Ed25519 seed before persisting.
+
+      This closes a gap
+        Keyring's ref-06x-cypress-stack put enrolment explicitly out of scope — "the Prague onboarding flow on the OpenVTC TS library." This phase is that flow, run for real, at Dogwood. It's the rung the keyring ladder skipped.
+
+      3
+
+        Signed Trust Tasks over REST
+
+        one evening
+
+      One document, signed once, at the channel. 93 of the 141 task types this wallet speaks declare proof REQUIRED — before signing moved to the channel, every one of those calls was refused with proofRequired before reaching a handler.
+
+        Give the agent something to hold. Dev-only, daemon stopped.
+          vta --config config.toml vault seed
+
+        List it from the wallet. What crosses the wire is a canonical Trust-Task document with a Data Integrity proof attached by RestChannel.post — not by any of the ~116 call sites that build tasks.
+
+        Verify that claim yourself. tests/vta.outbound-signing.mjs runs the real verifier over the document as the counterparty receives it. Copy a proof from one document onto another and watch it pass an "is there a proof member" check and fail this one.
+
+        Open the diagnostics panel. Transport in use: REST. Health: unknown.
+
+        "unknown" is the interesting answer
+        A RestChannel is built from a URL without contacting anything, so marking it up on construction would be the same overconfidence the panel exists to end. up requires positive evidence; down is a skip; REST records unknown and stays in selection. In Phase 4 you'll watch a second channel earn a real up.
+
+        Done when
+
+          Seeded vault entries render in the wallet.
+
+          You've made the signing test fail on purpose and understand what it caught.
+
+          You can name the two things deliberately not signed at the channel, and why.
+
+      4
+
+        The mediator, and the approval ceremony
+
+        a week — the risky one
+
+      The part you said you care about. A consent prompt is a security control: one silently lost prompt is a gated action that never got its human check. Everything strange about the inbox design is downstream of that sentence.
+
+        The farm would hand you this, and that's the reason to build it
+        The farm ships a managed Community Mediator — "no mediator wiring on your side." So this is precisely the phase you'd skip by starting there, and precisely the one worth not skipping: the mediator is where every hard property in this stack lives. Persist-before-ack, the per-agent inbox, transport health, the CORS trap. Build it once and Phase 7 tells you something; skip it and Phase 7 is just a green checkmark.
+
+      Keyring's ref-05 named this exact gap and left it open — the production mediator can't mint its own DID, so it isn't a drop-in container. The tractable path that README identified is the harness crate the VTI's own e2e tests use, and it's already in your cargo cache.
+
+        Wrap the test mediator in a binary. A tiny crate outside both repos. TestMediatorHandle gives you did() and ws_endpoint(); print both and park.
+          // two builder settings are load-bearing:
+.enable_forwarding(true)   // routing/2.0 forward — defaults FALSE
+.local_dids(vec![holder_did, vta_did])
+// the WS upgrade handler refuses any session
+// whose DID lacks the LOCAL ACL bit
+
+        Put a CORS proxy in front of it. ~40 lines of Node: add Access-Control-Allow-Origin for your extension origin, pass the WebSocket upgrade straight through, point the wallet at the proxy.
+
+        Advertise it. Daemon stopped. Watch the new log entry land with byte-identical verification methods — a capability change with no key rotation.
+          vta --config config.toml services didcomm enable \
+  --mediator-did <the mediator's did>
+
+        Let the wallet find it. The inbox is adopted from the agent's DID document with source: "agent". Confirm Setup says the relay came from your agent — because that sentence was once a lie the wallet told while routing through a stranger's demo host.
+
+        Raise a consent prompt. Then read the ordering that makes it survivable: onInboundMessage awaits putPendingInbound as its first action, and only then does the transport ack — the ack is what tells the mediator to delete its copy.
+
+        Kill the offscreen document mid-decision. Reload the extension with a prompt open. It should come back: both offscreen.ts and background.ts drain listPendingInbound on boot.
+
+        The one that will actually bite you
+        I checked the crate: the test mediator has no CORS layer at all. The wallet POSTs to {authEndpoint}/challenge before any socket exists, so with no Access-Control-Allow-Origin that handshake fails — and it takes TSP and DIDComm down together, since they share it. REST keeps working, so the wallet looks fine while the inbox is dark.
+
+        Chrome hands JavaScript a bare TypeError: Failed to fetch for this, identical to a dead host. Don't debug it by hand and don't reach for curl — a terminal sends no Origin, so the endpoint answers perfectly and you conclude nothing is wrong. Run the wallet's own self-test: transport-diagnosis.ts infers the refusal structurally by re-probing the same host in no-cors mode. That panel exists for precisely the hour you're about to spend.
+
+        Skip the doorbell, but notice its absence
+        Push wake needs vti-push-gateway stood up; leave it. Without it a request sits in the mediator until the worker next happens to run. Time that delay once — it's the entire argument for the doorbell, and it lands better felt than read. It's also the strongest case for the phone: a notification is native there.
+
+        Done when
+
+          Diagnostics shows DIDComm up with a completed handshake and an open socket.
+
+          A consent prompt renders, you approve it, and the agent records the decision.
+
+          A prompt interrupted by a worker teardown is re-driven rather than lost.
+
+          You can explain why sessions are keyed on the (agent, relay) pair.
+
+      5
+
+        Hermes portability probe
+
+        two or three days
+
+      No UI. Prove the library runs on the phone's engine before building anything on top of it — the same discipline as keyring's ref-03b, for the same reason: a byte difference found now is an afternoon, found later a week.
+
+      I measured the porting surface rather than guessing. It's much smaller than the file count suggests, because most apparent hits are comments and a parameter that happens to be named document.
+
+          Platform dependencyReal call sitesOn RN
+
+            crypto.subtle.digest SHA-2562 — canonical.ts, verification-method.tsShim with noble. This is the whole blocker for the Trust-Task path.
+
+            AES-GCM + HKDF1 file — approver-prf-wrap.tsPasskey wrap only. Off the path; disabled by default anyway.
+
+            IndexedDB4 — behind the KVStore interfaceAdapter swap. InMemoryKVStore is the precedent to copy; keyring already ships async-storage 2.2.0.
+
+            navigator.credentials1 — webauthn/register.tsNot on the Trust-Task path. Native passkeys replace it later.
+
+            WebSocket5Native on RN. Nothing to do.
+
+        Freeze a fixture in Node. Canonicalize, digest and sign one Trust Task; write keys-in / bytes-out to JSON.
+
+        Reproduce it on Hermes. A bare screen running the same three operations against the same fixture, comparing multibase strings.
+
+        Assert byte-exact, not "looks right." Same signature, same digest, or the probe fails.
+
+        Done when
+
+          The fixture reproduces byte-identically on the simulator.
+
+          You know exactly which shims your app ships, and they're written.
+
+      6
+
+        The reference wallet
+
+        two to four weeks
+
+      A Keyring-shaped RN app on the iOS simulator, against the agent you've run since Phase 1. Built to be lifted into keyring later — so it matches keyring's versions, theme and module shape from the first commit — and every technical moment from the Phase 2 list gets a QR or a tap.
+
+        Make the agent a config value, not a constant
+        You're building against localhost now and against the farm in Phase 7, so the agent's address is a runtime setting from the first commit. That isn't just plumbing for Phase 7 — a reference app that can only reach one agent teaches implementors less than one that demonstrably works against any, and swapping targets is also how you'll test what the UI does when a transport goes down.
+
+      Match keyring exactly
+
+      Same versions means the port is a folder move, not a negotiation. All read from app/package.json:
+
+      react-native   0.81.5   # patched in keyring — use the same patch
+react          19.1.0
+expo           ~54.0.31
+react-native-svg           ~15.12.1  # the logo
+react-native-vision-camera 4.7.3     # the QR scanner, already proven
+@react-native-async-storage/async-storage ~2.2.0  # first KVStore adapter
+
+      That vision-camera line matters more than it looks: keyring already ships and has shipped a working camera stack, so every QR idea in this document is a known quantity rather than a new native dependency.
+
+      Keyring's palette, verbatim
+
+        #622C62brand purple · primary
+
+        #4D7A8Bharvard blue · link, focus
+
+        #2B6073deep blue · tertiary
+
+        #09465Bnavy anchor · dark bg
+
+        #EFB243harvard yellow · highlight
+
+        #D21E30bright crimson · error
+
+        #010B13bkc black · text
+
+        gradient2E4953 → 622C62 → 6E121D
+
+      Plus the geometry: borderRadius 4, borderWidth 2, spacing scale 4 / 8 / 16 / 24 / 32 / 40, maxFontSizeMultiplier 2. Logo is Keyring_Logo.svg (3.6 KB) — reference it through react-native-svg the way keyring's theme does.
+
+        Mimic the module shape, not just the look
+        Keyring consumes @bifold/* packages through portal: resolutions behind a tsyringe DI container. So put all pnm-core wiring behind one module with a DI token and RN shims — which is exactly the bifold/packages/vti-client shape your PNM/CNM plan already names. Do that from commit one and the eventual port is "move the folder, register the token." Do it later and it's a rewrite.
+
+      Five screens, each answering a question from the map
+
+        Agent — scan a QR to add an agent, with paste as the fallback. Show the capability ladder you first read in Phase 1, and render the DID with the host lifted, the way did-display.ts does.
+
+        Onboard — render the ephemeral DID as a QR for the operator to scan (Ladder 1), rather than a did:key:z6Mk… to copy between windows. You will have just done it by hand twice, on both tracks, so you'll know exactly what you're deleting. Biggest normie win available today, and it needs nothing upstream.
+
+        Name — check then set. Turn "here is your did:key:z6Mk…" into "you're …/@alberto." The screen that makes the whole thing feel like a product.
+
+        Persona — the farm's 02-openvtc-tui guide creates a persona DID for daily use, kept separate from the VTA's master keys. This wallet already implements the same idea — commits #144–#146 bind a persona to a site on first sign-in and sign in as it. Two independent arrivals at the same shape is a strong signal it belongs on the phone.
+
+        Approvals — the Phase 4 ceremony, and where a phone genuinely beats an extension. Dogwood guarantees the prompt is signed; show the requester by verified name, never by a name derived from the DID. Spend your design effort here.
+
+        Two simulator honesties
+        No hardware attestation on a simulator — keyring learned this the expensive way, and only attended device runs prove those paths. And leave encryptHolderSecret off, which is already the default, for the reason the extension documents at length: the WebAuthn ceremony needs a visible, user-focused context.
+
+        Done when
+
+          Someone who has never seen a DID onboards the app against your local agent by scanning two codes.
+
+          An approval raised from the extension can be decided on the phone.
+
+          The agent's address is a setting, and the pnm-core wiring is one folder behind one DI token.
+
+      7
+
+        Point it at the farm
+
+        an afternoon, if the rest was right
+
+      The graduation. Every earlier phase ran against an agent you configured, which means every earlier phase could have been passing for the wrong reason. The farm is a Dogwood-R1 agent you don't control, with a mediator you didn't wire, run by someone who didn't build your client — the first honest test in the whole journey.
+
+        Why this is the phase that transfers to Keyring
+        Keyring will eventually talk to the farm directly, and this is the rehearsal — done in a small app where a wrong turn costs a day instead of a sprint. What you carry over isn't code so much as a settled list: which shims were actually needed, which assumptions about the agent were yours rather than the protocol's, and what breaks when the endpoint isn't localhost.
+
+        Get the pnm binary and check it runs native. The macOS build was refreshed 09-03; you're on an M5 and only x86/Linux and macOS are published.
+          curl -LO https://download.firstperson.dev/releases/dogwood/macOS/pnm
+chmod +x pnm
+file ./pnm     # arm64? or x86_64 under Rosetta 2?
+./pnm --version
+
+        Create the VTA in the web UI. vtafarm.firstperson.dev → Create account (any email; the passkey is the real credential) → Create VTA → name it → Create session. Copy the Personal VTA DID.
+
+        Point pnm at it. Choose "Connect to an existing non-TEE VTA", give the same name, paste the VTA DID. pnm mints a temporary did:key:z6Mk… and prints an import-did command you don't run on this path.
+          ./pnm setup
+
+        Grant it in the web UI. Paste that did:key into Admin DID → Provision agent → wait for "Agent is online."
+
+            You will recognise this moment
+            That paste is the ACL grant — the same act you performed with acl create --role admin in Phase 2, wearing a web form instead of a shell. Having done it both ways is what makes the Ladder 2 argument yours rather than borrowed. And it's still a human ferrying a did:key:z6Mk… between two windows, which is still exactly the QR-shaped hole.
+
+        Verify, and read what it verifies. pnm health checks the VTA, the Mediator, and DIDComm/TSP trust pings. You built that mediator leg yourself in Phase 4, so you know what each line is actually asserting.
+          ./pnm health
+
+        Switch the RN app's agent setting to the farm VTA and run the same five screens. Onboard, claim a name, list the vault, approve something. Note every difference from localhost — each one is a hidden assumption you can now name.
+
+        Then go one layer up. 02-openvtc-tui for a persona DID, 03-joining-a-community for a join request approved by a community admin. That's the VTC layer, and it's where keyring's VRC work eventually meets this stack.
+
+        Done when
+
+          The RN app completes onboarding, a vault list and an approval against a farm VTA, with no code change beyond the address.
+
+          You can list every difference between the farm and your local agent, and say which were your assumptions rather than the protocol's.
+
+          You've joined a community under a persona, so the VTC layer is no longer hearsay.
+
+          The hand-off note for keyring is written: the shim list, the assumption list, and what you'd do differently.
+
+    What this hands back to keyring
+
+    Nothing in this plan modifies that repo. But five of its open threads get evidence they don't currently have.
+
+        The enrolment rung nobody ran
+
+        ref-06x declared enrolment out of scope. Phase 2 runs it against a Dogwood agent — the missing joint between the ladder and a real wallet.
+
+        ref-05's named mediator gap
+
+        "The mediator is not in the compose file yet." Phase 4 builds the harness-crate path that README already identified as tractable.
+
+        A second upstream candidate
+
+        The test mediator has no CORS layer, so no browser client can use it. A cors_origins builder option is a small PR with an obvious community rationale.
+
+        P0's portability proof, measured
+
+        The plan estimates ref-10-pnm-core-hermes. Phase 5 turns the estimate into a count: one shim on the Trust-Task path, one adapter, and a list of what to keep off the phone.
+
+        The operator / user seam
+
+        Not currently on any plan. The Class A/B/C map argues it's the highest-leverage product contribution available — and the reference app is where it gets drawn.
+
+        No browser wallet reaches the farm
+
+        Probed and confirmed: no Access-Control-Allow-Origin for an extension origin. The farm is the ecosystem's shared test environment and the ecosystem's own browser wallet can't use it. Two config entries fix it. Nothing here waits on that, but it's worth reporting.
+
+        A local-dev path that actually exists
+
+        The farm answers "give me an agent." It doesn't answer "let me run the stack." Phases 1 and 4 produce that recipe — setup TOML, a mediator binary, the CORS proxy — which is the local-dev.md upstream still has as a stub.
+
+    Sources read at file level: vta-browser-plugin @ 3c15d6e (= VTI-Dogwood-R1) · keyring-wallet docs/plans, tsp-reference, app/src/keyring-theme (read-only) · verifiable-trust-infrastructure @ 187ad9cd · affinidi-messaging-test-mediator 0.2.4 · Dogwood migration summary, docs.fpp.storm.ws · vti-setup developer/01-personal-vta.md + developer/README.md · firstperson.dev · vtafarm.firstperson.dev probed for CORS 2026-09-03
+

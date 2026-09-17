@@ -24,6 +24,12 @@ jest.mock('@bifold/core', () => ({
 
 jest.mock('react-native-config', () => ({ MEDIATOR_V2_URL: undefined }))
 
+// The mocked Config, typed so a case can set the URL. Cast once into a name:
+// assigning through `(Config as ...)` at the start of a line needs a leading
+// semicolon under prettier and forbids one under eslint's no-extra-semi, so
+// the two tools reformat each other forever (2026-09-16).
+const mockedConfig = Config as unknown as { MEDIATOR_V2_URL?: string }
+
 function fakeAgent() {
   return {
     config: { logger: { info: jest.fn(), warn: jest.fn() } },
@@ -36,21 +42,21 @@ describe('provisionV2MediationIfConfigured', () => {
   })
 
   it('does nothing when the developer flag is off', async () => {
-    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
+    mockedConfig.MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
     await provisionV2MediationIfConfigured(fakeAgent(), false)
     expect(mockProvisionV2Mediation).not.toHaveBeenCalled()
     expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
   })
 
   it('does nothing when MEDIATOR_V2_URL is unset', async () => {
-    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = undefined
+    mockedConfig.MEDIATOR_V2_URL = undefined
     await provisionV2MediationIfConfigured(fakeAgent(), true)
     expect(mockProvisionV2Mediation).not.toHaveBeenCalled()
     expect(mockStartV2MessagePickup).not.toHaveBeenCalled()
   })
 
   it('starts pickup once when newly provisioning a v2 mediation record', async () => {
-    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
+    mockedConfig.MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
     mockFindV2MediationRecord.mockResolvedValueOnce(undefined) // none yet
     mockProvisionV2Mediation.mockResolvedValueOnce({ id: 'm-v2' })
 
@@ -61,7 +67,7 @@ describe('provisionV2MediationIfConfigured', () => {
   })
 
   it('does NOT start a second pickup loop when the v2 record already existed (the bug)', async () => {
-    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
+    mockedConfig.MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
     mockFindV2MediationRecord.mockResolvedValueOnce({ id: 'm-v2' }) // already provisioned on a prior launch
     mockProvisionV2Mediation.mockResolvedValueOnce({ id: 'm-v2' }) // idempotent no-op, per provisionV2Mediation's own contract
 
@@ -74,7 +80,7 @@ describe('provisionV2MediationIfConfigured', () => {
   })
 
   it('logs and swallows a provisioning failure without starting pickup', async () => {
-    (Config as unknown as { MEDIATOR_V2_URL?: string }).MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
+    mockedConfig.MEDIATOR_V2_URL = 'https://mediator/?_oob=x'
     mockFindV2MediationRecord.mockResolvedValueOnce(undefined)
     mockProvisionV2Mediation.mockRejectedValueOnce(new Error('mediator unreachable'))
 
