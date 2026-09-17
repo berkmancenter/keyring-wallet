@@ -1,12 +1,15 @@
 # Real-device e2e flakiness — patterns and fixes
 
-Notes from getting `yarn e2e:vrc:devices:android-only:didcomm-v2` (two real
-Android phones, hardware attestation, DIDComm v2) to a clean, repeatable
-pass. None of this is specific to that one script — all three patterns live
-in shared `e2e/lib/flows.js`/`lib/driver.js` helpers, so any real-device flow
-can hit them. Recorded here in more depth than `e2e/README.md`'s
-Troubleshooting section has room for, so the next person chasing a similar
-failure can skip the multi-hour rediscovery.
+Notes from getting `yarn e2e:vrc:devices:android-only:didcomm-v2`,
+`yarn e2e:vrc:witnessed:android-only:didcomm-v2`, and
+`yarn e2e:vrc:witnessed:locality:android-only:didcomm-v2` (two real Android
+phones; hardware attestation; DIDComm v2; a witness and BLE co-presence in
+the last two) to a clean, repeatable pass. None of this is specific to any
+one script — every pattern here lives in shared
+`e2e/lib/flows.js`/`lib/driver.js` helpers, so any real-device flow can hit
+them. Recorded here in more depth than `e2e/README.md`'s Troubleshooting
+section has room for, so the next person chasing a similar failure can skip
+the multi-hour rediscovery.
 
 ## 1. A polling loop times out even though the exchange visibly succeeded
 
@@ -128,3 +131,80 @@ way every time. The tell is the same as above — add a debug log in the
 handler, confirm zero firings across several attempts (not "some attempts
 lower than expected") — before reaching for `tapTestIdByCoordinates`
 instead of `tapTestIdReliable`.
+
+## 4. A native scroll outruns React Native's JS-thread render
+
+**Symptom**: even with fixes #2 and #3 in place, `setAutoLockNever`'s
+`UiScrollable.scrollIntoView` for `AutoLockTimeNever` still occasionally
+times out on the same older device — this time under the combined CPU load
+of the witnessed + locality + DIDComm v2 variant specifically, the heaviest
+of the real-device scripts. Not a toggle-close (fix #2) and not a dead
+click (fix #3): the dropdown genuinely opens, but the option still isn't
+found after several seconds.
+
+**Why**: `UiScrollable.scrollIntoView` is a native UiAutomator operation —
+it scrolls the native Android view hierarchy directly and checks for the
+target as it goes. React Native's virtualized `SectionList`, however, mounts
+newly-scrolled-into-view rows via the JS thread crossing the bridge, which
+is strictly slower than native scroll physics, especially on an older/
+weaker CPU under heavier background load (attestation + a witness
+connection + BLE scanning all competing for the same JS thread). If the
+native scroll reaches the end of what's *currently mounted* and checks
+before the JS side has rendered further rows, `scrollIntoView` reports "not
+found" even though the row would have appeared moments later.
+
+**Fix**: increase the pause between `scrollIntoView` retry attempts from
+500ms to 2s specifically (not the pause after the initial tap, which
+addresses a different gap — see fix #2's settle wait). This is a
+cross-thread render race, not a UI-animation-settle race, so it needs
+enough room for a full bridge round trip under load, not just an animation
+frame or two.
+
+## 5. A toggle's persisted value is lost to a force-kill race
+
+**Symptom**: `enableDidCommV2`/`enableTspCarriage` report success ("DIDComm
+v2 enabled (developer setting)"), the app restarts, and — only sometimes,
+only on the older device — the setting reads back as `off`. Confirmed via
+`adb logcat`: `[TrustTasks:V2Mediation] not provisioning: flag=off,
+MEDIATOR_V2_URL=set`, despite the harness's own log insisting it had just
+been turned on. Downstream, this surfaces as a confusing `assertV2MediationMarker`
+timeout ("no Coordinate Mediation 2.0 grant marker") that looks unrelated to
+the toggle at all.
+
+**Why**: `Developer.tsx`'s toggle handler `dispatch`es a Redux-style action
+— the in-memory state update is synchronous, but persisting it to disk is a
+separate async side effect. `restartApp()` calls `driver.terminateApp()`
+immediately afterward, a hard process kill. On a slow device, or simply
+when `returnToContacts()` (called between the toggle and the restart)
+finishes faster than usual, the force-kill can land before the persistence
+write actually flushes, silently reverting the setting on next launch.
+
+**Fix**: a 1s settle sleep right after the toggle's `.click()`, before
+`returnToContacts()`/`restartApp()` run — in both `enableDidCommV2` and
+`enableTspCarriage`, which share the identical toggle-then-restart shape.
+
+## 6. A "fallback" that throws defeats its own callers' retry loops
+
+**Symptom**: `showRelationshipInvitation` (or `connectToWitness`, or any of
+`openQrSheet`'s other three call sites) fails outright with `Can't call
+click on element with selector "android=new UiSelector().text("QR Code")"
+because element wasn't found` — even though every one of these call sites
+already wraps `openQrSheet` in a multi-attempt retry loop that restarts the
+app and tries again on a miss. The failure screenshot can show the
+"Invite Contact" button rendered right there on screen; the timing was just
+a hair off.
+
+**Why**: `openQrSheet`'s own last-resort fallback
+(`byText(driver, "QR Code").click()`) throws unconditionally when nothing
+matches. None of its four call sites catch that exception — each only
+checks for *its own* follow-up element (e.g. `GenerateRelationshipQRCode`)
+after calling `openQrSheet`, expecting a plain "sheet didn't open" to be
+visible as that check failing, not as an exception escaping `openQrSheet`
+itself. A thrown exception skips that entire retry loop and kills the
+attempt outright — the retry logic was there all along, it just never got
+a chance to run.
+
+**Fix**: check existence before clicking in the fallback, same pattern as
+everywhere else in this file — a miss becomes a silent no-op, and the
+caller's own follow-up check (which is designed to retry) is what actually
+surfaces it. One fix at the source instead of patching four call sites.
