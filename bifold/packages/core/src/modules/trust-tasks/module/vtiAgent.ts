@@ -83,6 +83,8 @@ export interface VtiVerdict {
   requestId?: string
   effect: string
   needs: string[]
+  /** Everything the verdict carried — an `allow` brings the membership card here. */
+  with?: Record<string, unknown>
 }
 
 type Listener = () => void
@@ -234,13 +236,20 @@ class VtiAgentController {
    * the community answers `requestMore` naming what it still needs, rather than
    * the wallet guessing at requirements it cannot yet meet.
    */
-  async apply(communityDid: string, manifest: VtiManifest): Promise<VtiVerdict> {
+  async apply(
+    communityDid: string,
+    manifest: VtiManifest,
+    options: { credentials?: unknown[] } = {}
+  ): Promise<VtiVerdict> {
+    // The presentation is unsigned: the community takes the holder from the
+    // sealed envelope's sender (VTI-9), so what matters is that the
+    // credentials inside name that same DID as their subject.
     const answer = await this.ask(communityDid, SUBMIT, {
       vp: {
         '@context': ['https://www.w3.org/ns/credentials/v2'],
         type: ['VerifiablePresentation'],
         holder: this.state.did,
-        verifiableCredential: [],
+        verifiableCredential: options.credentials ?? [],
       },
       registryConsent: false,
       extensions: manifest.requirementsDigest ? { requirementsDigest: manifest.requirementsDigest } : {},
@@ -250,13 +259,19 @@ class VtiAgentController {
     if (refusal) throw refusal
     const payload = (
       answer.body as
-        | { payload?: { requestId?: string; verdict?: { effect?: string; with?: { needs?: string[] } } } }
+        | {
+            payload?: {
+              requestId?: string
+              verdict?: { effect?: string; with?: { needs?: string[] } & Record<string, unknown> }
+            }
+          }
         | undefined
     )?.payload
     return {
       requestId: payload?.requestId,
       effect: payload?.verdict?.effect ?? 'unstated',
       needs: payload?.verdict?.with?.needs ?? [],
+      with: payload?.verdict?.with,
     }
   }
 }

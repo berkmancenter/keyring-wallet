@@ -39,7 +39,7 @@ import {
   type VtiClientIdentity,
   type VtiMediatorEndpoints,
 } from './VtiMediatorTransport'
-import type { VtiIdentityStore } from './VtiIdentityStore'
+import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
 import { VtiRefusal } from './vtiAgent'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
@@ -294,6 +294,44 @@ export class VtaClient {
       addMediatorService: true,
       setPrimary: false,
     })
+  }
+
+  /**
+   * The persona for a community, kept in the identity store: reused when the
+   * phone already holds one with its key-agreement key borrowed, otherwise
+   * minted on the first registered DID-hosting server (or serverlessly at
+   * `personaBaseUrl`), its key borrowed, and the whole recorded. Connects if
+   * it must; the caller owns disconnecting.
+   */
+  async ensurePersona(options: { communityDid: string; label?: string; personaBaseUrl?: string }): Promise<VtiPersona> {
+    const existing = await this.store.getPersona(options.communityDid)
+    if (existing?.kmsKeyIds?.keyAgreement) return existing
+
+    await this.connect()
+    const contexts = await this.listContexts()
+    const contextId = contexts[0]?.id ?? 'vta'
+    const servers = await this.listServers()
+    const label = options.label ?? `keyring-${Date.now().toString(36)}`
+    const minted = existing
+      ? ({ did: existing.did, contextId: existing.contextId, signingKeyId: existing.vtaKeyIds.signing, kaKeyId: existing.vtaKeyIds.keyAgreement } as VtaMintedDid)
+      : await this.mintPersona(
+          servers[0]
+            ? { contextId, serverId: servers[0].id, label }
+            : { contextId, didUrl: `${options.personaBaseUrl ?? ''}/${label}`, label }
+        )
+    const borrowed = await this.borrowKey(minted.kaKeyId)
+    const persona: VtiPersona = {
+      communityDid: options.communityDid,
+      vtaDid: this.vtaDid,
+      did: minted.did,
+      contextId: minted.contextId ?? contextId,
+      vtaKeyIds: { signing: minted.signingKeyId, keyAgreement: minted.kaKeyId },
+      kmsKeyIds: { keyAgreement: borrowed.keyId },
+      label,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+    }
+    await this.store.setPersona(persona)
+    return persona
   }
 
   /** Borrow one of the VTA's keys into the wallet's KMS; returns the KMS key id. */

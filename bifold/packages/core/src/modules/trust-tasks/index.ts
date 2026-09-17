@@ -77,3 +77,11 @@ export type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './module/
 export { importVtaKey, decodeMultibaseKey } from './module/vtaKeys'
 export type { VtaExportedKey } from './module/vtaKeys'
 export type { VtiAgentState, VtiAgentStatus, VtiCriterion, VtiManifest, VtiVerdict } from './module/vtiAgent'
+export {
+  GenericRecordsCommunityStore,
+  type VtiCommunityStore,
+  type VtiInvitation,
+  type VtiMembership,
+} from './module/VtiCommunityStore'
+export { isVtiInvitationLink, buildVtiInvitationLink, parseVtiInvitationLink, describeInvitation } from './module/vtiInvitation'
+export { joinCommunity, ensurePersonaFor, membershipFromVerdict, type VtiJoinStep, type VtiJoinDeps, type VtiJoinResult } from './module/vtiJoin'

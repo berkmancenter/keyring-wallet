@@ -244,6 +244,14 @@ export {
   decodeMultibaseKey,
   vtiClientIdentityFromDid,
   createVtiClientDid,
+  GenericRecordsCommunityStore,
+  isVtiInvitationLink,
+  buildVtiInvitationLink,
+  parseVtiInvitationLink,
+  describeInvitation,
+  joinCommunity,
+  ensurePersonaFor,
+  membershipFromVerdict,
 } from './modules/trust-tasks'
 export type {
   TrustTaskRegistration,
@@ -266,6 +274,12 @@ export type {
   VtiPersona,
   VtaExportedKey,
   VtiClientIdentity,
+  VtiCommunityStore,
+  VtiInvitation,
+  VtiMembership,
+  VtiJoinStep,
+  VtiJoinDeps,
+  VtiJoinResult,
 } from './modules/trust-tasks'
 export type {
   ITrustTaskDisplayHandler,

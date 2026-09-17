@@ -19,6 +19,8 @@ import { BifoldError } from '../types/error'
 import { TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
+import { GenericRecordsCommunityStore } from '../modules/trust-tasks/module/VtiCommunityStore'
+import { isVtiInvitationLink, parseVtiInvitationLink } from '../modules/trust-tasks/module/vtiInvitation'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import InAppMessageNotifier from '../components/InAppMessageNotifier'
@@ -56,6 +58,23 @@ const TabStack: React.FC = () => {
   const handleDeepLink = useCallback(
     async (deepLink: string) => {
       logger.info(`Handling deeplink: ${deepLink}`)
+
+      // A community invitation (keyring://vti/invitation?c=…) is kept as a
+      // pending invitation and shown on My Agent; it is not a DIDComm OOB link.
+      if (isVtiInvitationLink(deepLink)) {
+        try {
+          if (agent) {
+            const invitation = parseVtiInvitationLink(deepLink)
+            await new GenericRecordsCommunityStore(agent).saveInvitation(invitation)
+            navigation.navigate(TabStacks.MyAgentStack as never)
+          }
+        } catch (err: unknown) {
+          logger.error(`invitation link rejected: ${(err as Error)?.message ?? err}`)
+        } finally {
+          dispatch({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [undefined] })
+        }
+        return
+      }
 
       // If it's just the general link with no params, set link inactive and do nothing
       if (deepLink.search(/oob=|c_i=|d_m=|url=/) < 0) {

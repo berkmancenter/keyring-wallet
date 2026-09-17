@@ -13,7 +13,7 @@
 import { useNavigation } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
 import { useAgent } from '@bifold/react-hooks'
-import React, { useCallback, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -22,14 +22,17 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
+import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { vtiAgent } from '../module/vtiAgent'
+import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
 
 /** The DID is long and the host is what a person recognises, so lead with it. */
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-8)}` : did)
 
 export interface MyAgentProps {
-  /** The mediator a VTI agent advertises, and the community to offer. */
-  config?: { mediatorDid?: string; communityDid?: string }
+  /** The mediator a VTI agent advertises, the community to offer, and the phone's own VTA. */
+  config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
 }
 
 const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
@@ -41,6 +44,103 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
 
   const mediatorDid = config?.mediatorDid
   const communityDid = config?.communityDid
+  const vtaDid = config?.vtaDid
+
+  // What the wallet holds towards communities (§2.4 B): the persona its VTA
+  // minted for this community, the invitations it was handed, the memberships
+  // it earned. Read from the stores; refreshed after anything that writes.
+  const [persona, setPersona] = useState<VtiPersona>()
+  const [invitations, setInvitations] = useState<VtiInvitation[]>([])
+  const [memberships, setMemberships] = useState<VtiMembership[]>([])
+  const [busy, setBusy] = useState<'identity' | 'join'>()
+  const [activity, setActivity] = useState<string[]>([])
+  const [holdingError, setHoldingError] = useState<string>()
+
+  const refresh = useCallback(async () => {
+    if (!agent) return
+    const identities = new GenericRecordsIdentityStore(agent)
+    const communities = new GenericRecordsCommunityStore(agent)
+    const [p, i, m] = await Promise.all([
+      communityDid ? identities.getPersona(communityDid) : Promise.resolve(undefined),
+      communities.listInvitations(),
+      communities.listMemberships(),
+    ])
+    setPersona(p)
+    setInvitations(i.filter((x) => x.status === 'pending'))
+    setMemberships(m)
+  }, [agent, communityDid])
+
+  useEffect(() => {
+    void refresh()
+    // Invitations arrive by deep link while this screen may be open.
+    const timer = setInterval(() => void refresh(), 4000)
+    return () => clearInterval(timer)
+  }, [refresh])
+
+  const onCreateIdentity = useCallback(async () => {
+    if (!agent || !vtaDid || !communityDid) return
+    setBusy('identity')
+    setHoldingError(undefined)
+    try {
+      await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+      await refresh()
+    } catch (error) {
+      setHoldingError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(undefined)
+    }
+  }, [agent, vtaDid, communityDid, refresh])
+
+  const stepText = useCallback(
+    (step: VtiJoinStep, detail?: string) => {
+      switch (step) {
+        case 'persona':
+          return t('MyAgent.StepPersona')
+        case 'connecting':
+          return t('MyAgent.StepConnecting', { did: shortDid(detail) })
+        case 'manifest':
+          return t('MyAgent.StepManifest')
+        case 'submitting':
+          return t('MyAgent.StepSubmitting')
+        case 'verdict':
+          return t('MyAgent.StepVerdict', { effect: detail })
+        case 'stored':
+          return t('MyAgent.StepStored')
+      }
+    },
+    [t]
+  )
+
+  const onJoin = useCallback(
+    async (invitation: VtiInvitation) => {
+      if (!agent || !vtaDid || !mediatorDid) return
+      setBusy('join')
+      setHoldingError(undefined)
+      setActivity([])
+      try {
+        const result = await joinCommunity(
+          {
+            agent,
+            identityStore: new GenericRecordsIdentityStore(agent),
+            communityStore: new GenericRecordsCommunityStore(agent),
+            vtaDid,
+            mediatorDid,
+            communityDid: invitation.communityDid,
+            onStep: (step, detail) => setActivity((prev) => [...prev, stepText(step, detail)]),
+          },
+          invitation
+        )
+        if (result.membership) setActivity((prev) => [...prev, t('MyAgent.AddedToWallet')])
+        await refresh()
+      } catch (error) {
+        setHoldingError(error instanceof Error ? error.message : String(error))
+      } finally {
+        setBusy(undefined)
+      }
+    },
+    [agent, vtaDid, mediatorDid, refresh, stepText, t]
+  )
+
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -75,6 +175,119 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       // the failure is already on screen, from the controller's state
     }
   }, [agent, mediatorDid])
+
+  const viaText = (via: VtiMembership['via']) =>
+    via === 'invitation' ? t('MyAgent.ViaInvitation') : via === 'vetting' ? t('MyAgent.ViaVetting') : t('MyAgent.ViaApproval')
+
+  const holdings = (
+    <>
+      {vtaDid && communityDid ? (
+        <>
+          <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Identity')}</Text>
+          <View style={styles.card} testID={testIdWithKey('MyAgentIdentityCard')}>
+            {persona ? (
+              <>
+                <Text style={styles.value} testID={testIdWithKey('MyAgentPersonaDid')}>
+                  {persona.did}
+                </Text>
+                <Text style={styles.label}>{t('MyAgent.ShareIdentity')}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.value}>{t('MyAgent.NoIdentity')}</Text>
+                <Pressable
+                  style={styles.button}
+                  testID={testIdWithKey('CreateIdentityButton')}
+                  accessibilityRole="button"
+                  disabled={busy !== undefined}
+                  onPress={onCreateIdentity}
+                >
+                  {busy === 'identity' ? <ActivityIndicator color="#FFFFFF" /> : null}
+                  <Text style={styles.buttonText}>
+                    {busy === 'identity' ? t('MyAgent.CreatingIdentity') : t('MyAgent.CreateIdentity')}
+                  </Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </>
+      ) : null}
+
+      <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Invitations')}</Text>
+      {invitations.length === 0 ? (
+        <Text style={styles.value} testID={testIdWithKey('MyAgentNoInvitations')}>
+          {t('MyAgent.NoInvitations')}
+        </Text>
+      ) : (
+        invitations.map((invitation) => (
+          <View key={invitation.id} style={styles.card} testID={testIdWithKey('MyAgentInvitationCard')}>
+            <Text style={styles.value}>{shortDid(invitation.communityDid)}</Text>
+            <Text style={styles.label}>{t('MyAgent.InvitedAs', { role: invitation.role })}</Text>
+            {persona && invitation.subjectDid !== persona.did ? (
+              <Text style={styles.error}>{t('MyAgent.InvitationNotForYou')}</Text>
+            ) : (
+              <Pressable
+                style={styles.button}
+                testID={testIdWithKey('JoinCommunityButton')}
+                accessibilityRole="button"
+                disabled={busy !== undefined}
+                onPress={() => onJoin(invitation)}
+              >
+                {busy === 'join' ? <ActivityIndicator color="#FFFFFF" /> : null}
+                <Text style={styles.buttonText}>{busy === 'join' ? t('MyAgent.Joining') : t('MyAgent.Join')}</Text>
+              </Pressable>
+            )}
+          </View>
+        ))
+      )}
+
+      <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Communities')}</Text>
+      {memberships.map((m) => (
+        <View key={m.communityDid} style={styles.card} testID={testIdWithKey('MyAgentMembershipCard')}>
+          <View style={styles.row}>
+            <Icon name="card-account-details" size={18} color={ColorPalette.semantic.success} />
+            <Text style={styles.value}>{t('MyAgent.Member')}</Text>
+          </View>
+          <Text style={styles.value}>{shortDid(m.communityDid)}</Text>
+          <Text style={styles.label} testID={testIdWithKey('MyAgentMembershipRole')}>
+            {m.role} · {viaText(m.via)}
+          </Text>
+          <Text style={styles.label}>{t('MyAgent.MemberSince', { date: m.grantedAt.slice(0, 10) })}</Text>
+        </View>
+      ))}
+      {communityDid && !memberships.some((m) => m.communityDid === communityDid) ? (
+        <Pressable
+          style={styles.card}
+          testID={testIdWithKey('MyAgentCommunityRow')}
+          accessibilityRole="button"
+          onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid })}
+        >
+          <Text style={styles.value}>{shortDid(communityDid)}</Text>
+          <Text style={styles.label}>{t('MyAgent.NotAMember')}</Text>
+        </Pressable>
+      ) : null}
+      {!communityDid && memberships.length === 0 ? <Text style={styles.value}>{t('MyAgent.NoCommunities')}</Text> : null}
+
+      {activity.length > 0 || holdingError ? (
+        <>
+          <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Activity')}</Text>
+          <View style={styles.card} testID={testIdWithKey('MyAgentActivity')}>
+            {activity.map((line, i) => (
+              <Text key={i} style={styles.value}>
+                {line}
+              </Text>
+            ))}
+            {holdingError ? (
+              <Text style={styles.error} testID={testIdWithKey('MyAgentHoldingError')}>
+                {holdingError}
+              </Text>
+            ) : null}
+          </View>
+        </>
+      ) : null}
+    </>
+  )
+
 
   if (!mediatorDid) {
     return (
@@ -125,20 +338,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             </View>
           </View>
 
-          <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Communities')}</Text>
-          {communityDid ? (
-            <Pressable
-              style={styles.card}
-              testID={testIdWithKey('MyAgentCommunityRow')}
-              accessibilityRole="button"
-              onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid })}
-            >
-              <Text style={styles.value}>{shortDid(communityDid)}</Text>
-              <Text style={styles.label}>{t('MyAgent.NotAMember')}</Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.value}>{t('MyAgent.NoCommunities')}</Text>
-          )}
+          {holdings}
         </ScrollView>
       </SafeAreaView>
     )
@@ -155,6 +355,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             {state.error}
           </Text>
         ) : null}
+        {holdings}
         <Pressable
           style={styles.button}
           testID={testIdWithKey('ConnectMyAgentButton')}
