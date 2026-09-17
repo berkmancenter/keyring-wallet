@@ -1,5 +1,15 @@
 import { ClaimFormat, JsonTransformer, W3cCredentialRecord } from '@credo-ts/core'
-import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from '../types/relationshipContext'
+import { buildJCardFromFormInput } from '../types/rcard'
+import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from '../types/relationshipContext'
+
+import {
+  ALICE_CAT_PHOTO,
+  BESTBC_PANDA_PHOTO,
+  BOB_FOX_PHOTO,
+  CHARLIE_OWL_PHOTO,
+  DIANA_BUNNY_PHOTO,
+  FABER_BEAR_PHOTO,
+} from './testContactPhotos'
 
 /**
  * Parameters for creating a DTG credential
@@ -11,6 +21,16 @@ export interface CreateDTGCredentialParams {
     name: string
     email?: string
     organization?: string
+    /**
+     * A data:image/jpeg;base64,... URI.
+     *
+     * Deliberately ignored by `createDTGCredential`: a photo travels in the
+     * RelationshipCard's jCard, and the legacy issuer-object shape the DTG
+     * credential uses has no place to put one — `resolveContactDisplayInfo`'s
+     * legacy branch returns name/email/organization and nothing else. Use
+     * `createRCardCredential` to get a photo on screen.
+     */
+    photo?: string
   }
   credentialSubject: {
     id: string
@@ -58,6 +78,7 @@ export const TEST_CONTACTS = {
       name: 'Alice Smith',
       email: 'alice@example.com',
       organization: 'Tech Corp',
+      photo: ALICE_CAT_PHOTO,
     },
   },
   bob: {
@@ -65,6 +86,7 @@ export const TEST_CONTACTS = {
       id: generateTestDid('bob'),
       name: 'Bob Jones',
       email: 'bob@example.org',
+      photo: BOB_FOX_PHOTO,
     },
   },
   charlie: {
@@ -72,12 +94,14 @@ export const TEST_CONTACTS = {
       id: generateTestDid('charlie'),
       name: 'Charlie Wilson',
       organization: 'Wilson Industries',
+      photo: CHARLIE_OWL_PHOTO,
     },
   },
   diana: {
     issuer: {
       id: generateTestDid('diana'),
       name: 'Diana Martinez',
+      photo: DIANA_BUNNY_PHOTO,
     },
   },
   faber: {
@@ -86,6 +110,7 @@ export const TEST_CONTACTS = {
       name: 'Faber College',
       email: 'contact@faber.edu',
       organization: 'Faber College',
+      photo: FABER_BEAR_PHOTO,
     },
   },
   bestbc: {
@@ -93,9 +118,13 @@ export const TEST_CONTACTS = {
       id: generateTestDid('bestbc'),
       name: 'BestBC Tea',
       organization: 'BestBC Tea Company',
+      photo: BESTBC_PANDA_PHOTO,
     },
   },
 }
+
+/** Same inputs as a DTG credential; `issuer.photo` is the one it also uses. */
+export type CreateRCardCredentialParams = CreateDTGCredentialParams
 
 /**
  * Create a DTG credential (RelationshipCredential) as a W3cCredentialRecord
@@ -142,6 +171,71 @@ export function createDTGCredential(params: CreateDTGCredentialParams): W3cCrede
       validFrom,
       credentialSubject: {
         id: params.credentialSubject.id,
+      },
+      // Mock proof - not used in tests but needed for completeness
+      proof: {
+        type: 'Ed25519Signature2018',
+        created: validFrom,
+        proofPurpose: 'assertionMethod',
+        verificationMethod: `${params.issuer.id}#key-1`,
+        jws: 'mock-jws-signature',
+      },
+    },
+  }
+
+  return JsonTransformer.fromJSON(credentialData, W3cCredentialRecord)
+}
+
+/**
+ * Create a received RelationshipCard (RCard) as a W3cCredentialRecord.
+ *
+ * Mirrors `services/rCardCredential.ts`'s VCDM 2.0 shape — issuer is the
+ * counterparty's relationship DID, `credentialSubject.card` is the jCard —
+ * which is what a post-separation exchange actually stores.
+ *
+ * A contact needs BOTH credentials to look real: the DTG credential is what
+ * puts them in the contacts list (`isPeerVrcCredential`), and this is what
+ * `resolveContactDisplayInfo` prefers for their name, organisation and photo.
+ * Without it, resolution falls through to the legacy issuer-object branch,
+ * which carries no photo at all.
+ */
+export function createRCardCredential(params: CreateRCardCredentialParams): W3cCredentialRecord {
+  const id = params.id || `urn:uuid:${generateUUID()}`
+  const validFrom = params.validFrom || new Date().toISOString()
+  const createdAt = params.createdAt || validFrom
+
+  // TEST_CONTACTS carry one display name; the jCard wants it structured.
+  // Splitting on the first space round-trips through
+  // extractFormInputFromJCard, which rebuilds `${firstName} ${lastName}`.
+  const [firstName, ...rest] = params.issuer.name.trim().split(/\s+/)
+
+  const jcard = buildJCardFromFormInput({
+    firstName: firstName ?? '',
+    lastName: rest.join(' '),
+    email: params.issuer.email ?? '',
+    organization: params.issuer.organization ?? '',
+    photo: params.issuer.photo,
+  })
+
+  const credentialData = {
+    _tags: {
+      claimFormat: ClaimFormat.LdpVc,
+      contexts: ['https://www.w3.org/ns/credentials/v2', DTG_CONTEXT_URL, RCARD_CONTEXT_URL],
+      types: ['VerifiableCredential', 'RelationshipCard'],
+      issuerId: params.issuer.id,
+    },
+    type: 'W3cCredentialRecord',
+    id,
+    createdAt,
+    updatedAt: params.updatedAt || createdAt,
+    credential: {
+      '@context': ['https://www.w3.org/ns/credentials/v2', DTG_CONTEXT_URL, RCARD_CONTEXT_URL],
+      type: ['VerifiableCredential', 'RelationshipCard'],
+      issuer: params.issuer.id,
+      validFrom,
+      credentialSubject: {
+        id: params.credentialSubject.id,
+        card: jcard,
       },
       // Mock proof - not used in tests but needed for completeness
       proof: {
