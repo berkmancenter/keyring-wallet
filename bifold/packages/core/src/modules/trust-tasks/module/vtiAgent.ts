@@ -21,6 +21,7 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import {
   createVtiClientDid,
   resolveVtiMediator,
+  resolveDidDocumentRetrying,
   vtiClientIdentityFromDid,
   VtiMediatorSession,
   type VtiClientIdentity,
@@ -100,6 +101,7 @@ class VtiAgentController {
   private listeners = new Set<Listener>()
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
+  private agent?: Agent
   /** One request in flight; a message that predates it is a stale redelivery (see VtaClient). */
   private pending?: { resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
 
@@ -129,6 +131,7 @@ class VtiAgentController {
    * log in and hold the socket. Idempotent while the socket is open.
    */
   async connect(agent: Agent, mediatorDid: string, options: { identity?: VtiClientIdentity } = {}): Promise<void> {
+    this.agent = agent
     if (this.session?.isOpen && (!options.identity || options.identity.did === this.state.did)) return
     if (this.session) await this.disconnect()
     try {
@@ -219,6 +222,9 @@ class VtiAgentController {
 
   /** What a community asks of an applicant, in its own words. */
   async fetchManifest(communityDid: string): Promise<VtiManifest> {
+    // Packing to the community resolves its document; warm that resolution
+    // patiently so a tunnel's rate limit does not surface as a failed send.
+    if (this.agent) await resolveDidDocumentRetrying(this.agent, communityDid)
     const answer = await this.ask(communityDid, MANIFEST, {})
     if (!answer) throw new Error('vtiAgent: the community did not answer')
     const refusal = refusalOf(answer)

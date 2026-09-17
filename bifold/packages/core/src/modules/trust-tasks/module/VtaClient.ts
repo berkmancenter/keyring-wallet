@@ -34,6 +34,7 @@ import { importVtaKey, type VtaExportedKey } from './vtaKeys'
 import {
   createVtiClientDid,
   resolveVtiMediator,
+  resolveDidDocumentRetrying,
   vtiClientIdentityFromDid,
   VtiMediatorSession,
   type VtiClientIdentity,
@@ -93,7 +94,7 @@ const nowSec = () => Math.floor(Date.now() / 1000)
  * mediator's own document then carries the URLs.
  */
 export async function resolveVtaMediator(agent: Agent, vtaDid: string): Promise<VtiMediatorEndpoints> {
-  const doc = await agent.dids.resolveDidDocument(vtaDid)
+  const doc = await resolveDidDocumentRetrying(agent, vtaDid)
   const services = (doc.service ?? []) as { type?: string; serviceEndpoint?: unknown }[]
   const endpoints = services
     .filter((s) => String(s.type) === 'DIDCommMessaging')

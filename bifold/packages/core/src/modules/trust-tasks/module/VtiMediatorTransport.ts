@@ -67,13 +67,33 @@ export interface VtiMediatorEndpoints {
   kid: string
 }
 
+
+/**
+ * Resolve a DID document, retrying on transient failure. A `did:webvh` behind a
+ * tunnel answers a burst of resolutions with 421/429 or an HTML page (VTI-19 —
+ * measured on iOS as "JSON Parse error: Unexpected character: R"); Credo caches
+ * a successful resolution, so one patient first look is all that is needed.
+ */
+export async function resolveDidDocumentRetrying(agent: Agent, did: string, attempts = 4) {
+  let lastError: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await agent.dids.resolveDidDocument(did)
+    } catch (error) {
+      lastError = error
+      await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
 /**
  * Read the mediator's endpoints and key agreement key out of its DID document.
  * Both `DIDCommMessaging` service entries are published; which is which is
  * decided by scheme, not by order.
  */
 export async function resolveVtiMediator(agent: Agent, mediatorDid: string): Promise<VtiMediatorEndpoints> {
-  const doc = await agent.dids.resolveDidDocument(mediatorDid)
+  const doc = await resolveDidDocumentRetrying(agent, mediatorDid)
 
   /**
    * A `serviceEndpoint` is a string, an object with `uri`, or — for a
@@ -188,7 +208,7 @@ export async function vtiClientIdentityFromPersona(
   personaDid: string,
   keyAgreementKmsKeyId: string
 ): Promise<VtiClientIdentity> {
-  const doc = await agent.dids.resolveDidDocument(personaDid)
+  const doc = await resolveDidDocumentRetrying(agent, personaDid)
   const keyAgreementRef = doc.keyAgreement?.[0]
   const vm = typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
   if (!vm) throw new Error(`${LOG_PREFIX} ${personaDid} has no keyAgreement verification method`)
@@ -249,9 +269,17 @@ export class VtiMediatorSession {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ did: this.identity.did }),
     })
-    const challengeBody = (await challengeResponse.json()) as {
-      data?: { challenge?: string; session_id?: string }
-      sessionId?: string
+    // Read as text first: a tunnel in front of the mediator can answer with a
+    // page instead of JSON (measured on iOS as "Unexpected character: R"), and
+    // the status plus the first line say what happened where a parse error would not.
+    const challengeText = await challengeResponse.text()
+    let challengeBody: { data?: { challenge?: string; session_id?: string }; sessionId?: string } = {}
+    try {
+      challengeBody = JSON.parse(challengeText)
+    } catch {
+      throw new Error(
+        `${LOG_PREFIX} challenge answered ${challengeResponse.status} with a non-JSON body: ${challengeText.slice(0, 80)}`
+      )
     }
     const challenge = challengeBody?.data?.challenge
     const sessionId = challengeBody?.data?.session_id ?? challengeBody?.sessionId
@@ -283,7 +311,19 @@ export class VtiMediatorSession {
   }
 
   async start(): Promise<void> {
-    this.accessToken = await this.login()
+    // The login is two round trips through a tunnel; a transient answer from
+    // the tunnel itself is not a refusal, so try a few times before giving up.
+    let lastError: unknown
+    for (let attempt = 0; attempt < 3 && !this.accessToken; attempt++) {
+      try {
+        this.accessToken = await this.login()
+      } catch (error) {
+        lastError = error
+        if (String((error as Error)?.message).includes('refused')) throw error
+        await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)))
+      }
+    }
+    if (!this.accessToken) throw lastError instanceof Error ? lastError : new Error(String(lastError))
     const socket = new WebSocket(this.mediator.wsEndpoint, [`bearer.${this.accessToken}`, WS_APP_SUBPROTOCOL])
     await new Promise<void>((resolve, reject) => {
       const onOpen = () => {
