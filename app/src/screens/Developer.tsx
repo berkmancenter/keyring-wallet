@@ -11,6 +11,7 @@ import {
   clearTestContacts,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
+  vtaAgent,
 } from '@bifold/core'
 import { RemoteLogger, RemoteLoggerEventTypes } from '@bifold/remote-logs'
 import {
@@ -81,7 +82,6 @@ const Developer: React.FC = () => {
   // it minted, the VTA's operator admits it, then the phone connects.
   const [isProbingManager, setIsProbingManager] = useState(false)
   const [managerProbeLog, setManagerProbeLog] = useState<string[]>([])
-  const vtaClientRef = useRef<VtaClient | undefined>(undefined)
   const [isClearingContacts, setIsClearingContacts] = useState(false)
   const navigation = useNavigation()
 
@@ -519,15 +519,11 @@ const Developer: React.FC = () => {
     }
   }
 
+  // The app's one session with its VTA (shared with My Agent), so a consent
+  // granted for a task started here reaches the client that waits for it.
   const vtaClientFor = (vtaDid: string): VtaClient => {
     if (!agent) throw new Error('Agent not initialized')
-    if (!vtaClientRef.current || vtaClientRef.current.vtaDid !== vtaDid) {
-      vtaClientRef.current = new VtaClient(agent, vtaDid, new GenericRecordsIdentityStore(agent), {
-        // eslint-disable-next-line no-console
-        onError: (error) => console.log('[VTA-PROBE] session error', error.message),
-      })
-    }
-    return vtaClientRef.current
+    return vtaAgent.client(agent, vtaDid, new GenericRecordsIdentityStore(agent))
   }
 
   /** Half 1 — mint (or recall) the manager identity and show it, so it can be enrolled. */
@@ -595,7 +591,18 @@ const Developer: React.FC = () => {
       mark('[VTA-PROBE] persona minted', persona.did)
       mark('[VTA-PROBE] persona keys', `signing=${persona.signingKeyId}`, `ka=${persona.kaKeyId}`)
 
-      const borrowed = await client.borrowKey(persona.kaKeyId)
+      // Under an approval policy the VTA holds this until an approver consents;
+      // the controller's state says so while the wait is on.
+      const unsub = vtaAgent.subscribe(() => {
+        const waiting = vtaAgent.getState().awaitingConsentFor
+        if (waiting) mark('[VTA-PROBE] consent required', waiting.replace('https://trusttasks.org/spec/', ''))
+      })
+      let borrowed
+      try {
+        borrowed = await client.borrowKey(persona.kaKeyId)
+      } finally {
+        unsub()
+      }
       mark('[VTA-PROBE] key borrowed', borrowed.curve, `kms=${borrowed.keyId}`)
 
       // The community leg, wearing the persona: the phone seals with the key it

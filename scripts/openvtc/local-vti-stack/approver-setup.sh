@@ -20,9 +20,10 @@ strip() { sed -e 's/\x1b\[[0-9;]*m//g' | grep -v "█\|╗\|╝\|║\|^\s*$" || 
 case "${1:-}" in
   add)
     DID="${2:?approver DID}"; TASK="${3:-$TASK_DEFAULT}"
-    "$PNM" --vta "$VTA_SLUG" approvals approvers add "$SET" "$DID" 2>&1 | strip | tail -2
-    "$PNM" --vta "$VTA_SLUG" approvals require "$TASK" --consent --set "$SET" 2>&1 | strip | tail -2
-    "$PNM" --vta "$VTA_SLUG" approvals list 2>&1 | strip | tail -6
+    "$PNM" --vta "$VTA_SLUG" approvals approvers add "$SET" "$DID" 2>&1 | strip | tail -2 || true
+    "$PNM" --vta "$VTA_SLUG" approvals require "$TASK" --consent --set "$SET" 2>&1 | strip | tail -2 || true
+    "$PNM" --vta "$VTA_SLUG" approvals list 2>&1 | strip | tail -6 || true
+    true
     ;;
   clear)
     TASK="${2:-$TASK_DEFAULT}"

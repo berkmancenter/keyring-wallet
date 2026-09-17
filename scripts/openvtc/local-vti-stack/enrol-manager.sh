@@ -30,8 +30,19 @@ pid=$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)
 # Kill by PID only — never by name pattern.
 [ -n "$pid" ] && kill "$pid" && sleep 3
 
-"$VTA_BIN" --config "$STACK_DIR/$NAME/config.toml" import-did --did "$DID" --role "$ROLE" --label "keyring-$ROLE" 2>&1 \
-  | sed -e 's/\x1b\[[0-9;]*m//g' | grep -E "imported|already|rror" || true
+# import-did creates the entry but never downgrades an existing one, so a
+# re-enrol at a lower role (e.g. admin -> initiator, needed for consent to
+# apply) is a change-role, tried after the import "already exists".
+imported=$("$VTA_BIN" --config "$STACK_DIR/$NAME/config.toml" import-did --did "$DID" --role "$ROLE" --label "keyring-$ROLE" 2>&1 | sed -e 's/\x1b\[[0-9;]*m//g' || true)
+echo "$imported" | grep -E "imported|already|rror" || true
+if echo "$imported" | grep -qi "already"; then
+  for from in admin initiator application reader; do
+    [ "$from" = "$ROLE" ] && continue
+    out=$("$VTA_BIN" --config "$STACK_DIR/$NAME/config.toml" acl change-role --did "$DID" --from "$from" --to "$ROLE" 2>/dev/null | sed -e 's/\x1b\[[0-9;]*m//g' || true)
+    if echo "$out" | grep -qEi "changed|→"; then echo "$out" | grep -Ei "changed|→"; break; fi
+  done
+fi
+true
 
 nohup "$VTA_BIN" --config "$STACK_DIR/$NAME/config.toml" > "$STACK_DIR/logs/$NAME.log" 2>&1 &
 for _ in $(seq 1 30); do

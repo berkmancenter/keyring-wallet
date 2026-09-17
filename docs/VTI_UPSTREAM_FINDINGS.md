@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.3 — 2026-09-16.** A living document: every finding here was measured
+**Version 1.4 — 2026-09-17.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -496,11 +496,44 @@ copies it out of band. For a phone, that means a QR/link the admin shows
 the credential to the invitee's DID over DIDComm, which every persona already
 advertises a service for. **Measured:** vtc-service 0.11.58, 2026-09-16.
 
+
+### VTI-22 — Consent policies are inert unless `config.policy.enforcement` is on
+
+`pnm approvals require <task> --consent --set <set>` writes the rule and
+`pnm approvals list` shows it, but the PDP gate is "a no-op unless
+`config.policy.enforcement`" (`vta-service/src/trust_tasks/mod.rs`). With the
+default `enforcement = false`, a gated task runs ungated and `pnm approvals
+explain` reports "no rule names this task" — the rule exists but is never
+consulted. Setting `[policy] enforcement = true` in the VTA's config and
+restarting makes the gate live; then an admin caller IS held (admin is not
+exempt — the earlier appearance of exemption was enforcement being off).
+**Measured:** vta-service 0.28.0, 2026-09-17.
+
+### VTI-23 — Every operation a manager needs requires the admin role
+
+`webvh/dids/create` (mint a persona) and `keys/export-secret` (borrow a
+persona's key) both call `require_admin` (`webvh.rs`, `keys.rs`). `initiator`
+carries `KeyMint` and `Sign` but is refused both with "admin role required",
+so a Keyring manager must hold `admin`. This is fine once VTI-22 is set
+(enforcement gates admins too), but it means "least-privilege manager" is not
+achievable for the persona lifecycle in 0.28. **Measured:** 2026-09-17.
+
+### VTI-24 — A pushed consent request is queued, not delivered, to an idle approver
+
+With enforcement on, a held task's `task-consent/request` is pushed to each
+approver, but the VTA logs "no mediator route for consent approver — NOT
+notifying" and the request lands in the approver's mediator queue rather than
+its live socket. A client that only enables Pickup 3.0 *live* delivery never
+sees it; an explicit `delivery-request` on connect is needed to drain the
+backlog. (Keyring now sends one.) Whether the VTA should also live-notify a
+connected approver is the open question. **Measured:** 2026-09-17.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
+| 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
 | 1.1 | 2026-09-16 | **Corrects VTI-01**, which 1.0 called a blocker: the first vetter can be bootstrapped on documented surfaces — invitation-only community → invited identity auto-admitted with `allow` → vetter role granted → vetting criterion added. Severity lowered to medium; the finding is now that the obvious attempt dead-ends and the working order is undocumented. Adds **Stack under test** (every component's version and upstream commit) and a note on version drift, including our own Trust Tasks lag. Adds VTI-16 (admin portal sign-in requires an outage). Test keys redacted from fixtures. |
 | 1.0 | 2026-09-16 | First published: VTI-01…VTI-15, consolidating the nine findings from the terminal-side rehearsal with the six that only appear when a phone is the client. Records the 2026-09-16 measurement that membership completes on an unconditioned community. |
