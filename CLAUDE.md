@@ -67,7 +67,8 @@ Note: emulators/simulators cannot do hardware attestation — the app silently f
 ## Commit conventions
 
 - Conventional commits enforced by commitlint: `feat|fix|docs|style|refactor|perf|test|chore|revert`, lower-case type.
-- Commits in the `bifold/` submodule require a `Signed-off-by:` trailer as the **last line** of the message (commitlint rejects anything after it), naming the commit's own author — i.e. your configured `user.name` / `user.email`, the same as `git commit -s` produces. A sign-off is an attestation by whoever made the commit, so never sign off as another contributor. Do not add agent co-author trailers to bifold commits.
+- **Both repos** require a `Signed-off-by:` trailer as the **last line** of the message (commitlint rejects anything after it), naming the commit's own author — i.e. your configured `user.name` / `user.email`, the same as `git commit -s` produces. A sign-off is an attestation by whoever made the commit, so never sign off as another contributor. Do not add agent co-author trailers to bifold commits.
+- The sign-off rule is easy to miss on the root repo, because it is the `bifold/` convention that gets talked about. It is enforced there too: a root commit without the trailer fails `commit-msg` with `message must be signed off [signed-off-by]`.
 - For message-only rewrites in bifold, use `git commit-tree -S` (SSH signing) to keep commits Verified; fallback `git commit -S -F msg.txt` with `HUSKY=0`.
 - Every commit on `main` (both repos) must also be cryptographically signed and verified by GitHub — enforced by branch protection and by the `commit-checks` CI workflow. `.husky/pre-commit` (root) and `bifold/.githooks/pre-commit` only check that `commit.gpgsign` is enabled locally, since a hook can't see the signature itself (git signs after hooks run).
 
