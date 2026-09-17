@@ -24,6 +24,7 @@ import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
 
@@ -41,6 +42,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const { agent } = useAgent()
   const navigation = useNavigation<StackNavigationProp<MyAgentStackParams>>()
   const state = useSyncExternalStore(vtiAgent.subscribe, vtiAgent.getState)
+  const vta = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
 
   const mediatorDid = config?.mediatorDid
   const communityDid = config?.communityDid
@@ -76,6 +78,30 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     const timer = setInterval(() => void refresh(), 4000)
     return () => clearInterval(timer)
   }, [refresh])
+
+  // Be reachable by the VTA as soon as this phone has a manager identity for
+  // it: a consent request can arrive at any time, and only an open session
+  // receives it.
+  useEffect(() => {
+    if (!agent || !vtaDid) return
+    void (async () => {
+      const manager = await new GenericRecordsIdentityStore(agent).getManager(vtaDid)
+      if (manager) await vtaAgent.connect(agent, vtaDid).catch(() => undefined)
+    })()
+  }, [agent, vtaDid])
+
+  const [deciding, setDeciding] = useState<string>()
+  const onDecide = useCallback(async (id: string, decision: 'approve' | 'deny') => {
+    setDeciding(id)
+    try {
+      await vtaAgent.decide(id, decision)
+    } catch {
+      // the failure is on the approval itself, from the controller's state
+    } finally {
+      setDeciding(undefined)
+    }
+  }, [])
+  const shortTask = (uri: string) => uri.replace('https://trusttasks.org/spec/', '')
 
   const onCreateIdentity = useCallback(async () => {
     if (!agent || !vtaDid || !communityDid) return
@@ -210,6 +236,63 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               </>
             )}
           </View>
+        </>
+      ) : null}
+
+      {vtaDid ? (
+        <>
+          <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Approvals')}</Text>
+          {vta.awaitingConsentFor ? (
+            <View style={styles.row}>
+              <ActivityIndicator color={ColorPalette.brand.primary} />
+              <Text style={styles.value} testID={testIdWithKey('MyAgentAwaitingConsent')}>
+                {t('MyAgent.AwaitingConsent', { task: shortTask(vta.awaitingConsentFor) })}
+              </Text>
+            </View>
+          ) : null}
+          {vta.approvals.length === 0 ? (
+            <Text style={styles.value} testID={testIdWithKey('MyAgentNoApprovals')}>
+              {vta.status === 'connected' ? `${t('MyAgent.NoApprovals')} ${t('MyAgent.AgentListening')}` : t('MyAgent.NoApprovals')}
+            </Text>
+          ) : (
+            vta.approvals.map((approval) => (
+              <View key={approval.id} style={styles.card} testID={testIdWithKey('MyAgentApprovalCard')}>
+                <Text style={styles.value}>
+                  {t('MyAgent.ApprovalAsks', { requester: shortDid(approval.requester), task: shortTask(approval.taskType) })}
+                </Text>
+                <Text style={styles.label}>{t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}</Text>
+                {approval.status === 'pending' ? (
+                  <View style={styles.row}>
+                    <Pressable
+                      style={[styles.button, { flex: 1 }]}
+                      testID={testIdWithKey('ApproveConsentButton')}
+                      accessibilityRole="button"
+                      disabled={deciding !== undefined}
+                      onPress={() => onDecide(approval.id, 'approve')}
+                    >
+                      <Text style={styles.buttonText}>{t('MyAgent.Approve')}</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.button, { flex: 1, backgroundColor: ColorPalette.grayscale.mediumGrey }]}
+                      testID={testIdWithKey('DenyConsentButton')}
+                      accessibilityRole="button"
+                      disabled={deciding !== undefined}
+                      onPress={() => onDecide(approval.id, 'deny')}
+                    >
+                      <Text style={styles.buttonText}>{t('MyAgent.Deny')}</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Text
+                    style={approval.status === 'failed' ? styles.error : styles.value}
+                    testID={testIdWithKey('MyAgentApprovalDecided')}
+                  >
+                    {approval.status === 'approved' ? t('MyAgent.Approved') : approval.status === 'denied' ? t('MyAgent.Denied') : approval.error ?? approval.status}
+                  </Text>
+                )}
+              </View>
+            ))
+          )}
         </>
       ) : null}
 

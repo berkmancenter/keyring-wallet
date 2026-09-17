@@ -41,7 +41,9 @@ const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
 export class VtiRefusal extends Error {
   constructor(
     readonly code: string,
-    message: string
+    message: string,
+    /** The framework's `details`, when the refusal carries any (a consent challenge does). */
+    readonly details?: unknown
   ) {
     super(message)
     this.name = 'VtiRefusal'
@@ -51,8 +53,9 @@ export class VtiRefusal extends Error {
 /** A refusal arrives as a document in its own right, not as a verdict. */
 const refusalOf = (plaintext: DidCommV2PlaintextMessage): VtiRefusal | undefined => {
   if (!String(plaintext.type ?? '').startsWith(TASK_ERROR)) return undefined
-  const payload = (plaintext.body as { payload?: { code?: string; message?: string } } | undefined)?.payload
-  return new VtiRefusal(payload?.code ?? 'unknown', payload?.message ?? 'The community refused the request.')
+  const payload = (plaintext.body as { payload?: { code?: string; message?: string; details?: unknown } } | undefined)
+    ?.payload
+  return new VtiRefusal(payload?.code ?? 'unknown', payload?.message ?? 'The community refused the request.', payload?.details)
 }
 
 /** How far the connection has got, in the words the Connecting screen uses. */

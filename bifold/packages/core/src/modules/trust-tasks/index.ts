@@ -85,3 +85,6 @@ export {
 } from './module/VtiCommunityStore'
 export { isVtiInvitationLink, buildVtiInvitationLink, parseVtiInvitationLink, describeInvitation } from './module/vtiInvitation'
 export { joinCommunity, ensurePersonaFor, membershipFromVerdict, type VtiJoinStep, type VtiJoinDeps, type VtiJoinResult } from './module/vtiJoin'
+
+export { vtaAgent, type VtaAgentState, type VtiApproval } from './module/vtaAgent'
+export type { VtaConsentRequest } from './module/VtaClient'

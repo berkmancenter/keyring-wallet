@@ -1187,6 +1187,16 @@
     "StepVerdict": "Answer: {{effect}}",
     "StepStored": "Card kept",
     "InvitationNotForYou": "This invitation was issued to another identity.",
-    "Activity": "Activity"
+    "Activity": "Activity",
+    "Approvals": "Approvals",
+    "NoApprovals": "Nothing to approve. When your agent needs your consent, it asks here.",
+    "ApprovalAsks": "{{requester}} asks your agent to run {{task}}",
+    "Approve": "Approve",
+    "Deny": "Deny",
+    "Approved": "Approved",
+    "Denied": "Denied",
+    "ApprovalExpires": "Expires {{when}}",
+    "AwaitingConsent": "Waiting for an approver to consent to {{task}}…",
+    "AgentListening": "Your agent can reach you here."
   }
 }

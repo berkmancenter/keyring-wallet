@@ -14,7 +14,7 @@
 
 import type { Agent } from '@credo-ts/core'
 
-import { VtaClient } from './VtaClient'
+import { vtaAgent } from './vtaAgent'
 import type { VtiCommunityStore, VtiInvitation, VtiMembership } from './VtiCommunityStore'
 import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
 import { vtiClientIdentityFromPersona } from './VtiMediatorTransport'
@@ -51,12 +51,10 @@ export interface VtiJoinResult {
  * identity per community, kept: a person is recognised by it afterwards.
  */
 export async function ensurePersonaFor(deps: Pick<VtiJoinDeps, 'agent' | 'identityStore' | 'vtaDid' | 'communityDid'>): Promise<VtiPersona> {
-  const client = new VtaClient(deps.agent, deps.vtaDid, deps.identityStore)
-  try {
-    return await client.ensurePersona({ communityDid: deps.communityDid })
-  } finally {
-    await client.disconnect().catch(() => undefined)
-  }
+  // The app's one session with its VTA: a granted notice must reach the
+  // client that waits for it, and a second socket for the same DID would not.
+  const client = vtaAgent.client(deps.agent, deps.vtaDid, deps.identityStore)
+  return client.ensurePersona({ communityDid: deps.communityDid })
 }
 
 export async function joinCommunity(deps: VtiJoinDeps, invitation?: VtiInvitation): Promise<VtiJoinResult> {

@@ -1034,6 +1034,16 @@
     "StepVerdict": "Resposta: {{effect}}",
     "StepStored": "Cartão guardado",
     "InvitationNotForYou": "Este convite foi emitido para outra identidade.",
-    "Activity": "Atividade"
+    "Activity": "Atividade",
+    "Approvals": "Aprovações",
+    "NoApprovals": "Nada para aprovar. Quando seu agente precisar do seu consentimento, ele pede aqui.",
+    "ApprovalAsks": "{{requester}} pede ao seu agente para executar {{task}}",
+    "Approve": "Aprovar",
+    "Deny": "Negar",
+    "Approved": "Aprovado",
+    "Denied": "Negado",
+    "ApprovalExpires": "Expira {{when}}",
+    "AwaitingConsent": "Aguardando um aprovador consentir com {{task}}…",
+    "AgentListening": "Seu agente pode alcançar você aqui."
   }
 }

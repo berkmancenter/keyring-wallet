@@ -55,7 +55,28 @@ export const VTA_TASK = {
   didsCreate: 'https://trusttasks.org/spec/vta/webvh/dids/create/1.0',
   keysExportSecret: 'https://trusttasks.org/spec/keys/export-secret/0.1',
   serversList: 'https://trusttasks.org/spec/vta/webvh/servers/list/1.0',
+  consentRequest: 'https://trusttasks.org/spec/task-consent/request/0.1',
+  consentDecision: 'https://trusttasks.org/spec/task-consent/decision/0.1',
+  consentGranted: 'https://trusttasks.org/spec/task-consent/granted/0.1',
 } as const
+
+/** What a VTA sends an approver: the request document's payload (`consent_request.rs`). */
+export interface VtaConsentRequest {
+  challenge: string
+  taskType: string
+  payloadDigest: string
+  requester: string
+  approverSet: string
+  minApprovals: number
+  excludeRequester?: boolean
+  expiresAt: string
+  sideEffects?: unknown
+  exposure?: unknown
+  effects?: unknown
+  subject?: string
+  origin?: string
+  [key: string]: unknown
+}
 
 export interface VtaWhoAmI {
   /** The VTA answers `roles` (array) and `scopes` (`ctx:<id>`), per its whoami spec. */
@@ -87,6 +108,14 @@ export interface VtaMintedDid {
 }
 
 const nowSec = () => Math.floor(Date.now() / 1000)
+
+/** The consent challenge inside a refusal, when that is what the refusal is. */
+function consentPendingOf(error: unknown): { payloadDigest?: string } | undefined {
+  if (!(error instanceof VtiRefusal)) return undefined
+  const details = error.details as { reason?: string; consentRequests?: { payload?: { payloadDigest?: string } }[] } | undefined
+  if (details?.reason !== 'auth:consent_required') return undefined
+  return { payloadDigest: details.consentRequests?.[0]?.payload?.payloadDigest }
+}
 
 /**
  * What a VTA's DID document tells a client: the mediator it is reached through.
@@ -123,17 +152,43 @@ export class VtaClient {
   private queue: Promise<unknown> = Promise.resolve()
 
   private deliver(plaintext: DidCommV2PlaintextMessage): void {
+    // A granted notice answers a wait, never a task.
+    const body = plaintext.body as { type?: string; payload?: { payloadDigest?: string } } | undefined
+    if (body?.type === VTA_TASK.consentGranted) {
+      const digest = body.payload?.payloadDigest
+      const wake = digest ? this.grantWaiters.get(digest) : undefined
+      if (wake) {
+        this.grantWaiters.delete(digest as string)
+        wake()
+      }
+      this.options.onInbound?.(plaintext)
+      return
+    }
     const pending = this.pending
-    if (!pending || Date.now() < pending.sentAt) return
+    if (!pending || Date.now() < pending.sentAt) {
+      this.options.onInbound?.(plaintext)
+      return
+    }
     this.pending = undefined
     pending.resolve(plaintext)
   }
+
+  /** Grants this client is waiting for, by the payload digest the VTA names. */
+  private grantWaiters = new Map<string, () => void>()
 
   constructor(
     private readonly agent: Agent,
     readonly vtaDid: string,
     private readonly store: VtiIdentityStore,
-    private readonly options: { onError?: (error: Error) => void } = {}
+    private readonly options: {
+      onError?: (error: Error) => void
+      /** Anything the VTA sends that is not the answer to a task — a consent request, a granted notice. */
+      onInbound?: (plaintext: DidCommV2PlaintextMessage) => void
+      /** A task was held for an approver's consent; the wait is on. */
+      onConsentPending?: (info: { taskType: string; payloadDigest?: string }) => void
+      /** How long to wait for approvers before giving up on a held task. */
+      consentWaitMs?: number
+    } = {}
   ) {}
 
   /** The DID this phone presents to its VTA — enrolled on the VTA's ACL. */
@@ -239,15 +294,55 @@ export class VtaClient {
 
       const body = answer.body as { type?: string; payload?: unknown } | undefined
       if (String(body?.type ?? '').startsWith(TASK_ERROR)) {
-        const p = body?.payload as { code?: string; message?: string } | undefined
-        throw new VtiRefusal(p?.code ?? 'unknown', p?.message ?? `the VTA refused ${type}`)
+        const p = body?.payload as { code?: string; message?: string; details?: unknown } | undefined
+        throw new VtiRefusal(p?.code ?? 'unknown', p?.message ?? `the VTA refused ${type}`, p?.details)
       }
       return (body?.payload ?? body) as T
     }
     // Chain behind whatever is in flight, but do not let one failure poison the next.
     const next = this.queue.then(run, run)
     this.queue = next.catch(() => undefined)
-    return next
+    return next.catch(async (error: unknown) => {
+      // A task the policy holds for consent is refused with
+      // `details.reason = "auth:consent_required"` and the signed requests the
+      // approvers were sent (policy_gate.rs). The grant that consent produces
+      // is single-use and consumed by re-submitting the same payload, so:
+      // wait for the granted notice, then send it again, once.
+      const pending = consentPendingOf(error)
+      const waitMs = this.options.consentWaitMs ?? 180000
+      if (!pending || waitMs <= 0) throw error
+      this.options.onConsentPending?.({ taskType: type, payloadDigest: pending.payloadDigest })
+      await this.awaitGrant(pending.payloadDigest, waitMs)
+      const again = new VtaClient(this.agent, this.vtaDid, this.store, { ...this.options, consentWaitMs: 0 })
+      again.session = this.session
+      again.identity = this.identity
+      again.mediator = this.mediator
+      return again.task<T>(type, payload, timeoutMs)
+    })
+  }
+
+  private awaitGrant(payloadDigest: string | undefined, waitMs: number): Promise<void> {
+    if (!payloadDigest) return new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 5000)))
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.grantWaiters.delete(payloadDigest)
+        reject(new Error(`${LOG_PREFIX} no approver consented within ${Math.round(waitMs / 1000)}s`))
+      }, waitMs)
+      this.grantWaiters.set(payloadDigest, () => {
+        clearTimeout(timer)
+        resolve()
+      })
+    })
+  }
+
+  /** An approver's answer to a consent request it was sent — signed by this client's identity. */
+  decideConsent(request: Pick<VtaConsentRequest, 'challenge' | 'payloadDigest'>, decision: 'approve' | 'deny', reason?: string) {
+    return this.task<{ status?: string }>(VTA_TASK.consentDecision, {
+      challenge: request.challenge,
+      payloadDigest: request.payloadDigest,
+      decision,
+      ...(reason ? { reason } : {}),
+    })
   }
 
   whoAmI() {

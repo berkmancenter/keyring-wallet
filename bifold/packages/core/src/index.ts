@@ -252,6 +252,7 @@ export {
   joinCommunity,
   ensurePersonaFor,
   membershipFromVerdict,
+  vtaAgent,
 } from './modules/trust-tasks'
 export type {
   TrustTaskRegistration,
@@ -280,6 +281,9 @@ export type {
   VtiJoinStep,
   VtiJoinDeps,
   VtiJoinResult,
+  VtaAgentState,
+  VtiApproval,
+  VtaConsentRequest,
 } from './modules/trust-tasks'
 export type {
   ITrustTaskDisplayHandler,

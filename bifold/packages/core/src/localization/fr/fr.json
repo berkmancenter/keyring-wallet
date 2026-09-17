@@ -1135,6 +1135,16 @@
     "StepVerdict": "Réponse : {{effect}}",
     "StepStored": "Carte conservée",
     "InvitationNotForYou": "Cette invitation a été émise pour une autre identité.",
-    "Activity": "Activité"
+    "Activity": "Activité",
+    "Approvals": "Approbations",
+    "NoApprovals": "Rien à approuver. Quand votre agent a besoin de votre accord, il le demande ici.",
+    "ApprovalAsks": "{{requester}} demande à votre agent d'exécuter {{task}}",
+    "Approve": "Approuver",
+    "Deny": "Refuser",
+    "Approved": "Approuvé",
+    "Denied": "Refusé",
+    "ApprovalExpires": "Expire {{when}}",
+    "AwaitingConsent": "En attente qu'un approbateur consente à {{task}}…",
+    "AgentListening": "Votre agent peut vous joindre ici."
   }
 }
