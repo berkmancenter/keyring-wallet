@@ -107,7 +107,7 @@ Issue under the spec's placeholder, verbatim. Accept the migration; §2.3 is the
 
 So the unpublished context costs us a **bundled document under a URL we do not control**, exactly as `WITNESSED_EXCHANGE_CONTEXT_URL` is today. What it does *not* let us do is claim interoperability with a third party that resolves the URL for real. §10 names that as a thing to close upstream, not here.
 
-**Open, and material:** our existing `DTG_CONTEXT_URL` is `https://www.firstperson.network/dtg/v1` — a *different IRI* from the spec's `https://firstperson.network/credentials/dtg/v1` (different host, different path). They are not the same context and never were. §9 Q3.
+**Our existing `DTG_CONTEXT_URL` is the wrong IRI, and V2 switches it.** `@bifold/vrc-contexts` defines it as `https://www.firstperson.network/dtg/v1` — a *different IRI* from the spec's `https://firstperson.network/credentials/dtg/v1` (different host, different path). They are not the same context and never were. Both are unresolvable placeholders today, so carrying two wrong URLs buys nothing over carrying one; V2 adopts the spec's IRI and accepts that #48 may move it again, which §2.3's cutover already covers.
 
 ---
 
@@ -188,6 +188,21 @@ C5 requires the VWC's issuer to declare `directed` scope at minimum. **This does
 
 It is named here rather than omitted because it is a **standing liability with a trap in it**: the rule is that *"all credentials issued under one identifier MUST declare the same scope"* (C14). When the property is named, the declaration attaches to the **witness's identifier across every credential it ever issues**, not to the VWC. That is a witness-deployment decision, not a credential-builder decision, and finding it out at implementation time would be expensive. Out of scope for this plan; §9 Q5.
 
+
+### 3.7 Every shipped proof suite is RDF-canonicalized, so the vocabulary is mandatory
+
+The parent plans discuss `eddsa-jcs-2022`, and JCS-based proofs would make the JSON-LD vocabulary optional — JCS hashes the JSON, so an untermed member is still signed. **That is not what we ship.** `core/src/modules/vrc/vrc-manager.ts:438-446` negotiates exactly two suites by RCE version: `DataIntegrityProof`/**`eddsa-rdfc-2022`** for v3+ peers, and **`Ed25519Signature2018`** for everyone else. Both canonicalize with URDNA2015. `eddsa-jcs-2022` is the *recommendation* of [`docs/CRYPTO_SUITE_FOLLOWUP.md`](../CRYPTO_SUITE_FOLLOWUP.md), not the shipped suite.
+
+The consequence is sharp and it lands on V2: **a VSC member with no JSON-LD term is not merely unsigned, it does not exist in the signed graph.** `predicate`, `object`, `object.digestMultibase` and every hoisted extension member of §3.5 must be termed before they are emitted, or the witness signs a credential that silently omits the very claim it is making.
+
+Three practical rules follow, and V2's ordering is built on them:
+
+1. **Terms land before members.** V2 ships the vocabulary; V4 ships the members. A build where issuance is ahead of the context is the failure mode, not a transient state.
+2. **The guard is CI, not review.** `localityVocabulary.test.ts` already counts quads per member and proves the guard guards by deleting a term. Generalising it to every VSC member is the whole defence, and it is cheap because the pattern exists.
+3. **Change one thing at a time.** D7 (the `@context` swap) alters canonicalization for *every* member, and D2/D3/D5 add and move members. Landing them in one commit makes a canonicalization break unbisectable. V2 (terms, no wire change) and V4 (wire change, no new terms) are separated for exactly this reason.
+
+This is the `openvtc-integration-plan` companion's *"vocabulary trap closed twice this week"* in its third incarnation. It is the highest-risk part of the migration and the one most likely to present as an inexplicable verification failure rather than a clean error.
+
 ---
 
 ## 4. Where the wire shape lives in this codebase
@@ -215,6 +230,8 @@ bifold/packages/vrc-reference/src/witnessedExchangeContext.ts            ⚠ see
 ```
 
 **One thing to fix first.** Three files named `witnessedExchangeContext.ts` exist. `core/src/modules/vrc/types/` is a genuine re-export shim of `@bifold/vrc-contexts` — its header says so. **`vrc-reference/src/witnessedExchangeContext.ts` is a byte-identical copy of that shim** (`96c6aa2e`), which means `vrc-reference` re-exports from `@bifold/vrc-contexts` correctly and the file is harmless — but the name collision makes a reader believe there are three context definitions when there is one. Verify, then leave it; renaming is churn this plan does not need.
+
+**The predicate-awareness tail is two call sites, not thirty.** The type predicates have 30 non-test call sites, but only **two** pass a bare type array rather than a credential object, and both are in `core/src/modules/vrc/vrc-manager.ts` — a file that has the full credential in scope and can simply pass it. Every other site already passes `raw`, `credJson` or `credentialData`. §1 calls the predicate-aware split a design change and it is; it is not a large one.
 
 **Fixtures and tests carrying the shape** (updated in lockstep, §6 V5):
 
@@ -304,11 +321,13 @@ Implement D6 and D8 in the wallet **before** changing issuance, against both sha
 
 **This is the only phase that changes bytes**, and it has a deployment order the others do not: the witness server is a **deployed service** and wallets are **installed apps** (§7). V3 must be in testers' hands before V4 reaches the witness.
 
+**The witness emits one shape, chosen by configuration, not a compile-time constant.** A single `WITNESS_CREDENTIAL_SHAPE=wd02|vsc` setting, defaulting to `wd02` until §7.1's upstream question is closed. This is not gold-plating: §7.1 identifies a shipped upstream policy that matches the WD02 type string, and an operator running a witness against a community on that policy needs the old shape until the community moves. The switch is deleted when §7.1 resolves — with a stated trigger, as V3's dual-read has a stated date.
+
 **Done when:** `ref-23` green; the witness-server suite green; `yarn e2e:vrc` green; `yarn e2e:vrc:devices` green on physical phones — the only run that exercises hardware attestation, per the root `CLAUDE.md`; a VSC minted by the real witness verifies in the real wallet with the D6 check passing on a real VRC.
 
 ### V5 — Fixtures, ladder, and the record
 
-Regenerate the captured fixtures. Correct `ref-07`'s *"encoding-only"* check text with §3.1's evidence — **the check itself keeps running against the legacy fixture**, which is how the ladder records a superseded claim rather than erasing it. Update `bifold/docs/WITNESSED_EXCHANGE_FLOW.md`, `bifold/packages/witness-server/README.md`, `bifold/packages/vrc-reference/README.md`, and the VWC rows of `tsp-reference/README.md`.
+Regenerate the captured fixtures. **The tool that produced the most valuable one is not in this repository.** `ref-07`'s README credits `edge-witnessed-captured.json` to `bifold/packages/vrc-reference/__tests__/integration/captureEdge.local-al.test.ts`, described there as an *"untracked local capture tool"* — and it is indeed absent from that directory and from git history. Regenerating a real captured witnessed exchange therefore means **rebuilding the capture harness first**, against the real Credo agents in `vrc-reference`. Budget for it as a task rather than discovering it at the end; and commit the rebuilt harness this time, so the next migration does not pay this twice. Correct `ref-07`'s *"encoding-only"* check text with §3.1's evidence — **the check itself keeps running against the legacy fixture**, which is how the ladder records a superseded claim rather than erasing it. Update `bifold/docs/WITNESSED_EXCHANGE_FLOW.md`, `bifold/packages/witness-server/README.md`, `bifold/packages/vrc-reference/README.md`, and the VWC rows of `tsp-reference/README.md`.
 
 **Done when:** the full ladder green; root `yarn lint`, `yarn typecheck`, `yarn test` green; `cd bifold/packages/core && yarn test` green; no document describes `credentialSubject.digest` as current.
 
@@ -324,6 +343,25 @@ Three qualifications keep that from being the whole story:
 2. **The witness is a service; the wallet is an app.** We control deployment of the first and not the second. Hence V3-before-V4 (§6), and hence the rollout order is: ship V3 to all three channels ([`release-flow-plan.md`](./release-flow-plan.md)), wait for adoption, then deploy V4 to the witness. A wallet without V3 meeting a V4 witness sees a credential whose type it does not recognise and drops the badge — degraded, not broken, which is the correct failure and worth confirming rather than assuming (§9 Q2).
 3. **Structural distinguishability is what makes any of this work.** WD02's `WitnessCredential` and WD 0.4.0's `StatementCredential` differ in the `type` array, so a dual-reader never has to guess (C15). Had the working group kept the type string and changed only the subject, there would be no safe dual-read at all.
 
+
+### 7.1 An upstream verifier still matches the WD02 type string
+
+The ecosystem's own VTC service ships a default personhood policy that matches the literal string this migration removes. `vtc-service/policies/default/personhood.rego:61`, in the pinned `verifiable-trust-infrastructure` clone at `187ad9cd`:
+
+```rego
+"WitnessCredential" in cred.type
+```
+
+It is **shipped policy, not a test fixture** — `policy/default.rs` embeds it with `include_str!`, and the `WitnessCredential` occurrences in that file's own source are all below its `#[cfg(test)]` boundary at line 323. A Keyring-issued VSC presented to a community running the default policy **fails the personhood assert**, because `cred.type` no longer contains the string.
+
+Three things bound how much this matters, and they are the reason this is a §7 note rather than a blocker:
+
+1. **It is the personhood path, not the join path.** `WitnessCredential` appears in exactly one shipped rego across all ten default policies. `join.rego` does not reference witness credentials at all, so the community-join flow that [`keyring-on-the-vta-farm.md`](./keyring-on-the-vta-farm.md) cares about is not on this rule.
+2. **The policy is designed to be replaced.** Its own header calls it *"intentionally permissive"* and says *"operators replace it via `POST /v1/policies`"*. A community that cares can accept both shapes today, without waiting on upstream.
+3. **The witness can emit either shape** (V4's switch), so a Keyring witness serving such a community is not stranded.
+
+**What is genuinely unknown:** this is our pin from 2026-08-17, and `sync-external.mjs` reports `verifiable-trust-infrastructure: FETCH FAILED` — so we cannot see whether upstream has already moved. **Fixing that fetch and re-reading `personhood.rego` is a precondition of V4**, not of the plan. Until then, treat the finding as true-at-the-pin and not as a claim about today's upstream, per [`docs/plans/README.md`](./README.md) rule 5.
+
 ---
 
 ## 8. What this plan does not do
@@ -331,24 +369,31 @@ Three qualifications keep that from being the whole story:
 - **Touch the VRC.** It is an edge credential; WD 0.4.0 leaves its shape alone. Its *proof suite* (`Ed25519Signature2018` today, `eddsa-jcs-2022` recommended) is [`docs/CRYPTO_SUITE_FOLLOWUP.md`](../CRYPTO_SUITE_FOLLOWUP.md)'s, and `ref-07` already records the divergence.
 - **Implement `dtg:endorses`.** We issue no endorsements. `endorses.jsonld` is mirrored in V1 so the registry format is exercised against both core profiles, and no code consumes it.
 - **Implement correlation scope.** §3.6 — does not bind at WD 0.4.0, and the property has no name.
-- **Adopt the other WD 0.4.0 additions.** The VDC, the VAC and the promoted VIC arrived in the same 28 commits. They are new credential types we neither issue nor consume, and reading them as part of this migration would triple its surface for no witness-related gain. Named so the next reader knows the gap is deliberate: §9 Q4.
+- **Adopt the other WD 0.4.0 additions.** The VDC, the VAC and the promoted VIC arrived in the same 28 commits. They are new credential types we neither issue nor consume, and reading them as part of this migration would triple its surface for no witness-related gain. **Decided and settled** — not deferred pending a look. If a Prague or Farm requirement later needs delegation or authority credentials, that is a new plan with its own constraints companion, not a late addition to this one.
 - **Advance the `external/` pin.** §10.
 
 ---
 
-## 9. Open questions
+## 9. Decisions taken, and what remains open
 
-**Q1 — Do we issue under the placeholder namespace, or wait for #48?** §2.4 recommends issuing under `https://firstperson.network/credentials/dtg/v1#witnessed` and treating the rename as a rolling cutover (§2.3). The alternative is to hold V4 until #48 resolves. *Decided by: Brendan. Blocked on: nothing — the recommendation is actionable today.*
+### Settled
 
-**Q2 — Is "old wallet, new witness" really degraded-not-broken?** §7 asserts the badge silently disappears. Worth an actual test in `ref-23` rather than an assertion in a plan; cheap to add if we want it. *Decided by: whoever builds `ref-23`.*
+| | Decision | Where it lives |
+|---|---|---|
+| **Namespace** | Issue under the spec's placeholder `https://firstperson.network/credentials/dtg/v1#witnessed` verbatim, behind one constant, and treat #48 as a rolling cutover rather than a flag day | §2.3, §2.4 |
+| **DTG `@context`** | Switch from our `https://www.firstperson.network/dtg/v1` to the spec's `https://firstperson.network/credentials/dtg/v1` in V2. Both are unresolvable placeholders; one wrong URL beats two | §2.5 |
+| **Extension members** | `locality*`, `hardwareAttestationIncluded`, `parties`, `taskDigestMultibase` become siblings of `witnessContext` under a Keyring-controlled namespace. `witnessContext` keeps the profile's three members and nothing else | §3.5 |
+| **Scope** | VDC, VAC and VIC are out, permanently for this plan | §8 |
 
-**Q3 — `https://www.firstperson.network/dtg/v1` vs `https://firstperson.network/credentials/dtg/v1`.** Our long-standing `DTG_CONTEXT_URL` is a different IRI from the one *Base Structure* requires (§2.5). Do we switch to the spec's IRI now — knowing #48 may move it again — or carry both until #48 resolves? Leaning: switch, since both are unresolvable placeholders and having *one* wrong URL beats two. *Decided by: Brendan.*
+### Open
 
-**Q4 — Should the VDC/VAC/VIC read be a separate piece of work?** §8 excludes them. They may matter for the Prague path, where community membership is in play. *Decided by: Brendan, against the [`keyring-on-the-vta-farm.md`](./keyring-on-the-vta-farm.md) schedule.*
+**Q1 — Does V4 wait on upstream `personhood.rego`, or ship behind the switch?** §7.1 found a shipped upstream policy matching the WD02 type string, at a pin we cannot currently refresh. The plan's answer is the V4 config switch defaulting to `wd02`, which unblocks us without stranding anyone — but *when the default flips* is a judgement call about ecosystem readiness, not a technical one. **Blocked on:** repairing the `verifiable-trust-infrastructure` fetch and re-reading the policy. *Decided by: Brendan, after that re-read.*
 
-**Q5 — Who owns the witness's correlation-scope declaration when the property is named?** §3.6: it attaches to the witness's identifier across every credential it ever issues, so it is a deployment decision. *Blocked on: the DTGWG naming the property. Not on us.*
+**Q2 — Is "old wallet, new witness" really degraded-not-broken?** §7 asserts the badge silently disappears. Worth an actual test in `ref-23` rather than an assertion in a plan. *Decided by: whoever builds `ref-23`.*
 
-**Q6 — Do we propose the extension members upstream?** §3.5 puts `locality*` and `hardwareAttestationIncluded` under a Keyring namespace, which is conforming and needs nobody's permission. Whether to also propose them for the registry's `witness-context.schema.json` is a separate, later, optional question. *Decided by: Brendan. Not blocking.*
+**Q3 — Who owns the witness's correlation-scope declaration when the property is named?** §3.6: it attaches to the witness's identifier across every credential it ever issues, so it is a deployment decision, not a credential-builder one. **Blocked on:** the DTGWG naming the property. Not on us.
+
+**Q4 — Do we propose the extension members upstream?** §3.5 puts `locality*` and `hardwareAttestationIncluded` under a Keyring namespace, which is conforming and needs nobody's permission. Whether to also propose them for the registry's `witness-context.schema.json` is a separate, later, optional question. *Decided by: Brendan. Not blocking.*
 
 ---
 
@@ -360,7 +405,8 @@ Two of this plan's three gaps are **ours to close**. `spec/header.md` lists Bren
 |---|---|---|
 | **The namespace** | cred-spec [#48](https://github.com/trustoverip/dtgwg-cred-spec/issues/48) | The measured cost of each option from a second implementation. §2.3's four-state rolling cutover, proven by `ref-22`, is evidence that the migration is survivable — which is exactly what the issue is weighing |
 | **The registry** | cred-spec [#52](https://github.com/trustoverip/dtgwg-cred-spec/issues/52) | `ref-22`'s mirror is a working implementation of the proposed format. If ours generates a byte-equal `accept-list.json`, that is a validated format rather than a proposed one, and `dtgwg-predicate-vocab` can be seeded from it |
-| **The `@context`** | #48's second half | We have shipped a DTG context under an unresolvable URL for months (§2.5, Q3). That experience — including what breaks and what does not — is the concrete input the issue asks for |
+| **The `@context`** | #48's second half | We have shipped a DTG context under an unresolvable URL for months (§2.5). That experience — including what breaks and what does not — is the concrete input the issue asks for |
+| **`personhood.rego`** | `verifiable-trust-infrastructure`, `vtc-service/policies/default/` | §7.1: the shipped default policy matches a type string WD 0.4.0 removes. The fix is small and mechanical — match the predicate IRI, or accept both — and it is the kind of second-implementation finding the ecosystem has taken from us before (`dtgwg-cred-spec` #7). **Confirm against current upstream before proposing**; our pin is from 2026-08-17 and its fetch is broken |
 
 **Nothing is pushed to an external repository without review.** Per the [`openvtc-workspace`](../../.claude/skills/openvtc-workspace/SKILL.md) skill: develop on a branch inside the `external/` clone, write a candidate document beside the rung it came from, **show a human and wait for approval**, stage on a personal fork first. Commits need a DCO `Signed-off-by`.
 
