@@ -74,6 +74,11 @@ class VtaAgentController {
     this.set({ status: 'connecting', error: undefined })
     try {
       await client.connect()
+      // Say hello to the VTA so it caches a reply route for this DID. Without a
+      // round-trip the VTA has never seen this approver and drops a consent
+      // request to it as "no mediator route" (VTI-24). whoami is the cheapest
+      // authenticated call and is what makes the approver reachable.
+      await client.whoAmI().catch(() => undefined)
       this.set({ status: 'connected', managerDid: client.managerDid })
     } catch (error) {
       this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })

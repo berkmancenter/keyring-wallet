@@ -45,12 +45,19 @@ const ATM_AUTHENTICATE = 'https://affinidi.com/atm/1.0/authenticate'
 const FORWARD = 'https://didcomm.org/routing/2.0/forward'
 const LIVE_DELIVERY_CHANGE = 'https://didcomm.org/messagepickup/3.0/live-delivery-change'
 const MESSAGES_RECEIVED = 'https://didcomm.org/messagepickup/3.0/messages-received'
+const DELIVERY_REQUEST = 'https://didcomm.org/messagepickup/3.0/delivery-request'
+const DELIVERY = 'https://didcomm.org/messagepickup/3.0/delivery'
 const PICKUP_PROTOCOL = 'https://didcomm.org/messagepickup/3.0/'
 const PLAIN = 'application/didcomm-plain+json'
 const WS_APP_SUBPROTOCOL = 'didcomm'
 
 const nowSec = () => Math.floor(Date.now() / 1000)
 const isPickup = (type: unknown) => typeof type === 'string' && type.startsWith(PICKUP_PROTOCOL)
+
+interface DeliveryMessage {
+  type?: string
+  attachments?: { id?: string; data?: { json?: unknown } }[]
+}
 // Hermes has no `crypto.randomUUID` — react-native-get-random-values polyfills
 // `getRandomValues` and nothing else — so ids come from Credo's own helper.
 const uuid = () => `urn:uuid:${utils.uuid()}`
@@ -370,6 +377,22 @@ export class VtiMediatorSession {
       return_route: 'all',
       body: { live_delivery: true },
     })
+
+    // Live delivery only carries messages that arrive from now on. Anything the
+    // mediator queued while this DID was offline — a consent request pushed to
+    // an approver before its app opened — is fetched with an explicit
+    // delivery-request; the `delivery` response is unpacked in `handleFrame`.
+    await this.send({
+      id: uuid(),
+      typ: PLAIN,
+      type: DELIVERY_REQUEST,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + 300,
+      return_route: 'all',
+      body: { limit: 20 },
+    })
   }
 
   /**
@@ -407,6 +430,13 @@ export class VtiMediatorSession {
       if (isPickup(frame.type)) return
       if (this.options.onMessage && typeof frame.protected === 'string') {
         const plaintext = await this.unpack(frame as unknown as DidCommV2EncryptedMessage)
+        // A `delivery` answering our delivery-request wraps the queued messages
+        // as attachments; unpack and route each, then acknowledge them so the
+        // mediator drops them from the queue.
+        if (plaintext.type === DELIVERY) {
+          await this.handleDelivery(plaintext as unknown as DeliveryMessage)
+          return
+        }
         // The mediator authcrypts its own bookkeeping too, so a frame's type is
         // only visible once it is open: a Pickup `status` answering
         // `live-delivery-change` looks exactly like a peer's message until then.
@@ -431,6 +461,40 @@ export class VtiMediatorSession {
       }
     } catch (error) {
       this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+
+  /**
+   * A Pickup 3.0 `delivery`: each attachment is a queued JWE. Unpack and route
+   * every one, then send `messages-received` with their ids so the mediator
+   * clears them.
+   */
+  private async handleDelivery(delivery: DeliveryMessage): Promise<void> {
+    const attachments = delivery.attachments ?? []
+    const acknowledged: string[] = []
+    for (const attachment of attachments) {
+      const jwe = attachment.data?.json
+      if (!jwe) continue
+      try {
+        const plaintext = await this.unpack(jwe as DidCommV2EncryptedMessage)
+        if (!isPickup(plaintext.type)) this.options?.onMessage?.(plaintext)
+        if (attachment.id) acknowledged.push(attachment.id)
+      } catch (error) {
+        this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
+      }
+    }
+    if (acknowledged.length > 0) {
+      await this.send({
+        id: uuid(),
+        typ: PLAIN,
+        type: MESSAGES_RECEIVED,
+        from: this.identity.did,
+        to: [this.mediator.did],
+        created_time: nowSec(),
+        expires_time: nowSec() + 300,
+        return_route: 'all',
+        body: { message_id_list: acknowledged },
+      })
     }
   }
 
