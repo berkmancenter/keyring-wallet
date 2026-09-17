@@ -1,6 +1,6 @@
 # Community vetting — Keyring as a PNM, admitted to a community through peer identity vetting
 
-**Status:** In execution on `feat/prague-farm-membership` (both repositories, pushed; wallet `ae42501`, bifold `7fd7798`). Reviewed in [#53](https://github.com/berkmancenter/keyring-wallet/pull/53). One decision is open — §2.4.
+**Status:** In execution on `feat/prague-farm-membership` (both repositories, pushed; wallet `ae42501`, bifold `7fd7798`). Reviewed in [#53](https://github.com/berkmancenter/keyring-wallet/pull/53). §2.4 is decided: **Keyring has its own VTA** (option B), recorded in `[2026-09-16-al.md](./2026-09-16-al.md)` F19.
 **Parent:** `[keyring-on-the-vta-farm.md](../keyring-on-the-vta-farm.md)` — this subtask carries the parent's F2 (enrolment) and F4 (membership) for the ecosystem's **peer identity vetting** ceremony, and the development environment that ceremony needs before a Farm can host it.
 **Siblings consulted:** `[pnm_cnm_subtask.md](../openvtc-integration-plan/pnm_cnm_subtask.md)` owns the VTA client architecture this subtask instantiates; `[trust_tasks_subtask.md](../openvtc-integration-plan/trust_tasks_subtask.md)` owns the Trust Task carriage it rides on.
 **Reasoning:** `[2026-09-15-al.md](./2026-09-15-al.md)` — the measurements behind §2–§3, and which positions of the parent plan they supersede; `[2026-09-16-al.md](./2026-09-16-al.md)` — what the first two days of execution measured, the positions it changed (§2.1, §2.4, §2.5, §3.2, §5) and the open decision in §2.4; `[2026-09-16-bm.md](./2026-09-16-bm.md)` — the state boundary of §2.6 and the rendering rules of §3.9, and what each of them turns on in §2.4's open decision. Upstream-facing findings, numbered and versioned: `[docs/VTI_UPSTREAM_FINDINGS.md](https://github.com/berkmancenter/keyring-wallet/blob/feat/prague-farm-membership/docs/VTI_UPSTREAM_FINDINGS.md)`. This document states current design only; see `[CLAUDE.md](../CLAUDE.md)`.
@@ -54,14 +54,18 @@ A Farm is orchestration around four services — VTA, mediator, DID hosting, VTC
 
 The newest images a Farm session can select (GHCR `ic3software/vta`, `vtc`: `0.24.1-0af2cce7`, built from VTI commit `0af2cce7` of 2026-09-09) **predate** the vetting implementation (VTI #1425 `5a6d4923`, #1430 `14ef89a6`, #1439 `7a5d8aa0`). The first release batch that contains it is the 2026-09-12 one (`vta-service-v0.27.0`, `vta-sdk-v0.38.0`, `cnm-cli-v0.15.0`). Until vetting-capable images are selectable, a Farm run can exercise enrolment and plain membership (parent F2, F4) but not this ceremony.
 
-### 2.4 Keys — and an open decision on who the member is
+### 2.4 Keys — Keyring has its own VTA, and the VTA is the member
 
-**Open.** Two architectures are in play, and the choice gates P6 (`[2026-09-16-al.md](./2026-09-16-al.md)` F14):
+**Decided 2026-09-16 (`[2026-09-16-al.md](./2026-09-16-al.md)` F19): option B.** Every Keyring user has a Personal VTA of their own — chosen or provisioned for them — and Keyring is that VTA's manager, the way upstream's TUI and browser plugin are. Concretely, and as upstream's own join guide documents it (`vti-setup` `developer/03-joining-a-community.md`):
 
-- **A — the phone is the agent.** What P4 built: the phone's own `did:peer:2` is the member, the community mails the card to the phone, and everything the ceremony signs is signed on the phone. No VTA.
-- **B — Keyring drives the user's VTA.** What the rest of this section, §7 and the parent assume: the VTA is the member and holds the card, Keyring enrols as its manager and is the control surface. Needs the enrolment step (§9 request 2) first.
+- **The VTA holds the keys and mints the member identity.** A member identity is a *persona* — a `did:webvh` the VTA mints and hosts, one per community, never the VTA's primary DID. Its keys never leave the VTA.
+- **Keyring runs the ceremony; the VTA signs.** The VTA has no join task of its own: the *client* submits `manifest/0.2` and `submit/0.2` under the persona, and the VTA signs on its behalf. Keyring's Credo transport to the community stays; what changes is the identity it presents and where signing happens.
+- **The VTA receives and holds the card.** The community delivers `credential-exchange/issue` to the persona's holder — the VTA's vault. Keyring renders it (§2.6).
+- **Keyring talks to its VTA over DIDComm v2 via the VTA's mediator, or the VTA's REST with a DID-signed login** — the two transports a VTA advertises. Not DIDComm v1.
 
-The transport, the screens and the invitation flow are the same under both; the Vetting Card is a signed object, so the choice decides which side the ceremony code lives on. Until it is made, the rungs that are identical under both go first (§6 P5).
+What P4 built — the phone minting its own `did:peer:2` and being the member itself (option A) — stays as the proof of the transport and the screens, and is replaced by the persona in P4b. The rungs that are identical under both (§6 P5's first three) are unaffected.
+
+**Still to measure before P4b is designed** (F19): how upstream's reference client (`OpenVTC/openvtc`, the TUI) seals a DIDComm envelope *from* a persona whose key agreement lives in the VTA — whether the VTA packs and forwards on the persona's behalf, or the client holds the persona's agreement key and only signing is delegated. The answer decides whether Keyring's transport addresses the community directly (as now) or goes through the VTA.
 
 Under B, persona and join-DID keys are **held by the VTA**, as upstream designs them: a persona is a `did:webvh` minted by the member's own VTA, one per community (`vti-setup` `developer/03-joining-a-community.md`), and the join persona is fixed at the start of an application ([[VETTING-DESIGN]]). The phone's own admin `did:key` is software Ed25519 first; the hardware target is chosen in P4 by measurement among: a P-256 `did:key` in the Secure Enclave (if the VTA accepts one), StrongBox Ed25519 (Android API 33+), or software Ed25519 wrapped by a hardware key. The parent's custody position (§3.2) is unchanged; this subtask sequences it. §3.6 records why TSP Rev 3 eases the hardware case.
 
@@ -324,9 +328,16 @@ drives it, and `e2e:agent:connect` asserts its markers.
 **Done when:** unit tests cover the platform seams, the store adapter, and byte-equality of Keyring-built documents against P2's fixtures; `e2e:agent:connect` passes on the Android emulator **and** the iOS simulator; the hardware-custody measurement of §2.4 is recorded.
 **Blocked on:** P1.
 
+### P4b — Keyring connects to *its* VTA (target 09-23)
+
+Enrolment against the local `alice` VTA as the stand-in for a farm-hosted one: scan an enrolment QR (a local stand-in for §9 request 2; `vta import-did` behind it), a DID-signed session, health, **mint a persona** (`did:webvh`, hosted by the stack's DID-hosting daemon), and the measurement F19 names — how the reference client signs and sends as a persona. Then the approver rung: the VTA pushes a `task-consent/request` to the phone, the phone answers with a signed `decision`.
+
+**Done when:** the phone lists its VTA's personas and mints one; a join manifest is fetched *as that persona*; a consent request from the VTA renders on the phone and a signed decision is accepted; `e2e:agent:connect` covers enrolment and the persona.
+**Blocked on:** P1; the F19 measurement.
+
 ### P5 — Keyring joins a community (target 09-24) — **wire proven; card not held**
 
-Plain membership (§3.1) is proven on the wire two ways (`[2026-09-16-al.md](./2026-09-16-al.md)` F13); the phone does not yet keep the card (F14). The rungs, identical under §2.4 A and B: (1) one member identity persisted across restarts; (2) credentials read out of an `allow` verdict and a later `credential-exchange/issue` accepted; (3) the invitation flow end to end — show my identity as a QR, the administrator invites in the portal, scan the invitation, apply, admitted.
+Plain membership (§3.1) is proven on the wire two ways (`[2026-09-16-al.md](./2026-09-16-al.md)` F13); the phone does not yet keep the card (F14). The rungs: (1) one member identity persisted across restarts — under §2.4 B, the persona; (2) the card read out of an `allow` verdict and out of the VTA's vault after a later delivery, rendered as one of the wallet's own credential cards; (3) the two ways in that need no vetter — *request to join* (scan the community's QR, `refer`, the administrator approves in the portal) and *invited* (the invitation reaches the phone, ideally pushed over the same line; §9 request 10). The screens are the wireframes of 2026-09-16.
 
 **Done when:** `e2e:community:join` passes on both platforms; the membership card renders from the stored VMC; `cnm` lists the applicant as a member.
 **Blocked on:** P4.
@@ -436,6 +447,10 @@ The numbered, versioned list — with the reproduction, the observation and the 
 4. Whether a headless vetter mode (the P3 binary's behaviour) is wanted in the terminal client itself, for scripted community rehearsals.
 5. Whether a TypeScript port of the applicant-side card, statement and match-code logic belongs in `pnm-core`.
 6. Every divergence P2 finds between the documentation and the running services — VTI-01…VTI-16, of which: the undocumented order a vetting community must be stood up in and that an administrator cannot be granted the vetter role (VTI-01); a `requestMore` request that can never be closed (VTI-03); that a criterion cannot express open enrolment (VTI-13).
+
+**Community portal**
+10. A *join QR* (the community's identifier) and a *recent enquirers* list with an *Invite* action, so an administrator never types a DID; and delivery of an issued invitation to the invitee over DIDComm, the way membership credentials already are.
+11. Whether a vetter client — terminal or agent-side — is planned, and when. None exists; our headless vetter is the fallback.
 
 **Mediator** (to its maintainers, and as an operator setting on any Farm)
 6a. A phone's WebSocket upgrade is refused as a cross-origin browser unless `cors_allow_origin` is set — and that key is silently ignored outside the `[security]` table (VTI-05, VTI-06).
