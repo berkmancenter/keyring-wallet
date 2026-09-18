@@ -41,6 +41,10 @@ async function unlockToHome(d) {
 }
 async function openVetting(d) {
   await (await waitForTestId(d, "MyAgent", 30000)).click();
+  // My Agent shows its holdings — the vetting entry among them — only once the
+  // phone's VTA session is up; it reconnects on its own when this phone was
+  // enrolled before, which takes a few seconds through the tunnel.
+  await waitForTestId(d, "MyAgentVettingRow", 90000);
   await sleep(1500);
   const row = await scrollToTestId(d, "MyAgentVettingRow", 6);
   await row.click();
