@@ -110,11 +110,16 @@ export interface VtaMintedDid {
 const nowSec = () => Math.floor(Date.now() / 1000)
 
 /** The consent challenge inside a refusal, when that is what the refusal is. */
-function consentPendingOf(error: unknown): { payloadDigest?: string } | undefined {
+function consentPendingOf(
+  error: unknown
+): { payloadDigest?: string; requests: Record<string, unknown>[] } | undefined {
   if (!(error instanceof VtiRefusal)) return undefined
-  const details = error.details as { reason?: string; consentRequests?: { payload?: { payloadDigest?: string } }[] } | undefined
+  const details = error.details as
+    | { reason?: string; consentRequests?: (Record<string, unknown> & { payload?: { payloadDigest?: string } })[] }
+    | undefined
   if (details?.reason !== 'auth:consent_required') return undefined
-  return { payloadDigest: details.consentRequests?.[0]?.payload?.payloadDigest }
+  const requests = details.consentRequests ?? []
+  return { payloadDigest: requests[0]?.payload?.payloadDigest, requests }
 }
 
 /**
@@ -245,7 +250,48 @@ export class VtaClient {
    * reply carries no correlation a client can rely on, so one at a time.
    */
   async task<T = unknown>(type: string, payload: Record<string, unknown>, timeoutMs = 30000): Promise<T> {
-    const run = async (): Promise<T> => {
+    const run = (): Promise<T> => this.sendTask<T>(type, payload, timeoutMs)
+    // Chain behind whatever is in flight, but do not let one failure poison the next.
+    const next = this.queue.then(run, run)
+    this.queue = next.catch(() => undefined)
+    return next.catch(async (error: unknown) => {
+      // A task the policy holds for consent is refused with
+      // `details.reason = "auth:consent_required"` and the signed requests the
+      // approvers were sent (policy_gate.rs). The grant that consent produces
+      // is single-use and consumed by re-submitting the same payload.
+      const pending = consentPendingOf(error)
+      const waitMs = this.options.consentWaitMs ?? 180000
+      if (!pending || waitMs <= 0) throw error
+      this.options.onConsentPending?.({ taskType: type, payloadDigest: pending.payloadDigest })
+      // The VTA can push a consent request only to a did:key approver
+      // ("did:webvh … not wired yet → relay fallback", step_up.rs); for any
+      // other approver it says "the approver learns of this request only if
+      // the requester relays it" — and hands us the VTA-signed requests in the
+      // refusal for exactly that. A CLI cannot relay; a phone can.
+      await this.relayConsentRequests(pending.requests)
+      // Then wait for the grant. The granted notice is route-gated the same
+      // way, so do not rely on it alone: re-submit periodically on THIS client
+      // (its session routes replies to it) — a re-submit while consent is
+      // still pending is refused again, and the first one after the approval
+      // consumes the grant.
+      const deadline = Date.now() + waitMs
+      let lastError: unknown = error
+      while (Date.now() < deadline) {
+        await this.awaitGrant(pending.payloadDigest, Math.min(8000, deadline - Date.now())).catch(() => undefined)
+        try {
+          return await this.sendTask<T>(type, payload, timeoutMs)
+        } catch (retryError) {
+          lastError = retryError
+          if (!consentPendingOf(retryError)) throw retryError
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error(String(lastError))
+    })
+  }
+
+  /** One send and its matched answer — no queue, no consent handling. */
+  private async sendTask<T>(type: string, payload: Record<string, unknown>, timeoutMs: number): Promise<T> {
+    {
       const session = this.session
       const did = this.identity?.did
       if (!session || !did) throw new Error(`${LOG_PREFIX} not connected`)
@@ -299,26 +345,31 @@ export class VtaClient {
       }
       return (body?.payload ?? body) as T
     }
-    // Chain behind whatever is in flight, but do not let one failure poison the next.
-    const next = this.queue.then(run, run)
-    this.queue = next.catch(() => undefined)
-    return next.catch(async (error: unknown) => {
-      // A task the policy holds for consent is refused with
-      // `details.reason = "auth:consent_required"` and the signed requests the
-      // approvers were sent (policy_gate.rs). The grant that consent produces
-      // is single-use and consumed by re-submitting the same payload, so:
-      // wait for the granted notice, then send it again, once.
-      const pending = consentPendingOf(error)
-      const waitMs = this.options.consentWaitMs ?? 180000
-      if (!pending || waitMs <= 0) throw error
-      this.options.onConsentPending?.({ taskType: type, payloadDigest: pending.payloadDigest })
-      await this.awaitGrant(pending.payloadDigest, waitMs)
-      const again = new VtaClient(this.agent, this.vtaDid, this.store, { ...this.options, consentWaitMs: 0 })
-      again.session = this.session
-      again.identity = this.identity
-      again.mediator = this.mediator
-      return again.task<T>(type, payload, timeoutMs)
-    })
+  }
+
+  /** Forward the VTA-signed consent requests to the approvers they name, over the same session. */
+  private async relayConsentRequests(requests: Record<string, unknown>[]): Promise<void> {
+    const session = this.session
+    const did = this.identity?.did
+    if (!session || !did) return
+    for (const request of requests) {
+      const recipient = typeof request.recipient === 'string' ? request.recipient : undefined
+      if (!recipient) continue
+      try {
+        await session.sendTo(recipient, {
+          id: `urn:uuid:${utils.uuid()}`,
+          typ: 'application/didcomm-plain+json',
+          type: TRUST_TASK_V2_ENVELOPE_TYPE,
+          from: did,
+          to: [recipient],
+          created_time: nowSec(),
+          expires_time: nowSec() + 900,
+          body: request,
+        })
+      } catch (relayError) {
+        this.options.onError?.(relayError instanceof Error ? relayError : new Error(String(relayError)))
+      }
+    }
   }
 
   private awaitGrant(payloadDigest: string | undefined, waitMs: number): Promise<void> {

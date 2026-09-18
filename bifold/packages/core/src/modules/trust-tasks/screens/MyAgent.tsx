@@ -246,7 +246,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <View style={styles.row}>
               <ActivityIndicator color={ColorPalette.brand.primary} />
               <Text style={styles.value} testID={testIdWithKey('MyAgentAwaitingConsent')}>
-                {t('MyAgent.AwaitingConsent', { task: shortTask(vta.awaitingConsentFor) })}
+                {t('MyAgent.AwaitingConsent', { task: shortTask(vta.awaitingConsentFor), interpolation: { escapeValue: false } })}
               </Text>
             </View>
           ) : null}
@@ -258,7 +258,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             vta.approvals.map((approval) => (
               <View key={approval.id} style={styles.card} testID={testIdWithKey('MyAgentApprovalCard')}>
                 <Text style={styles.value}>
-                  {t('MyAgent.ApprovalAsks', { requester: shortDid(approval.requester), task: shortTask(approval.taskType) })}
+                  {t('MyAgent.ApprovalAsks', { requester: shortDid(approval.requester), task: shortTask(approval.taskType), interpolation: { escapeValue: false } })}
                 </Text>
                 <Text style={styles.label}>{t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}</Text>
                 {approval.status === 'pending' ? (
