@@ -5,6 +5,11 @@
  * persona's community session; both are the reference client's flows
  * (design §8–§10) with the terminal taken out of the room.
  *
+ * The seat is said out loud before anything else on the screen — a badge, a
+ * heading and one sentence — because the two people at a vetting hold phones
+ * that look alike, and which of them is checking whom is the one thing
+ * neither should have to infer.
+ *
  * @module trust-tasks/screens/VtiVetting
  */
 
@@ -13,6 +18,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
@@ -92,7 +98,27 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     input: { borderWidth: 1, borderColor: ColorPalette.grayscale.lightGrey, borderRadius: 8, padding: 10, color: TextTheme.normal.color, backgroundColor: ColorPalette.brand.primaryBackground },
     error: { ...TextTheme.normal, color: ColorPalette.semantic.error },
     row: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+    seat: { backgroundColor: ColorPalette.brand.primary, borderRadius: 16, padding: 18, gap: 8 },
+    seatBadge: { alignSelf: 'flex-start', borderRadius: 999, paddingVertical: 4, paddingHorizontal: 12, backgroundColor: '#FFFFFF' },
+    seatBadgeText: { ...TextTheme.labelSubtitle, color: ColorPalette.brand.primary, fontWeight: '700' },
+    seatTitle: { ...TextTheme.headingThree, color: '#FFFFFF' },
+    seatText: { ...TextTheme.normal, color: '#FFFFFF' },
+    step: { ...TextTheme.labelSubtitle, color: ColorPalette.brand.primary, fontWeight: '700', textTransform: 'uppercase' },
   })
+
+  /** The seat banner: who this phone is at the vetting, in three lines. */
+  const seatBanner = (which: 'vetter' | 'applicant') => (
+    <View style={styles.seat} testID={testIdWithKey('VettingSeatBanner')} accessibilityRole="header">
+      <View style={styles.row}>
+        <Icon name={which === 'vetter' ? 'account-check' : 'account-search'} size={28} color="#FFFFFF" />
+        <Text style={styles.seatTitle}>{which === 'vetter' ? t('Vetting.DeskTitle') : t('Vetting.ApplicantTitle')}</Text>
+      </View>
+      <View style={styles.seatBadge} testID={testIdWithKey('VettingRoleBadge')}>
+        <Text style={styles.seatBadgeText}>{which === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}</Text>
+      </View>
+      <Text style={styles.seatText}>{which === 'vetter' ? t('Vetting.SeatVetterHint') : t('Vetting.SeatApplicantHint')}</Text>
+    </View>
+  )
 
   // Load what the phone holds, and connect the persona's session with an inbox.
   useEffect(() => {
@@ -180,7 +206,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.h}>{t('Vetting.Title')}</Text>
+          {seatBanner('applicant')}
           <Text style={styles.value}>{t('Vetting.NeedIdentity')}</Text>
           <Pressable style={styles.button} testID={testIdWithKey('VettingCreateIdentityButton')} accessibilityRole="button" disabled={!!busy}
             onPress={() => run('identity', async () => { if (agent && stores) await ensurePersonaFor({ agent, identityStore: stores.identity, vtaDid, communityDid }) })}>
@@ -198,9 +224,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.h}>{t('Vetting.DeskTitle')}</Text>
+          {seatBanner('vetter')}
           <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>{t('Vetting.YouVetFor', { community: shortDid(persona.communityDid) })}</Text>
 
+          <Text style={styles.step}>{t('Vetting.DeskStep1')}</Text>
           <Text style={styles.h}>{t('Vetting.Tickets')}</Text>
           <Pressable style={styles.button} testID={testIdWithKey('VettingNewTicketButton')} accessibilityRole="button" disabled={!!busy}
             onPress={() => run('ticket', () => deskRef.current!.issueTicket())}>
@@ -217,6 +244,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             </View>
           ))}
 
+          <Text style={styles.step}>{t('Vetting.DeskStep2')}</Text>
           <Text style={styles.h}>{t('Vetting.Desk')}</Text>
           {desk.length === 0 ? <Text style={styles.value} testID={testIdWithKey('VettingDeskEmpty')}>{t('Vetting.DeskEmpty')}</Text> : null}
           {desk.map((r) => (
@@ -262,9 +290,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.h}>{t('Vetting.Title')}</Text>
+        {seatBanner('applicant')}
         {membershipRole ? <Text style={styles.value} testID={testIdWithKey('VettingAlreadyMember')}>{t('Vetting.AlreadyMember', { role: membershipRole })}</Text> : null}
 
+        <Text style={styles.step}>{t('Vetting.ApplicantStep1')}</Text>
         <Text style={styles.h}>{t('Vetting.YourFace')}</Text>
         <View style={styles.card}>
           <Text style={styles.label}>{t('Vetting.LegalName')}</Text>
@@ -285,6 +314,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           <>
             <Text style={styles.value} testID={testIdWithKey('VettingRequirements')}>{t('Vetting.Requirements', { n: application.minStatements, claims: application.requiredClaims.join(', ') })}</Text>
 
+            <Text style={styles.step}>{t('Vetting.ApplicantStep2')}</Text>
             <Text style={styles.h}>{t('Vetting.AskAVetter')}</Text>
             <View style={styles.card}>
               <Text style={styles.label}>{t('Vetting.PasteTicket')}</Text>
@@ -316,6 +346,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               </View>
             ))}
 
+            <Text style={styles.step}>{t('Vetting.ApplicantStep3')}</Text>
             <Text style={styles.h}>{t('Vetting.Checklist')}</Text>
             <View style={styles.card}>
               <Text style={styles.value} testID={testIdWithKey('VettingChecklist')}>

@@ -1146,7 +1146,15 @@
     "Denied": "Refusé",
     "ApprovalExpires": "Expire {{when}}",
     "AwaitingConsent": "En attente qu'un approbateur consente à {{task}}…",
-    "AgentListening": "Votre agent peut vous joindre ici."
+    "AgentListening": "Votre agent peut vous joindre ici.",
+    "StepSigningIn": "Connexion à votre agent…",
+    "ManagerIdentity": "Ce téléphone, pour votre agent",
+    "EnrolHint": "Partagez cette identité avec l'opérateur de votre agent pour enrôler ce téléphone. Puis connectez-vous.",
+    "ConnectExplains": "La connexion ouvre une session avec votre agent, prépare votre identité pour la communauté et ouvre le canal vers elle.",
+    "NoCommunitySession": "La communauté n'est pas encore jointe.",
+    "ConnectCommunity": "Joindre la communauté",
+    "PeerLegTsp": "Messages entre pairs : TSP (Rev 3)",
+    "PeerLegDidComm": "Messages entre pairs : DIDComm v2"
   },
   "Vetting": {
     "Title": "Vérification",
@@ -1193,6 +1201,20 @@
       "attested": "Déclaration reçue",
       "declined": "Déclinée",
       "cardReceived": "Carte reçue"
-    }
+    },
+    "ApplicantTitle": "Se faire vérifier",
+    "SeatVetter": "Vous êtes le vérificateur",
+    "SeatApplicant": "Vous êtes vérifié·e",
+    "SeatVetterHint": "Un membre est devant vous. Vous lui remettez un ticket, ouvrez la session, comparez sa carte à son document, puis attestez.",
+    "SeatApplicantHint": "Un vérificateur contrôle qui vous êtes. Vous le sollicitez avec son ticket, lisez le code de correspondance, envoyez votre carte et recevez sa déclaration.",
+    "HeroVetter": "Vous détenez une habilitation de vérificateur pour cette communauté. Ouvrez le bureau pour émettre un ticket et vérifier la personne devant vous.",
+    "HeroApplicant": "Faites-vous vérifier en personne par un membre, puis candidatez à la communauté avec sa déclaration.",
+    "OpenDesk": "Ouvrir le bureau de vérification",
+    "GetVetted": "Commencer ma vérification",
+    "DeskStep1": "Étape 1 · Remettre un ticket",
+    "DeskStep2": "Étape 2 · Demandes sur votre bureau",
+    "ApplicantStep1": "Étape 1 · Votre visage",
+    "ApplicantStep2": "Étape 2 · Solliciter un vérificateur",
+    "ApplicantStep3": "Étape 3 · Candidater"
   }
 }

@@ -70,7 +70,13 @@ class VtaAgentController {
   /** Open the manager session — needed to be reachable as an approver. */
   async connect(agent: Agent, vtaDid: string): Promise<void> {
     const client = this.client(agent, vtaDid)
-    if (client.isConnected) return
+    if (client.isConnected) {
+      // Opened by a caller that used the client directly (the Developer
+      // probe does): the state has to say so, or a screen gated on it
+      // never sees the session that is already there.
+      if (this.state.status !== 'connected') this.set({ status: 'connected', managerDid: client.managerDid, error: undefined })
+      return
+    }
     this.set({ status: 'connecting', error: undefined })
     try {
       await client.connect()

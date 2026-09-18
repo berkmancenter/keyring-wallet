@@ -1198,7 +1198,15 @@
     "Denied": "Denied",
     "ApprovalExpires": "Expires {{when}}",
     "AwaitingConsent": "Waiting for an approver to consent to {{task}}…",
-    "AgentListening": "Your agent can reach you here."
+    "AgentListening": "Your agent can reach you here.",
+    "StepSigningIn": "Signing in to your agent…",
+    "ManagerIdentity": "This phone, to your agent",
+    "EnrolHint": "Share this identity with your agent's operator to enrol this phone. Then connect.",
+    "ConnectExplains": "Connecting signs in to your agent, prepares your identity for the community, and opens the channel to it.",
+    "NoCommunitySession": "Not reaching the community yet.",
+    "ConnectCommunity": "Reach the community",
+    "PeerLegTsp": "Peer messages: TSP (Rev 3)",
+    "PeerLegDidComm": "Peer messages: DIDComm v2"
   },
   "Vetting": {
     "Title": "Vetting",
@@ -1245,6 +1253,20 @@
       "attested": "Statement received",
       "declined": "Declined",
       "cardReceived": "Card received"
-    }
+    },
+    "ApplicantTitle": "Get vetted",
+    "SeatVetter": "You are the vetter",
+    "SeatApplicant": "You are being vetted",
+    "SeatVetterHint": "A member sits in front of you. You hand them a ticket, open the session, check their card against their document, and attest.",
+    "SeatApplicantHint": "A vetter checks who you are. You ask them with their ticket, read the match code, send your card, and receive their statement.",
+    "HeroVetter": "You hold a vetter grant for this community. Open the desk to cut a ticket and vet the person in front of you.",
+    "HeroApplicant": "Be vetted in person by a member, then apply to the community with their statement.",
+    "OpenDesk": "Open the vetting desk",
+    "GetVetted": "Start my vetting",
+    "DeskStep1": "Step 1 · Hand out a ticket",
+    "DeskStep2": "Step 2 · Requests on your desk",
+    "ApplicantStep1": "Step 1 · Your face",
+    "ApplicantStep2": "Step 2 · Ask a vetter",
+    "ApplicantStep3": "Step 3 · Apply"
   }
 }
