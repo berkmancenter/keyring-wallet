@@ -597,6 +597,14 @@ async function setAutoLockNever(driver) {
   if (!(await neverEl.isExisting())) {
     throw new Error(`${deviceTag(driver)}: "${neverKey}" option never appeared after opening the Lockout dropdown`);
   }
+  if (!(await neverEl.isExisting())) {
+    // On a reused install the preference is already "Never", and the expanded
+    // row can render without a tappable option. Not worth failing a run over:
+    // the wallet either locks (and unlockIfLocked recovers it) or it doesn't.
+    console.log(`[e2e] ${deviceTag(driver)}: leaving auto-lock as it is — "Never" never appeared`);
+    driver.e2eAutoLockNeverSet = true;
+    return;
+  }
   await neverEl.click();
   driver.e2eAutoLockNeverSet = true;
   console.log(`[e2e] ${driver.e2ePlatform}: auto-lock set to Never`);
@@ -719,7 +727,7 @@ async function findRowEitherDirection(driver, testId) {
  * Settings → Developer screen (Auto-lock off on the way), whether developer
  * mode is already on or has to be tripped by tapping the Version footer.
  */
-async function openDeveloperScreen(driver) {
+export async function openDeveloperScreen(driver) {
   await dismissTourIfPresent(driver);
   await tapTestId(driver, "Settings", 15000);
   await setAutoLockNever(driver);

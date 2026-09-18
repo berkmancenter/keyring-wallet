@@ -405,19 +405,23 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
 }
 
 /** Swipe up until the element with the given testID is displayed (max 6 swipes). */
-export async function scrollToTestId(driver, key, maxSwipes = 6) {
+// `from` is where the drag starts (fraction of the screen height): a drag that
+// begins on a TextInput selects text instead of scrolling, so a screen with an
+// input mid-page needs a lower origin.
+export async function scrollToTestId(driver, key, maxSwipes = 6, { from = 0.7, direction = "down" } = {}) {
+  const [startY, endY] = direction === "up" ? [0.15, from] : [from, 0.25];
   for (let i = 0; i < maxSwipes; i++) {
     const el = byTestId(driver, key);
     if ((await el.isExisting()) && (await el.isDisplayed())) return el;
     const { width, height } = await driver.getWindowRect();
     await driver
       .action("pointer")
-      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * startY) })
       .down()
       .pause(100)
       .move({
         x: Math.floor(width / 2),
-        y: Math.floor(height * 0.25),
+        y: Math.floor(height * endY),
         duration: 400,
       })
       .up()

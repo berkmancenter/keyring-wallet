@@ -140,6 +140,15 @@ export class AppContainer implements Container {
     this._container.registerInstance(TOKENS.CONFIG, {
       ...defaultConfig,
       PINSecurity: { rules: PINRules, displayHelper: false },
+      // The VTI agent this build talks to. Both DIDs are bound to the host the
+      // stack runs behind, so they are baked in per environment rather than
+      // discovered — see scripts/openvtc/local-vti-stack/README.md.
+      vti: {
+        mediatorDid: Config.VTI_MEDIATOR_DID,
+        communityDid: Config.VTI_COMMUNITY_DID,
+        vtaDid: Config.VTI_VTA_DID,
+        personaBaseUrl: Config.VTI_PERSONA_BASE_URL,
+      },
       settings: [
         /* Help section commented out — re-enable when help actions are wired up
         {
