@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.4 — 2026-09-17.** A living document: every finding here was measured
+**Version 1.5 — 2026-09-18.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -54,13 +54,14 @@ offers (whose newest predates vetting entirely).
 
 | Component | Version | Upstream repository | Commit | Commit date |
 | --- | --- | --- | --- | --- |
-| `vta-service` — personal agent | 0.28.0 | `verifiable-trust-infrastructure` | `53a7cde4` | 2026-09-15 |
-| `vtc-service` — community service (incl. admin portal) | 0.11.58 | `verifiable-trust-infrastructure` | `53a7cde4` | 2026-09-15 |
-| `vta-sdk` | 0.38.2 | `verifiable-trust-infrastructure` | `53a7cde4` | 2026-09-15 |
-| `pnm-cli` — personal network manager | 0.16.5 | `verifiable-trust-infrastructure` | `53a7cde4` | 2026-09-15 |
-| `cnm-cli` — community network manager | 0.15.2 | `verifiable-trust-infrastructure` | `53a7cde4` | 2026-09-15 |
-| `affinidi-messaging-mediator` | 0.25.0 | `affinidi-tdk-rs` | `dff68eb` | 2026-09-15 |
-| `did-hosting-daemon` (server 0.8.3 · control 0.8.8 · common 0.8.6) | 0.8.3 | `affinidi-webvh-service` | `cb8a6f4` | 2026-09-15 |
+| `vta-service` — personal agent | 0.33.0 | `verifiable-trust-infrastructure` | `460e0ebb` (tag `VTI-Eucalyptus-RC-0`) | 2026-09-17 |
+| `vtc-service` — community service (incl. admin portal) | 0.11.58 (train code; version string unchanged) | `verifiable-trust-infrastructure` | `460e0ebb` | 2026-09-17 |
+| `vta-sdk` | 0.42.1 | `verifiable-trust-infrastructure` | `460e0ebb` | 2026-09-17 |
+| `pnm-cli` — personal network manager | 0.17.2 | `verifiable-trust-infrastructure` | `460e0ebb` | 2026-09-17 |
+| `cnm-cli` — community network manager | 0.16.3 | `verifiable-trust-infrastructure` | `460e0ebb` | 2026-09-17 |
+| `affinidi-messaging-mediator` | 0.26.2 | `affinidi-tdk-rs` | `144a3af0` (tag `VTI-Eucalyptus-RC-0`) | 2026-09-17 |
+| `did-hosting-daemon` | 0.8.3 (version string unchanged) | `affinidi-webvh-service` | `933fe3a`⁺ (tag `VTI-Eucalyptus-RC-0`) | 2026-09-17 |
+| reference client `openvtc` (the vetter oracle) | head | `OpenVTC/openvtc` | `177a218` | 2026-09-17 |
 | Redis | 8.10.1 | Homebrew | — | — |
 | ngrok agent (six reserved domains) | 3.37.1 | — | — | — |
 
@@ -73,11 +74,13 @@ iOS simulator 26.3.
 
 Recorded so upstream can tell a real defect from us being behind:
 
-- **This stack is a month newer than our reference pins.** The repository's
-  pinned reference clones (`scripts/openvtc/pins.json`) sit at the Cypress
-  release — `verifiable-trust-infrastructure` `187ad9cd`, 2026-08-17 — while
-  every service above was built from `53a7cde4`, 2026-09-15. Findings were
-  measured against the newer code.
+- **Upgraded in place on 2026-09-18 to the `VTI-Eucalyptus-RC-0` train** (the tag
+  is coordinated across the VTI monorepo, `affinidi-tdk-rs` and
+  `affinidi-webvh-service`). The 0.28-era stores, configs and DIDs were kept;
+  every service accepted them and reconnected to the new mediator without a
+  re-provision. Findings VTI-1 … VTI-24 were measured on the previous pin
+  (`53a7cde4`, main-tip of 2026-09-15, two commits past `vta-service-v0.28.0`);
+  anything re-measured on the train says so.
 - **Our Trust Tasks framework is behind.** The pinned `trust-tasks` specification
   clone is 235 commits behind its `main`, and the wallet's own error documents
   are `trust-task-error/0.3` while `vtc-service` emits `trust-task-error/0.5`
@@ -535,6 +538,24 @@ and queue for a never-seen DID is the open upstream question. **Measured:**
 vta-service 0.28.0, 2026-09-17: manager held for consent proven on the phone;
 delivery to a second device pending this route being warm at push time.
 
+
+### VTI-25 — On the Eucalyptus train the card is delivered, not returned
+
+On the 0.28 pin an `allow` verdict carried the membership credential and the
+role endorsement inline (`verdict.with.vmc`, `verdict.with.roleVec`). On
+`VTI-Eucalyptus-RC-0` the verdict no longer does: immediately after `allow`
+the VTC sends **two separate `credential-exchange/issue/0.1` messages** to the
+applicant from a durable outbox (retried until acknowledged) — the
+`MembershipCredential` and the `CommunityRole` `EndorsementCredential` — and
+they can arrive in either order (measured: the role first). Each is a DIDComm
+message **typed as the task itself**, not the binding envelope, whose body is
+the bare payload `{"credential_response": {"credential": …}}` (an OID4VCI
+credential response, verbatim). A client that only waits for a reply to its
+submit, or that unwraps only the binding envelope, keeps nothing and sees no
+error. Keyring now matches replies by `#response` type and gives the community
+session an inbox for the rest. **Measured:** vtc-service 0.11.58 (train code
+at `460e0ebb`), 2026-09-18.
+
 ## Changelog
 
 | Version | Date | Change |
@@ -542,5 +563,6 @@ delivery to a second device pending this route being warm at push time.
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.5 | 2026-09-18 | Upgraded in place to VTI-Eucalyptus-RC-0 (versions table); VTI-25: the card is delivered by credential-exchange/issue, not inline |
 | 1.1 | 2026-09-16 | **Corrects VTI-01**, which 1.0 called a blocker: the first vetter can be bootstrapped on documented surfaces — invitation-only community → invited identity auto-admitted with `allow` → vetter role granted → vetting criterion added. Severity lowered to medium; the finding is now that the obvious attempt dead-ends and the working order is undocumented. Adds **Stack under test** (every component's version and upstream commit) and a note on version drift, including our own Trust Tasks lag. Adds VTI-16 (admin portal sign-in requires an outage). Test keys redacted from fixtures. |
 | 1.0 | 2026-09-16 | First published: VTI-01…VTI-15, consolidating the nine findings from the terminal-side rehearsal with the six that only appear when a phone is the client. Records the 2026-09-16 measurement that membership completes on an unconditioned community. |

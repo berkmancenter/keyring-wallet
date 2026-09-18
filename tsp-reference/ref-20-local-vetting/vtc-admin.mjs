@@ -45,6 +45,9 @@ const TASK = {
   joinList: "https://trusttasks.org/spec/vtc/join-requests/list/0.1",
   joinDecide: "https://trusttasks.org/spec/vtc/join-requests/decide/0.1",
   invitationIssue: "https://trusttasks.org/spec/vtc/invitations/issue/0.1",
+  policyUpsert: "https://trusttasks.org/spec/policy/upsert/0.2",
+  policyActivate: "https://trusttasks.org/spec/policy/activate/0.1",
+  policyActive: "https://trusttasks.org/spec/policy/active/0.1",
   membersList: "https://trusttasks.org/spec/vtc/members/list/0.1",
 };
 
@@ -203,6 +206,27 @@ async function main() {
         `DELETE /schemas/accepts/${args[0]}`,
         await call(base, TASK.typeRegister, `/schemas/accepts/${args[0]}`, { method: "DELETE", token })
       );
+    // The dry-run guide's step 00: an older community keeps the join policy it
+    // was first booted with; upload the shipped default and ACTIVATE it
+    // (uploading alone activates nothing).
+    case "put-policy": {
+      const rego = readFileSync(args[0], "utf8");
+      return void show(
+        "POST /policies",
+        await call(base, TASK.policyUpsert, "/policies", {
+          method: "POST",
+          token,
+          body: { name: args[2] ?? "join (default, Eucalyptus)", module: rego, ext: { "org.openvtc.purpose": args[1] ?? "join" } },
+        })
+      );
+    }
+    case "activate-policy":
+      return void show(
+        `POST /policies/${args[0]}/activate`,
+        await call(base, TASK.policyActivate, `/policies/${args[0]}/activate`, { method: "POST", token, body: {} })
+      );
+    case "active-policies":
+      return void show("GET /policies/active", await call(base, TASK.policyActive, "/policies/active", { token }));
     case "invite":
       return void show(
         "POST /invitations",

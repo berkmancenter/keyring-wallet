@@ -20,6 +20,7 @@ import {
   vtiClientIdentityFromDid,
   VtiMediatorSession,
   VtaClient,
+  GenericRecordsCommunityStore,
   GenericRecordsIdentityStore,
   vtiClientIdentityFromPersona,
   vtiAgent,
@@ -551,6 +552,18 @@ const Developer: React.FC = () => {
   }
 
   /** Half 2 — after enrolment: connect, ask who we are, mint a persona, borrow its key. */
+  // A person starting over with a community: drop the persona, the membership
+  // and the invitations for it. The VTA keeps the persona's keys; the community
+  // keeps its record of the old member. Needed to re-run "I was invited" — a
+  // community refuses to invite a current member (VTI-6).
+  const handleForgetCommunity = async () => {
+    const communityDid = Config.VTI_COMMUNITY_DID
+    if (!agent || !communityDid) return
+    await new GenericRecordsIdentityStore(agent).forgetPersona(communityDid)
+    await new GenericRecordsCommunityStore(agent).forgetCommunity(communityDid)
+    Alert.alert('Forgotten', 'Persona, membership and invitations for the community were dropped.')
+  }
+
   const handleProbeVtaManager = async () => {
     const vtaDid = Config.VTI_VTA_DID
     if (!agent || !vtaDid) {
@@ -992,6 +1005,22 @@ const Developer: React.FC = () => {
             testID={testIdWithKey('ShowManagerIdentityButton')}
           >
             <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>My VTA: show manager identity</Text>
+          </Pressable>
+          <Pressable
+            style={[
+              {
+                backgroundColor: ColorPalette.brand.primary,
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 8,
+                alignItems: 'center',
+                marginTop: 12,
+              },
+            ]}
+            onPress={handleForgetCommunity}
+            testID={testIdWithKey('ForgetCommunityButton')}
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>My VTA: forget this community</Text>
           </Pressable>
           <Pressable
             style={[

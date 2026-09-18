@@ -10,9 +10,9 @@
  *
  * Usage: E2E_KEEP_STATE=1 PLATFORM=android node run-vti-invite.js  (or ios)
  */
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
-import { completeOnboarding, enableDidCommV2, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, enableDidCommV2, openDeveloperScreen, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -52,6 +52,28 @@ try {
   }
   if (process.env.E2E_ENABLE_V2 === "1") await enableDidCommV2(driver);
 
+  // 0 — a person starting over: a community refuses to invite a current member
+  // (VTI-6), so if this phone already holds a membership, forget it first.
+  if (process.env.E2E_FRESH_COMMUNITY === "1" || keepState) {
+    await openDeveloperScreen(driver);
+    for (let i = 0; i < 45; i++) {
+      const community = await textOf(driver, "VtaProbeLog").catch(() => "");
+      if (/verdict|no verdict|\[VTI-PROBE\] failed|no manifest/.test(community)) break;
+      await sleep(2000);
+    }
+    for (let i = 0; i < 3; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;
+    const forget = await scrollToTestId(driver, "ForgetCommunityButton", 8).catch(() => undefined);
+    if (forget) {
+      await forget.click();
+      await sleep(1500);
+      await driver.acceptAlert().catch(() => undefined);
+      console.log(`[e2e] ${driver.e2ePlatform}: forgot the community (persona, membership, invitations)`);
+    }
+    await driver.back().catch(() => undefined);
+    await sleep(800);
+    await driver.back().catch(() => undefined);
+  }
+
   // 1 — the identity to be invited.
   await (await waitForTestId(driver, "MyAgent", 30000)).click();
   await waitForTestId(driver, "MyAgentIdentityCard", 30000);
@@ -78,17 +100,20 @@ try {
   // 3 — join as the persona.
   await (await waitForTestId(driver, "JoinCommunityButton", 10000)).click();
   console.log(`[e2e] ${driver.e2ePlatform}: joining`);
+  // The Communities card sits below Approvals and Invitations; UiAutomator
+  // only sees what is rendered, so scroll to it rather than ask if it exists.
   let activity = "";
-  for (let i = 0; i < 60; i++) {
-    await sleep(2000);
-    const card = await byTestId(driver, "MyAgentMembershipCard").isExisting();
-    activity = await textOf(driver, "MyAgentActivity").catch(() => activity);
+  let card;
+  for (let i = 0; i < 40 && !card; i++) {
+    await sleep(3000);
     const err = await byTestId(driver, "MyAgentHoldingError").isExisting();
-    if (card || err) break;
+    if (err) break;
+    card = await scrollToTestId(driver, "MyAgentMembershipCard", 4).catch(() => undefined);
   }
   await screenshot(driver, "vti-invite-result");
   const errText = await textOf(driver, "MyAgentHoldingError").catch(() => "");
   if (errText) throw new Error(`join failed: ${errText}\n${activity}`);
+  if (!card) throw new Error("no membership card appeared");
   const role = await textOf(driver, "MyAgentMembershipRole");
   console.log(`[e2e] ${driver.e2ePlatform}: membership card on screen — ${role}`);
   if (!/member/i.test(role)) throw new Error(`unexpected role text: ${role}`);
