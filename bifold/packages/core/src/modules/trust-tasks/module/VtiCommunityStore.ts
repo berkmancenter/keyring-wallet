@@ -56,6 +56,19 @@ export interface VtiCommunityStore {
   getMembership(communityDid: string): Promise<VtiMembership | undefined>
   listMemberships(): Promise<VtiMembership[]>
   saveMembership(membership: VtiMembership): Promise<void>
+  /** Drop the membership and every invitation for a community — a person starting over. */
+  forgetCommunity(communityDid: string): Promise<void>
+  /** Credentials a community or a vetter delivered that are not the membership itself. */
+  saveHeldCredential(item: VtiHeldCredential): Promise<void>
+  listHeldCredentials(kind?: VtiHeldCredential['kind'], communityDid?: string): Promise<VtiHeldCredential[]>
+}
+
+export interface VtiHeldCredential {
+  kind: 'role' | 'vetter-grant' | 'vetting-statement' | 'other'
+  communityDid: string
+  subjectDid: string
+  credential: Record<string, unknown>
+  receivedAt: string
 }
 
 const RECORD_TYPE = 'keyring/vti-community'
@@ -102,5 +115,34 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
 
   saveMembership(membership: VtiMembership) {
     return this.put('membership', membership.communityDid, { ...membership })
+  }
+
+  async forgetCommunity(communityDid: string) {
+    const memberships = await this.agent.genericRecords.findAllByQuery({
+      recordType: RECORD_TYPE,
+      kind: 'membership',
+      key: communityDid,
+    })
+    const invitations = (await this.listInvitationRecords()).filter(
+      (r) => (r.content as unknown as VtiInvitation).communityDid === communityDid
+    )
+    const held = (await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'credential' })).filter(
+      (r) => (r.content as unknown as VtiHeldCredential).communityDid === communityDid
+    )
+    for (const record of [...memberships, ...invitations, ...held]) await this.agent.genericRecords.delete(record)
+  }
+
+  private listInvitationRecords() {
+    return this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'invitation' })
+  }
+
+  saveHeldCredential(item: VtiHeldCredential) {
+    const id = String(item.credential.id ?? `${item.kind}:${item.communityDid}:${item.receivedAt}`)
+    return this.put('credential', id, { ...item })
+  }
+
+  async listHeldCredentials(kind?: VtiHeldCredential['kind'], communityDid?: string) {
+    const all = await this.list<VtiHeldCredential>('credential')
+    return all.filter((c) => (!kind || c.kind === kind) && (!communityDid || c.communityDid === communityDid))
   }
 }

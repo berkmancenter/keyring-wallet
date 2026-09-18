@@ -88,3 +88,5 @@ export { joinCommunity, ensurePersonaFor, membershipFromVerdict, type VtiJoinSte
 
 export { vtaAgent, type VtaAgentState, type VtiApproval } from './module/vtaAgent'
 export type { VtaConsentRequest } from './module/VtaClient'
+export { receiveIssue, classifyCredential, credentialsOfIssue, CREDENTIAL_EXCHANGE_ISSUE, type VtiReceivedCredential, type VtiCredentialKind } from './module/vtiInbox'
+export type { VtiHeldCredential } from './module/VtiCommunityStore'

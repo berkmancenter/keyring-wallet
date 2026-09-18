@@ -19,6 +19,7 @@ import type { VtiCommunityStore, VtiInvitation, VtiMembership } from './VtiCommu
 import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
 import { vtiClientIdentityFromPersona } from './VtiMediatorTransport'
 import { vtiAgent, type VtiVerdict } from './vtiAgent'
+import { receiveIssue } from './vtiInbox'
 
 export type VtiJoinStep =
   | 'persona'
@@ -72,6 +73,23 @@ export async function joinCommunity(deps: VtiJoinDeps, invitation?: VtiInvitatio
   const identity = await vtiClientIdentityFromPersona(deps.agent, persona.did, kaKmsKeyId)
   await vtiAgent.connect(deps.agent, deps.mediatorDid, { identity })
 
+  // Whatever the community delivers during the join — on the Eucalyptus
+  // train the card and the role arrive as separate messages after the verdict.
+  const via = invitation ? 'invitation' : 'approval'
+  const stopInbox = vtiAgent.onInbound((plaintext) => {
+    // eslint-disable-next-line no-console
+    console.log('[vtiInbox] inbound', String(plaintext.type), JSON.stringify(plaintext.body ?? null).slice(0, 600))
+    void receiveIssue(deps.communityStore, persona.did, plaintext, { via })
+      .then((got) => {
+        // eslint-disable-next-line no-console
+        console.log('[vtiInbox] kept', JSON.stringify(got.map((g) => [g.kind, g.subjectDid.slice(-16)])))
+      })
+      .catch((error) => {
+        // eslint-disable-next-line no-console
+        console.log('[vtiInbox] failed', error instanceof Error ? error.message : String(error))
+      })
+  })
+
   step('manifest')
   const manifest = await vtiAgent.fetchManifest(deps.communityDid)
 
@@ -82,13 +100,26 @@ export async function joinCommunity(deps: VtiJoinDeps, invitation?: VtiInvitatio
   step('verdict', verdict.effect)
 
   let membership: VtiMembership | undefined
-  if (verdict.effect === 'allow') {
-    membership = membershipFromVerdict(deps.communityDid, persona.did, verdict, invitation ? 'invitation' : 'approval')
-    if (membership) {
-      await deps.communityStore.saveMembership(membership)
-      if (invitation) await deps.communityStore.saveInvitation({ ...invitation, status: 'used' })
-      step('stored', membership.role)
+  try {
+    if (verdict.effect === 'allow') {
+      membership = membershipFromVerdict(deps.communityDid, persona.did, verdict, via)
+      if (membership) {
+        await deps.communityStore.saveMembership(membership)
+      } else {
+        // The card comes by delivery, not inline: give the outbox a moment.
+        for (let i = 0; i < 20 && !membership; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+          membership = await deps.communityStore.getMembership(deps.communityDid)
+        }
+      }
+      if (membership) {
+        if (invitation) await deps.communityStore.saveInvitation({ ...invitation, status: 'used' })
+        step('stored', membership.role)
+      }
     }
+  } finally {
+    // Keep listening a little longer: the role endorsement can trail the card.
+    setTimeout(stopInbox, 30000)
   }
   return { persona, verdict, membership }
 }

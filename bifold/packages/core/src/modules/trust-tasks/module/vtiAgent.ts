@@ -105,14 +105,40 @@ class VtiAgentController {
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
   private agent?: Agent
-  /** One request in flight; a message that predates it is a stale redelivery (see VtaClient). */
-  private pending?: { resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
+  /**
+   * One request in flight. Its answer is the message whose type is the
+   * request's `#response` (or a trust-task-error); measured on the
+   * Eucalyptus train, a community also sends unsolicited messages right after
+   * a verdict — the credentials, over `credential-exchange/issue` — so
+   * "first message after send" is no longer a reply. Those go to the inbox.
+   */
+  private pending?: { type: string; resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
+  private inbox: ((plaintext: DidCommV2PlaintextMessage) => void)[] = []
+
+  /** Receive what the community sends that is not an answer (credentials, statements). */
+  onInbound(handler: (plaintext: DidCommV2PlaintextMessage) => void): () => void {
+    this.inbox.push(handler)
+    return () => {
+      this.inbox = this.inbox.filter((h) => h !== handler)
+    }
+  }
 
   private deliver(plaintext: DidCommV2PlaintextMessage): void {
     const pending = this.pending
-    if (!pending || Date.now() < pending.sentAt) return
-    this.pending = undefined
-    pending.resolve(plaintext)
+    const type = String(plaintext.type ?? '')
+    const answers = pending && Date.now() >= pending.sentAt && (type === `${pending.type}#response` || type.startsWith(TASK_ERROR))
+    if (pending && answers) {
+      this.pending = undefined
+      pending.resolve(plaintext)
+      return
+    }
+    for (const handler of this.inbox) {
+      try {
+        handler(plaintext)
+      } catch {
+        // one handler's failure must not lose the message for the others
+      }
+    }
   }
 
   getState = (): VtiAgentState => this.state
@@ -193,7 +219,7 @@ class VtiAgentController {
     const threadId = `urn:uuid:${utils.uuid()}`
     const sentAt = Date.now()
     const answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
-      this.pending = { resolve, sentAt }
+      this.pending = { type, resolve, sentAt }
     })
     const now = Math.floor(Date.now() / 1000)
     await session.sendTo(communityDid, {
