@@ -262,9 +262,20 @@ onboarding-only plumbing (the `agent` prop, `DID_SETUP_R_CARD` dispatch) into a
 screen that has neither. Splitting into a shared form plus two thin screens is less
 code overall, not more.
 
-**Entry point.** A new row in `Settings.tsx`'s existing array, following the
-`Screens.ChangePIN` row exactly (`Settings.tsx:177-183`): title, `onPress: () =>
-navigation.navigate(Screens.EditRCard)`, a `testID`. No new pattern.
+**Entry point.** The existing Settings tab (`TabStack.tsx`) is relabeled "Profile" and
+its `Settings.tsx` screen gains a profile card as its first element — avatar/photo and
+name, tapping it navigates to `Screens.EditRCard` — with the existing settings sections
+unchanged below it. This is a relabel and a reorder, not a new tab or a new navigator:
+the tab is already a peer bottom-tab destination one tap away, so making it visually
+lead with "you" (the WhatsApp/Telegram/Signal pattern) needs no new navigation surface.
+Only the user-facing label changes — the `Screens.Settings` translation string, which
+the tab bar, the stack header, and `SettingsMenu.tsx`/`HistoryMenu.tsx`'s
+`accessibilityLabel`s all already read from that one key — not the internal
+`Screens.Settings`/`Stacks.SettingStack`/`SettingStack.tsx` identifiers, since the screen
+still is the settings screen, now fronted by a profile card. See
+[`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md)'s "Entry point
+reconsidered" section for the rejected alternatives (a plain Settings row; an additional
+header button elsewhere).
 
 **Storage — replace, not append.** Add `updateRCardTemplate(profileId: string, input:
 RCardFormInput, agent: Agent): Promise<boolean>` beside `storeRCardTemplate`
@@ -358,10 +369,13 @@ specific `profileId` instead of deleting every `RCardTemplate` record.
    **Done when:** opening the screen shows the current name/email/organization/photo
    pre-filled (not the onboarding empty state); submitting a change and reopening the
    screen shows the new values.
-5. **Settings entry** — a new row in `Settings.tsx` navigating to `Screens.EditRCard`,
-   following the `Screens.ChangePIN` row shape exactly.
-   **Done when:** the row is visible in Settings and navigates correctly; existing
-   Settings tests/snapshots are updated for the new row, not broken by it.
+5. **Entry point** — relabel the Settings tab "Profile" (`TabStack.tsx`: label text and
+   icon), and add a profile card as the first element of `Settings.tsx` (avatar/photo,
+   name, tap navigates to `Screens.EditRCard`), leaving the existing settings sections
+   below it unchanged.
+   **Done when:** the tab reads "Profile"; opening it shows the profile card above the
+   existing settings sections; tapping the card navigates to `EditRCard`; existing
+   Settings tests/snapshots are updated for the new card, not broken by it.
 
 ### 5.2 Phase 2
 
@@ -438,4 +452,4 @@ specific `profileId` instead of deleting every `RCardTemplate` record.
 
 | Companion | Author | What it settles |
 |---|---|---|
-| [`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md) | BAM | Reads `feat/prague-farm-membership`'s persona implementation and `dtgwg-cred-spec`'s latest `main` directly; supersedes §3's "open, blocked" framing with the resolved VTA architecture, the r-card/persona/VPC spec grounding, and the decided 1:1 profile↔persona link |
+| [`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md) | BAM | Reads `feat/prague-farm-membership`'s persona implementation and `dtgwg-cred-spec`'s latest `main` directly; supersedes §3's "open, blocked" framing with the resolved VTA architecture, the r-card/persona/VPC spec grounding, and the decided 1:1 profile↔persona link. Also supersedes §4.2's original "plain Settings row" entry point with the Profile-tab redesign. |
