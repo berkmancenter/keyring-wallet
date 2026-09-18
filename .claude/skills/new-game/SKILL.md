@@ -184,6 +184,99 @@ change, not after:
   visual's presence/absence/testID the same way `TradingCardProfile.test.tsx`
   already tests `rarityFor`'s output (`getByText('COMMON')` and friends).
 
+## Planning the e2e test — required for every game
+
+A game's whole point is what happens across multiple phones at once — a unit
+test proves the state machine is correct, but only a real multi-device run
+proves the actual game plays. **Every new game gets an e2e test. That part
+is not optional.** Whether that test can actually *run* on the machine
+building it is a separate question, answered below — but the test itself
+gets written either way.
+
+### 1. Work out the minimum player count *with the person you're building this for*
+
+Don't decide this alone. Talk it through with them: what is the smallest
+total number of participants — host plus players — that actually exercises
+the game's real mechanic, not just the smallest number that completes a
+connection? "Two phones talk to each other" proves the plumbing works;
+it rarely proves the *game* works. `find-your-group-example.md`'s own
+mechanic (splitting a pool into groups) needs at least one host plus three
+players to prove a pool actually splits into two or more groups — one host
+plus one player would only prove a single connection, which every other
+demo in this repo already covers.
+
+Write the number down in the test file's own header comment, with the
+one-line reasoning, the same way you'd write down any other design decision
+— the next person reading the test needs to know *why* it's four devices
+and not two, not just that it is.
+
+### 2. Check whether this machine can actually run that many devices
+
+```sh
+yarn e2e:check-device-budget --android <N>        # or --ios <N>, or both
+```
+
+This is a static, conservative rule-of-thumb check (`e2e/lib/multiDevice.js`
+— read the comment above `BUDGET` there for the reasoning), not a promise —
+it exists because this repo has real prior history of emulators OOM-killing
+each other when too many run at once. It tells you, in plain numbers, how
+much room this specific machine has and whether your player count fits.
+Run it *before* writing the test, so a too-large player count is a two-line
+message here rather than a confusing timeout an hour later.
+
+### 3. Write the test regardless of what step 2 said
+
+Use `e2e/lib/multiDevice.js`'s `createDevices({ android: [...roles] })` (or
+`ios: [...]`) to boot one session per role — `['host', 'player1', 'player2',
+'player3']`, not `['device1', 'device2', ...]`; name devices by what they
+*are* in the game, because that's what the test's assertions will read like.
+Model the actual flow (connect, dispatch messages, assert state) on the
+closest existing pattern — `e2e/run-vrc-exchange-witnessed-android-only-devices.js`
+is the nearest relative for "witness-mediated, multi-party, Android-only."
+Call `screenshotAll(devices, '<meaningful-label>')` (same file) at each
+meaningful beat of the game (connected, mid-game, resolved) — not only at
+the end — and `teardownAll(devices)` when done, success or failure.
+
+### 4. If step 2 said it's feasible: actually run it, don't just write it
+
+Run the test as part of implementing the game, not as a follow-up someone
+else does later. When it finishes, tell the person you're building this for,
+plainly:
+
+- **Where the screenshots are**: `e2e/artifacts/<label>-<role>-<platform>-<timestamp>.png`
+  — one per role per beat you screenshotted. List the actual filenames from
+  this run, don't just describe the pattern.
+- **The exact command to run it again themselves** — copy-pasteable, with
+  every env var it needs already filled in for this game (which AVDs/UDIDs
+  map to which role), not left as an exercise.
+- **How to watch it happen live**, not just read the screenshots after the
+  fact: the emulators must be visible windows, not headless — if you booted
+  them yourself as part of this run, say so and say they can just watch;
+  if they're booting emulators themselves to re-run it, the instruction is
+  "don't add `-no-window` (or any headless flag) when starting the AVD" —
+  say that in exactly those words, because someone who isn't a mobile
+  developer won't know which flag that is otherwise.
+
+### 5. If step 2 said it's NOT feasible: say so plainly, then hand them a manual runbook
+
+Don't fail silently and don't bury this in a wall of output — lead with it:
+*"This game needs `<N>` devices at once; this machine has room for at most
+`<M>`, so I can't run the automated test here. The test itself is written
+and will run on a machine that does have room — here's how to try it
+yourself with real people instead."*
+
+Then copy [`manual-test-runbook-template.md`](./manual-test-runbook-template.md)
+to a real file (e.g. `docs/DEMO_RUNBOOK_<GAME_NAME>.md`, matching
+`docs/DEMO_RUNBOOK_WITNESSED_EXCHANGE.md`'s naming) and fill in every
+placeholder for this specific game. Write it for someone who has never used
+Appium, never heard of an emulator, and doesn't know what a testID is —
+because that's exactly who ends up running a manual demo. Plain steps, one
+per person, one row per step, exactly what they'll see on screen at each
+point, and a troubleshooting table for what a normal hiccup looks like
+versus an actual bug. `docs/DEMO_RUNBOOK_WITNESSED_EXCHANGE.md` is a real,
+filled-in example of this same shape — read it, don't just read the
+template.
+
 ## Seeing it on screen
 
 Identical loop to `customizing-trading-card`'s "Seeing it on screen" section
