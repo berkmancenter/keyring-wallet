@@ -329,11 +329,7 @@ const TabStack: React.FC = () => {
             tabBarIconStyle: styles.tabBarIcon,
             tabBarIcon: ({ color, focused }) => (
               <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
-                {Assets.svg.tabMenuIcon ? (
-                  <Assets.svg.tabMenuIcon height={26} width={26} fill={color} />
-                ) : (
-                  <Icon name="menu" size={26} color={color} />
-                )}
+                <Icon name={focused ? 'account-circle' : 'account-circle-outline'} size={26} color={color} />
                 {showLabels && (
                   <Text
                     style={{

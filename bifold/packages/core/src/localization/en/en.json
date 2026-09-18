@@ -819,6 +819,7 @@
     "AppSettings": "App Settings",
     "AboutApp": "About App",
     "ChangePin": "Change PIN",
+    "ProfileCardSubtitle": "Tap to edit your profile",
     "Language": "Language",
     "DataRetention": "Data retention",
     "PreventAutoLock": "Prevent auto-lock",
@@ -956,7 +957,7 @@
     "ProofRequestDetails": "Proof Request Details",
     "ProofRequestAttributeDetails": "Proof Request Attribute Details",
     "ProofDetails": "Proof Details",
-    "Settings": "Settings",
+    "Settings": "Profile",
     "Tours": "App guides",
     "Language": "Language",
     "DataRetention": "Data retention",
@@ -1033,6 +1034,10 @@
       "PhotoGeneric": "We couldn’t use that photo. Please try again.",
       "PhotoPermissionDenied": "Keyring needs permission to access your photos to add a profile picture."
     }
+  },
+  "EditRCard": {
+    "Title": "Edit Your Profile",
+    "Legend": "This is the profile others see when you connect with them. Changes here don’t update cards you’ve already shared — reconnect to share the new version."
   },
   "RenameContact": {
     "ThisContactName": "This contact name is only displayed in your Contacts List.",

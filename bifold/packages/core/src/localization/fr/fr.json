@@ -798,6 +798,7 @@
     "AppSettings": "Réglage de l'application",
     "AboutApp": "À propos de l'application",
     "ChangePin": "Changer le NIP",
+    "ProfileCardSubtitle": "Touchez pour modifier votre profil",
     "Language": "Langue",
     "DataRetention": "Date de rétention",
     "PreventAutoLock": "Empêcher le verrouillage automatique",
@@ -897,7 +898,7 @@
     "ProofRequest": "Demande de preuve",
     "ProofRequestAttributeDetails": "Détails des attributs de la demande de preuve",
     "ProofDetails": "Détails de la preuve",
-    "Settings": "Paramètres",
+    "Settings": "Profil",
     "Language": "Langue",
     "DataRetention": "Données de rétention",
     "Tours": "Guides d'applications",
@@ -972,6 +973,10 @@
       "PhotoGeneric": "Nous n'avons pas pu utiliser cette photo. Veuillez réessayer.",
       "PhotoPermissionDenied": "Keyring a besoin d'accéder à vos photos pour ajouter une photo de profil."
     }
+  },
+  "EditRCard": {
+    "Title": "Modifier votre profil",
+    "Legend": "C'est le profil que les autres voient lorsque vous vous connectez avec eux. Les modifications ici ne mettent pas à jour les cartes déjà partagées — reconnectez-vous pour partager la nouvelle version."
   },
   "RenameContact": {
     "ThisContactName": "Ce nom de contact n'est affiché que dans votre Liste de Contacts.",

@@ -16,6 +16,7 @@ import ToggleLocalityConfirmation from '../screens/ToggleLocalityConfirmation'
 import ToggleWitnessReporting from '../screens/ToggleWitnessReporting'
 import ExportWallet from '../screens/ExportWallet'
 import ImportWallet from '../screens/ImportWallet'
+import EditRCard from '../modules/vrc/screens/EditRCard'
 // DISABLED: Witnessing toggle is now inline in Settings
 // import ToggleWitnessing from '../screens/ToggleWitnessing'
 // DISABLED: Push notifications disabled — no server backend yet
@@ -257,6 +258,15 @@ const SettingStack: React.FC = () => {
             title: t('Settings.ImportWallet'),
             headerBackTestID: testIdWithKey('Back'),
             ...ScreenOptionsDictionary[Screens.ImportWallet],
+          }}
+        />
+        <Stack.Screen
+          name={Screens.EditRCard}
+          component={EditRCard}
+          options={{
+            title: t('EditRCard.Title'),
+            headerBackTestID: testIdWithKey('Back'),
+            ...ScreenOptionsDictionary[Screens.EditRCard],
           }}
         />
       </Stack.Navigator>

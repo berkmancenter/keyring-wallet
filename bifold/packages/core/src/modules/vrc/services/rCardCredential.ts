@@ -1,6 +1,6 @@
 import { Agent, JsonTransformer, W3cCredential, W3cCredentialRecord, W3cCredentialRepository } from '@credo-ts/core'
 
-import { RCardTemplate, JCard } from '../types/rcard'
+import { RCardFormInput, RCardTemplate, JCard, buildJCardFromFormInput } from '../types/rcard'
 import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../types/relationshipContext'
 import { selectCredentialContexts } from '../utils/selectCredentialContexts'
 import { createVrcLogger } from '../vrc-logging'
@@ -210,6 +210,58 @@ export const extractRCardTemplateFromW3cRecord = (record: W3cCredentialRecord): 
     jcard: jcard as JCard,
     issuer: typeof w3cCred.issuer === 'string' ? w3cCred.issuer : w3cCred.issuer?.id || w3cCred.issuer,
     issuanceDate: w3cCred.issuanceDate,
+  }
+}
+
+/**
+ * Replaces the jCard of an existing R-card template record in place, keyed by
+ * `templateId`. Unlike storeRCardTemplate (create), this preserves the
+ * record's Credo id and tags via repository.update() rather than save(), so
+ * editing a profile never creates a second, duplicate record.
+ */
+export const updateRCardTemplate = async (
+  profileId: string,
+  input: RCardFormInput,
+  agent: Agent
+): Promise<boolean> => {
+  const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
+
+  try {
+    if (!agent.context) {
+      logger.error('updateRCardTemplate: Agent context is not available')
+      throw new Error('Agent context is not available - agent may not be initialized')
+    }
+
+    const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
+    const records = await repository.findByQuery(agent.context, {
+      type: 'RCardTemplate',
+      templateId: profileId,
+    })
+
+    const record = records[0]
+    if (!record) {
+      logger.warn('updateRCardTemplate: No existing R-card template found for profileId', { profileId })
+      return false
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const credential = record.encoded as any
+    const subject = Array.isArray(credential.credentialSubject)
+      ? credential.credentialSubject[0]
+      : credential.credentialSubject
+    subject.claims = { ...subject.claims, jcard: buildJCardFromFormInput(input) }
+
+    await repository.update(agent.context, record)
+
+    logger.info('R-card template updated in Credo', { profileId })
+    return true
+  } catch (error) {
+    logger.error('updateRCardTemplate: Update operation failed', {
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    })
+    return false
   }
 }
 

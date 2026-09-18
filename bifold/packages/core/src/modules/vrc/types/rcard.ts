@@ -184,6 +184,22 @@ export const extractFormInputFromJCard = (jcard: JCard): Partial<RCardFormInput>
 }
 
 /**
+ * Recovers full RCardFormInput (all fields defined) from an existing template's
+ * jcard, for pre-filling an edit form. extractFormInputFromJCard is partial
+ * because it also serves callers that only care about specific fields.
+ */
+export const formInputFromTemplate = (template: RCardTemplate): RCardFormInput => {
+  const partial = extractFormInputFromJCard(template.jcard)
+  return {
+    firstName: partial.firstName ?? '',
+    lastName: partial.lastName ?? '',
+    email: partial.email ?? '',
+    organization: partial.organization ?? '',
+    photo: partial.photo,
+  }
+}
+
+/**
  * Builds an R-Card Template with jCard format
  * Follows the Relationship Card Credential draft specification
  *

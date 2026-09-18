@@ -724,6 +724,7 @@
     "AppSettings": "Configurações do Aplicativo",
     "AboutApp": "Sobre o App",
     "ChangePin": "Alterar o PIN",
+    "ProfileCardSubtitle": "Toque para editar seu perfil",
     "Language": "Idioma",
     "DataRetention": "Retenção de dados",
     "PreventAutoLock": "Prevenir travamento automático",
@@ -817,7 +818,7 @@
     "ProofRequestDetails": "Detalhes Da Solicitação De Comprovação",
     "ProofRequestAttributeDetails": "Atributos de Requisição de Prova",
     "ProofDetails": "Detalhes da prova",
-    "Settings": "Configurações",
+    "Settings": "Perfil",
     "Language": "Idioma",
     "DataRetention": "Retenção de dados",
     "Tours": "Guias do app",
@@ -884,6 +885,10 @@
       "PhotoGeneric": "Não foi possível usar esta foto. Tente novamente.",
       "PhotoPermissionDenied": "O Keyring precisa de permissão para acessar suas fotos para adicionar uma foto de perfil."
     }
+  },
+  "EditRCard": {
+    "Title": "Editar seu perfil",
+    "Legend": "Este é o perfil que outras pessoas veem quando se conectam com você. As alterações aqui não atualizam cartões já compartilhados — reconecte-se para compartilhar a nova versão."
   },
   "RenameContact": {
     "ThisContactName": "Este nome de contato só é visualizado em sua Lista de Contatos.",

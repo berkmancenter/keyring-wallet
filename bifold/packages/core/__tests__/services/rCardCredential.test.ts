@@ -2,6 +2,7 @@ import { Agent, W3cCredentialRecord, W3cCredentialRepository } from '@credo-ts/c
 import {
   storeRCardTemplate,
   loadRCardTemplate,
+  updateRCardTemplate,
   buildRCardTemplateW3cCredentialRecord,
   extractRCardTemplateFromW3cRecord,
 } from '../../src/modules/vrc/services/rCardCredential'
@@ -116,5 +117,99 @@ describe('R-card template Credo storage helpers', () => {
   test('loadRCardTemplate returns undefined when agent is null', async () => {
     const loaded = await loadRCardTemplate(null)
     expect(loaded).toBeUndefined()
+  })
+})
+
+describe('updateRCardTemplate', () => {
+  // An in-memory stand-in for the Credo repository, so findByQuery/update
+  // behave like the real thing (query by tag, update in place, no duplicate
+  // records) rather than just recording call args.
+  let records: W3cCredentialRecord[]
+
+  const matchesQuery = (record: W3cCredentialRecord, query: Record<string, unknown>) => {
+    const tags = record.getTags()
+    return Object.entries(query).every(([key, value]) => tags[key as keyof typeof tags] === value)
+  }
+
+  const inMemoryRepository = {
+    save: jest.fn(async (_context: unknown, record: W3cCredentialRecord) => {
+      records.push(record)
+    }),
+    update: jest.fn(async (_context: unknown, record: W3cCredentialRecord) => {
+      records = records.map((existing) => (existing.id === record.id ? record : existing))
+    }),
+    findByQuery: jest.fn(async (_context: unknown, query: Record<string, unknown>) =>
+      records.filter((record) => matchesQuery(record, query))
+    ),
+  } as unknown as W3cCredentialRepository
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    records = []
+    ;(mockAgent.dependencyManager.resolve as jest.Mock).mockReturnValue(inMemoryRepository)
+  })
+
+  test('replaces every field (including adding, changing and removing the photo) in place, not as a second record', async () => {
+    const original = buildRCardTemplate({
+      firstName: 'Jane',
+      lastName: 'Doe',
+      email: 'jane@example.com',
+      organization: 'Old Org',
+    })
+    records.push(buildRCardTemplateW3cCredentialRecord(original))
+
+    const withPhoto = await updateRCardTemplate(
+      original.templateId,
+      {
+        firstName: 'Janet',
+        lastName: 'Doerson',
+        email: 'janet@example.com',
+        organization: 'New Org',
+        photo: 'data:image/jpeg;base64,mockBase64Data',
+      },
+      mockAgent
+    )
+    expect(withPhoto).toBe(true)
+
+    let matches = await inMemoryRepository.findByQuery(mockAgent.context, {
+      type: 'RCardTemplate',
+      templateId: original.templateId,
+    })
+    expect(matches).toHaveLength(1)
+    let extracted = extractRCardTemplateFromW3cRecord(matches[0])
+    expect(extracted.jcard).toEqual([
+      'vcard',
+      expect.arrayContaining([
+        ['fn', {}, 'text', 'Janet Doerson'],
+        ['email', { type: ['work'] }, 'text', 'janet@example.com'],
+        ['org', {}, 'text', 'New Org'],
+        ['photo', {}, 'uri', 'data:image/jpeg;base64,mockBase64Data'],
+      ]),
+    ])
+
+    const photoRemoved = await updateRCardTemplate(
+      original.templateId,
+      { firstName: 'Janet', lastName: 'Doerson', email: 'janet@example.com', organization: 'New Org' },
+      mockAgent
+    )
+    expect(photoRemoved).toBe(true)
+
+    matches = await inMemoryRepository.findByQuery(mockAgent.context, {
+      type: 'RCardTemplate',
+      templateId: original.templateId,
+    })
+    expect(matches).toHaveLength(1)
+    extracted = extractRCardTemplateFromW3cRecord(matches[0])
+    expect(extracted.jcard[1].some((property) => property[0] === 'photo')).toBe(false)
+  })
+
+  test('returns false and leaves storage untouched when no record matches the profileId', async () => {
+    const result = await updateRCardTemplate(
+      'no-such-profile',
+      { firstName: 'A', lastName: 'B', email: '', organization: '' },
+      mockAgent
+    )
+    expect(result).toBe(false)
+    expect(records).toHaveLength(0)
   })
 })

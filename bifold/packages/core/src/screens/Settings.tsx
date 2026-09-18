@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LockoutReason, useAuth } from '../contexts/auth'
 import {
   Animated,
+  Image,
   SectionList,
   StyleSheet,
   TouchableOpacity,
@@ -25,6 +26,8 @@ import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { useDeveloperMode } from '../hooks/developer-mode'
 import { Locales, storeLanguage } from '../localization'
+import { useRCardCredential } from '../modules/vrc/hooks/useRCardCredential'
+import { formInputFromTemplate } from '../modules/vrc/types/rcard'
 import { GenericFn } from '../types/fn'
 import { Screens, SettingStackParams, Stacks } from '../types/navigators'
 import { SettingIcon, SettingSection } from '../types/settings'
@@ -41,6 +44,7 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     navigation.navigate(Screens.Developer)
   }
   const { incrementDeveloperMenuCounter } = useDeveloperMode(onDevModeTriggered)
+  const { template } = useRCardCredential()
   const { SettingsTheme, TextTheme, ColorPalette, Assets, maxFontSizeMultiplier } = useTheme()
   const [
     { settings, enableTours, /* enablePushNotifications, */ disableContactsInSettings, supportedLanguages },
@@ -85,6 +89,31 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     footer: {
       marginVertical: 25,
       alignItems: 'center',
+    },
+    profileCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: SettingsTheme.groupBackground,
+      paddingHorizontal: 25,
+      paddingVertical: 20,
+      marginBottom: 10,
+    },
+    profileAvatar: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: ColorPalette.brand.primaryBackground,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    profileAvatarImage: {
+      width: 56,
+      height: 56,
+    },
+    profileTextWrap: {
+      marginLeft: 16,
+      flexShrink: 1,
     },
   })
 
@@ -566,6 +595,42 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     </View>
   )
 
+  const ProfileCard = () => {
+    if (!template) {
+      return null
+    }
+    const { firstName, lastName, photo } = formInputFromTemplate(template)
+    const name = [firstName, lastName].filter(Boolean).join(' ')
+
+    return (
+      <TouchableOpacity
+        style={styles.profileCard}
+        onPress={() => navigation.navigate(Screens.EditRCard)}
+        accessibilityRole="button"
+        accessibilityLabel={t('EditRCard.Title')}
+        testID={testIdWithKey('ProfileCard')}
+      >
+        <View style={styles.profileAvatar}>
+          {photo ? (
+            <Image style={styles.profileAvatarImage} source={{ uri: photo }} />
+          ) : (
+            <Icon name="account-circle" size={40} color={ColorPalette.grayscale.mediumGrey} />
+          )}
+        </View>
+        <View style={styles.profileTextWrap}>
+          <ThemedText variant="headingThree" numberOfLines={1}>
+            {name}
+          </ThemedText>
+          <ThemedText style={[TextTheme.settingsText, { color: ColorPalette.brand.link }]}>
+            {t('Settings.ProfileCardSubtitle')}
+          </ThemedText>
+        </View>
+        <View style={{ flex: 1 }} />
+        <Icon name="chevron-right" size={24} color={ColorPalette.grayscale.mediumGrey} />
+      </TouchableOpacity>
+    )
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <SectionList
@@ -673,6 +738,7 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
             header: { title, icon, iconRight, titleTestID },
           },
         }) => <SectionHeader icon={icon} iconRight={iconRight} title={title} titleTestID={titleTestID} />}
+        ListHeaderComponent={ProfileCard}
         ItemSeparatorComponent={() => (
           <View style={{ backgroundColor: SettingsTheme.groupBackground }}>
             <View style={styles.itemSeparator}></View>

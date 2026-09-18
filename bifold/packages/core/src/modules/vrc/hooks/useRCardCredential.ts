@@ -3,8 +3,8 @@ import { useAgent } from '@bifold/react-hooks'
 
 import { DispatchAction } from '../../../contexts/reducers/store'
 import { useStore } from '../../../contexts/store'
-import { loadRCardTemplate, storeRCardTemplate } from '../services/rCardCredential'
-import { RCardTemplate } from '../types/rcard'
+import { loadRCardTemplate, storeRCardTemplate, updateRCardTemplate } from '../services/rCardCredential'
+import { RCardFormInput, RCardTemplate, validateRCardForm } from '../types/rcard'
 import { createVrcLogger } from '../vrc-logging'
 
 export const useRCardCredential = () => {
@@ -71,10 +71,38 @@ export const useRCardCredential = () => {
     return template
   }, [agent, dispatch])
 
+  // Replaces the current profile's jcard in place. Returns false, without
+  // touching storage or dispatching, when there is no agent/template to edit
+  // or the input fails validation.
+  const update = useCallback(
+    async (input: RCardFormInput): Promise<boolean> => {
+      if (!agent || !state.rCard.template) {
+        return false
+      }
+
+      if (!validateRCardForm(input).isValid) {
+        return false
+      }
+
+      const persisted = await updateRCardTemplate(state.rCard.template.templateId, input, agent)
+      if (!persisted) {
+        return false
+      }
+
+      const updated = await loadRCardTemplate(agent)
+      if (updated) {
+        dispatch({ type: DispatchAction.R_CARD_CREDENTIAL_SYNCED, payload: [updated] })
+      }
+      return true
+    },
+    [agent, state.rCard.template, dispatch]
+  )
+
   return {
     template: state.rCard.template,
     lastSyncedAt: state.rCard.lastSyncedAt,
     refresh,
+    update,
   }
 }
 
