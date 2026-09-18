@@ -66,6 +66,7 @@ import { resolveWitnessResponse, runWitnessSession } from './witnessCeremony'
 import * as witnessShare from './witnessShareSpec'
 import type { VwcPresentationBundle } from './outcomeEvidence'
 import { createDidCommV1Carriage } from './module/DidCommV1Carriage'
+import { createDidCommV2Carriage } from './module/DidCommV2Carriage'
 import { createTspCarriage } from './module/TspCarriage'
 import { TrustTasksModule } from './module/TrustTasksModule'
 import { trustTaskRegistry } from './registry'
@@ -91,6 +92,47 @@ export function setTspCarriageEnabled(enabled: boolean): void {
 
 export function isTspCarriageEnabled(): boolean {
   return tspCarriageEnabled
+}
+
+/**
+ * Developer-flagged DIDComm v2 (docs/plans/openvtc-integration-plan/didcomm_v2_subtask.md
+ * V2 step C11/C12): when on, the agent enables `didcommVersions: ['v1','v2']`
+ * and new relationship invitations are Out-of-Band 2.0 on did:peer:2. It does
+ * NOT decide the carriage — `selectCarriage` does, per connection (below).
+ */
+let didCommV2Enabled = false
+
+export function setDidCommV2Enabled(enabled: boolean): void {
+  didCommV2Enabled = enabled
+}
+
+export function isDidCommV2Enabled(): boolean {
+  return didCommV2Enabled
+}
+
+export type TrustTaskCarriageKind = 'didcomm-v1' | 'didcomm-v2' | 'tsp'
+
+/**
+ * The carriage a document takes to a peer, per connection:
+ *
+ * | TSP developer flag | connection | carriage |
+ * |---|---|---|
+ * | on  | v1 or v2 | TSP envelope, delivered on that connection |
+ * | off | v2 | DIDComm v2 binding |
+ * | off | v1 | DIDComm v1 binding |
+ *
+ * TSP is an envelope, not a connection type: it rides whichever DIDComm
+ * version the connection speaks (didcomm_v2_subtask.md V2T; the envelope
+ * and keys were measured over v2 in tsp-reference/ref-19). Without the flag
+ * the connection's own DIDComm version decides — a v2 record exists only
+ * because the peer produced or accepted a v2 invitation. None of this
+ * rewrites a document: carriages are byte-identical for it (ref-16). The
+ * parent plan's §4.2 DID-document resolver (`TSPTransport`) is not built.
+ */
+export async function selectCarriage(agent: Agent, connectionId: string): Promise<TrustTaskCarriageKind> {
+  if (tspCarriageEnabled) return 'tsp'
+  const connection = await agent.modules.didcomm.connections.getById(connectionId)
+  return connection.didcommVersion === 'v2' ? 'didcomm-v2' : 'didcomm-v1'
 }
 
 /** The first RCE protocol version whose peers speak the Trust Task dialect. */
@@ -457,7 +499,13 @@ export async function sendTrustTaskDocument(
   connectionId: string,
   document: Record<string, unknown>
 ): Promise<void> {
-  const carriage = tspCarriageEnabled ? createTspCarriage(agent) : createDidCommV1Carriage(agent)
+  const kind = await selectCarriage(agent, connectionId)
+  const carriage =
+    kind === 'didcomm-v2'
+      ? createDidCommV2Carriage(agent)
+      : kind === 'tsp'
+        ? createTspCarriage(agent)
+        : createDidCommV1Carriage(agent)
   await carriage.send(document, { connectionId })
 }
 
@@ -549,13 +597,18 @@ export function setupTrustTasksInbound(agent: Agent): void {
     await service.retain(agent.context, document, 'request', context.connectionId)
   }
 
+  // The v2 binding's handler is always registered: it only ever fires for
+  // messages of its own type, and a v2 peer may reach us whatever the flag.
+  // Registered first so the v1 registration stays the latest one (fakes that
+  // keep only the last registered handler keep exercising the v1 path).
+  createDidCommV2Carriage(agent).onDocument(handleInboundDocument)
   createDidCommV1Carriage(agent).onDocument(handleInboundDocument)
   if (tspCarriageEnabled) {
     createTspCarriage(agent).onDocument(handleInboundDocument)
   }
 
   agent.config.logger.info(
-    `${LOG_PREFIX} inbound carriage handler registered (binding 0.2${tspCarriageEnabled ? ' + TSP envelope' : ''})`
+    `${LOG_PREFIX} inbound carriage handlers registered (binding didcomm-v1/0.2 + didcomm/0.2${tspCarriageEnabled ? ' + TSP envelope' : ''})`
   )
 }
 

@@ -32,5 +32,6 @@ abstract class AttestationSpec internal constructor(context: ReactApplicationCon
   abstract fun deleteHardwareSigningKey(promise: Promise)
   abstract fun getHardwareKeyInfo(promise: Promise)
   abstract fun getKeyAttestation(promise: Promise)
+  abstract fun getCachedHardwareKeyAttestation(promise: Promise)
   abstract fun isHardwareAttestationAvailable(promise: Promise)
 }

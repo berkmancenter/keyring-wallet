@@ -27,13 +27,13 @@
   },
   "dependencies": {
     "@bifold/trust-tasks": "workspace:*",
-    "@credo-ts/askar": "0.6.3",
-    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
+    "@credo-ts/askar": "0.7.1-pr-2704-20260909134930",
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch",
     "@openwallet-foundation/askar-shared": "0.6.0",
     "@stablelib/ed25519": "^2.0.2"
   },
   "devDependencies": {
-    "@credo-ts/node": "0.6.3",
+    "@credo-ts/node": "0.7.1-pr-2704-20260909134930",
     "@openwallet-foundation/askar-nodejs": "^0.6.0",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",

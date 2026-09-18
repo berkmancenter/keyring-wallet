@@ -24,65 +24,66 @@ jest.mock('react-native-logs', () => ({
 }))
 
 jest.mock('@credo-ts/core', () => ({
+  // 0.7 renamed the members to PascalCase; the values are unchanged.
   LogLevel: {
-    test: 0,
-    trace: 1,
-    debug: 2,
-    info: 3,
-    warn: 4,
-    error: 5,
-    fatal: 6,
-    off: 7,
+    Test: 0,
+    Trace: 1,
+    Debug: 2,
+    Info: 3,
+    Warn: 4,
+    Error: 5,
+    Fatal: 6,
+    Off: 7,
   },
 }))
 
 jest.mock(
   '@bifold/core',
   () => ({
-  BifoldLogger: class BifoldLogger {},
-  AbstractBifoldLogger: class AbstractBifoldLogger {
-    public logLevel = 2 // LogLevel.debug
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    protected _log: any
-    protected _config = {
-      levels: {
-        test: 0,
-        trace: 0,
-        debug: 0,
-        info: 1,
-        warn: 2,
-        error: 3,
-        fatal: 4,
-      },
-      severity: 'debug',
-      async: true,
-      dateFormat: 'time',
-      printDate: false,
-    }
+    BifoldLogger: class BifoldLogger {},
+    AbstractBifoldLogger: class AbstractBifoldLogger {
+      public logLevel = 2 // LogLevel.Debug
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      protected _log: any
+      protected _config = {
+        levels: {
+          test: 0,
+          trace: 0,
+          debug: 0,
+          info: 1,
+          warn: 2,
+          error: 3,
+          fatal: 4,
+        },
+        severity: 'debug',
+        async: true,
+        dateFormat: 'time',
+        printDate: false,
+      }
 
-    public isEnabled(logLevel: number): boolean {
-      return logLevel >= this.logLevel
-    }
+      public isEnabled(logLevel: number): boolean {
+        return logLevel >= this.logLevel
+      }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
-    public report(_bifoldError: any): void {
-      // Mock implementation
-    }
-  },
-  BifoldError: class BifoldError {
-    title: string
-    description: string
-    code: number
-    message: string
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+      public report(_bifoldError: any): void {
+        // Mock implementation
+      }
+    },
+    BifoldError: class BifoldError {
+      title: string
+      description: string
+      code: number
+      message: string
 
-    constructor(title: string, description: string, message: string, code: number) {
-      this.title = title
-      this.description = description
-      this.code = code
-      this.message = message
-    }
-  },
-}),
+      constructor(title: string, description: string, message: string, code: number) {
+        this.title = title
+        this.description = description
+        this.code = code
+        this.message = message
+      }
+    },
+  }),
   { virtual: true }
 )
 
@@ -92,6 +93,8 @@ jest.mock('../transports', () => ({
 }))
 
 // Import after mocks to ensure they're applied
+import { LogLevel } from '@credo-ts/core'
+
 import { RemoteLogger, RemoteLoggerEventTypes } from '../logger'
 import { lokiTransport } from '../transports'
 import { BifoldError } from '@bifold/core'
@@ -299,6 +302,23 @@ describe('RemoteLogger', () => {
       remoteLogger = new RemoteLogger({})
     })
 
+    // Regression guard: an arrow-function class field (`public info = (...) => {...}`)
+    // becomes an OWN property that shadows AbstractBifoldLogger's prototype method of
+    // the same name. That shadowing form was observed, on this codebase's Metro/Hermes
+    // toolchain (not reproducible under Jest, which never compiles through Hermes), to
+    // silently no-op on every call — no exception, no output — while the identical
+    // logic reached as a plain prototype method worked. See the
+    // remotelogger-info-silently-broken session notes. This test can't catch the Hermes
+    // behavior itself, but it does catch the one thing that's under our control and
+    // known to correlate with it: don't let these regress back to class fields.
+    it.each(['test', 'trace', 'debug', 'info', 'warn', 'error', 'fatal'])(
+      '%s is inherited from the prototype chain, not own',
+      (method) => {
+        expect(Object.prototype.hasOwnProperty.call(remoteLogger, method)).toBe(false)
+        expect(typeof (remoteLogger as unknown as Record<string, unknown>)[method]).toBe('function')
+      }
+    )
+
     it('should call test method', () => {
       remoteLogger.test('test message', { key: 'value' })
 
@@ -504,6 +524,106 @@ describe('RemoteLogger', () => {
           },
         })
       )
+    })
+  })
+
+  describe('setLogLevel', () => {
+    it('applies the new level immediately when remote logging is off', () => {
+      const remoteLogger = new RemoteLogger({})
+
+      remoteLogger.setLogLevel(LogLevel.Warn)
+
+      expect(remoteLogger.logLevel).toBe(LogLevel.Warn)
+    })
+
+    it('keeps the forced debug level while remote logging is on, and remembers the new base', () => {
+      const remoteLogger = new RemoteLogger({})
+      remoteLogger.remoteLoggingEnabled = true
+
+      remoteLogger.setLogLevel(LogLevel.Error)
+
+      // Remote logging pins the level to Debug; the requested level is the base
+      // to fall back to, not the level in force.
+      expect(remoteLogger.logLevel).toBe(LogLevel.Debug)
+
+      remoteLogger.remoteLoggingEnabled = false
+      expect(remoteLogger.logLevel).toBe(LogLevel.Error)
+    })
+
+    it('reconfigures the underlying transport', () => {
+      const remoteLogger = new RemoteLogger({})
+      mockCreateLogger.mockClear()
+
+      remoteLogger.setLogLevel(LogLevel.Info)
+
+      expect(mockCreateLogger).toHaveBeenCalled()
+    })
+  })
+
+  describe('dispose', () => {
+    it('removes the event listener and disables remote logging', () => {
+      const remove = jest.fn()
+      ;(DeviceEventEmitter.addListener as jest.Mock).mockReturnValueOnce({ remove })
+      const remoteLogger = new RemoteLogger({})
+      remoteLogger.startEventListeners()
+      remoteLogger.remoteLoggingEnabled = true
+
+      remoteLogger.dispose()
+
+      expect(remove).toHaveBeenCalled()
+      expect(remoteLogger.remoteLoggingEnabled).toBe(false)
+    })
+
+    it('clears a pending auto-disable timer', () => {
+      jest.useFakeTimers()
+      try {
+        // The auto-disable timer is only armed for a remote transport, so a loki url is part of the setup.
+        const remoteLogger = new RemoteLogger({ lokiUrl: 'http://localhost:3100', autoDisableRemoteLoggingIntervalInMinutes: 5 })
+        remoteLogger.remoteLoggingEnabled = true
+        expect(jest.getTimerCount()).toBeGreaterThan(0)
+
+        remoteLogger.dispose()
+
+        expect(jest.getTimerCount()).toBe(0)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('is safe to call when nothing was started', () => {
+      const remoteLogger = new RemoteLogger({})
+
+      expect(() => remoteLogger.dispose()).not.toThrow()
+    })
+  })
+
+  describe('overrideCurrentAutoDisableExpiration', () => {
+    it('ignores a non-positive expiration', () => {
+      jest.useFakeTimers()
+      try {
+        const remoteLogger = new RemoteLogger({})
+        remoteLogger.overrideCurrentAutoDisableExpiration(0)
+
+        expect(jest.getTimerCount()).toBe(0)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+
+    it('replaces a pending timer and disables remote logging when it fires', () => {
+      jest.useFakeTimers()
+      try {
+        const remoteLogger = new RemoteLogger({ lokiUrl: 'http://localhost:3100', autoDisableRemoteLoggingIntervalInMinutes: 60 })
+        remoteLogger.remoteLoggingEnabled = true
+
+        remoteLogger.overrideCurrentAutoDisableExpiration(1)
+        expect(jest.getTimerCount()).toBe(1)
+
+        jest.advanceTimersByTime(60000)
+        expect(remoteLogger.remoteLoggingEnabled).toBe(false)
+      } finally {
+        jest.useRealTimers()
+      }
     })
   })
 })

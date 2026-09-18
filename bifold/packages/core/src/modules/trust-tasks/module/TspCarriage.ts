@@ -31,7 +31,7 @@ import type { Agent } from '@credo-ts/core'
 import { DidCommMessageHandlerRegistry, DidCommMessageSender, DidCommOutboundMessageContext } from '@credo-ts/didcomm'
 import type { Carriage, CarriageDocumentHandler, CarriagePeer } from '@bifold/trust-tasks'
 import { tsp } from '@bifold/trust-tasks'
-import { identityFromDid, createCredoVidResolver } from '@bifold/credo-tsp-adapter'
+import { identityFromDid, createCredoVidResolver, unpackForConnection } from '@bifold/credo-tsp-adapter'
 
 import { TspEnvelopeMessage } from '../messages/TspEnvelopeMessage'
 
@@ -72,7 +72,11 @@ export function createTspCarriage(agent: Agent): Carriage {
           connection,
         })
       )
-      agent.config.logger.info(`${LOG_PREFIX} envelope sent on connection ${peer.connectionId}`)
+      // The delivering DIDComm version is in the line so an e2e run can prove
+      // the envelope rode a v2 connection and not v1 (didcomm_v2_subtask.md T5).
+      agent.config.logger.info(
+        `${LOG_PREFIX} envelope sent on ${connection.didcommVersion ?? 'v1'} connection ${peer.connectionId}`
+      )
     },
 
     onDocument(handler: CarriageDocumentHandler): void {
@@ -84,16 +88,13 @@ export function createTspCarriage(agent: Agent): Carriage {
           const connection = messageContext.connection
           if (!envelope || !connection?.did || !connection.theirDid) return undefined
 
-          const receiverIdentity = await identityFromDid(agent, connection.did)
-          const unpacked = await tsp.unpack(envelope, receiverIdentity, resolver)
-          if (unpacked.sender !== connection.theirDid) {
-            throw new Error(
-              `TspCarriage: envelope's claimed sender (${unpacked.sender}) disagrees with the connection's counterparty (${connection.theirDid})`
-            )
-          }
-
+          // Current or previous DIDs on both sides: a reusable v2 invitation
+          // rotates the inviter's DID on first contact (tsp-reference/ref-19).
+          const { unpacked } = await unpackForConnection(agent, envelope, connection, resolver)
           const document = JSON.parse(fromUtf8(unpacked.payload)) as Record<string, unknown>
-          agent.config.logger.info(`${LOG_PREFIX} envelope received on connection ${connection.id}`)
+          agent.config.logger.info(
+            `${LOG_PREFIX} envelope received on ${connection.didcommVersion ?? 'v1'} connection ${connection.id}`
+          )
           await handler(document, {
             connectionId: connection.id,
             senderDid: connection.theirDid,

@@ -57,15 +57,51 @@ jest.mock('@bifold/credo-tsp-adapter', () => {
         return { encryptionPublicKey: identity.keyAgreement.publicKey, signingPublicKey: identity.signingKey.publicKey }
       },
     }),
+    // Same rule as the real adapter's unpackForConnection (credo-tsp-adapter/src/connection.ts):
+    // our current-or-previous DIDs, the counterparty's current-or-previous DIDs.
+    unpackForConnection: async (
+      _agent: unknown,
+      envelope: Uint8Array,
+      connection: { id: string; did?: string; theirDid?: string; previousDids?: string[]; previousTheirDids?: string[] },
+      resolver: unknown
+    ) => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { tsp } = require('@bifold/trust-tasks')
+      const ours = [connection.did, ...(connection.previousDids ?? [])].filter(Boolean) as string[]
+      let lastError: unknown
+      for (const did of ours) {
+        try {
+          const unpacked = await tsp.unpack(envelope, identityFor(did), resolver)
+          const theirs = [connection.theirDid, ...(connection.previousTheirDids ?? [])]
+          if (!theirs.includes(unpacked.sender)) {
+            throw new Error(`envelope's claimed sender (${unpacked.sender}) is not a DID of the counterparty`)
+          }
+          return { unpacked, receivedAs: did }
+        } catch (error) {
+          lastError = error
+        }
+      }
+      throw lastError
+    },
   }
 })
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { __registerIdentity: registerIdentity } = require('@bifold/credo-tsp-adapter')
 
-function makeFakeAgent(connections: Record<string, { did: string; theirDid: string }>) {
+type FakeConnection = {
+  did: string
+  theirDid: string
+  didcommVersion?: 'v1' | 'v2'
+  previousDids?: string[]
+  previousTheirDids?: string[]
+}
+
+function makeFakeAgent(connections: Record<string, FakeConnection>) {
   const sent: unknown[] = []
-  let registeredHandler: ((messageContext: { message: TspEnvelopeMessage; connection: { id: string; did: string; theirDid: string } }) => Promise<unknown>) | undefined
+  let registeredHandler:
+    | ((messageContext: { message: TspEnvelopeMessage; connection: { id: string } & FakeConnection }) => Promise<unknown>)
+    | undefined
 
   const container = {
     resolve: (token: unknown) => {
@@ -92,7 +128,7 @@ function makeFakeAgent(connections: Record<string, { did: string; theirDid: stri
           getById: async (id: string) => {
             const conn = connections[id]
             if (!conn) throw new Error(`fake connections: no connection ${id}`)
-            return { id, did: conn.did, theirDid: conn.theirDid }
+            return { id, ...conn }
           },
         },
       },
@@ -107,7 +143,7 @@ function makeFakeAgent(connections: Record<string, { did: string; theirDid: stri
       const message = sent.pop()
       if (!message) throw new Error('test setup: nothing was sent')
       const conn = connections[connectionId]
-      return registeredHandler({ message: message as TspEnvelopeMessage, connection: { id: connectionId, did: conn.did, theirDid: conn.theirDid } })
+      return registeredHandler({ message: message as TspEnvelopeMessage, connection: { id: connectionId, ...conn } })
     },
   }
 }
@@ -161,7 +197,7 @@ describe('TspCarriage', () => {
     })
 
     bob.sent.push(mallory.sent[0])
-    await expect(bob.deliver('conn-1')).rejects.toThrow(/disagrees with the connection/)
+    await expect(bob.deliver('conn-1')).rejects.toThrow(/not a DID of/)
     expect(handlerRan).toBe(false)
   })
 })
@@ -208,5 +244,69 @@ describe('carriage selection (ceremony.ts)', () => {
 
     await sendTrustTaskDocument(agent, 'conn-1', { type: 'x', id: '1' })
     expect(sent[0]).toBeInstanceOf(TspEnvelopeMessage)
+  })
+
+  test.each([
+    [false, 'v1', 'didcomm-v1'],
+    [false, 'v2', 'didcomm-v2'],
+    [true, 'v1', 'tsp'],
+    [true, 'v2', 'tsp'],
+  ])('selectCarriage: TSP flag %s on a %s connection → %s (V2T: TSP rides either DIDComm version)', async (flag, version, expected) => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { selectCarriage, setTspCarriageEnabled } = require('../ceremony')
+    setTspCarriageEnabled(flag)
+    const { agent } = makeFakeAgent({
+      'conn-1': { did: 'did:example:a', theirDid: 'did:example:b', didcommVersion: version as 'v1' | 'v2' },
+    })
+    expect(await selectCarriage(agent, 'conn-1')).toBe(expected)
+  })
+})
+
+describe('TspCarriage over a DIDComm v2 connection whose DID rotated (V2T change 3)', () => {
+  test('an envelope sealed to our PREVIOUS DID, from the peer, is accepted and handled', async () => {
+    const invitationDid = 'did:example:witness-invitation'
+    const rotatedDid = 'did:example:witness-rotated'
+    const walletDid = 'did:example:wallet'
+    registerIdentity(invitationDid)
+    registerIdentity(rotatedDid)
+    registerIdentity(walletDid)
+
+    // The wallet still addresses the invitation DID; the witness has already rotated.
+    const wallet = makeFakeAgent({ w: { did: walletDid, theirDid: invitationDid, didcommVersion: 'v2' } })
+    const witness = makeFakeAgent({
+      w: { did: rotatedDid, theirDid: walletDid, didcommVersion: 'v2', previousDids: [invitationDid] },
+    })
+
+    const walletCarriage = createTspCarriage(wallet.agent)
+    const witnessCarriage = createTspCarriage(witness.agent)
+    const received: Record<string, unknown>[] = []
+    witnessCarriage.onDocument(async (document) => {
+      received.push(document)
+    })
+
+    await walletCarriage.send({ type: 'x', id: 'sealed-to-previous' }, { connectionId: 'w' })
+    witness.sent.push(wallet.sent.pop())
+    await witness.deliver('w')
+    expect(received).toEqual([{ type: 'x', id: 'sealed-to-previous' }])
+  })
+
+  test('an envelope from a DID the counterparty never held is still refused', async () => {
+    const walletDid = 'did:example:wallet-2'
+    const witnessDid = 'did:example:witness-2'
+    const strangerDid = 'did:example:stranger'
+    registerIdentity(walletDid)
+    registerIdentity(witnessDid)
+    registerIdentity(strangerDid)
+
+    const stranger = makeFakeAgent({ s: { did: strangerDid, theirDid: witnessDid, didcommVersion: 'v2' } })
+    const witness = makeFakeAgent({ s: { did: witnessDid, theirDid: walletDid, didcommVersion: 'v2', previousTheirDids: [] } })
+    let handlerRan = false
+    createTspCarriage(witness.agent).onDocument(async () => {
+      handlerRan = true
+    })
+    await createTspCarriage(stranger.agent).send({ type: 'x', id: 'forged' }, { connectionId: 's' })
+    witness.sent.push(stranger.sent.pop())
+    await expect(witness.deliver('s')).rejects.toThrow(/not a DID of/)
+    expect(handlerRan).toBe(false)
   })
 })

@@ -58,6 +58,12 @@ const createMockAgent = () => ({
   },
   modules: {
     didcomm: {
+      // isSupported('v2'): false by default — matches every existing test
+      // here, which exercises the flag-off (v1) path. The DIDComm v2 gate
+      // tests live in createRelationshipInvitationDidCommV2Gate.test.ts.
+      config: {
+        isSupported: jest.fn().mockReturnValue(false),
+      },
       connections: {
         getById: jest.fn().mockResolvedValue(mockConnection),
       },
@@ -253,6 +259,7 @@ describe('VRC Manager', () => {
       )
 
       expect(mockAgent.modules.didcomm.oob.createInvitation).toHaveBeenCalledWith({
+        didCommVersion: 'v1',
         label: 'My Wallet',
         goalCode: 'relationship.credential.bidirectional',
         goal: 'Establish connection and exchange relationship credentials',
@@ -269,6 +276,7 @@ describe('VRC Manager', () => {
       )
 
       expect(mockAgent.modules.didcomm.oob.createInvitation).toHaveBeenCalledWith({
+        didCommVersion: 'v1',
         label: 'My Wallet',
         goalCode: 'relationship.credential',
         goal: 'Establish connection and issue relationship credential',

@@ -284,6 +284,10 @@ describe('EvidenceBuilder', () => {
         mockGetHardwareKeyAttestation.mockResolvedValue({
           success: true,
           certificateChain: testCertificateChain,
+          // The reported key the chain certifies — must equal the signing
+          // key for getOrFetchAttestation to accept it (an absent/empty
+          // publicKey now fails closed instead of being treated as a match).
+          publicKey: testPublicKey,
           format: 'apple-appattest-v1',
           platform: 'ios',
           securityLevel: 'SecureEnclave',
@@ -594,6 +598,7 @@ describe('EvidenceBuilder', () => {
       mockGetHardwareKeyAttestation.mockRejectedValueOnce(new Error('Network timeout')).mockResolvedValueOnce({
         success: true,
         certificateChain: testCertificateChain,
+        publicKey: testPublicKey,
         format: 'apple-appattest-v1',
         platform: 'ios',
         securityLevel: 'SecureEnclave',

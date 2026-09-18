@@ -227,6 +227,51 @@ export const getHardwareKeyAttestation = async (
   );
 };
 
+/**
+ * The attestation already held for the current hardware key, read without
+ * contacting Apple/Google and without creating, attesting or deleting a key.
+ * Resolves `null` when nothing is held.
+ *
+ * Use this once a signature exists: `getHardwareKeyAttestation()` may replace
+ * the iOS App Attest key on some errors, orphaning the signature. Compare the
+ * returned `publicKey` with the key that signed before using the chain.
+ */
+export const getCachedHardwareKeyAttestation =
+  async (): Promise<HardwareKeyAttestationResult | null> => {
+    if (Platform.OS !== 'ios' && Platform.OS !== 'android') return null;
+    try {
+      const result = await Attestation.getCachedHardwareKeyAttestation();
+      const certificateChain: string[] = Array.isArray(result?.certificateChain)
+        ? result.certificateChain.map((cert: unknown) => String(cert))
+        : [];
+      if (!result?.success || certificateChain.length === 0) return null;
+      return Platform.OS === 'ios'
+        ? {
+            success: true,
+            format: 'apple-appattest-v1',
+            certificateChain,
+            publicKey: result.publicKey || '',
+            securityLevel: 'SecureEnclave',
+            platform: 'ios',
+          }
+        : {
+            success: true,
+            format: 'android-key-attestation-v3',
+            certificateChain,
+            publicKey: result.publicKey || '',
+            securityLevel:
+              result.securityLevel as HardwareKeyAttestationResult['securityLevel'],
+            platform: 'android',
+          };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      // eslint-disable-next-line no-console
+      console.warn(`${LOG_PREFIX} Cached attestation read failed: ${errorMessage}`);
+      return null;
+    }
+  };
+
 /** iOS attestation via App Attest (CBOR parsing done natively in Attestation.mm) */
 async function getIOSAttestation(
   challenge?: string

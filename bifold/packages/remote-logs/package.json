@@ -49,7 +49,7 @@
     "typescript": "~5.9.2"
   },
   "peerDependencies": {
-    "@credo-ts/core": "0.6.3",
+    "@credo-ts/core": "0.7.1-pr-2704-20260909134930",
     "axios": "~1.13.2",
     "buffer": "~6.0.3",
     "react": "~19.1.4",
@@ -61,7 +61,7 @@
   },
   "dependencies": {
     "@bifold/core": "3.0.16",
-    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.6.3#~/.yarn/patches/@credo-ts-core-npm-0.6.3-28b59086b0.patch",
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch",
     "axios": "~1.13.2",
     "buffer": "~6.0.3",
     "react": "~19.1.4",

@@ -12,6 +12,20 @@ module.exports = {
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node', 'mjs'],
   moduleNameMapper: {
+    // class-transformer keeps its @Expose metadata in a MODULE-LOCAL store (0.5.1), and
+    // this tree carries nested copies under the @credo-ts packages. @bifold/trust-tasks'
+    // v2 envelope registers Expose renames that Credo's JsonTransformer must see, so every
+    // import of class-transformer has to land on one copy (Metro does the same via its
+    // singleton list; see didcomm_v2_subtask.md C10).
+    '^class-transformer$': '<rootDir>/../../node_modules/class-transformer',
+    // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
+    // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
+    '^@verifiables/request-converter$': require('fs').existsSync(
+      __dirname + '/node_modules/@verifiables/request-converter'
+    )
+      ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
+      : '<rootDir>/../../node_modules/@verifiables/request-converter/dist/index.js',
+
     // @openvtc/trust-tasks is ESM-only with an import-condition exports map,
     // which jest's require-based resolver cannot see through — map straight
     // to the dist files (babel transforms them; the package is allowlisted
@@ -40,7 +54,7 @@ module.exports = {
     '^.+\\.(js|jsx|ts|tsx|mjs)$': 'babel-jest',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(.*react-native.*|@credo-ts|@openvtc|@openid4vc|@noble|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|expo(nent)?|@expo(nent)?/.*)/)',
+    'node_modules/(?!(.*react-native.*|@credo-ts|@openvtc|@openid4vc|@noble|@scure|@owf|@verifiables|ky|cbor-x|@stablelib|@digitalcredentials|base58-universal|base64url-universal|dcql|valibot|query-string|decode-uri-component|filter-obj|split-on-first|uuid|@bifold|expo(nent)?|@expo(nent)?/.*)/)',
   ],
   testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]sx?$',
   testPathIgnorePatterns: [

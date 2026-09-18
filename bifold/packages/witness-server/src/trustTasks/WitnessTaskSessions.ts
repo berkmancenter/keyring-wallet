@@ -43,7 +43,10 @@ import { getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
 import {
   TRUST_TASK_BINDING_URI,
   TrustTaskMessage,
+  TrustTaskEnvelopeV2Message,
   TspEnvelopeMessage,
+  checkV2ThreadCorrelation,
+  ensureV2ConnectionForFirstContact,
   digestMultibase,
   signDocumentProof,
   taskDigestMultibase,
@@ -51,7 +54,7 @@ import {
   tsp,
   verifyDocumentProof,
 } from '@bifold/trust-tasks'
-import { createCredoVidResolver, identityFromDid } from '@bifold/credo-tsp-adapter'
+import { createCredoVidResolver, identityFromDid, unpackForConnection } from '@bifold/credo-tsp-adapter'
 
 import { TaskLocalityProvider, LocalityObservationResult } from './BleLocalityProvider'
 import {
@@ -68,7 +71,7 @@ import {
 import { loadTrustTaskRuntime } from './runtime'
 
 /** Which carriage a request arrived on — a reply always goes back the same way. */
-type Carriage = 'didcomm-v1' | 'tsp'
+type Carriage = 'didcomm-v1' | 'didcomm-v2' | 'tsp'
 
 const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
 const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
@@ -112,7 +115,11 @@ export interface WitnessTaskHost {
   venueClaim?: string
   localityProvider?: TaskLocalityProvider
   getIssuer(): Promise<{ did: string; verificationMethodId: string }>
-  buildVwcJson(presentation: Record<string, unknown>, sessionId: string, localityAssertion?: LocalityAssertion): Record<string, unknown>
+  buildVwcJson(
+    presentation: Record<string, unknown>,
+    sessionId: string,
+    localityAssertion?: LocalityAssertion
+  ): Record<string, unknown>
   /** The observed VRC's hardware-attestation public key (base64), if any — for the §7.3 step-6 key-match check. */
   vrcHardwareAttestationPublicKey(presentation: Record<string, unknown>): string | undefined
 }
@@ -158,13 +165,9 @@ export class WitnessTaskSessions {
         const connection = context.connection
         if (!envelope || !connection?.did || !connection.theirDid) return undefined
         try {
-          const receiverIdentity = await identityFromDid(this.host.agent, connection.did)
-          const unpacked = await tsp.unpack(envelope, receiverIdentity, this.resolver)
-          if (unpacked.sender !== connection.theirDid) {
-            throw new Error(
-              `envelope's claimed sender (${unpacked.sender}) disagrees with the connection's counterparty (${connection.theirDid})`
-            )
-          }
+          // Current or previous DIDs on both sides: this witness's reusable v2
+          // invitation rotates its DID on first contact (tsp-reference/ref-19).
+          const { unpacked } = await unpackForConnection(this.host.agent, envelope, connection, this.resolver)
           const document = JSON.parse(Buffer.from(unpacked.payload).toString('utf-8')) as Record<string, unknown>
           await this.handleDocument(document, connection.id, connection.did, connection.theirDid, 'tsp')
         } catch (error) {
@@ -173,7 +176,35 @@ export class WitnessTaskSessions {
         return undefined
       },
     })
-    console.log(`[${this.host.name}] Trust Task witness handler registered (binding 0.2 + TSP envelope)`)
+    // binding/didcomm 0.2 — the DIDComm v2 envelope (didcomm_v2_subtask.md C13).
+    registry.registerMessageHandler({
+      supportedMessages: [TrustTaskEnvelopeV2Message],
+      handle: async (context: DidCommInboundMessageContext<TrustTaskEnvelopeV2Message>) => {
+        const document = context.message.document
+        let connection = context.connection
+        if (!connection && context.senderKey) {
+          const from = context.message.plaintextFrom ?? context.senderDid
+          const to = context.message.plaintextTo?.[0]
+          if (from && to)
+            connection = await ensureV2ConnectionForFirstContact(this.host.agent, {
+              from,
+              to,
+              senderKey: context.senderKey,
+            })
+        }
+        if (!document || !context.senderKey || !connection?.did || !connection.theirDid) return undefined
+        if (checkV2ThreadCorrelation(context.message, document) !== 'ok') return undefined
+        try {
+          await this.handleDocument(document, connection.id, connection.did, connection.theirDid, 'didcomm-v2')
+        } catch (error) {
+          console.error(`[${this.host.name}] v2 trust-task handling failed: ${(error as Error).message}`)
+        }
+        return undefined
+      },
+    })
+    console.log(
+      `[${this.host.name}] Trust Task witness handler registered (binding didcomm-v1/0.2 + didcomm/0.2 + TSP envelope)`
+    )
   }
 
   private async handleDocument(
@@ -206,6 +237,15 @@ export class WitnessTaskSessions {
     // wallet has no inbound handler for the plain binding-0.2 message, and
     // vice versa (see TspCarriage.ts's own onDocument for the wallet side of
     // this same send-identity-resolve-pack sequence).
+    if (carriage === 'didcomm-v2') {
+      await sender.sendMessage(
+        new DidCommOutboundMessageContext(new TrustTaskEnvelopeV2Message({ document: reply }), {
+          agentContext: this.host.agent.context,
+          connection,
+        })
+      )
+      return
+    }
     if (carriage === 'tsp') {
       const senderIdentity = await identityFromDid(this.host.agent, myDid)
       const body = new TextEncoder().encode(JSON.stringify(reply))
@@ -312,7 +352,8 @@ export class WitnessTaskSessions {
         }
         const challenge = randomBytes(16).toString('hex')
         const sessionDigest = taskDigestMultibase(document)
-        const localityOffer = (ext as Record<string, { locality?: { offered?: boolean } }>)[LOCALITY_EXT_NAMESPACE]?.locality
+        const localityOffer = (ext as Record<string, { locality?: { offered?: boolean } }>)[LOCALITY_EXT_NAMESPACE]
+          ?.locality
 
         const session: TaskSession = {
           sessionId: String(doc.id),
@@ -419,18 +460,36 @@ export class WitnessTaskSessions {
         // Verify the presentation cryptographically against THIS session's
         // challenge and domain.
         let vpValid = false
+        let vpFailure = ''
         try {
           const vp = JsonTransformer.fromJSON(vpJson, W3cJsonLdVerifiablePresentation)
           const result = await this.host.agent.w3cCredentials.verifyPresentation({
             presentation: vp as never,
             challenge: session.challenge,
             domain: session.domain,
-          })
+            // Credo 0.7 requires the holder to authenticate every credentialSubject;
+            // a VRC presenter is the credential's ISSUER, not its subject, so that
+            // can never hold here. Party membership is checked below instead.
+            // The option is Keyring's core patch (W3cJsonLdCredentialService).
+            verifyCredentialSubjectAuthentication: false,
+          } as never)
           vpValid = result.isValid
-        } catch {
+          if (!vpValid) {
+            // Credo's result carries the failing validation; without it a
+            // rejected presentation is indistinguishable from a wrong challenge.
+            vpFailure = JSON.stringify(
+              { error: result.error?.message, validations: result.validations },
+              (_key, value) => (value instanceof Error ? value.message : value)
+            ).slice(0, 1200)
+          }
+        } catch (error) {
           vpValid = false
+          vpFailure = `threw: ${(error as Error).message}`
         }
         if (!vpValid) {
+          console.warn(
+            `[${this.host.name}] Task session ${sessionId}: presentation rejected — ${vpFailure}`
+          )
           return notBound(rawDoc as never, 'presentation not bound to this session')
         }
 
@@ -452,7 +511,11 @@ export class WitnessTaskSessions {
             // offered it with no provider configured) — §7.1's second
             // explicit state, a choice, not a failure.
             observation = {
-              method: 'none', sensorDid, observedAt: new Date().toISOString(), confirmed: false, reason: 'declinedByHolder',
+              method: 'none',
+              sensorDid,
+              observedAt: new Date().toISOString(),
+              confirmed: false,
+              reason: 'declinedByHolder',
             }
           } else {
             const result = await session.localityObservation
@@ -461,7 +524,11 @@ export class WitnessTaskSessions {
               // advert — the app backgrounded, locked, or the ceremony
               // moved on before the radio phase completed.
               observation = {
-                method: 'none', sensorDid, observedAt: new Date().toISOString(), confirmed: false, reason: 'windowLost',
+                method: 'none',
+                sensorDid,
+                observedAt: new Date().toISOString(),
+                confirmed: false,
+                reason: 'windowLost',
               }
             } else {
               observedTranscript = result.transcript
@@ -478,7 +545,10 @@ export class WitnessTaskSessions {
                   retryable: false,
                 })
               }
-              keyMatches = transcriptKeyMatchesVrcSigner(result.transcript, this.host.vrcHardwareAttestationPublicKey(vpJson))
+              keyMatches = transcriptKeyMatchesVrcSigner(
+                result.transcript,
+                this.host.vrcHardwareAttestationPublicKey(vpJson)
+              )
               observation = {
                 method: LOCALITY_METHOD,
                 sensorDid,
@@ -540,9 +610,7 @@ export class WitnessTaskSessions {
         this.sessions.delete(sessionId)
         console.log(`[${this.host.name}] Task session ${sessionId}: VWC issued (taskContext bound)`)
 
-        const responseExt = observation
-          ? { [LOCALITY_EXT_NAMESPACE]: { locality: { observation } } }
-          : undefined
+        const responseExt = observation ? { [LOCALITY_EXT_NAMESPACE]: { locality: { observation } } } : undefined
         return runtime.respondWith(rawDoc, randomUUID(), {
           vwc: signedVwcJson,
           vwcDigestMultibase: digestMultibase(signedVwcJson),

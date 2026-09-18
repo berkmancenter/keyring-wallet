@@ -1,10 +1,6 @@
-import { Agent, ConsoleLogger, InitConfig, LogLevel } from '@credo-ts/core'
+import { Agent, ConsoleLogger, InitConfig, LogLevel, PeerDidNumAlgo } from '@credo-ts/core'
 import { AskarModule } from '@credo-ts/askar'
-import {
-  DidCommHttpOutboundTransport,
-  DidCommMessageForwardingStrategy,
-  DidCommModule,
-} from '@credo-ts/didcomm'
+import { DidCommHttpOutboundTransport, DidCommMessageForwardingStrategy, DidCommModule } from '@credo-ts/didcomm'
 import { agentDependencies, DidCommHttpInboundTransport } from '@credo-ts/node'
 import { askar } from '@openwallet-foundation/askar-nodejs'
 import { mkdirSync } from 'fs'
@@ -28,6 +24,7 @@ export class MediatorService {
   public readonly agent: Agent<ReturnType<typeof buildMediatorModules>>
   private readonly config: MediatorConfig
   private invitationUrl?: string
+  private invitationV2Url?: string
 
   private constructor(config: MediatorConfig) {
     this.config = config
@@ -38,7 +35,7 @@ export class MediatorService {
     // Credo 0.6 has no agent-level label; the name a wallet shows for its
     // mediator comes from the invitation, minted in createInvitation below.
     const agentConfig: InitConfig = {
-      logger: new ConsoleLogger(config.verbose ? LogLevel.debug : LogLevel.warn),
+      logger: new ConsoleLogger(config.verbose ? LogLevel.Debug : LogLevel.Warn),
     }
 
     this.agent = new Agent({
@@ -75,6 +72,25 @@ export class MediatorService {
       multiUseInvitation: true,
     })
     this.invitationUrl = invitation.toUrl({ domain: this.config.publicUrl })
+
+    // A second, out-of-band/2.0 invitation when v2 is served: a wallet accepts
+    // it with unmediated routing and provisions Coordinate Mediation 2.0 on the
+    // resulting connection (the app's provisionV2Mediation). Reusable: the
+    // first message from each wallet creates its own connection here
+    // (autoCreateConnectionOnFirstMessage) and rotates this side's DID.
+    if (this.config.didcommVersions.includes('v2')) {
+      const record = await this.agent.modules.didcomm.oob.createInvitation({
+        didCommVersion: 'v2',
+        goal: this.config.label,
+        multiUseInvitation: true,
+      })
+      this.invitationV2Url = record.outOfBandInvitation.toUrl({ domain: this.config.publicUrl })
+    }
+  }
+
+  /** The `MEDIATOR_V2_URL` value for a wallet with DIDComm v2 enabled; undefined when v2 is not served. */
+  public get mediatorV2Url(): string | undefined {
+    return this.invitationV2Url
   }
 
   /** The `MEDIATOR_URL` value a wallet should be pointed at. */
@@ -111,10 +127,21 @@ function buildMediatorModules(config: MediatorConfig) {
       // this they deadlock at "request-received" (the same reason the
       // witness-server sets it).
       processDidCommMessagesConcurrently: true,
-      connections: { autoAcceptConnections: true },
+      connections: {
+        autoAcceptConnections: true,
+        // v2 has no handshake: the connection for a wallet that accepted our
+        // v2 invitation is created on its first authenticated message.
+        autoCreateConnectionOnFirstMessage: config.didcommVersions.includes('v2'),
+      },
+      // DIDComm v2 beside v1 when MEDIATOR_DIDCOMM_VERSIONS says so: Coordinate
+      // Mediation 2.0 + Pickup 4.0 (tsp-reference/ref-17). The mediator derives
+      // its own routing did:peer:2 from its routing key and ws endpoint.
+      didcommVersions: config.didcommVersions,
+      peerDidNumAlgoForV2OOB: PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc,
       mediator: {
         autoAcceptMediationRequests: true,
         messageForwardingStrategy: DidCommMessageForwardingStrategy.QueueOnly,
+        mediationProtocolVersions: config.didcommVersions,
       },
       // A mediator routes; it never issues or verifies.
       credentials: false,

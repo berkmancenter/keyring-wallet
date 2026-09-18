@@ -17,17 +17,6 @@ const SESSION_ID_RANGE = {
   MAX: 999999,
 } as const
 
-/**
- * Standardized logging method interface with consistent overloads
- * Supports all combinations of message, data, and error parameters
- */
-interface LogMethod {
-  (message: string): void
-  (message: string, data: Record<string, unknown>): void
-  (message: string, error: Error): void
-  (message: string, data: Record<string, unknown>, error: Error): void
-}
-
 export class RemoteLogger extends AbstractBifoldLogger {
   private _remoteLoggingEnabled = false
   private _sessionId: number | undefined
@@ -36,7 +25,7 @@ export class RemoteLogger extends AbstractBifoldLogger {
   private lokiLabels: Record<string, string>
   private remoteLoggingAutoDisableTimer: ReturnType<typeof setTimeout> | undefined
   private eventListener: EmitterSubscription | undefined
-  private _baseLogLevel: LogLevel = LogLevel.debug
+  private _baseLogLevel: LogLevel = LogLevel.Debug
 
   constructor(options: RemoteLoggerOptions) {
     super()
@@ -83,7 +72,7 @@ export class RemoteLogger extends AbstractBifoldLogger {
         )
       }
       // Override to most verbose when remote logging active
-      this.logLevel = LogLevel.debug
+      this.logLevel = LogLevel.Debug
     } else {
       this._sessionId = undefined
       if (this.remoteLoggingAutoDisableTimer) {
@@ -182,45 +171,58 @@ export class RemoteLogger extends AbstractBifoldLogger {
     })
   }
 
-  // Standardized logging methods with consistent overloads
-  public test: LogMethod = (message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void => {
-    if (!this.isEnabled(LogLevel.debug)) return
+  // Standardized logging methods with consistent overloads.
+  //
+  // Declared as ordinary prototype methods, not arrow-function class fields.
+  // A class-field arrow function makes `.info`/`.warn`/etc. own instance
+  // properties that shadow AbstractBifoldLogger's prototype methods of the
+  // same name. On this codebase's Metro/Hermes toolchain that shadowing
+  // form was observed to silently no-op on every call (no exception, no
+  // output) while an identical, hand-inlined sequence of the same three
+  // steps (isEnabled gate -> parseLogArguments -> this._log.info(...)),
+  // and the plain prototype methods reached by bypassing the instance
+  // property via Object.getPrototypeOf(), both worked — see
+  // remotelogger-info-silently-broken session notes. No call site here
+  // detaches these methods from their instance (checked), so the switch
+  // to prototype methods costs nothing.
+  public test(message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void {
+    if (!this.isEnabled(LogLevel.Debug)) return
     const { data, actualError } = this.parseLogArguments(dataOrError, error)
     this._log?.test?.({ message, data, error: actualError })
   }
 
-  public trace: LogMethod = (message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void => {
-    if (!this.isEnabled(LogLevel.debug)) return
+  public trace(message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void {
+    if (!this.isEnabled(LogLevel.Debug)) return
     const { data, actualError } = this.parseLogArguments(dataOrError, error)
     this._log?.trace?.({ message, data, error: actualError })
   }
 
-  public debug: LogMethod = (message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void => {
-    if (!this.isEnabled(LogLevel.debug)) return
+  public debug(message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void {
+    if (!this.isEnabled(LogLevel.Debug)) return
     const { data, actualError } = this.parseLogArguments(dataOrError, error)
     this._log?.debug?.({ message, data, error: actualError })
   }
 
-  public info: LogMethod = (message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void => {
-    if (!this.isEnabled(LogLevel.info)) return
+  public info(message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void {
+    if (!this.isEnabled(LogLevel.Info)) return
     const { data, actualError } = this.parseLogArguments(dataOrError, error)
     this._log?.info?.({ message, data, error: actualError })
   }
 
-  public warn: LogMethod = (message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void => {
-    if (!this.isEnabled(LogLevel.warn)) return
+  public warn(message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void {
+    if (!this.isEnabled(LogLevel.Warn)) return
     const { data, actualError } = this.parseLogArguments(dataOrError, error)
     this._log?.warn?.({ message, data, error: actualError })
   }
 
-  public error: LogMethod = (message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void => {
-    if (!this.isEnabled(LogLevel.error)) return
+  public error(message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void {
+    if (!this.isEnabled(LogLevel.Error)) return
     const { data, actualError } = this.parseLogArguments(dataOrError, error)
     this._log?.error?.({ message, data, error: actualError })
   }
 
-  public fatal: LogMethod = (message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void => {
-    if (!this.isEnabled(LogLevel.fatal)) return
+  public fatal(message: string, dataOrError?: Record<string, unknown> | Error, error?: Error): void {
+    if (!this.isEnabled(LogLevel.Fatal)) return
     const { data, actualError } = this.parseLogArguments(dataOrError, error)
     this._log?.fatal?.({ message, data, error: actualError })
   }

@@ -26,7 +26,15 @@ yarn mediator --endpoint http://10.0.2.2:3010   # two Android emulators, no tunn
 yarn mediator --endpoint http://localhost:3010  # iOS simulator, no tunnel
 yarn mediator --fresh                           # wipe the wallet first
 yarn mediator --no-env                          # print MEDIATOR_URL, don't write it
+yarn mediator --didcomm-v2                      # also serve DIDComm v2; writes MEDIATOR_V2_URL too
 ```
+
+`--didcomm-v2` adds Coordinate Mediation 2.0 and Message Pickup 4.0 beside
+the v1 protocols and mints a second, reusable out-of-band/2.0 invitation
+(`MEDIATOR_V2_URL`). v1 is always served, so wallets without the
+"Enable DIDComm v2" developer setting are unaffected; a wallet with it on
+provisions v2 mediation as a *second* mediation record and keeps v1 as its
+default (`docs/plans/openvtc-integration-plan/didcomm_v2_subtask.md`, §7.1).
 
 It writes `MEDIATOR_URL` into `app/.env` (creating the file from `.env.sample`
 if you have not yet), leaving every other line alone. Then `yarn android` /
@@ -100,4 +108,6 @@ All optional except `MEDIATOR_PUBLIC_URL`, which `yarn mediator` sets for you.
 | `MEDIATOR_WALLET_KEY` | `<wallet id>-key` | Askar store key. |
 | `MEDIATOR_WALLET_PATH` | `./.wallet` | Directory holding the sqlite file. |
 | `MEDIATOR_INVITATION_PATH` | unset | If set, the invitation URL is written here on boot. |
+| `MEDIATOR_DIDCOMM_VERSIONS` | `v1` | `v1,v2` serves DIDComm v2 beside v1 (`--didcomm-v2`); must include `v1`. |
+| `MEDIATOR_INVITATION_V2_PATH` | unset | If set and v2 is served, the out-of-band/2.0 invitation URL is written here on boot. |
 | `MEDIATOR_VERBOSE` | `false` | Credo debug logging. |

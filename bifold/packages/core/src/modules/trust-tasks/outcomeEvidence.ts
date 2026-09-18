@@ -169,7 +169,11 @@ export async function verifyVwcPresentationBundle(agent: Agent, options: VerifyB
       presentation: vp as never,
       challenge: options.challenge,
       domain: options.domain,
-    })
+      // Credo 0.7's holder-must-authenticate-subject check cannot hold for a
+      // VRC (the presenter is its issuer, the subject is the counterparty).
+      // Option from Keyring's core patch (W3cJsonLdCredentialService).
+      verifyCredentialSubjectAuthentication: false,
+    } as never)
     if (!result.isValid) {
       failures.push('presentation proof did not verify')
       logger.warn(
