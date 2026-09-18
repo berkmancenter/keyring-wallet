@@ -20,7 +20,7 @@ import { AskarModule } from '@credo-ts/askar'
 import { askarNodeJS as askar } from '@openwallet-foundation/askar-nodejs'
 import { convertPublicKeyToX25519 } from '@stablelib/ed25519'
 
-import { identityFromDid } from '../src/identity'
+import { identityFromDid, keyAgreementFromEd25519Key } from '../src/identity'
 import { createCredoVidResolver } from '../src/vidResolver'
 
 const eq = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i])
@@ -64,6 +64,20 @@ describe('identityFromDid', () => {
     const message = new TextEncoder().encode('signed via identityFromDid')
     const signature = await identity.signingKey.sign(message)
     expect(signature.length).toBe(64)
+
+    // Regression: a did:key document's keyAgreement verification method is a
+    // DERIVED X25519 key (Edwards→Montgomery of the signing key), never a
+    // separately-stored Askar key. identityFromDid used to look it up under
+    // publicJwk.legacyKeyId — a name Askar never stored anything under for a
+    // derived key — so `.agree()` threw "no askar key stored under keyId …"
+    // instead of falling through to the Ed25519-derivation path. Calling
+    // `.agree()` here must not throw, and must equal what the
+    // Ed25519-derivation path computes directly from the same signing key.
+    const peer = await kms.createKey({ type: { kty: 'OKP', crv: 'X25519' }, backend: 'askar' })
+    const peerPublicKey = TypedArrayEncoder.fromBase64Url(peer.publicJwk.x as string)
+    const ours = await identity.keyAgreement.agree(peerPublicKey)
+    const expected = await keyAgreementFromEd25519Key(agent, keyId, publicKey).agree(peerPublicKey)
+    expect(eq(ours, expected)).toBe(true)
   }, 30000)
 
   test('uses the INDEPENDENT X25519 keyAgreement key of a did:peer:2 (DIDComm v2 connection DID shape)', async () => {

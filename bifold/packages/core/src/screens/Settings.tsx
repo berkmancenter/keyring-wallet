@@ -626,16 +626,17 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
               {isAutoLockRow && expandedDropdown === 'autolock' && (
                 <View style={{ backgroundColor: SettingsTheme.groupBackground, paddingHorizontal: 25 }}>
                   {[
-                    { label: t('AutoLockTimes.OneHour'), value: AutoLockTime.OneHour },
-                    { label: t('AutoLockTimes.FiveMinutes'), value: AutoLockTime.FiveMinutes },
-                    { label: t('AutoLockTimes.ThreeMinutes'), value: AutoLockTime.ThreeMinutes },
-                    { label: t('AutoLockTimes.OneMinute'), value: AutoLockTime.OneMinute },
-                    { label: t('AutoLockTimes.Never'), value: AutoLockTime.Never },
+                    { id: 'OneHour', label: t('AutoLockTimes.OneHour'), value: AutoLockTime.OneHour },
+                    { id: 'FiveMinutes', label: t('AutoLockTimes.FiveMinutes'), value: AutoLockTime.FiveMinutes },
+                    { id: 'ThreeMinutes', label: t('AutoLockTimes.ThreeMinutes'), value: AutoLockTime.ThreeMinutes },
+                    { id: 'OneMinute', label: t('AutoLockTimes.OneMinute'), value: AutoLockTime.OneMinute },
+                    { id: 'Never', label: t('AutoLockTimes.Never'), value: AutoLockTime.Never },
                   ].map((option) => {
                     const isSelected = (store.preferences.autoLockTime ?? AutoLockTime.FiveMinutes) === option.value
                     return (
                       <TouchableOpacity
                         key={String(option.value)}
+                        testID={testIdWithKey(`AutoLockTime${option.id}`)}
                         style={{
                           flexDirection: 'row',
                           alignItems: 'center',
