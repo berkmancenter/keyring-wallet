@@ -60,6 +60,7 @@ async function managerDidOf(driver) {
 }
 
 let manager, approver;
+let keepalive;
 try {
   await ensureAppium();
   manager = await createSession(platforms[0], keep(platforms[0] === "android" ? androidCaps() : iosCaps()));
@@ -78,6 +79,13 @@ try {
   // Back to My Agent, where the approver listens.
   await (await waitForTestId(approver, "MyAgent", 30000)).click();
   await waitForTestId(approver, "MyAgentNoApprovals", 30000);
+
+  // Keep the approver's session alive while the manager takes its minutes:
+  // an idle WebDriver session can be reaped, and a dead approver session
+  // was the only reason a green flow read as a failed run.
+  keepalive = setInterval(() => {
+    approver.getWindowSize().catch(() => undefined);
+  }, 20000);
 
   // 2 — the manager asks for a key; the VTA holds it. The manager must be a
   // NON-admin role: an admin (PolicyAdmin) is exempt from its own consent
@@ -132,6 +140,7 @@ try {
   await screenshot(manager, "vti-approve-result");
   if (!mlog.includes("key borrowed")) throw new Error(`manager's borrow never completed:\n${mlog}`);
   console.log(`[e2e] ${manager.e2ePlatform}: key borrowed after consent`);
+  clearInterval(keepalive);
   printSuccess("vti-approve");
   process.exitCode = 0;
 } catch (err) {
@@ -141,6 +150,7 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  if (keepalive) clearInterval(keepalive);
   try { execFileSync("bash", [SETUP, "clear"], { stdio: "inherit" }); } catch { /* best effort */ }
   for (const d of [manager, approver]) { if (d) { try { await d.deleteSession(); } catch { /* ignore */ } } }
   stopAppium();

@@ -556,6 +556,25 @@ error. Keyring now matches replies by `#response` type and gives the community
 session an inbox for the rest. **Measured:** vtc-service 0.11.58 (train code
 at `460e0ebb`), 2026-09-18.
 
+
+### VTI-26 — A consent request is pushed only to a `did:key` approver; every other approver needs the requester to relay
+
+`step_up::approver_mediator` (vta-service 0.33.0) returns a route for a
+`did:key` approver only — via the VTA's own `[messaging] mediator_did` — and
+`None` for anything else: its own test says *"future routable DIDs advertise
+their own mediator; not wired yet → None"* for `did:webvh`, and a `did:peer`
+falls in the same bucket even though the DID document names its mediator. For
+those the VTA logs *"no mediator route for consent approver — NOT notifying;
+the approver learns of this request only if the requester relays it (a CLI
+cannot)"*. This supersedes VTI-24's reading (it was never about a warm route):
+the refusal carries the VTA-signed `consentRequests`, each addressed to its
+approver, **so that the requester can forward them**. Keyring now does: on
+`auth:consent_required` it relays each request to its recipient over the
+same mediator session, then re-submits periodically until the grant is
+consumed (the granted notice is route-gated the same way). The upstream
+question is whether a VTA should resolve a `did:webvh`/`did:peer` approver's
+own `DIDCommMessaging` service and push directly. **Measured:** 2026-09-18.
+
 ## Changelog
 
 | Version | Date | Change |
@@ -563,6 +582,6 @@ at `460e0ebb`), 2026-09-18.
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
-| 1.5 | 2026-09-18 | Upgraded in place to VTI-Eucalyptus-RC-0 (versions table); VTI-25: the card is delivered by credential-exchange/issue, not inline |
+| 1.5 | 2026-09-18 | Upgraded in place to VTI-Eucalyptus-RC-0 (versions table); VTI-25: the card is delivered by credential-exchange/issue, not inline; VTI-26: consent pushes reach did:key approvers only — the requester relays for the rest |
 | 1.1 | 2026-09-16 | **Corrects VTI-01**, which 1.0 called a blocker: the first vetter can be bootstrapped on documented surfaces — invitation-only community → invited identity auto-admitted with `allow` → vetter role granted → vetting criterion added. Severity lowered to medium; the finding is now that the obvious attempt dead-ends and the working order is undocumented. Adds **Stack under test** (every component's version and upstream commit) and a note on version drift, including our own Trust Tasks lag. Adds VTI-16 (admin portal sign-in requires an outage). Test keys redacted from fixtures. |
 | 1.0 | 2026-09-16 | First published: VTI-01…VTI-15, consolidating the nine findings from the terminal-side rehearsal with the six that only appear when a phone is the client. Records the 2026-09-16 measurement that membership completes on an unconditioned community. |
