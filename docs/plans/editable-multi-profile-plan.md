@@ -117,31 +117,66 @@ carried over unchanged here, not a new decision).
 
 ---
 
-## 3. Terminology, and a related, unresolved workstream
+## 3. Terminology, and how a profile relates to a VTA persona
 
 This plan calls the thing a user edits and switches between a **profile**, deliberately
-not a **persona**. `docs/plans/keyring-on-the-vta-farm.md` and its
-`community_vetting_subtask.md` companion (on `plan/prague-farm-membership`, merged to
-`main` as PR #53, not yet on this branch) already use "persona" for a different concept:
-a `did:webvh` minted by a member's own VTA, one per community
-(`community_vetting_subtask.md` §2.6, §3.3), carrying **faces** (named claim subsets)
-disclosed through Trust Tasks (`persona/disclosure/preview/1.0`). Whether that persona is
-held by a remote Farm-hosted VTA or lives on the phone itself is an explicitly **open**
-architectural question there (§2.4, "Keys — and an open decision on who the member is"),
-and that whole workstream is stated as optional and non-core to everything else
-(`keyring-on-the-vta-farm.md`'s own framing).
+not a **persona**. `feat/prague-farm-membership` (bifold, not yet merged) uses "persona"
+for a distinct concept: a `did:webvh` a member's own VTA mints and holds the keys for, one
+per community. That branch's own architecture question (a remote Farm VTA vs. a
+phone-managed one) is resolved, not open — see
+[`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md) for the evidence, and
+for the `dtgwg-cred-spec` grounding (r-card as a VDS, persona and correlation scope, VPC)
+behind everything in this section.
 
-**Standing rationale for keeping the two concepts separate for now.** A Keyring profile
-(this plan) is a locally-held, editable jCard used in peer-to-peer VRC exchange; a VTA
-persona (that plan) is a per-community DID whose custody model is not yet decided. Making
-them the same thing, or hard-wiring a reference from one to the other, would commit this
-plan to an architecture that plan's own author has not settled. Instead, Phase 2's data
-model (§4.1) reserves one unused, optional field on each profile for a future,
-opaque link to an external identity — so that whichever way §2.4 resolves, connecting a
-Keyring profile to a VTA persona later is an additive change to already-shipped data, not
-a migration. See §6 for this as a named, explicitly blocked open question — it is not
-actionable until that plan's own open decision lands, and this plan does not attempt to
-resolve it.
+```mermaid
+flowchart TB
+  subgraph K["Keyring wallet — this plan"]
+    Prof1["Profile: Personal"]
+    Prof2["Profile: Work"]
+  end
+
+  subgraph V["Phone-managed VTA — feat/prague-farm-membership"]
+    PersA["Persona · Community A<br/>(did:webvh)"]
+    PersB["Persona · Community B<br/>(did:webvh)"]
+  end
+
+  VettingCard["Vetting Card<br/>(claims array)"]
+  Contact(("Contact"))
+  Vetter(("Vetter"))
+  CommB[("Community B")]
+
+  Prof1 -->|"sourced into R-Card (jCard),<br/>exchanged over a VRC edge"| Contact
+  Prof2 -.->|"linked 1:1, optional, enforced<br/>(§3, §4.1)"| PersA
+  Prof2 -.->|"values default in, not shape (§3)"| VettingCard
+  PersA -->|signs| VettingCard
+  VettingCard -->|sent to| Vetter
+  PersB -->|"member of, no linked profile"| CommB
+  Contact -.->|"VPC — future, unbuilt:<br/>would assert PersA to this contact"| PersA
+```
+
+Solid arrows are built and shipping today; dashed arrows are this plan's decision (the
+1:1 link, and vetting-claims value-sourcing) or explicitly unbuilt (VPC) — none of the
+dashed paths exist in code yet. `Persona · Community B` shows the ordinary case for a
+*persona*: one with no linked profile at all, since most won't need one. That's a
+different case from a community membership that has no persona whatsoever — the spec's
+`pairwise` scope, which `feat/prague-farm-membership`'s own `ensurePersonaFor` doesn't
+currently produce (it mints or reuses a persona unconditionally on every join), so it
+isn't pictured here.
+
+**Decided: an optional, enforced 1:1 link between a profile and a persona.** A profile may
+be linked to at most one persona DID, and a persona DID to at most one profile — never
+many-to-one or one-to-many in either direction — and a profile needs no link at all, the
+ordinary case for a casual, non-community-facing profile. This is a safety property: a
+profile linked to two personas would let editing it silently change what both present,
+bridging two identities a user chose to keep separately correlated. §4.1 gives the field
+and its enforcement.
+
+**Separately, and out of scope for Phase 1/2 below:** the community-vetting ceremony's
+"Vetting Card" (`feat/prague-farm-membership`) should default its self-asserted claims
+from a linked profile's data rather than have the user retype them — a values-level
+default, not a shape merge; the two stay different credential shapes for different jobs
+(companion has the detail). This needs Phase 1 to exist and belongs to that branch's own
+work, not to this plan's implementation steps.
 
 ---
 
@@ -188,11 +223,22 @@ exists, load it, assign it `id` as its `templateId` going forward, and set it ac
 needs to be an explicit step (§5.2.1), not an assumption, but it costs no new storage
 mechanism.
 
-**Reserved for the future, not built now:** an optional
-`externalPersonaRef?: { system: string; ref: string }` field on `RCardTemplate`,
-unused and unread by any code this plan adds. Its only purpose is to exist, so a later
-plan (§3) can start writing to it without a schema migration. Nothing in Phase 1 or
-Phase 2 populates or reads it.
+**Decided, not scheduled into Phase 1 or 2:** an optional `linkedPersonaDid?: string`
+field on `RCardTemplate` — a bare persona DID, no other persona metadata duplicated here
+(a persona's own details live in `VtiIdentityStore`, a different module on a different
+branch today). §3 gives the reasoning; the constraint that makes it safe is enforced
+entirely within this plan's own profile store, with no new dependency:
+
+```ts
+function assertPersonaLinkIsUnique(profiles: RCardTemplate[], profileId: string, personaDid: string) {
+  const conflict = profiles.find((p) => p.id !== profileId && p.linkedPersonaDid === personaDid)
+  if (conflict) throw new Error(`linkedPersonaDid ${personaDid} is already linked to profile "${conflict.label}"`)
+}
+```
+
+Neither Phase 1 nor Phase 2 populates, reads, or enforces this field — it exists so that
+whenever persona-linking UI is built (on whichever branch owns that work), adding it is
+additive to already-shipped data, not a migration.
 
 ### 4.2 Phase 1 — editable profile after onboarding
 
@@ -371,12 +417,13 @@ specific `profileId` instead of deleting every `RCardTemplate` record.
 
 ## 7. Open questions / blocked
 
-- **Linking a Keyring profile to a VTA persona is explicitly out of scope for this plan
-  and not actionable yet.** Blocked on `keyring-on-the-vta-farm.md` /
-  `community_vetting_subtask.md` §2.4's own open decision (whether a VTA persona is
-  held remotely by a Farm VTA or locally on the phone) — this plan reserves an unused
-  extension point (`externalPersonaRef`, §4.1) and does nothing further until that
-  decision lands elsewhere.
+- **The profile↔persona link is designed (§3, §4.1) but not scheduled.** The 1:1
+  `linkedPersonaDid` field and its uniqueness constraint are decided; building the UI to
+  set it, and the vetting-claims value-sourcing that would consume it, are both
+  `feat/prague-farm-membership`-side work with no phase or date assigned here.
+- **VPC issuance (asserting a persona over an existing VRC edge) remains unbuilt and
+  undesigned**, on either branch — a real, spec-sanctioned capability (§3), not something
+  this plan or its sibling need to resolve to ship Phase 1 or 2.
 - **A true per-connection profile binding** (§4.3's rejected alternative) is deferred,
   not designed — revisit only if the "active profile, switched before connecting" model
   proves insufficient in practice (e.g., a user wants a specific existing contact to
@@ -384,3 +431,11 @@ specific `profileId` instead of deleting every `RCardTemplate` record.
 - **User-facing wording** ("profile" vs. "card" vs. something else in translated
   strings) is not decided here — a copy/product decision, not an engineering one, and
   it does not block any implementation step above.
+
+---
+
+## 8. Review index
+
+| Companion | Author | What it settles |
+|---|---|---|
+| [`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md) | BAM | Reads `feat/prague-farm-membership`'s persona implementation and `dtgwg-cred-spec`'s latest `main` directly; supersedes §3's "open, blocked" framing with the resolved VTA architecture, the r-card/persona/VPC spec grounding, and the decided 1:1 profile↔persona link |
