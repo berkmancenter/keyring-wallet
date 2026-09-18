@@ -6,10 +6,14 @@
  * agent card, a community and an application all talk to the same session. So
  * the session lives here, and screens subscribe.
  *
- * Deliberately small. Membership is the only ceremony wired up so far —
- * manifest, apply, verdict — which is what `community_vetting_subtask.md` calls
- * P4/P5. The vetting ceremony (ticket, session, card, statement) comes later
- * and will hang off the same session.
+ * Two legs share the socket. The **community leg** (`ask`) is DIDComm v2:
+ * a VTC or a VTA reads the plaintext body as a Trust Task document. The
+ * **peer leg** (`send`, applicant ↔ vetter) is either DIDComm v2 or TSP
+ * Rev 3, decided at build time (`vtiTsp.setPeerLegCarriage`); a TSP frame
+ * that arrives is opened whenever the session holds a TSP identity, whatever
+ * the build sends, and is handed to the same inbox as a DIDComm plaintext
+ * would be, so nothing above this controller knows which carriage a document
+ * took.
  *
  * @module trust-tasks/module/vtiAgent
  */
@@ -17,16 +21,31 @@
 import type { Agent } from '@credo-ts/core'
 import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { tsp } from '@bifold/trust-tasks'
 
+import type { VtiPersona } from './VtiIdentityStore'
 import {
   createVtiClientDid,
   resolveVtiMediator,
   resolveDidDocumentRetrying,
   vtiClientIdentityFromDid,
+  vtiClientIdentityFromPersona,
   VtiMediatorSession,
   type VtiClientIdentity,
   type VtiMediatorEndpoints,
 } from './VtiMediatorTransport'
+import {
+  frameForm,
+  getPeerLegCarriage,
+  LOG_PREFIX as TSP_LOG_PREFIX,
+  packTrustTaskForPeer,
+  tspSessionForPersona,
+  unpackTrustTaskFromPeer,
+  type PeerLegCarriage,
+  type PeerRevisionRecord,
+  type TspPeerRevisionStore,
+  type TspSessionIdentity,
+} from './vtiTsp'
 
 const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
 const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
@@ -68,6 +87,11 @@ export interface VtiAgentState {
   /** The mediator's host, which is what a person can recognise. */
   host?: string
   error?: string
+  /** What this session sends on the peer leg, and whether it can open TSP. */
+  peerLeg?: PeerLegCarriage
+  tspReady?: boolean
+  /** What each peer was observed to speak (diagnostic; never fed back into packing). */
+  peerRevisions?: PeerRevisionRecord[]
 }
 
 /** A community's published join criteria, as a manifest states them. */
@@ -129,6 +153,8 @@ class VtiAgentController {
    */
   private pending?: { type: string; resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
   private inbox: ((plaintext: DidCommV2PlaintextMessage) => void)[] = []
+  private tsp?: TspSessionIdentity
+  private peerRevisionStore?: TspPeerRevisionStore
 
   /** Receive what the community sends that is not an answer (credentials, statements). */
   onInbound(handler: (plaintext: DidCommV2PlaintextMessage) => void): () => void {
@@ -174,9 +200,25 @@ class VtiAgentController {
    * Resolve the mediator a VTI agent advertises, mint this wallet's member DID,
    * log in and hold the socket. Idempotent while the socket is open.
    */
-  async connect(agent: Agent, mediatorDid: string, options: { identity?: VtiClientIdentity } = {}): Promise<void> {
+  async connect(
+    agent: Agent,
+    mediatorDid: string,
+    options: {
+      identity?: VtiClientIdentity
+      /**
+       * Connect as a persona: the DIDComm identity is derived from its
+       * borrowed key-agreement key, and — so the peer leg can carry TSP —
+       * its TSP identity from both borrowed keys. Preferred over `identity`
+       * for anything that will talk to a vetter or an applicant.
+       */
+      persona?: VtiPersona
+      /** Where to record what each peer speaks; in memory when absent. */
+      peerRevisionStore?: TspPeerRevisionStore
+    } = {}
+  ): Promise<void> {
     this.agent = agent
-    if (this.session?.isOpen && (!options.identity || options.identity.did === this.state.did)) return
+    const wantedDid = options.persona?.did ?? options.identity?.did
+    if (this.session?.isOpen && (!wantedDid || wantedDid === this.state.did)) return
     if (this.session) await this.disconnect()
     try {
       this.set({ status: 'resolving', error: undefined })
@@ -187,18 +229,43 @@ class VtiAgentController {
       // Under §2.4 B the identity a community sees is a persona the VTA minted
       // and whose key the phone borrowed; the phone-minted did:peer is what the
       // proof-of-transport used, and stays as the fallback when no persona is given.
-      const identity = options.identity ?? (await vtiClientIdentityFromDid(agent, await createVtiClientDid(agent, mediator)))
+      let identity = options.identity
+      let tspSession: TspSessionIdentity | undefined
+      if (options.persona) {
+        const kaKmsKeyId = options.persona.kmsKeyIds?.keyAgreement
+        if (!kaKmsKeyId) throw new Error('vtiAgent: the persona has no borrowed key-agreement key')
+        identity = await vtiClientIdentityFromPersona(agent, options.persona.did, kaKmsKeyId)
+        // A persona without a borrowed signing key can still ride DIDComm; it
+        // just cannot sign a TSP frame, and says so in the state.
+        if (options.persona.kmsKeyIds?.signing) {
+          tspSession = await tspSessionForPersona(agent, options.persona)
+        }
+      }
+      identity ??= await vtiClientIdentityFromDid(agent, await createVtiClientDid(agent, mediator))
       const did = identity.did
+      this.tsp = tspSession
+      this.peerRevisionStore = options.peerRevisionStore ?? this.peerRevisionStore
       const session = new VtiMediatorSession(agent, identity, mediator, {
         onError: (error) => this.set({ error: error.message }),
         onMessage: (plaintext) => this.deliver(plaintext),
+        ...(tspSession ? { onTspFrame: (bytes: Uint8Array) => this.receiveTspFrame(bytes, did) } : {}),
       })
       await session.start()
       // Discard any stale backlog the mediator flushes on live delivery before
       // a request could have a reply (see VtaClient.connect).
       await new Promise((resolve) => setTimeout(resolve, 2000))
       this.session = session
-      this.set({ status: 'connected', did })
+      const peerLeg = getPeerLegCarriage()
+      if (peerLeg === 'tsp' && !tspSession) {
+        agent.config.logger.warn(`${TSP_LOG_PREFIX} peer leg is wired for TSP but this session has no TSP identity; sending DIDComm`)
+      }
+      this.set({
+        status: 'connected',
+        did,
+        peerLeg: peerLeg === 'tsp' && tspSession ? 'tsp' : 'didcomm',
+        tspReady: Boolean(tspSession),
+        peerRevisions: (await this.peerRevisionStore?.list().catch(() => undefined)) ?? this.state.peerRevisions ?? [],
+      })
     } catch (error) {
       this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
       throw error
@@ -209,7 +276,36 @@ class VtiAgentController {
     await this.session?.stop()
     this.session = undefined
     this.pending = undefined
-    this.set({ status: 'disconnected', did: undefined, error: undefined })
+    this.tsp = undefined
+    this.set({ status: 'disconnected', did: undefined, error: undefined, peerLeg: undefined, tspReady: undefined })
+  }
+
+  /**
+   * A TSP frame from the socket: open it as the persona, record the revision
+   * the peer spoke, and deliver the Trust Task exactly as a DIDComm plaintext
+   * would be. Throwing here withholds the acknowledgement, so a frame this
+   * wallet could not open stays on the mediator rather than being lost.
+   */
+  private async receiveTspFrame(bytes: Uint8Array, myDid: string): Promise<void> {
+    const tspSession = this.tsp
+    const agent = this.agent
+    if (!tspSession || !agent) throw new Error(`${TSP_LOG_PREFIX} no TSP identity on this session`)
+    const result = await unpackTrustTaskFromPeer(tspSession, bytes, myDid)
+    if (!result) {
+      agent.config.logger.info(`${TSP_LOG_PREFIX} TSP frame opened but carried no Trust Task envelope; ignored`)
+      return
+    }
+    const { plaintext, unpacked } = result
+    const peeked = tsp.peekRevision(bytes)
+    const record = await this.peerRevisionStore?.observe(unpacked.sender, unpacked.revision, peeked.minor).catch(() => undefined)
+    agent.config.logger.info(
+      `${TSP_LOG_PREFIX} received ${unpacked.revision} ${frameForm(bytes)} frame from ${unpacked.sender} (${bytes.length} bytes, type ${plaintext.type})`
+    )
+    if (record) {
+      const others = (this.state.peerRevisions ?? []).filter((r) => r.vid !== record.vid)
+      this.set({ peerRevisions: [...others, record] })
+    }
+    this.deliver(plaintext)
   }
 
   get isConnected(): boolean {
@@ -221,11 +317,20 @@ class VtiAgentController {
     return this.state.did
   }
 
+  /** What this session will put on the wire for the next `send`. */
+  get peerLeg(): PeerLegCarriage {
+    return this.state.peerLeg ?? 'didcomm'
+  }
+
   /**
    * Send one Trust Task document to a peer without waiting — the reply, if
    * any, reaches the inbox threaded on the document's id. For the peer path
    * (applicant ↔ vetter) where a human answers minutes later. The document is
    * signed by the caller when the spec requires it (every vetting task does).
+   *
+   * On a build wired for TSP the document travels as a TSP Rev 3 direct
+   * message in the Trust Tasks TSP binding envelope; otherwise as a DIDComm
+   * v2 plaintext. The reply comes back the way the peer's build sends.
    */
   async send(
     toDid: string,
@@ -236,6 +341,14 @@ class VtiAgentController {
     const session = this.session
     const did = this.state.did
     if (!session || !did) throw new Error('vtiAgent: not connected')
+    if (this.peerLeg === 'tsp' && this.tsp && this.agent) {
+      const packed = await packTrustTaskForPeer(this.tsp, did, toDid, { ...document, type: String(document.type ?? type) })
+      await session.sendTspFrame(packed.bytes)
+      this.agent.config.logger.info(
+        `${TSP_LOG_PREFIX} sent ${packed.revision} ${frameForm(packed.bytes)} frame to ${toDid} (${packed.bytes.length} bytes, type ${type})`
+      )
+      return
+    }
     const now = Math.floor(Date.now() / 1000)
     await session.sendTo(toDid, {
       id: `urn:uuid:${utils.uuid()}`,

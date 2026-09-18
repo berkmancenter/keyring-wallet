@@ -5,9 +5,13 @@
  * Credo VidResolver, real end-to-end round trips). Those don't run under
  * Jest/RN's toolchain, so this suite covers what they can't: the actual
  * compiled TS module, imported and bundled the way the app will, interoperating
- * with the real published @openvtc/vti-tsp-js package. No Agent/KMS needed —
- * every port here is a plain raw-key wrapper, the same reference-adapter shape
- * ref-09/ref-11 use, since the ports themselves carry no custody logic.
+ * with the real @openvtc/vti-tsp-js package (0.3.0, vendored — packs Rev 3,
+ * reads both). No Agent/KMS needed — every port here is a plain raw-key
+ * wrapper, the same reference-adapter shape ref-09/ref-11 use, since the ports
+ * themselves carry no custody logic.
+ *
+ * Since the Rev 3 cutover `tsp.pack` packs Rev 3; the frozen Rev 2 packer is
+ * covered in `tspRev3.test.ts` alongside the dual reader.
  */
 import { pack as realPack, unpack as realUnpack } from '@openvtc/vti-tsp-js'
 import { ed25519, x25519 } from '@noble/curves/ed25519.js'
@@ -79,30 +83,32 @@ describe('tsp.pack / tsp.unpack', () => {
     expect(opened.receiver).toBe(receiverVid)
     expect(opened.messageType).toBe('direct')
     expect(eq(opened.threadDigest, sealed.threadDigest)).toBe(true)
+    expect(sealed.revision).toBe('rev3')
+    expect(opened.revision).toBe('rev3')
   })
 
-  test('interoperates with the real published @openvtc/vti-tsp-js: our pack() -> its unpack()', async () => {
+  test('interoperates with the real @openvtc/vti-tsp-js: our pack() -> its unpack()', async () => {
     const sealed = await tsp.pack(plaintext, senderVid, receiverVid, senderIdentity, resolver)
     const opened = await realUnpack(sealed.bytes, {
       receiverDecryptionKey: receiverEncSk,
-      senderEncryptionKey: senderEncPk,
       senderSigningKey: senderSignPk,
     })
     expect(eq(opened.payload, plaintext)).toBe(true)
     expect(opened.sender).toBe(senderVid)
     expect(opened.receiver).toBe(receiverVid)
+    expect(opened.revision).toBe('rev3')
   })
 
-  test('interoperates with the real published @openvtc/vti-tsp-js: its pack() -> our unpack()', async () => {
+  test('interoperates with the real @openvtc/vti-tsp-js: its pack() -> our unpack()', async () => {
     const sealed = await realPack(plaintext, senderVid, receiverVid, {
       senderSigningKey: senderSignSk,
-      senderEncryptionKey: senderEncSk,
       receiverEncryptionKey: receiverEncPk,
     })
     const opened = await tsp.unpack(sealed.bytes, receiverIdentity, resolver)
     expect(eq(opened.payload, plaintext)).toBe(true)
     expect(opened.sender).toBe(senderVid)
     expect(opened.receiver).toBe(receiverVid)
+    expect(opened.revision).toBe('rev3')
   })
 
   test('rejects tampered wire bytes', async () => {

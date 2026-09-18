@@ -17,9 +17,9 @@ import type { Agent } from '@credo-ts/core'
 import { vtaAgent } from './vtaAgent'
 import type { VtiCommunityStore, VtiInvitation, VtiMembership } from './VtiCommunityStore'
 import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
-import { vtiClientIdentityFromPersona } from './VtiMediatorTransport'
 import { vtiAgent, type VtiVerdict } from './vtiAgent'
 import { receiveIssue } from './vtiInbox'
+import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 
 export type VtiJoinStep =
   | 'persona'
@@ -63,15 +63,13 @@ export async function joinCommunity(deps: VtiJoinDeps, invitation?: VtiInvitatio
 
   step('persona')
   const persona = await ensurePersonaFor(deps)
-  const kaKmsKeyId = persona.kmsKeyIds?.keyAgreement
-  if (!kaKmsKeyId) throw new Error('vtiJoin: the persona has no borrowed key-agreement key')
+  if (!persona.kmsKeyIds?.keyAgreement) throw new Error('vtiJoin: the persona has no borrowed key-agreement key')
   if (invitation && invitation.subjectDid !== persona.did) {
     throw new Error(`vtiJoin: the invitation is for ${invitation.subjectDid}, not this persona`)
   }
 
   step('connecting', persona.did)
-  const identity = await vtiClientIdentityFromPersona(deps.agent, persona.did, kaKmsKeyId)
-  await vtiAgent.connect(deps.agent, deps.mediatorDid, { identity })
+  await vtiAgent.connect(deps.agent, deps.mediatorDid, { persona, peerRevisionStore: new GenericRecordsTspPeerRevisionStore(deps.agent) })
 
   // Whatever the community delivers during the join — on the Eucalyptus
   // train the card and the role arrive as separate messages after the verdict.

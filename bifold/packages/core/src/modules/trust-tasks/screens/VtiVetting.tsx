@@ -18,8 +18,8 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
-import { vtiClientIdentityFromPersona } from '../module/VtiMediatorTransport'
 import { vtiAgent, type VtiManifest } from '../module/vtiAgent'
+import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { receiveIssue } from '../module/vtiInbox'
 import {
   GenericRecordsVettingStore,
@@ -105,8 +105,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       if (!p?.kmsKeyIds?.keyAgreement) return
       try {
         if (vtiAgent.getState().did !== p.did) {
-          const identity = await vtiClientIdentityFromPersona(agent, p.did, p.kmsKeyIds.keyAgreement)
-          await vtiAgent.connect(agent, mediatorDid, { identity })
+          await vtiAgent.connect(agent, mediatorDid, { persona: p, peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent) })
         }
         setConnected(true)
       } catch (e) {

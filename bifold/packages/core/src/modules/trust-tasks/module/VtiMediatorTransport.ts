@@ -14,6 +14,18 @@
  *   4. outbound: Credo's packed JWE wrapped in a Routing 2.0 `forward` whose
  *      `next` is the peer, the forward itself packed by Credo to the mediator.
  *
+ * The same socket also carries **TSP**. A TSP message goes out as a binary
+ * frame of raw qb2 bytes — the mediator sniffs the leading count code (`0xF8`
+ * short-framed, `0xFB` long-framed), binds the cleartext sender VID to the
+ * authenticated session, and stores it for the receiver VID — and comes in as
+ * a text frame of the same bytes base64url-encoded (`-E…` / `--E…`), which
+ * {@link tsp.isTspFrameText} tells apart from a DIDComm JWE before either is
+ * parsed. A TSP frame is acknowledged like any queued message, by the id the
+ * mediator gave it: SHA-256 of the text exactly as delivered. This is how the
+ * upstream client frames TSP on the same socket, and it is what
+ * `tsp_rev3_subtask.md` §3.3 measured: a classifier that knows only `-E`
+ * drops every Rev 3 message past ~12 KB.
+ *
  * No key ever leaves Askar: every pack goes through Credo's own
  * `DidCommV2EnvelopeService`, and inbound frames go to `DidCommMessageReceiver`,
  * so a delivered message becomes a normal Credo message with its connection.
@@ -38,6 +50,7 @@ import {
 } from '@credo-ts/core'
 import type { DidCommV2EncryptedMessage, DidCommV2KeyAgreementJwk, DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didcomm'
+import { tsp } from '@bifold/trust-tasks'
 
 const LOG_PREFIX = '[TrustTasks:VtiMediatorTransport]'
 
@@ -56,7 +69,7 @@ const isPickup = (type: unknown) => typeof type === 'string' && type.startsWith(
 
 interface DeliveryMessage {
   type?: string
-  attachments?: { id?: string; data?: { json?: unknown } }[]
+  attachments?: { id?: string; data?: { json?: unknown; base64?: string } }[]
 }
 // Hermes has no `crypto.randomUUID` — react-native-get-random-values polyfills
 // `getRandomValues` and nothing else — so ids come from Credo's own helper.
@@ -250,6 +263,14 @@ export class VtiMediatorSession {
        * what a v1-shaped message wants.
        */
       onMessage?: (plaintext: DidCommV2PlaintextMessage) => void
+      /**
+       * A TSP frame addressed to this client, as raw qb2 bytes — sealed, so
+       * the consumer holds the key. Awaited before the frame is acknowledged:
+       * a consumer that throws has not taken the message, and the mediator
+       * keeps it for redelivery. Without a consumer, TSP frames are left
+       * queued rather than acknowledged blind.
+       */
+      onTspFrame?: (bytes: Uint8Array) => void | Promise<void>
     } = {}
   ) {}
 
@@ -422,6 +443,12 @@ export class VtiMediatorSession {
   /** Hand a delivered frame to Credo, then acknowledge it — never the other way round. */
   private async handleFrame(raw: string): Promise<void> {
     try {
+      // TSP demux, before any JSON is parsed: the mediator delivers a stored
+      // TSP message as base64url(qb2) text, and a JWE never starts with `-E`.
+      if (tsp.isTspFrameText(raw)) {
+        await this.handleTspFrame(raw)
+        return
+      }
       const frame = JSON.parse(raw) as Record<string, unknown>
       // The mediator answers `live-delivery-change` with a Pickup 3.0 `status`,
       // which is this transport's own bookkeeping rather than a message for the
@@ -465,15 +492,62 @@ export class VtiMediatorSession {
   }
 
   /**
-   * A Pickup 3.0 `delivery`: each attachment is a queued JWE. Unpack and route
-   * every one, then send `messages-received` with their ids so the mediator
-   * clears them.
+   * A live-delivered TSP frame: hand the bytes to the consumer, then
+   * acknowledge by the mediator's queue id for it — SHA-256 of the delivered
+   * text. Same persist-before-ack ordering as the DIDComm path.
+   */
+  private async handleTspFrame(text: string): Promise<void> {
+    if (!this.options.onTspFrame) {
+      this.agent.config.logger.debug(`${LOG_PREFIX} TSP frame left queued: no consumer on this session`)
+      return
+    }
+    const bytes = tsp.fromBase64Url(text)
+    await this.options.onTspFrame(bytes)
+    await this.acknowledge([tsp.tspFrameQueueId(text)])
+  }
+
+  private async acknowledge(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return
+    await this.send({
+      id: uuid(),
+      typ: PLAIN,
+      type: MESSAGES_RECEIVED,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + 300,
+      return_route: 'all',
+      body: { message_id_list: messageIds },
+    })
+  }
+
+  /**
+   * A Pickup 3.0 `delivery`: each attachment is a queued JWE — or a queued
+   * TSP frame, carried as its base64url text. Unpack and route every one,
+   * then send `messages-received` with their ids so the mediator clears them.
    */
   private async handleDelivery(delivery: DeliveryMessage): Promise<void> {
     const attachments = delivery.attachments ?? []
     const acknowledged: string[] = []
     for (const attachment of attachments) {
-      const jwe = attachment.data?.json
+      const data = attachment.data
+      const tspText =
+        typeof data?.base64 === 'string' && tsp.isTspFrameText(data.base64)
+          ? data.base64
+          : typeof data?.json === 'string' && tsp.isTspFrameText(data.json)
+            ? data.json
+            : undefined
+      if (tspText) {
+        try {
+          if (!this.options.onTspFrame) continue
+          await this.options.onTspFrame(tsp.fromBase64Url(tspText))
+          if (attachment.id) acknowledged.push(attachment.id)
+        } catch (error) {
+          this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
+        }
+        continue
+      }
+      const jwe = data?.json
       if (!jwe) continue
       try {
         const plaintext = await this.unpack(jwe as DidCommV2EncryptedMessage)
@@ -521,6 +595,23 @@ export class VtiMediatorSession {
       throw new Error(`${LOG_PREFIX} socket is not open`)
     }
     this.socket.send(JSON.stringify(await this.packForMediator(plaintext)))
+  }
+
+  /**
+   * Ship a packed TSP message as a binary frame. The mediator routes it on the
+   * cleartext receiver VID and binds the cleartext sender VID to this session,
+   * so the frame's sender has to be the DID this session logged in as. The
+   * bytes are already sealed and signed; nothing is packed to the mediator.
+   */
+  async sendTspFrame(bytes: Uint8Array): Promise<void> {
+    if (!tsp.isTspFrameBytes(bytes)) throw new Error(`${LOG_PREFIX} not a TSP frame (leading byte 0x${(bytes[0] ?? 0).toString(16)})`)
+    await this.ensureOpen()
+    if (!this.socket || this.socket.readyState !== 1) {
+      throw new Error(`${LOG_PREFIX} socket is not open`)
+    }
+    // A standalone ArrayBuffer: React Native's WebSocket sends the whole
+    // backing buffer of a view, so a slice of a larger buffer must be copied.
+    this.socket.send(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
   }
 
   /**
