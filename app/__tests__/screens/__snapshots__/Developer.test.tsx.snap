@@ -1765,6 +1765,62 @@ exports[`Developer Screen screen renders correctly 1`] = `
             {
               "busy": undefined,
               "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          onBlur={[Function]}
+          onClick={[Function]}
+          onFocus={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            [
+              {
+                "alignItems": "center",
+                "backgroundColor": "#622C62",
+                "borderRadius": 8,
+                "marginTop": 12,
+                "paddingHorizontal": 20,
+                "paddingVertical": 12,
+              },
+            ]
+          }
+          testID="com.ariesbifold:id/ForgetCommunityButton"
+        >
+          <Text
+            style={
+              {
+                "color": "#FFFFFF",
+                "fontSize": 16,
+                "fontWeight": "600",
+              }
+            }
+          >
+            My VTA: forget this community
+          </Text>
+        </View>
+        <View
+          accessibilityState={
+            {
+              "busy": undefined,
+              "checked": undefined,
               "disabled": false,
               "expanded": undefined,
               "selected": undefined,
