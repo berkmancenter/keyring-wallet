@@ -1,0 +1,27 @@
+{
+  "@context": "https://trustoverip.org/dtg/vocab/meta-context.jsonld",
+  "id": "https://trustoverip.org/dtg/vocab#presented",
+  "type": "Predicate",
+  "status": "proposed",
+  "label": {
+    "en": "presented"
+  },
+  "definition": {
+    "en": "The issuer observed the subject present the credential the object names. The subject is the holder; the credential's issuer need not have been present."
+  },
+  "classification": "evidence",
+  "objectKind": [
+    "digestMultibase"
+  ],
+  "subjectObjectRelationship": "credentialSubject.id MUST be the credentialSubject.id of the credential object.digestMultibase names.",
+  "taskContextRequired": true,
+  "minimumIssuerScope": "directed",
+  "issuer": "A member, or a VTA acting according to VTC policy.",
+  "establishes": "That the issuer attests that, in the exchange identified by taskContext, the subject presented the credential whose claims digest to object.digestMultibase.",
+  "doesNotEstablish": [
+    "that the presented credential is valid, unrevoked, or was issued to the subject",
+    "that the presented credential's claims are true",
+    "that the subject controls the presented credential's subject identifier",
+    "that any consequential action is authorized"
+  ]
+}

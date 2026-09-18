@@ -1,0 +1,14 @@
+{
+  "name": "ref-07b-statement-shape",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs",
+    "regen": "node build-fixture.mjs"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.3.0",
+    "@scure/base": "^2.3.0"
+  }
+}
