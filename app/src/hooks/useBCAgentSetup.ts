@@ -13,6 +13,7 @@ import {
   setupTrustTasksInbound,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
+  findV2MediationRecord,
   provisionV2Mediation,
   startV2MessagePickup,
 } from '@bifold/core'
@@ -115,8 +116,11 @@ const configureMessagePickup = async (agent: Agent): Promise<void> => {
  * subtask plan; the production v1 mediator is never upgraded in place).
  * Idempotent, and a failure is logged rather than fatal: the wallet keeps
  * working over v1, and v2 invitations fall back to unmediated routing.
+ *
+ * Exported (only) for the de-dup regression test — see
+ * useBCAgentSetup.test.ts. Not otherwise part of this module's public API.
  */
-const provisionV2MediationIfConfigured = async (agent: Agent, enabled: boolean): Promise<void> => {
+export const provisionV2MediationIfConfigured = async (agent: Agent, enabled: boolean): Promise<void> => {
   const invitationUrl = Config.MEDIATOR_V2_URL
   if (!enabled || !invitationUrl) {
     // Logged so a device run shows WHY v2 mediation did not start: the flag
@@ -129,8 +133,18 @@ const provisionV2MediationIfConfigured = async (agent: Agent, enabled: boolean):
     return
   }
   try {
+    // configureMessagePickup (called before this, unconditionally) already
+    // started the v4 loop when a v2 mediation record pre-existed from a
+    // previous launch. Only start it here for a record THIS call newly
+    // provisions — startV2MessagePickup's PickUpV4 start has no anti-stacking
+    // guard (unlike the patched v1/v2 start), so calling it again on an
+    // already-provisioned record subscribed a second polling loop on every
+    // launch after the first.
+    const alreadyProvisioned = !!(await findV2MediationRecord(agent))
     await provisionV2Mediation(agent, invitationUrl)
-    await startV2MessagePickup(agent)
+    if (!alreadyProvisioned) {
+      await startV2MessagePickup(agent)
+    }
   } catch (error) {
     agent.config.logger.warn(
       `[TrustTasks:V2Mediation] provisioning failed, continuing on v1 only: ${(error as Error).message}`

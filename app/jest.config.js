@@ -20,7 +20,7 @@ module.exports = {
       __dirname + '/node_modules/@verifiables/request-converter'
     )
       ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
-      : '<rootDir>/../../node_modules/@verifiables/request-converter/dist/index.js',
+      : '<rootDir>/../node_modules/@verifiables/request-converter/dist/index.js',
 
     // @openvtc/trust-tasks is ESM-only with an import-condition exports map
     // (reached through @bifold/core's portal source) — map to dist, as the
