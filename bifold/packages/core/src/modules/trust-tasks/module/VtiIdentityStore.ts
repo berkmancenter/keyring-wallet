@@ -52,6 +52,8 @@ export interface VtiIdentityStore {
   getPersona(communityDid: string): Promise<VtiPersona | undefined>
   listPersonas(): Promise<VtiPersona[]>
   setPersona(persona: VtiPersona): Promise<void>
+  /** Drop the persona record for a community (the VTA still holds the keys). */
+  forgetPersona(communityDid: string): Promise<void>
 }
 
 const RECORD_TYPE = 'keyring/vti-identity'
@@ -98,5 +100,14 @@ export class GenericRecordsIdentityStore implements VtiIdentityStore {
 
   setPersona(persona: VtiPersona) {
     return this.put('persona', persona.communityDid, { ...persona })
+  }
+
+  async forgetPersona(communityDid: string) {
+    const records = await this.agent.genericRecords.findAllByQuery({
+      recordType: RECORD_TYPE,
+      kind: 'persona',
+      key: communityDid,
+    })
+    for (const record of records) await this.agent.genericRecords.delete(record)
   }
 }
