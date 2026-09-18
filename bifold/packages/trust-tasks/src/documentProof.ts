@@ -109,10 +109,23 @@ function firstSigningVerificationMethod(didDocument: {
 export async function signDocumentProof(
   agent: Agent,
   document: Record<string, unknown>,
-  controllerDid: string
+  controllerDid: string,
+  options: {
+    /**
+     * The KMS key to sign with, when the controller is not a DID this wallet
+     * created — a VTA-minted persona whose signing key was borrowed into the
+     * KMS for the session. Without it the key is looked up on the DidRecord.
+     */
+    kmsKeyId?: string
+    /** The verification method to name in the proof; defaults to the first signing one. */
+    verificationMethodId?: string
+  } = {}
 ): Promise<Record<string, unknown>> {
   const didDocument = await agent.dids.resolveDidDocument(controllerDid)
-  const verificationMethod = firstSigningVerificationMethod(didDocument as never)
+  const verificationMethod = options.verificationMethodId
+    ? (didDocument.dereferenceKey(options.verificationMethodId, ['assertionMethod', 'authentication']) ??
+      firstSigningVerificationMethod(didDocument as never))
+    : firstSigningVerificationMethod(didDocument as never)
   if (!verificationMethod) {
     throw new Error(`no verification method on ${controllerDid}`)
   }
@@ -125,10 +138,14 @@ export async function signDocumentProof(
   const relativeKeyId = verificationMethod.id.startsWith(controllerDid)
     ? verificationMethod.id.slice(controllerDid.length)
     : verificationMethod.id
-  const [didRecord] = await agent.dids.getCreatedDids({ did: controllerDid })
-  publicJwk.keyId =
-    didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ??
-    publicJwk.legacyKeyId
+  if (options.kmsKeyId) {
+    publicJwk.keyId = options.kmsKeyId
+  } else {
+    const [didRecord] = await agent.dids.getCreatedDids({ did: controllerDid })
+    publicJwk.keyId =
+      didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ??
+      publicJwk.legacyKeyId
+  }
   const proofConfig: Record<string, unknown> = {
     type: 'DataIntegrityProof',
     cryptosuite: 'eddsa-jcs-2022',

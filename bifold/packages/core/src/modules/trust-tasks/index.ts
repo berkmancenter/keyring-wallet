@@ -90,3 +90,4 @@ export { vtaAgent, type VtaAgentState, type VtiApproval } from './module/vtaAgen
 export type { VtaConsentRequest } from './module/VtaClient'
 export { receiveIssue, classifyCredential, credentialsOfIssue, CREDENTIAL_EXCHANGE_ISSUE, type VtiReceivedCredential, type VtiCredentialKind } from './module/vtiInbox'
 export type { VtiHeldCredential } from './module/VtiCommunityStore'
+export { VtiVetterDesk, VtiApplicant, GenericRecordsVettingStore, VETTING, identityCommitment, type VtiVettingStore, type VettingTicket, type VettingDeskRequest, type VettingApplication, type VettingApplicationRequest, type VettingMethod } from './module/vtiVetting'

@@ -991,7 +991,8 @@
     "UpdateAvailable": "Update Available",
     "JSONDetails": "JSON details",
     "MyAgent": "My Agent",
-    "Community": "Community"
+    "Community": "Community",
+    "Vetting": "Vetting"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -1198,5 +1199,52 @@
     "ApprovalExpires": "Expires {{when}}",
     "AwaitingConsent": "Waiting for an approver to consent to {{task}}…",
     "AgentListening": "Your agent can reach you here."
+  },
+  "Vetting": {
+    "Title": "Vetting",
+    "RowHint": "Be vetted by a member, or vet someone if you are a vetter.",
+    "NeedIdentity": "You need an identity for this community first — every card, statement and the final application name the same one.",
+    "DeskTitle": "Vetting desk",
+    "YouVetFor": "You vet for {{community}}.",
+    "Tickets": "Tickets",
+    "NewTicket": "New ticket",
+    "ReadAloud": "Read this code to the person, or…",
+    "OrScan": "…let them scan or paste this link",
+    "TicketValid": "{{uses}} use left, until {{until}}",
+    "Desk": "Requests",
+    "DeskEmpty": "No requests yet. Hand someone a ticket.",
+    "OpenSession": "Open session",
+    "MatchCodeHint": "Read this code aloud — both screens must show the same one.",
+    "CardReceived": "Their card",
+    "Attest": "I checked the person and their document — attest",
+    "StatementIssued": "Statement issued",
+    "YourFace": "Your face",
+    "LegalName": "Legal name",
+    "LegalNamePlaceholder": "As on your passport or ID",
+    "FaceNote": "This is what the vetter will see and check against your document.",
+    "Connecting": "Connecting your identity…",
+    "StartApplication": "Start my application",
+    "SaveFace": "Save",
+    "Requirements": "This community needs {{n}} statement(s) verifying: {{claims}}.",
+    "AskAVetter": "Ask a vetter",
+    "PasteTicket": "Paste the vetter's ticket link",
+    "Request": "Request vetting",
+    "EligibleVetter": "eligible vetter",
+    "CardPreview": "Your card will show: legal name “{{name}}”. Nothing leaves until you send it.",
+    "SendCard": "Send my card",
+    "Checklist": "Your checklist",
+    "ChecklistLine": "{{held}} of {{needed}} statements",
+    "Meets": "meets the published requirements",
+    "AlreadyMember": "You are already a member ({{role}}).",
+    "Status": {
+      "sent": "Request sent",
+      "accepted": "Accepted — waiting for the vetter to open the session",
+      "refused": "Refused",
+      "session": "Session open",
+      "cardSent": "Card sent — the vetter is checking",
+      "attested": "Statement received",
+      "declined": "Declined",
+      "cardReceived": "Card received"
+    }
   }
 }

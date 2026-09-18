@@ -74,6 +74,21 @@ export interface VtiAgentState {
 export interface VtiCriterion {
   id?: string
   description?: string
+  /** Per-criterion digest — what an applicant is held to (manifest/0.2). */
+  requirementsDigest?: string
+  /** The vetting requirement object, when the criterion needs peer vetting. */
+  vetting?: {
+    version?: string
+    statementType?: string
+    minStatements?: number
+    acceptedMethods?: string[]
+    requiredClaims?: string[]
+    maxStatementAge?: string
+    eligibleVetters?: Record<string, unknown>
+    independence?: Record<string, unknown>
+    [key: string]: unknown
+  }
+  [key: string]: unknown
 }
 
 export interface VtiManifest {
@@ -201,12 +216,46 @@ class VtiAgentController {
     return this.session?.isOpen === true
   }
 
+  /** The DID this session presents. */
+  get did(): string | undefined {
+    return this.state.did
+  }
+
+  /**
+   * Send one Trust Task document to a peer without waiting — the reply, if
+   * any, reaches the inbox threaded on the document's id. For the peer path
+   * (applicant ↔ vetter) where a human answers minutes later. The document is
+   * signed by the caller when the spec requires it (every vetting task does).
+   */
+  async send(
+    toDid: string,
+    type: string,
+    document: Record<string, unknown>,
+    options: { thid?: string; expiresInSec?: number } = {}
+  ): Promise<void> {
+    const session = this.session
+    const did = this.state.did
+    if (!session || !did) throw new Error('vtiAgent: not connected')
+    const now = Math.floor(Date.now() / 1000)
+    await session.sendTo(toDid, {
+      id: `urn:uuid:${utils.uuid()}`,
+      typ: 'application/didcomm-plain+json',
+      type,
+      from: did,
+      to: [toDid],
+      ...(options.thid ? { thid: options.thid } : {}),
+      created_time: now,
+      expires_time: now + (options.expiresInSec ?? 900),
+      body: document,
+    })
+  }
+
   /**
    * Send one Trust Task document and wait for the community's answer. The VTC
    * reads the DIDComm body as a whole document where a VTA takes a bare
    * payload — measured in `tsp-reference/ref-20`.
    */
-  private async ask(
+  async ask(
     communityDid: string,
     type: string,
     payload: Record<string, unknown>,

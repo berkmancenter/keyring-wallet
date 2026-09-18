@@ -6,6 +6,7 @@ import { TOKENS, useServices } from '../container-api'
 import { useTheme } from '../contexts/theme'
 import MyAgent from '../modules/trust-tasks/screens/MyAgent'
 import VtiCommunity from '../modules/trust-tasks/screens/VtiCommunity'
+import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
 import { MyAgentStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
@@ -30,6 +31,9 @@ const MyAgentStack: React.FC = () => {
         component={VtiCommunity}
         options={{ title: t('Screens.Community'), ...ScreenOptionsDictionary[Screens.VtiCommunity] }}
       />
+      <Stack.Screen name={Screens.VtiVetting} options={{ title: t('Screens.Vetting'), ...ScreenOptionsDictionary[Screens.VtiVetting] }}>
+        {() => <VtiVetting config={config.vti} />}
+      </Stack.Screen>
     </Stack.Navigator>
   )
 }

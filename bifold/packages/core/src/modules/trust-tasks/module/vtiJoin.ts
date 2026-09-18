@@ -77,17 +77,7 @@ export async function joinCommunity(deps: VtiJoinDeps, invitation?: VtiInvitatio
   // train the card and the role arrive as separate messages after the verdict.
   const via = invitation ? 'invitation' : 'approval'
   const stopInbox = vtiAgent.onInbound((plaintext) => {
-    // eslint-disable-next-line no-console
-    console.log('[vtiInbox] inbound', String(plaintext.type), JSON.stringify(plaintext.body ?? null).slice(0, 600))
-    void receiveIssue(deps.communityStore, persona.did, plaintext, { via })
-      .then((got) => {
-        // eslint-disable-next-line no-console
-        console.log('[vtiInbox] kept', JSON.stringify(got.map((g) => [g.kind, g.subjectDid.slice(-16)])))
-      })
-      .catch((error) => {
-        // eslint-disable-next-line no-console
-        console.log('[vtiInbox] failed', error instanceof Error ? error.message : String(error))
-      })
+    void receiveIssue(deps.communityStore, persona.did, plaintext, { via }).catch(() => undefined)
   })
 
   step('manifest')

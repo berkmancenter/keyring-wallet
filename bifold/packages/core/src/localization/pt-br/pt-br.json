@@ -842,7 +842,8 @@
     "UpdateAvailable": "Update Available (PT-BR)",
     "JSONDetails": "JSON details (PT-BR)",
     "MyAgent": "Meu agente",
-    "Community": "Comunidade"
+    "Community": "Comunidade",
+    "Vetting": "Verificação"
   },
   "Loading": {
     "TakingTooLong": "Isso esta demorando mais que o normal. Você pode voltar para a home ou continuar esperando.",
@@ -1045,5 +1046,52 @@
     "ApprovalExpires": "Expira {{when}}",
     "AwaitingConsent": "Aguardando um aprovador consentir com {{task}}…",
     "AgentListening": "Seu agente pode alcançar você aqui."
+  },
+  "Vetting": {
+    "Title": "Verificação",
+    "RowHint": "Seja verificado por um membro, ou verifique alguém se você for verificador.",
+    "NeedIdentity": "Você precisa primeiro de uma identidade para esta comunidade — cada cartão, declaração e a candidatura final nomeiam a mesma.",
+    "DeskTitle": "Mesa de verificação",
+    "YouVetFor": "Você verifica para {{community}}.",
+    "Tickets": "Tickets",
+    "NewTicket": "Novo ticket",
+    "ReadAloud": "Leia este código para a pessoa, ou…",
+    "OrScan": "…deixe-a escanear ou colar este link",
+    "TicketValid": "{{uses}} uso restante, até {{until}}",
+    "Desk": "Pedidos",
+    "DeskEmpty": "Nenhum pedido ainda. Entregue um ticket a alguém.",
+    "OpenSession": "Abrir sessão",
+    "MatchCodeHint": "Leia este código em voz alta — as duas telas devem mostrar o mesmo.",
+    "CardReceived": "O cartão dela",
+    "Attest": "Verifiquei a pessoa e o documento — atestar",
+    "StatementIssued": "Declaração emitida",
+    "YourFace": "Seu rosto",
+    "LegalName": "Nome legal",
+    "LegalNamePlaceholder": "Como no seu passaporte ou identidade",
+    "FaceNote": "É isto que o verificador verá e comparará com o seu documento.",
+    "Connecting": "Conectando sua identidade…",
+    "StartApplication": "Iniciar minha candidatura",
+    "SaveFace": "Salvar",
+    "Requirements": "Esta comunidade exige {{n}} declaração(ões) verificando: {{claims}}.",
+    "AskAVetter": "Pedir a um verificador",
+    "PasteTicket": "Cole o link do ticket do verificador",
+    "Request": "Pedir verificação",
+    "EligibleVetter": "verificador elegível",
+    "CardPreview": "Seu cartão mostrará: nome legal “{{name}}”. Nada sai antes de você enviar.",
+    "SendCard": "Enviar meu cartão",
+    "Checklist": "Sua lista",
+    "ChecklistLine": "{{held}} de {{needed}} declarações",
+    "Meets": "atende aos requisitos publicados",
+    "AlreadyMember": "Você já é membro ({{role}}).",
+    "Status": {
+      "sent": "Pedido enviado",
+      "accepted": "Aceito — aguardando o verificador abrir a sessão",
+      "refused": "Recusado",
+      "session": "Sessão aberta",
+      "cardSent": "Cartão enviado — o verificador está checando",
+      "attested": "Declaração recebida",
+      "declined": "Recusado",
+      "cardReceived": "Cartão recebido"
+    }
   }
 }

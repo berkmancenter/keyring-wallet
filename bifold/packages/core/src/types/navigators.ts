@@ -76,6 +76,7 @@ export enum Screens {
   ImportWallet = 'Import Wallet',
   MyAgent = 'My Agent',
   VtiCommunity = 'Community',
+  VtiVetting = 'Vetting',
 }
 
 export enum Stacks {
@@ -134,6 +135,7 @@ export type TabStackParams = {
 export type MyAgentStackParams = {
   [Screens.MyAgent]: undefined
   [Screens.VtiCommunity]: { communityDid: string }
+  [Screens.VtiVetting]: undefined
 }
 
 export type OnboardingStackParams = {

@@ -296,6 +296,18 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         </>
       ) : null}
 
+      {vtaDid && communityDid ? (
+        <Pressable
+          style={styles.card}
+          testID={testIdWithKey('MyAgentVettingRow')}
+          accessibilityRole="button"
+          onPress={() => navigation.navigate(Screens.VtiVetting)}
+        >
+          <Text style={styles.value}>{t('Vetting.Title')}</Text>
+          <Text style={styles.label}>{t('Vetting.RowHint')}</Text>
+        </Pressable>
+      ) : null}
+
       <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Invitations')}</Text>
       {invitations.length === 0 ? (
         <Text style={styles.value} testID={testIdWithKey('MyAgentNoInvitations')}>

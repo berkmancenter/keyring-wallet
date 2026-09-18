@@ -45,6 +45,7 @@ import { VtiRefusal } from './vtiAgent'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 
 /** The tasks this client speaks, by the URIs `vta-sdk` registers. */
 export const VTA_TASK = {
@@ -338,6 +339,13 @@ export class VtaClient {
       this.pending = undefined
       if (!answer) throw new Error(`${LOG_PREFIX} the VTA did not answer ${type}`)
 
+      // An auth/ACL refusal never reaches the task handler: the VTA answers
+      // with a DIDComm problem-report (`app_err_to_response`, handlers.rs),
+      // not a trust-task-error. Treat it as the refusal it is.
+      if (answer.type === PROBLEM_REPORT) {
+        const p = answer.body as { code?: string; comment?: string } | undefined
+        throw new VtiRefusal(p?.code ?? 'problem-report', p?.comment ?? `the VTA refused ${type}`)
+      }
       const body = answer.body as { type?: string; payload?: unknown } | undefined
       if (String(body?.type ?? '').startsWith(TASK_ERROR)) {
         const p = body?.payload as { code?: string; message?: string; details?: unknown } | undefined
@@ -452,7 +460,7 @@ export class VtaClient {
    */
   async ensurePersona(options: { communityDid: string; label?: string; personaBaseUrl?: string }): Promise<VtiPersona> {
     const existing = await this.store.getPersona(options.communityDid)
-    if (existing?.kmsKeyIds?.keyAgreement) return existing
+    if (existing?.kmsKeyIds?.keyAgreement && existing.kmsKeyIds.signing) return existing
 
     await this.connect()
     const contexts = await this.listContexts()
@@ -467,13 +475,16 @@ export class VtaClient {
             : { contextId, didUrl: `${options.personaBaseUrl ?? ''}/${label}`, label }
         )
     const borrowed = await this.borrowKey(minted.kaKeyId)
+    // The signing key too: a vetting card, an eligibility presentation and a
+    // vetting statement are all signed as the persona (D19).
+    const signing = await this.borrowKey(minted.signingKeyId)
     const persona: VtiPersona = {
       communityDid: options.communityDid,
       vtaDid: this.vtaDid,
       did: minted.did,
       contextId: minted.contextId ?? contextId,
       vtaKeyIds: { signing: minted.signingKeyId, keyAgreement: minted.kaKeyId },
-      kmsKeyIds: { keyAgreement: borrowed.keyId },
+      kmsKeyIds: { keyAgreement: borrowed.keyId, signing: signing.keyId },
       label,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     }

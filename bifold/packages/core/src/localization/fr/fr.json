@@ -930,7 +930,8 @@
     "UpdateAvailable": "Update Available (FR)",
     "JSONDetails": "JSON details (FR)",
     "MyAgent": "Mon agent",
-    "Community": "Communauté"
+    "Community": "Communauté",
+    "Vetting": "Vérification"
   },
   "Loading": {
     "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
@@ -1146,5 +1147,52 @@
     "ApprovalExpires": "Expire {{when}}",
     "AwaitingConsent": "En attente qu'un approbateur consente à {{task}}…",
     "AgentListening": "Votre agent peut vous joindre ici."
+  },
+  "Vetting": {
+    "Title": "Vérification",
+    "RowHint": "Faites-vous vérifier par un membre, ou vérifiez quelqu'un si vous êtes vérificateur.",
+    "NeedIdentity": "Il vous faut d'abord une identité pour cette communauté — chaque carte, déclaration et la candidature finale nomment la même.",
+    "DeskTitle": "Bureau de vérification",
+    "YouVetFor": "Vous vérifiez pour {{community}}.",
+    "Tickets": "Tickets",
+    "NewTicket": "Nouveau ticket",
+    "ReadAloud": "Lisez ce code à la personne, ou…",
+    "OrScan": "…laissez-la scanner ou coller ce lien",
+    "TicketValid": "{{uses}} utilisation restante, jusqu'au {{until}}",
+    "Desk": "Demandes",
+    "DeskEmpty": "Pas encore de demande. Donnez un ticket à quelqu'un.",
+    "OpenSession": "Ouvrir la session",
+    "MatchCodeHint": "Lisez ce code à voix haute — les deux écrans doivent afficher le même.",
+    "CardReceived": "Sa carte",
+    "Attest": "J'ai vérifié la personne et son document — attester",
+    "StatementIssued": "Déclaration émise",
+    "YourFace": "Votre visage",
+    "LegalName": "Nom légal",
+    "LegalNamePlaceholder": "Comme sur votre passeport ou pièce d'identité",
+    "FaceNote": "C'est ce que le vérificateur verra et comparera à votre document.",
+    "Connecting": "Connexion de votre identité…",
+    "StartApplication": "Commencer ma candidature",
+    "SaveFace": "Enregistrer",
+    "Requirements": "Cette communauté demande {{n}} déclaration(s) vérifiant : {{claims}}.",
+    "AskAVetter": "Demander à un vérificateur",
+    "PasteTicket": "Collez le lien du ticket du vérificateur",
+    "Request": "Demander une vérification",
+    "EligibleVetter": "vérificateur éligible",
+    "CardPreview": "Votre carte affichera : nom légal « {{name}} ». Rien ne part avant l'envoi.",
+    "SendCard": "Envoyer ma carte",
+    "Checklist": "Votre liste",
+    "ChecklistLine": "{{held}} déclaration(s) sur {{needed}}",
+    "Meets": "répond aux exigences publiées",
+    "AlreadyMember": "Vous êtes déjà membre ({{role}}).",
+    "Status": {
+      "sent": "Demande envoyée",
+      "accepted": "Acceptée — en attente que le vérificateur ouvre la session",
+      "refused": "Refusée",
+      "session": "Session ouverte",
+      "cardSent": "Carte envoyée — le vérificateur vérifie",
+      "attested": "Déclaration reçue",
+      "declined": "Déclinée",
+      "cardReceived": "Carte reçue"
+    }
   }
 }
