@@ -26,6 +26,15 @@ case "${1:-}" in
   --restore-criteria)
     node "$ADMIN" "$BASE" "$VTC_DID" "$CRED" put-criterion "$STACK_DIR/criterion.json" >/dev/null
     echo "vetting criterion restored"; exit 0 ;;
+  # The dry-run guide's step 02: for a vetting run, delete anything that would
+  # admit the applicant without vetting, or the run proves nothing.
+  --vetting-only)
+    node "$ADMIN" "$BASE" "$VTC_DID" "$CRED" put-criterion "$STACK_DIR/criterion.json" >/dev/null 2>&1 || true
+    node "$ADMIN" "$BASE" "$VTC_DID" "$CRED" delete-criterion invited-member >/dev/null 2>&1 || true
+    echo "community is vetting-only"; exit 0 ;;
+  --restore-invited)
+    node "$ADMIN" "$BASE" "$VTC_DID" "$CRED" put-criterion "$STACK_DIR/criterion-invited.json" >/dev/null 2>&1 || true
+    echo "invitation criterion restored"; exit 0 ;;
 esac
 
 DID="${1:?usage: invite-persona.sh <did> [role]}"

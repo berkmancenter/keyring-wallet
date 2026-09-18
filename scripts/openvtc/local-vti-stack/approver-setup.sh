@@ -27,7 +27,8 @@ case "${1:-}" in
     ;;
   clear)
     TASK="${2:-$TASK_DEFAULT}"
-    "$PNM" --vta "$VTA_SLUG" approvals remove "$TASK" 2>&1 | strip | tail -2
+    "$PNM" --vta "$VTA_SLUG" approvals remove "$TASK" 2>&1 | strip | tail -2 || true
+    true
     ;;
   *) echo "usage: approver-setup.sh add <did> [taskType] | clear [taskType]" >&2; exit 1 ;;
 esac

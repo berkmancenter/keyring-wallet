@@ -21,6 +21,7 @@ import {
   VtiMediatorSession,
   VtaClient,
   GenericRecordsCommunityStore,
+  GenericRecordsVettingStore,
   GenericRecordsIdentityStore,
   vtiClientIdentityFromPersona,
   vtiAgent,
@@ -561,6 +562,7 @@ const Developer: React.FC = () => {
     if (!agent || !communityDid) return
     await new GenericRecordsIdentityStore(agent).forgetPersona(communityDid)
     await new GenericRecordsCommunityStore(agent).forgetCommunity(communityDid)
+    await new GenericRecordsVettingStore(agent).forget(communityDid)
     Alert.alert('Forgotten', 'Persona, membership and invitations for the community were dropped.')
   }
 

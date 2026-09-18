@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.5 — 2026-09-18.** A living document: every finding here was measured
+**Version 1.6 — 2026-09-18.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -44,6 +44,13 @@ from a report or an issue always lands on the right entry.
 | [VTI-18](#vti-18) | A self-managed DID-hosting daemon without a mediator cannot be registered by a VTA | Medium | Open |
 | [VTI-19](#vti-19) | The DID resolver bursts a dozen fetches per operation and trips rate-limited hosts | Low | Open — operational |
 | [VTI-20](#vti-20) | A serverless persona mint prints a log nobody serves | Low | Open — documentation |
+| [VTI-21](#vti-21--no-channel-delivers-an-invitation-to-its-invitee) | No channel delivers an invitation to its invitee | Medium | Open |
+| [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | Open |
+| [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open |
+| [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | Open |
+| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open |
+| [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | Open |
+| [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open |
 
 ## Stack under test
 
@@ -575,6 +582,24 @@ consumed (the granted notice is route-gated the same way). The upstream
 question is whether a VTA should resolve a `did:webvh`/`did:peer` approver's
 own `DIDCommMessaging` service and push directly. **Measured:** 2026-09-18.
 
+### VTI-27 — An authentication or ACL refusal over DIDComm is a `problem-report`, not a `trust-task-error`
+
+A trust task whose sender the VTA does not accept — a DID missing from the
+ACL, a stale session — never reaches the task handler: `auth_from_message`
+fails and `app_try!` answers with `DIDCommResponse::problem_report(...)`
+(`vta-service/src/messaging/handlers.rs`), i.e. a plain DIDComm
+`https://didcomm.org/report-problem/2.0/problem-report` whose body is
+`{code, comment}`. Every refusal the handler itself produces, by contrast, is
+a `trust-task-error/0.3` document in the Trust Task envelope, with a typed
+`code` and `details`. A client that keys on the envelope type — as the spec
+suggests it should — reads the auth refusal as an empty success and carries
+on with nothing. **Measured:** 2026-09-18 — Alice's log says *"refusing trust
+task: DID not in ACL: did:peer:2…"* while the phone, whose manager had
+dropped out of the ACL, showed no error and waited. Keyring now treats a
+problem-report answer as a refusal (`VtiRefusal(code, comment)`). The upstream
+question is whether the auth gate should speak the same error document as the
+tasks it guards, so one code path covers both.
+
 ## Changelog
 
 | Version | Date | Change |
@@ -582,6 +607,7 @@ own `DIDCommMessaging` service and push directly. **Measured:** 2026-09-18.
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.6 | 2026-09-18 | VTI-27: an auth/ACL refusal over DIDComm is a problem-report, not a trust-task-error; status table extended to VTI-21…27 |
 | 1.5 | 2026-09-18 | Upgraded in place to VTI-Eucalyptus-RC-0 (versions table); VTI-25: the card is delivered by credential-exchange/issue, not inline; VTI-26: consent pushes reach did:key approvers only — the requester relays for the rest |
 | 1.1 | 2026-09-16 | **Corrects VTI-01**, which 1.0 called a blocker: the first vetter can be bootstrapped on documented surfaces — invitation-only community → invited identity auto-admitted with `allow` → vetter role granted → vetting criterion added. Severity lowered to medium; the finding is now that the obvious attempt dead-ends and the working order is undocumented. Adds **Stack under test** (every component's version and upstream commit) and a note on version drift, including our own Trust Tasks lag. Adds VTI-16 (admin portal sign-in requires an outage). Test keys redacted from fixtures. |
 | 1.0 | 2026-09-16 | First published: VTI-01…VTI-15, consolidating the nine findings from the terminal-side rehearsal with the six that only appear when a phone is the client. Records the 2026-09-16 measurement that membership completes on an unconditioned community. |
