@@ -995,7 +995,11 @@
     "DeleteLastProfileTitle": "Impossible de supprimer votre seul profil",
     "DeleteLastProfileDescription": "Vous devez conserver au moins un profil. Ajoutez-en un autre avant de supprimer celui-ci.",
     "DeleteActiveProfileTitle": "Impossible de supprimer votre profil actif",
-    "DeleteActiveProfileDescription": "Rendez un autre profil actif d'abord, puis vous pourrez supprimer celui-ci."
+    "DeleteActiveProfileDescription": "Rendez un autre profil actif d'abord, puis vous pourrez supprimer celui-ci.",
+    "DeleteWithContactsTitle": "Supprimer ce profil ?",
+    "DeleteWithContactsMessage_one": "Ce profil a été partagé avec {{count}} contact. Il continuera de le voir tel qu'il était au moment du partage ; vous ne pourrez plus le mettre à jour pour lui.",
+    "DeleteWithContactsMessage_other": "Ce profil a été partagé avec {{count}} contacts. Ils continueront de le voir tel qu'il était au moment du partage ; vous ne pourrez plus le mettre à jour pour eux.",
+    "DeleteAnyway": "Supprimer quand même"
   },
   "RenameContact": {
     "ThisContactName": "Ce nom de contact n'est affiché que dans votre Liste de Contacts.",

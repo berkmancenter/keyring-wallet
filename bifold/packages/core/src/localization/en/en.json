@@ -528,6 +528,8 @@
     "AContact": "A Contact",
     "DateOfConnection": "Connected: {{ date }}",
     "RelationshipDID": "Relationship DID",
+    "LinkedProfile": "Your Linked Profile",
+    "LinkedProfileDeleted": "{{label}} (deleted)",
     "ViewMessages": "View Messages",
     "ViewContact": "View Contact",
     "RemoveTitle": "Remove this Contact",
@@ -1056,7 +1058,11 @@
     "DeleteLastProfileTitle": "Can’t delete your only profile",
     "DeleteLastProfileDescription": "You need at least one profile. Add another before deleting this one.",
     "DeleteActiveProfileTitle": "Can’t delete your active profile",
-    "DeleteActiveProfileDescription": "Make another profile active first, then you can delete this one."
+    "DeleteActiveProfileDescription": "Make another profile active first, then you can delete this one.",
+    "DeleteWithContactsTitle": "Delete this profile?",
+    "DeleteWithContactsMessage_one": "This profile has been shared with {{count}} contact. They'll keep seeing it as it was at share time; you won't be able to update it for them anymore.",
+    "DeleteWithContactsMessage_other": "This profile has been shared with {{count}} contacts. They'll keep seeing it as it was at share time; you won't be able to update it for them anymore.",
+    "DeleteAnyway": "Delete Anyway"
   },
   "RenameContact": {
     "ThisContactName": "This contact name is only displayed in your Contacts List.",

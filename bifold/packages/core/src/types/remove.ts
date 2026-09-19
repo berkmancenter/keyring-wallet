@@ -5,4 +5,5 @@ export enum ModalUsage {
   CredentialOfferDecline,
   ProofRequestDecline,
   CustomNotificationDecline,
+  ProfileDeleteWithContacts,
 }

@@ -907,7 +907,11 @@
     "DeleteLastProfileTitle": "Não é possível excluir seu único perfil",
     "DeleteLastProfileDescription": "Você precisa de pelo menos um perfil. Adicione outro antes de excluir este.",
     "DeleteActiveProfileTitle": "Não é possível excluir seu perfil ativo",
-    "DeleteActiveProfileDescription": "Torne outro perfil ativo primeiro, depois você poderá excluir este."
+    "DeleteActiveProfileDescription": "Torne outro perfil ativo primeiro, depois você poderá excluir este.",
+    "DeleteWithContactsTitle": "Excluir este perfil?",
+    "DeleteWithContactsMessage_one": "Este perfil foi compartilhado com {{count}} contato. Ele continuará vendo o perfil como estava no momento do compartilhamento; você não poderá mais atualizá-lo para ele.",
+    "DeleteWithContactsMessage_other": "Este perfil foi compartilhado com {{count}} contatos. Eles continuarão vendo o perfil como estava no momento do compartilhamento; você não poderá mais atualizá-lo para eles.",
+    "DeleteAnyway": "Excluir mesmo assim"
   },
   "RenameContact": {
     "ThisContactName": "Este nome de contato só é visualizado em sua Lista de Contatos.",

@@ -103,6 +103,37 @@ export class RelationshipDidRepository extends Repository<RelationshipDidRecord>
   }
 
   /**
+   * Record which R-Card profile was most recently shared with a counterparty.
+   * No-op (returns null) if no record exists yet for this connection.
+   */
+  async updateSharedProfile(
+    agentContext: AgentContext,
+    counterpartyConnectionDid: string,
+    profileId: string,
+    profileLabel: string
+  ): Promise<RelationshipDidRecord | null> {
+    const record = await this.findByConnectionDid(agentContext, counterpartyConnectionDid)
+
+    if (!record) {
+      return null
+    }
+
+    record.sharedProfileId = profileId
+    record.sharedProfileLabel = profileLabel
+    await this.update(agentContext, record)
+    return record
+  }
+
+  /**
+   * Count how many contacts currently have this profile recorded as shared —
+   * used to warn before deleting a profile that's in use.
+   */
+  async countBySharedProfileId(agentContext: AgentContext, profileId: string): Promise<number> {
+    const records = await this.findByQuery(agentContext, { sharedProfileId: profileId })
+    return records.length
+  }
+
+  /**
    * Delete a RelationshipDidRecord by connection DID
    */
   async deleteByConnectionDid(agentContext: AgentContext, counterpartyConnectionDid: string): Promise<void> {

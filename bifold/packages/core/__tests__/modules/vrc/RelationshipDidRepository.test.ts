@@ -15,12 +15,16 @@ const createMockRecord = (props: {
   myRelationshipDid: string
   counterpartyRelationshipDid?: string
   connectionId?: string
+  sharedProfileId?: string
+  sharedProfileLabel?: string
 }) => ({
   id: props.id ?? `mock-uuid-${Math.random().toString(36).substring(7)}`,
   counterpartyConnectionDid: props.counterpartyConnectionDid,
   myRelationshipDid: props.myRelationshipDid,
   counterpartyRelationshipDid: props.counterpartyRelationshipDid,
   connectionId: props.connectionId,
+  sharedProfileId: props.sharedProfileId,
+  sharedProfileLabel: props.sharedProfileLabel,
   createdAt: new Date(),
   type: 'RelationshipDidRecord',
   _tags: {},
@@ -28,6 +32,7 @@ const createMockRecord = (props: {
     return {
       counterpartyConnectionDid: this.counterpartyConnectionDid,
       counterpartyRelationshipDid: this.counterpartyRelationshipDid,
+      sharedProfileId: this.sharedProfileId,
     }
   },
   clone() {
@@ -281,6 +286,73 @@ describe('RelationshipDidRepository', () => {
 
       expect(result).toBeNull()
       expect(mockUpdate).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('updateSharedProfile', () => {
+    it('should record the shared profile id and label on an existing record', async () => {
+      const existingRecord = createMockRecord({
+        counterpartyConnectionDid: testDids.counterpartyConnectionDid,
+        myRelationshipDid: testDids.myRelationshipDid,
+      })
+
+      mockFindByQuery.mockResolvedValue([existingRecord])
+
+      const result = await repository.updateSharedProfile(
+        mockAgentContext,
+        testDids.counterpartyConnectionDid,
+        'profile-123',
+        'Work'
+      )
+
+      expect(result).not.toBeNull()
+      expect(result?.sharedProfileId).toBe('profile-123')
+      expect(result?.sharedProfileLabel).toBe('Work')
+      expect(mockUpdate).toHaveBeenCalled()
+    })
+
+    it('should return null and not update when no record exists for the connection', async () => {
+      mockFindByQuery.mockResolvedValue([])
+
+      const result = await repository.updateSharedProfile(
+        mockAgentContext,
+        'did:peer:1zNonExistent',
+        'profile-123',
+        'Work'
+      )
+
+      expect(result).toBeNull()
+      expect(mockUpdate).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('countBySharedProfileId', () => {
+    it('should count records sharing the given profile id', async () => {
+      mockFindByQuery.mockResolvedValue([
+        createMockRecord({
+          counterpartyConnectionDid: 'did:peer:1zParty1',
+          myRelationshipDid: 'did:peer:0z6MkMyDid1',
+          sharedProfileId: 'profile-123',
+        }),
+        createMockRecord({
+          counterpartyConnectionDid: 'did:peer:1zParty2',
+          myRelationshipDid: 'did:peer:0z6MkMyDid2',
+          sharedProfileId: 'profile-123',
+        }),
+      ])
+
+      const result = await repository.countBySharedProfileId(mockAgentContext, 'profile-123')
+
+      expect(result).toBe(2)
+      expect(mockFindByQuery).toHaveBeenCalledWith({ sharedProfileId: 'profile-123' })
+    })
+
+    it('should return 0 when no contact has this profile shared', async () => {
+      mockFindByQuery.mockResolvedValue([])
+
+      const result = await repository.countBySharedProfileId(mockAgentContext, 'profile-unused')
+
+      expect(result).toBe(0)
     })
   })
 

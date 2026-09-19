@@ -822,6 +822,29 @@ async function issueRCardCredential(
 
     connectionRCardOffers.set(connectionId, 'offered')
     logger.info(`✓ RCard offer sent | Connection: ${connectionId}`)
+
+    // Record which of our own profiles was shared with this counterparty, so
+    // our ContactDetails page for them can show it (editable-multi-profile-plan
+    // §4.3). Best-effort: a failure here shouldn't undo an offer already sent.
+    if (connectionRecord.theirDid) {
+      try {
+        const sharedTemplate = await loadRCardTemplate(agent)
+        if (sharedTemplate) {
+          const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
+          await repository.updateSharedProfile(
+            agent.context,
+            connectionRecord.theirDid,
+            sharedTemplate.id,
+            sharedTemplate.label
+          )
+        }
+      } catch (error) {
+        logger.error(
+          `Failed to record shared profile | Connection: ${connectionId}: ${(error as Error).message}`,
+          error
+        )
+      }
+    }
   } catch (error) {
     connectionRCardOffers.set(connectionId, 'failed')
     logger.error(`Failed to offer RCard | Connection: ${connectionId}: ${(error as Error).message}`, error)

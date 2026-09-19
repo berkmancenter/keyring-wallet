@@ -11,6 +11,9 @@ import { useOpenIDCredentials } from '../../../../src/modules/openid/context/Ope
 import { testIdWithKey } from '../../../../src/utils/testable'
 import { ContainerProvider } from '../../../../src/container-api'
 import { MainContainer } from '../../../../src/container-impl'
+import { StoreProvider, defaultReducer } from '../../../../src/contexts/store'
+import { testDefaultState } from '../../../contexts/store'
+import { buildRCardTemplate } from '../../../../src/modules/vrc/types/rcard'
 
 // ContactDetails resolves TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER via
 // useServices, so every render needs a real container in context — the same
@@ -88,6 +91,24 @@ describe('ContactDetails Screen', () => {
     } as any,
     navigation: { navigate: mockNavigate, goBack: mockGoBack, getParent: mockGetParent } as any,
   })
+
+  // Wraps ContactDetails with a StoreProvider seeded with the given live
+  // profiles, so useRCardCredential()'s live lookup has something to resolve
+  // against — plain TestContainerWrapper falls back to an empty profile list.
+  const renderWithProfiles = (contact: ContactCredentialDetails, profiles: ReturnType<typeof buildRCardTemplate>[]) =>
+    render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: ({ children }) => (
+        <StoreProvider
+          initialState={{
+            ...testDefaultState,
+            rCard: { profiles, activeProfileId: profiles[0]?.id, lastSyncedAt: new Date().toISOString() },
+          }}
+          reducer={defaultReducer}
+        >
+          <TestContainerWrapper>{children}</TestContainerWrapper>
+        </StoreProvider>
+      ),
+    })
 
   test('Renders contact details correctly', async () => {
     mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
@@ -535,6 +556,61 @@ describe('ContactDetails Screen', () => {
         expect(await findByText('Verified')).toBeTruthy()
         expect(queryByTestId('LocalityConfirmedBadge')).toBeNull()
         expect(queryByText('Locality Verification')).toBeNull()
+      })
+    })
+  })
+
+  describe('linked profile display', () => {
+    test('shows the live profile name and photo, in a card, when sharedProfileId still resolves to an existing profile', async () => {
+      const photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+      const workProfile = buildRCardTemplate(
+        { firstName: 'Jane', lastName: 'Doe', email: '', organization: '', photo },
+        { label: 'Work' }
+      )
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue({
+        sharedProfileId: workProfile.id,
+        sharedProfileLabel: 'Work (renamed since)',
+      })
+
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+      const { findByText, findByTestId } = renderWithProfiles(contact, [workProfile])
+
+      await waitFor(async () => {
+        expect(await findByText('ContactDetails.LinkedProfile')).toBeTruthy()
+        // Live label wins over the share-time snapshot.
+        expect(await findByText('Work')).toBeTruthy()
+        const avatar = await findByTestId(testIdWithKey('LinkedProfileAvatarImage'))
+        expect(avatar.props.source).toEqual({ uri: photo })
+        expect(await findByTestId('LinkedProfileCard')).toBeTruthy()
+      })
+    })
+
+    test('falls back to the share-time label snapshot, with no photo, when the linked profile no longer exists', async () => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue({
+        sharedProfileId: 'urn:uuid:deleted-profile',
+        sharedProfileLabel: 'Old Work Profile',
+      })
+
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+      const { findByText, queryByTestId } = renderWithProfiles(contact, [])
+
+      await waitFor(async () => {
+        expect(await findByText('ContactDetails.LinkedProfile')).toBeTruthy()
+        expect(await findByText('ContactDetails.LinkedProfileDeleted')).toBeTruthy()
+        expect(queryByTestId(testIdWithKey('LinkedProfileAvatarImage'))).toBeNull()
+      })
+    })
+
+    test('does not show the Linked Profile card when no profile was ever recorded as shared', async () => {
+      mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
+
+      const contact: ContactCredentialDetails = { issuer: TEST_CONTACTS.alice.issuer }
+      const { findByText, queryByText, queryByTestId } = renderWithProfiles(contact, [])
+
+      await waitFor(async () => {
+        expect(await findByText('Alice Smith')).toBeTruthy()
+        expect(queryByText('ContactDetails.LinkedProfile')).toBeNull()
+        expect(queryByTestId('LinkedProfileCard')).toBeNull()
       })
     })
   })

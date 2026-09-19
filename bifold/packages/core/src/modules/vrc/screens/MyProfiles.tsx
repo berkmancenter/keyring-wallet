@@ -4,15 +4,19 @@ import { FlatList, Image, StyleSheet, TouchableOpacity, View } from 'react-nativ
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StackScreenProps } from '@react-navigation/stack'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
+import { useAgent } from '@bifold/react-hooks'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import PopupModal from '../../../components/modals/PopupModal'
+import CommonRemoveModal from '../../../components/modals/CommonRemoveModal'
 import { InfoBoxType } from '../../../components/misc/InfoBox'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { ModalUsage } from '../../../types/remove'
 import { Screens, SettingStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { useRCardCredential } from '../hooks/useRCardCredential'
+import { RelationshipDidRepository } from '../repositories/RelationshipDidRepository'
 import { formInputFromTemplate, RCardTemplate } from '../types/rcard'
 
 type MyProfilesProps = StackScreenProps<SettingStackParams, Screens.MyProfiles>
@@ -20,8 +24,12 @@ type MyProfilesProps = StackScreenProps<SettingStackParams, Screens.MyProfiles>
 const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
+  const { agent } = useAgent()
   const { profiles, activeProfileId, setActive, remove } = useRCardCredential()
   const [blockedDeleteReason, setBlockedDeleteReason] = useState<'LastProfile' | 'ActiveProfile' | undefined>(
+    undefined
+  )
+  const [pendingDelete, setPendingDelete] = useState<{ profileId: string; contactCount: number } | undefined>(
     undefined
   )
 
@@ -70,12 +78,42 @@ const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
     },
   })
 
-  const handleDelete = async (profileId: string) => {
+  const performDelete = async (profileId: string) => {
     const result = await remove(profileId)
     if (!result.ok && result.reason !== 'NoAgent') {
       setBlockedDeleteReason(result.reason)
     }
   }
+
+  const handleDelete = async (profileId: string) => {
+    if (agent) {
+      try {
+        const repository = agent.dependencyManager.resolve(RelationshipDidRepository)
+        const contactCount = await repository.countBySharedProfileId(agent.context, profileId)
+        if (contactCount > 0) {
+          setPendingDelete({ profileId, contactCount })
+          return
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[VRC:MyProfiles] Shared-profile count lookup error:',
+          error instanceof Error ? error.message : String(error)
+        )
+      }
+    }
+
+    await performDelete(profileId)
+  }
+
+  const handleConfirmDeleteWithContacts = async () => {
+    if (!pendingDelete) return
+    const { profileId } = pendingDelete
+    setPendingDelete(undefined)
+    await performDelete(profileId)
+  }
+
+  const handleCancelDeleteWithContacts = () => setPendingDelete(undefined)
 
   const renderProfile = ({ item: profile }: { item: RCardTemplate }) => {
     const { firstName, lastName, photo } = formInputFromTemplate(profile)
@@ -167,6 +205,15 @@ const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
           notificationType={InfoBoxType.Info}
           onCallToActionLabel={t('Global.Okay')}
           onCallToActionPressed={() => setBlockedDeleteReason(undefined)}
+        />
+      )}
+      {pendingDelete && (
+        <CommonRemoveModal
+          usage={ModalUsage.ProfileDeleteWithContacts}
+          visible={!!pendingDelete}
+          extraDetails={String(pendingDelete.contactCount)}
+          onSubmit={handleConfirmDeleteWithContacts}
+          onCancel={handleCancelDeleteWithContacts}
         />
       )}
     </SafeAreaView>
