@@ -2142,6 +2142,7 @@ __metadata:
     "@types/base-64": "npm:^1.0.2"
     ajv: "npm:^8.17.1"
     canonicalize: "npm:^1.0.8"
+    pako: "npm:^2.1.0"
     unique-names-generator: "npm:^4.7.1"
   peerDependencies:
     "@animo-id/expo-secure-environment": 0.1.5
@@ -16873,6 +16874,13 @@ __metadata:
   version: 2.2.0
   resolution: "p-try@npm:2.2.0"
   checksum: 10c0/c36c19907734c904b16994e6535b02c36c2224d433e01a2f1ab777237f4d86e6289fd5fd464850491e940379d4606ed850c03e0f9ab600b0ebddb511312e177f
+  languageName: node
+  linkType: hard
+
+"pako@npm:^2.1.0":
+  version: 2.2.0
+  resolution: "pako@npm:2.2.0"
+  checksum: 10c0/e5d31de1940fdd13cc4014296b0026112483d0834bce4856ca29c8af8438d030c6416986a0f6df7d5372cae18d6dd6c57f48b24a49d6c207c0a4cc66af15c07d
   languageName: node
   linkType: hard
 

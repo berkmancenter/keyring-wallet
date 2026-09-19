@@ -770,6 +770,20 @@ not `data.json`. Keyring now polls every 15 s. For upstream: the SDK's
 extension to the Pickup 3.0 body is undocumented, and a `status` on
 `live-delivery-change` could carry the dropped count so clients know to poll.
 
+**Being fixed upstream** as `affinidi-tdk-rs` #830 (open, tracked there as
+KR-30), and by the second route: a drop raises a per-connection resync flag and
+the writer sends a Pickup 3.0 `status` carrying the live `message_count` as
+soon as the socket moves again. One caution from the client side, since the PR
+reasons that recovery "needs no new protocol on the client side" — true of the
+protocol, and not automatically true of a client. Keyring, until we fix it,
+drops *every* pickup-protocol frame on arrival, `status` included, because it
+only ever treats pickup as the answer to a request it made. An unsolicited
+`status` therefore reaches a listener that ignores it, and the drop stays
+invisible exactly as before. Worth saying in the PR, because it decides whether
+the fix works in the field: the signal is only as good as the clients that act
+on an *unsolicited* one, and that is a behaviour change for any client built
+the way ours was. Ours to fix on our side.
+
 ### VTI-31 — A dropped terminal error is never acknowledged, so it never leaves the sender's queue
 
 *Measured on era **C**, with `affinidi-tdk-rs` PR #829 (`b544da04`) as the
