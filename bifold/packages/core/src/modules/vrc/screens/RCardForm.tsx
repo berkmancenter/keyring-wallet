@@ -27,9 +27,11 @@ import { useTheme } from '../../../contexts/theme'
 import { bifoldLoggerInstance } from '../../../services/bifoldLogger'
 import { RCardFormInput, RCardValidationErrors, validateRCardForm } from '../types/rcard'
 import { processRCardPhoto, RCardPhotoTooLargeError, ManipulateAsyncFn } from '../utils/rcardPhoto'
+import { CropRect } from '../utils/rcardCropMath'
 import { InlineErrorConfig } from '../../../types/error'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
+import RCardPhotoCropModal from './RCardPhotoCropModal'
 
 /** Adapts expo-image-manipulator's manipulateAsync to the injectable shape processRCardPhoto expects. */
 const rcardManipulateAsync: ManipulateAsyncFn = (uri, actions, saveOptions) =>
@@ -46,19 +48,25 @@ export class RCardPhotoPermissionDeniedError extends Error {
   }
 }
 
+export interface PickedRCardPhoto {
+  uri: string
+  width: number
+  height: number
+}
+
 /**
- * Launches the image picker and runs the picked asset through the
- * center-crop/resize/compress budget pipeline (processRCardPhoto). Returns
- * undefined if the user cancels.
+ * Launches the image picker and returns the raw picked asset (uri + its own
+ * pixel dimensions), for the caller to route through the crop modal before
+ * processRCardPhoto. Returns undefined if the user cancels.
  *
  * Deliberately does not pass `allowsEditing` — that hands cropping to the
  * OS's own picker UI, which on Android has been observed to hand back a
  * stale, previously-cropped image instead of the one just picked (see
- * docs/plans/rcard-profile-picture-plan/2026-09-18-bam.md). Cropping the
- * picker's own freshly-returned asset ourselves, in processRCardPhoto,
- * removes that failure mode.
+ * docs/plans/rcard-profile-picture-plan/2026-09-18-bam.md). Cropping happens
+ * instead in-app (RCardPhotoCropModal + processRCardPhoto), against this
+ * freshly-returned asset URI, which removes that failure mode.
  */
-export const pickAndProcessRCardPhoto = async (): Promise<string | undefined> => {
+export const pickRCardPhoto = async (): Promise<PickedRCardPhoto | undefined> => {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
   if (!permission.granted) {
     throw new RCardPhotoPermissionDeniedError()
@@ -74,7 +82,7 @@ export const pickAndProcessRCardPhoto = async (): Promise<string | undefined> =>
   }
 
   const asset = result.assets[0]
-  return processRCardPhoto(asset.uri, rcardManipulateAsync, asset.width, asset.height)
+  return { uri: asset.uri, width: asset.width, height: asset.height }
 }
 
 const CARD_MARGIN = 20
@@ -111,6 +119,7 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
   const [submitting, setSubmitting] = useState(false)
   const [errorModal, setErrorModal] = useState<string | undefined>(undefined)
   const [pickingPhoto, setPickingPhoto] = useState(false)
+  const [pendingCropPhoto, setPendingCropPhoto] = useState<PickedRCardPhoto | undefined>(undefined)
   const scrollRef = useRef<ScrollView>(null)
   const lastNameRef = useRef<TextInput>(null)
   const emailRef = useRef<TextInput>(null)
@@ -210,14 +219,8 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
     setErrors((prev) => ({ ...prev, [field]: undefined }))
   }
 
-  const handlePickPhoto = useCallback(async () => {
-    setPickingPhoto(true)
-    try {
-      const photo = await pickAndProcessRCardPhoto()
-      if (photo) {
-        setFormState((prev) => ({ ...prev, photo }))
-      }
-    } catch (error) {
+  const reportPhotoError = useCallback(
+    (error: unknown) => {
       let message = t('RCardOnboarding.Errors.PhotoGeneric')
       if (error instanceof RCardPhotoTooLargeError) {
         message = t('RCardOnboarding.Errors.PhotoTooLarge')
@@ -229,10 +232,45 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
         errorMessage: error instanceof Error ? error.message : String(error),
       })
       setErrorModal(message)
+    },
+    [t]
+  )
+
+  const handlePickPhoto = useCallback(async () => {
+    setPickingPhoto(true)
+    try {
+      const picked = await pickRCardPhoto()
+      if (picked) {
+        setPendingCropPhoto(picked)
+      }
+    } catch (error) {
+      reportPhotoError(error)
     } finally {
       setPickingPhoto(false)
     }
-  }, [t])
+  }, [reportPhotoError])
+
+  const handleCancelCrop = useCallback(() => {
+    setPendingCropPhoto(undefined)
+  }, [])
+
+  const handleConfirmCrop = useCallback(
+    async (crop: CropRect) => {
+      const picked = pendingCropPhoto
+      if (!picked) return
+      setPendingCropPhoto(undefined)
+      setPickingPhoto(true)
+      try {
+        const photo = await processRCardPhoto(picked.uri, rcardManipulateAsync, crop)
+        setFormState((prev) => ({ ...prev, photo }))
+      } catch (error) {
+        reportPhotoError(error)
+      } finally {
+        setPickingPhoto(false)
+      }
+    },
+    [pendingCropPhoto, reportPhotoError]
+  )
 
   const handleRemovePhoto = useCallback(() => {
     setFormState((prev) => ({ ...prev, photo: undefined }))
@@ -448,6 +486,15 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
           notificationType={InfoBoxType.Error}
           onCallToActionLabel={t('Global.Okay')}
           onCallToActionPressed={() => setErrorModal(undefined)}
+        />
+      )}
+      {pendingCropPhoto && (
+        <RCardPhotoCropModal
+          photoUri={pendingCropPhoto.uri}
+          imageWidth={pendingCropPhoto.width}
+          imageHeight={pendingCropPhoto.height}
+          onCancel={handleCancelCrop}
+          onConfirm={handleConfirmCrop}
         />
       )}
     </SafeAreaView>

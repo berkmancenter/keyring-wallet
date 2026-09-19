@@ -875,7 +875,10 @@
       "Photo": "Foto de perfil",
       "PhotoAdd": "Adicionar foto",
       "PhotoRemove": "Remover foto",
-      "PhotoProcessing": "Processando foto..."
+      "PhotoProcessing": "Processando foto...",
+      "CropTitle": "Ajuste sua foto",
+      "CropHint": "Belisque para ampliar, arraste para reposicionar.",
+      "CropConfirm": "Usar foto"
     },
     "Errors": {
       "FirstNameRequired": "Informe seu nome.",

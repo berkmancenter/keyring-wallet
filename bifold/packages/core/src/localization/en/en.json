@@ -1024,7 +1024,10 @@
       "Photo": "Profile photo",
       "PhotoAdd": "Add photo",
       "PhotoRemove": "Remove photo",
-      "PhotoProcessing": "Processing photo..."
+      "PhotoProcessing": "Processing photo...",
+      "CropTitle": "Adjust your photo",
+      "CropHint": "Pinch to zoom, drag to reposition.",
+      "CropConfirm": "Use Photo"
     },
     "Errors": {
       "FirstNameRequired": "Enter your first name.",

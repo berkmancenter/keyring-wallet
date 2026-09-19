@@ -963,7 +963,10 @@
       "Photo": "Photo de profil",
       "PhotoAdd": "Ajouter une photo",
       "PhotoRemove": "Supprimer la photo",
-      "PhotoProcessing": "Traitement de la photo..."
+      "PhotoProcessing": "Traitement de la photo...",
+      "CropTitle": "Ajustez votre photo",
+      "CropHint": "Pincez pour zoomer, glissez pour repositionner.",
+      "CropConfirm": "Utiliser la photo"
     },
     "Errors": {
       "FirstNameRequired": "Veuillez entrer votre prénom.",

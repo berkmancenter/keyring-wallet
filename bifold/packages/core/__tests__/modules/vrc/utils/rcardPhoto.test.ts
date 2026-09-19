@@ -1,6 +1,5 @@
 import {
   processRCardPhoto,
-  centeredSquareCrop,
   RCardPhotoTooLargeError,
   RCARD_PHOTO_MAX_DIMENSION,
   RCARD_PHOTO_MAX_BASE64_BYTES,
@@ -13,7 +12,7 @@ import {
  *  native runtime. */
 function fakeManipulator(bytesByQuality: Record<number, number>): ManipulateAsyncFn {
   return jest.fn(async (_uri, actions, saveOptions) => {
-    const resize = actions[0]?.resize
+    const resize = actions[actions.length - 1]?.resize
     const quality = saveOptions.compress ?? 1
     const bytes = bytesByQuality[quality] ?? 20 * 1024
     return {
@@ -86,10 +85,10 @@ describe('processRCardPhoto', () => {
     )
   })
 
-  test('center-crops a non-square source to a square before resizing, given the picked asset dimensions', async () => {
+  test('adds the given crop rect as the first action, ahead of the resize', async () => {
     const manipulateAsync = fakeManipulator({ 0.8: 8 * 1024 })
 
-    await processRCardPhoto('file:///source.jpg', manipulateAsync, 1200, 800)
+    await processRCardPhoto('file:///source.jpg', manipulateAsync, { originX: 200, originY: 0, width: 800, height: 800 })
 
     expect(manipulateAsync).toHaveBeenCalledWith(
       'file:///source.jpg',
@@ -101,35 +100,15 @@ describe('processRCardPhoto', () => {
     )
   })
 
-  test('does not add a crop action when the source is already square or dimensions are unknown', async () => {
+  test('omits the crop action when no crop rect is given', async () => {
     const manipulateAsync = fakeManipulator({ 0.8: 8 * 1024 })
 
-    await processRCardPhoto('file:///source.jpg', manipulateAsync, 500, 500)
+    await processRCardPhoto('file:///source.jpg', manipulateAsync)
 
     expect(manipulateAsync).toHaveBeenCalledWith(
       'file:///source.jpg',
       [{ resize: { width: RCARD_PHOTO_MAX_DIMENSION, height: RCARD_PHOTO_MAX_DIMENSION } }],
       { compress: 0.8, format: 'jpeg', base64: true }
     )
-  })
-})
-
-describe('centeredSquareCrop', () => {
-  test('returns the largest centered square for a landscape source', () => {
-    expect(centeredSquareCrop(1200, 800)).toEqual({ originX: 200, originY: 0, width: 800, height: 800 })
-  })
-
-  test('returns the largest centered square for a portrait source', () => {
-    expect(centeredSquareCrop(800, 1200)).toEqual({ originX: 0, originY: 200, width: 800, height: 800 })
-  })
-
-  test('returns undefined for an already-square source', () => {
-    expect(centeredSquareCrop(500, 500)).toBeUndefined()
-  })
-
-  test('returns undefined when either dimension is missing', () => {
-    expect(centeredSquareCrop(undefined, 500)).toBeUndefined()
-    expect(centeredSquareCrop(500, undefined)).toBeUndefined()
-    expect(centeredSquareCrop()).toBeUndefined()
   })
 })

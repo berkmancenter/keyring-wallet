@@ -171,6 +171,16 @@ describe('RCardOnboarding Screen', () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('RCardPhotoInput')))
     })
 
+    // Picking opens the in-app crop modal on the freshly-picked photo,
+    // rather than processing it immediately — the user must confirm the
+    // crop before it's used.
+    await waitFor(async () => {
+      expect(await tree.findByTestId(testIdWithKey('RCardPhotoCropConfirm'))).toBeTruthy()
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('RCardPhotoCropConfirm')))
+    })
+
     await waitFor(async () => {
       expect(await tree.findByTestId(testIdWithKey('RCardPhotoPreview'))).toBeTruthy()
     })
@@ -208,7 +218,7 @@ describe('RCardOnboarding Screen', () => {
   test('Shows an error and adds no photo when compression cannot fit the size budget', async () => {
     mockLaunchImageLibraryAsync.mockResolvedValue({
       canceled: false,
-      assets: [{ uri: 'file:///picked-photo.jpg' }],
+      assets: [{ uri: 'file:///picked-photo.jpg', width: 1200, height: 800 }],
     })
     // Every compression quality tier still exceeds the 12KB budget.
     mockManipulateAsync.mockResolvedValue({
@@ -231,9 +241,46 @@ describe('RCardOnboarding Screen', () => {
     })
 
     await waitFor(async () => {
+      expect(await tree.findByTestId(testIdWithKey('RCardPhotoCropConfirm'))).toBeTruthy()
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('RCardPhotoCropConfirm')))
+    })
+
+    await waitFor(async () => {
       expect(await tree.findByText('RCardOnboarding.Errors.PhotoTooLarge')).toBeTruthy()
     })
 
     expect(tree.queryByTestId(testIdWithKey('RCardPhotoPreview'))).toBeNull()
+  })
+
+  test('Cancelling the crop modal discards the picked photo without processing it', async () => {
+    mockLaunchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///picked-photo.jpg', width: 1200, height: 800 }],
+    })
+
+    const tree = render(
+      <StoreProvider initialState={testDefaultState} reducer={defaultReducer}>
+        <BasicAppContext>
+          <RCardOnboarding agent={mockAgent} />
+        </BasicAppContext>
+      </StoreProvider>
+    )
+
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('RCardPhotoInput')))
+    })
+    await waitFor(async () => {
+      expect(await tree.findByTestId(testIdWithKey('RCardPhotoCropCancel'))).toBeTruthy()
+    })
+
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('RCardPhotoCropCancel')))
+    })
+
+    expect(tree.queryByTestId(testIdWithKey('RCardPhotoCropConfirm'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('RCardPhotoPreview'))).toBeNull()
+    expect(mockManipulateAsync).not.toHaveBeenCalled()
   })
 })
