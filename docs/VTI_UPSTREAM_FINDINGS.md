@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.12 — 2026-09-19.** A living document: every finding here was measured
+**Version 1.16 — 2026-09-19.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -22,93 +22,76 @@ from a report or an issue always lands on the right entry.
 
 ## Status at a glance
 
-| # | Finding | Severity | Status |
-| --- | --- | --- | --- |
-| [VTI-01](#vti-01) | An administrator cannot become a vetter, and the first-vetter bootstrap is undocumented | Medium | Open — bootstrap path measured |
-| [VTI-02](#vti-02) | An ACL `member` role is not community membership | High | Open |
-| [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | Open |
-| [VTI-04](#vti-04) | A second application from one DID is refused, not answered | Medium | Open — by design, consequences unaddressed |
-| [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | Open — operator workaround exists |
-| [VTI-06](#vti-06) | `cors_allow_origin` is silently ignored unless it is in `[security]` | Medium | Open |
-| [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | Open |
-| [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | Open — workaround |
-| [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | Open |
-| [VTI-10](#vti-10) | A document's issuer must equal the DIDComm sender | Low | **Confirmed by upstream** — deliberate; specification gap stands |
-| [VTI-11](#vti-11) | A fresh VTC has an empty ACL and cannot authenticate its own admin | Low | Open |
-| [VTI-12](#vti-12) | A community's advertised transports are fixed at mint | Low | Open |
-| [VTI-13](#vti-13) | A criterion cannot express "no requirements" | Medium | Open — upstream queries the wording; re-measure `minStatements: 0` |
-| [VTI-14](#vti-14) | `cnm`'s vetting subcommands ignore `--url` / `VTA_URL` | Low | Open |
-| [VTI-15](#vti-15) | A VTC DID cannot be used as a `cnm` community | Low | Open |
-| [VTI-16](#vti-16) | Minting an admin portal sign-in needs the daemon stopped, then running | Low | Open |
-| [VTI-17](#vti-17) | A force re-provision keeps a DID bound to a hostname that no longer exists | Medium | Open |
-| [VTI-18](#vti-18) | A self-managed DID-hosting daemon without a mediator cannot be registered by a VTA | Medium | Open |
-| [VTI-19](#vti-19) | The DID resolver bursts a dozen fetches per operation and trips rate-limited hosts | Low | Open — operational |
-| [VTI-20](#vti-20) | A serverless persona mint prints a log nobody serves | Low | Open — documentation |
-| [VTI-21](#vti-21--no-channel-delivers-an-invitation-to-its-invitee) | No channel delivers an invitation to its invitee | Medium | **Confirmed by upstream** in source |
-| [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | Open |
-| [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open |
-| [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | Open |
-| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open |
-| [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | Open |
-| [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open |
-| [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202; re-measured clean on head |
-| [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | Open — fixture limit raised |
-| [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | Open — Keyring polls |
+| # | Finding | Severity | Status | Era |
+| --- | --- | --- | --- | --- |
+| [VTI-01](#vti-01) | An administrator cannot become a vetter, and the first-vetter bootstrap is undocumented | Medium | Open — bootstrap path measured | A |
+| [VTI-02](#vti-02) | An ACL `member` role is not community membership | High | Open | A |
+| [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | Open | A |
+| [VTI-04](#vti-04) | A second application from one DID is refused, not answered | Medium | Open — by design, consequences unaddressed | A |
+| [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | Open — operator workaround exists | A |
+| [VTI-06](#vti-06) | `cors_allow_origin` is silently ignored unless it is in `[security]` | Medium | Open | A |
+| [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | Open | A |
+| [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | Open — workaround | A |
+| [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | Open | A |
+| [VTI-10](#vti-10) | A document's issuer must equal the DIDComm sender | Low | **Confirmed by upstream** — deliberate; specification gap stands | A |
+| [VTI-11](#vti-11) | A fresh VTC has an empty ACL and cannot authenticate its own admin | Low | Open | A |
+| [VTI-12](#vti-12) | A community's advertised transports are fixed at mint | Low | Open | A |
+| [VTI-13](#vti-13) | A criterion cannot express "no requirements" | Medium | **Corrected** — misattributed; the refusal is `affinidi-openid4vp`'s and spec-correct. Narrowed, and our answer on the shape is inside | A |
+| [VTI-14](#vti-14) | `cnm`'s vetting subcommands ignore `--url` / `VTA_URL` | Low | Open | A |
+| [VTI-15](#vti-15) | A VTC DID cannot be used as a `cnm` community | Low | Open | A |
+| [VTI-16](#vti-16) | Minting an admin portal sign-in needs the daemon stopped, then running | Low | Open | A |
+| [VTI-17](#vti-17) | A force re-provision keeps a DID bound to a hostname that no longer exists | Medium | Open | A |
+| [VTI-18](#vti-18) | A self-managed DID-hosting daemon without a mediator cannot be registered by a VTA | Medium | Open | A |
+| [VTI-19](#vti-19) | The DID resolver bursts a dozen fetches per operation and trips rate-limited hosts | Low | Open — operational | A |
+| [VTI-20](#vti-20) | A serverless persona mint prints a log nobody serves | Low | Open — documentation | A |
+| [VTI-21](#vti-21--no-channel-delivers-an-invitation-to-its-invitee) | No channel delivers an invitation to its invitee | Medium | **Confirmed by upstream** in source | A |
+| [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | Open | A |
+| [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open | A |
+| [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | Open | A |
+| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open | B |
+| [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | Open | B |
+| [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open | B |
+| [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 | B, re-measured on **C**: gone |
+| [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | Open — fixture limit raised | B |
+| [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | Open — Keyring polls | B |
+| [VTI-31](#vti-31--a-dropped-terminal-error-is-never-acknowledged-so-it-never-leaves-the-senders-queue) | A dropped terminal error is never acknowledged, so it never leaves the sender's queue | **High** | New — found while validating tdk-rs #829 | C |
 
 ## Stack under test
 
-Every finding in this version was measured against exactly this. All Rust
-services are **debug builds from source** at the commits below — none are
-published images, and in particular none are the images a VTA Farm currently
-offers (whose newest predates vetting entirely).
+**Upstream asked for the exact versions, and this is the honest answer: there
+are three, not one.** The fixture was rebuilt twice while these findings were
+gathered, so each finding names the era it was measured on (A, B or C below)
+and nothing here claims a version it was not measured against. All Rust
+services are **debug builds from source** — none are published images, and in
+particular none are the images a VTA Farm currently offers.
 
-| Component | Version | Upstream repository | Commit | Commit date |
+| Era | When | `verifiable-trust-infrastructure` | `affinidi-tdk-rs` (mediator) | `affinidi-webvh-service` (daemon) |
 | --- | --- | --- | --- | --- |
-| `vta-service` — personal agent | 0.34.1 | `verifiable-trust-infrastructure` | `6bd52cab` (main, 20 commits past `VTI-Eucalyptus-RC-0`) | 2026-09-19 |
-| `vtc-service` — community service (incl. admin portal) | 0.11.58 (version string unchanged) | `verifiable-trust-infrastructure` | `6bd52cab` | 2026-09-19 |
-| `vta-sdk` | 0.43 | `verifiable-trust-infrastructure` | `6bd52cab` | 2026-09-19 |
-| `pnm-cli` · `cnm-cli` — the two CLIs | 0.17.4 · 0.16.3 | `verifiable-trust-infrastructure` | `6bd52cab` | 2026-09-19 |
-| Messaging mediator | 0.26.2 | `affinidi-tdk-rs` | `c13a6352` (main) | 2026-09-19 |
-| `did-hosting-daemon` | 0.8.3 (version string unchanged) | `affinidi-webvh-service` | `35244b7` (main) | 2026-09-19 |
-| reference client `openvtc` (the vetter oracle) | head | `OpenVTC/openvtc` | `177a218` | 2026-09-17 |
-| Redis | 8.10.1 | Homebrew | — | — |
-| ngrok agent (six reserved domains) | 3.37.1 | — | — | — |
+| **A** | 2026-09-15 → 09-17 | `53a7cde4` — main tip, 2 commits past `vta-service-v0.28.0`; vta 0.28.0 · vtc 0.11.58 · sdk 0.38.2 · pnm 0.16.5 · cnm 0.15.2 | `dff68eb` — mediator 0.25.0 | `cb8a6f4` — daemon 0.8.3 |
+| **B** | 2026-09-18 | `460e0ebb` — tag `VTI-Eucalyptus-RC-0`; vta 0.33.0 · vtc 0.11.58 · sdk 0.42.1 · pnm 0.17.2 · cnm 0.16.3 | `144a3af0` — mediator 0.26.2 | `f579e42` — daemon 0.8.3 |
+| **C** | 2026-09-19 | `6bd52cab` — main, 20 commits past the tag; vta 0.34.1 · vtc 0.11.58 · sdk 0.43 · pnm 0.17.4 · cnm 0.16.3 | `c13a6352` — mediator 0.26.2 | `35244b7` — daemon 0.8.3 |
 
-**The client side**, for completeness: Keyring built on `@credo-ts/*`
-`0.7.1-pr-2704-20260909134930` (the DIDComm v2 snapshot), `@bifold/trust-tasks`
-`0.1.0-alpha.1`, on React Native 0.81 with Hermes; Android emulator API 33 and
-iOS simulator 26.3.
+Era C is upstream's own planning basis. A finding measured on A or B has **not**
+been re-measured on C unless its entry says so — the September refresh may
+already have closed some, which is exactly why the era is stated per finding
+rather than once for the document.
 
-### Note on version drift
+Constant across all three: Redis 8.10.1, six reserved ngrok domains, and on the
+phone credo-ts `0.7.1-pr-2704` (DIDComm v2), React Native 0.81 / Hermes,
+`@bifold/trust-tasks` emitting `trust-task-error/0.3` while the community emits
+`/0.5`. The reference client `openvtc` is built at `177a218`.
 
-Recorded so upstream can tell a real defect from us being behind:
-
-- **Upgraded in place on 2026-09-18 to the `VTI-Eucalyptus-RC-0` train** (the tag
-  is coordinated across the VTI monorepo, `affinidi-tdk-rs` and
-  `affinidi-webvh-service`). The 0.28-era stores, configs and DIDs were kept;
-  every service accepted them and reconnected to the new mediator without a
-  re-provision. Findings VTI-1 … VTI-24 were measured on the previous pin
-  (`53a7cde4`, main-tip of 2026-09-15, two commits past `vta-service-v0.28.0`);
-  anything re-measured on the train says so.
-- **Our Trust Tasks framework is behind.** The pinned `trust-tasks` specification
-  clone is 235 commits behind its `main`, and the wallet's own error documents
-  are `trust-task-error/0.3` while `vtc-service` emits `trust-task-error/0.5`
-  (`vtc-service/src/trust_tasks/helpers.rs`). Keyring reads refusals by the
-  `trust-task-error/` prefix, so it copes, but it is not current.
-- **Client-side, recorded here for the next developer, not an upstream defect:**
-  iOS refuses to finish agent initialisation when Keyring's *own* mediator URL
-  (`MEDIATOR_URL` in `app/.env`, a `yarn mediator` cloudflared quick tunnel) has
-  died — the DIDComm module throws and the app shows its error boundary. Android
-  tolerates it (the mediation-recovery path). Restart `yarn mediator` and rebuild
-  before an iOS run. Unrelated to the VTI mediator.
-- **Upstream itself emits two error versions.** `vta-service` produces
-  `trust-task-error/0.5` in `trust_tasks/mod.rs` and `/0.3` in
-  `trust_tasks/wire_v0_2.rs`. Possibly intentional for the older wire; worth
-  confirming.
-
----
+**Two fixture deviations to declare.** On era B the mediator's
+`queued_send_messages_soft` was raised from 200 to 2000 to get past VTI-29
+while it was being diagnosed; everything measured after that point on era B
+ran with the raised limit. Era C has it back at the default — and VTI-29
+promptly reproduced, so the community's stuck send queue was emptied by hand
+in Redis to carry on. Both are workarounds for the same finding, neither is a
+fix, and upstream is right that raising the limit is not one.
 
 ## VTI-01
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### An administrator cannot become a vetter, and the first-vetter bootstrap is undocumented
 
@@ -168,6 +151,8 @@ let an administrator be granted the vetter role directly, or have
 
 ## VTI-02
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### An ACL `member` role is not community membership
 
 The access list and the member roll are separate stores, and the vetting routes
@@ -180,6 +165,8 @@ and means different things.
 ---
 
 ## VTI-03
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### A `requestMore` join request can never be closed
 
@@ -198,6 +185,8 @@ unrecoverable, and the only way forward for that person is a brand-new identity.
 
 ## VTI-04
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### A second application from one DID is refused, not answered
 
 While a request is open, `submit/0.2` returns a `trust-task-error` with code
@@ -215,6 +204,8 @@ the community's sentence with the framework code behind a *Details* control.
 ---
 
 ## VTI-05
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### The mediator refuses a phone's WebSocket upgrade
 
@@ -249,6 +240,8 @@ upgrades, or document prominently that mobile clients require an allowlist entry
 
 ## VTI-06
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### `cors_allow_origin` is silently ignored unless it is in `[security]`
 
 The setting is read from the configuration's `[security]` table
@@ -265,6 +258,8 @@ problem.
 ---
 
 ## VTI-07
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### The mediator resolves `functions_file` relative to the working directory
 
@@ -284,6 +279,8 @@ every other path in that file behaves in practice.
 
 ## VTI-08
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### `vta-service` overflows a worker stack creating a context
 
 On a debug build, `vta/contexts/create/1.0` overflows a tokio worker's stack and
@@ -301,6 +298,8 @@ or a large stack temporary that a release build merely hides.
 
 ## VTI-09
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### VTA and VTC disagree on the DIDComm body shape
 
 A VTA accepts a bare payload as the DIDComm body. A VTC requires a whole Trust
@@ -313,6 +312,8 @@ belongs in the specification; if it is not, the VTA is the lenient one.
 ---
 
 ## VTI-10
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### A document's issuer must equal the DIDComm sender
 
@@ -329,6 +330,8 @@ agreement key).
 ---
 
 ## VTI-11
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### A fresh VTC has an empty ACL and cannot authenticate its own admin
 
@@ -348,6 +351,8 @@ every new operator hits.
 
 ## VTI-12
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### A community's advertised transports are fixed at mint
 
 `transports = ["didcomm"]` has to be present in the VTC's setup recipe. A
@@ -358,6 +363,8 @@ community again, losing its identity.
 ---
 
 ## VTI-13
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### A criterion cannot express "no requirements"
 
@@ -378,7 +385,29 @@ be approved by an administrator, which does produce a real membership.
 
 ---
 
+**Corrected, 2026-09-19, after upstream read it.** The attribution here was
+wrong: the refusal does not come from `vtc-service` but from
+`affinidi-openid4vp/src/dcql.rs:105`, and it is **spec-correct** — a DCQL query
+must carry at least one credential query, so a requirement with an empty
+credential query is invalid by the query language, not by the community
+service. The finding that survives is narrower and is not a defect in DCQL: the
+VTC reaches for a DCQL query to express *"nothing is required"*, and a query
+language that cannot say "nothing" is the wrong instrument for it. What is
+needed is a criterion model that admits an empty requirement without going
+through DCQL at all.
+
+**Our answer to the question upstream put back to us** — should such a
+criterion *auto-admit* or *admit pending review*? **Admit pending review.** An
+auto-admitting empty criterion is indistinguishable from an open door, and the
+case that motivates it is the bootstrap one: a community with no vetters yet
+needs to let exactly one person in so they can be granted the vetter role. That
+is a decision a human should make once, not a standing property of the
+community. `refer` already carries the right semantics, and it keeps the
+audit trail an admission deserves.
+
 ## VTI-14
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### `cnm`'s vetting subcommands ignore `--url` / `VTA_URL`
 
@@ -392,6 +421,8 @@ is why this repository carries its own small admin client
 
 ## VTI-15
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### A VTC DID cannot be used as a `cnm` community
 
 A VTC's DID document publishes a `VTCRest` service entry whose endpoint omits
@@ -401,6 +432,8 @@ document land on `405 Method Not Allowed`.
 ---
 
 ## VTI-16
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### Minting an admin portal sign-in needs the daemon stopped, then running
 
@@ -422,6 +455,8 @@ outage.
 
 ## VTI-17
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### A force re-provision keeps a DID bound to a hostname that no longer exists
 
 `did-hosting-daemon setup --force-reprovision` rotates the daemon's secrets and
@@ -442,6 +477,8 @@ DID or refuse loudly.
 
 ## VTI-18
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### A self-managed DID-hosting daemon without a mediator cannot be registered by a VTA
 
 A VTA registers a hosting server by resolving the server's DID and requiring a
@@ -460,6 +497,8 @@ wizard ask for the mediator.
 
 ## VTI-19
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 ### The DID resolver bursts a dozen fetches per operation and trips rate-limited hosts
 
 One `pnm` command against a VTA fetched that VTA's `/.well-known/did.jsonl`
@@ -476,6 +515,8 @@ so the next person does not debug it as a stack fault.
 ---
 
 ## VTI-20
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 ### A serverless persona mint prints a log nobody serves
 
@@ -501,6 +542,8 @@ operational request for anyone hosting a mediator that mobile clients must reach
 
 ### VTI-21 — No channel delivers an invitation to its invitee
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 `POST /v1/invitations` issues an `InvitationCredential` bound to a DID and
 hands it to the *admin*. Nothing carries it to the invited DID: the operator
 copies it out of band. For a phone, that means a QR/link the admin shows
@@ -510,6 +553,8 @@ advertises a service for. **Measured:** vtc-service 0.11.58, 2026-09-16.
 
 
 ### VTI-22 — Consent policies are inert unless `config.policy.enforcement` is on
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 `pnm approvals require <task> --consent --set <set>` writes the rule and
 `pnm approvals list` shows it, but the PDP gate is "a no-op unless
@@ -523,6 +568,8 @@ exempt — the earlier appearance of exemption was enforcement being off).
 
 ### VTI-23 — Every operation a manager needs requires the admin role
 
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
+
 `webvh/dids/create` (mint a persona) and `keys/export-secret` (borrow a
 persona's key) both call `require_admin` (`webvh.rs`, `keys.rs`). `initiator`
 carries `KeyMint` and `Sign` but is refused both with "admin role required",
@@ -531,6 +578,8 @@ so a Keyring manager must hold `admin`. This is fine once VTI-22 is set
 achievable for the persona lifecycle in 0.28. **Measured:** 2026-09-17.
 
 ### VTI-24 — A pushed consent request is queued, not delivered, to an idle approver
+
+*Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
 With enforcement on, a held task's `task-consent/request` is pushed to each
 approver, but the VTA logs "no mediator route for consent approver — NOT
@@ -550,6 +599,8 @@ delivery to a second device pending this route being warm at push time.
 
 ### VTI-25 — On the Eucalyptus train the card is delivered, not returned
 
+*Measured on era **B** (see [Stack under test](#stack-under-test)).*
+
 On the 0.28 pin an `allow` verdict carried the membership credential and the
 role endorsement inline (`verdict.with.vmc`, `verdict.with.roleVec`). On
 `VTI-Eucalyptus-RC-0` the verdict no longer does: immediately after `allow`
@@ -567,6 +618,8 @@ at `460e0ebb`), 2026-09-18.
 
 
 ### VTI-26 — A consent request is pushed only to a `did:key` approver; every other approver needs the requester to relay
+
+*Measured on era **B** (see [Stack under test](#stack-under-test)).*
 
 `step_up::approver_mediator` (vta-service 0.33.0) returns a route for a
 `did:key` approver only — via the VTA's own `[messaging] mediator_did` — and
@@ -586,6 +639,8 @@ own `DIDCommMessaging` service and push directly. **Measured:** 2026-09-18.
 
 ### VTI-27 — An authentication or ACL refusal over DIDComm is a `problem-report`, not a `trust-task-error`
 
+*Measured on era **B** (see [Stack under test](#stack-under-test)).*
+
 A trust task whose sender the VTA does not accept — a DID missing from the
 ACL, a stale session — never reaches the task handler: `auth_from_message`
 fails and `app_try!` answers with `DIDCommResponse::problem_report(...)`
@@ -603,6 +658,8 @@ question is whether the auth gate should speak the same error document as the
 tasks it guards, so one code path covers both.
 
 ### VTI-28 — A VTA answers a reply with an error, and loops with its DID-hosting daemon
+
+*Measured on era **B**; re-measured on era **C** and gone (see [Stack under test](#stack-under-test)).*
 
 **Root cause (vta-service 0.33.0, `trust_tasks/mod.rs`).** When an inbound
 document completes a request the VTA itself sent — the daemon's
@@ -644,6 +701,8 @@ answered`, drains the backlog and goes quiet; the four end-to-end runs pass.
 
 ### VTI-29 — Members who never collect their cards silence the community: the mediator's per-sender queue cap
 
+*Measured on era **B** (see [Stack under test](#stack-under-test)).*
+
 The mediator caps the messages one sender may have waiting for delivery
 (`[limits] queued_send_messages_soft`, default 200) and, at the cap, refuses
 the sender's *next* message with `e.p.limits.queue.sender` — whoever it is
@@ -660,7 +719,41 @@ outbox for recipients that never came back. **Severity:** high — an
 unresponsive applicant, or a hundred of them, can stop a community
 answering anyone.
 
+**Reproduced on era C, 2026-09-19, at the default limit.** With the fixture
+back on `queued_send_messages_soft = "200"` and the stack on upstream head,
+the community's send queue stood at **236 messages for 134 distinct
+recipients**, the oldest 3.6 days old — roughly two undelivered messages each
+(a membership card and a role credential) for personas on phones that were
+reset and will never collect them. The mediator then refused what the
+community sent to a *live* applicant with `e.p.limits.queue.sender`, and the
+applicant's persona mint timed out with no indication why. Nothing was wrong
+with either party to that exchange. This is the shape upstream describes:
+an unresponsive recipient degrades the sender globally, and per-recipient
+accounting plus an eviction path for undeliverable credentials is the fix —
+raising the limit only moves the cliff, as we found when we raised it on
+era B and it filled again in a day.
+
+**Upstream's fix, and a gap they found in it themselves.**
+`affinidi-tdk-rs` **#828** — *"gate forwards per relationship, not per sender
+total"* — is merged: the queue is accounted per relationship so one stuck peer
+can no longer consume a sender's whole allowance, with a sender-total ceiling
+kept well above it as an abuse guard. **#829** then found that the three
+depth gates lived in the `didcomm` routing path and so were reached only by a
+`forward`: **direct delivery and the TSP bridge stored straight to a
+recipient's inbox with no depth limit at all**, which means the gate added for
+this finding never covered those paths. It moves the checks outside the
+`didcomm` gate and identifies a message by id rather than by a parsed message,
+which the direct path does not have. Mediator-generated replies stay exempt
+deliberately — they are how a client is told its queue is full, and gating
+them would turn a full inbox into an unreportable one.
+
+That second half matters to a client beyond this finding: a wallet that moves
+to TSP frames on the mediator socket is on exactly the path that had no limit,
+so the two changes want measuring together.
+
 ### VTI-30 — A live push can be dropped, and a client that only listens never sees the message
+
+*Measured on era **B** (see [Stack under test](#stack-under-test)).*
 
 The mediator's live delivery is a bounded buffer (`ws_send_buffer`, a
 per-client queue of 8, a pub/sub ring of 16 slots); when it is full a push is
@@ -676,6 +769,41 @@ each queued message as a **base64url attachment** (`Attachment::base64`),
 not `data.json`. Keyring now polls every 15 s. For upstream: the SDK's
 extension to the Pickup 3.0 body is undocumented, and a `status` on
 `live-delivery-change` could carry the dropped count so clients know to poll.
+
+### VTI-31 — A dropped terminal error is never acknowledged, so it never leaves the sender's queue
+
+*Measured on era **C**, with `affinidi-tdk-rs` PR #829 (`b544da04`) as the
+mediator.*
+
+VTI-28's fix is right: an inbound error is terminal and answered with nothing.
+VTI-29's fix is right too: a sender's queue depth is accounted and capped. They
+interact, and the result is that a service which once emitted a storm is
+permanently rate-limited by its own history.
+
+**Measured.** The DID-hosting daemon's outbound queue held **223 messages, all
+addressed to one VTA**, the oldest 2.6 days — the residue of the VTI-28 loop.
+Of those, **57 are still in the VTA's inbox** and **166 had already been
+delivered**: the VTA drained them, logged each as *"inbound trust-task error
+from a peer — terminal, not answered"*, and dropped it. Correct behaviour — and
+no acknowledgement follows a drop, so all 223 stay in the daemon's queue. Once
+PR #829 runs the depth gates on the direct-delivery path, the mediator refuses
+everything the daemon sends with `e.p.limits.queue.sender`
+(`messages::queue_limits`), and DID creation stops for every client of that
+daemon. The queues do not drain on their own; they stood unchanged across
+repeated checks.
+
+**Why it matters beyond this fixture.** Any message a recipient deliberately
+declines to process — a terminal error, an unsupported type, a document
+refused by policy — has the same shape: delivered, never acknowledged, counted
+against the sender forever. The expiry sweeper is the only thing that clears
+it, and on a 2.6-day-old queue it had not.
+
+**Suggested shape.** A recipient that drops a message terminally should still
+tell the mediator it is done with it — the acknowledgement means "stop holding
+this for me", not "I acted on it". Failing that, the eviction path already
+planned for VTI-29 needs to cover delivered-but-unacknowledged messages, not
+only undeliverable ones. This is worth deciding before #829 lands, because
+#829 is what turns a stale queue into an outage for the sender.
 
 ## Open questions and requests
 
@@ -698,6 +826,10 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.16 | 2026-09-19 | **VTI-31**, found while validating tdk-rs #829 before it lands: a terminal error the spine correctly drops is never acknowledged, so it stays in the sender's queue — 223 messages, 166 of them already delivered — and once #829 gates the direct path the sender is refused everything. |
+| 1.15 | 2026-09-19 | VTI-29's fix merged upstream (tdk-rs #828), with #829 extending the gates to direct delivery and the TSP bridge, which had none. |
+| 1.14 | 2026-09-19 | VTI-29 reproduced on era C at the default limit: 236 messages for 134 recipients blocked the community from answering a live applicant. |
+| 1.13 | 2026-09-19 | **Versions, per finding.** The fixture was rebuilt twice while these were gathered, so *Stack under test* now states three eras (A, B, C) with exact commits and every finding names the one it was measured on — upstream asked for this and a single table was misleading. Declares the one fixture deviation (the mediator's sender-queue limit raised on era B). **VTI-13 corrected** after upstream read it: the refusal is `affinidi-openid4vp`'s and is spec-correct; the finding narrows to the VTC using DCQL to say "nothing required", and our answer on the shape is *admit pending review*. VTI-28 re-measured on era C and gone. |
 | 1.12 | 2026-09-19 | Adds an *Open questions and requests* section (`VTI-QN`) so asks that are not defects travel with the findings. VTI-Q3 records that a vetter listing cannot distinguish a revoked grant from an unlisted vetter. |
 | 1.11 | 2026-09-19 | Stack moved to upstream head (vta-service 0.34.1). **VTI-28 resolved upstream** — `vti` #1567 lets the spine decide what an inbound document is and answers an error with nothing, and webvh #202 treats an inbound error as terminal; re-measured clean, and the local patches that stood in for it are dropped. Upgrade note: `trust_xff` is retired for `trust_xff_cidrs` (#1562). |
 | 1.10 | 2026-09-19 | Upstream reviewed the report: VTI-10 and VTI-21 confirmed in their source; VTI-13 queried (probably the narrower `minStatements: 0` refusal). Client-side gaps they found are tracked in the plan companion, not here — they are ours, not upstream's. |
