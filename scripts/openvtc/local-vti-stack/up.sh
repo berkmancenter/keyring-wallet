@@ -273,9 +273,19 @@ export PNM_HOME="$STACK_DIR/pnm-community"
 # ("No local secret matches any JWE recipient" in the mediator's own log).
 [ -n "$PNM_HOME" ] && rm -rf "${PNM_HOME:?}"
 mkdir -p "$PNM_HOME"
-# pnm also keeps a profile outside PNM_HOME (macOS: ~/Library/Application
-# Support/pnm), and refuses `setup` while one exists for this name.
-yes | "$PNM_BIN" vta remove community >/dev/null 2>&1 || true
+# pnm also keeps a profile list outside PNM_HOME (macOS: ~/Library/Application
+# Support/pnm/config.toml), and refuses `setup` while one exists for this name.
+# That file also holds `default_vta`, which is the part that bites: a leftover
+# profile for a VTA this script re-mints every run leaves the default pointing
+# at a DID that no longer resolves, and every pnm command then fails with
+# "does not match the top-level 'id' in any DIDDoc version" — naming a DID that
+# appears nowhere in this run's output, which is what makes it hard to place.
+# So drop every profile for a name this stack owns, and pin the slug explicitly
+# rather than trusting whatever the default happens to be.
+for n in alice bob community; do
+  "$PNM_BIN" vta remove "$n" --yes >/dev/null 2>&1 || true
+done
+export PNM_VTA=community
 PNM_DID=$("$PNM_BIN" setup --name community 2>&1 | grep -o 'did:key:z[A-Za-z0-9]*' | head -1)
 pid=$(lsof -nP -iTCP:8111 -sTCP:LISTEN -t | head -1); kill "$pid"; sleep 3
 "$VTA_BIN" --config community/config.toml import-did --did "$PNM_DID" --role admin --label pnm-community >/dev/null
@@ -306,7 +316,27 @@ mediator_url = "https://$MED_HOST"
 [secrets]
 backend = "plaintext"
 EOF
-VTC_DID=$(cd vtc && "$VTC_BIN" setup --from setup.toml 2>&1 | grep '^vtc_did=' | cut -d= -f2)
+# The VTC has no `overwrite_config` of its own: `setup --from` refuses outright
+# while a config exists ("VTC already configured at …"), so a second run of this
+# script never reached this far. The VTAs already re-provision from scratch each
+# run, so the community's identity is re-minted anyway — carrying the old VTC
+# config forward would only pair a new VTA with a stale community.
+rm -rf "$STACK_DIR/vtc/config.toml" "$STACK_DIR/vtc/data"
+# Captured rather than piped: with `pipefail`, a `grep` that matches nothing
+# aborts the script, and since the command's own output is what was being
+# grepped, the reason went to the same pipe and was never seen. A silent exit 1
+# in the middle of a bring-up is expensive to place; print what it said.
+VTC_SETUP_OUT=$(cd vtc && "$VTC_BIN" setup --from setup.toml 2>&1) || {
+  echo "vtc setup --from failed:" >&2
+  echo "$VTC_SETUP_OUT" >&2
+  exit 1
+}
+VTC_DID=$(printf '%s\n' "$VTC_SETUP_OUT" | grep '^vtc_did=' | cut -d= -f2 || true)
+if [ -z "$VTC_DID" ]; then
+  echo "vtc setup --from printed no vtc_did= line; its output was:" >&2
+  echo "$VTC_SETUP_OUT" >&2
+  exit 1
+fi
 
 # A freshly provisioned VTC has an EMPTY ACL — its own admin_did cannot
 # authenticate until it is added offline, on a stopped daemon.
