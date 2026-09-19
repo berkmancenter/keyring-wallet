@@ -386,6 +386,45 @@ describe('QRScanner Component', () => {
       })
     })
 
+    test('shows each profile\'s photo in the picker, alongside its name, when it has one', async () => {
+      const photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+      const profileWithPhoto = buildRCardTemplate(
+        { firstName: 'Jane', lastName: 'Doe', email: '', organization: 'Personal', photo },
+        { label: 'Personal' }
+      )
+
+      const tree = render(
+        <StoreProvider
+          initialState={{
+            ...defaultState,
+            rCard: { profiles: [profileWithPhoto, profileB], activeProfileId: profileWithPhoto.id },
+          }}
+        >
+          <BasicAppContext>
+            <QRScanner
+              showTabs={true}
+              defaultToConnect={false}
+              offerRelationshipCredential={true}
+              handleCodeScan={() => Promise.resolve()}
+              navigation={navigation as any}
+              route={{} as any}
+            />
+          </BasicAppContext>
+        </StoreProvider>
+      )
+      await act(async () => {})
+
+      fireEvent.press(tree.getByTestId(testIdWithKey('SwitchProfile')))
+
+      const row = tree.getByTestId(testIdWithKey(`SwitchProfile-${profileWithPhoto.id}`))
+      expect(within(row).getByText(profileWithPhoto.label)).toBeTruthy()
+      const avatarImage = tree.getByTestId(testIdWithKey(`SwitchProfileAvatar-${profileWithPhoto.id}`))
+      expect(avatarImage.props.source).toEqual({ uri: photo })
+
+      // profileB has no photo, so it falls back to the icon, not a broken image.
+      expect(tree.queryByTestId(testIdWithKey(`SwitchProfileAvatar-${profileB.id}`))).toBeNull()
+    })
+
     // The reducer round-trip for activeProfileId (does the store actually
     // change, does the UI read the new value back) is covered directly by
     // useRCardCredential.test.tsx and MyProfiles.test.tsx's real-StoreProvider

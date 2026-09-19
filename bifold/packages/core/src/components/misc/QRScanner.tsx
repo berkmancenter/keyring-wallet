@@ -424,6 +424,17 @@ const QRScanner: React.FC<Props> = ({
                   accessibilityRole="button"
                   testID={testIdWithKey(`SwitchProfile-${profile.id}`)}
                 >
+                  <View style={styles.profileSwitcherAvatar}>
+                    {formInputFromTemplate(profile).photo ? (
+                      <Image
+                        testID={testIdWithKey(`SwitchProfileAvatar-${profile.id}`)}
+                        style={styles.profileSwitcherAvatarImage}
+                        source={{ uri: formInputFromTemplate(profile).photo }}
+                      />
+                    ) : (
+                      <Icon name="account" size={20} color={ColorPalette.grayscale.mediumGrey} />
+                    )}
+                  </View>
                   <ThemedText style={[profile.id === activeProfileId && { fontWeight: '700' as const }]}>
                     {profile.label}
                   </ThemedText>
