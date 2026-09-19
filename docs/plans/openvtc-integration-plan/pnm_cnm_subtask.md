@@ -983,6 +983,9 @@ pre-Trust-Task bespoke protocol.**
    that move on the peer-to-peer path, and TSP's own relationship control FSM is
    declared-but-dead (`XRFI`/`XRFA`/`XRFD` markers exist in
    `packages/tsp-js/src/cesr/wire.ts:105-107` with no reader or writer).
+   True at that pin only: under TSP Rev 3 those markers are load-bearing and a
+   peer enforcing §7.2.2 drops what an unrelated VID sends — see
+   [`tsp_rev3_subtask.md`](../keyring-on-the-vta-farm/tsp_rev3_subtask.md) §3.4.
    **Namespace note:** the framework editor settled ours as **`vrc/relationships/*`
    — plural**, matching `vtc/relationships/*`, with `witness/` staying top-level
    ([#173](https://github.com/trustoverip/dtgwg-trust-tasks-tf/issues/173), 2026-08-14).

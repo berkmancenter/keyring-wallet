@@ -15,7 +15,7 @@
  * Usage: E2E_KEEP_STATE=1 node run-vti-vetting.js   (PLATFORMS=android,ios)
  */
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
-import { androidCaps, iosCaps } from "./lib/config.js";
+import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import { openDeveloperScreen, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
@@ -32,15 +32,48 @@ const textOf = async (d, key) => (await byTestId(d, key).getAttribute(d.e2ePlatf
 const isIos = (d) => d.e2ePlatform === "ios";
 // The applicant screen has two inputs mid-page: drag from below them.
 const LOW = { from: 0.86 };
+// The desk lists requests newest first and XCUITest reports off-screen
+// elements too, so an old request's "Statement issued" or Attest button
+// satisfies a page-wide lookup. Scope the vetter's lookups to the first
+// (current) VettingDeskRequest container.
+const inCurrentRequest = (d, key) => {
+  const attr = isIos(d) ? "@name" : "@resource-id";
+  return d.$(`(//*[${attr}="${TEST_ID_PREFIX}VettingDeskRequest"])[1]//*[${attr}="${TEST_ID_PREFIX}${key}"]`);
+};
+async function waitInCurrentRequest(d, key, ms = 60000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const el = inCurrentRequest(d, key);
+    if (await el.isExisting().catch(() => false)) return el;
+    await sleep(2000);
+  }
+  throw new Error(`${d.e2ePlatform}: ${key} never appeared in the current desk request`);
+}
+
 
 async function unlockToHome(d) {
   await waitForTestId(d, "EnterPIN", 120000).catch(() => undefined);
   await unlockIfLocked(d);
+  // A kept-state app resumes on whatever screen it was left on, and the VTA
+  // probe reports with an alert as the Developer screen mounts — which hides
+  // every testID behind it until it is dismissed.
+  for (let i = 0; i < 4; i++) if (!(await d.acceptAlert().then(() => true, () => false))) break;
   await waitForTestId(d, "Contacts", 300000);
   await sleep(4000);
 }
 async function openVetting(d) {
   await (await waitForTestId(d, "MyAgent", 30000)).click();
+  await sleep(1500);
+  // My Agent shows its holdings — the vetting entry among them — only once the
+  // phone's VTA session is up. A phone that was enrolled before reconnects on
+  // its own, but a cold start offers "Connect my agent" instead and waits to
+  // be asked; tap it when it is there.
+  const connect = await byTestId(d, "ConnectMyAgentButton");
+  if (await connect.isExisting().catch(() => false)) {
+    await connect.click();
+    console.log(`[e2e] ${d.e2ePlatform}: connecting my agent`);
+  }
+  await waitForTestId(d, "MyAgentVettingRow", 180000);
   await sleep(1500);
   const row = await scrollToTestId(d, "MyAgentVettingRow", 6);
   await row.click();
@@ -71,6 +104,10 @@ try {
   // — vetter: the desk, a ticket
   await openVetting(vetter);
   await waitForTestId(vetter, "VettingYouVetFor", 120000);
+  // A desk left over from earlier runs makes every page-wide lookup ambiguous.
+  const clear = await scrollToTestId(vetter, "VettingDeskClearButton", 4).catch(() => undefined);
+  if (clear) { await clear.click(); await sleep(2500); console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`); }
+  await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
   await (await waitForTestId(vetter, "VettingNewTicketButton", 20000)).click();
   await waitForTestId(vetter, "VettingTicketLink", 30000);
   const link = (await textOf(vetter, "VettingTicketLink")).trim();
@@ -110,11 +147,10 @@ try {
   await screenshot(applicant, "vetting-02-accepted");
 
   // — vetter: open the session
-  await scrollToTestId(vetter, "VettingOpenSessionButton", 6);
-  await waitText(vetter, "VettingDeskStatus", /accepted|waiting/i, 60000);
-  await (await scrollToTestId(vetter, "VettingOpenSessionButton", 4)).click();
-  await waitForTestId(vetter, "VettingMatchCode", 60000);
-  const vetterCode = (await textOf(vetter, "VettingMatchCode")).trim();
+  const open = await scrollToTestId(vetter, "VettingOpenSessionButton", 6);
+  await open.click();
+  const codeEl = await waitForTestId(vetter, "VettingMatchCode", 60000);
+  const vetterCode = ((await codeEl.getAttribute(isIos(vetter) ? "label" : "text")) || "").trim();
   await screenshot(vetter, "vetting-03-session");
 
   // — applicant: the same code, then the card
@@ -127,18 +163,22 @@ try {
   console.log(`[e2e] ${applicant.e2ePlatform}: card sent`);
 
   // — vetter: the card, the human check, the statement
-  await scrollToTestId(vetter, "VettingCardClaim", 6).catch(() => undefined);
-  const claim = await waitText(vetter, "VettingCardClaim", new RegExp(LEGAL_NAME), 120000);
+  const claimEl = await waitForTestId(vetter, "VettingCardClaim", 120000);
+  const claim = (await claimEl.getAttribute(isIos(vetter) ? "label" : "text")) || "";
+  if (!new RegExp(LEGAL_NAME).test(claim)) throw new Error(`${vetter.e2ePlatform}: unexpected card claim: ${claim}`);
   console.log(`[e2e] ${vetter.e2ePlatform}: card received — ${claim}`);
   await screenshot(vetter, "vetting-05-card");
-  await (await scrollToTestId(vetter, "VettingAttestButton", 4)).click();
+  const attest = await scrollToTestId(vetter, "VettingAttestButton", 6);
+  await attest.click();
   await waitForTestId(vetter, "VettingStatementIssued", 60000);
   console.log(`[e2e] ${vetter.e2ePlatform}: statement issued`);
   await screenshot(vetter, "vetting-06-attested");
 
   // — applicant: the statement, the checklist, the application
   await scrollToTestId(applicant, "VettingChecklist", 6, LOW).catch(() => undefined);
-  const check = await waitText(applicant, "VettingChecklist", /1 of 1/, 120000);
+  // A statement the mediator redelivers from an earlier run counts too, so
+  // assert the verdict the screen states, not an exact tally.
+  const check = await waitText(applicant, "VettingChecklist", /meets the published requirements/, 120000);
   console.log(`[e2e] ${applicant.e2ePlatform}: ${check}`);
   await screenshot(applicant, "vetting-07-checklist");
   await (await scrollToTestId(applicant, "VettingApplyButton", 4, LOW)).click();

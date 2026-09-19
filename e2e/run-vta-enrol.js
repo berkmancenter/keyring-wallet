@@ -44,6 +44,10 @@ try {
     platform,
     keepState
       ? { ...caps, "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false }
+      // E2E_PERSIST=1: a fresh install and onboarding that survives the session
+      // (fullReset uninstalls on session end), so later E2E_KEEP_STATE runs can use it.
+      : process.env.E2E_PERSIST === "1"
+      ? { ...caps, "appium:fullReset": false, "appium:noReset": false }
       : undefined
   );
 

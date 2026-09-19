@@ -21,8 +21,16 @@ case "${1:-}" in
   add)
     DID="${2:?approver DID}"; TASK="${3:-$TASK_DEFAULT}"
     "$PNM" --vta "$VTA_SLUG" approvals approvers add "$SET" "$DID" 2>&1 | strip | tail -2 || true
-    "$PNM" --vta "$VTA_SLUG" approvals require "$TASK" --consent --set "$SET" 2>&1 | strip | tail -2 || true
+    # The rule is what actually holds a task; `|| true` used to swallow a
+    # transient failure here and the run then found "no approval rules" only
+    # when the borrow completed unheld. Verify, and retry a few times.
+    for _ in 1 2 3 4 5; do
+      "$PNM" --vta "$VTA_SLUG" approvals require "$TASK" --consent --set "$SET" 2>&1 | strip | tail -2 || true
+      if "$PNM" --vta "$VTA_SLUG" approvals list 2>&1 | strip | grep -q "$TASK"; then break; fi
+      sleep 2
+    done
     "$PNM" --vta "$VTA_SLUG" approvals list 2>&1 | strip | tail -6 || true
+    "$PNM" --vta "$VTA_SLUG" approvals list 2>&1 | strip | grep -q "$TASK" || { echo "approver-setup: the consent rule for $TASK did not stick" >&2; exit 1; }
     true
     ;;
   clear)

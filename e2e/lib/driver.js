@@ -408,7 +408,17 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
 // `from` is where the drag starts (fraction of the screen height): a drag that
 // begins on a TextInput selects text instead of scrolling, so a screen with an
 // input mid-page needs a lower origin.
-export async function scrollToTestId(driver, key, maxSwipes = 6, { from = 0.7, direction = "down" } = {}) {
+export async function scrollToTestId(driver, key, maxSwipes = 6, { from = 0.7, direction = "down", both = true } = {}) {
+  try {
+    return await scrollOnce(driver, key, maxSwipes, from, direction);
+  } catch (err) {
+    // A long screen may already have scrolled past the element; look the other way.
+    if (!both) throw err;
+    return scrollOnce(driver, key, maxSwipes, from, direction === "up" ? "down" : "up");
+  }
+}
+
+async function scrollOnce(driver, key, maxSwipes, from, direction) {
   const [startY, endY] = direction === "up" ? [0.15, from] : [from, 0.25];
   for (let i = 0; i < maxSwipes; i++) {
     const el = byTestId(driver, key);

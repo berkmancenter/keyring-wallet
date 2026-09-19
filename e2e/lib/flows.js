@@ -759,8 +759,11 @@ export async function openDeveloperScreen(driver) {
       await sleep(150);
     }
     // Settings navigates to the Developer screen itself on the trip — wait
-    // for a Developer-screen-only element, not a Settings row.
+    // for a Developer-screen-only element, not a Settings row. The VTA probe
+    // (VTI_PROBE_ON_START) fires as the screen mounts and reports with an
+    // alert, which hides the toggle from a lookup until it is dismissed.
     if (!reachedDeveloperScreen) {
+      for (let i = 0; i < 3; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;
       await waitForTestId(driver, "ToggleDeveloper", 5000);
     }
   }

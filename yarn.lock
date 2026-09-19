@@ -2311,7 +2311,7 @@ __metadata:
     "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
-    "@openvtc/vti-tsp-js": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch"
+    "@openvtc/vti-tsp-js": "file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz"
     ajv: "npm:^8.17.1"
     canonicalize: "npm:^1.0.8"
     class-transformer: "npm:0.5.1"
@@ -4529,31 +4529,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hpke/chacha20poly1305@npm:^1.8.0":
-  version: 1.8.0
-  resolution: "@hpke/chacha20poly1305@npm:1.8.0"
-  dependencies:
-    "@hpke/common": "npm:^1.10.0"
-  checksum: 10c0/bf85857e64f5fbe4d84ade3b6140dac852f05096498e9055b7a85bb854f8c9142dfe8b93cd95934c1402267a40a50ab52311feb76d46457250292dfbe7f39a81
-  languageName: node
-  linkType: hard
-
-"@hpke/common@npm:^1.10.0":
-  version: 1.10.1
-  resolution: "@hpke/common@npm:1.10.1"
-  checksum: 10c0/9620587336341138d0b98c03f0bdf4fa6390350c378775d6aff6031c77dffed8315c672dd7c04abf1ec753994b047d7f7b87f4c1d706a19c412b2e1756ce986a
-  languageName: node
-  linkType: hard
-
-"@hpke/core@npm:^1.9.0":
-  version: 1.9.0
-  resolution: "@hpke/core@npm:1.9.0"
-  dependencies:
-    "@hpke/common": "npm:^1.10.0"
-  checksum: 10c0/184d8c6a0e72e25362a8e5d559349cacf20f161df12ff31cbcdaf32b1a5ad08ebf4e44c512c52212e22c634449b7689a716b1753a565003a70a7cb430c7a1c76
-  languageName: node
-  linkType: hard
-
 "@humanwhocodes/config-array@npm:^0.13.0":
   version: 0.13.0
   resolution: "@humanwhocodes/config-array@npm:0.13.0"
@@ -5449,27 +5424,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openvtc/vti-tsp-js@npm:0.1.0":
-  version: 0.1.0
-  resolution: "@openvtc/vti-tsp-js@npm:0.1.0"
+"@openvtc/vti-tsp-js@file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz::locator=%40bifold%2Ftrust-tasks%40portal%3Abifold%2Fpackages%2Ftrust-tasks%3A%3Alocator%3Dkeyring-wallet%2540workspace%253A.":
+  version: 0.3.0
+  resolution: "@openvtc/vti-tsp-js@file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz#./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz::hash=84521e&locator=%40bifold%2Ftrust-tasks%40portal%3Abifold%2Fpackages%2Ftrust-tasks%3A%3Alocator%3Dkeyring-wallet%2540workspace%253A."
   dependencies:
-    "@hpke/chacha20poly1305": "npm:^1.8.0"
-    "@hpke/core": "npm:^1.9.0"
+    "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.2.0"
     "@noble/hashes": "npm:^2.0.0"
-  checksum: 10c0/36cd6aed45566e434a222695b30e11526285862ae442c7205f121889865cfd251571770e8f1771ea45b01a2cca4c6f89a4c41122c54dddd24bcb3c3e8ebdeef8
-  languageName: node
-  linkType: hard
-
-"@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch":
-  version: 0.1.0
-  resolution: "@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch::version=0.1.0&hash=dbb2d4"
-  dependencies:
-    "@hpke/chacha20poly1305": "npm:^1.8.0"
-    "@hpke/core": "npm:^1.9.0"
-    "@noble/curves": "npm:^2.2.0"
-    "@noble/hashes": "npm:^2.0.0"
-  checksum: 10c0/11d6a80d8ecb0f0b8e567427720df610578c3d404625c974bdeb0f797840af45cd940921e278d3605fd5a90769ea7f39c1ff2d8616fa7bc0251d8d368b5dfe78
+  checksum: 10c0/f1b91b6f93c1d38bbe61c06aca1419d13f323f04ee8acd27bc5e0058c22c572e552093a9ffe1bef125ee02974ffa35ef7e0b0816aaf3bef2741e32a12ff55f41
   languageName: node
   linkType: hard
 

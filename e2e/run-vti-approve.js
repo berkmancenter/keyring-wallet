@@ -30,6 +30,10 @@ const textOf = async (driver, key) =>
 async function unlockToHome(driver) {
   await waitForTestId(driver, "EnterPIN", 120000).catch(() => undefined);
   await unlockIfLocked(driver);
+  // A kept-state app resumes on whatever screen it was left on, and the VTA
+  // probe reports with an alert as the Developer screen mounts — which hides
+  // every testID behind it until it is dismissed.
+  for (let i = 0; i < 4; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;
   await waitForTestId(driver, "Contacts", 300000);
   await sleep(4000);
 }
@@ -59,6 +63,26 @@ async function managerDidOf(driver) {
   return /MANAGER_DID=(did:[^\s]+)/.exec(log)?.[1];
 }
 
+
+/** My Agent gates on the VTA session now: connect first, then wait for it. */
+async function openMyAgentConnected(d, timeout = 180000) {
+  await (await waitForTestId(d, "MyAgent", 30000)).click();
+  await sleep(1500);
+  const connect = await byTestId(d, "ConnectMyAgentButton");
+  if (await connect.isExisting().catch(() => false)) {
+    await connect.click();
+    console.log(`[e2e] ${d.e2ePlatform}: connecting my agent`);
+  }
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    for (const key of ["MyAgentIdentityCard", "MyAgentCard"]) {
+      if (await byTestId(d, key).isExisting().catch(() => false)) return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(`${d.e2ePlatform}: My Agent never reached its connected state`);
+}
+
 let manager, approver;
 let keepalive;
 try {
@@ -77,7 +101,7 @@ try {
   console.log(`[e2e] ${policy.trim().split("\n").slice(-4).join(" | ")}`);
   if (/No approval rules/.test(policy)) throw new Error(`the consent rule did not take:\n${policy}`);
   // Back to My Agent, where the approver listens.
-  await (await waitForTestId(approver, "MyAgent", 30000)).click();
+  await openMyAgentConnected(approver);
   await waitForTestId(approver, "MyAgentNoApprovals", 30000);
 
   // Keep the approver's session alive while the manager takes its minutes:

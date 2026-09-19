@@ -33,6 +33,31 @@ function openLink(url) {
   else execFileSync("adb", ["-s", ANDROID_SERIAL, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", `'${url}'`, ANDROID_PKG], { stdio: "inherit" });
 }
 
+
+/**
+ * My Agent gates everything behind the VTA session now: the not-connected
+ * screen offers only "Connect my agent". Tap it if it is there, then wait for
+ * the connected screen (the identity card or, if a persona already exists,
+ * the agent card).
+ */
+async function openMyAgentConnected(d, timeout = 180000) {
+  await (await waitForTestId(d, "MyAgent", 30000)).click();
+  await sleep(1500);
+  const connect = await byTestId(d, "ConnectMyAgentButton");
+  if (await connect.isExisting().catch(() => false)) {
+    await connect.click();
+    console.log(`[e2e] ${d.e2ePlatform}: connecting my agent`);
+  }
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    for (const key of ["MyAgentIdentityCard", "MyAgentCard"]) {
+      if (await byTestId(d, key).isExisting().catch(() => false)) return;
+    }
+    await sleep(3000);
+  }
+  throw new Error(`${d.e2ePlatform}: My Agent never reached its connected state`);
+}
+
 let driver;
 try {
   execFileSync("bash", [INVITE, "--invitation-only"], { stdio: "inherit" });
@@ -75,11 +100,12 @@ try {
   }
 
   // 1 — the identity to be invited.
-  await (await waitForTestId(driver, "MyAgent", 30000)).click();
-  await waitForTestId(driver, "MyAgentIdentityCard", 30000);
-  const create = await byTestId(driver, "CreateIdentityButton").isExisting();
+  await openMyAgentConnected(driver);
+  // The identity card sits below the agent card on the reworked screen.
+  await scrollToTestId(driver, "MyAgentIdentityCard", 6).catch(() => undefined);
+  const create = await scrollToTestId(driver, "CreateIdentityButton", 4).catch(() => undefined);
   if (create) {
-    await byTestId(driver, "CreateIdentityButton").click();
+    await create.click();
     console.log(`[e2e] ${driver.e2ePlatform}: creating an identity on the VTA`);
   }
   await waitForTestId(driver, "MyAgentPersonaDid", 180000);
@@ -94,11 +120,18 @@ try {
   if (!link) throw new Error(`no invitation link:\n${out}`);
   console.log(`[e2e] invitation issued (${link.length} chars)`);
   openLink(link);
-  await waitForTestId(driver, "MyAgentInvitationCard", 60000);
+  // The card sits below Approvals and the Vetting row; UiAutomator only
+  // reports what is on screen, so poll with a scroll rather than a wait.
+  let invitationCard;
+  for (let i = 0; i < 20 && !invitationCard; i++) {
+    await sleep(3000);
+    invitationCard = await scrollToTestId(driver, "MyAgentInvitationCard", 4).catch(() => undefined);
+  }
+  if (!invitationCard) throw new Error("the invitation never appeared on My Agent");
   await screenshot(driver, "vti-invite-received");
 
   // 3 — join as the persona.
-  await (await waitForTestId(driver, "JoinCommunityButton", 10000)).click();
+  await (await scrollToTestId(driver, "JoinCommunityButton", 4)).click();
   console.log(`[e2e] ${driver.e2ePlatform}: joining`);
   // The Communities card sits below Approvals and Invitations; UiAutomator
   // only sees what is rendered, so scroll to it rather than ask if it exists.
