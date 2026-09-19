@@ -333,6 +333,9 @@ proceeds — a real UX cost for a capability most users will rarely need in the 
 version. Deferred, not designed away: if a later need surfaces ("this specific contact
 should always see profile X, even after I switch my active profile"), it is a
 Phase 3 addition to this same connection-keyed storage question, not a redesign.
+(A narrower, read-only sibling of this storage question — which profile was
+shared with a contact, for display only, not for binding future exchanges — is
+resolved and built; see [`2026-09-19-bam.md`](./editable-multi-profile-plan/2026-09-19-bam.md).)
 
 **What Phase 2 actually builds: an *active profile*, switchable before you connect.**
 `rCard.activeProfileId` (§4.1) names which profile's template `loadRCardTemplate`
@@ -480,3 +483,4 @@ specific `profileId` instead of deleting every `RCardTemplate` record.
 | Companion | Author | What it settles |
 |---|---|---|
 | [`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md) | BAM | Reads `feat/prague-farm-membership`'s persona implementation and `dtgwg-cred-spec`'s latest `main` directly; supersedes §3's "open, blocked" framing with the resolved VTA architecture, the r-card/persona/VPC spec grounding, and the decided 1:1 profile↔persona link. Also supersedes §4.2's original "plain Settings row" entry point with the Profile-tab redesign, and records why §4.1's active-profile resolution needed a Credo tag rather than relying on `RCardState.activeProfileId` alone. |
+| [`2026-09-19-bam.md`](./editable-multi-profile-plan/2026-09-19-bam.md) | BAM | Resolves a narrower, read-only sibling of §4.3's deferred per-connection binding: which profile was shared with a contact, shown live on `ContactDetails` (falling back to a share-time label snapshot only once the profile is deleted), plus a delete-time warning on `MyProfiles` when a profile is still shared with contacts. Does not resolve §7's still-open per-connection binding item. |
