@@ -28,8 +28,8 @@ from a report or an issue always lands on the right entry.
 | [VTI-02](#vti-02) | An ACL `member` role is not community membership | High | Open | A |
 | [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | Open | A |
 | [VTI-04](#vti-04) | A second application from one DID is refused, not answered | Medium | Open — by design, consequences unaddressed | A |
-| [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | Open — operator workaround exists | A |
-| [VTI-06](#vti-06) | `cors_allow_origin` is silently ignored unless it is in `[security]` | Medium | Open | A |
+| [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | **Resolved upstream** — `affinidi-tdk-rs` #831 | A |
+| [VTI-06](#vti-06) | A misplaced configuration key is accepted in silence | Low | CORS half answered by #831; general case open | A, re-checked on **C** |
 | [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | Open | A |
 | [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | Open — workaround | A |
 | [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | Open | A |
@@ -236,24 +236,64 @@ where it has to go.
 cookie, so the origin check adds little for it. Either exempt token-bearing
 upgrades, or document prominently that mobile clients require an allowlist entry.
 
+**Resolved upstream** by `affinidi-tdk-rs` #831 (tracked there as KR-05), which
+took the second option and went further than the finding asked. The check and
+the default-closed posture are untouched, which is right — the default was
+never the defect. What changed is that three documents and two test names no
+longer say a native client is unaffected. The rule is now stated by the header
+rather than by the client class: a request sending no `Origin` is admitted, one
+sending an `Origin` is admitted only if the policy admits it. A regression test
+pins the React Native case specifically.
+
+Worth recording why this one survived so long, because it is a pattern rather
+than an accident: every sentence involved was *true*. "Native clients send no
+Origin" describes the Rust SDK exactly. It only misleads when a reader
+substitutes "native" for "sends no Origin", and those sets differ by precisely
+one client — the mobile one nobody was testing with. A test asserting the right
+behaviour under the wrong name kept the idea alive through every review.
+
 ---
 
 ## VTI-06
 
 *Measured on era **A** (see [Stack under test](#stack-under-test)).*
 
-### `cors_allow_origin` is silently ignored unless it is in `[security]`
+### A misplaced configuration key is accepted in silence
 
-The setting is read from the configuration's `[security]` table
+**Retitled after upstream read it.** This was filed as "`cors_allow_origin` is
+silently ignored unless it is in `[security]`", which reads as a claim that the
+reference configuration puts the key in the wrong place. It does not, and
+upstream correctly reported no reproduction on that reading (#831). The claim
+was never about where the key belongs. It is about what happens when an
+operator puts it somewhere else.
+
+The setting is read from the `[security]` table
 (`state.config.security.cors_origins`), and the generated `mediator.toml`
-documents it there, commented out. Set anywhere else in the file — appended at
-the end, or at the top level — TOML scopes the key to whatever table precedes
-it, the mediator never sees it, and the refusals of [VTI-05](#vti-05) continue
-with the setting plainly present in the file.
+documents it there, commented out — all correct. Append it at the end of the
+file instead, or at the top level, and TOML scopes the key to whatever table
+happens to precede it. The mediator never sees it, says nothing, and the
+refusals of [VTI-05](#vti-05) continue with the setting plainly present in the
+file the operator is looking at.
 
-Cost us roughly an hour of believing a correct fix had not worked. A startup
-warning for an unrecognised top-level key would have made it a five-second
-problem.
+Cost us roughly an hour of believing a correct fix had not worked.
+
+**Still true on era C**, and not specific to this key: no configuration struct
+under `src/common/config/` carries `#[serde(deny_unknown_fields)]`, so any
+unrecognised key anywhere in `mediator.toml` is accepted without comment.
+
+**Largely answered by #831, from the other end.** That PR added a line stating
+the effective CORS policy at boot — `CORS: disabled (security.cors_allow_origin
+unset)`. An operator who misplaces the key now sees the mediator say the
+setting is unset while their file plainly sets it, which is exactly the
+five-second signal this finding asked for, arrived at by a better route than a
+parser warning. We would call the CORS half of this closed.
+
+What remains is the general case: a misplaced or misspelled key that has no
+boot line of its own is still silent. `deny_unknown_fields` is the wrong
+instrument — it turns a forward-compatible config into a hard failure across
+version skew — but a warning naming unrecognised keys at load would cost
+nothing and generalises what #831 did for one setting. Low priority; recorded
+rather than pressed.
 
 ---
 
