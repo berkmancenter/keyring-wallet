@@ -213,6 +213,25 @@ Two existing fields are repurposed rather than replaced:
   `'Default business card'`) becomes the profile's display name in the picker/list UI.
   No schema change.
 
+**A new Credo tag, `active`, is what `loadRCardTemplate(agent)` (no `profileId`)
+resolves against — not `RCardState.activeProfileId`.** The deep DIDComm
+event-handling code that decides what to exchange (`buildRCardCredential`,
+`buildLegacyIssuerObject` in `vrc-manager.ts`) only ever has `agent` in scope, never
+the app's Redux store — so `activeProfileId` living in `RCardState` alone would be
+unreachable from exactly the call sites that need "the active profile" most. Every
+`RCardTemplate` record is tagged `active: 'true'|'false'`
+(`buildRCardTemplateW3cCredentialRecord`'s `options.active`), with the invariant that
+at most one is `'true'` at a time, enforced at the single point that writes it
+(`setActiveRCardProfile`). `loadRCardTemplate(agent)` queries by that tag;
+`loadRCardTemplate(agent, profileId)` queries by `templateId` instead, regardless of
+which is active. `RCardState.activeProfileId` is the Redux *mirror* of the same fact,
+kept in sync by dispatching whenever `setActiveRCardProfile` succeeds — it exists for
+the UI layer's convenience (so components don't have to await a Credo read to know
+what's active), not as the source of truth. See
+[`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md)'s "Resolving
+the active profile without Redux access" section for why this wasn't spelled out
+above originally.
+
 **Migration is free.** An existing install has exactly one `RCardTemplate` record. Once
 `templateId` is minted from `id` instead of the shared constant, that one record becomes
 "the first profile" with `activeProfileId` pointing at it — no data migration step, no
@@ -327,14 +346,22 @@ gain `store.rCard.activeProfileId` as a dependency, so switching profiles on tha
 regenerates the invitation under the newly active one — no new invitation-creation
 mechanism, just a wider dependency list on what already reacts to store changes.
 
-**Settings — "My Profiles."** A new list screen (reachable the same way as `EditRCard`)
-showing each profile by its `label` and resolved display info, reusing
-`resolveContactDisplayInfo`'s "name/photo, else fallback" pattern rather than inventing a
-new one. Tapping a row opens `EditRCard` parameterized by that profile's id (§4.2's
-shared form, third call site). A "＋ Add profile" action opens the same form in create
-mode. Deleting a profile is blocked when it is the last one — a user always has at least
-one active profile — and deleting the active profile requires picking a new active one
-first, not silently falling back to an arbitrary remaining one.
+**Settings — "My Profiles."** The Settings profile card (§4.2's entry point) now opens
+this new list screen — `Screens.MyProfiles` — instead of `EditRCard` directly, since
+"tap your own face to edit yourself" no longer has a single unambiguous target once
+more than one profile can exist; the card's subtitle changes from "Tap to edit your
+profile" to "Manage your profiles" to match. The list shows each profile by its `label`
+and resolved display info, reusing `resolveContactDisplayInfo`'s "name/photo, else
+fallback" pattern rather than inventing a new one. `EditRCard` gains a route param,
+`{ profileId?: string }`: given, it edits that profile (tapping a row on this list);
+omitted, it creates a new one (the list's "＋ Add profile" action) — one screen, both
+call sites distinguished by that one param rather than a separate create-mode screen.
+The connect-time switcher below is a separate, narrower picker for choosing which
+profile is *active* — it does not open `EditRCard`. Deleting a profile is blocked when
+it is the last one — a user always has at least one active profile — and deleting the active
+profile requires picking a new active one first, not silently falling back to an
+arbitrary remaining one; both blocks surface as an explanatory modal, not a silent
+no-op.
 
 **Storage.** `loadRCardTemplate(agent, profileId)` and a new `loadAllRCardTemplates(agent)`
 replace the `records[0]` assumption; `storeRCardTemplate` for a *new* profile mints a
@@ -452,4 +479,4 @@ specific `profileId` instead of deleting every `RCardTemplate` record.
 
 | Companion | Author | What it settles |
 |---|---|---|
-| [`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md) | BAM | Reads `feat/prague-farm-membership`'s persona implementation and `dtgwg-cred-spec`'s latest `main` directly; supersedes §3's "open, blocked" framing with the resolved VTA architecture, the r-card/persona/VPC spec grounding, and the decided 1:1 profile↔persona link. Also supersedes §4.2's original "plain Settings row" entry point with the Profile-tab redesign. |
+| [`2026-09-18-bam.md`](./editable-multi-profile-plan/2026-09-18-bam.md) | BAM | Reads `feat/prague-farm-membership`'s persona implementation and `dtgwg-cred-spec`'s latest `main` directly; supersedes §3's "open, blocked" framing with the resolved VTA architecture, the r-card/persona/VPC spec grounding, and the decided 1:1 profile↔persona link. Also supersedes §4.2's original "plain Settings row" entry point with the Profile-tab redesign, and records why §4.1's active-profile resolution needed a Credo tag rather than relying on `RCardState.activeProfileId` alone. |
