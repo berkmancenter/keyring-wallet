@@ -83,7 +83,7 @@ export const generateOnboardingWorkflowSteps = (
   const { showPreface } = config
   // const { enablePushNotifications } = config // DISABLED: Push notifications disabled
   const { needsUpdate, dismissed = false } = state.versionInfo
-  const hasRCardCredential = Boolean(state.rCard?.template)
+  const hasRCardCredential = Boolean(state.rCard?.profiles?.length)
 
   return [
     isPrefaceComplete(didSeePreface, showPreface ?? false),
