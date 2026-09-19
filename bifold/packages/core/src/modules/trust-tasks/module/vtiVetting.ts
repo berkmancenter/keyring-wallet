@@ -23,6 +23,8 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import {
   CROCKFORD,
   digestMultibase,
+  evaluateStatements,
+  statementFacts,
   encodeTicketUri,
   parseTicketUri,
   signDocumentProof,
@@ -168,6 +170,15 @@ export interface VettingApplication {
   minStatements: number
   requiredClaims: string[]
   acceptedMethods: VettingMethod[]
+  /** Per-method floors the community published, e.g. at least one `inPerson`. */
+  minByMethod?: Record<string, number>
+  /** ISO 8601 duration; a statement older than this at submit does not count. */
+  maxStatementAge?: string
+  /** Relationship caps and commitment consistency, as published. */
+  independence?: {
+    maxByDeclaredRelationship?: Record<string, number>
+    requireConsistentIdentityCommitment?: boolean
+  }
   /** One salt per application, so every vetter sees the same commitment. */
   commitmentSalt: string
   /** What the card will carry — the face, kept on the phone for now. */
@@ -675,7 +686,17 @@ export class VtiApplicant {
   async start(manifest: VtiManifest, claims: Record<string, string>): Promise<VettingApplication> {
     const existing = await this.store.getApplication(this.persona.communityDid)
     const vetting = manifest.criteria.map((c) => (c as { vetting?: Record<string, unknown> }).vetting).find(Boolean) as
-      | { minStatements?: number; requiredClaims?: string[]; acceptedMethods?: VettingMethod[] }
+      | {
+          minStatements?: number
+          requiredClaims?: string[]
+          acceptedMethods?: VettingMethod[]
+          minByMethod?: Record<string, number>
+          maxStatementAge?: string
+          independence?: {
+            maxByDeclaredRelationship?: Record<string, number>
+            requireConsistentIdentityCommitment?: boolean
+          }
+        }
       | undefined
     const digest =
       (
@@ -698,6 +719,12 @@ export class VtiApplicant {
     application.minStatements = vetting?.minStatements ?? 1
     application.requiredClaims = vetting?.requiredClaims ?? ['name.legal']
     application.acceptedMethods = vetting?.acceptedMethods ?? ['inPerson', 'video']
+    // The rest of the published requirement. A community sets every one of
+    // these and applies them at intake; an applicant that reads only the
+    // statement count gathers against a rule it never saw.
+    application.minByMethod = vetting?.minByMethod
+    application.maxStatementAge = vetting?.maxStatementAge
+    application.independence = vetting?.independence
     application.claims = { ...application.claims, ...claims }
     await this.store.saveApplication(application)
     this.onChange?.()
@@ -1012,11 +1039,21 @@ export class VtiApplicant {
     needed: number
     meets: boolean
     statements: Record<string, unknown>[]
+    /** How many of those will actually count. */
+    counted: number
     /**
-     * Statements the community will discount — signed before the grant, past
-     * it, or backed by a grant the community has since revoked.
+     * Statements the community will discount — too old, from a vetter who has
+     * already spoken, about a different face, or backed by a grant that did
+     * not cover the signing or has since been revoked.
      */
     discounted: number
+    /** What is still missing, in the community's own terms. */
+    needs: { kind: 'statements' | 'method'; method?: string; n: number }[]
+    /** False when a declared-relationship cap is over — a referral, not a refusal. */
+    independenceOk: boolean
+    exceededCaps: { relationship: string; limit: number; seen: number }[]
+    /** Set when the community published an age limit this client could not read. */
+    unreadableMaxAge?: string
     /** Vetters whose grant status could not be reached, and why. */
     unchecked: { vetterDid: string; reason: string }[]
   }> {
@@ -1028,12 +1065,27 @@ export class VtiApplicant {
     const statements = (await this.communityStore.listHeldCredentials('vetting-statement', application.communityDid))
       .map((s) => s.credential)
       .filter((c) => (c as { credentialSubject?: { id?: string } }).credentialSubject?.id === application.joinDid)
-    // A revoked grant joins the two ordering faults: all three are reasons the
-    // community counts a statement as nothing, and an applicant is better off
-    // hearing it here than inferring it from a refusal. A grant we could not
-    // reach is NOT counted — it is reported separately, because "we could not
-    // ask" and "the answer was no" are different things to tell someone.
-    const discounted = application.requests.filter(
+    // What the community will actually make of these: age, per-method floors,
+    // one voice per vetter, and a consistent commitment. Judged at now,
+    // because the submit is the moment that decides.
+    const evaluation = evaluateStatements(
+      statements.map(statementFacts),
+      {
+        minStatements: application.minStatements,
+        minByMethod: application.minByMethod,
+        acceptedMethods: application.acceptedMethods,
+        maxStatementAge: application.maxStatementAge,
+        independence: application.independence,
+      },
+      application.joinDid
+    )
+
+    // A revoked grant joins the evaluation's own reasons: all of them are ways
+    // the community counts a statement as nothing, and an applicant is better
+    // off hearing it here than inferring it from a refusal. A grant we could
+    // not reach is NOT counted — it is reported separately, because "we could
+    // not ask" and "the answer was no" are different things to tell someone.
+    const grantFaults = application.requests.filter(
       (r) =>
         r.status === 'attested' &&
         (r.grantedBeforeSigning === false || r.grantStillValid === false || r.grantStatus === 'revoked')
@@ -1042,11 +1094,19 @@ export class VtiApplicant {
       .filter((r) => r.status === 'attested' && r.grantStatusReason)
       .map((r) => ({ vetterDid: r.vetterDid, reason: r.grantStatusReason! }))
     return {
+      // `held` stays the number gathered, not the number that will count —
+      // the two are said separately so "3 of 2 statements" with a discount
+      // line beneath it reads as what it is.
       held: statements.length,
       needed: application.minStatements,
-      meets: statements.length >= application.minStatements,
+      counted: evaluation.counted.length,
+      meets: evaluation.meets && grantFaults < statements.length,
       statements,
-      discounted,
+      discounted: evaluation.discounted.length + grantFaults,
+      needs: evaluation.needs,
+      independenceOk: evaluation.independenceOk,
+      exceededCaps: evaluation.exceededCaps,
+      unreadableMaxAge: evaluation.unreadableMaxAge,
       unchecked,
     }
   }

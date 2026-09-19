@@ -73,8 +73,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [checklist, setChecklist] = useState<{
     held: number
     needed: number
+    counted: number
     meets: boolean
     discounted: number
+    needs: { kind: 'statements' | 'method'; method?: string; n: number }[]
+    independenceOk: boolean
+    exceededCaps: { relationship: string; limit: number; seen: number }[]
+    unreadableMaxAge?: string
     unchecked: { vetterDid: string; reason: string }[]
   }>()
   const [membershipRole, setMembershipRole] = useState<string>()
@@ -607,6 +612,38 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               {checklist?.unchecked?.length ? (
                 <Text style={styles.label} testID={testIdWithKey('VettingGrantUnchecked')}>
                   {t('Vetting.GrantUnchecked', { n: checklist.unchecked.length })}
+                </Text>
+              ) : null}
+              {/*
+                What is still missing, in the community's own terms — a count
+                alone cannot say "one of them has to be in person".
+              */}
+              {checklist?.needs?.length ? (
+                <Text style={styles.label} testID={testIdWithKey('VettingNeeds')}>
+                  {checklist.needs
+                    .map((need) =>
+                      need.kind === 'method'
+                        ? t('Vetting.NeedsMethod', { n: need.n, method: t(`Vetting.Method.${need.method}`) })
+                        : t('Vetting.NeedsStatements', { n: need.n })
+                    )
+                    .join(' · ')}
+                </Text>
+              ) : null}
+              {/*
+                An exceeded relationship cap is a referral, not a refusal: the
+                application still stands and a human will look at it. Saying so
+                is kinder than letting the delay look like a fault.
+              */}
+              {checklist && !checklist.independenceOk ? (
+                <Text style={styles.label} testID={testIdWithKey('VettingIndependence')}>
+                  {t('Vetting.IndependenceCapped', {
+                    relationships: checklist.exceededCaps.map((c) => c.relationship).join(', '),
+                  })}
+                </Text>
+              ) : null}
+              {checklist?.unreadableMaxAge ? (
+                <Text style={styles.label} testID={testIdWithKey('VettingUnreadableAge')}>
+                  {t('Vetting.UnreadableMaxAge', { value: checklist.unreadableMaxAge })}
                 </Text>
               ) : null}
               {checklist?.meets && !membershipRole ? (

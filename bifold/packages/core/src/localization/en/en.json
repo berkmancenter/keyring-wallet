@@ -1233,6 +1233,15 @@
     "Connecting": "Connecting your identity…",
     "Discounted": "{{n}} statement(s) will not count — the vetter's grant did not cover the moment they signed, or has since been revoked.",
     "GrantUnchecked": "{{n}} vetter's grant could not be checked just now. You can still apply; the community will check it when you do.",
+    "NeedsStatements": "{{n}} more statement(s)",
+    "NeedsMethod": "{{n}} more {{method}}",
+    "IndependenceCapped": "More statements from people who declared a {{relationships}} connection to you than this community counts. Your application still stands — someone will review it.",
+    "UnreadableMaxAge": "This community publishes an age limit for statements ({{value}}) that this app could not read, so the count above may be more hopeful than the community's.",
+    "Method": {
+      "inPerson": "in person",
+      "video": "by video",
+      "priorAcquaintance": "from someone who knows you"
+    },
     "YourProfile": "Your vetter profile",
     "ProfileHint": "Publish this so people looking for a vetter can find you. Your grant works either way.",
     "ProfileNamePlaceholder": "How you want to be listed",
