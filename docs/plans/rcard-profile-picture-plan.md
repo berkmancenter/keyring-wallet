@@ -261,14 +261,14 @@ consumes these as a library and needs no changes.
   `yarn e2e:vrc:tsp` with a maximum-size photo through a real mediator/relay
   and confirm no truncation, rejection, or unexpected latency. If this surfaces
   a lower real ceiling, §3.3's numbers need revising before implementation.
-- **Crop/aspect-ratio UX** for the onboarding capture flow (§4.2): the
-  question of a user-adjustable crop (pan/zoom to choose which part of a
-  non-square photo survives) is still not designed and still needs a design
-  pass. What *is* settled, per
-  [`rcard-profile-picture-plan/2026-09-18-bam.md`](rcard-profile-picture-plan/2026-09-18-bam.md):
-  the crop must not be delegated to the OS picker's own `allowsEditing` UI
-  (observed to return a stale image on Android); it's a deterministic center
-  crop in `processRCardPhoto` today, with no user adjustment.
+- **Crop/aspect-ratio UX** for the onboarding capture flow (§4.2): a
+  user-adjustable crop now exists (`RCardPhotoCropModal.tsx` — pinch-zoom and
+  pan a square viewport over the picked photo), but per
+  [`rcard-profile-picture-plan/2026-09-18-bam.md`](rcard-profile-picture-plan/2026-09-18-bam.md)
+  it was built as an engineering default, not a designed one — the circular
+  viewport mask, max zoom, and modal styling haven't had a design pass. What
+  *is* settled: the crop must not be delegated to the OS picker's own
+  `allowsEditing` UI (observed to return a stale image on Android).
 - **Format is decided** (JPEG, §3.1) but not yet stress-tested against actual
   photographic input at the 256×256/12KB budget — worth confirming the budget
   holds up visually before locking `RCardOnboarding.tsx`'s compression
