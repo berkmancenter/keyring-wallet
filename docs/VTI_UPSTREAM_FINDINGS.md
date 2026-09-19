@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.11 — 2026-09-19.** A living document: every finding here was measured
+**Version 1.12 — 2026-09-19.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -677,6 +677,20 @@ not `data.json`. Keyring now polls every 15 s. For upstream: the SDK's
 extension to the Pickup 3.0 body is undocumented, and a `status` on
 `live-delivery-change` could carry the dropped count so clients know to poll.
 
+## Open questions and requests
+
+Not defects — things we would like answered or changed, kept here so one link
+carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
+
+| # | Ask | Why |
+| --- | --- | --- |
+| VTI-Q1 | Is `VTI-Eucalyptus-RC-0` the pin you want a client on, or main? | We run main (0.34.1) because it carries the VTI-28 fix; a client needs to know which surface is the contract. |
+| VTI-Q2 | Will the reference client keep accepting a DIDComm-carried `vetting/request/0.1`, or must a peer speak TSP Rev 3? | Keyring can do either per build; the answer decides the demo's default. |
+| VTI-Q3 | `vtc/vetting/vetters/list/0.1` skips a vetter with no published profile and a vetter with no live grant alike, so absence cannot distinguish *revoked* from *unlisted*. Is a status field, or a by-DID lookup, wanted? | An applicant checking whether its vetter is still live has to fall back to the credential's own status list; a one-line answer from the list route would make the common case cheap. |
+| VTI-Q4 | Is borrowing a persona's signing key from the VTA the expected pattern for signing a Vetting Card (D19), or should the VTA sign it? | We borrow, as the reference client does; confirming it settles our custody model. |
+| VTI-Q5 | Is a Trust Task that links an `openvtc` request to a Keyring device something you would like drafted? | Raised in conversation; we would write it if wanted. |
+| VTI-Q6 | Does a dry-run gate assume the applicant stores the vetter's statement in the VTA vault (`purpose: vetting`) rather than on the device? | We hold it on the device today. |
+
 ## Changelog
 
 | Version | Date | Change |
@@ -684,6 +698,7 @@ extension to the Pickup 3.0 body is undocumented, and a `status` on
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.12 | 2026-09-19 | Adds an *Open questions and requests* section (`VTI-QN`) so asks that are not defects travel with the findings. VTI-Q3 records that a vetter listing cannot distinguish a revoked grant from an unlisted vetter. |
 | 1.11 | 2026-09-19 | Stack moved to upstream head (vta-service 0.34.1). **VTI-28 resolved upstream** — `vti` #1567 lets the spine decide what an inbound document is and answers an error with nothing, and webvh #202 treats an inbound error as terminal; re-measured clean, and the local patches that stood in for it are dropped. Upgrade note: `trust_xff` is retired for `trust_xff_cidrs` (#1562). |
 | 1.10 | 2026-09-19 | Upstream reviewed the report: VTI-10 and VTI-21 confirmed in their source; VTI-13 queried (probably the narrower `minStatements: 0` refusal). Client-side gaps they found are tracked in the plan companion, not here — they are ours, not upstream's. |
 | 1.9 | 2026-09-18 | VTI-28 root cause: `sign_success_response` turns an empty 204 into a trust-task-error that is sent to the daemon; fix verified on a patched local build |

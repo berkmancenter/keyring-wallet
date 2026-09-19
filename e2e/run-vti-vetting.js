@@ -105,6 +105,21 @@ try {
   await openVetting(vetter);
   await waitForTestId(vetter, "VettingYouVetFor", 120000);
   // A desk left over from earlier runs makes every page-wide lookup ambiguous.
+  // Publish the vetter's profile — a vetter with none is invisible to the
+  // community's listing, so this is part of being a vetter, not a nicety.
+  const publish = await scrollToTestId(vetter, "VettingPublishProfileButton", 6).catch(() => undefined);
+  if (publish) {
+    await publish.click();
+    const until = Date.now() + 60000;
+    let published = false;
+    while (Date.now() < until && !published) {
+      published = await byTestId(vetter, "VettingProfilePublished").isExisting().catch(() => false);
+      if (!published) await sleep(2500);
+    }
+    const err = await textOf(vetter, "VettingError").catch(() => "");
+    if (!published) throw new Error(`${vetter.e2ePlatform}: the profile was not published${err ? ` — ${err}` : ""}`);
+    console.log(`[e2e] ${vetter.e2ePlatform}: vetter profile published`);
+  }
   const clear = await scrollToTestId(vetter, "VettingDeskClearButton", 4).catch(() => undefined);
   if (clear) { await clear.click(); await sleep(2500); console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`); }
   await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
