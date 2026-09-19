@@ -36,11 +36,26 @@ restarting Metro. Community setup — statement type, criterion — goes through
 Their managed infrastructure. Geoff keeps a staging instance on latest mains,
 which makes it the practical answer to "which version is the contract".
 
-**The farm provisions VTAs, not communities.** Bootstrapping a VTC is the
-sysop path — its own host, mediator and DID host — and `vti-setup`'s
-community-manager guide for it is still unwritten. So on the farm we are
-members: applicant and vetter. We cannot set criteria, revoke a grant, or force
-a capacity refusal.
+The farm offers two modes, and the difference decides what can be tested on it:
+
+- **VTA Only** — a VTA against the farm's shared mediator and DID hosting. On
+  this one we are members: applicant and vetter, unable to set criteria or
+  revoke a grant.
+- **Full Stack** — a dedicated VTA, mediator, DID-hosting daemon **and VTC**.
+  This one gives us a community we control, on their infrastructure.
+
+`vti-setup`'s developer guide documents only the VTA-Only path, and its
+community-manager guide is still unwritten, so reading the guides alone
+suggests the farm cannot make a community. It can. Check the console rather
+than the docs.
+
+**Check the image versions before trusting a farm result.** The console pins a
+version per component, and the default is not always the newest thing upstream
+has merged. A mediator older than 0.28.1 does not carry the fix for the
+`Origin` check that refuses a React Native WebSocket (VTI-05), so a phone is
+refused there exactly as it was before the fix — and a stack whose mediator
+predates 0.28.0 has none of the queue-depth gating either. A finding measured
+against an old image says nothing about upstream's current main.
 
 Provisioning also needs a human at a browser once per VTA: the client generates
 a temporary admin `did:key`, and someone pastes it into the farm UI and clicks
