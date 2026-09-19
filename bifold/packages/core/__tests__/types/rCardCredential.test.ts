@@ -81,7 +81,14 @@ describe('R-card template helpers', () => {
 
     const input = formInputFromTemplate(bareTemplate)
 
-    expect(input).toEqual({ firstName: 'Alice', lastName: '', email: '', organization: '', photo: undefined })
+    expect(input).toEqual({
+      firstName: 'Alice',
+      lastName: '',
+      email: '',
+      organization: '',
+      photo: undefined,
+      label: bareTemplate.label,
+    })
   })
 
   test('buildJCardFromFormInput omits photo property when no photo is provided', () => {

@@ -91,29 +91,41 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
       alignItems: 'center',
     },
     profileCard: {
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderRadius: 14,
+      marginHorizontal: 16,
+      marginTop: 16,
+      marginBottom: 20,
+      paddingHorizontal: 20,
+      paddingVertical: 18,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    profileCardRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: SettingsTheme.groupBackground,
-      paddingHorizontal: 25,
-      paddingVertical: 20,
-      marginBottom: 10,
+      marginTop: 10,
     },
     profileAvatar: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       backgroundColor: ColorPalette.brand.primaryBackground,
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
     },
     profileAvatarImage: {
-      width: 56,
-      height: 56,
+      width: 32,
+      height: 32,
     },
     profileTextWrap: {
-      marginLeft: 16,
+      marginLeft: 12,
       flexShrink: 1,
+      minWidth: 0,
     },
   })
 
@@ -610,23 +622,23 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
         accessibilityLabel={t('MyProfiles.Title')}
         testID={testIdWithKey('ProfileCard')}
       >
-        <View style={styles.profileAvatar}>
-          {photo ? (
-            <Image style={styles.profileAvatarImage} source={{ uri: photo }} />
-          ) : (
-            <Icon name="account-circle" size={40} color={ColorPalette.grayscale.mediumGrey} />
-          )}
+        <ThemedText variant="headingTwo">{t('Settings.ProfileCardSubtitle')}</ThemedText>
+        <View style={styles.profileCardRow}>
+          <View style={styles.profileAvatar}>
+            {photo ? (
+              <Image style={styles.profileAvatarImage} source={{ uri: photo }} />
+            ) : (
+              <Icon name="account-circle" size={22} color={ColorPalette.grayscale.mediumGrey} />
+            )}
+          </View>
+          <View style={styles.profileTextWrap}>
+            <ThemedText numberOfLines={1} style={TextTheme.settingsText}>
+              {name}
+            </ThemedText>
+          </View>
+          <View style={{ flex: 1 }} />
+          <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
         </View>
-        <View style={styles.profileTextWrap}>
-          <ThemedText variant="headingThree" numberOfLines={1}>
-            {name}
-          </ThemedText>
-          <ThemedText style={[TextTheme.settingsText, { color: ColorPalette.brand.link }]}>
-            {t('Settings.ProfileCardSubtitle')}
-          </ThemedText>
-        </View>
-        <View style={{ flex: 1 }} />
-        <Icon name="chevron-right" size={24} color={ColorPalette.grayscale.mediumGrey} />
       </TouchableOpacity>
     )
   }

@@ -1,6 +1,13 @@
 import { Agent, JsonTransformer, W3cCredential, W3cCredentialRecord, W3cCredentialRepository } from '@credo-ts/core'
 
-import { RCardFormInput, RCardTemplate, JCard, buildJCardFromFormInput, LEGACY_SHARED_TEMPLATE_ID } from '../types/rcard'
+import {
+  RCardFormInput,
+  RCardTemplate,
+  JCard,
+  buildJCardFromFormInput,
+  LEGACY_SHARED_TEMPLATE_ID,
+  DEFAULT_LABEL,
+} from '../types/rcard'
 import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../types/relationshipContext'
 import { selectCredentialContexts } from '../utils/selectCredentialContexts'
 import { createVrcLogger } from '../vrc-logging'
@@ -199,7 +206,7 @@ export const extractRCardTemplateFromW3cRecord = (record: W3cCredentialRecord): 
       ? (claims as any).label
       : subject && 'label' in subject
       ? (subject as any).label
-      : 'Default business card'
+      : DEFAULT_LABEL
 
   if (!jcard || !Array.isArray(jcard) || jcard[0] !== 'vcard') {
     const logger = createVrcLogger(null, { module: 'vrc', component: 'rCardCredential' })
@@ -262,7 +269,11 @@ export const updateRCardTemplate = async (
     const subject = Array.isArray(credential.credentialSubject)
       ? credential.credentialSubject[0]
       : credential.credentialSubject
-    subject.claims = { ...subject.claims, jcard: buildJCardFromFormInput(input) }
+    subject.claims = {
+      ...subject.claims,
+      jcard: buildJCardFromFormInput(input),
+      label: input.label?.trim() || subject.claims?.label || DEFAULT_LABEL,
+    }
 
     await repository.update(agent.context, record)
 

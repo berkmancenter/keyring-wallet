@@ -296,6 +296,20 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
                 <Text style={{ color: ColorPalette.brand.inlineError }}>*</Text>
                 {' Required'}
               </ThemedText>
+              <LimitedTextInput
+                showLimitCounter={false}
+                label={t('RCardOnboarding.Fields.ProfileName')}
+                limit={40}
+                defaultValue={formState.label}
+                autoCapitalize="words"
+                handleChangeText={updateField('label')}
+                testID={testIdWithKey('RCardLabelInput')}
+                accessibilityLabel={t('RCardOnboarding.Fields.ProfileName')}
+                returnKeyType="next"
+              />
+              <ThemedText style={{ fontSize: 12, color: '#888', marginTop: -12, marginBottom: 16 }}>
+                {t('RCardOnboarding.Fields.ProfileNameHint')}
+              </ThemedText>
               <View style={styles.photoSection}>
                 <TouchableOpacity
                   onPress={handlePickPhoto}

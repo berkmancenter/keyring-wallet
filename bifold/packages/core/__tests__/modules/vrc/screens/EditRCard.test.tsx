@@ -29,6 +29,7 @@ describe('EditRCard Screen', () => {
   let loadSpy: jest.SpyInstance
   let storeSpy: jest.SpyInstance
   const goBack = jest.fn()
+  const setOptions = jest.fn()
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -61,7 +62,7 @@ describe('EditRCard Screen', () => {
           <EditRCard
             key="first-mount"
             route={{ key: 'EditRCard', name: 'Edit Profile' as never, params: profileId ? { profileId } : undefined }}
-            navigation={{ goBack } as any}
+            navigation={{ goBack, setOptions } as any}
           />
         </BasicAppContext>
       </StoreProvider>
@@ -85,6 +86,38 @@ describe('EditRCard Screen', () => {
     expect(tree.getByTestId(testIdWithKey('RCardOrganizationInput')).props.defaultValue).toBe('Work')
   })
 
+  test('pre-fills the profile-name (label) field with the profile\'s own organizing tag', () => {
+    const tree = renderScreen(profileA.id)
+    expect(tree.getByTestId(testIdWithKey('RCardLabelInput')).props.defaultValue).toBe(profileA.label)
+  })
+
+  test('submitting a changed profile name updates the label, not just the jcard', async () => {
+    const tree = renderScreen(profileA.id)
+
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('RCardLabelInput')), 'Soccer Team')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('RCardSubmit')))
+    })
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        profileA.templateId,
+        expect.objectContaining({ label: 'Soccer Team' }),
+        expect.anything()
+      )
+    })
+  })
+
+  test('sets the nav header title to the profile being edited — not a generic title that could mean any of them', () => {
+    renderScreen(profileB.id)
+    expect(setOptions).toHaveBeenCalledWith({ title: profileB.label })
+  })
+
+  test('sets the nav header title to the create-mode title when there is no profileId', () => {
+    renderScreen(undefined)
+    expect(setOptions).toHaveBeenCalledWith({ title: 'EditRCard.CreateTitle' })
+  })
+
   test('renders nothing when asked to edit a profile that is not loaded', () => {
     const tree = renderScreen('no-such-profile')
 
@@ -99,7 +132,10 @@ describe('EditRCard Screen', () => {
         initialState={{ ...testDefaultState, rCard: { profiles: [profileA], activeProfileId: profileA.id } }}
         reducer={defaultReducer}
       >
-        <EditRCard route={{ key: 'EditRCard', name: 'Edit Profile' as never, params: undefined }} navigation={{} as any} />
+        <EditRCard
+          route={{ key: 'EditRCard', name: 'Edit Profile' as never, params: undefined }}
+          navigation={{ setOptions: jest.fn() } as any}
+        />
       </StoreProvider>
     )
 
@@ -134,7 +170,7 @@ describe('EditRCard Screen', () => {
           <EditRCard
             key="first-mount"
             route={{ key: 'EditRCard', name: 'Edit Profile' as never, params: { profileId: profileA.id } }}
-            navigation={{ goBack } as any}
+            navigation={{ goBack, setOptions: jest.fn() } as any}
           />
         </BasicAppContext>
       </StoreProvider>
@@ -153,6 +189,9 @@ describe('EditRCard Screen', () => {
         expect.anything()
       )
     })
+    // A successful save must navigate back on its own — the button pressed
+    // just sitting there with no feedback is exactly what prompted this test.
+    expect(goBack).toHaveBeenCalled()
 
     // Re-mount EditRCard (a different `key`, forcing a fresh component instance —
     // the same thing navigating away and back does) under the SAME StoreProvider
@@ -164,7 +203,7 @@ describe('EditRCard Screen', () => {
           <EditRCard
             key="second-mount"
             route={{ key: 'EditRCard', name: 'Edit Profile' as never, params: { profileId: profileA.id } }}
-            navigation={{ goBack } as any}
+            navigation={{ goBack, setOptions: jest.fn() } as any}
           />
         </BasicAppContext>
       </StoreProvider>

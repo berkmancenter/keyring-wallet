@@ -1015,6 +1015,8 @@
     "Title": "Create Your Profile (R-Card)",
     "Legend": "Your profile is like a digital business card you share when creating new connections. It helps others verify who you are. You control what you share and can update this anytime.",
     "Fields": {
+      "ProfileName": "Profile name",
+      "ProfileNameHint": "Just for you — helps you tell your profiles apart (e.g. Work, Personal). Not shown to your contacts.",
       "FirstName": "First name",
       "LastName": "Last name",
       "Email": "Email",

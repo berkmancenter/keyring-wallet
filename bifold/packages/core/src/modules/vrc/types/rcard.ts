@@ -7,6 +7,13 @@ export type RCardFormInput = {
   organization: string
   /** A data:image/jpeg;base64,... URI. Optional; omitted when no photo is set. */
   photo?: string
+  /**
+   * A phone-local organizing tag ("Work", "Soccer team") — maps to
+   * RCardTemplate.label. Never part of the jcard/vCard, so it never travels
+   * over the wire in an issued RelationshipCard credential; it only helps
+   * this user tell their own profiles apart in the picker/list UI.
+   */
+  label?: string
 }
 
 export type RCardValidationErrors = Partial<Record<keyof RCardFormInput, string>>
@@ -59,7 +66,7 @@ const DEFAULT_TYPES = ['VerifiableCredential', 'RCardTemplate']
 /** The shared templateId every profile got before per-profile minting (§4.1) — the
  *  signature of a pre-multi-profile legacy record, used only to detect one for migration. */
 export const LEGACY_SHARED_TEMPLATE_ID = 'rcard-basic-1'
-const DEFAULT_LABEL = 'Default business card'
+export const DEFAULT_LABEL = 'My Profile'
 const DEFAULT_ISSUER = 'urn:aries:bifold:r-card'
 const EMAIL_REGEX =
   // eslint-disable-next-line no-control-regex
@@ -198,6 +205,7 @@ export const formInputFromTemplate = (template: RCardTemplate): RCardFormInput =
     email: partial.email ?? '',
     organization: partial.organization ?? '',
     photo: partial.photo,
+    label: template.label,
   }
 }
 

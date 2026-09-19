@@ -866,6 +866,8 @@
     "Title": "Crie seu perfil (R-Card)",
     "Legend": "Seu perfil é como um cartão de visita digital que você pode compartilhar ao criar novas conexões. Isso ajuda outros a verificar quem você é.\n\nVocê controla o que compartilha e pode atualizar isso a qualquer momento.",
     "Fields": {
+      "ProfileName": "Nome do perfil",
+      "ProfileNameHint": "Apenas para você — ajuda a diferenciar seus perfis (ex.: Trabalho, Pessoal). Não é mostrado aos seus contatos.",
       "FirstName": "Nome",
       "LastName": "Sobrenome",
       "Email": "Email",

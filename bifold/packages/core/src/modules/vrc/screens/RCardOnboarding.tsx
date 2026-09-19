@@ -19,7 +19,7 @@ const RCardOnboarding: React.FC<RCardOnboardingProps> = ({ agent }) => {
 
   const handleSubmit = async (formState: RCardFormInput) => {
     try {
-      const template = buildRCardTemplate(formState)
+      const template = buildRCardTemplate(formState, { label: formState.label?.trim() || undefined })
 
       if (!agent) {
         dispatch({ type: DispatchAction.R_CARD_TEMPLATE_STAGED, payload: [template] })

@@ -52,6 +52,13 @@ const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
     },
     rowText: {
       flex: 1,
+      flexShrink: 1,
+      overflow: 'hidden',
+      marginRight: 8,
+    },
+    setActiveButton: {
+      flexShrink: 0,
+      marginRight: 12,
     },
     itemSeparator: {
       borderBottomWidth: 1,
@@ -78,7 +85,7 @@ const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
     return (
       <View style={styles.row}>
         <TouchableOpacity
-          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexShrink: 1, minWidth: 0 }}
           onPress={() => navigation.navigate(Screens.EditRCard, { profileId: profile.id })}
           accessibilityRole="button"
           accessibilityLabel={profile.label}
@@ -109,7 +116,7 @@ const MyProfiles: React.FC<MyProfilesProps> = ({ navigation }) => {
             accessibilityRole="button"
             accessibilityLabel={t('MyProfiles.SetActive')}
             testID={testIdWithKey(`SetActiveProfile-${profile.id}`)}
-            style={{ marginRight: 12 }}
+            style={styles.setActiveButton}
           >
             <ThemedText style={{ color: ColorPalette.brand.link }}>{t('MyProfiles.SetActive')}</ThemedText>
           </TouchableOpacity>

@@ -131,7 +131,7 @@ export const useRCardCredential = () => {
         return undefined
       }
 
-      const template = buildRCardTemplate(input)
+      const template = buildRCardTemplate(input, { label: input.label?.trim() || undefined })
       const persisted = await storeRCardTemplate(template, agent)
       if (!persisted) {
         return undefined
