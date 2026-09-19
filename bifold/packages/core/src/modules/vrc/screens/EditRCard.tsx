@@ -54,6 +54,12 @@ const EditRCard: React.FC<EditRCardProps> = ({ route, navigation }) => {
 
   return (
     <RCardForm
+      // Keying by which profile (or "new") is being edited forces a fresh
+      // RCardForm instance — and fresh formState — per profile identity. Without
+      // it, RCardForm's useState(initialValues) only runs on first mount, so if
+      // this screen instance were ever reused for a different profileId its
+      // stale formState (including a previous profile's photo) would carry over.
+      key={profileId ?? 'new'}
       initialValues={profile ? formInputFromTemplate(profile) : undefined}
       title={profileId ? t('EditRCard.Title') : t('EditRCard.CreateTitle')}
       legend={profileId ? t('EditRCard.Legend') : t('EditRCard.CreateLegend')}

@@ -147,7 +147,7 @@ describe('RCardOnboarding Screen', () => {
   test('Adds a picked photo to the submitted R-Card template', async () => {
     mockLaunchImageLibraryAsync.mockResolvedValue({
       canceled: false,
-      assets: [{ uri: 'file:///picked-photo.jpg' }],
+      assets: [{ uri: 'file:///picked-photo.jpg', width: 1200, height: 800 }],
     })
     mockManipulateAsync.mockResolvedValue({
       uri: 'file:///mock-processed.jpg',
@@ -190,6 +190,19 @@ describe('RCardOnboarding Screen', () => {
         mockAgent
       )
     })
+
+    // No `allowsEditing` — cropping must not be delegated to the OS picker UI,
+    // which was found to sometimes hand back a stale, previously-cropped image
+    // instead of the one just picked (docs/plans/rcard-profile-picture-plan/2026-09-18-bam.md).
+    expect(mockLaunchImageLibraryAsync).toHaveBeenCalledWith(
+      expect.not.objectContaining({ allowsEditing: expect.anything() })
+    )
+    // The 1200x800 picked asset is center-cropped to a square before resizing.
+    expect(mockManipulateAsync).toHaveBeenCalledWith(
+      'file:///picked-photo.jpg',
+      expect.arrayContaining([{ crop: { originX: 200, originY: 0, width: 800, height: 800 } }]),
+      expect.anything()
+    )
   })
 
   test('Shows an error and adds no photo when compression cannot fit the size budget', async () => {

@@ -47,9 +47,16 @@ export class RCardPhotoPermissionDeniedError extends Error {
 }
 
 /**
- * Launches the image picker (cropped to a square so the resize step in
- * processRCardPhoto never distorts the image) and runs the result through the
- * resize/compress budget pipeline. Returns undefined if the user cancels.
+ * Launches the image picker and runs the picked asset through the
+ * center-crop/resize/compress budget pipeline (processRCardPhoto). Returns
+ * undefined if the user cancels.
+ *
+ * Deliberately does not pass `allowsEditing` — that hands cropping to the
+ * OS's own picker UI, which on Android has been observed to hand back a
+ * stale, previously-cropped image instead of the one just picked (see
+ * docs/plans/rcard-profile-picture-plan/2026-09-18-bam.md). Cropping the
+ * picker's own freshly-returned asset ourselves, in processRCardPhoto,
+ * removes that failure mode.
  */
 export const pickAndProcessRCardPhoto = async (): Promise<string | undefined> => {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -59,8 +66,6 @@ export const pickAndProcessRCardPhoto = async (): Promise<string | undefined> =>
 
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
-    allowsEditing: true,
-    aspect: [1, 1],
     quality: 1,
   })
 
@@ -68,7 +73,8 @@ export const pickAndProcessRCardPhoto = async (): Promise<string | undefined> =>
     return undefined
   }
 
-  return processRCardPhoto(result.assets[0].uri, rcardManipulateAsync)
+  const asset = result.assets[0]
+  return processRCardPhoto(asset.uri, rcardManipulateAsync, asset.width, asset.height)
 }
 
 const CARD_MARGIN = 20

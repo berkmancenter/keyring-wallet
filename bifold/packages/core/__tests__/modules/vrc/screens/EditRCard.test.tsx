@@ -86,6 +86,49 @@ describe('EditRCard Screen', () => {
     expect(tree.getByTestId(testIdWithKey('RCardOrganizationInput')).props.defaultValue).toBe('Work')
   })
 
+  test('switching which profile this same screen instance edits does not leak the previous profile\'s photo', () => {
+    // Renders with the SAME outer `key` (no fresh EditRCard mount) but a
+    // different profileId param — the shape a stack navigator's route-reuse
+    // can produce. Without RCardForm being keyed by profile identity inside
+    // EditRCard, its formState (and formState.photo) would survive from the
+    // first render and profileB's (photo-less) form would wrongly still show
+    // profileA's photo.
+    const initialState = {
+      ...testDefaultState,
+      rCard: { profiles: [profileA, profileB], activeProfileId: profileA.id, lastSyncedAt: new Date().toISOString() },
+    }
+    const { getByTestId, queryByTestId, rerender } = render(
+      <StoreProvider initialState={initialState} reducer={defaultReducer}>
+        <BasicAppContext>
+          <EditRCard
+            key="same-instance"
+            route={{ key: 'EditRCard', name: 'Edit Profile' as never, params: { profileId: profileA.id } }}
+            navigation={{ goBack, setOptions } as any}
+          />
+        </BasicAppContext>
+      </StoreProvider>
+    )
+
+    expect(getByTestId(testIdWithKey('RCardPhotoPreview')).props.source).toEqual({
+      uri: 'data:image/jpeg;base64,existingPhoto',
+    })
+
+    rerender(
+      <StoreProvider initialState={initialState} reducer={defaultReducer}>
+        <BasicAppContext>
+          <EditRCard
+            key="same-instance"
+            route={{ key: 'EditRCard', name: 'Edit Profile' as never, params: { profileId: profileB.id } }}
+            navigation={{ goBack, setOptions } as any}
+          />
+        </BasicAppContext>
+      </StoreProvider>
+    )
+
+    expect(queryByTestId(testIdWithKey('RCardPhotoPreview'))).toBeNull()
+    expect(getByTestId(testIdWithKey('RCardOrganizationInput')).props.defaultValue).toBe('Work')
+  })
+
   test('pre-fills the profile-name (label) field with the profile\'s own organizing tag', () => {
     const tree = renderScreen(profileA.id)
     expect(tree.getByTestId(testIdWithKey('RCardLabelInput')).props.defaultValue).toBe(profileA.label)

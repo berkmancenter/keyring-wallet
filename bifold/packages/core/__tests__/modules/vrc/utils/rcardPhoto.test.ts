@@ -1,5 +1,6 @@
 import {
   processRCardPhoto,
+  centeredSquareCrop,
   RCardPhotoTooLargeError,
   RCARD_PHOTO_MAX_DIMENSION,
   RCARD_PHOTO_MAX_BASE64_BYTES,
@@ -83,5 +84,52 @@ describe('processRCardPhoto', () => {
     await expect(processRCardPhoto('file:///source.jpg', manipulateAsync)).rejects.toThrow(
       'Image manipulation did not return base64 data'
     )
+  })
+
+  test('center-crops a non-square source to a square before resizing, given the picked asset dimensions', async () => {
+    const manipulateAsync = fakeManipulator({ 0.8: 8 * 1024 })
+
+    await processRCardPhoto('file:///source.jpg', manipulateAsync, 1200, 800)
+
+    expect(manipulateAsync).toHaveBeenCalledWith(
+      'file:///source.jpg',
+      [
+        { crop: { originX: 200, originY: 0, width: 800, height: 800 } },
+        { resize: { width: RCARD_PHOTO_MAX_DIMENSION, height: RCARD_PHOTO_MAX_DIMENSION } },
+      ],
+      { compress: 0.8, format: 'jpeg', base64: true }
+    )
+  })
+
+  test('does not add a crop action when the source is already square or dimensions are unknown', async () => {
+    const manipulateAsync = fakeManipulator({ 0.8: 8 * 1024 })
+
+    await processRCardPhoto('file:///source.jpg', manipulateAsync, 500, 500)
+
+    expect(manipulateAsync).toHaveBeenCalledWith(
+      'file:///source.jpg',
+      [{ resize: { width: RCARD_PHOTO_MAX_DIMENSION, height: RCARD_PHOTO_MAX_DIMENSION } }],
+      { compress: 0.8, format: 'jpeg', base64: true }
+    )
+  })
+})
+
+describe('centeredSquareCrop', () => {
+  test('returns the largest centered square for a landscape source', () => {
+    expect(centeredSquareCrop(1200, 800)).toEqual({ originX: 200, originY: 0, width: 800, height: 800 })
+  })
+
+  test('returns the largest centered square for a portrait source', () => {
+    expect(centeredSquareCrop(800, 1200)).toEqual({ originX: 0, originY: 200, width: 800, height: 800 })
+  })
+
+  test('returns undefined for an already-square source', () => {
+    expect(centeredSquareCrop(500, 500)).toBeUndefined()
+  })
+
+  test('returns undefined when either dimension is missing', () => {
+    expect(centeredSquareCrop(undefined, 500)).toBeUndefined()
+    expect(centeredSquareCrop(500, undefined)).toBeUndefined()
+    expect(centeredSquareCrop()).toBeUndefined()
   })
 })
