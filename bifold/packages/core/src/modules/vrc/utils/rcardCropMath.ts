@@ -27,7 +27,11 @@ export const coverScale = (imageWidth: number, imageHeight: number, viewportSize
 
 /** Clamps a center-anchored display-pixel translation so the `viewportSize`
  *  square viewport stays fully covered by the image at the given `scale` —
- *  i.e. the user can't pan the image's edge into view. */
+ *  i.e. the user can't pan the image's edge into view.
+ *
+ *  Marked as a worklet: RCardPhotoCropModal calls this directly from its
+ *  pan/pinch gesture callbacks, which Reanimated runs on the UI thread —
+ *  calling a plain (non-worklet) function from there throws at runtime. */
 export const clampTranslation = (
   imageWidth: number,
   imageHeight: number,
@@ -36,6 +40,7 @@ export const clampTranslation = (
   translateX: number,
   translateY: number
 ): { x: number; y: number } => {
+  'worklet'
   const displayWidth = imageWidth * scale
   const displayHeight = imageHeight * scale
   const maxX = Math.max(0, (displayWidth - viewportSize) / 2)
