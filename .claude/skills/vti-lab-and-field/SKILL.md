@@ -174,6 +174,14 @@ private.
 
 - Emulators and simulators cannot do hardware attestation; the app falls back
   silently. Only device runs prove those paths.
+- **A freshly built `pnm` hangs on the macOS Keychain, not on the network.**
+  After a machine reset or a rebuild, the keychain ACL no longer trusts the
+  binary, so the first read raises a GUI dialog and the process waits for a
+  human forever. It looks exactly like a network hang, and `yes | pnm …` does
+  not help because the block is before any prompt. Diagnose it by PID: no TCP
+  sockets in `lsof`, and a `SecurityAgent` process spawned at the same instant.
+  A human clicks Always Allow once per binary. `--yes` does **not** avoid it —
+  the keychain read happens before the confirmation branch.
 - Never edit app or bifold sources while an e2e is running — Metro fast-refresh
   corrupts the run.
 - The findings doc and the plan documents are read by people outside this
