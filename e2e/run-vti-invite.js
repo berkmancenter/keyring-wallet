@@ -147,7 +147,14 @@ try {
   const errText = await textOf(driver, "MyAgentHoldingError").catch(() => "");
   if (errText) throw new Error(`join failed: ${errText}\n${activity}`);
   if (!card) throw new Error("no membership card appeared");
-  const role = await textOf(driver, "MyAgentMembershipRole");
+  // The card can re-render between finding it and reading it (the membership
+  // list refreshes on a timer), which makes an already-found element stale.
+  let role = "";
+  for (let i = 0; i < 10 && !role; i++) {
+    await scrollToTestId(driver, "MyAgentMembershipRole", 4).catch(() => undefined);
+    role = await textOf(driver, "MyAgentMembershipRole").catch(() => "");
+    if (!role) await sleep(2000);
+  }
   console.log(`[e2e] ${driver.e2ePlatform}: membership card on screen — ${role}`);
   if (!/member/i.test(role)) throw new Error(`unexpected role text: ${role}`);
   printSuccess("vti-invite");
