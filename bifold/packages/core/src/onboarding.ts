@@ -79,7 +79,7 @@ export const generateOnboardingWorkflowSteps = (
   const { enableWalletNaming } = state.preferences
   const { isAttestationComplete } = state.attestation
   const { showPreface, enablePushNotifications } = config
-  const hasRCardTemplate = Boolean(state.rCard?.template)
+  const hasRCardTemplate = Boolean(state.rCard?.profiles?.length)
   const rCardTask = isRCardSetupComplete(didSetupRCard, hasRCardTemplate)
 
   const tasks = [

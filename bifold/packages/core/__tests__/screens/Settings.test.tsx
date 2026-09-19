@@ -173,7 +173,7 @@ describe('Settings Screen', () => {
     expect(contactsSection).toBeNull()
   })
 
-  test('Shows a profile card above the settings sections, and tapping it opens EditRCard', async () => {
+  test('Shows a profile card above the settings sections, and tapping it opens My Profiles', async () => {
     const template = buildRCardTemplate({
       firstName: 'Jane',
       lastName: 'Doe',
@@ -182,7 +182,7 @@ describe('Settings Screen', () => {
     })
     const customState = {
       ...testDefaultState,
-      rCard: { template, lastSyncedAt: new Date().toISOString() },
+      rCard: { profiles: [template], activeProfileId: template.id, lastSyncedAt: new Date().toISOString() },
     }
     const navigate = jest.fn()
 
@@ -201,7 +201,7 @@ describe('Settings Screen', () => {
     expect(tree.getByText('Jane Doe')).toBeTruthy()
 
     fireEvent.press(profileCard)
-    expect(navigate).toHaveBeenCalledWith(Screens.EditRCard)
+    expect(navigate).toHaveBeenCalledWith(Screens.MyProfiles)
   })
 
   test('Shows no profile card when there is no profile yet', async () => {

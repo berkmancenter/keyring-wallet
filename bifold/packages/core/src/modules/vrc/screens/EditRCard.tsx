@@ -1,32 +1,54 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import { StackScreenProps } from '@react-navigation/stack'
 import { useAgent } from '@bifold/react-hooks'
 
 import RCardForm from './RCardForm'
 import { useRCardCredential } from '../hooks/useRCardCredential'
 import { RCardFormInput, formInputFromTemplate } from '../types/rcard'
+import { Screens, SettingStackParams } from '../../../types/navigators'
 
-const EditRCard: React.FC = () => {
+type EditRCardProps = StackScreenProps<SettingStackParams, Screens.EditRCard>
+
+/** `route.params.profileId` given: edit that profile. Omitted: create a new one. */
+const EditRCard: React.FC<EditRCardProps> = ({ route, navigation }) => {
   const { t } = useTranslation()
   const { agent } = useAgent()
-  const { template, update } = useRCardCredential()
+  const { profiles, update, create } = useRCardCredential()
+
+  const profileId = route.params?.profileId
+  const profile = profileId ? profiles.find((p) => p.id === profileId) : undefined
 
   const handleSubmit = async (input: RCardFormInput) => {
-    const persisted = await update(input)
-    if (!persisted) {
-      throw new Error('Failed to update R-card template')
+    if (profileId) {
+      const persisted = await update(profileId, input)
+      if (!persisted) {
+        throw new Error('Failed to update R-card template')
+      }
+      return
     }
+
+    const created = await create(input)
+    if (!created) {
+      throw new Error('Failed to create R-card template')
+    }
+    navigation.goBack()
   }
 
-  if (!agent || !template) {
+  if (!agent) {
+    return null
+  }
+  // Asked to edit a specific profile, but it isn't loaded (yet, or it was
+  // deleted out from under this screen) — nothing sensible to show.
+  if (profileId && !profile) {
     return null
   }
 
   return (
     <RCardForm
-      initialValues={formInputFromTemplate(template)}
-      title={t('EditRCard.Title')}
-      legend={t('EditRCard.Legend')}
+      initialValues={profile ? formInputFromTemplate(profile) : undefined}
+      title={profileId ? t('EditRCard.Title') : t('EditRCard.CreateTitle')}
+      legend={profileId ? t('EditRCard.Legend') : t('EditRCard.CreateLegend')}
       submitLabel={t('Global.Save')}
       onSubmit={handleSubmit}
     />

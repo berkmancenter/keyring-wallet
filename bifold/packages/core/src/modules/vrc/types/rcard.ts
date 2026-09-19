@@ -56,7 +56,9 @@ const DEFAULT_CONTEXTS = ['https://www.w3.org/2018/credentials/v1', 'https://exa
 // W3cCredential requires "VerifiableCredential" in the type array
 // We include both "VerifiableCredential" (required) and "RCardTemplate" (our specific type)
 const DEFAULT_TYPES = ['VerifiableCredential', 'RCardTemplate']
-const DEFAULT_TEMPLATE_ID = 'rcard-basic-1'
+/** The shared templateId every profile got before per-profile minting (§4.1) — the
+ *  signature of a pre-multi-profile legacy record, used only to detect one for migration. */
+export const LEGACY_SHARED_TEMPLATE_ID = 'rcard-basic-1'
 const DEFAULT_LABEL = 'Default business card'
 const DEFAULT_ISSUER = 'urn:aries:bifold:r-card'
 const EMAIL_REGEX =
@@ -219,7 +221,11 @@ export const buildRCardTemplate = (input: RCardFormInput, options?: RCardCredent
     id,
     '@context': options?.context ?? DEFAULT_CONTEXTS,
     type: types,
-    templateId: options?.templateId ?? DEFAULT_TEMPLATE_ID,
+    // Minted per-profile (equal to id) rather than the old shared constant, so
+    // every profile — including the one created at onboarding — is already
+    // individually addressable for Credo storage queries. See
+    // docs/plans/editable-multi-profile-plan.md §4.1.
+    templateId: options?.templateId ?? id,
     label: options?.label ?? DEFAULT_LABEL,
     jcard,
     issuer: options?.issuer ?? DEFAULT_ISSUER,

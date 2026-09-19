@@ -79,7 +79,8 @@ export const defaultState: State = {
   stateLoaded: false,
   versionInfo: { needsUpdate: false, lastChecked: undefined, version: undefined },
   rCard: {
-    template: undefined,
+    profiles: [],
+    activeProfileId: undefined,
     lastSyncedAt: undefined,
   },
   witness: {

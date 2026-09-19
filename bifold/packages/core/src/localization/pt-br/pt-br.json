@@ -546,6 +546,7 @@
     "WillScanAutomatically": "Um QR code válido será escaneado automaticamente.",
     "ScanQRCode": "Scanear QR code",
     "MyQRCode": "Meu QR code",
+    "SwitchProfile": "Trocar de perfil",
     "YourQRCodeTitle": "Seu código QR",
     "YourQRCodeInstruction": "Mostre este código para trocar credenciais",
     "PlaceQRCodeInsideFrame": "Coloque o código QR dentro da moldura para escanear, evite tremer para obter resultados rapidamente",
@@ -724,7 +725,7 @@
     "AppSettings": "Configurações do Aplicativo",
     "AboutApp": "Sobre o App",
     "ChangePin": "Alterar o PIN",
-    "ProfileCardSubtitle": "Toque para editar seu perfil",
+    "ProfileCardSubtitle": "Gerencie seus perfis",
     "Language": "Idioma",
     "DataRetention": "Retenção de dados",
     "PreventAutoLock": "Prevenir travamento automático",
@@ -888,7 +889,20 @@
   },
   "EditRCard": {
     "Title": "Editar seu perfil",
-    "Legend": "Este é o perfil que outras pessoas veem quando se conectam com você. As alterações aqui não atualizam cartões já compartilhados — reconecte-se para compartilhar a nova versão."
+    "Legend": "Este é o perfil que outras pessoas veem quando se conectam com você. As alterações aqui não atualizam cartões já compartilhados — reconecte-se para compartilhar a nova versão.",
+    "CreateTitle": "Adicionar um perfil",
+    "CreateLegend": "Crie outro perfil — por exemplo, Pessoal e Trabalho — e escolha qual compartilhar ao se conectar."
+  },
+  "MyProfiles": {
+    "Title": "Meus perfis",
+    "AddProfile": "Adicionar perfil",
+    "Active": "Ativo",
+    "SetActive": "Tornar ativo",
+    "Delete": "Excluir",
+    "DeleteLastProfileTitle": "Não é possível excluir seu único perfil",
+    "DeleteLastProfileDescription": "Você precisa de pelo menos um perfil. Adicione outro antes de excluir este.",
+    "DeleteActiveProfileTitle": "Não é possível excluir seu perfil ativo",
+    "DeleteActiveProfileDescription": "Torne outro perfil ativo primeiro, depois você poderá excluir este."
   },
   "RenameContact": {
     "ThisContactName": "Este nome de contato só é visualizado em sua Lista de Contatos.",

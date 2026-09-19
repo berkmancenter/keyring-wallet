@@ -605,9 +605,9 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     return (
       <TouchableOpacity
         style={styles.profileCard}
-        onPress={() => navigation.navigate(Screens.EditRCard)}
+        onPress={() => navigation.navigate(Screens.MyProfiles)}
         accessibilityRole="button"
-        accessibilityLabel={t('EditRCard.Title')}
+        accessibilityLabel={t('MyProfiles.Title')}
         testID={testIdWithKey('ProfileCard')}
       >
         <View style={styles.profileAvatar}>

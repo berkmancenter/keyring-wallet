@@ -609,6 +609,7 @@
     "WillScanAutomatically": "Un code QR valide sera scanné automatiquement.",
     "ScanQRCode": "Scanner le code QR",
     "MyQRCode": "Mon code QR",
+    "SwitchProfile": "Changer de profil",
     "YourQRCodeTitle": "Votre code QR",
     "YourQRCodeInstruction": "Montrez ce code pour échanger des attestations",
     "PlaceQRCodeInsideFrame": "Placez le code QR dans le cadre pour le scanner, évitez les tremblements pour obtenir des résultats rapidement",
@@ -798,7 +799,7 @@
     "AppSettings": "Réglage de l'application",
     "AboutApp": "À propos de l'application",
     "ChangePin": "Changer le NIP",
-    "ProfileCardSubtitle": "Touchez pour modifier votre profil",
+    "ProfileCardSubtitle": "Gérer vos profils",
     "Language": "Langue",
     "DataRetention": "Date de rétention",
     "PreventAutoLock": "Empêcher le verrouillage automatique",
@@ -976,7 +977,20 @@
   },
   "EditRCard": {
     "Title": "Modifier votre profil",
-    "Legend": "C'est le profil que les autres voient lorsque vous vous connectez avec eux. Les modifications ici ne mettent pas à jour les cartes déjà partagées — reconnectez-vous pour partager la nouvelle version."
+    "Legend": "C'est le profil que les autres voient lorsque vous vous connectez avec eux. Les modifications ici ne mettent pas à jour les cartes déjà partagées — reconnectez-vous pour partager la nouvelle version.",
+    "CreateTitle": "Ajouter un profil",
+    "CreateLegend": "Créez un autre profil — par exemple Personnel et Travail — et choisissez lequel partager lors de vos connexions."
+  },
+  "MyProfiles": {
+    "Title": "Mes profils",
+    "AddProfile": "Ajouter un profil",
+    "Active": "Actif",
+    "SetActive": "Rendre actif",
+    "Delete": "Supprimer",
+    "DeleteLastProfileTitle": "Impossible de supprimer votre seul profil",
+    "DeleteLastProfileDescription": "Vous devez conserver au moins un profil. Ajoutez-en un autre avant de supprimer celui-ci.",
+    "DeleteActiveProfileTitle": "Impossible de supprimer votre profil actif",
+    "DeleteActiveProfileDescription": "Rendez un autre profil actif d'abord, puis vous pourrez supprimer celui-ci."
   },
   "RenameContact": {
     "ThisContactName": "Ce nom de contact n'est affiché que dans votre Liste de Contacts.",

@@ -50,6 +50,7 @@ export enum Screens {
   PushNotifications = 'Push Notifications',
   RCardOnboarding = 'R-Card',
   EditRCard = 'Edit Profile',
+  MyProfiles = 'My Profiles',
   TogglePushNotifications = 'Toggle Push Notifications',
   Developer = 'Developer',
   CustomNotification = 'Custom Notification',
@@ -250,7 +251,9 @@ export type SettingStackParams = {
   [Screens.About]: undefined
   [Screens.ExportWallet]: undefined
   [Screens.ImportWallet]: undefined
-  [Screens.EditRCard]: undefined
+  // profileId given: edit that profile. Omitted: create a new one.
+  [Screens.EditRCard]: { profileId: string } | undefined
+  [Screens.MyProfiles]: undefined
 }
 
 export type NotificationStackParams = {

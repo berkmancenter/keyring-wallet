@@ -635,6 +635,7 @@
     "WillScanAutomatically": "A valid QR code will scan automatically.",
     "ScanQRCode": "Scan QR code",
     "MyQRCode": "My QR code",
+    "SwitchProfile": "Switch profile",
     "YourQRCodeInstruction": "Show this code to exchange contacts",
     "PlaceQRCodeInsideFrame": "Place QR code inside the frame to scan please avoid shake to get results quickly",
     "UnableToHandleRedirection": "Unable to handle redirection",
@@ -819,7 +820,7 @@
     "AppSettings": "App Settings",
     "AboutApp": "About App",
     "ChangePin": "Change PIN",
-    "ProfileCardSubtitle": "Tap to edit your profile",
+    "ProfileCardSubtitle": "Manage your profiles",
     "Language": "Language",
     "DataRetention": "Data retention",
     "PreventAutoLock": "Prevent auto-lock",
@@ -1037,7 +1038,20 @@
   },
   "EditRCard": {
     "Title": "Edit Your Profile",
-    "Legend": "This is the profile others see when you connect with them. Changes here don’t update cards you’ve already shared — reconnect to share the new version."
+    "Legend": "This is the profile others see when you connect with them. Changes here don’t update cards you’ve already shared — reconnect to share the new version.",
+    "CreateTitle": "Add a Profile",
+    "CreateLegend": "Create another profile — for example, Personal and Work — and choose which one to share when you connect."
+  },
+  "MyProfiles": {
+    "Title": "My Profiles",
+    "AddProfile": "Add profile",
+    "Active": "Active",
+    "SetActive": "Make active",
+    "Delete": "Delete",
+    "DeleteLastProfileTitle": "Can’t delete your only profile",
+    "DeleteLastProfileDescription": "You need at least one profile. Add another before deleting this one.",
+    "DeleteActiveProfileTitle": "Can’t delete your active profile",
+    "DeleteActiveProfileDescription": "Make another profile active first, then you can delete this one."
   },
   "RenameContact": {
     "ThisContactName": "This contact name is only displayed in your Contacts List.",

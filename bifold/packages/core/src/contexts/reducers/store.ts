@@ -108,6 +108,9 @@ enum RCardDispatchAction {
   R_CARD_TEMPLATE_STAGED = 'rCard/templateStaged',
   R_CARD_CREDENTIAL_SYNCED = 'rCard/credentialSynced',
   R_CARD_CREDENTIAL_CLEARED = 'rCard/credentialCleared',
+  R_CARD_PROFILES_LOADED = 'rCard/profilesLoaded',
+  R_CARD_PROFILE_DELETED = 'rCard/profileDeleted',
+  R_CARD_ACTIVE_PROFILE_SET = 'rCard/activeProfileSet',
 }
 
 enum WitnessDispatchAction {
@@ -163,11 +166,15 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       return { ...state, ...newState, stateLoaded: true }
     }
     case RCardDispatchAction.R_CARD_TEMPLATE_STAGED: {
-      // Stores RCard template in Redux state only (not yet persisted to Credo)
-      // Does NOT set lastSyncedAt, allowing migration hook to detect and persist to Credo later
+      // Stages a single RCard template in Redux state only, before an agent
+      // exists to persist it to Credo. Only ever reached pre-agent, when there
+      // are no other profiles yet, so this replaces the list outright rather
+      // than upserting. Does NOT set lastSyncedAt, allowing the migration hook
+      // to detect and persist to Credo later.
       const template = (action?.payload || []).pop()
       const rCard = {
-        template,
+        profiles: [template],
+        activeProfileId: template.id,
         lastSyncedAt: state.rCard?.lastSyncedAt, // Preserve existing value if any
       }
       return {
@@ -176,10 +183,18 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
       }
     }
     case RCardDispatchAction.R_CARD_CREDENTIAL_SYNCED: {
-      // RCard template is confirmed persisted to Credo - set lastSyncedAt
+      // A single profile is confirmed persisted to Credo (the initial sync,
+      // an edit, or a newly created profile) - upsert it into the list by id,
+      // and set lastSyncedAt. The first profile a wallet ever gets becomes
+      // active by default; later profiles don't change what's active.
       const template = (action?.payload || []).pop()
+      const existing = state.rCard?.profiles ?? []
+      const profiles = existing.some((p) => p.id === template.id)
+        ? existing.map((p) => (p.id === template.id ? template : p))
+        : [...existing, template]
       const rCard = {
-        template,
+        profiles,
+        activeProfileId: state.rCard?.activeProfileId ?? template.id,
         lastSyncedAt: new Date().toISOString(),
       }
       return {
@@ -189,8 +204,45 @@ export const reducer = <S extends State>(state: S, action: ReducerAction<Dispatc
     }
     case RCardDispatchAction.R_CARD_CREDENTIAL_CLEARED: {
       const rCard = {
-        template: undefined,
+        profiles: [],
+        activeProfileId: undefined,
         lastSyncedAt: new Date().toISOString(),
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_PROFILES_LOADED: {
+      // Replaces the whole list at once - the full sync/adopt-on-read path,
+      // as opposed to R_CARD_CREDENTIAL_SYNCED's single-profile upsert.
+      const [profiles, activeProfileId] = action?.payload ?? [[], undefined]
+      const rCard = {
+        profiles,
+        activeProfileId,
+        lastSyncedAt: new Date().toISOString(),
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_PROFILE_DELETED: {
+      const profileId = (action?.payload || []).pop()
+      const rCard = {
+        ...state.rCard,
+        profiles: (state.rCard?.profiles ?? []).filter((p) => p.id !== profileId),
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_ACTIVE_PROFILE_SET: {
+      const activeProfileId = (action?.payload || []).pop()
+      const rCard = {
+        ...state.rCard,
+        activeProfileId,
       }
       return {
         ...state,
