@@ -36,6 +36,12 @@ import type { VtiPersona } from './VtiIdentityStore'
 import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './vtiInbox'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
 import { vtiAgent, type VtiManifest } from './vtiAgent'
+import {
+  checkCredentialStatus,
+  checkStatusEntry,
+  statusEntryOf,
+  type CredentialStatusResult,
+} from './vtiStatusList'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
@@ -119,7 +125,30 @@ export interface VettingApplicationRequest {
   /** False when the grant was issued after the statement was signed. */
   grantedBeforeSigning?: boolean
   grantStillValid?: boolean
+  /**
+   * The live status of the vetter's grant, the half a validity window cannot
+   * answer. `none` means the grant carries no status block at all, which is
+   * the community claiming it does not revoke — kept distinct from `ok`, which
+   * means a list was fetched, its signature checked and the bit read.
+   */
+  grantStatus?: CredentialStatusResult['state']
+  /** Why the status is `unknown` — an offline phone must not read as revoked. */
+  grantStatusReason?: string
+  grantStatusCheckedAt?: string
+  /** Enough of the grant's `credentialStatus` to re-check it later. */
+  grantStatusEntry?: { url: string; index: number; purpose: string }
   updatedAt: string
+}
+
+/**
+ * The grant's status entry, kept so the check can be repeated later without
+ * holding on to the whole credential. A malformed entry is dropped rather
+ * than stored: a re-check has nothing to go on, and the state recorded at
+ * acceptance already says the entry was unreadable.
+ */
+const statusEntryFor = (credential: Record<string, unknown>) => {
+  const entry = statusEntryOf(credential)
+  return entry && entry !== 'malformed' ? entry : undefined
 }
 
 /** What this phone last published as its vetter profile, and when. */
@@ -759,6 +788,7 @@ export class VtiApplicant {
     let eligibilityOk = false
     let grantValidFrom: string | undefined
     let grantValidUntil: string | undefined
+    let grantCredential: Record<string, unknown> | undefined
     if (vp) {
       const creds = (vp.verifiableCredential as Record<string, unknown>[]) ?? []
       const grant = creds.find((c) => {
@@ -768,7 +798,21 @@ export class VtiApplicant {
       eligibilityOk = !!grant && (await verifyDocumentProof(this.agent, vp, vetterDid))
       grantValidFrom = typeof grant?.validFrom === 'string' ? grant.validFrom : undefined
       grantValidUntil = typeof grant?.validUntil === 'string' ? grant.validUntil : undefined
+      grantCredential = grant
     }
+    // The window says when the grant was *meant* to be live; the status list
+    // says whether the community has since withdrawn it. Only the second one
+    // catches a vetter revoked this morning, and it is the one the community
+    // applies at intake — so an applicant that never asks can gather a
+    // statement, submit it, and be told nothing about why it did not count.
+    const status = grantCredential
+      ? await checkCredentialStatus(
+          this.agent,
+          grantCredential,
+          String(grantCredential.issuer ?? this.persona.communityDid),
+          { allowInsecureLocal: __DEV__ }
+        )
+      : undefined
     await this.update(vetterDid, {
       status: 'accepted',
       requestId: String(p.requestId ?? ''),
@@ -776,6 +820,10 @@ export class VtiApplicant {
       grantValidFrom,
       grantValidUntil,
       grantCheckedAt: new Date().toISOString(),
+      grantStatus: status?.state,
+      grantStatusReason: status?.state === 'unknown' ? status.reason : undefined,
+      grantStatusCheckedAt: status?.checkedAt,
+      grantStatusEntry: grantCredential ? statusEntryFor(grantCredential) : undefined,
     })
   }
 
@@ -916,14 +964,61 @@ export class VtiApplicant {
     await this.update(vetterDid, { status: 'declined' })
   }
 
+  /**
+   * Re-ask the community whether each vetter's grant is still live.
+   *
+   * A grant checked when it arrived says nothing about this afternoon, and the
+   * community applies the status at intake — so the moment that matters is
+   * just before the submit, not when the statement was gathered. Runs the
+   * checks together because they usually hit the same list, and a phone on a
+   * slow link should not pay for them one after another.
+   *
+   * A check that cannot complete leaves the previous answer alone and records
+   * why. An applicant offline in a basement is not an applicant with a revoked
+   * vetter, and collapsing the two would refuse someone for having no signal.
+   */
+  async refreshGrantStatus(): Promise<void> {
+    const application = await this.app()
+    const checkable = application.requests.filter((r) => r.grantStatusEntry)
+    if (checkable.length === 0) return
+    const results = await Promise.all(
+      checkable.map(async (r) => ({
+        vetterDid: r.vetterDid,
+        result: await checkStatusEntry(this.agent, r.grantStatusEntry!, application.communityDid, {
+          allowInsecureLocal: __DEV__,
+        }),
+      }))
+    )
+    for (const { vetterDid, result } of results) {
+      if (result.state === 'unknown') {
+        await this.update(vetterDid, {
+          grantStatusReason: result.reason,
+          grantStatusCheckedAt: result.checkedAt,
+        })
+        continue
+      }
+      await this.update(vetterDid, {
+        grantStatus: result.state,
+        grantStatusReason: undefined,
+        grantStatusCheckedAt: result.checkedAt,
+      })
+    }
+    this.onChange?.()
+  }
+
   /** The advisory checklist: statements held against the published requirement. */
   async checklist(): Promise<{
     held: number
     needed: number
     meets: boolean
     statements: Record<string, unknown>[]
-    /** Statements the community will discount — signed before the grant, or past it. */
+    /**
+     * Statements the community will discount — signed before the grant, past
+     * it, or backed by a grant the community has since revoked.
+     */
     discounted: number
+    /** Vetters whose grant status could not be reached, and why. */
+    unchecked: { vetterDid: string; reason: string }[]
   }> {
     const application = await this.app()
     // Only statements about THIS application count. A phone that was vetted
@@ -933,15 +1028,26 @@ export class VtiApplicant {
     const statements = (await this.communityStore.listHeldCredentials('vetting-statement', application.communityDid))
       .map((s) => s.credential)
       .filter((c) => (c as { credentialSubject?: { id?: string } }).credentialSubject?.id === application.joinDid)
+    // A revoked grant joins the two ordering faults: all three are reasons the
+    // community counts a statement as nothing, and an applicant is better off
+    // hearing it here than inferring it from a refusal. A grant we could not
+    // reach is NOT counted — it is reported separately, because "we could not
+    // ask" and "the answer was no" are different things to tell someone.
     const discounted = application.requests.filter(
-      (r) => r.status === 'attested' && (r.grantedBeforeSigning === false || r.grantStillValid === false)
+      (r) =>
+        r.status === 'attested' &&
+        (r.grantedBeforeSigning === false || r.grantStillValid === false || r.grantStatus === 'revoked')
     ).length
+    const unchecked = application.requests
+      .filter((r) => r.status === 'attested' && r.grantStatusReason)
+      .map((r) => ({ vetterDid: r.vetterDid, reason: r.grantStatusReason! }))
     return {
       held: statements.length,
       needed: application.minStatements,
       meets: statements.length >= application.minStatements,
       statements,
       discounted,
+      unchecked,
     }
   }
 }

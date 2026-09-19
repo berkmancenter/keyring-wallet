@@ -70,7 +70,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [manifest, setManifest] = useState<VtiManifest>()
   const [legalName, setLegalName] = useState('')
   const [ticketLink, setTicketLink] = useState('')
-  const [checklist, setChecklist] = useState<{ held: number; needed: number; meets: boolean; discounted: number }>()
+  const [checklist, setChecklist] = useState<{
+    held: number
+    needed: number
+    meets: boolean
+    discounted: number
+    unchecked: { vetterDid: string; reason: string }[]
+  }>()
   const [membershipRole, setMembershipRole] = useState<string>()
 
   const stores = useMemo(
@@ -592,6 +598,17 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   {t('Vetting.Discounted', { n: checklist.discounted })}
                 </Text>
               ) : null}
+              {/*
+                A grant we could not reach is said out loud rather than folded
+                into the count above. The applicant can still submit — being
+                offline is not a finding — but they should not be told the
+                statement is good when nobody asked.
+              */}
+              {checklist?.unchecked?.length ? (
+                <Text style={styles.label} testID={testIdWithKey('VettingGrantUnchecked')}>
+                  {t('Vetting.GrantUnchecked', { n: checklist.unchecked.length })}
+                </Text>
+              ) : null}
               {checklist?.meets && !membershipRole ? (
                 <Pressable
                   style={styles.button}
@@ -601,6 +618,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   onPress={() =>
                     run('apply', async () => {
                       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
+                      // Ask about the grants now, not when the statements were
+                      // gathered: the community applies the status at intake,
+                      // so a vetter revoked since is the case this catches.
+                      await applicantRef.current!.refreshGrantStatus()
                       const { statements } = await applicantRef.current!.checklist()
                       const stopInbox = vtiAgent.onInbound((msg) => {
                         void receiveIssue(stores!.community, persona.did, msg, { via: 'vetting' })
