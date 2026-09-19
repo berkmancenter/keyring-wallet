@@ -2,8 +2,9 @@
 
 *Phase 1: let a user change the profile (name/email/organization/photo) they set up during
 onboarding, at any time afterward. Phase 2: let a user hold more than one such profile and
-choose which one to present when connecting to someone. No subtask plans yet; no
-companions yet — this is the initial draft.*
+choose which one to present when connecting to someone. Both phases are built; see the
+review index (§8) for the companions that refined the design along the way, and §7 for
+what's still open.*
 
 ---
 
