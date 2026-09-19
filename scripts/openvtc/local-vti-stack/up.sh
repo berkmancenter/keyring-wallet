@@ -34,20 +34,41 @@ log() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 stop_stack() {
   log "stopping"
+  # SIGTERM then *wait*. A daemon holds an LSM store open for as long as it is
+  # alive, and this script's next act is to re-provision — deleting data dirs
+  # out from under a process that has not finished shutting down. That race
+  # leaves a half-deleted store which recovers as "Recovered less tables than
+  # expected" and then refuses to open at all, while the surviving old data
+  # serves yesterday's DID against today's config. Measured 2026-09-19.
   for port in 8110 8111 8112 8200 8534 7037; do
     pid=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)
     # Kill by PID only — never by name pattern.
-    [ -n "$pid" ] && kill "$pid" && echo "  stopped :$port (pid $pid)"
+    [ -n "$pid" ] || continue
+    kill "$pid" && echo "  stopping :$port (pid $pid)"
+    for _ in $(seq 1 30); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "  :$port (pid $pid) ignored SIGTERM after 30s — SIGKILL"
+      kill -9 "$pid" 2>/dev/null || true
+      sleep 2
+    fi
+    # The port outliving the process means something else holds it; provisioning
+    # on top of that is how the store gets corrupted, so stop rather than guess.
+    if lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+      echo "  :$port is still held after killing $pid — refusing to re-provision" >&2
+      exit 1
+    fi
+    echo "  stopped :$port"
   done
-  if [ -f "$STACK_DIR/ngrok.pid" ]; then
-    # Kill by PID only — never by name pattern.
-    kill "$(cat "$STACK_DIR/ngrok.pid")" 2>/dev/null && echo "  stopped ngrok"
-    rm -f "$STACK_DIR/ngrok.pid"
-  fi
-  pkill -f "cloudflared tunnel --url http://localhost:81" 2>/dev/null || true
-  pkill -f "cloudflared tunnel --url http://localhost:8200" 2>/dev/null || true
-  pkill -f "cloudflared tunnel --url http://localhost:8534" 2>/dev/null || true
-  pkill -f "cloudflared tunnel --url http://localhost:7037" 2>/dev/null || true
+  for pidfile in "$STACK_DIR"/ngrok.pid "$STACK_DIR"/tunnel-*.pid; do
+    [ -f "$pidfile" ] || continue
+    # Kill by PID only — never by name pattern. A `pkill -f` here once matched
+    # far more than it was aimed at; every tunnel writes a pid file instead.
+    kill "$(cat "$pidfile")" 2>/dev/null && echo "  stopped $(basename "$pidfile" .pid)"
+    rm -f "$pidfile"
+  done
 }
 
 if [ "${1:-}" = "--stop" ]; then stop_stack; exit 0; fi
@@ -72,6 +93,7 @@ cd "$STACK_DIR"
 open_tunnel() { # name port -> echoes hostname
   local name=$1 port=$2
   nohup cloudflared tunnel --url "http://localhost:$port" > "logs/tunnel-$name.log" 2>&1 &
+  echo $! > "$STACK_DIR/tunnel-$name.pid"
   for _ in $(seq 1 30); do
     host=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "logs/tunnel-$name.log" 2>/dev/null | head -1 || true)
     [ -n "$host" ] && { echo "${host#https://}"; return 0; }
