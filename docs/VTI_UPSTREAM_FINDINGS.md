@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.10 — 2026-09-19.** A living document: every finding here was measured
+**Version 1.11 — 2026-09-19.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -51,7 +51,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open |
 | [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | Open |
 | [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open |
-| [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | Open — root cause found, fix verified on a local build |
+| [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202; re-measured clean on head |
 | [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | Open — fixture limit raised |
 | [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | Open — Keyring polls |
 
@@ -64,13 +64,12 @@ offers (whose newest predates vetting entirely).
 
 | Component | Version | Upstream repository | Commit | Commit date |
 | --- | --- | --- | --- | --- |
-| `vta-service` — personal agent | 0.33.0 | `verifiable-trust-infrastructure` | `460e0ebb` (tag `VTI-Eucalyptus-RC-0`) | 2026-09-17 |
-| `vtc-service` — community service (incl. admin portal) | 0.11.58 (train code; version string unchanged) | `verifiable-trust-infrastructure` | `460e0ebb` | 2026-09-17 |
-| `vta-sdk` | 0.42.1 | `verifiable-trust-infrastructure` | `460e0ebb` | 2026-09-17 |
-| `pnm-cli` — personal network manager | 0.17.2 | `verifiable-trust-infrastructure` | `460e0ebb` | 2026-09-17 |
-| `cnm-cli` — community network manager | 0.16.3 | `verifiable-trust-infrastructure` | `460e0ebb` | 2026-09-17 |
-| `affinidi-messaging-mediator` | 0.26.2 | `affinidi-tdk-rs` | `144a3af0` (tag `VTI-Eucalyptus-RC-0`) | 2026-09-17 |
-| `did-hosting-daemon` | 0.8.3 (version string unchanged) | `affinidi-webvh-service` | `933fe3a`⁺ (tag `VTI-Eucalyptus-RC-0`) | 2026-09-17 |
+| `vta-service` — personal agent | 0.34.1 | `verifiable-trust-infrastructure` | `6bd52cab` (main, 20 commits past `VTI-Eucalyptus-RC-0`) | 2026-09-19 |
+| `vtc-service` — community service (incl. admin portal) | 0.11.58 (version string unchanged) | `verifiable-trust-infrastructure` | `6bd52cab` | 2026-09-19 |
+| `vta-sdk` | 0.43 | `verifiable-trust-infrastructure` | `6bd52cab` | 2026-09-19 |
+| `pnm-cli` · `cnm-cli` — the two CLIs | 0.17.4 · 0.16.3 | `verifiable-trust-infrastructure` | `6bd52cab` | 2026-09-19 |
+| Messaging mediator | 0.26.2 | `affinidi-tdk-rs` | `c13a6352` (main) | 2026-09-19 |
+| `did-hosting-daemon` | 0.8.3 (version string unchanged) | `affinidi-webvh-service` | `35244b7` (main) | 2026-09-19 |
 | reference client `openvtc` (the vetter oracle) | head | `OpenVTC/openvtc` | `177a218` | 2026-09-17 |
 | Redis | 8.10.1 | Homebrew | — | — |
 | ngrok agent (six reserved domains) | 3.37.1 | — | — | — |
@@ -629,8 +628,19 @@ untouched; (2) the DIDComm trust-task handler sends nothing for an empty
 outcome, as `handle_tsp` already does; (3) an unsolicited reply-shaped
 document is logged and dropped, never answered; and (4) the VTA's
 `did/problem-report/0.1` schema should match what daemon 0.8.3 sends.
-Versions: vta-service 0.33.0, did-hosting daemon 0.8.3 (`f579e42`),
+Versions as measured: vta-service 0.33.0, did-hosting daemon 0.8.3 (`f579e42`),
 mediator 0.26.2.
+
+**Resolved upstream, 2026-09-18.** `vti` #1567 ("let the spine decide what an
+inbound document is") moves authorization behind the spine: a transport hands
+over the document and the VID it proved and makes no policy decision, an error
+document is terminal and answered with nothing, and a threaded document goes to
+its waiter. `affinidi-webvh-service` #202 makes the daemon treat an inbound
+error as terminal too. Upstream's description of the failure matches this
+finding independently, including the mediator's rate limiter as the only thing
+that ended it. Re-measured on head (vta-service 0.34.1, daemon at
+`35244b7`): the VTA logs `inbound trust-task error from a peer — terminal, not
+answered`, drains the backlog and goes quiet; the four end-to-end runs pass.
 
 ### VTI-29 — Members who never collect their cards silence the community: the mediator's per-sender queue cap
 
@@ -674,6 +684,7 @@ extension to the Pickup 3.0 body is undocumented, and a `status` on
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.11 | 2026-09-19 | Stack moved to upstream head (vta-service 0.34.1). **VTI-28 resolved upstream** — `vti` #1567 lets the spine decide what an inbound document is and answers an error with nothing, and webvh #202 treats an inbound error as terminal; re-measured clean, and the local patches that stood in for it are dropped. Upgrade note: `trust_xff` is retired for `trust_xff_cidrs` (#1562). |
 | 1.10 | 2026-09-19 | Upstream reviewed the report: VTI-10 and VTI-21 confirmed in their source; VTI-13 queried (probably the narrower `minStatements: 0` refusal). Client-side gaps they found are tracked in the plan companion, not here — they are ours, not upstream's. |
 | 1.9 | 2026-09-18 | VTI-28 root cause: `sign_success_response` turns an empty 204 into a trust-task-error that is sent to the daemon; fix verified on a patched local build |
 | 1.8 | 2026-09-18 | VTI-29: the mediator's per-sender queue cap lets uncollected cards silence a community; VTI-30: dropped live pushes need a poll — `delivery-request` wants `recipient_did`, `delivery` attaches base64 |
