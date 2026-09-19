@@ -34,6 +34,7 @@ import {
 import type { VtiCommunityStore, VtiHeldCredential } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './vtiInbox'
+import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
 import { vtiAgent, type VtiManifest } from './vtiAgent'
 
 export const VETTING = {
@@ -121,6 +122,15 @@ export interface VettingApplicationRequest {
   updatedAt: string
 }
 
+/** What this phone last published as its vetter profile, and when. */
+export interface VettingVetterProfile {
+  communityDid: string
+  vetterDid: string
+  listed: boolean
+  displayName?: string
+  publishedAt: string
+}
+
 /** The applicant's one application to one community. */
 export interface VettingApplication {
   communityDid: string
@@ -144,6 +154,8 @@ export interface VtiVettingStore {
   saveDesk(request: VettingDeskRequest): Promise<void>
   /** Drop every desk request for a community — a desk is working state, not a record. */
   clearDesk(communityDid: string): Promise<void>
+  getProfile(communityDid: string): Promise<VettingVetterProfile | undefined>
+  saveProfile(profile: VettingVetterProfile): Promise<void>
   getApplication(communityDid: string): Promise<VettingApplication | undefined>
   saveApplication(application: VettingApplication): Promise<void>
   forget(communityDid: string): Promise<void>
@@ -176,6 +188,12 @@ export class GenericRecordsVettingStore implements VtiVettingStore {
   }
   saveDesk(r: VettingDeskRequest) {
     return this.put('desk', r.requestId, { ...r })
+  }
+  async getProfile(communityDid: string) {
+    return (await this.list<VettingVetterProfile>('profile')).find((p) => p.communityDid === communityDid)
+  }
+  saveProfile(p: VettingVetterProfile) {
+    return this.put('profile', p.communityDid, { ...p })
   }
   async clearDesk(communityDid: string) {
     const rs = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'desk' })
@@ -281,6 +299,62 @@ export class VtiVetterDesk {
     private readonly communityStore: VtiCommunityStore,
     private readonly onChange?: () => void
   ) {}
+
+  /**
+   * Publish this vetter's profile to the community
+   * (`vtc/vetting/vetters/profile/0.1`). Until a vetter does this they are
+   * invisible to an applicant looking for one: the community's listing skips
+   * any vetter without a published profile. `listed: false` withdraws from
+   * the listing without giving up the grant.
+   *
+   * `location` is sent only when a country is given — the community's schema
+   * requires one inside it, so a half-filled location is refused rather than
+   * stored.
+   */
+  async publishProfile(input: {
+    listed?: boolean
+    displayName?: string
+    languages?: string[]
+    methods?: VettingMethod[]
+    country?: string
+    city?: string
+    acceptsDocumentation?: string[]
+    events?: { name: string; startDate: string; endDate: string }[]
+  }): Promise<void> {
+    const country = input.country?.trim()
+    const payload: Record<string, unknown> = {
+      listed: input.listed ?? true,
+      languages: input.languages ?? ['en'],
+      methods: input.methods ?? ['inPerson', 'video'],
+      ...(input.displayName?.trim() ? { displayName: input.displayName.trim() } : {}),
+      ...(country ? { location: { country, ...(input.city?.trim() ? { city: input.city.trim() } : {}) } } : {}),
+      // Both are required by the community's schema even when they say
+      // nothing: an empty `acceptsDocumentation` means "no statement either
+      // way" rather than "none accepted", and a vetter with no listed events
+      // still has a profile.
+      acceptsDocumentation: input.acceptsDocumentation ?? [],
+      events: input.events ?? [],
+    }
+    // The community's document may not be in the resolver's cache on this
+    // phone yet, and the hosting daemon rate-limits a burst (VTI-19), so warm
+    // it patiently rather than letting the first ask fail as `invalidDid`.
+    await resolveDidDocumentRetrying(this.agent, this.persona.communityDid)
+    const answer = await vtiAgent.ask(this.persona.communityDid, VETTING.vettersProfile, payload)
+    if (!answer) throw new Error('vtiVetting: the community did not answer the profile publish')
+    const type = String((answer.body as { type?: string } | undefined)?.type ?? '')
+    if (type.startsWith(TASK_ERROR)) {
+      const p = (answer.body as { payload?: { code?: string; message?: string } } | undefined)?.payload
+      throw new Error(`vtiVetting: ${p?.message ?? p?.code ?? 'the community refused the profile'}`)
+    }
+    await this.store.saveProfile({
+      communityDid: this.persona.communityDid,
+      vetterDid: this.persona.did,
+      listed: (payload.listed as boolean) ?? true,
+      displayName: input.displayName?.trim(),
+      publishedAt: new Date().toISOString(),
+    })
+    this.onChange?.()
+  }
 
   /** The vetter grant this persona holds for its community, if delivered. */
   async grant(): Promise<VtiHeldCredential | undefined> {

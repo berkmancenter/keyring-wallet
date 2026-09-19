@@ -33,6 +33,7 @@ import {
   VtiVetterDesk,
   type VettingApplication,
   type VettingDeskRequest,
+  type VettingVetterProfile,
   type VettingTicket,
 } from '../module/vtiVetting'
 import { ensurePersonaFor } from '../module/vtiJoin'
@@ -62,6 +63,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // desk
   const [tickets, setTickets] = useState<(VettingTicket & { link: string })[]>([])
   const [desk, setDesk] = useState<VettingDeskRequest[]>([])
+  const [profile, setProfile] = useState<VettingVetterProfile>()
+  const [profileName, setProfileName] = useState('')
   // application
   const [application, setApplication] = useState<VettingApplication>()
   const [manifest, setManifest] = useState<VtiManifest>()
@@ -201,6 +204,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         if (!deskRef.current)
           deskRef.current = new VtiVetterDesk(agent, persona, stores.vetting, stores.community, bump)
         deskRef.current.listen()
+        const p = await stores.vetting.getProfile(persona.communityDid)
+        setProfile(p)
+        setProfileName((v) => v || p?.displayName || '')
         const ts = await stores.vetting.listTickets(persona.communityDid)
         setTickets(ts.map((x) => ({ ...x, link: deskRef.current!.linkFor(x) })))
         setDesk(await stores.vetting.listDesk())
@@ -291,6 +297,40 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>
             {t('Vetting.YouVetFor', { community: shortDid(persona.communityDid) })}
           </Text>
+
+          <Text style={styles.h}>{t('Vetting.YourProfile')}</Text>
+          <View style={styles.card}>
+            <Text style={styles.label}>{t('Vetting.ProfileHint')}</Text>
+            <TextInput
+              style={styles.input}
+              testID={testIdWithKey('VettingProfileNameInput')}
+              value={profileName}
+              onChangeText={setProfileName}
+              placeholder={t('Vetting.ProfileNamePlaceholder')}
+              placeholderTextColor={ColorPalette.grayscale.mediumGrey}
+              autoCapitalize="words"
+            />
+            <Pressable
+              style={styles.button}
+              testID={testIdWithKey('VettingPublishProfileButton')}
+              accessibilityRole="button"
+              disabled={!!busy || !connected}
+              onPress={() =>
+                run('profile', async () => {
+                  await deskRef.current!.publishProfile({ listed: true, displayName: profileName.trim() || undefined })
+                  setProfile(await stores!.vetting.getProfile(persona.communityDid))
+                })
+              }
+            >
+              {busy === 'profile' ? <ActivityIndicator color="#FFFFFF" /> : null}
+              <Text style={styles.buttonText}>{t('Vetting.PublishProfile')}</Text>
+            </Pressable>
+            {profile ? (
+              <Text style={styles.label} testID={testIdWithKey('VettingProfilePublished')}>
+                {t('Vetting.ProfilePublished', { when: new Date(profile.publishedAt).toLocaleString() })}
+              </Text>
+            ) : null}
+          </View>
 
           <Text style={styles.step}>{t('Vetting.DeskStep1')}</Text>
           <Text style={styles.h}>{t('Vetting.Tickets')}</Text>

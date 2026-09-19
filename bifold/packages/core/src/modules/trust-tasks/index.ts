@@ -83,14 +83,46 @@ export {
   type VtiInvitation,
   type VtiMembership,
 } from './module/VtiCommunityStore'
-export { isVtiInvitationLink, buildVtiInvitationLink, parseVtiInvitationLink, describeInvitation } from './module/vtiInvitation'
-export { joinCommunity, ensurePersonaFor, membershipFromVerdict, type VtiJoinStep, type VtiJoinDeps, type VtiJoinResult } from './module/vtiJoin'
+export {
+  isVtiInvitationLink,
+  buildVtiInvitationLink,
+  parseVtiInvitationLink,
+  describeInvitation,
+} from './module/vtiInvitation'
+export {
+  joinCommunity,
+  ensurePersonaFor,
+  membershipFromVerdict,
+  type VtiJoinStep,
+  type VtiJoinDeps,
+  type VtiJoinResult,
+} from './module/vtiJoin'
 
 export { vtaAgent, type VtaAgentState, type VtiApproval } from './module/vtaAgent'
 export type { VtaConsentRequest } from './module/VtaClient'
-export { receiveIssue, classifyCredential, credentialsOfIssue, CREDENTIAL_EXCHANGE_ISSUE, type VtiReceivedCredential, type VtiCredentialKind } from './module/vtiInbox'
+export {
+  receiveIssue,
+  classifyCredential,
+  credentialsOfIssue,
+  CREDENTIAL_EXCHANGE_ISSUE,
+  type VtiReceivedCredential,
+  type VtiCredentialKind,
+} from './module/vtiInbox'
 export type { VtiHeldCredential } from './module/VtiCommunityStore'
-export { VtiVetterDesk, VtiApplicant, GenericRecordsVettingStore, VETTING, identityCommitment, type VtiVettingStore, type VettingTicket, type VettingDeskRequest, type VettingApplication, type VettingApplicationRequest, type VettingMethod } from './module/vtiVetting'
+export {
+  VtiVetterDesk,
+  VtiApplicant,
+  GenericRecordsVettingStore,
+  VETTING,
+  identityCommitment,
+  type VtiVettingStore,
+  type VettingTicket,
+  type VettingDeskRequest,
+  type VettingVetterProfile,
+  type VettingApplication,
+  type VettingApplicationRequest,
+  type VettingMethod,
+} from './module/vtiVetting'
 export {
   setPeerLegCarriage,
   getPeerLegCarriage,
