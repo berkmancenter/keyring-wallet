@@ -111,9 +111,7 @@ export interface VtaMintedDid {
 const nowSec = () => Math.floor(Date.now() / 1000)
 
 /** The consent challenge inside a refusal, when that is what the refusal is. */
-function consentPendingOf(
-  error: unknown
-): { payloadDigest?: string; requests: Record<string, unknown>[] } | undefined {
+function consentPendingOf(error: unknown): { payloadDigest?: string; requests: Record<string, unknown>[] } | undefined {
   if (!(error instanceof VtiRefusal)) return undefined
   const details = error.details as
     | { reason?: string; consentRequests?: (Record<string, unknown> & { payload?: { payloadDigest?: string } })[] }
@@ -171,7 +169,11 @@ export class VtaClient {
       return
     }
     const pending = this.pending
-    if (!pending || Date.now() < pending.sentAt) {
+    // A reply older than the request is a re-delivery of a stale message (a
+    // poll draining the queue), never the answer — created_time is seconds.
+    const stale =
+      typeof plaintext.created_time === 'number' && plaintext.created_time * 1000 < (pending?.sentAt ?? 0) - 5000
+    if (!pending || stale) {
       this.options.onInbound?.(plaintext)
       return
     }
@@ -395,7 +397,11 @@ export class VtaClient {
   }
 
   /** An approver's answer to a consent request it was sent — signed by this client's identity. */
-  decideConsent(request: Pick<VtaConsentRequest, 'challenge' | 'payloadDigest'>, decision: 'approve' | 'deny', reason?: string) {
+  decideConsent(
+    request: Pick<VtaConsentRequest, 'challenge' | 'payloadDigest'>,
+    decision: 'approve' | 'deny',
+    reason?: string
+  ) {
     return this.task<{ status?: string }>(VTA_TASK.consentDecision, {
       challenge: request.challenge,
       payloadDigest: request.payloadDigest,
@@ -468,7 +474,12 @@ export class VtaClient {
     const servers = await this.listServers()
     const label = options.label ?? `keyring-${Date.now().toString(36)}`
     const minted = existing
-      ? ({ did: existing.did, contextId: existing.contextId, signingKeyId: existing.vtaKeyIds.signing, kaKeyId: existing.vtaKeyIds.keyAgreement } as VtaMintedDid)
+      ? ({
+          did: existing.did,
+          contextId: existing.contextId,
+          signingKeyId: existing.vtaKeyIds.signing,
+          kaKeyId: existing.vtaKeyIds.keyAgreement,
+        } as VtaMintedDid)
       : await this.mintPersona(
           servers[0]
             ? { contextId, serverId: servers[0].id, label }

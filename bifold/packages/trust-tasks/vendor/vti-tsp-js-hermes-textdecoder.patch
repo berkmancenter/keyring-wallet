@@ -1,0 +1,132 @@
+diff -ruN a/src/cesr/utf8.ts b/src/cesr/utf8.ts
+--- a/src/cesr/utf8.ts
++++ b/src/cesr/utf8.ts
+@@ -0,0 +1,38 @@
++// Strict UTF-8 decoding that also runs on React Native's Hermes engine.
++//
++// `new TextDecoder("utf-8", { fatal: true })` is the right tool on Node and in
++// browsers: malformed input throws instead of decoding to U+FFFD, which is what
++// a VID field needs — a corrupted or hostile hop must not decode into a
++// plausible-looking identifier. Hermes implements `TextDecoder` without the
++// `fatal` option and throws at construction ("the 'fatal' option is
++// unsupported"), so a module that constructs one at load time cannot even be
++// imported there. Feature-detect once and fall back to a lenient decode checked
++// by re-encoding, which rejects exactly the same inputs.
++//
++// Keyring carries this as a local patch on top of the published package; the
++// upstream request is to take it as is.
++
++const utf8 = new TextEncoder();
++
++function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
++  if (a.length !== b.length) return false;
++  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
++  return true;
++}
++
++/** A `{ decode }` object with `TextDecoder`'s strict semantics on every runtime. */
++export function strictUtf8Decoder(): { decode(bytes: Uint8Array): string } {
++  try {
++    const decoder = new TextDecoder("utf-8", { fatal: true });
++    return { decode: (bytes) => decoder.decode(bytes) };
++  } catch {
++    const lenient = new TextDecoder("utf-8");
++    return {
++      decode: (bytes) => {
++        const text = lenient.decode(bytes);
++        if (!bytesEqual(utf8.encode(text), bytes)) throw new TypeError("invalid UTF-8");
++        return text;
++      },
++    };
++  }
++}
+diff -ruN a/src/rev2/reader.ts b/src/rev2/reader.ts
+--- a/src/rev2/reader.ts
++++ b/src/rev2/reader.ts
+@@ -30,6 +30,7 @@
+ import { sha256 } from "@noble/hashes/sha2.js";
+ 
+ import * as wire from "../cesr/wire.js";
++import { strictUtf8Decoder } from "../cesr/utf8.js";
+ import * as hpke from "../crypto/hpke.js";
+ import * as sign from "../crypto/sign.js";
+ 
+@@ -39,7 +40,7 @@
+ const SIG_QUADLETS = 22;
+ const EMPTY = new Uint8Array(0);
+ 
+-const fromUtf8 = new TextDecoder("utf-8", { fatal: true });
++const fromUtf8 = strictUtf8Decoder();
+ 
+ /** Rev 2's long count code spelling, from a superseded draft of the CESR v2
+  *  tables. Every `decodeCount` in this file passes it. */
+diff -ruN a/src/rev3/control.ts b/src/rev3/control.ts
+--- a/src/rev3/control.ts
++++ b/src/rev3/control.ts
+@@ -40,6 +40,7 @@
+ import { sha256 } from "@noble/hashes/sha2.js";
+ 
+ import * as wire from "../cesr/wire.js";
++import { strictUtf8Decoder } from "../cesr/utf8.js";
+ import {
+   bareVidBytes,
+   concatBytes,
+@@ -218,7 +219,7 @@
+   if (vidBytes === undefined) throw new Error("tsp: malformed VID in referral field");
+   let newVid: string;
+   try {
+-    newVid = new TextDecoder("utf-8", { fatal: true }).decode(vidBytes);
++    newVid = strictUtf8Decoder().decode(vidBytes);
+   } catch {
+     throw new Error("tsp: referral VID is not UTF-8");
+   }
+diff -ruN a/src/rev3/envelope.ts b/src/rev3/envelope.ts
+--- a/src/rev3/envelope.ts
++++ b/src/rev3/envelope.ts
+@@ -19,9 +19,10 @@
+ // split falls where it does: the count code is not part of the AAD.
+ 
+ import * as wire from "../cesr/wire.js";
++import { strictUtf8Decoder } from "../cesr/utf8.js";
+ 
+ const utf8 = new TextEncoder();
+-const fromUtf8 = new TextDecoder("utf-8", { fatal: true });
++const fromUtf8 = strictUtf8Decoder();
+ 
+ export interface Envelope {
+   sender: string;
+diff -ruN a/src/rev3/fields.ts b/src/rev3/fields.ts
+--- a/src/rev3/fields.ts
++++ b/src/rev3/fields.ts
+@@ -10,9 +10,10 @@
+ // message and an invite is which of these appear and in what order.
+ 
+ import * as wire from "../cesr/wire.js";
++import { strictUtf8Decoder } from "../cesr/utf8.js";
+ 
+ const utf8 = new TextEncoder();
+-const fromUtf8 = new TextDecoder("utf-8", { fatal: true });
++const fromUtf8 = strictUtf8Decoder();
+ 
+ /** SHA-256 digest length, and the width of a `TSP_Digest` field's payload. */
+ export const DIGEST_LEN = 32;
+diff -ruN a/src/rev3/payload.ts b/src/rev3/payload.ts
+--- a/src/rev3/payload.ts
++++ b/src/rev3/payload.ts
+@@ -36,6 +36,7 @@
+ import { sha256 } from "@noble/hashes/sha2.js";
+ 
+ import * as wire from "../cesr/wire.js";
++import { strictUtf8Decoder } from "../cesr/utf8.js";
+ import {
+   decodeControlBody,
+   encodeControlBody,
+@@ -51,7 +52,7 @@
+   senderFieldBytes,
+ } from "./fields.js";
+ 
+-const fromUtf8 = new TextDecoder("utf-8", { fatal: true });
++const fromUtf8 = strictUtf8Decoder();
+ 
+ /** What kind of message a payload frame carries. */
+ export type MessageType = "direct" | "nested" | "routed" | "control" | "padding";

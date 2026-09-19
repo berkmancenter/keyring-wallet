@@ -71,6 +71,13 @@ export interface Config {
     vtaDid?: string
     /** Where a persona minted serverlessly is served from — the VTA's own host. */
     personaBaseUrl?: string
+    /**
+     * What the peer leg (applicant ↔ vetter) puts on the mediator socket:
+     * DIDComm v2 plaintexts, or TSP Rev 3 frames. A build-time choice
+     * (`tsp_rev3_subtask.md` §2.3), never a user setting; a wallet reads
+     * both regardless. Defaults to DIDComm.
+     */
+    peerLeg?: 'didcomm' | 'tsp'
   }
 }
 

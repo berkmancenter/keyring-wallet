@@ -14,6 +14,18 @@
  *   4. outbound: Credo's packed JWE wrapped in a Routing 2.0 `forward` whose
  *      `next` is the peer, the forward itself packed by Credo to the mediator.
  *
+ * The same socket also carries **TSP**. A TSP message goes out as a binary
+ * frame of raw qb2 bytes — the mediator sniffs the leading count code (`0xF8`
+ * short-framed, `0xFB` long-framed), binds the cleartext sender VID to the
+ * authenticated session, and stores it for the receiver VID — and comes in as
+ * a text frame of the same bytes base64url-encoded (`-E…` / `--E…`), which
+ * {@link tsp.isTspFrameText} tells apart from a DIDComm JWE before either is
+ * parsed. A TSP frame is acknowledged like any queued message, by the id the
+ * mediator gave it: SHA-256 of the text exactly as delivered. This is how the
+ * upstream client frames TSP on the same socket, and it is what
+ * `tsp_rev3_subtask.md` §3.3 measured: a classifier that knows only `-E`
+ * drops every Rev 3 message past ~12 KB.
+ *
  * No key ever leaves Askar: every pack goes through Credo's own
  * `DidCommV2EnvelopeService`, and inbound frames go to `DidCommMessageReceiver`,
  * so a delivered message becomes a normal Credo message with its connection.
@@ -29,15 +41,19 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import {
   createPeerDidDocumentFromServices,
   getPublicJwkFromVerificationMethod,
   Kms,
   PeerDidNumAlgo,
+  TypedArrayEncoder,
   utils,
 } from '@credo-ts/core'
 import type { DidCommV2EncryptedMessage, DidCommV2KeyAgreementJwk, DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didcomm'
+import { tsp } from '@bifold/trust-tasks'
 
 const LOG_PREFIX = '[TrustTasks:VtiMediatorTransport]'
 
@@ -46,6 +62,7 @@ const FORWARD = 'https://didcomm.org/routing/2.0/forward'
 const LIVE_DELIVERY_CHANGE = 'https://didcomm.org/messagepickup/3.0/live-delivery-change'
 const MESSAGES_RECEIVED = 'https://didcomm.org/messagepickup/3.0/messages-received'
 const DELIVERY_REQUEST = 'https://didcomm.org/messagepickup/3.0/delivery-request'
+const DELIVERY_POLL_MS = 15000
 const DELIVERY = 'https://didcomm.org/messagepickup/3.0/delivery'
 const PICKUP_PROTOCOL = 'https://didcomm.org/messagepickup/3.0/'
 const PLAIN = 'application/didcomm-plain+json'
@@ -56,7 +73,7 @@ const isPickup = (type: unknown) => typeof type === 'string' && type.startsWith(
 
 interface DeliveryMessage {
   type?: string
-  attachments?: { id?: string; data?: { json?: unknown } }[]
+  attachments?: { id?: string; data?: { json?: unknown; base64?: string } }[]
 }
 // Hermes has no `crypto.randomUUID` — react-native-get-random-values polyfills
 // `getRandomValues` and nothing else — so ids come from Credo's own helper.
@@ -73,7 +90,6 @@ export interface VtiMediatorEndpoints {
   publicJwk: DidCommV2KeyAgreementJwk
   kid: string
 }
-
 
 /**
  * Resolve a DID document, retrying on transient failure. A `did:webvh` behind a
@@ -195,7 +211,9 @@ export async function vtiClientIdentityFromDid(agent: Agent, did: string): Promi
   const { didDocument, keys } = await agent.dids.resolveCreatedDidDocumentWithKeys(did)
   const keyAgreementRef = didDocument.keyAgreement?.[0]
   const vm =
-    typeof keyAgreementRef === 'string' ? didDocument.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
+    typeof keyAgreementRef === 'string'
+      ? didDocument.dereferenceKey(keyAgreementRef, ['keyAgreement'])
+      : keyAgreementRef
   if (!vm) throw new Error(`${LOG_PREFIX} ${did} has no keyAgreement verification method`)
   const kmsKey = (keys ?? []).find((key) => vm.id.endsWith(key.didDocumentRelativeKeyId))
   if (!kmsKey) throw new Error(`${LOG_PREFIX} no KMS key backs ${vm.id}`)
@@ -217,7 +235,8 @@ export async function vtiClientIdentityFromPersona(
 ): Promise<VtiClientIdentity> {
   const doc = await resolveDidDocumentRetrying(agent, personaDid)
   const keyAgreementRef = doc.keyAgreement?.[0]
-  const vm = typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
+  const vm =
+    typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
   if (!vm) throw new Error(`${LOG_PREFIX} ${personaDid} has no keyAgreement verification method`)
   const senderKey = getPublicJwkFromVerificationMethod(vm) as Kms.PublicJwk<Kms.X25519PublicJwk>
   senderKey.keyId = keyAgreementKmsKeyId
@@ -234,6 +253,9 @@ export async function vtiClientIdentityFromPersona(
  */
 export class VtiMediatorSession {
   private socket?: WebSocket
+  private pollTimer?: ReturnType<typeof setInterval>
+  private opening?: Promise<void>
+  private readonly seen = new Set<string>()
   private accessToken?: string
 
   constructor(
@@ -250,6 +272,14 @@ export class VtiMediatorSession {
        * what a v1-shaped message wants.
        */
       onMessage?: (plaintext: DidCommV2PlaintextMessage) => void
+      /**
+       * A TSP frame addressed to this client, as raw qb2 bytes — sealed, so
+       * the consumer holds the key. Awaited before the frame is acknowledged:
+       * a consumer that throws has not taken the message, and the mediator
+       * keeps it for redelivery. Without a consumer, TSP frames are left
+       * queued rather than acknowledged blind.
+       */
+      onTspFrame?: (bytes: Uint8Array) => void | Promise<void>
     } = {}
   ) {}
 
@@ -291,7 +321,9 @@ export class VtiMediatorSession {
     const challenge = challengeBody?.data?.challenge
     const sessionId = challengeBody?.data?.session_id ?? challengeBody?.sessionId
     if (!challenge || !sessionId) {
-      throw new Error(`${LOG_PREFIX} challenge refused (${challengeResponse.status}): ${JSON.stringify(challengeBody).slice(0, 200)}`)
+      throw new Error(
+        `${LOG_PREFIX} challenge refused (${challengeResponse.status}): ${JSON.stringify(challengeBody).slice(0, 200)}`
+      )
     }
 
     const authenticate = {
@@ -382,6 +414,23 @@ export class VtiMediatorSession {
     // mediator queued while this DID was offline — a consent request pushed to
     // an approver before its app opened — is fetched with an explicit
     // delivery-request; the `delivery` response is unpacked in `handleFrame`.
+    await this.requestDelivery()
+    // And a live push can be missed — measured: a vetting statement sat in the
+    // recipient's queue while its socket was open (VTI-24's shape again). A
+    // periodic delivery-request is the backstop; an empty queue answers with a
+    // `status`, which handleFrame ignores.
+    if (this.pollTimer) clearInterval(this.pollTimer)
+    this.pollTimer = setInterval(() => {
+      if (this.socket?.readyState === 1) void this.requestDelivery().catch(() => undefined)
+    }, DELIVERY_POLL_MS)
+  }
+
+  /**
+   * Pickup 3.0 delivery-request. This mediator's body is `{recipient_did,
+   * limit}` (`MessagePickupDeliveryRequest`, affinidi-messaging-sdk) — without
+   * `recipient_did` it answers a problem-report and nothing is delivered.
+   */
+  private async requestDelivery(): Promise<void> {
     await this.send({
       id: uuid(),
       typ: PLAIN,
@@ -391,7 +440,7 @@ export class VtiMediatorSession {
       created_time: nowSec(),
       expires_time: nowSec() + 300,
       return_route: 'all',
-      body: { limit: 20 },
+      body: { recipient_did: this.identity.did, limit: 20 },
     })
   }
 
@@ -422,6 +471,12 @@ export class VtiMediatorSession {
   /** Hand a delivered frame to Credo, then acknowledge it — never the other way round. */
   private async handleFrame(raw: string): Promise<void> {
     try {
+      // TSP demux, before any JSON is parsed: the mediator delivers a stored
+      // TSP message as base64url(qb2) text, and a JWE never starts with `-E`.
+      if (tsp.isTspFrameText(raw)) {
+        await this.handleTspFrame(raw)
+        return
+      }
       const frame = JSON.parse(raw) as Record<string, unknown>
       // The mediator answers `live-delivery-change` with a Pickup 3.0 `status`,
       // which is this transport's own bookkeeping rather than a message for the
@@ -440,24 +495,26 @@ export class VtiMediatorSession {
         // The mediator authcrypts its own bookkeeping too, so a frame's type is
         // only visible once it is open: a Pickup `status` answering
         // `live-delivery-change` looks exactly like a peer's message until then.
-        if (!isPickup(plaintext.type)) this.options.onMessage(plaintext)
+        // Its own frames are never queued messages: acknowledging one provokes
+        // another status reply, forever (vti-didcomm-js, mediator-transport.js).
+        if (isPickup(plaintext.type) || plaintext.from === this.mediator.did) return
+        // The mediator ids a stored message by sha256(packed bytes) and streams
+        // those exact bytes, so the hash of the raw frame is the queue id that
+        // acknowledges a live delivery (affinidi-messaging-sdk, websocket.rs)
+        // and the key that dedups an at-least-once redelivery. Without the ack
+        // the message stays queued until it expires, comes back on every poll,
+        // and counts against the sender's queue cap (VTI-29).
+        const queueId = bytesToHex(sha256(utf8ToBytes(raw)))
+        if (this.seen.has(queueId)) {
+          await this.acknowledge([queueId])
+          return
+        }
+        this.remember(queueId)
+        this.options.onMessage(plaintext)
+        await this.acknowledge([queueId])
       } else {
         const receiver = this.agent.dependencyManager.resolve(DidCommMessageReceiver)
         await receiver.receiveMessage(frame)
-      }
-      const queueId = (frame as { id?: string }).id
-      if (queueId) {
-        await this.send({
-          id: uuid(),
-          typ: PLAIN,
-          type: MESSAGES_RECEIVED,
-          from: this.identity.did,
-          to: [this.mediator.did],
-          created_time: nowSec(),
-          expires_time: nowSec() + 300,
-          return_route: 'all',
-          body: { message_id_list: [queueId] },
-        })
       }
     } catch (error) {
       this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
@@ -465,36 +522,104 @@ export class VtiMediatorSession {
   }
 
   /**
-   * A Pickup 3.0 `delivery`: each attachment is a queued JWE. Unpack and route
-   * every one, then send `messages-received` with their ids so the mediator
-   * clears them.
+   * A live-delivered TSP frame: hand the bytes to the consumer, then
+   * acknowledge by the mediator's queue id for it — SHA-256 of the delivered
+   * text. Same persist-before-ack ordering as the DIDComm path.
+   */
+  private async handleTspFrame(text: string): Promise<void> {
+    if (!this.options.onTspFrame) {
+      this.agent.config.logger.debug(`${LOG_PREFIX} TSP frame left queued: no consumer on this session`)
+      return
+    }
+    const bytes = tsp.fromBase64Url(text)
+    await this.options.onTspFrame(bytes)
+    await this.acknowledge([tsp.tspFrameQueueId(text)])
+  }
+
+  /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */
+  private async acknowledge(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return
+    await this.send({
+      id: uuid(),
+      typ: PLAIN,
+      type: MESSAGES_RECEIVED,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + 300,
+      return_route: 'all',
+      body: { message_id_list: messageIds },
+    })
+  }
+
+  /**
+   * A Pickup 3.0 `delivery`: each attachment is a queued JWE — or a queued
+   * TSP frame, carried as its base64url text. Unpack and route every one,
+   * then send `messages-received` with their ids so the mediator clears them.
    */
   private async handleDelivery(delivery: DeliveryMessage): Promise<void> {
     const attachments = delivery.attachments ?? []
     const acknowledged: string[] = []
     for (const attachment of attachments) {
-      const jwe = attachment.data?.json
-      if (!jwe) continue
+      const data = attachment.data
+      // A queued TSP frame comes as its base64url text in either slot; a JWE
+      // never starts with `-E`, so the demux is safe before any JSON parse.
+      const tspText =
+        typeof data?.base64 === 'string' && tsp.isTspFrameText(data.base64)
+          ? data.base64
+          : typeof data?.json === 'string' && tsp.isTspFrameText(data.json)
+            ? data.json
+            : undefined
+      if (tspText) {
+        try {
+          if (!this.options.onTspFrame) continue
+          if (attachment.id && this.seen.has(attachment.id)) {
+            acknowledged.push(attachment.id)
+            continue
+          }
+          await this.options.onTspFrame(tsp.fromBase64Url(tspText))
+          if (attachment.id) {
+            this.remember(attachment.id)
+            acknowledged.push(attachment.id)
+          }
+        } catch (error) {
+          this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
+        }
+        continue
+      }
       try {
+        // This mediator attaches each queued message as base64url
+        // (`Attachment::base64`, message_pickup.rs); the spec also allows json.
+        // A message we cannot read is left unacknowledged — it is what the
+        // queue is for — so an error here is reported, not swallowed.
+        const jwe =
+          data?.json ??
+          (data?.base64
+            ? JSON.parse(TypedArrayEncoder.toUtf8String(TypedArrayEncoder.fromBase64Url(data.base64)))
+            : undefined)
+        if (!jwe) continue
+        if (attachment.id && this.seen.has(attachment.id)) {
+          acknowledged.push(attachment.id)
+          continue
+        }
         const plaintext = await this.unpack(jwe as DidCommV2EncryptedMessage)
+        if (attachment.id) this.remember(attachment.id)
         if (!isPickup(plaintext.type)) this.options?.onMessage?.(plaintext)
         if (attachment.id) acknowledged.push(attachment.id)
       } catch (error) {
         this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
       }
     }
-    if (acknowledged.length > 0) {
-      await this.send({
-        id: uuid(),
-        typ: PLAIN,
-        type: MESSAGES_RECEIVED,
-        from: this.identity.did,
-        to: [this.mediator.did],
-        created_time: nowSec(),
-        expires_time: nowSec() + 300,
-        return_route: 'all',
-        body: { message_id_list: acknowledged },
-      })
+    if (acknowledged.length > 0) await this.acknowledge(acknowledged)
+  }
+
+  /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */
+  /** Queue ids already handed off this session, oldest first, bounded. */
+  private remember(queueId: string): void {
+    this.seen.add(queueId)
+    if (this.seen.size > 500) {
+      const oldest = this.seen.values().next().value
+      if (oldest) this.seen.delete(oldest)
     }
   }
 
@@ -506,13 +631,23 @@ export class VtiMediatorSession {
    */
   private async ensureOpen(): Promise<void> {
     if (this.socket?.readyState === 1) return
-    try {
-      this.socket?.close()
-    } catch {
-      /* already gone */
+    // One reopen at a time: an acknowledgement, the poll and a task can all
+    // find the socket closed in the same tick, and two starts racing replace
+    // the socket under the first caller ("socket is not open").
+    if (!this.opening) {
+      this.opening = (async () => {
+        try {
+          this.socket?.close()
+        } catch {
+          /* already gone */
+        }
+        this.socket = undefined
+        await this.start()
+      })().finally(() => {
+        this.opening = undefined
+      })
     }
-    this.socket = undefined
-    await this.start()
+    await this.opening
   }
 
   private async send(plaintext: DidCommV2PlaintextMessage): Promise<void> {
@@ -524,6 +659,23 @@ export class VtiMediatorSession {
   }
 
   /**
+   * Ship a packed TSP message as a binary frame. The mediator routes it on the
+   * cleartext receiver VID and binds the cleartext sender VID to this session,
+   * so the frame's sender has to be the DID this session logged in as. The
+   * bytes are already sealed and signed; nothing is packed to the mediator.
+   */
+  async sendTspFrame(bytes: Uint8Array): Promise<void> {
+    if (!tsp.isTspFrameBytes(bytes)) throw new Error(`${LOG_PREFIX} not a TSP frame (leading byte 0x${(bytes[0] ?? 0).toString(16)})`)
+    await this.ensureOpen()
+    if (!this.socket || this.socket.readyState !== 1) {
+      throw new Error(`${LOG_PREFIX} socket is not open`)
+    }
+    // A standalone ArrayBuffer: React Native's WebSocket sends the whole
+    // backing buffer of a view, so a slice of a larger buffer must be copied.
+    this.socket.send(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+  }
+
+  /**
    * Authcrypt a plaintext to a peer (its keyAgreement key, resolved through
    * Credo) and forward it through the mediator. This is the whole outbound
    * path for a VTA or a VTC: they are reached by DID, never dialled directly.
@@ -531,7 +683,8 @@ export class VtiMediatorSession {
   async sendTo(peerDid: string, plaintext: DidCommV2PlaintextMessage): Promise<void> {
     const doc = await this.agent.dids.resolveDidDocument(peerDid)
     const keyAgreementRef = doc.keyAgreement?.[0]
-    const vm = typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
+    const vm =
+      typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
     if (!vm) throw new Error(`${LOG_PREFIX} ${peerDid} publishes no keyAgreement verification method`)
     const recipientKey = getPublicJwkFromVerificationMethod(vm) as DidCommV2KeyAgreementJwk
     recipientKey.keyId = vm.id
@@ -565,6 +718,8 @@ export class VtiMediatorSession {
   }
 
   async stop(): Promise<void> {
+    if (this.pollTimer) clearInterval(this.pollTimer)
+    this.pollTimer = undefined
     this.socket?.close()
     this.socket = undefined
   }
@@ -579,7 +734,10 @@ export class VtiMediatorSession {
 export class VtiMediatorOutboundTransport {
   public supportedSchemes = ['vti']
 
-  constructor(private readonly session: VtiMediatorSession, private readonly peerDidFor: (outboundPackage: unknown) => string) {}
+  constructor(
+    private readonly session: VtiMediatorSession,
+    private readonly peerDidFor: (outboundPackage: unknown) => string
+  ) {}
 
   async start(): Promise<void> {
     /* the session owns its lifecycle */

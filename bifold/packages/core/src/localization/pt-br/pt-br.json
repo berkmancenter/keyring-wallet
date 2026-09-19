@@ -1045,7 +1045,15 @@
     "Denied": "Negado",
     "ApprovalExpires": "Expira {{when}}",
     "AwaitingConsent": "Aguardando um aprovador consentir com {{task}}…",
-    "AgentListening": "Seu agente pode alcançar você aqui."
+    "AgentListening": "Seu agente pode alcançar você aqui.",
+    "StepSigningIn": "Entrando no seu agente…",
+    "ManagerIdentity": "Este telefone, para o seu agente",
+    "EnrolHint": "Compartilhe esta identidade com o operador do seu agente para registrar este telefone. Depois, conecte.",
+    "ConnectExplains": "Conectar entra no seu agente, prepara sua identidade para a comunidade e abre o canal até ela.",
+    "NoCommunitySession": "Ainda sem contato com a comunidade.",
+    "ConnectCommunity": "Alcançar a comunidade",
+    "PeerLegTsp": "Mensagens entre pares: TSP (Rev 3)",
+    "PeerLegDidComm": "Mensagens entre pares: DIDComm v2"
   },
   "Vetting": {
     "Title": "Verificação",
@@ -1070,6 +1078,8 @@
     "LegalNamePlaceholder": "Como no seu passaporte ou identidade",
     "FaceNote": "É isto que o verificador verá e comparará com o seu documento.",
     "Connecting": "Conectando sua identidade…",
+    "Discounted": "{{n}} declaração(ões) não valerão — a outorga do verificador não cobria o momento da assinatura.",
+    "ClearDesk": "Limpar solicitações concluídas",
     "StartApplication": "Iniciar minha candidatura",
     "SaveFace": "Salvar",
     "Requirements": "Esta comunidade exige {{n}} declaração(ões) verificando: {{claims}}.",
@@ -1092,6 +1102,20 @@
       "attested": "Declaração recebida",
       "declined": "Recusado",
       "cardReceived": "Cartão recebido"
-    }
+    },
+    "ApplicantTitle": "Ser verificado",
+    "SeatVetter": "Você é o verificador",
+    "SeatApplicant": "Você está sendo verificado",
+    "SeatVetterHint": "Um membro está à sua frente. Você entrega um bilhete, abre a sessão, confere o cartão com o documento e atesta.",
+    "SeatApplicantHint": "Um verificador confere quem você é. Você o solicita com o bilhete dele, lê o código de correspondência, envia seu cartão e recebe a declaração.",
+    "HeroVetter": "Você tem uma autorização de verificador para esta comunidade. Abra a mesa para emitir um bilhete e verificar a pessoa à sua frente.",
+    "HeroApplicant": "Seja verificado pessoalmente por um membro e depois candidate-se à comunidade com a declaração dele.",
+    "OpenDesk": "Abrir a mesa de verificação",
+    "GetVetted": "Iniciar minha verificação",
+    "DeskStep1": "Passo 1 · Entregar um bilhete",
+    "DeskStep2": "Passo 2 · Pedidos na sua mesa",
+    "ApplicantStep1": "Passo 1 · Seu rosto",
+    "ApplicantStep2": "Passo 2 · Pedir a um verificador",
+    "ApplicantStep3": "Passo 3 · Candidatar-se"
   }
 }

@@ -5,6 +5,11 @@
  * persona's community session; both are the reference client's flows
  * (design §8–§10) with the terminal taken out of the room.
  *
+ * The seat is said out loud before anything else on the screen — a badge, a
+ * heading and one sentence — because the two people at a vetting hold phones
+ * that look alike, and which of them is checking whom is the one thing
+ * neither should have to infer.
+ *
  * @module trust-tasks/screens/VtiVetting
  */
 
@@ -13,13 +18,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
-import { vtiClientIdentityFromPersona } from '../module/VtiMediatorTransport'
 import { vtiAgent, type VtiManifest } from '../module/vtiAgent'
+import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { receiveIssue } from '../module/vtiInbox'
 import {
   GenericRecordsVettingStore,
@@ -31,7 +37,7 @@ import {
 } from '../module/vtiVetting'
 import { ensurePersonaFor } from '../module/vtiJoin'
 
-const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : did ?? '')
+const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
 
 export interface VtiVettingProps {
   config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
@@ -61,7 +67,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [manifest, setManifest] = useState<VtiManifest>()
   const [legalName, setLegalName] = useState('')
   const [ticketLink, setTicketLink] = useState('')
-  const [checklist, setChecklist] = useState<{ held: number; needed: number; meets: boolean }>()
+  const [checklist, setChecklist] = useState<{ held: number; needed: number; meets: boolean; discounted: number }>()
   const [membershipRole, setMembershipRole] = useState<string>()
 
   const stores = useMemo(
@@ -85,14 +91,73 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     h: { ...TextTheme.headingFour, color: TextTheme.normal.color },
     label: { ...TextTheme.labelSubtitle, color: ColorPalette.grayscale.mediumGrey },
     value: { ...TextTheme.normal, color: TextTheme.normal.color },
-    code: { fontSize: 40, fontWeight: '700', letterSpacing: 4, color: TextTheme.normal.color, textAlign: 'center', paddingVertical: 8 },
+    code: {
+      fontSize: 40,
+      fontWeight: '700',
+      letterSpacing: 4,
+      color: TextTheme.normal.color,
+      textAlign: 'center',
+      paddingVertical: 8,
+    },
     mono: { fontFamily: 'Courier', fontSize: 12, color: ColorPalette.grayscale.mediumGrey },
-    button: { backgroundColor: ColorPalette.brand.primary, borderRadius: 8, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
+    button: {
+      backgroundColor: ColorPalette.brand.primary,
+      borderRadius: 8,
+      paddingVertical: 12,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+    },
     buttonText: { ...TextTheme.bold, color: '#FFFFFF' },
-    input: { borderWidth: 1, borderColor: ColorPalette.grayscale.lightGrey, borderRadius: 8, padding: 10, color: TextTheme.normal.color, backgroundColor: ColorPalette.brand.primaryBackground },
+    input: {
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      borderRadius: 8,
+      padding: 10,
+      color: TextTheme.normal.color,
+      backgroundColor: ColorPalette.brand.primaryBackground,
+    },
     error: { ...TextTheme.normal, color: ColorPalette.semantic.error },
     row: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+    seat: { backgroundColor: ColorPalette.brand.primary, borderRadius: 16, padding: 18, gap: 8 },
+    seatBadge: {
+      alignSelf: 'flex-start',
+      borderRadius: 999,
+      paddingVertical: 4,
+      paddingHorizontal: 12,
+      backgroundColor: '#FFFFFF',
+    },
+    seatBadgeText: { ...TextTheme.labelSubtitle, color: ColorPalette.brand.primary, fontWeight: '700' },
+    seatTitle: { ...TextTheme.headingThree, color: '#FFFFFF' },
+    seatText: { ...TextTheme.normal, color: '#FFFFFF' },
+    step: {
+      ...TextTheme.labelSubtitle,
+      color: ColorPalette.brand.primary,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+    },
   })
+
+  /** The seat banner: who this phone is at the vetting, in three lines. */
+  const seatBanner = (which: 'vetter' | 'applicant') => (
+    <View style={styles.seat} testID={testIdWithKey('VettingSeatBanner')} accessibilityRole="header">
+      <View style={styles.row}>
+        <Icon name={which === 'vetter' ? 'account-check' : 'account-search'} size={28} color="#FFFFFF" />
+        <Text style={styles.seatTitle}>
+          {which === 'vetter' ? t('Vetting.DeskTitle') : t('Vetting.ApplicantTitle')}
+        </Text>
+      </View>
+      <View style={styles.seatBadge} testID={testIdWithKey('VettingRoleBadge')}>
+        <Text style={styles.seatBadgeText}>
+          {which === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}
+        </Text>
+      </View>
+      <Text style={styles.seatText}>
+        {which === 'vetter' ? t('Vetting.SeatVetterHint') : t('Vetting.SeatApplicantHint')}
+      </Text>
+    </View>
+  )
 
   // Load what the phone holds, and connect the persona's session with an inbox.
   useEffect(() => {
@@ -105,8 +170,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       if (!p?.kmsKeyIds?.keyAgreement) return
       try {
         if (vtiAgent.getState().did !== p.did) {
-          const identity = await vtiClientIdentityFromPersona(agent, p.did, p.kmsKeyIds.keyAgreement)
-          await vtiAgent.connect(agent, mediatorDid, { identity })
+          await vtiAgent.connect(agent, mediatorDid, {
+            persona: p,
+            peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+          })
         }
         setConnected(true)
       } catch (e) {
@@ -131,13 +198,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       const m = await stores.community.getMembership(persona.communityDid)
       setMembershipRole(m?.role)
       if (g) {
-        if (!deskRef.current) deskRef.current = new VtiVetterDesk(agent, persona, stores.vetting, stores.community, bump)
+        if (!deskRef.current)
+          deskRef.current = new VtiVetterDesk(agent, persona, stores.vetting, stores.community, bump)
         deskRef.current.listen()
         const ts = await stores.vetting.listTickets(persona.communityDid)
         setTickets(ts.map((x) => ({ ...x, link: deskRef.current!.linkFor(x) })))
         setDesk(await stores.vetting.listDesk())
       } else {
-        if (!applicantRef.current) applicantRef.current = new VtiApplicant(agent, persona, stores.vetting, stores.community, bump)
+        if (!applicantRef.current)
+          applicantRef.current = new VtiApplicant(agent, persona, stores.vetting, stores.community, bump)
         applicantRef.current.listen()
         const a = await stores.vetting.getApplication(persona.communityDid)
         setApplication(a)
@@ -155,23 +224,28 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     }
   }, [agent, stores, persona, connected, bump])
 
-  const run = useCallback(async (name: string, fn: () => Promise<unknown>) => {
-    setBusy(name)
-    setError(undefined)
-    try {
-      await fn()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(undefined)
-      bump()
-    }
-  }, [bump])
+  const run = useCallback(
+    async (name: string, fn: () => Promise<unknown>) => {
+      setBusy(name)
+      setError(undefined)
+      try {
+        await fn()
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setBusy(undefined)
+        bump()
+      }
+    },
+    [bump]
+  )
 
   if (!communityDid || !mediatorDid || !vtaDid) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
-        <View style={styles.content}><Text style={styles.value}>{t('MyAgent.NotConfigured')}</Text></View>
+        <View style={styles.content}>
+          <Text style={styles.value}>{t('MyAgent.NotConfigured')}</Text>
+        </View>
       </SafeAreaView>
     )
   }
@@ -181,14 +255,28 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.h}>{t('Vetting.Title')}</Text>
+          {seatBanner('applicant')}
           <Text style={styles.value}>{t('Vetting.NeedIdentity')}</Text>
-          <Pressable style={styles.button} testID={testIdWithKey('VettingCreateIdentityButton')} accessibilityRole="button" disabled={!!busy}
-            onPress={() => run('identity', async () => { if (agent && stores) await ensurePersonaFor({ agent, identityStore: stores.identity, vtaDid, communityDid }) })}>
+          <Pressable
+            style={styles.button}
+            testID={testIdWithKey('VettingCreateIdentityButton')}
+            accessibilityRole="button"
+            disabled={!!busy}
+            onPress={() =>
+              run('identity', async () => {
+                if (agent && stores)
+                  await ensurePersonaFor({ agent, identityStore: stores.identity, vtaDid, communityDid })
+              })
+            }
+          >
             {busy === 'identity' ? <ActivityIndicator color="#FFFFFF" /> : null}
             <Text style={styles.buttonText}>{t('MyAgent.CreateIdentity')}</Text>
           </Pressable>
-          {error ? <Text style={styles.error} testID={testIdWithKey('VettingError')}>{error}</Text> : null}
+          {error ? (
+            <Text style={styles.error} testID={testIdWithKey('VettingError')}>
+              {error}
+            </Text>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     )
@@ -199,60 +287,134 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.h}>{t('Vetting.DeskTitle')}</Text>
-          <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>{t('Vetting.YouVetFor', { community: shortDid(persona.communityDid) })}</Text>
+          {seatBanner('vetter')}
+          <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>
+            {t('Vetting.YouVetFor', { community: shortDid(persona.communityDid) })}
+          </Text>
 
+          <Text style={styles.step}>{t('Vetting.DeskStep1')}</Text>
           <Text style={styles.h}>{t('Vetting.Tickets')}</Text>
-          <Pressable style={styles.button} testID={testIdWithKey('VettingNewTicketButton')} accessibilityRole="button" disabled={!!busy}
-            onPress={() => run('ticket', () => deskRef.current!.issueTicket())}>
+          <Pressable
+            style={styles.button}
+            testID={testIdWithKey('VettingNewTicketButton')}
+            accessibilityRole="button"
+            disabled={!!busy}
+            onPress={() => run('ticket', () => deskRef.current!.issueTicket())}
+          >
             {busy === 'ticket' ? <ActivityIndicator color="#FFFFFF" /> : null}
             <Text style={styles.buttonText}>{t('Vetting.NewTicket')}</Text>
           </Pressable>
-          {tickets.filter((x) => x.usesLeft > 0).slice(-1).map((x) => (
-            <View key={x.ticketId} style={styles.card} testID={testIdWithKey('VettingTicketCard')}>
-              <Text style={styles.label}>{t('Vetting.ReadAloud')}</Text>
-              <Text style={styles.code} testID={testIdWithKey('VettingTicketCode')}>{x.code}</Text>
-              <Text style={styles.label}>{t('Vetting.OrScan')}</Text>
-              <Text style={styles.mono} testID={testIdWithKey('VettingTicketLink')} selectable>{x.link}</Text>
-              <Text style={styles.label}>{t('Vetting.TicketValid', { uses: x.usesLeft, until: x.expiresAt.slice(0, 10) })}</Text>
-            </View>
-          ))}
+          {desk.length > 0 ? (
+            <Pressable
+              style={[styles.button, { backgroundColor: ColorPalette.grayscale.mediumGrey }]}
+              testID={testIdWithKey('VettingDeskClearButton')}
+              accessibilityRole="button"
+              disabled={!!busy}
+              onPress={() =>
+                run('clear', async () => {
+                  await stores!.vetting.clearDesk(persona.communityDid)
+                  setDesk([])
+                })
+              }
+            >
+              <Text style={styles.buttonText}>{t('Vetting.ClearDesk')}</Text>
+            </Pressable>
+          ) : null}
+          {tickets
+            .filter((x) => x.usesLeft > 0)
+            .slice(-1)
+            .map((x) => (
+              <View key={x.ticketId} style={styles.card} testID={testIdWithKey('VettingTicketCard')}>
+                <Text style={styles.label}>{t('Vetting.ReadAloud')}</Text>
+                <Text style={styles.code} testID={testIdWithKey('VettingTicketCode')}>
+                  {x.code}
+                </Text>
+                <Text style={styles.label}>{t('Vetting.OrScan')}</Text>
+                <Text style={styles.mono} testID={testIdWithKey('VettingTicketLink')} selectable>
+                  {x.link}
+                </Text>
+                <Text style={styles.label}>
+                  {t('Vetting.TicketValid', { uses: x.usesLeft, until: x.expiresAt.slice(0, 10) })}
+                </Text>
+              </View>
+            ))}
 
+          <Text style={styles.step}>{t('Vetting.DeskStep2')}</Text>
           <Text style={styles.h}>{t('Vetting.Desk')}</Text>
-          {desk.length === 0 ? <Text style={styles.value} testID={testIdWithKey('VettingDeskEmpty')}>{t('Vetting.DeskEmpty')}</Text> : null}
+          {desk.length === 0 ? (
+            <Text style={styles.value} testID={testIdWithKey('VettingDeskEmpty')}>
+              {t('Vetting.DeskEmpty')}
+            </Text>
+          ) : null}
           {desk.map((r) => (
             <View key={r.requestId} style={styles.card} testID={testIdWithKey('VettingDeskRequest')}>
               <Text style={styles.value}>{shortDid(r.applicantDid)}</Text>
-              <Text style={styles.label} testID={testIdWithKey('VettingDeskStatus')}>{t(`Vetting.Status.${r.status}`)}</Text>
+              <Text style={styles.label} testID={testIdWithKey('VettingDeskStatus')}>
+                {t(`Vetting.Status.${r.status}`)}
+              </Text>
               {r.status === 'accepted' ? (
-                <Pressable style={styles.button} testID={testIdWithKey('VettingOpenSessionButton')} accessibilityRole="button" disabled={!!busy}
-                  onPress={() => run('session', () => deskRef.current!.openSession(r.requestId, ['name.legal'], r.preferredMethod ?? 'inPerson'))}>
+                <Pressable
+                  style={styles.button}
+                  testID={testIdWithKey('VettingOpenSessionButton')}
+                  accessibilityRole="button"
+                  disabled={!!busy}
+                  onPress={() =>
+                    run('session', () =>
+                      deskRef.current!.openSession(r.requestId, ['name.legal'], r.preferredMethod ?? 'inPerson')
+                    )
+                  }
+                >
                   <Text style={styles.buttonText}>{t('Vetting.OpenSession')}</Text>
                 </Pressable>
               ) : null}
               {r.session && (r.status === 'session' || r.status === 'cardReceived') ? (
                 <>
                   <Text style={styles.label}>{t('Vetting.MatchCodeHint')}</Text>
-                  <Text style={styles.code} testID={testIdWithKey('VettingMatchCode')}>{r.session.matchCode}</Text>
+                  <Text style={styles.code} testID={testIdWithKey('VettingMatchCode')}>
+                    {r.session.matchCode}
+                  </Text>
                 </>
               ) : null}
               {r.status === 'cardReceived' && r.card ? (
                 <>
                   <Text style={styles.label}>{t('Vetting.CardReceived')}</Text>
                   {((r.card.claims as { type: string; value: string }[]) ?? []).map((c) => (
-                    <Text key={c.type} style={styles.value} testID={testIdWithKey('VettingCardClaim')}>{c.type}: {String(c.value)}</Text>
+                    <Text key={c.type} style={styles.value} testID={testIdWithKey('VettingCardClaim')}>
+                      {c.type}: {String(c.value)}
+                    </Text>
                   ))}
-                  <Pressable style={styles.button} testID={testIdWithKey('VettingAttestButton')} accessibilityRole="button" disabled={!!busy}
-                    onPress={() => run('attest', () => deskRef.current!.attest(r.requestId, { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }))}>
+                  <Pressable
+                    style={styles.button}
+                    testID={testIdWithKey('VettingAttestButton')}
+                    accessibilityRole="button"
+                    disabled={!!busy}
+                    onPress={() =>
+                      run('attest', () =>
+                        deskRef.current!.attest(r.requestId, {
+                          documentClasses: ['passport'],
+                          claimsVerified: ['name.legal'],
+                          livenessConfirmed: true,
+                        })
+                      )
+                    }
+                  >
                     {busy === 'attest' ? <ActivityIndicator color="#FFFFFF" /> : null}
                     <Text style={styles.buttonText}>{t('Vetting.Attest')}</Text>
                   </Pressable>
                 </>
               ) : null}
-              {r.status === 'attested' ? <Text style={styles.value} testID={testIdWithKey('VettingStatementIssued')}>{t('Vetting.StatementIssued')}</Text> : null}
+              {r.status === 'attested' ? (
+                <Text style={styles.value} testID={testIdWithKey('VettingStatementIssued')}>
+                  {t('Vetting.StatementIssued')}
+                </Text>
+              ) : null}
             </View>
           ))}
-          {error ? <Text style={styles.error} testID={testIdWithKey('VettingError')}>{error}</Text> : null}
+          {error ? (
+            <Text style={styles.error} testID={testIdWithKey('VettingError')}>
+              {error}
+            </Text>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     )
@@ -263,35 +425,81 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.h}>{t('Vetting.Title')}</Text>
-        {membershipRole ? <Text style={styles.value} testID={testIdWithKey('VettingAlreadyMember')}>{t('Vetting.AlreadyMember', { role: membershipRole })}</Text> : null}
+        {seatBanner('applicant')}
+        {membershipRole ? (
+          <Text style={styles.value} testID={testIdWithKey('VettingAlreadyMember')}>
+            {t('Vetting.AlreadyMember', { role: membershipRole })}
+          </Text>
+        ) : null}
 
+        <Text style={styles.step}>{t('Vetting.ApplicantStep1')}</Text>
         <Text style={styles.h}>{t('Vetting.YourFace')}</Text>
         <View style={styles.card}>
           <Text style={styles.label}>{t('Vetting.LegalName')}</Text>
-          <TextInput style={styles.input} testID={testIdWithKey('VettingLegalNameInput')} value={legalName} onChangeText={setLegalName} placeholder={t('Vetting.LegalNamePlaceholder')} placeholderTextColor={ColorPalette.grayscale.mediumGrey} autoCapitalize="words" />
+          <TextInput
+            style={styles.input}
+            testID={testIdWithKey('VettingLegalNameInput')}
+            value={legalName}
+            onChangeText={setLegalName}
+            placeholder={t('Vetting.LegalNamePlaceholder')}
+            placeholderTextColor={ColorPalette.grayscale.mediumGrey}
+            autoCapitalize="words"
+          />
           <Text style={styles.label}>{t('Vetting.FaceNote')}</Text>
-          <Pressable style={styles.button} testID={testIdWithKey('VettingStartButton')} accessibilityRole="button" disabled={!!busy || !connected}
-            onPress={() => run('start', async () => {
-              const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
-              setManifest(m)
-              await applicantRef.current!.start(m, { 'name.legal': legalName.trim() })
-            })}>
+          <Pressable
+            style={styles.button}
+            testID={testIdWithKey('VettingStartButton')}
+            accessibilityRole="button"
+            disabled={!!busy || !connected}
+            onPress={() =>
+              run('start', async () => {
+                const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
+                setManifest(m)
+                await applicantRef.current!.start(m, { 'name.legal': legalName.trim() })
+              })
+            }
+          >
             {busy === 'start' || !connected ? <ActivityIndicator color="#FFFFFF" /> : null}
-            <Text style={styles.buttonText}>{!connected ? t('Vetting.Connecting') : application ? t('Vetting.SaveFace') : t('Vetting.StartApplication')}</Text>
+            <Text style={styles.buttonText}>
+              {!connected
+                ? t('Vetting.Connecting')
+                : application
+                  ? t('Vetting.SaveFace')
+                  : t('Vetting.StartApplication')}
+            </Text>
           </Pressable>
         </View>
 
         {application ? (
           <>
-            <Text style={styles.value} testID={testIdWithKey('VettingRequirements')}>{t('Vetting.Requirements', { n: application.minStatements, claims: application.requiredClaims.join(', ') })}</Text>
+            <Text style={styles.value} testID={testIdWithKey('VettingRequirements')}>
+              {t('Vetting.Requirements', {
+                n: application.minStatements,
+                claims: application.requiredClaims.join(', '),
+              })}
+            </Text>
 
+            <Text style={styles.step}>{t('Vetting.ApplicantStep2')}</Text>
             <Text style={styles.h}>{t('Vetting.AskAVetter')}</Text>
             <View style={styles.card}>
               <Text style={styles.label}>{t('Vetting.PasteTicket')}</Text>
-              <TextInput style={styles.input} testID={testIdWithKey('VettingTicketInput')} value={ticketLink} onChangeText={setTicketLink} placeholder="vetting-ticket:?v=1&…" placeholderTextColor={ColorPalette.grayscale.mediumGrey} autoCapitalize="none" autoCorrect={false} />
-              <Pressable style={styles.button} testID={testIdWithKey('VettingRequestButton')} accessibilityRole="button" disabled={!!busy || !ticketLink.trim()}
-                onPress={() => run('request', () => applicantRef.current!.requestVetter({ link: ticketLink.trim() }))}>
+              <TextInput
+                style={styles.input}
+                testID={testIdWithKey('VettingTicketInput')}
+                value={ticketLink}
+                onChangeText={setTicketLink}
+                placeholder="vetting-ticket:?v=1&…"
+                placeholderTextColor={ColorPalette.grayscale.mediumGrey}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Pressable
+                style={styles.button}
+                testID={testIdWithKey('VettingRequestButton')}
+                accessibilityRole="button"
+                disabled={!!busy || !ticketLink.trim()}
+                onPress={() => run('request', () => applicantRef.current!.requestVetter({ link: ticketLink.trim() }))}
+              >
                 {busy === 'request' ? <ActivityIndicator color="#FFFFFF" /> : null}
                 <Text style={styles.buttonText}>{t('Vetting.Request')}</Text>
               </Pressable>
@@ -300,14 +508,26 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             {requests.map((r) => (
               <View key={r.vetterDid} style={styles.card} testID={testIdWithKey('VettingRequestCard')}>
                 <Text style={styles.value}>{shortDid(r.vetterDid)}</Text>
-                <Text style={styles.label} testID={testIdWithKey('VettingRequestStatus')}>{t(`Vetting.Status.${r.status}`)}{r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}</Text>
+                <Text style={styles.label} testID={testIdWithKey('VettingRequestStatus')}>
+                  {t(`Vetting.Status.${r.status}`)}
+                  {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
+                </Text>
                 {r.session && r.status === 'session' ? (
                   <>
                     <Text style={styles.label}>{t('Vetting.MatchCodeHint')}</Text>
-                    <Text style={styles.code} testID={testIdWithKey('VettingMatchCode')}>{r.session.matchCode}</Text>
-                    <Text style={styles.label}>{t('Vetting.CardPreview', { name: legalName || application.claims['name.legal'] || '' })}</Text>
-                    <Pressable style={styles.button} testID={testIdWithKey('VettingSendCardButton')} accessibilityRole="button" disabled={!!busy}
-                      onPress={() => run('card', () => applicantRef.current!.sendCard(r.vetterDid))}>
+                    <Text style={styles.code} testID={testIdWithKey('VettingMatchCode')}>
+                      {r.session.matchCode}
+                    </Text>
+                    <Text style={styles.label}>
+                      {t('Vetting.CardPreview', { name: legalName || application.claims['name.legal'] || '' })}
+                    </Text>
+                    <Pressable
+                      style={styles.button}
+                      testID={testIdWithKey('VettingSendCardButton')}
+                      accessibilityRole="button"
+                      disabled={!!busy}
+                      onPress={() => run('card', () => applicantRef.current!.sendCard(r.vetterDid))}
+                    >
                       {busy === 'card' ? <ActivityIndicator color="#FFFFFF" /> : null}
                       <Text style={styles.buttonText}>{t('Vetting.SendCard')}</Text>
                     </Pressable>
@@ -317,29 +537,58 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               </View>
             ))}
 
+            <Text style={styles.step}>{t('Vetting.ApplicantStep3')}</Text>
             <Text style={styles.h}>{t('Vetting.Checklist')}</Text>
             <View style={styles.card}>
               <Text style={styles.value} testID={testIdWithKey('VettingChecklist')}>
-                {t('Vetting.ChecklistLine', { held: checklist?.held ?? 0, needed: checklist?.needed ?? application.minStatements })}{checklist?.meets ? ` · ${t('Vetting.Meets')}` : ''}
+                {t('Vetting.ChecklistLine', {
+                  held: checklist?.held ?? 0,
+                  needed: checklist?.needed ?? application.minStatements,
+                })}
+                {checklist?.meets ? ` · ${t('Vetting.Meets')}` : ''}
               </Text>
+              {checklist?.discounted ? (
+                <Text style={styles.error} testID={testIdWithKey('VettingDiscounted')}>
+                  {t('Vetting.Discounted', { n: checklist.discounted })}
+                </Text>
+              ) : null}
               {checklist?.meets && !membershipRole ? (
-                <Pressable style={styles.button} testID={testIdWithKey('VettingApplyButton')} accessibilityRole="button" disabled={!!busy}
-                  onPress={() => run('apply', async () => {
-                    const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
-                    const { statements } = await applicantRef.current!.checklist()
-                    const stopInbox = vtiAgent.onInbound((msg) => { void receiveIssue(stores!.community, persona.did, msg, { via: 'vetting' }) })
-                    try {
-                      const verdict = await vtiAgent.apply(communityDid, m, { credentials: statements })
-                      if (verdict.effect !== 'allow') throw new Error(`${verdict.effect}${verdict.needs.length ? `: ${verdict.needs.join(', ')}` : ''}`)
-                      for (let i = 0; i < 20; i++) {
-                        const mem = await stores!.community.getMembership(communityDid)
-                        if (mem) { if (mem.via === 'unknown') await stores!.community.saveMembership({ ...mem, via: 'vetting' }); break }
-                        await new Promise((res) => setTimeout(res, 1500))
+                <Pressable
+                  style={styles.button}
+                  testID={testIdWithKey('VettingApplyButton')}
+                  accessibilityRole="button"
+                  disabled={!!busy}
+                  onPress={() =>
+                    run('apply', async () => {
+                      const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
+                      const { statements } = await applicantRef.current!.checklist()
+                      const stopInbox = vtiAgent.onInbound((msg) => {
+                        void receiveIssue(stores!.community, persona.did, msg, { via: 'vetting' })
+                      })
+                      try {
+                        const verdict = await vtiAgent.apply(communityDid, m, {
+                          credentials: statements,
+                          requirementsDigest: application?.requirementsDigest,
+                        })
+                        if (verdict.effect !== 'allow')
+                          throw new Error(
+                            `${verdict.effect}${verdict.needs.length ? `: ${verdict.needs.join(', ')}` : ''}`
+                          )
+                        for (let i = 0; i < 20; i++) {
+                          const mem = await stores!.community.getMembership(communityDid)
+                          if (mem) {
+                            if (mem.via === 'unknown')
+                              await stores!.community.saveMembership({ ...mem, via: 'vetting' })
+                            break
+                          }
+                          await new Promise((res) => setTimeout(res, 1500))
+                        }
+                      } finally {
+                        setTimeout(stopInbox, 30000)
                       }
-                    } finally {
-                      setTimeout(stopInbox, 30000)
-                    }
-                  })}>
+                    })
+                  }
+                >
                   {busy === 'apply' ? <ActivityIndicator color="#FFFFFF" /> : null}
                   <Text style={styles.buttonText}>{t('MyAgent.Apply')}</Text>
                 </Pressable>
@@ -347,8 +596,17 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             </View>
           </>
         ) : null}
-        {!connected ? <View style={styles.row}><ActivityIndicator color={ColorPalette.brand.primary} /><Text style={styles.value}>{t('MyAgent.Authenticating')}</Text></View> : null}
-        {error ? <Text style={styles.error} testID={testIdWithKey('VettingError')}>{error}</Text> : null}
+        {!connected ? (
+          <View style={styles.row}>
+            <ActivityIndicator color={ColorPalette.brand.primary} />
+            <Text style={styles.value}>{t('MyAgent.Authenticating')}</Text>
+          </View>
+        ) : null}
+        {error ? (
+          <Text style={styles.error} testID={testIdWithKey('VettingError')}>
+            {error}
+          </Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   )

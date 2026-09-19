@@ -180,3 +180,5 @@ lib/
 # Local-only docs (not committed)
 .docs-local/
 .cursor/
+# The vendored TSP wire layer is committed on purpose (see its README).
+!packages/trust-tasks/vendor/*.tgz

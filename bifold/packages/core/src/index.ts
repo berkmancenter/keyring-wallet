@@ -213,6 +213,8 @@ export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,
   setDidCommV2Enabled,
+  setPeerLegCarriage,
+  getPeerLegCarriage,
   findV2MediationRecord,
   getRoutingForV2,
   provisionV2Mediation,

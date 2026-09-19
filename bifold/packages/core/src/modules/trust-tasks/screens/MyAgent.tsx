@@ -4,8 +4,17 @@
  * connecting, and once it is.
  *
  * A community is reached through an agent, so this is where that relationship
- * is made and shown: the agent's host and the DID this wallet presents as its
- * member identity, then the communities it can talk to.
+ * is made and shown. The primary action, *Connect my agent*, does the three
+ * things a phone needs before it can do anything with a community: sign in
+ * to its own VTA, get (or mint) its identity for the configured community,
+ * and open the community session as that identity. Until the agent is
+ * connected the screen shows only what is needed to get there — the manager
+ * identity to enrol, and the button; everything the agent holds (identity,
+ * approvals, invitations, communities, vetting) appears once it is.
+ *
+ * Vetting is the star of the connected screen: one prominent entry that says
+ * which seat this phone holds — the vetter's desk, or the applicant's — before
+ * the person opens it.
  *
  * @module trust-tasks/screens/MyAgent
  */
@@ -27,6 +36,10 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
+import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
+
+/** Which seat this phone would take at a vetting: decided by what it holds. */
+type VettingSeat = 'vetter' | 'applicant'
 
 /** The DID is long and the host is what a person recognises, so lead with it. */
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-8)}` : did)
@@ -54,22 +67,31 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const [persona, setPersona] = useState<VtiPersona>()
   const [invitations, setInvitations] = useState<VtiInvitation[]>([])
   const [memberships, setMemberships] = useState<VtiMembership[]>([])
+  const [seat, setSeat] = useState<VettingSeat>('applicant')
   const [busy, setBusy] = useState<'identity' | 'join'>()
   const [activity, setActivity] = useState<string[]>([])
   const [holdingError, setHoldingError] = useState<string>()
+  // The primary action: sign in to the VTA, ensure the persona, open the
+  // community session. Each step is named while it runs (S3).
+  const [connecting, setConnecting] = useState<{ step: string } | undefined>()
+  const [connectError, setConnectError] = useState<string>()
+  const [managerDid, setManagerDid] = useState<string>()
 
   const refresh = useCallback(async () => {
     if (!agent) return
     const identities = new GenericRecordsIdentityStore(agent)
     const communities = new GenericRecordsCommunityStore(agent)
-    const [p, i, m] = await Promise.all([
+    const [p, i, m, grants] = await Promise.all([
       communityDid ? identities.getPersona(communityDid) : Promise.resolve(undefined),
       communities.listInvitations(),
       communities.listMemberships(),
+      communityDid ? communities.listHeldCredentials('vetter-grant', communityDid) : Promise.resolve([]),
     ])
     setPersona(p)
     setInvitations(i.filter((x) => x.status === 'pending'))
     setMemberships(m)
+    // A vetter grant issued to this persona makes this phone the desk.
+    setSeat(p && grants.some((g) => g.subjectDid === p.did) ? 'vetter' : 'applicant')
   }, [agent, communityDid])
 
   useEffect(() => {
@@ -86,7 +108,17 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     if (!agent || !vtaDid) return
     void (async () => {
       const manager = await new GenericRecordsIdentityStore(agent).getManager(vtaDid)
-      if (manager) await vtaAgent.connect(agent, vtaDid).catch(() => undefined)
+      if (manager) {
+        setManagerDid(manager.did)
+        await vtaAgent.connect(agent, vtaDid).catch(() => undefined)
+      } else {
+        // Mint it so the person has something to enrol; connecting comes after.
+        const did = await vtaAgent
+          .client(agent, vtaDid)
+          .ensureManagerIdentity()
+          .catch(() => undefined)
+        if (did) setManagerDid(did)
+      }
     })()
   }, [agent, vtaDid])
 
@@ -191,22 +223,100 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     buttonText: { ...TextTheme.bold, color: '#FFFFFF' },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     error: { ...TextTheme.normal, color: ColorPalette.semantic.error },
+    hero: {
+      backgroundColor: ColorPalette.brand.primary,
+      borderRadius: 16,
+      padding: 20,
+      gap: 10,
+    },
+    heroTitle: { ...TextTheme.headingThree, color: '#FFFFFF' },
+    heroText: { ...TextTheme.normal, color: '#FFFFFF' },
+    badge: {
+      alignSelf: 'flex-start',
+      borderRadius: 999,
+      paddingVertical: 4,
+      paddingHorizontal: 12,
+      backgroundColor: '#FFFFFF',
+    },
+    badgeText: { ...TextTheme.labelSubtitle, color: ColorPalette.brand.primary, fontWeight: '700' },
+    heroButton: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 8,
+      paddingVertical: 12,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 4,
+    },
+    heroButtonText: { ...TextTheme.bold, color: ColorPalette.brand.primary },
+    mono: { fontFamily: 'Courier', fontSize: 12, color: TextTheme.normal.color },
   })
 
   const onConnect = useCallback(async () => {
     if (!agent || !mediatorDid) return
+    setConnectError(undefined)
     try {
-      await vtiAgent.connect(agent, mediatorDid)
-    } catch {
-      // the failure is already on screen, from the controller's state
+      if (vtaDid) {
+        setConnecting({ step: t('MyAgent.StepSigningIn') })
+        await vtaAgent.connect(agent, vtaDid)
+        if (communityDid) {
+          setConnecting({ step: t('MyAgent.StepPersona') })
+          const p = await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+          setConnecting({ step: t('MyAgent.StepConnecting', { did: shortDid(p.did) }) })
+          await vtiAgent.connect(agent, mediatorDid, { persona: p, peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent) })
+        }
+      } else {
+        // A build with no VTA: the community session with a phone-minted DID.
+        setConnecting({ step: t('MyAgent.Resolving') })
+        await vtiAgent.connect(agent, mediatorDid)
+      }
+      await refresh()
+    } catch (error) {
+      setConnectError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setConnecting(undefined)
     }
-  }, [agent, mediatorDid])
+  }, [agent, mediatorDid, vtaDid, communityDid, refresh, t])
+
+  // The agent is "connected" when the phone's own VTA session is up; a build
+  // with no VTA falls back to the community session being up.
+  const agentConnected = vtaDid ? vta.status === 'connected' : state.status === 'connected'
 
   const viaText = (via: VtiMembership['via']) =>
     via === 'invitation' ? t('MyAgent.ViaInvitation') : via === 'vetting' ? t('MyAgent.ViaVetting') : t('MyAgent.ViaApproval')
 
+  // The star of the connected screen: one entry, and the seat named before it
+  // is opened. A vetter grant makes this phone the desk; otherwise it is the
+  // applicant's side — being vetted is what most people come here to do.
+  const vettingHero =
+    vtaDid && communityDid ? (
+      <Pressable
+        style={styles.hero}
+        testID={testIdWithKey('MyAgentVettingRow')}
+        accessibilityRole="button"
+        accessibilityLabel={`${t('Vetting.Title')}. ${seat === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}`}
+        onPress={() => navigation.navigate(Screens.VtiVetting)}
+      >
+        <View style={styles.row}>
+          <Icon name={seat === 'vetter' ? 'account-check' : 'account-search'} size={28} color="#FFFFFF" />
+          <Text style={styles.heroTitle}>{t('Vetting.Title')}</Text>
+        </View>
+        <View style={styles.badge} testID={testIdWithKey('MyAgentVettingSeat')}>
+          <Text style={styles.badgeText}>{seat === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}</Text>
+        </View>
+        <Text style={styles.heroText}>{seat === 'vetter' ? t('Vetting.HeroVetter') : t('Vetting.HeroApplicant')}</Text>
+        <View style={styles.heroButton} testID={testIdWithKey('MyAgentVettingOpen')}>
+          <Text style={styles.heroButtonText}>{seat === 'vetter' ? t('Vetting.OpenDesk') : t('Vetting.GetVetted')}</Text>
+          <Icon name="chevron-right" size={20} color={ColorPalette.brand.primary} />
+        </View>
+      </Pressable>
+    ) : null
+
   const holdings = (
     <>
+      {vettingHero}
+
       {vtaDid && communityDid ? (
         <>
           <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Identity')}</Text>
@@ -294,18 +404,6 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             ))
           )}
         </>
-      ) : null}
-
-      {vtaDid && communityDid ? (
-        <Pressable
-          style={styles.card}
-          testID={testIdWithKey('MyAgentVettingRow')}
-          accessibilityRole="button"
-          onPress={() => navigation.navigate(Screens.VtiVetting)}
-        >
-          <Text style={styles.value}>{t('Vetting.Title')}</Text>
-          <Text style={styles.label}>{t('Vetting.RowHint')}</Text>
-        </Pressable>
       ) : null}
 
       <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Invitations')}</Text>
@@ -398,39 +496,77 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
 
   // S3 — connecting. Each step is named, because "please wait" tells a person
   // nothing about which leg is slow when one is.
-  if (state.status === 'resolving' || state.status === 'authenticating') {
+  const connectingStep =
+    connecting?.step ??
+    (vta.status === 'connecting'
+      ? t('MyAgent.StepSigningIn')
+      : state.status === 'resolving'
+        ? t('MyAgent.Resolving')
+        : state.status === 'authenticating'
+          ? t('MyAgent.Authenticating')
+          : undefined)
+  if (connectingStep) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>
+          <Text style={{ ...TextTheme.headingThree, color: TextTheme.normal.color }}>{t('MyAgent.Title')}</Text>
           <View style={styles.row}>
             <ActivityIndicator color={ColorPalette.brand.primary} />
             <Text style={styles.value} testID={testIdWithKey('MyAgentConnecting')}>
-              {state.status === 'resolving' ? t('MyAgent.Resolving') : t('MyAgent.Authenticating')}
+              {connectingStep}
             </Text>
           </View>
+          {vta.awaitingConsentFor ? (
+            <Text style={styles.label} testID={testIdWithKey('MyAgentAwaitingConsent')}>
+              {t('MyAgent.AwaitingConsent', { task: shortTask(vta.awaitingConsentFor), interpolation: { escapeValue: false } })}
+            </Text>
+          ) : null}
         </View>
       </SafeAreaView>
     )
   }
 
-  // S4 — connected.
-  if (state.status === 'connected') {
+  // S4 — connected: the agent card, then everything it holds.
+  if (agentConnected) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.card} testID={testIdWithKey('MyAgentCard')}>
-            <Text style={styles.label}>{t('MyAgent.Host')}</Text>
-            <Text style={styles.value} testID={testIdWithKey('MyAgentHost')}>
-              {state.host}
-            </Text>
-            <Text style={styles.label}>{t('MyAgent.YourIdentity')}</Text>
-            <Text style={styles.value} testID={testIdWithKey('MyAgentDid')}>
-              {shortDid(state.did)}
-            </Text>
             <View style={styles.row}>
               <Icon name="check-circle" size={18} color={ColorPalette.semantic.success} />
               <Text style={styles.value}>{t('MyAgent.Connected')}</Text>
             </View>
+            <Text style={styles.label}>{t('MyAgent.Host')}</Text>
+            <Text style={styles.value} testID={testIdWithKey('MyAgentHost')}>
+              {state.host ?? vta.vtaDid ?? ''}
+            </Text>
+            {vta.managerDid ? (
+              <>
+                <Text style={styles.label}>{t('MyAgent.ManagerIdentity')}</Text>
+                <Text style={styles.value} testID={testIdWithKey('MyAgentManagerDid')}>
+                  {shortDid(vta.managerDid)}
+                </Text>
+              </>
+            ) : null}
+            <Text style={styles.label}>{t('MyAgent.YourIdentity')}</Text>
+            <Text style={styles.value} testID={testIdWithKey('MyAgentDid')}>
+              {state.did ? shortDid(state.did) : t('MyAgent.NoCommunitySession')}
+            </Text>
+            {state.status === 'connected' && state.peerLeg ? (
+              <Text style={styles.label} testID={testIdWithKey('MyAgentPeerLeg')}>
+                {state.peerLeg === 'tsp' ? t('MyAgent.PeerLegTsp') : t('MyAgent.PeerLegDidComm')}
+              </Text>
+            ) : null}
+            {!state.did && mediatorDid && communityDid ? (
+              <Pressable style={styles.button} testID={testIdWithKey('ConnectCommunityButton')} accessibilityRole="button" onPress={onConnect}>
+                <Text style={styles.buttonText}>{t('MyAgent.ConnectCommunity')}</Text>
+              </Pressable>
+            ) : null}
+            {connectError ? (
+              <Text style={styles.error} testID={testIdWithKey('MyAgentError')}>
+                {connectError}
+              </Text>
+            ) : null}
           </View>
 
           {holdings}
@@ -440,27 +576,35 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   }
 
   // S1 — not connected (and the failed state, which says why and offers a retry).
+  const failure = connectError ?? (vtaDid ? vta.error : state.error)
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={{ ...TextTheme.headingThree, color: TextTheme.normal.color }}>{t('MyAgent.Title')}</Text>
         <Text style={styles.value}>{t('MyAgent.WhatItIs')}</Text>
-        {state.error ? (
+        {vtaDid ? (
+          <View style={styles.card} testID={testIdWithKey('MyAgentEnrolCard')}>
+            <Text style={styles.label}>{t('MyAgent.ManagerIdentity')}</Text>
+            <Text style={styles.mono} testID={testIdWithKey('MyAgentManagerDid')} selectable>
+              {managerDid ?? '…'}
+            </Text>
+            <Text style={styles.label}>{t('MyAgent.EnrolHint')}</Text>
+          </View>
+        ) : null}
+        {failure ? (
           <Text style={styles.error} testID={testIdWithKey('MyAgentError')}>
-            {state.error}
+            {failure}
           </Text>
         ) : null}
-        {holdings}
         <Pressable
           style={styles.button}
           testID={testIdWithKey('ConnectMyAgentButton')}
           accessibilityRole="button"
           onPress={onConnect}
         >
-          <Text style={styles.buttonText}>
-            {state.status === 'failed' ? t('MyAgent.TryAgain') : t('MyAgent.Connect')}
-          </Text>
+          <Text style={styles.buttonText}>{failure ? t('MyAgent.TryAgain') : t('MyAgent.Connect')}</Text>
         </Pressable>
+        <Text style={styles.label}>{t('MyAgent.ConnectExplains')}</Text>
       </ScrollView>
     </SafeAreaView>
   )

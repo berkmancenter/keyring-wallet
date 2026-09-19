@@ -77,7 +77,15 @@ export interface VettingDeskRequest {
   message?: string
   status: 'accepted' | 'session' | 'cardReceived' | 'attested' | 'declined'
   receivedAt: string
-  session?: { documentId: string; challenge: string; domain: string; requiredClaims: string[]; method: VettingMethod; expiresAt: string; matchCode: string }
+  session?: {
+    documentId: string
+    challenge: string
+    domain: string
+    requiredClaims: string[]
+    method: VettingMethod
+    expiresAt: string
+    matchCode: string
+  }
   card?: Record<string, unknown>
   statementId?: string
 }
@@ -90,9 +98,26 @@ export interface VettingApplicationRequest {
   status: 'sent' | 'accepted' | 'refused' | 'session' | 'cardSent' | 'attested' | 'declined'
   refusalCode?: string
   eligibilityOk?: boolean
-  session?: { documentId: string; challenge: string; domain: string; requiredClaims: string[]; method: VettingMethod; expiresAt: string; matchCode: string }
+  session?: {
+    documentId: string
+    challenge: string
+    domain: string
+    requiredClaims: string[]
+    method: VettingMethod
+    expiresAt: string
+    matchCode: string
+  }
   cardDigest?: string
   statementId?: string
+  /** The vetter grant's window, read from the eligibility presentation. */
+  grantValidFrom?: string
+  grantValidUntil?: string
+  /** When the applicant last satisfied itself the grant was live. */
+  grantCheckedAt?: string
+  statementSignedAt?: string
+  /** False when the grant was issued after the statement was signed. */
+  grantedBeforeSigning?: boolean
+  grantStillValid?: boolean
   updatedAt: string
 }
 
@@ -117,6 +142,8 @@ export interface VtiVettingStore {
   saveTicket(ticket: VettingTicket): Promise<void>
   listDesk(): Promise<VettingDeskRequest[]>
   saveDesk(request: VettingDeskRequest): Promise<void>
+  /** Drop every desk request for a community — a desk is working state, not a record. */
+  clearDesk(communityDid: string): Promise<void>
   getApplication(communityDid: string): Promise<VettingApplication | undefined>
   saveApplication(application: VettingApplication): Promise<void>
   forget(communityDid: string): Promise<void>
@@ -149,6 +176,13 @@ export class GenericRecordsVettingStore implements VtiVettingStore {
   }
   saveDesk(r: VettingDeskRequest) {
     return this.put('desk', r.requestId, { ...r })
+  }
+  async clearDesk(communityDid: string) {
+    const rs = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'desk' })
+    for (const r of rs) {
+      if ((r.content as { communityDid?: string }).communityDid === communityDid)
+        await this.agent.genericRecords.delete(r)
+    }
   }
   async getApplication(communityDid: string) {
     return (await this.list<VettingApplication>('application')).find((a) => a.communityDid === communityDid)
@@ -255,7 +289,9 @@ export class VtiVetterDesk {
   }
 
   /** Cut a ticket: one use, fourteen days, both forms. */
-  async issueTicket(options: { uses?: number; days?: number; methods?: VettingMethod[] } = {}): Promise<VettingTicket & { link: string }> {
+  async issueTicket(
+    options: { uses?: number; days?: number; methods?: VettingMethod[] } = {}
+  ): Promise<VettingTicket & { link: string }> {
     const ticket: VettingTicket = {
       ticketId: `vt-${utils.uuid().replace(/-/g, '')}`,
       code: randomCode(),
@@ -308,7 +344,8 @@ export class VtiVetterDesk {
       if (t.usesLeft <= 0 || new Date(t.expiresAt).getTime() < now) return false
       if (t.boundTo && t.boundTo !== applicantDid) return false
       if (presented?.code) return constantTimeEqual(t.code, presented.code)
-      if (presented?.ticketId && presented?.secret) return t.ticketId === presented.ticketId && constantTimeEqual(t.secret, presented.secret)
+      if (presented?.ticketId && presented?.secret)
+        return t.ticketId === presented.ticketId && constantTimeEqual(t.secret, presented.secret)
       return false
     })
     if (!ticket) {
@@ -332,7 +369,9 @@ export class VtiVetterDesk {
     }
     await this.store.saveDesk(request)
     const grant = await this.grant()
-    const eligibilityVp = grant ? await this.eligibilityPresentation(grant.credential, applicantDid, request.requestId) : undefined
+    const eligibilityVp = grant
+      ? await this.eligibilityPresentation(grant.credential, applicantDid, request.requestId)
+      : undefined
     const response = await signedDocument(
       this.agent,
       this.persona,
@@ -352,7 +391,14 @@ export class VtiVetterDesk {
 
   private async refuse(m: DidCommV2PlaintextMessage, to: string, code: string): Promise<void> {
     const body = bodyOf(m)
-    const error = await signedDocument(this.agent, this.persona, to, `${TASK_ERROR}0.3`, { code, message: code }, String(body.threadId ?? body.id ?? ''))
+    const error = await signedDocument(
+      this.agent,
+      this.persona,
+      to,
+      `${TASK_ERROR}0.3`,
+      { code, message: code },
+      String(body.threadId ?? body.id ?? '')
+    )
     await vtiAgent.send(to, `${TASK_ERROR}0.3`, error, { thid: String(m.id ?? '') })
   }
 
@@ -373,7 +419,11 @@ export class VtiVetterDesk {
   }
 
   /** Open the session: a fresh challenge, the community as domain, the required claims. */
-  async openSession(requestId: string, requiredClaims: string[], method: VettingMethod = 'inPerson'): Promise<VettingDeskRequest> {
+  async openSession(
+    requestId: string,
+    requiredClaims: string[],
+    method: VettingMethod = 'inPerson'
+  ): Promise<VettingDeskRequest> {
     const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
     if (!desk) throw new Error('vtiVetting: no such request')
     const challenge = b64url(randomBytes(32))
@@ -407,7 +457,9 @@ export class VtiVetterDesk {
     const body = bodyOf(m)
     const card = (payloadOf(m).card ?? {}) as Record<string, unknown>
     const thread = threadOf(m)
-    const desk = (await this.store.listDesk()).find((r) => r.session?.documentId === thread || r.applicantDid === String(body.issuer))
+    const desk = (await this.store.listDesk()).find(
+      (r) => r.session?.documentId === thread || r.applicantDid === String(body.issuer)
+    )
     if (!desk?.session) return
     const ok =
       card.audience === this.persona.did &&
@@ -426,15 +478,24 @@ export class VtiVetterDesk {
   /** The human check, then the statement — never automatic, signed as the member persona. */
   async attest(
     requestId: string,
-    decision: { documentClasses: string[]; claimsVerified: string[]; livenessConfirmed: boolean; declaredRelationship?: string; validDays?: number }
+    decision: {
+      documentClasses: string[]
+      claimsVerified: string[]
+      livenessConfirmed: boolean
+      declaredRelationship?: string
+      validDays?: number
+    }
   ): Promise<VettingDeskRequest> {
     const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
     if (!desk?.card || !desk.session) throw new Error('vtiVetting: no card to attest')
     if (!decision.livenessConfirmed) throw new Error('vtiVetting: confirm the match code with the person present first')
     const carried = ((desk.card.claims as { type: string }[]) ?? []).map((c) => c.type)
-    for (const c of decision.claimsVerified) if (!carried.includes(c)) throw new Error(`vtiVetting: the card does not carry ${c}`)
-    for (const c of desk.session.requiredClaims) if (!decision.claimsVerified.includes(c)) throw new Error(`vtiVetting: ${c} was not verified`)
-    if (decision.documentClasses.length === 0 && desk.session.method !== 'priorAcquaintance') throw new Error('vtiVetting: name the documentation relied on')
+    for (const c of decision.claimsVerified)
+      if (!carried.includes(c)) throw new Error(`vtiVetting: the card does not carry ${c}`)
+    for (const c of desk.session.requiredClaims)
+      if (!decision.claimsVerified.includes(c)) throw new Error(`vtiVetting: ${c} was not verified`)
+    if (decision.documentClasses.length === 0 && desk.session.method !== 'priorAcquaintance')
+      throw new Error('vtiVetting: name the documentation relied on')
 
     const { proof: _p, ...cardWithoutProof } = desk.card
     void _p
@@ -482,7 +543,10 @@ export class VtiVetterDesk {
   async decline(requestId: string, message?: string): Promise<void> {
     const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
     if (!desk) return
-    const doc = await signedDocument(this.agent, this.persona, desk.applicantDid, VETTING.decline, { requestId, ...(message ? { message } : {}) })
+    const doc = await signedDocument(this.agent, this.persona, desk.applicantDid, VETTING.decline, {
+      requestId,
+      ...(message ? { message } : {}),
+    })
     await vtiAgent.send(desk.applicantDid, VETTING.decline, doc)
     desk.status = 'declined'
     await this.store.saveDesk(desk)
@@ -510,7 +574,12 @@ export class VtiApplicant {
     const vetting = manifest.criteria.map((c) => (c as { vetting?: Record<string, unknown> }).vetting).find(Boolean) as
       | { minStatements?: number; requiredClaims?: string[]; acceptedMethods?: VettingMethod[] }
       | undefined
-    const digest = (manifest.criteria.find((c) => (c as { vetting?: unknown }).vetting) as { requirementsDigest?: string } | undefined)?.requirementsDigest ?? manifest.requirementsDigest
+    const digest =
+      (
+        manifest.criteria.find((c) => (c as { vetting?: unknown }).vetting) as
+          | { requirementsDigest?: string }
+          | undefined
+      )?.requirementsDigest ?? manifest.requirementsDigest
     const application: VettingApplication = existing ?? {
       communityDid: this.persona.communityDid,
       joinDid: this.persona.did,
@@ -556,7 +625,13 @@ export class VtiApplicant {
   }
 
   /** Ask a vetter, with the ticket they handed over. A link for another community is refused before anything is sent. */
-  async requestVetter(input: { link?: string; vetterDid?: string; code?: string; method?: VettingMethod; message?: string }): Promise<VettingApplicationRequest> {
+  async requestVetter(input: {
+    link?: string
+    vetterDid?: string
+    code?: string
+    method?: VettingMethod
+    message?: string
+  }): Promise<VettingApplicationRequest> {
     const application = await this.app()
     let vetterDid = input.vetterDid
     let presentation: TicketPresentation | undefined
@@ -567,7 +642,10 @@ export class VtiApplicant {
       presentation = t.presentation
     } else if (input.code) presentation = { code: { code: input.code } }
     if (!vetterDid || !presentation) throw new Error('vtiVetting: a ticket and a vetter are needed')
-    const ticket = 'qr' in presentation ? { ticketId: presentation.qr.ticketId, secret: presentation.qr.secret } : { code: presentation.code.code }
+    const ticket =
+      'qr' in presentation
+        ? { ticketId: presentation.qr.ticketId, secret: presentation.qr.secret }
+        : { code: presentation.code.code }
     const doc = await signedDocument(this.agent, this.persona, vetterDid, VETTING.request, {
       community: application.communityDid,
       ...(application.requirementsDigest ? { requirementsDigest: application.requirementsDigest } : {}),
@@ -578,7 +656,12 @@ export class VtiApplicant {
       ...(input.message ? { message: input.message } : {}),
     })
     await vtiAgent.send(vetterDid, VETTING.request, doc)
-    const request: VettingApplicationRequest = { vetterDid, requestDocumentId: String(doc.id), status: 'sent', updatedAt: new Date().toISOString() }
+    const request: VettingApplicationRequest = {
+      vetterDid,
+      requestDocumentId: String(doc.id),
+      status: 'sent',
+      updatedAt: new Date().toISOString(),
+    }
     application.requests = [...application.requests.filter((r) => r.vetterDid !== vetterDid), request]
     await this.store.saveApplication(application)
     this.onChange?.()
@@ -587,7 +670,9 @@ export class VtiApplicant {
 
   private async update(vetterDid: string, patch: Partial<VettingApplicationRequest>): Promise<void> {
     const application = await this.app()
-    application.requests = application.requests.map((r) => (r.vetterDid === vetterDid ? { ...r, ...patch, updatedAt: new Date().toISOString() } : r))
+    application.requests = application.requests.map((r) =>
+      r.vetterDid === vetterDid ? { ...r, ...patch, updatedAt: new Date().toISOString() } : r
+    )
     await this.store.saveApplication(application)
     this.onChange?.()
   }
@@ -598,6 +683,8 @@ export class VtiApplicant {
     const vetterDid = String(body.issuer ?? m.from ?? '')
     const vp = p.eligibilityVp as Record<string, unknown> | undefined
     let eligibilityOk = false
+    let grantValidFrom: string | undefined
+    let grantValidUntil: string | undefined
     if (vp) {
       const creds = (vp.verifiableCredential as Record<string, unknown>[]) ?? []
       const grant = creds.find((c) => {
@@ -605,8 +692,17 @@ export class VtiApplicant {
         return e?.role === 'vetter' && e?.communityDid === this.persona.communityDid
       })
       eligibilityOk = !!grant && (await verifyDocumentProof(this.agent, vp, vetterDid))
+      grantValidFrom = typeof grant?.validFrom === 'string' ? grant.validFrom : undefined
+      grantValidUntil = typeof grant?.validUntil === 'string' ? grant.validUntil : undefined
     }
-    await this.update(vetterDid, { status: 'accepted', requestId: String(p.requestId ?? ''), eligibilityOk })
+    await this.update(vetterDid, {
+      status: 'accepted',
+      requestId: String(p.requestId ?? ''),
+      eligibilityOk,
+      grantValidFrom,
+      grantValidUntil,
+      grantCheckedAt: new Date().toISOString(),
+    })
   }
 
   private async refused(m: DidCommV2PlaintextMessage): Promise<void> {
@@ -668,7 +764,14 @@ export class VtiApplicant {
       kmsKeyId: this.persona.kmsKeyIds?.signing,
       verificationMethodId: this.persona.vtaKeyIds.signing,
     })
-    const response = await signedDocument(this.agent, this.persona, vetterDid, `${VETTING.session}${RESPONSE}`, { card: signed }, request.session.documentId)
+    const response = await signedDocument(
+      this.agent,
+      this.persona,
+      vetterDid,
+      `${VETTING.session}${RESPONSE}`,
+      { card: signed },
+      request.session.documentId
+    )
     await vtiAgent.send(vetterDid, `${VETTING.session}${RESPONSE}`, response, { thid: request.session.documentId })
     await this.update(vetterDid, { status: 'cardSent', cardDigest: digestMultibase(signed) })
     return signed
@@ -678,19 +781,28 @@ export class VtiApplicant {
   private async statementDelivered(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
     const p = (body.payload ?? body) as Record<string, unknown>
-    const credential = ((p.credential_response as Record<string, unknown>)?.credential ?? undefined) as Record<string, unknown> | undefined
+    const credential = ((p.credential_response as Record<string, unknown>)?.credential ?? undefined) as
+      | Record<string, unknown>
+      | undefined
     if (!credential) return
     const subject = credential.credentialSubject as { id?: string; endorsement?: Record<string, unknown> } | undefined
     const endorsement = subject?.endorsement
     if (endorsement?.type !== IDENTITY_VETTING_ENDORSEMENT_TYPE) return
     const application = await this.store.getApplication(this.persona.communityDid)
     if (!application || subject?.id !== application.joinDid) return
-    const issuer = typeof credential.issuer === 'string' ? credential.issuer : String((credential.issuer as { id?: string })?.id ?? '')
+    const issuer =
+      typeof credential.issuer === 'string'
+        ? credential.issuer
+        : String((credential.issuer as { id?: string })?.id ?? '')
     const request = application.requests.find((r) => r.vetterDid === issuer)
     if (!request) return
     const expectedCommitment = identityCommitment(
       application.commitmentSalt,
-      (request.session?.requiredClaims ?? []).map((type) => ({ type, value: application.claims[type], provenance: 'selfAsserted' }))
+      (request.session?.requiredClaims ?? []).map((type) => ({
+        type,
+        value: application.claims[type],
+        provenance: 'selfAsserted',
+      }))
     )
     const ok =
       endorsement.community === application.communityDid &&
@@ -698,6 +810,17 @@ export class VtiApplicant {
       (!request.cardDigest || endorsement.cardDigestMultibase === request.cardDigest) &&
       (await verifyDocumentProof(this.agent, credential, issuer))
     if (!ok) return
+    // Two things a community checks that a verifying signature does not: the
+    // signer must have held the vetter grant BEFORE signing (sign first, grant
+    // second and the statement verifies perfectly, then counts for nothing —
+    // the community reports it as issuer-not-vetter), and the statement must
+    // be inside the criterion's maxStatementAge when it is submitted. Both are
+    // recorded here so the checklist can say so rather than the community
+    // discounting it silently.
+    const signedAt = String(credential.validFrom ?? (credential as { issuanceDate?: string }).issuanceDate ?? '')
+    const grantedBeforeSigning =
+      !request.grantValidFrom || !signedAt || Date.parse(request.grantValidFrom) <= Date.parse(signedAt)
+    const grantStillValid = !request.grantValidUntil || Date.parse(request.grantValidUntil) > Date.now()
     await this.communityStore.saveHeldCredential({
       kind: 'vetting-statement',
       communityDid: application.communityDid,
@@ -705,7 +828,13 @@ export class VtiApplicant {
       credential,
       receivedAt: new Date().toISOString(),
     })
-    await this.update(issuer, { status: 'attested', statementId: String(credential.id ?? '') })
+    await this.update(issuer, {
+      status: 'attested',
+      statementId: String(credential.id ?? ''),
+      statementSignedAt: signedAt || undefined,
+      grantedBeforeSigning,
+      grantStillValid,
+    })
   }
 
   private async declined(m: DidCommV2PlaintextMessage): Promise<void> {
@@ -714,9 +843,27 @@ export class VtiApplicant {
   }
 
   /** The advisory checklist: statements held against the published requirement. */
-  async checklist(): Promise<{ held: number; needed: number; meets: boolean; statements: Record<string, unknown>[] }> {
+  async checklist(): Promise<{
+    held: number
+    needed: number
+    meets: boolean
+    statements: Record<string, unknown>[]
+    /** Statements the community will discount — signed before the grant, or past it. */
+    discounted: number
+  }> {
     const application = await this.app()
-    const statements = (await this.communityStore.listHeldCredentials('vetting-statement', application.communityDid)).map((s) => s.credential)
-    return { held: statements.length, needed: application.minStatements, meets: statements.length >= application.minStatements, statements }
+    const statements = (
+      await this.communityStore.listHeldCredentials('vetting-statement', application.communityDid)
+    ).map((s) => s.credential)
+    const discounted = application.requests.filter(
+      (r) => r.status === 'attested' && (r.grantedBeforeSigning === false || r.grantStillValid === false)
+    ).length
+    return {
+      held: statements.length,
+      needed: application.minStatements,
+      meets: statements.length >= application.minStatements,
+      statements,
+      discounted,
+    }
   }
 }

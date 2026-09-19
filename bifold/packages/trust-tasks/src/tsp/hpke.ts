@@ -1,6 +1,13 @@
 /**
- * HPKE-Auth (RFC 9180) + the outer Ed25519 signature, built on the
+ * HPKE (RFC 9180) + the outer Ed25519 signature, built on the
  * SigningKey/KeyAgreement ports (./ports) instead of raw private keys.
+ *
+ * Two modes live here. **Base** (`sealBase`/`openBase`) is what TSP Rev 3
+ * seals with: the sender contributes only an ephemeral key, so the send path
+ * never consults a `KeyAgreement` port at all — the one static-key DH left is
+ * the recipient's decap, `recipientKeyAgreement.agree(enc)`. **Auth**
+ * (`seal`/`open`) is Rev 2's, kept so a Rev 2 message can still be read; it is
+ * no longer used to pack anything.
  *
  * TypeScript port of `tsp-reference/ref-09-tsp-core-ports/hpke-ports.mjs`,
  * itself the pluggable twin of `ref-03-noble-crypto/hpke-noble.mjs` (the
@@ -31,6 +38,7 @@ import type { KeyAgreement, SigningKey } from './ports'
 export const KEM_ID = 0x0020
 export const KDF_ID = 0x0001
 export const AEAD_ID = 0x0003
+export const MODE_BASE = 0x00
 export const MODE_AUTH = 0x02
 
 const NSECRET = 32 // DHKEM(X25519) shared-secret length
@@ -72,11 +80,15 @@ function extractAndExpand(dh: Uint8Array, kemContext: Uint8Array): Uint8Array {
   return labeledExpand(KEM_SUITE_ID, eaePrk, 'shared_secret', kemContext, NSECRET)
 }
 
-// §5.1 KeySchedule for mode_auth (no PSK)
-function keySchedule(sharedSecret: Uint8Array, info: Uint8Array): { key: Uint8Array; baseNonce: Uint8Array } {
+// §5.1 KeySchedule (no PSK), for mode_base or mode_auth
+function keySchedule(
+  mode: number,
+  sharedSecret: Uint8Array,
+  info: Uint8Array
+): { key: Uint8Array; baseNonce: Uint8Array } {
   const pskIdHash = labeledExtract(HPKE_SUITE_ID, EMPTY, 'psk_id_hash', EMPTY)
   const infoHash = labeledExtract(HPKE_SUITE_ID, EMPTY, 'info_hash', info)
-  const ksContext = cat(new Uint8Array([MODE_AUTH]), pskIdHash, infoHash)
+  const ksContext = cat(new Uint8Array([mode]), pskIdHash, infoHash)
   const secret = labeledExtract(HPKE_SUITE_ID, sharedSecret, 'secret', EMPTY)
   return {
     key: labeledExpand(HPKE_SUITE_ID, secret, 'key', ksContext, NK),
@@ -135,7 +147,7 @@ export async function seal(
   ephemeralSk?: Uint8Array
 ): Promise<{ enc: Uint8Array; ciphertext: Uint8Array }> {
   const { sharedSecret, enc } = await authEncap(recipientPk, senderKeyAgreement, ephemeralSk)
-  const { key, baseNonce } = keySchedule(sharedSecret, info)
+  const { key, baseNonce } = keySchedule(MODE_AUTH, sharedSecret, info)
   // Single-shot: seq = 0, so the nonce is base_nonce unmodified (§5.2).
   const ciphertext = chacha20poly1305(key, baseNonce, aad).encrypt(plaintext)
   return { enc, ciphertext }
@@ -151,7 +163,68 @@ export async function open(
   info: Uint8Array
 ): Promise<Uint8Array> {
   const sharedSecret = await authDecap(enc, recipientKeyAgreement, senderPk)
-  const { key, baseNonce } = keySchedule(sharedSecret, info)
+  const { key, baseNonce } = keySchedule(MODE_AUTH, sharedSecret, info)
+  return chacha20poly1305(key, baseNonce, aad).decrypt(ciphertext)
+}
+
+// ---------------------------------------------------------------------------
+// Base mode — TSP Rev 3
+// ---------------------------------------------------------------------------
+
+/**
+ * §7.1.3 DeriveKeyPair for DHKEM(X25519, HKDF-SHA256). Only needed to
+ * reproduce published test vectors, which print their ephemeral as `ikmE`;
+ * production sealing draws the ephemeral from the CSPRNG.
+ */
+export function deriveKeyPair(ikm: Uint8Array): { sk: Uint8Array; pk: Uint8Array } {
+  const dkpPrk = labeledExtract(KEM_SUITE_ID, EMPTY, 'dkp_prk', ikm)
+  const sk = labeledExpand(KEM_SUITE_ID, dkpPrk, 'sk', EMPTY, 32)
+  return { sk, pk: x25519.getPublicKey(sk) }
+}
+
+/**
+ * §4.1 Encap: a single ephemeral DH against the recipient's static key. No
+ * port is consulted — the sender holds nothing static here, which is the
+ * property Rev 3 buys for hardware custody on the send path.
+ * @param ephemeralSk fixed only for test vectors; production callers omit it.
+ */
+export function encapBase(recipientPk: Uint8Array, ephemeralSk?: Uint8Array): { sharedSecret: Uint8Array; enc: Uint8Array } {
+  const skE = ephemeralSk ?? x25519.utils.randomSecretKey()
+  const enc = x25519.getPublicKey(skE)
+  const kemContext = cat(enc, recipientPk)
+  return { sharedSecret: extractAndExpand(dh(skE, recipientPk), kemContext), enc }
+}
+
+/** §4.1 Decap: the recipient's static key against `enc`, through the port. */
+export async function decapBase(enc: Uint8Array, recipientKeyAgreement: KeyAgreement): Promise<Uint8Array> {
+  const shared = await recipientKeyAgreement.agree(enc)
+  const kemContext = cat(enc, recipientKeyAgreement.publicKey)
+  return extractAndExpand(shared, kemContext)
+}
+
+/** HPKE-Base single-shot seal. Raw recipient public key, no sender key. */
+export function sealBase(
+  plaintext: Uint8Array,
+  aad: Uint8Array,
+  recipientPk: Uint8Array,
+  info: Uint8Array,
+  ephemeralSk?: Uint8Array
+): { enc: Uint8Array; ciphertext: Uint8Array } {
+  const { sharedSecret, enc } = encapBase(recipientPk, ephemeralSk)
+  const { key, baseNonce } = keySchedule(MODE_BASE, sharedSecret, info)
+  return { enc, ciphertext: chacha20poly1305(key, baseNonce, aad).encrypt(plaintext) }
+}
+
+/** HPKE-Base single-shot open, port-shaped on the recipient side. */
+export async function openBase(
+  ciphertext: Uint8Array,
+  aad: Uint8Array,
+  enc: Uint8Array,
+  recipientKeyAgreement: KeyAgreement,
+  info: Uint8Array
+): Promise<Uint8Array> {
+  const sharedSecret = await decapBase(enc, recipientKeyAgreement)
+  const { key, baseNonce } = keySchedule(MODE_BASE, sharedSecret, info)
   return chacha20poly1305(key, baseNonce, aad).decrypt(ciphertext)
 }
 
