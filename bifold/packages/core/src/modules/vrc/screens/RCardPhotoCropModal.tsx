@@ -141,6 +141,14 @@ const RCardPhotoCropModal: React.FC<RCardPhotoCropModalProps> = ({
           borderRadius: VIEWPORT_SIZE / 2,
           borderWidth: 2,
           borderColor: '#FFFFFF',
+          // The image element is deliberately larger than this viewport (cover-fit) —
+          // without centering it here, RN's default flexbox layout pins it to the
+          // top-left corner, while all of rcardCropMath's geometry (coverScale,
+          // clampTranslation, cropRectFromTransform) assumes translate (0,0) means
+          // the image's own center coincides with the viewport's center. That
+          // mismatch is what made the crop preview not match the final photo.
+          alignItems: 'center',
+          justifyContent: 'center',
         },
         hint: {
           color: '#CCCCCC',
