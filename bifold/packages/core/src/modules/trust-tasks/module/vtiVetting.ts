@@ -852,9 +852,13 @@ export class VtiApplicant {
     discounted: number
   }> {
     const application = await this.app()
-    const statements = (
-      await this.communityStore.listHeldCredentials('vetting-statement', application.communityDid)
-    ).map((s) => s.credential)
+    // Only statements about THIS application count. A phone that was vetted
+    // before holds statements naming an older join DID, and the mediator can
+    // redeliver one at any time; counting those reads as "2 of 1" and would
+    // let a stale statement stand in for one this application never gathered.
+    const statements = (await this.communityStore.listHeldCredentials('vetting-statement', application.communityDid))
+      .map((s) => s.credential)
+      .filter((c) => (c as { credentialSubject?: { id?: string } }).credentialSubject?.id === application.joinDid)
     const discounted = application.requests.filter(
       (r) => r.status === 'attested' && (r.grantedBeforeSigning === false || r.grantStillValid === false)
     ).length

@@ -431,6 +431,14 @@ class VtiAgentController {
     // Packing to the community resolves its document; warm that resolution
     // patiently so a tunnel's rate limit does not surface as a failed send.
     if (this.agent) await resolveDidDocumentRetrying(this.agent, communityDid)
+    // A community answers the join manifest over REST with no session at all
+    // (`POST {VTCRest}/v1/trust-tasks`), which is how an applicant can read
+    // what is asked of them on a first join — before any channel exists — and
+    // the fast path when one does. A community may switch that off, and a
+    // wallet with a live session can always ask over DIDComm, so a failure
+    // here is not an error: it falls through.
+    const overRest = await this.manifestOverRest(communityDid)
+    if (overRest) return overRest
     const answer = await this.ask(communityDid, MANIFEST, {})
     if (!answer) throw new Error('vtiAgent: the community did not answer')
     const refusal = refusalOf(answer)
@@ -440,6 +448,51 @@ class VtiAgentController {
       communityDid: payload?.communityDid,
       criteria: payload?.criteria ?? [],
       requirementsDigest: payload?.requirementsDigest,
+    }
+  }
+
+  /**
+   * The manifest over the community's REST endpoint, which its DID document
+   * advertises as a `VTCRest` service. The published endpoint omits the API's
+   * version prefix (VTI-15), so `/v1` is added here. Returns undefined for
+   * anything that is not a usable manifest — a community that has turned the
+   * public read off, a network that is not there, an error document — so the
+   * caller can fall back to asking over DIDComm.
+   */
+  private async manifestOverRest(communityDid: string): Promise<VtiManifest | undefined> {
+    const agent = this.agent
+    if (!agent) return undefined
+    try {
+      const doc = await agent.dids.resolveDidDocument(communityDid)
+      const service = doc.service?.find((s) => s.type === 'VTCRest')
+      const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
+      if (!base) return undefined
+      const now = new Date().toISOString()
+      const response = await fetch(`${base.replace(/\/$/, '')}/v1/trust-tasks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: `urn:uuid:${utils.uuid()}`,
+          type: MANIFEST,
+          threadId: `urn:uuid:${utils.uuid()}`,
+          payload: {},
+          issuer: this.state.did ?? communityDid,
+          recipient: communityDid,
+          issuedAt: now,
+        }),
+      })
+      if (!response.ok) return undefined
+      const body = (await response.json()) as { type?: string; payload?: VtiManifest } | undefined
+      if (String(body?.type ?? '').startsWith(TASK_ERROR)) return undefined
+      const payload = body?.payload
+      if (!payload?.criteria) return undefined
+      return {
+        communityDid: payload.communityDid,
+        criteria: payload.criteria ?? [],
+        requirementsDigest: payload.requirementsDigest,
+      }
+    } catch {
+      return undefined
     }
   }
 
