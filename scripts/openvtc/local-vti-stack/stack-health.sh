@@ -69,6 +69,37 @@ for h in alice community bob vtc dids mediator; do
   esac
 done
 
+log "every agent's DIDComm ear"
+# The same outage that deafened the VTC took the community and bob VTAs with
+# it, and nothing said so: each kept serving REST while its websocket stayed
+# down for eleven hours. A persona mint then fails with "the VTA did not
+# answer", which reads as the VTA being gone when it is listening perfectly.
+for n in alice community bob; do
+  last=$(grep -nE "messaging connected to mediator|WebSocket connection dropped|Error creating websocket" \
+    "$STACK_DIR/logs/$n.log" 2>/dev/null | tail -1)
+  case "$last" in
+    *"connected to mediator"*) ok "$n's last websocket event was a connect" ;;
+    "") bad "no websocket events in $n's log" ;;
+    *)
+      if [ "$HEAL" = 1 ]; then
+        bad "$n's last websocket event was a DROP — restarting it"
+        case "$n" in alice) port=8110 ;; community) port=8111 ;; bob) port=8112 ;; esac
+        for pid in $(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null); do
+          kill "$pid"
+          for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+        done
+        nohup "$VTI_SRC/target/debug/vta" --config "$STACK_DIR/$n/config.toml" \
+          > "$STACK_DIR/logs/$n.log" 2>&1 &
+        sleep 20
+        grep -q "messaging connected to mediator" "$STACK_DIR/logs/$n.log" 2>/dev/null \
+          && ok "$n reconnected" || bad "$n did not reconnect"
+      else
+        bad "$n's last websocket event was a DROP — it is deaf on DIDComm (--heal restarts it)"
+      fi
+      ;;
+  esac
+done
+
 log "the community's DIDComm ear"
 # The one that cost the most: the VTC serves REST happily while its mediator
 # websocket is gone, so a manifest fetch succeeds and every Trust Task asked

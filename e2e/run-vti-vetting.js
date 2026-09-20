@@ -171,6 +171,14 @@ try {
   if (create) { await byTestId(applicant, "VettingCreateIdentityButton").click(); console.log(`[e2e] ${applicant.e2ePlatform}: creating an identity`); }
   await waitForTestId(applicant, "VettingLegalNameInput", 240000);
   await byTestId(applicant, "VettingLegalNameInput").setValue(LEGAL_NAME);
+  // Dismiss the keyboard before looking for the button below it. On iOS the
+  // keyboard covers the lower half of the screen, so "Start my application"
+  // is never displayed and the scroll gives up after its swipes — which reads
+  // as a missing button rather than a hidden one. `hideKeyboard` is avoided
+  // deliberately: on Android it sends ESC, which cancels the PIN modal
+  // elsewhere in this suite. Tapping a heading is inert on both.
+  await byTestId(applicant, "VettingSeatBanner").click().catch(() => undefined);
+  await sleep(800);
   // The button stays disabled until the persona's mediator session is up.
   const start = await scrollToTestId(applicant, "VettingStartButton", 4);
   for (let i = 0; i < 30 && !(await start.isEnabled().catch(() => false)); i++) await sleep(2000);
