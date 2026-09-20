@@ -349,9 +349,13 @@ export class VtiMediatorSession {
     return token
   }
 
-  async start(): Promise<void> {
-    // The login is two round trips through a tunnel; a transient answer from
-    // the tunnel itself is not a refusal, so try a few times before giving up.
+  /**
+   * Mint an access token unless one is already held.
+   *
+   * The login is two round trips through a tunnel; a transient answer from the
+   * tunnel itself is not a refusal, so try a few times before giving up.
+   */
+  private async ensureAccessToken(): Promise<void> {
     let lastError: unknown
     for (let attempt = 0; attempt < 3 && !this.accessToken; attempt++) {
       try {
@@ -363,6 +367,41 @@ export class VtiMediatorSession {
       }
     }
     if (!this.accessToken) throw lastError instanceof Error ? lastError : new Error(String(lastError))
+  }
+
+  async start(): Promise<void> {
+    // A token the mediator will no longer honour is the one failure this
+    // transport could not talk its way out of. `accessToken` is cached and
+    // every reopen path goes through here, so once the mediator stopped
+    // accepting it — the persona it was minted for was dropped, the mediator
+    // restarted and forgot the session, or it simply expired — every
+    // subsequent attempt presented the same dead bearer and failed
+    // identically, for ever. Only recreating the object cleared it, which in
+    // practice meant relaunching the app.
+    //
+    // Measured on 2026-09-20: forgetting the community mid-session left the
+    // wallet reporting "socket failed to open" for the rest of the run, with
+    // the vetter's desk empty because nothing was ever sent. A fresh launch
+    // fixed it.
+    //
+    // So a handshake refused while using a CACHED token is treated as a
+    // verdict on the token: drop it, mint a new one, try once more. A
+    // freshly-minted token that is refused is a real failure and is reported.
+    const hadCachedToken = this.accessToken !== undefined
+    await this.ensureAccessToken()
+    try {
+      await this.openSocket()
+    } catch (error) {
+      if (!hadCachedToken) throw error
+      this.accessToken = undefined
+      await this.ensureAccessToken()
+      await this.openSocket()
+    }
+    await this.startLiveDelivery()
+  }
+
+  /** Open the websocket and attach the frame handler. */
+  private async openSocket(): Promise<void> {
     const socket = new WebSocket(this.mediator.wsEndpoint, [`bearer.${this.accessToken}`, WS_APP_SUBPROTOCOL])
     await new Promise<void>((resolve, reject) => {
       const onOpen = () => {
@@ -396,7 +435,10 @@ export class VtiMediatorSession {
       void this.handleFrame(typeof event.data === 'string' ? event.data : String(event.data))
     }
     this.socket = socket
+  }
 
+  /** Ask for live delivery, drain what was queued, and start the backstop poll. */
+  private async startLiveDelivery(): Promise<void> {
     // Pickup 3.0 live mode: without this the mediator queues and waits to be polled.
     await this.send({
       id: uuid(),
