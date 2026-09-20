@@ -191,12 +191,17 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       setPersona(p)
       if (!p?.kmsKeyIds?.keyAgreement) return
       try {
-        if (vtiAgent.getState().did !== p.did) {
-          await vtiAgent.connect(agent, mediatorDid, {
-            persona: p,
-            peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
-          })
-        }
+        // Always ask: `connect` returns immediately when its socket is still
+        // open for this persona, and reconnects when it is not. Guarding on
+        // the DID alone trusted state that outlives the socket — after the
+        // mediator dropped the stream, the screen saw a matching DID, skipped
+        // the connect, and reported itself connected with nothing underneath.
+        // Anything sent to the persona then went nowhere: not delivered, not
+        // even queued, because the mediator had deregistered it.
+        await vtiAgent.connect(agent, mediatorDid, {
+          persona: p,
+          peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+        })
         setConnected(true)
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
