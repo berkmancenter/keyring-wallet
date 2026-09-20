@@ -1,5 +1,5 @@
 {
-  "updated": "2026-08-18",
+  "updated": "2026-09-20",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "187ad9cd",
-      "commitDate": "2026-08-17",
-      "pinnedOn": "2026-08-17",
-      "why": "Cypress release tag (== main 187ad9cd): the official cut, 56 days / 15 repos per the release report",
+      "sha": "c9bc3a69",
+      "commitDate": "2026-09-20",
+      "pinnedOn": "2026-09-20",
+      "why": "Reconcile the pin with what is actually running: the pin sat at Cypress 187ad9cd (vta-service 0.17.0) while the lab, the VTA Farm and upstream main all run vta-service 0.34.1 / vtc-service 0.11.58. Anyone reading external/ as ground truth was reading 17 minor versions below the software under test. Carries #1591 (vtc/join-requests/withdraw/0.1, our KR-03) and #1588 (takes the SDK re-establish fix).",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
