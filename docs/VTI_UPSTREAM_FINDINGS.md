@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.18 — 2026-09-20.** A living document: every finding here was measured
+**Version 1.19 — 2026-09-20.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -52,9 +52,9 @@ from a report or an issue always lands on the right entry.
 | [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | Open | B |
 | [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open | B |
 | [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 | B, re-measured on **C**: gone |
-| [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | Open — fixture limit raised | B |
-| [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | Open — Keyring polls | B |
-| [VTI-31](#vti-31--a-dropped-terminal-error-is-never-acknowledged-so-it-never-leaves-the-senders-queue) | A dropped terminal error is never acknowledged, so it never leaves the sender's queue | **High** | New — found while validating tdk-rs #829 | C |
+| [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | **Fixed upstream** — `affinidi-tdk-rs` #828, now on our stack; the fixture's raised limit has **not** yet been dropped and re-measured | B |
+| [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | **Fixed upstream** — `affinidi-tdk-rs` #830 (their KR-30); not yet on our stack, and Keyring polls | B |
+| [VTI-31](#vti-31--a-dropped-terminal-error-is-never-acknowledged-so-it-never-leaves-the-senders-queue) | A dropped terminal error is never acknowledged, so it never leaves the sender's queue | **High** | **Fixed upstream** — `affinidi-tdk-rs` #834, with our proposed cause corrected; not yet on our stack | C |
 | [VTI-32](#vti-32--an-invitation-is-too-large-for-the-channel-it-is-meant-to-travel-on) | An invitation is too large for the channel it is meant to travel on | **High** | New | C |
 
 ## Stack under test
@@ -71,6 +71,7 @@ particular none are the images a VTA Farm currently offers.
 | **A** | 2026-09-15 → 09-17 | `53a7cde4` — main tip, 2 commits past `vta-service-v0.28.0`; vta 0.28.0 · vtc 0.11.58 · sdk 0.38.2 · pnm 0.16.5 · cnm 0.15.2 | `dff68eb` — mediator 0.25.0 | `cb8a6f4` — daemon 0.8.3 |
 | **B** | 2026-09-18 | `460e0ebb` — tag `VTI-Eucalyptus-RC-0`; vta 0.33.0 · vtc 0.11.58 · sdk 0.42.1 · pnm 0.17.2 · cnm 0.16.3 | `144a3af0` — mediator 0.26.2 | `f579e42` — daemon 0.8.3 |
 | **C** | 2026-09-19 | `6bd52cab` — main, 20 commits past the tag; vta 0.34.1 · vtc 0.11.58 · sdk 0.43 · pnm 0.17.4 · cnm 0.16.3 | `c13a6352` — mediator 0.26.2 | `35244b7` — daemon 0.8.3 |
+| **D** | 2026-09-20 | unchanged from C — vta 0.34.1 · vtc 0.11.58 | `b544da04` — the **#829 branch tip**, mediator 0.28.0; this is *not* upstream main, which has since merged #829 and thirteen more (#830–#842) and stands at mediator 0.28.9 | `35244b7` — daemon 0.8.3 |
 
 Era C is upstream's own planning basis. A finding measured on A or B has **not**
 been re-measured on C unless its entry says so — the September refresh may
@@ -877,6 +878,25 @@ planned for VTI-29 needs to cover delivered-but-unacknowledged messages, not
 only undeliverable ones. This is worth deciding before #829 lands, because
 #829 is what turns a stale queue into an outage for the sender.
 
+**Fixed upstream, and the suggested shape above was wrong.** `affinidi-tdk-rs`
+#834 answers this directly and corrects the diagnosis: the acknowledgement
+contract we asked for **already existed** on both receive paths — a terminal
+drop by the application does release the message. The 223-message residue was
+not a missing ack. It was **acks that were issued and then thrown away**:
+`ack_via_source` had two failure arms, a source transport that had gone and a
+failed `transport.ack()`, and both discarded the ack with only a `debug!` or a
+`warn!` — invisible in a default deployment. Undeliverable acks are now parked
+and retried on their own clock, same-transport-only (a transport id names a
+wire to a *particular* mediator, and an ack is a delete of a message id at that
+mediator), bounded at 4,096 entries and five minutes, with every abandonment
+counted rather than silent.
+
+Worth recording plainly: we proposed a protocol change and the real defect was
+a dropped error path. The finding was right that the queue filled and right
+about why it mattered once #829 gated the direct path — upstream says so —
+and wrong about the mechanism. **Not yet verified on our stack**, which is era
+D and predates #834.
+
 ### VTI-32 — An invitation is too large for the channel it is meant to travel on
 
 *Measured on era **C**.*
@@ -938,6 +958,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.19 | 2026-09-20 | **Era D** — the mediator advanced to the #829 branch tip (0.28.0) for the two-device ceremony, which upstream main has since left behind at 0.28.9. Three statuses corrected against merged work: **VTI-29** fixed by #828 (on our stack; the fixture's raised limit not yet dropped and re-measured), **VTI-30** by #830, **VTI-31** by #834 — which also **corrects VTI-31's proposed cause**: the ack contract we asked for already existed, and the real defect was `ack_via_source` discarding acks it had issued. None of #830–#842 has been measured here yet. |
 | 1.18 | 2026-09-20 | **VTI-03 resolved upstream** — `vti` #1591 adds `vtc/join-requests/withdraw/0.1`, so an applicant can close their own deferred request; specified in `dtgwg-trust-tasks-tf` #518 and shipped in `trust-tasks-rs` 0.21.5. The client half is ours and unwritten, and is recorded on the finding. Also notes that `tdk-rs` #831 closed VTI-05's documentation half, and that `tdk-rs` #838 — a re-establishing TSP send losing its payload to the peer's own invite, about half the time under load — lands on a path our lab does not yet exercise (`tsp = false` on every agent) but will the moment TSP Rev 3 is switched on. |
 | 1.17 | 2026-09-20 | VTI-32: an invitation is 6,331 bytes and a QR code carries at most 2,953, so the credential cannot travel by the only channel it has. Found when an iOS deep link truncated it and the client reported a JSON parse error rather than a length one. |
 | 1.16 | 2026-09-19 | **VTI-31**, found while validating tdk-rs #829 before it lands: a terminal error the spine correctly drops is never acknowledged, so it stays in the sender's queue — 223 messages, 166 of them already delivered — and once #829 gates the direct path the sender is refused everything. |
