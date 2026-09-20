@@ -167,6 +167,40 @@ if marker is None:
 lines.insert(marker + 1, 'cors_allow_origin = "*"')
 open(path, "w").write("\n".join(lines) + "\n")
 PYEOF
+# Take THIS build's stored-function library, every time.
+#
+# `mediator-setup` writes an `atm-functions.lua` at the version that generated
+# it, and nothing refreshes it when the binary moves. The mediator detects the
+# mismatch and warns, but the warning is easy to miss and the failure it
+# describes is silent: a library predating the per-relationship queue
+# accounting never writes PEER_Q, so `peer_queue_count` reads 0 and
+# `limits.queue.peer` NEVER FIRES. The gate is configured, reported as present,
+# and inert. Measured 2026-09-20 — the lab had been running `degraded` on a
+# 0.26-era library under a 0.28.9 binary, so every per-peer queue observation
+# made here before that date was taken with the gate switched off.
+cp "$TDK_SRC/crates/messaging/affinidi-messaging-mediator/conf/atm-functions.lua" \
+  "$STACK_DIR/mediator/conf/atm-functions.lua" 2>/dev/null \
+  && echo "  stored-function library refreshed from this build"
+
+# Keep the queue limits at UPSTREAM DEFAULTS rather than whatever the
+# generating version happened to ship. `queued_send_messages_per_peer` did not
+# exist before #828 (0.27.0), so a config generated earlier omits it entirely;
+# the soft/hard pair was 200/1000 where upstream now ships 2000/10000. A lab
+# that quietly runs tighter limits than a real deployment produces findings
+# that do not transfer — and the VTA Farm runs stock.
+python3 - "$STACK_DIR/mediator/conf/mediator.toml" <<'PYEOF'
+import re, sys
+path = sys.argv[1]
+t = open(path).read()
+for key, val in (("queued_send_messages_soft", "2000"),
+                 ("queued_send_messages_hard", "10000")):
+    t = re.sub(rf'^{key} = "\d+"$', f'{key} = "{val}"', t, count=1, flags=re.M)
+if "queued_send_messages_per_peer" not in t:
+    t = t.replace('queued_send_messages_soft = "2000"',
+                  'queued_send_messages_per_peer = "50"\n\nqueued_send_messages_soft = "2000"', 1)
+open(path, "w").write(t)
+PYEOF
+
 # `functions_file` in that config is relative, so the mediator only finds
 # ./conf/atm-functions.lua when it runs from its own directory.
 (cd "$STACK_DIR/mediator" && nohup "$MEDIATOR_BIN" -c "$STACK_DIR/mediator/conf/mediator.toml" > "$STACK_DIR/logs/mediator.log" 2>&1 &)

@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.22 — 2026-09-20.** A living document: every finding here was measured
+**Version 1.23 — 2026-09-20.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -52,7 +52,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | Open | B |
 | [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open | B |
 | [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 | B, re-measured on **C**: gone |
-| [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | **Fixed upstream** — `affinidi-tdk-rs` #828, now on our stack; the fixture's raised limit has **not** yet been dropped and re-measured | B |
+| [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | **Fixed upstream** — `affinidi-tdk-rs` #828, and re-measured on era E at upstream's stock limits with the per-relationship gate actually live: the ceremony passes | B |
 | [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | **Fixed upstream** — `affinidi-tdk-rs` #830 (their KR-30); not yet on our stack, and Keyring polls | B |
 | [VTI-31](#vti-31--a-dropped-terminal-error-is-never-acknowledged-so-it-never-leaves-the-senders-queue) | A dropped terminal error is never acknowledged, so it never leaves the sender's queue | **High** | **Fixed upstream** — `affinidi-tdk-rs` #834, with our proposed cause corrected; not yet on our stack | C |
 | [VTI-32](#vti-32--an-invitation-is-too-large-for-the-channel-it-is-meant-to-travel-on) | An invitation is too large for the channel it is meant to travel on | **High** | New | C |
@@ -92,6 +92,25 @@ ran with the raised limit. Era C has it back at the default — and VTI-29
 promptly reproduced, so the community's stuck send queue was emptied by hand
 in Redis to carry on. Both are workarounds for the same finding, neither is a
 fix, and upstream is right that raising the limit is not one.
+
+**Era E retires both, and finds a third nobody had declared.** The lab now runs
+upstream's shipped values — `queued_send_messages_per_peer = 50`,
+`queued_send_messages_soft = 2000`, `hard = 10000` — and the ceremony passes at
+them, so there is no longer a queue-limit deviation to declare. Note the
+direction: the era-B "raised" limit of 2000 *is* today's default, and what the
+lab had been running since (200/1000) was **below** stock, not above it.
+
+The third deviation was silent and mattered more than either. The mediator's
+stored-function library is written by `mediator-setup` at the version that
+generated the configuration, and nothing refreshed it when the binary moved —
+so a 0.28.9 mediator was running a 0.26-era `atm-functions.lua`. The mediator
+says what that costs: *"a library predating the per-relationship queue
+accounting never writes PEER_Q, so `peer_queue_count` reads 0 and
+`limits.queue.peer` never fires"*. The gate was configured, reported present,
+and **inert**, and the mediator ran `degraded` throughout. Every per-peer queue
+observation made in this lab before 2026-09-20 was therefore taken with the
+gate switched off. `up.sh` now copies the library from the build on every
+start.
 
 ## VTI-01
 
@@ -960,6 +979,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.23 | 2026-09-20 | **The lab is stock, and a silent deviation is found.** Queue limits set to upstream's shipped values and the ceremony re-run green at them, so the queue-limit deviation is retired — and the direction is corrected: what the lab had been running (200/1000) was *below* stock, not the "raised" limit this document claimed. The silent one: a 0.28.9 mediator was running a 0.26-era `atm-functions.lua`, which never writes `PEER_Q`, so `limits.queue.peer` was configured, reported present and **inert**, with the mediator `degraded`. Every per-peer queue observation made here before today was taken with the gate off. |
 | 1.22 | 2026-09-20 | **Era F corrected within the hour.** 1.21 called the Farm "far behind us" on the strength of its mediator alone. Measuring the rest: the Farm's **VTA is 0.34.1 and its VTC is 0.11.58 — both identical to the lab**, and the VTA serves the same 78 OpenAPI paths. Only the mediator is behind. The correction matters because it inverts the conclusion: the protocol surface our client actually talks to is at parity, so a Farm run tests the same contract on infrastructure we did not build. What the old mediator changes is delivery, not protocol — VTI-29, VTI-30 and VTI-31 can still appear there and must not be read as regressions. |
 | 1.21 | 2026-09-20 | **Era F — the VTA Farm, and it is far behind us.** The Farm mediator our VTA's DID document points at (`mediator.ic3.dev`) is **older than 0.26.5**: `DELETE /mediator/v1/purge/{folder}` answers `404` there and `401` on our own 0.28.9, and its `/readyz` omits the `status`/`version`/`uptime_seconds` fields ours reports. Probed rather than asked, and validated against a mediator of known version so the method means something. Consequence: **VTI-29, VTI-30 and VTI-31 all still reproduce on the Farm**, since their fixes are #828 (0.27.0), #830 (0.28.1) and #834 (0.28.x). A Farm result is therefore not comparable with a lab result today, and a finding measured there says nothing about upstream's current main. |
 | 1.20 | 2026-09-20 | **Era E** — the two-device ceremony passes on mediator **0.28.9** (upstream main, #829–#842). No regression against era D: three failures in between were our own e2e reset defect, which survived a revert to 0.28.0 and was wrongly suspected of being the upgrade until the revert failed too. Recorded because it is the exact shape of a fixture artefact reported as an upstream finding. Also: `affinidi-messaging-sdk` **0.26.12** carries #838, so the TSP Rev 3 release gate is open; our stack pins 0.26.10. |
