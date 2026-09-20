@@ -2206,6 +2206,7 @@ __metadata:
     react-native-orientation-locker: "*"
     react-native-permissions: ~5.4.1
     react-native-qrcode-svg: ~6.2.0
+    react-native-reanimated: ~3.19.5
     react-native-safe-area-context: ~5.6.2
     react-native-screenguard: "*"
     react-native-screens: ~4.16.0
