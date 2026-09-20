@@ -55,6 +55,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | Open — fixture limit raised | B |
 | [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | Open — Keyring polls | B |
 | [VTI-31](#vti-31--a-dropped-terminal-error-is-never-acknowledged-so-it-never-leaves-the-senders-queue) | A dropped terminal error is never acknowledged, so it never leaves the sender's queue | **High** | New — found while validating tdk-rs #829 | C |
+| [VTI-32](#vti-32--an-invitation-is-too-large-for-the-channel-it-is-meant-to-travel-on) | An invitation is too large for the channel it is meant to travel on | **High** | New | C |
 
 ## Stack under test
 
@@ -859,6 +860,46 @@ planned for VTI-29 needs to cover delivered-but-unacknowledged messages, not
 only undeliverable ones. This is worth deciding before #829 lands, because
 #829 is what turns a stale queue into an outage for the sender.
 
+### VTI-32 — An invitation is too large for the channel it is meant to travel on
+
+*Measured on era **C**.*
+
+An `InvitationCredential` issued for one persona, wrapped as the link a console
+would show, is **6,331 bytes**:
+
+```
+keyring://vti/invitation?c=<base64url of the whole credential>
+```
+
+A QR code cannot carry it. QR's byte mode tops out at **2,953 bytes** (version
+40, error-correction level L, the most generous configuration there is), so
+this payload is over the maximum by **3,378 bytes** — more than twice what
+fits. No choice of version or error-correction level changes that; the
+credential would have to shrink by more than half. Alphanumeric mode is not a
+way out either: base64url uses `-` and `_`, which are outside QR's
+alphanumeric character set, so the encoder falls to byte mode regardless.
+
+This matters because scanning is the delivery channel. [VTI-21](#vti-21)
+already records that an invitation has no delivery channel of its own — it is
+handed over out of band — and out of band in a wallet means a QR. So the one
+mechanism available is the one the payload cannot use.
+
+It shows up on iOS first for an unrelated reason: `xcrun simctl openurl`
+truncates a URL this long, and the client then reports `invitation link
+rejected: JSON Parse error: Unexpected end of input`, which reads as a
+malformed credential rather than a truncated one. Android's `am start`
+tolerates the length, which is why the same rung passes there — a platform
+difference masking a protocol-level limit.
+
+**Suggested shape.** Invite by reference rather than by value: the invitation
+carries a short identifier and the client fetches the credential from the
+community over a channel that has no size limit, exactly as it already fetches
+a manifest. That keeps the QR small whatever the credential grows to. Failing
+that, the credential needs to lose more than half its bytes, which seems the
+harder road.
+
+---
+
 ## Open questions and requests
 
 Not defects — things we would like answered or changed, kept here so one link
@@ -880,6 +921,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.17 | 2026-09-20 | VTI-32: an invitation is 6,331 bytes and a QR code carries at most 2,953, so the credential cannot travel by the only channel it has. Found when an iOS deep link truncated it and the client reported a JSON parse error rather than a length one. |
 | 1.16 | 2026-09-19 | **VTI-31**, found while validating tdk-rs #829 before it lands: a terminal error the spine correctly drops is never acknowledged, so it stays in the sender's queue — 223 messages, 166 of them already delivered — and once #829 gates the direct path the sender is refused everything. |
 | 1.15 | 2026-09-19 | VTI-29's fix merged upstream (tdk-rs #828), with #829 extending the gates to direct delivery and the TSP bridge, which had none. |
 | 1.14 | 2026-09-19 | VTI-29 reproduced on era C at the default limit: 236 messages for 134 recipients blocked the community from answering a live applicant. |
