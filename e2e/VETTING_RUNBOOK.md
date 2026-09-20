@@ -123,7 +123,8 @@ elsewhere on the page.
 | "element not found" after a tap | the tap never fired — use the adb path |
 | a control "not displayed after N swipes" | the keyboard is covering it; dismiss it by tapping a heading, never `hideKeyboard` (it sends ESC on Android and cancels the PIN modal) |
 | a card present with empty children and no testIDs | it is rendered **below the fold**; scroll to it before judging |
-| the ticket field empty after `setValue` | a 324-character value silently does not take on iOS; set it, read it back, retry |
+| the request button dead with the ticket field visibly full | `setValue` writes native text without raising `onChangeText`, so the component still thinks it is empty — type into a focused field and verify the BUTTON went enabled, never the field's text |
+| a button `enabled="true"` but `visible="false"` | the keyboard pushed it off screen; a coordinate tap then lands somewhere else and reports success |
 | the app ignoring a credential the community sent | it arrived during `connect`, before the screen's listener attached |
 | a screen "connected" but receiving nothing | stale in-process state outliving the socket; always call `vtiAgent.connect`, it returns immediately when the socket is open |
 
