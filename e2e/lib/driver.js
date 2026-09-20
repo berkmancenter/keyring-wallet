@@ -342,18 +342,83 @@ export async function tapTestId(driver, key, timeout = 30000) {
  * log in the handler itself), while a coordinate gesture worked immediately.
  * Android only — iOS's XCUITest click doesn't have this failure mode.
  */
+/**
+ * Tap an element you already hold, at the centre of its bounds, using the
+ * same gesture `tapTestIdByCoordinates` uses. For elements found by a scoped
+ * lookup — a control inside the CURRENT desk request, say — where re-finding
+ * by testID would match a stale one somewhere else on the page.
+ */
+/**
+ * Tap a point on Android through `adb shell input tap`.
+ *
+ * Neither a W3C pointer sequence nor UiAutomator2's own `mobile: clickGesture`
+ * reliably reaches a React Native `Pressable`: measured on the vetter's
+ * publish-profile and new-ticket controls, where both report success, the
+ * element reports clickable and enabled, and `onPress` never runs — four
+ * verified retries in a row failed. `adb shell input tap` on the identical
+ * centre point fired the handler every time. So that is what Android taps use,
+ * with the WebDriver paths kept as fallbacks.
+ */
+function adbTap(driver, x, y) {
+  const udid = driver.capabilities?.deviceUDID || driver.capabilities?.udid || process.env.ANDROID_UDID;
+  const target = udid ? ["-s", udid] : [];
+  execSync(["adb", ...target, "shell", "input", "tap", String(x), String(y)].join(" "), { stdio: "ignore" });
+}
+
+export async function tapElement(driver, el) {
+  await el.waitForDisplayed({ timeout: 30000 });
+  const { x, y } = await el.getLocation();
+  const { width, height } = await el.getSize();
+  const cx = Math.floor(x + width / 2);
+  const cy = Math.floor(y + height / 2);
+  if (driver.e2ePlatform === "android") {
+    try {
+      adbTap(driver, cx, cy);
+      return el;
+    } catch {
+      try {
+        await driver.execute("mobile: clickGesture", { x: cx, y: cy });
+        return el;
+      } catch {
+        /* fall through to the pointer sequence */
+      }
+    }
+  }
+  await driver.action("pointer").move({ x: cx, y: cy }).down().pause(80).up().perform();
+  return el;
+}
+
 export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
   const { x, y } = await el.getLocation();
   const { width, height } = await el.getSize();
-  await driver
-    .action("pointer")
-    .move({ x: Math.floor(x + width / 2), y: Math.floor(y + height / 2) })
-    .down()
-    .pause(80)
-    .up()
-    .perform();
+  const cx = Math.floor(x + width / 2);
+  const cy = Math.floor(y + height / 2);
+  // A W3C pointer press is not always enough for a React Native `Pressable`:
+  // measured on the vetter's "publish my profile" control, which reports
+  // clickable and enabled, accepts the pointer sequence without error, and
+  // never fires `onPress` — while `adb shell input tap` on the same centre
+  // point fires it every time. UiAutomator2's own gesture is what `input tap`
+  // does, so prefer it on Android and keep the pointer sequence as the
+  // fallback for iOS and for anything the gesture refuses.
+  let tapped = false;
+  if (driver.e2ePlatform === "android") {
+    try {
+      adbTap(driver, cx, cy);
+      tapped = true;
+    } catch {
+      try {
+        await driver.execute("mobile: clickGesture", { x: cx, y: cy });
+        tapped = true;
+      } catch {
+        tapped = false;
+      }
+    }
+  }
+  if (!tapped) {
+    await driver.action("pointer").move({ x: cx, y: cy }).down().pause(80).up().perform();
+  }
   console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (by coordinates)`);
   return el;
 }
@@ -391,7 +456,13 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const el = byTestId(driver, key);
     if (await el.isExisting()) {
-      await el.click().catch(() => {});
+      // Prefer the same gesture `tapElement` uses: a plain `.click()` on a
+      // React Native Pressable can return success without the handler ever
+      // running — measured on the vetter's publish and new-ticket controls,
+      // where `adb shell input tap` on the identical point fired every time.
+      await tapElement(driver, el).catch(async () => {
+        await el.click().catch(() => {});
+      });
     }
     await sleep(settleMs);
     if (await verify()) {

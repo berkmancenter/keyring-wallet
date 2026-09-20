@@ -14,7 +14,7 @@
  *
  * Usage: E2E_KEEP_STATE=1 node run-vti-vetting.js   (PLATFORMS=android,ios)
  */
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import { openDeveloperScreen, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
@@ -109,7 +109,14 @@ try {
   // community's listing, so this is part of being a vetter, not a nicety.
   const publish = await scrollToTestId(vetter, "VettingPublishProfileButton", 6).catch(() => undefined);
   if (publish) {
-    await publish.click();
+    // `.click()` on this one lands on the accessible Button wrapper and never
+    // reaches the Pressable's onPress — measured: the element reports
+    // clickable and enabled, the tap returns success, and the handler does not
+    // run. The same thing bites the Lockout control, which is why
+    // `tapTestIdByCoordinates` exists. Tap the centre of its bounds instead.
+    await tapTestIdByCoordinates(vetter, "VettingPublishProfileButton").catch(async () => {
+      await publish.click();
+    });
     const until = Date.now() + 60000;
     let published = false;
     while (Date.now() < until && !published) {
@@ -121,9 +128,18 @@ try {
     console.log(`[e2e] ${vetter.e2ePlatform}: vetter profile published`);
   }
   const clear = await scrollToTestId(vetter, "VettingDeskClearButton", 4).catch(() => undefined);
-  if (clear) { await clear.click(); await sleep(2500); console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`); }
+  if (clear) { await tapTestIdByCoordinates(vetter, "VettingDeskClearButton"); await sleep(2500); console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`); }
   await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
-  await (await waitForTestId(vetter, "VettingNewTicketButton", 20000)).click();
+  await waitForTestId(vetter, "VettingNewTicketButton", 20000);
+  // Tap-and-verify: publishing the profile adds a line above this button, so
+  // the layout can shift between reading its position and tapping it, and the
+  // tap then lands on nothing. Retry until a ticket actually appears.
+  await tapTestIdReliable(
+    vetter,
+    "VettingNewTicketButton",
+    () => byTestId(vetter, "VettingTicketLink").isExisting().catch(() => false),
+    { attempts: 4, settleMs: 3000 }
+  );
   await waitForTestId(vetter, "VettingTicketLink", 30000);
   const link = (await textOf(vetter, "VettingTicketLink")).trim();
   const code = (await textOf(vetter, "VettingTicketCode")).trim();
@@ -150,11 +166,12 @@ try {
   // The button stays disabled until the persona's mediator session is up.
   const start = await scrollToTestId(applicant, "VettingStartButton", 4);
   for (let i = 0; i < 30 && !(await start.isEnabled().catch(() => false)); i++) await sleep(2000);
-  await start.click();
+  await tapTestIdByCoordinates(applicant, "VettingStartButton");
   await waitForTestId(applicant, "VettingRequirements", 60000);
   console.log(`[e2e] ${applicant.e2ePlatform}: ${await textOf(applicant, "VettingRequirements")}`);
   await (await scrollToTestId(applicant, "VettingTicketInput", 4)).setValue(link);
-  await (await scrollToTestId(applicant, "VettingRequestButton", 4)).click();
+  await scrollToTestId(applicant, "VettingRequestButton", 4);
+  await tapTestIdByCoordinates(applicant, "VettingRequestButton");
   console.log(`[e2e] ${applicant.e2ePlatform}: request sent`);
   await scrollToTestId(applicant, "VettingRequestStatus", 4, LOW).catch(() => undefined);
   await waitText(applicant, "VettingRequestStatus", /Accepted/i, 120000);
@@ -163,7 +180,7 @@ try {
 
   // — vetter: open the session
   const open = await scrollToTestId(vetter, "VettingOpenSessionButton", 6);
-  await open.click();
+  await tapElement(vetter, open);
   const codeEl = await waitForTestId(vetter, "VettingMatchCode", 60000);
   const vetterCode = ((await codeEl.getAttribute(isIos(vetter) ? "label" : "text")) || "").trim();
   await screenshot(vetter, "vetting-03-session");
@@ -174,7 +191,8 @@ try {
   console.log(`[e2e] match code vetter=${vetterCode} applicant=${applicantCode.trim()}`);
   if (vetterCode !== applicantCode.trim()) throw new Error(`match codes differ: ${vetterCode} vs ${applicantCode}`);
   await screenshot(applicant, "vetting-04-match-code");
-  await (await scrollToTestId(applicant, "VettingSendCardButton", 4, LOW)).click();
+  await scrollToTestId(applicant, "VettingSendCardButton", 4, LOW);
+  await tapTestIdByCoordinates(applicant, "VettingSendCardButton");
   console.log(`[e2e] ${applicant.e2ePlatform}: card sent`);
 
   // — vetter: the card, the human check, the statement
@@ -184,7 +202,7 @@ try {
   console.log(`[e2e] ${vetter.e2ePlatform}: card received — ${claim}`);
   await screenshot(vetter, "vetting-05-card");
   const attest = await scrollToTestId(vetter, "VettingAttestButton", 6);
-  await attest.click();
+  await tapElement(vetter, attest);
   await waitForTestId(vetter, "VettingStatementIssued", 60000);
   console.log(`[e2e] ${vetter.e2ePlatform}: statement issued`);
   await screenshot(vetter, "vetting-06-attested");
@@ -196,7 +214,8 @@ try {
   const check = await waitText(applicant, "VettingChecklist", /meets the published requirements/, 120000);
   console.log(`[e2e] ${applicant.e2ePlatform}: ${check}`);
   await screenshot(applicant, "vetting-07-checklist");
-  await (await scrollToTestId(applicant, "VettingApplyButton", 4, LOW)).click();
+  await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
+  await tapTestIdByCoordinates(applicant, "VettingApplyButton");
   // The member line sits at the top of the screen; wait for the verdict, then scroll back up.
   await sleep(8000);
   await scrollToTestId(applicant, "VettingAlreadyMember", 8, { ...LOW, direction: "up" }).catch(() => undefined);
