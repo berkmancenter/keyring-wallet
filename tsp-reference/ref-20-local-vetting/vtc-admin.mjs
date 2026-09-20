@@ -51,6 +51,7 @@ const TASK = {
   membersList: "https://trusttasks.org/spec/vtc/members/list/0.1",
   endorsementList: "https://trusttasks.org/spec/vtc/endorsements/list/0.1",
   endorsementRevoke: "https://trusttasks.org/spec/vtc/endorsements/revoke/0.1",
+  vettersResend: "https://trusttasks.org/spec/vtc/vetting/vetters/resend/0.1",
 };
 
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -256,6 +257,19 @@ async function main() {
     // the status-list bit the grant's `credentialStatus` points at. These two
     // are what let a refusal path be staged — without them the only way to
     // test a revoked vetter is to wait for one to expire.
+    // A grant is issued once and delivered once. A vetter whose client was not
+    // listening — or was reinstalled since — has the role and not the
+    // credential, and shows no vetter seat at all. This is how a community
+    // hands it over again.
+    case "vetter-resend":
+      return void show(
+        `POST /vetting/vetters/${args[0]}/resend`,
+        await call(base, TASK.vettersResend, `/vetting/vetters/${encodeURIComponent(args[0])}/resend`, {
+          method: "POST",
+          token,
+          body: {},
+        })
+      );
     case "endorsements":
       return void show(
         "GET /credentials/endorsements",
