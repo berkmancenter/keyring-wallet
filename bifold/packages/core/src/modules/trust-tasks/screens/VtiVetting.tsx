@@ -200,8 +200,19 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   }, [agent, stores, communityDid, mediatorDid, tick])
 
   // Whatever the community or a vetter delivers, keep it; then decide the seat.
+  //
+  // Deliberately NOT gated on `connected`. Opening the session drains whatever
+  // the mediator has been holding, and those messages are emitted while
+  // `connect` is still in flight — measured at roughly 900ms before it
+  // returned, which is when `connected` becomes true. A listener attached
+  // after that misses the entire backlog: the mediator counts the messages as
+  // delivered and drops them, so a vetter grant issued while the app was shut
+  // arrives once, is heard by nobody, and never comes again. The seat then
+  // never appears and the community looks at fault, having done everything
+  // right. Registering before the connect costs nothing — `onInbound` is a
+  // listener on the agent, not on a session — and closes the window.
   useEffect(() => {
-    if (!agent || !stores || !persona || !connected) return
+    if (!agent || !stores || !persona) return
     const stopIssue = vtiAgent.onInbound((m) => {
       void receiveIssue(stores.community, persona.did, m).then((got) => got.length && bump())
     })
