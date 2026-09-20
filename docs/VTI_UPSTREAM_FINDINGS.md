@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.16 — 2026-09-19.** A living document: every finding here was measured
+**Version 1.18 — 2026-09-20.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -26,7 +26,7 @@ from a report or an issue always lands on the right entry.
 | --- | --- | --- | --- | --- |
 | [VTI-01](#vti-01) | An administrator cannot become a vetter, and the first-vetter bootstrap is undocumented | Medium | Open — bootstrap path measured | A |
 | [VTI-02](#vti-02) | An ACL `member` role is not community membership | High | Open | A |
-| [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | Open | A |
+| [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | **Resolved upstream** — `verifiable-trust-infrastructure` #1591; client work is ours | A |
 | [VTI-04](#vti-04) | A second application from one DID is refused, not answered | Medium | Open — by design, consequences unaddressed | A |
 | [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | **Resolved upstream** — `affinidi-tdk-rs` #831 | A |
 | [VTI-06](#vti-06) | A misplaced configuration key is accepted in silence | Low | CORS half answered by #831; general case open | A, re-checked on **C** |
@@ -181,6 +181,23 @@ before holding the statements it will be asked for — the first attempt is
 unrecoverable, and the only way forward for that person is a brand-new identity.
 
 **Evidence.** `tsp-reference/ref-20-local-vetting/fixtures/submit-0.2-invited-requestMore.log`
+
+**Resolved upstream.** `verifiable-trust-infrastructure` #1591 adds
+`vtc/join-requests/withdraw/0.1`, letting the applicant close their own
+request. It was specified first in `dtgwg-trust-tasks-tf` #518 and ships in
+`trust-tasks-rs` 0.21.5. The entitlement is ownership rather than a role —
+correct, since an applicant holds neither a role nor a capability; that is what
+they are applying for. Two refusals are declared and distinguished: a request
+that is absent or someone else's answers `notFound` (so a caller cannot probe
+for request ids), and one already decided answers `alreadyDecided`.
+
+**The client half is ours, and it is not yet written.** Keyring has no route
+that withdraws a request, so the dead end this finding describes is still a
+dead end in the wallet whatever the server now supports. What it needs: the
+task wired into the VTC client, a control on a deferred request, and the two
+codes told apart without parsing prose — `alreadyDecided` means the outcome
+stands and the applicant should be shown it, `notFound` means there is nothing
+to close. Until then the rule of thumb above still holds for our users.
 
 ---
 
@@ -921,6 +938,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
 | 1.4 | 2026-09-17 | VTI-22 enforcement flag; VTI-23 manager needs admin; VTI-24 approver delivery is queued not live |
+| 1.18 | 2026-09-20 | **VTI-03 resolved upstream** — `vti` #1591 adds `vtc/join-requests/withdraw/0.1`, so an applicant can close their own deferred request; specified in `dtgwg-trust-tasks-tf` #518 and shipped in `trust-tasks-rs` 0.21.5. The client half is ours and unwritten, and is recorded on the finding. Also notes that `tdk-rs` #831 closed VTI-05's documentation half, and that `tdk-rs` #838 — a re-establishing TSP send losing its payload to the peer's own invite, about half the time under load — lands on a path our lab does not yet exercise (`tsp = false` on every agent) but will the moment TSP Rev 3 is switched on. |
 | 1.17 | 2026-09-20 | VTI-32: an invitation is 6,331 bytes and a QR code carries at most 2,953, so the credential cannot travel by the only channel it has. Found when an iOS deep link truncated it and the client reported a JSON parse error rather than a length one. |
 | 1.16 | 2026-09-19 | **VTI-31**, found while validating tdk-rs #829 before it lands: a terminal error the spine correctly drops is never acknowledged, so it stays in the sender's queue — 223 messages, 166 of them already delivered — and once #829 gates the direct path the sender is refused everything. |
 | 1.15 | 2026-09-19 | VTI-29's fix merged upstream (tdk-rs #828), with #829 extending the gates to direct delivery and the TSP bridge, which had none. |
