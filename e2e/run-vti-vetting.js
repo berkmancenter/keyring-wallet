@@ -181,7 +181,18 @@ try {
   // need, which is cheap and now reliable.
   const membershipUnknown = /\[VTI-PROBE\] failed/.test(probe);
   if (membershipUnknown) console.log(`[e2e] ${applicant.e2ePlatform}: the probe failed — membership unknown, resetting rather than assuming`);
-  if (alreadyMember || membershipUnknown || process.env.E2E_FRESH_PERSONA === "1") {
+  // Reset UNCONDITIONALLY. Membership was the wrong thing to key this on: the
+  // state that breaks a ceremony is the VETTING state, and the two come apart.
+  // An applicant that finished a previous run holds "1 of 1 statements · meets
+  // the published requirements", so "Request vetting" has nothing to ask for,
+  // no request is sent, and the run reports that the vetter never accepted —
+  // which reads as a delivery failure and is a reset that never happened. That
+  // cost three runs on 2026-09-20 and very nearly a wrong bug report against a
+  // mediator upgrade that had nothing to do with it.
+  //
+  // The reset costs a persona re-mint, which is cheap and, since the
+  // cached-token fix, reliable. Determinism is worth more than the minute.
+  if (true) {
     const forget = await scrollToTestId(applicant, "ForgetCommunityButton", 8).catch(() => undefined);
     if (forget) {
       await forget.click();
