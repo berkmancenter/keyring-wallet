@@ -157,9 +157,10 @@ try {
 
   // — applicant: start over, identity, face, application, request
   await openDeveloperScreen(applicant);
+  let probe = "";
   for (let i = 0; i < 45; i++) {
-    const community = await textOf(applicant, "VtaProbeLog").catch(() => "");
-    if (/verdict|no verdict|\[VTI-PROBE\] failed|no manifest/.test(community)) break;
+    probe = await textOf(applicant, "VtaProbeLog").catch(() => "");
+    if (/verdict|no verdict|\[VTI-PROBE\] failed|no manifest/.test(probe)) break;
     await sleep(2000);
   }
   for (let i = 0; i < 3; i++) if (!(await applicant.acceptAlert().then(() => true, () => false))) break;
@@ -170,7 +171,17 @@ try {
   // latency problem that told us nothing about vetting. An applicant needs to
   // be a non-member, not a new identity.
   const alreadyMember = await byTestId(applicant, "MyAgentMembershipRole").isExisting().catch(() => false);
-  if (alreadyMember || process.env.E2E_FRESH_PERSONA === "1") {
+  // A probe that failed means membership is UNKNOWN, not false. Read as false,
+  // the reset is skipped and the applicant carries the previous ceremony's
+  // vetting state into this one — which is how a run once reported that the
+  // vetter never accepted while the applicant's own screen still read
+  // "Statement received" from the run before. Measured 2026-09-20, when a 421
+  // on DID resolution broke the probe and cost a whole run downstream of it.
+  // Unknown therefore resets: the worst case is a persona re-mint we did not
+  // need, which is cheap and now reliable.
+  const membershipUnknown = /\[VTI-PROBE\] failed/.test(probe);
+  if (membershipUnknown) console.log(`[e2e] ${applicant.e2ePlatform}: the probe failed — membership unknown, resetting rather than assuming`);
+  if (alreadyMember || membershipUnknown || process.env.E2E_FRESH_PERSONA === "1") {
     const forget = await scrollToTestId(applicant, "ForgetCommunityButton", 8).catch(() => undefined);
     if (forget) {
       await forget.click();

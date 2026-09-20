@@ -127,6 +127,8 @@ elsewhere on the page.
 | a button `enabled="true"` but `visible="false"` | the keyboard pushed it off screen; a coordinate tap then lands somewhere else and reports success |
 | the app ignoring a credential the community sent | it arrived during `connect`, before the screen's listener attached |
 | a screen "connected" but receiving nothing | stale in-process state outliving the socket; always call `vtiAgent.connect`, it returns immediately when the socket is open |
+| `[VTI-PROBE] failed … status: 421` on the phone, while `curl` to the same host is fine | **HTTP/2 connection coalescing.** Our six services sit on `*.ngrok.app` behind one wildcard certificate and the same IPs, so the phone reuses a connection opened for one host to talk to another and the edge answers `421 Misdirected Request`. `curl` opens a fresh connection per host and never sees it. Intermittent — re-run. It is a property of the ngrok fixture, not of the stack |
+| the run reports the vetter never accepted, and the applicant's own screen shows a status from the PREVIOUS run | the probe failed, so membership read as unknown; the runner now resets in that case instead of assuming non-membership |
 
 ## Debugging, in the order that pays
 
