@@ -19,6 +19,7 @@ STACK_DIR="${STACK_DIR:-$HOME/vti-stack}"
 VTI_SRC="${VTI_SRC:-$HOME/Documents/vti-main}"
 VTA_BIN="$VTI_SRC/target/debug/vta"
 VTC_BIN="$VTI_SRC/target/debug/vtc"
+PNM_BIN="$VTI_SRC/target/debug/pnm"
 ADMIN="$REPO/tsp-reference/ref-20-local-vetting/vtc-admin.mjs"
 CRED="$STACK_DIR/vtc-admin-credential.json"
 STATEMENT_TYPE="https://firstperson.network/endorsements/identity-vetting/0.1"
@@ -78,6 +79,29 @@ stop_and_wait 8200
   | grep -E "Added|already" | sed 's/^/  /' || true
 nohup "$VTC_BIN" --config "$STACK_DIR/vtc/config.toml" > "$STACK_DIR/logs/vtc.log" 2>&1 &
 sleep 12
+
+# `approver-setup.sh` drives alice's VTA through a pnm profile named `alice`,
+# and nothing created one — so every call it made failed, `|| true` swallowed
+# each failure, and the approver rung reported only that the consent rule "did
+# not stick". The profile is minted the same two-phase way as the community's:
+# pnm mints an admin did:key, the VTA imports it offline, pnm binds the result.
+log "creating the alice pnm profile (approver-setup drives the VTA through it)"
+export PNM_HOME="$STACK_DIR/pnm-alice"
+rm -rf "${PNM_HOME:?}" && mkdir -p "$PNM_HOME"
+ALICE_ADMIN=$("$PNM_BIN" setup --name alice --overwrite 2>&1 | grep -o 'did:key:z[A-Za-z0-9]*' | head -1)
+if [ -n "$ALICE_ADMIN" ]; then
+  stop_and_wait 8110
+  "$VTA_BIN" --config "$STACK_DIR/alice/config.toml" import-did \
+    --did "$ALICE_ADMIN" --role admin --label pnm-alice >/dev/null 2>&1 || true
+  nohup "$VTA_BIN" --config "$STACK_DIR/alice/config.toml" \
+    > "$STACK_DIR/logs/alice.log" 2>&1 &
+  sleep 14
+  "$PNM_BIN" setup continue alice --vta-did "$ALICE_VTA_DID" >/dev/null 2>&1 || true
+  echo "  admin $ALICE_ADMIN"
+else
+  echo "  could not mint an alice admin DID — approver-setup will fail" >&2
+fi
+unset PNM_HOME
 
 log "registering the statement type"
 node "$ADMIN" "$BASE" "$VTC_DID" "$CRED" register-type "$STATEMENT_TYPE" "Identity vetting statement" \
