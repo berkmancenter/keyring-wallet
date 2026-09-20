@@ -185,7 +185,23 @@ try {
   await tapTestIdByCoordinates(applicant, "VettingStartButton");
   await waitForTestId(applicant, "VettingRequirements", 60000);
   console.log(`[e2e] ${applicant.e2ePlatform}: ${await textOf(applicant, "VettingRequirements")}`);
-  await (await scrollToTestId(applicant, "VettingTicketInput", 4)).setValue(link);
+  // `setValue` with a link this long silently does nothing on iOS often
+  // enough to matter: the field keeps its placeholder, "Request vetting" is
+  // then tapped with an empty ticket, and the run reports that the vetter
+  // never accepted — when nothing was ever sent. Set it, read it back, retry.
+  {
+    const field = await scrollToTestId(applicant, "VettingTicketInput", 4);
+    let entered = "";
+    for (let i = 0; i < 4 && entered !== link; i++) {
+      await field.clearValue().catch(() => undefined);
+      await field.setValue(link).catch(() => undefined);
+      await sleep(600);
+      entered = ((await field.getAttribute(isIos(applicant) ? "value" : "text")) || "").trim();
+      if (entered !== link) console.log(`[e2e] ${applicant.e2ePlatform}: ticket field holds ${entered.length}/${link.length} chars, retrying`);
+    }
+    if (entered !== link) throw new Error(`${applicant.e2ePlatform}: could not enter the ticket link (${entered.length}/${link.length} chars)`);
+    console.log(`[e2e] ${applicant.e2ePlatform}: ticket link entered (${entered.length} chars)`);
+  }
   await scrollToTestId(applicant, "VettingRequestButton", 4);
   await tapTestIdByCoordinates(applicant, "VettingRequestButton");
   console.log(`[e2e] ${applicant.e2ePlatform}: request sent`);

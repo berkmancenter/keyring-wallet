@@ -1,0 +1,152 @@
+# Running the vetting ceremony
+
+What it takes to get `run-vti-vetting.js` through a two-device run, and the
+traps that cost a full session on 2026-09-20. Most of them present as the app
+misbehaving and are not.
+
+## Before anything
+
+```sh
+./scripts/openvtc/local-vti-stack/stack-health.sh          # report
+./scripts/openvtc/local-vti-stack/stack-health.sh --heal   # restart what is down
+```
+
+Run this **before every rung**. Three separate runs failed on a dead service
+rather than the thing under test, each after a wrong diagnosis. A minute here
+is cheaper than an hour of reading a stack failure as a client bug.
+
+It checks the three shapes that do not announce themselves:
+
+- a process that has exited — its tunnel then answers `502` and the client
+  says "unable to resolve did document"
+- a tunnel with nothing behind it
+- a service whose **mediator websocket dropped** while it kept serving REST.
+  This is the nastiest: a manifest fetch succeeds, so the community looks
+  healthy, and every Trust Task asked over DIDComm goes unanswered with no
+  error anywhere. Trust the LAST websocket event in the log, never the
+  presence of a connect line somewhere in it.
+
+### RUST_MIN_STACK is not optional
+
+```sh
+export RUST_MIN_STACK=33554432
+```
+
+A VTA started without it **overflows a worker stack and aborts the process**
+handling `vta/webvh/dids/create/1.0` — the first persona mint. The client
+reports "the VTA did not answer", which reads as a timeout rather than a
+crash, and the log line is at the very end of the file where nobody looks.
+`up.sh` and `stack-health.sh` both export it. Anything you restart by hand
+must too.
+
+## Stack setup, in order
+
+```sh
+./scripts/openvtc/local-vti-stack/up.sh                 # six services + tunnels
+./scripts/openvtc/local-vti-stack/community-setup.sh    # admin cred, ACL, type, criterion
+```
+
+`up.sh` leaves a community that can do nothing until `community-setup.sh` runs:
+its ACL is empty so its own admin cannot authenticate, no statement type is
+registered, and no criterion is published.
+
+**Two ACL directions, both required.** `up.sh` adds each VTA to the DID-hosting
+daemon's ACL. The daemon also has to be in **each VTA's** ACL, or a persona
+mint is refused with `refusing trust task: DID not in ACL` and the client just
+sees a timeout:
+
+```sh
+vta --config <n>/config.toml import-did --did "$DIDS_DID" --role admin --label dids-daemon
+```
+
+**Register the DID host with each VTA** (`up.sh` does this now). Without it a
+persona is minted "serverless" — created, keys held, served by nobody — and the
+phone fails at "community session as persona" with a 404 naming the persona
+rather than the missing registration. `[VTA-PROBE] servers 0` is the tell.
+
+## The rungs, and how they chain
+
+```sh
+# first rung of a chain keeps the app installed afterwards
+ANDROID_AVD=API36_S25_A E2E_KEEP_APP=1 PLATFORM=android node run-vta-enrol.js
+# later rungs keep the state it left
+ANDROID_AVD=API36_S25_A E2E_KEEP_STATE=1 PLATFORM=android node run-vti-invite.js
+```
+
+`fullReset` uninstalls the app at the **end** of a session as well as the
+start, so without `E2E_KEEP_APP=1` each rung deletes its own result and the
+next one opens a freshly installed app at the Welcome screen — reported as a
+missing element rather than missing state. `E2E_KEEP_STATE=1` alone cannot fix
+it: it preserves state that is still there, and by then there is none.
+
+For the ceremony itself:
+
+```sh
+ANDROID_AVD=API36_S25_A PLATFORMS=ios,android E2E_KEEP_STATE=1 node run-vti-vetting.js
+```
+
+`PLATFORMS` is `applicant,vetter` in that order. The default puts the vetter on
+iOS; `ios,android` makes **Android the vetter**, which is the way round that
+works today — an invitation cannot reach iOS (see VTI-32 in the findings doc:
+the credential is 6,331 bytes and a QR carries 2,953), and the applicant needs
+no invitation.
+
+The vetter must be a member holding the grant before the ceremony:
+
+```sh
+node tsp-reference/ref-20-local-vetting/vtc-admin.mjs "$VTC_URL/v1" "$VTC_DID" \
+  ~/vti-stack/vtc-admin-credential.json vetter-grant <vetter persona did>
+# if the client was not listening when it was issued:
+node ... vtc-admin.mjs ... vetter-resend <vetter persona did>
+```
+
+## Taps: use adb, not WebDriver
+
+A React Native `Pressable` can accept a WebDriver tap and never run its
+handler. Measured on the publish-profile and new-ticket controls: the element
+reports clickable, enabled and displayed; `.click()`, a W3C pointer sequence
+and UiAutomator2's `mobile: clickGesture` all return success; `onPress` does
+not fire. Four verified retries in a row failed. `adb shell input tap` on the
+identical centre point fired it every time.
+
+`tapTestIdByCoordinates` and `tapElement` now shell out to adb on Android.
+Use `tapElement` for a control found by a **scoped** lookup — a button inside
+the current desk request — where re-finding by testID would match a stale one
+elsewhere on the page.
+
+## Things that look like app bugs and are not
+
+| Symptom | Actually |
+|---|---|
+| "the VTA did not answer" | the VTA crashed on a stack overflow, or the DID host is not in its ACL |
+| a Trust Task never answered, REST fine | that service's mediator websocket dropped hours ago |
+| "element not found" after a tap | the tap never fired — use the adb path |
+| a control "not displayed after N swipes" | the keyboard is covering it; dismiss it by tapping a heading, never `hideKeyboard` (it sends ESC on Android and cancels the PIN modal) |
+| a card present with empty children and no testIDs | it is rendered **below the fold**; scroll to it before judging |
+| the ticket field empty after `setValue` | a 324-character value silently does not take on iOS; set it, read it back, retry |
+| the app ignoring a credential the community sent | it arrived during `connect`, before the screen's listener attached |
+| a screen "connected" but receiving nothing | stale in-process state outliving the socket; always call `vtiAgent.connect`, it returns immediately when the socket is open |
+
+## Debugging, in the order that pays
+
+1. **Look at the screenshot.** `e2e/artifacts/vetting-failure-*.png`. Two
+   hypotheses were spent on a card that a screenshot explained in a minute.
+2. **Check the queue**, not the logs: `redis-cli HGET "DID:$(sha256 of the did)"
+   RECEIVE_QUEUE_COUNT`. It tells you whether a message was sent, queued, or
+   collected, which settles "who is at fault" faster than any log.
+3. **Check the last websocket event** for every service, not the first.
+4. **Then** instrument. A `console.log` at each early return in the screen
+   found the listener race in one run, after an hour of inference from outside
+   had found nothing.
+
+On Metro: edit, then `curl localhost:8081/index.bundle?platform=android&dev=true`
+to force a rebuild, then force-stop the app. Otherwise the app fetches the old
+bundle and your logs never appear — which reads as the code not running.
+
+## Known open
+
+- The applicant's `vetting/request/0.1` does not reach the vetter: the ticket
+  enters correctly and the request is sent, and the vetter's inbox stays at
+  zero with no vetting message on the wire. Next thing to chase.
+- An invitation cannot be delivered by QR (VTI-32), so the vetter must be
+  Android until invite-by-reference exists upstream.

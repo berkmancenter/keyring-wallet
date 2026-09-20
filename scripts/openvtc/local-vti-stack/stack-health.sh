@@ -22,6 +22,13 @@ WEBVH_SRC="${WEBVH_SRC:-$HOME/Documents/affinidi-webvh-service}"
 HEAL=0
 [ "${1:-}" = "--heal" ] && HEAL=1
 
+# A VTA started without this overflows a worker stack handling
+# `vta/webvh/dids/create/1.0` and aborts the whole process — the client then
+# reports "the VTA did not answer", which reads as a timeout rather than a
+# crash. up.sh exports it; anything that restarts a service must too, or a
+# heal quietly produces an agent that dies on the first persona mint.
+export RUST_MIN_STACK="${RUST_MIN_STACK:-33554432}"
+
 problems=0
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; problems=$((problems + 1)); }
