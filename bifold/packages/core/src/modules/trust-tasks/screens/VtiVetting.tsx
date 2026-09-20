@@ -16,7 +16,7 @@
 import { useAgent } from '@bifold/react-hooks'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -113,7 +113,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       textAlign: 'center',
       paddingVertical: 8,
     },
-    mono: { fontFamily: 'Courier', fontSize: 12, color: ColorPalette.grayscale.mediumGrey },
+    // 'Courier' is an iOS face; Android has no font by that name, and asking
+    // for one it cannot resolve takes the whole Text — and its siblings — out
+    // of the rendered tree, so the ticket card came out as three empty views
+    // with no testIDs and the run could never find the link inside it.
+    mono: {
+      fontFamily: Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' }),
+      fontSize: 12,
+      color: ColorPalette.grayscale.mediumGrey,
+    },
     button: {
       backgroundColor: ColorPalette.brand.primary,
       borderRadius: 8,
