@@ -137,9 +137,17 @@ try {
   await tapTestIdReliable(
     vetter,
     "VettingNewTicketButton",
-    () => byTestId(vetter, "VettingTicketLink").isExisting().catch(() => false),
+    async () => {
+      // The card renders BELOW this button, so a fresh ticket lands off the
+      // bottom of the screen: present in the hierarchy, with children the
+      // dump cannot populate because they were never laid out. Scroll to it
+      // before deciding the tap did nothing.
+      await scrollToTestId(vetter, "VettingTicketLink", 4).catch(() => undefined);
+      return byTestId(vetter, "VettingTicketLink").isExisting().catch(() => false);
+    },
     { attempts: 4, settleMs: 3000 }
   );
+  await scrollToTestId(vetter, "VettingTicketLink", 4).catch(() => undefined);
   await waitForTestId(vetter, "VettingTicketLink", 30000);
   const link = (await textOf(vetter, "VettingTicketLink")).trim();
   const code = (await textOf(vetter, "VettingTicketCode")).trim();
