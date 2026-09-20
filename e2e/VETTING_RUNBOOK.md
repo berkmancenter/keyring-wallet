@@ -143,10 +143,31 @@ On Metro: edit, then `curl localhost:8081/index.bundle?platform=android&dev=true
 to force a rebuild, then force-stop the app. Otherwise the app fetches the old
 bundle and your logs never appear — which reads as the code not running.
 
+## A passing run looks like this
+
+```
+applicant = ios, vetter = android
+android: vetter profile published
+android: ticket JBPB-88NB (324 chars)
+ios: This community needs 1 statement(s) verifying: name.legal.
+ios: ticket field 324/324 chars, request button enabled
+ios: request sent
+ios: accepted
+match code vetter=SD88-JRDG applicant=SD88-JRDG
+ios: card sent
+android: card received — name.legal: Alice Example
+android: statement issued
+ios: 1 of 1 statements · meets the published requirements
+ios: You are already a member (member).
+```
+
 ## Known open
 
-- The applicant's `vetting/request/0.1` does not reach the vetter: the ticket
-  enters correctly and the request is sent, and the vetter's inbox stays at
-  zero with no vetting message on the wire. Next thing to chase.
+- **The first persona mint is roughly a coin flip.** It goes alice → the DID
+  host over DIDComm through the tunnel and times out often enough to fail
+  about every other run, surfacing as "the VTA did not answer". The runner now
+  keeps the applicant's persona unless the phone is actually a member, so this
+  is paid once rather than every run; `E2E_FRESH_PERSONA=1` forces a re-mint.
+  If a run dies there, just run it again.
 - An invitation cannot be delivered by QR (VTI-32), so the vetter must be
   Android until invite-by-reference exists upstream.

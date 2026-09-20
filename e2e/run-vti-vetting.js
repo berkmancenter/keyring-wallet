@@ -163,8 +163,24 @@ try {
     await sleep(2000);
   }
   for (let i = 0; i < 3; i++) if (!(await applicant.acceptAlert().then(() => true, () => false))) break;
-  const forget = await scrollToTestId(applicant, "ForgetCommunityButton", 8).catch(() => undefined);
-  if (forget) { await forget.click(); await sleep(1500); await applicant.acceptAlert().catch(() => undefined); }
+  // Only forget when this phone actually holds a membership. Forgetting wipes
+  // the persona too, and re-minting one goes alice -> the DID host over
+  // DIDComm through the tunnel, which times out often enough that roughly
+  // every other run died there with "the VTA did not answer" — a fixture
+  // latency problem that told us nothing about vetting. An applicant needs to
+  // be a non-member, not a new identity.
+  const alreadyMember = await byTestId(applicant, "MyAgentMembershipRole").isExisting().catch(() => false);
+  if (alreadyMember || process.env.E2E_FRESH_PERSONA === "1") {
+    const forget = await scrollToTestId(applicant, "ForgetCommunityButton", 8).catch(() => undefined);
+    if (forget) {
+      await forget.click();
+      await sleep(1500);
+      await applicant.acceptAlert().catch(() => undefined);
+      console.log(`[e2e] ${applicant.e2ePlatform}: forgot the community (was a member)`);
+    }
+  } else {
+    console.log(`[e2e] ${applicant.e2ePlatform}: not a member — keeping the persona, skipping the re-mint`);
+  }
   await applicant.back().catch(() => undefined); await sleep(800); await applicant.back().catch(() => undefined);
   await openVetting(applicant);
   const create = await byTestId(applicant, "VettingCreateIdentityButton").isExisting();
@@ -190,20 +206,46 @@ try {
   // then tapped with an empty ticket, and the run reports that the vetter
   // never accepted — when nothing was ever sent. Set it, read it back, retry.
   {
+    // The Request button is disabled on REACT state (`!ticketLink.trim()`),
+    // not on the field's text. `setValue` writes the native text without
+    // firing `onChangeText`, so the field can show all 324 characters while
+    // the component still believes it is empty — the button stays disabled,
+    // the tap is swallowed, and the run reports that the vetter never
+    // accepted when nothing was ever sent. So the check that matters is not
+    // what the field holds, it is whether the button came alive.
     const field = await scrollToTestId(applicant, "VettingTicketInput", 4);
-    let entered = "";
-    for (let i = 0; i < 4 && entered !== link; i++) {
+    let enabled = false;
+    for (let i = 0; i < 4 && !enabled; i++) {
       await field.clearValue().catch(() => undefined);
-      await field.setValue(link).catch(() => undefined);
-      await sleep(600);
-      entered = ((await field.getAttribute(isIos(applicant) ? "value" : "text")) || "").trim();
-      if (entered !== link) console.log(`[e2e] ${applicant.e2ePlatform}: ticket field holds ${entered.length}/${link.length} chars, retrying`);
+      await field.click().catch(() => undefined); // focus, so typing raises events
+      if (i === 0) {
+        await field.setValue(link).catch(() => undefined);
+      } else {
+        await field.addValue(link).catch(() => undefined);
+      }
+      await sleep(1200);
+      enabled = await byTestId(applicant, "VettingRequestButton").isEnabled().catch(() => false);
+      const held = ((await field.getAttribute(isIos(applicant) ? "value" : "text")) || "").trim();
+      console.log(`[e2e] ${applicant.e2ePlatform}: ticket field ${held.length}/${link.length} chars, request button ${enabled ? "enabled" : "still disabled"}`);
     }
-    if (entered !== link) throw new Error(`${applicant.e2ePlatform}: could not enter the ticket link (${entered.length}/${link.length} chars)`);
-    console.log(`[e2e] ${applicant.e2ePlatform}: ticket link entered (${entered.length} chars)`);
+    if (!enabled) throw new Error(`${applicant.e2ePlatform}: the ticket never reached the component — request button stayed disabled`);
+    // Typing leaves the keyboard up, which displaces the Request button off
+    // the screen: it reports enabled and `visible="false"`, so a coordinate
+    // tap computed from its location lands somewhere else entirely and the
+    // run reports "request sent" having sent nothing.
+    await byTestId(applicant, "VettingSeatBanner").click().catch(() => undefined);
+    await sleep(800);
   }
   await scrollToTestId(applicant, "VettingRequestButton", 4);
-  await tapTestIdByCoordinates(applicant, "VettingRequestButton");
+  // Confirm the tap did something: a request card appears once the request is
+  // saved. Without this the run announces "request sent" on a tap it never
+  // verified, and the failure surfaces much later as the vetter not accepting.
+  await tapTestIdReliable(
+    applicant,
+    "VettingRequestButton",
+    () => byTestId(applicant, "VettingRequestCard").isExisting().catch(() => false),
+    { attempts: 4, settleMs: 3000 }
+  );
   console.log(`[e2e] ${applicant.e2ePlatform}: request sent`);
   await scrollToTestId(applicant, "VettingRequestStatus", 4, LOW).catch(() => undefined);
   await waitText(applicant, "VettingRequestStatus", /Accepted/i, 120000);
