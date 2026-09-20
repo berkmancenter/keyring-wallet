@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# Is the stack actually able to run a ceremony right now?
+#
+#   ./stack-health.sh          report; exit 1 if anything is wrong
+#   ./stack-health.sh --heal   restart what is down, then report
+#
+# Written after an evening in which three separate runs failed for reasons
+# that had nothing to do with the thing under test: a VTA that had exited so
+# its tunnel answered 502, a tunnel endpoint that went offline, and a VTC
+# whose mediator websocket dropped at 05:55 and never came back — leaving a
+# community that answered REST perfectly and was deaf to every DIDComm
+# request for the next eleven hours. None of those announce themselves. Each
+# one presents as the app misbehaving.
+#
+# Run this before an e2e rung. A minute here is cheaper than a wrong diagnosis.
+set -uo pipefail
+
+STACK_DIR="${STACK_DIR:-$HOME/vti-stack}"
+VTI_SRC="${VTI_SRC:-$HOME/Documents/vti-main}"
+TDK_SRC="${TDK_SRC:-$HOME/Documents/affinidi-tdk-rs}"
+WEBVH_SRC="${WEBVH_SRC:-$HOME/Documents/affinidi-webvh-service}"
+HEAL=0
+[ "${1:-}" = "--heal" ] && HEAL=1
+
+problems=0
+ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; problems=$((problems + 1)); }
+log()  { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
+
+# name port config-path binary
+services() {
+  cat <<EOF
+alice 8110 $STACK_DIR/alice/config.toml $VTI_SRC/target/debug/vta
+community 8111 $STACK_DIR/community/config.toml $VTI_SRC/target/debug/vta
+bob 8112 $STACK_DIR/bob/config.toml $VTI_SRC/target/debug/vta
+vtc 8200 $STACK_DIR/vtc/config.toml $VTI_SRC/target/debug/vtc
+dids 8534 $STACK_DIR/dids/config.toml $WEBVH_SRC/target/debug/did-hosting-daemon
+EOF
+}
+
+log "processes"
+while read -r name port config bin; do
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+    ok "$name listening on :$port"
+  elif [ "$HEAL" = 1 ]; then
+    bad "$name was not listening on :$port — restarting"
+    nohup "$bin" --config "$config" > "$STACK_DIR/logs/$name.log" 2>&1 &
+    sleep 14
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1 && ok "$name came back" || bad "$name would not start"
+  else
+    bad "$name is NOT listening on :$port"
+  fi
+done < <(services)
+
+if lsof -nP -iTCP:7037 -sTCP:LISTEN -t >/dev/null 2>&1; then
+  ok "mediator listening on :7037"
+else
+  bad "mediator is NOT listening on :7037 (restart it from up.sh)"
+fi
+
+log "tunnels"
+# A 502 means the tunnel is up and nothing is behind it — the shape a dead
+# service takes from the outside, and the one that reads as a client problem.
+for h in alice community bob vtc dids mediator; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 12 "https://keyring-vti-$h.ngrok.app/" 2>/dev/null)
+  case "$code" in
+    502|000) bad "$h tunnel answers $code — nothing behind it" ;;
+    *) ok "$h tunnel answers $code" ;;
+  esac
+done
+
+log "the community's DIDComm ear"
+# The one that cost the most: the VTC serves REST happily while its mediator
+# websocket is gone, so a manifest fetch succeeds and every Trust Task asked
+# over DIDComm goes unanswered. Trust the LAST event in the log, not the
+# presence of a connect line somewhere in it.
+last=$(grep -nE "connected to mediator|WebSocket connection dropped|Error creating websocket" \
+  "$STACK_DIR/logs/vtc.log" 2>/dev/null | tail -1)
+case "$last" in
+  *"connected to mediator"*) ok "VTC's last websocket event was a connect" ;;
+  "") bad "no websocket events in the VTC log at all" ;;
+  *)
+    if [ "$HEAL" = 1 ]; then
+      bad "VTC's last websocket event was a DROP — restarting it"
+      pid=$(lsof -nP -iTCP:8200 -sTCP:LISTEN -t 2>/dev/null | head -1)
+      if [ -n "$pid" ]; then
+        kill "$pid"
+        for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+      fi
+      nohup "$VTI_SRC/target/debug/vtc" --config "$STACK_DIR/vtc/config.toml" \
+        > "$STACK_DIR/logs/vtc.log" 2>&1 &
+      sleep 20
+      grep -q "connected to mediator" "$STACK_DIR/logs/vtc.log" 2>/dev/null \
+        && ok "VTC reconnected" || bad "VTC did not reconnect"
+    else
+      bad "VTC's last websocket event was a DROP — it is deaf on DIDComm (--heal restarts it)"
+    fi
+    ;;
+esac
+
+echo
+if [ "$problems" -eq 0 ]; then
+  printf '\033[32mstack looks able to run a ceremony\033[0m\n'
+  exit 0
+fi
+printf '\033[31m%d problem(s) — fix before reading anything into an e2e failure\033[0m\n' "$problems"
+exit 1
