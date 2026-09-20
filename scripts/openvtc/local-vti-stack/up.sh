@@ -353,6 +353,31 @@ done
 nohup "$WEBVH_BIN" --config dids/config.toml > logs/dids.log 2>&1 &
 sleep 6
 
+# An ACL entry on the daemon is only half of it: each VTA also has to have the
+# daemon REGISTERED as a hosting server, or its persona mints fall back to
+# "serverless" — created, keys held, and served by nobody. The DID then 404s
+# and the phone fails at "community session as persona" with a resolution
+# error naming the persona rather than the missing registration. That is
+# VTI-20, and it cost an evening; `[VTA-PROBE] servers 0` is the tell.
+# Offline, so each VTA is stopped, registered, and started again.
+log "registering the DID host with each VTA (else persona mints are serverless)"
+for n in alice community bob; do
+  case "$n" in alice) port=8110;; community) port=8111;; bob) port=8112;; esac
+  pid=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)
+  if [ -n "$pid" ]; then
+    kill "$pid"
+    for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+  fi
+  if "$VTA_BIN" --config "$n/config.toml" did-mgmt servers add \
+       --id dids --did "$DIDS_DID" --label "local dids daemon" >/dev/null 2>&1; then
+    echo "  $n -> dids"
+  else
+    echo "  $n -> already registered"
+  fi
+  nohup "$VTA_BIN" --config "$n/config.toml" > "logs/$n.log" 2>&1 &
+done
+sleep 12
+
 cat > stack.env <<EOF
 DIDS_DID=$DIDS_DID
 ALICE_VTA_DID=$ALICE_DID

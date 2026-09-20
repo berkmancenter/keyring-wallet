@@ -49,6 +49,8 @@ const TASK = {
   policyActivate: "https://trusttasks.org/spec/policy/activate/0.1",
   policyActive: "https://trusttasks.org/spec/policy/active/0.1",
   membersList: "https://trusttasks.org/spec/vtc/members/list/0.1",
+  endorsementList: "https://trusttasks.org/spec/vtc/endorsements/list/0.1",
+  endorsementRevoke: "https://trusttasks.org/spec/vtc/endorsements/revoke/0.1",
 };
 
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -247,6 +249,27 @@ async function main() {
           method: "POST",
           token,
           body: { memberDid: args[0], validitySeconds: Number(args[1] ?? 15552000) },
+        })
+      );
+    // A vetter grant is an endorsement, and there is no vetter-specific
+    // withdrawal: it is taken back through `endorsements/revoke`, which flips
+    // the status-list bit the grant's `credentialStatus` points at. These two
+    // are what let a refusal path be staged — without them the only way to
+    // test a revoked vetter is to wait for one to expire.
+    case "endorsements":
+      return void show(
+        "GET /credentials/endorsements",
+        await call(base, TASK.endorsementList, "/credentials/endorsements", { token })
+      );
+    case "revoke-endorsement":
+      // The response carries `statusListIndex` — the bit that just flipped,
+      // which is what makes this checkable against the published list rather
+      // than merely believed.
+      return void show(
+        `DELETE /credentials/endorsements/${args[0]}`,
+        await call(base, TASK.endorsementRevoke, `/credentials/endorsements/${args[0]}`, {
+          method: "DELETE",
+          token,
         })
       );
     default:

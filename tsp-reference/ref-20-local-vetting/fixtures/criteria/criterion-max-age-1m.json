@@ -1,0 +1,36 @@
+{
+  "id": "vetted-member",
+  "description": "A statement counts for one minute \u2014 the age limit, made testable",
+  "query": {
+    "credentials": [
+      {
+        "id": "vetting",
+        "format": "ldp_vc",
+        "meta": {
+          "type_values": [
+            "EndorsementCredential"
+          ]
+        }
+      }
+    ]
+  },
+  "vetting": {
+    "version": "0.1",
+    "statementType": "https://firstperson.network/endorsements/identity-vetting/0.1",
+    "minStatements": 1,
+    "acceptedMethods": [
+      "inPerson",
+      "video"
+    ],
+    "requiredClaims": [
+      "name.legal"
+    ],
+    "maxStatementAge": "PT1M",
+    "eligibleVetters": {
+      "role": "vetter"
+    },
+    "independence": {
+      "requireConsistentIdentityCommitment": true
+    }
+  }
+}

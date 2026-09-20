@@ -1,0 +1,36 @@
+{
+  "id": "vetted-member",
+  "description": "Two statements from distinct vetters",
+  "query": {
+    "credentials": [
+      {
+        "id": "vetting",
+        "format": "ldp_vc",
+        "meta": {
+          "type_values": [
+            "EndorsementCredential"
+          ]
+        }
+      }
+    ]
+  },
+  "vetting": {
+    "version": "0.1",
+    "statementType": "https://firstperson.network/endorsements/identity-vetting/0.1",
+    "minStatements": 2,
+    "acceptedMethods": [
+      "inPerson",
+      "video"
+    ],
+    "requiredClaims": [
+      "name.legal"
+    ],
+    "maxStatementAge": "P120D",
+    "eligibleVetters": {
+      "role": "vetter"
+    },
+    "independence": {
+      "requireConsistentIdentityCommitment": true
+    }
+  }
+}
