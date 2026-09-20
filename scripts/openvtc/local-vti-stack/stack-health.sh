@@ -30,9 +30,15 @@ HEAL=0
 export RUST_MIN_STACK="${RUST_MIN_STACK:-33554432}"
 
 problems=0
+healed=0
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; problems=$((problems + 1)); }
 log()  { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
+# A problem that --heal actually fixed is no longer a reason to refuse the run.
+# Without this the script healed everything and still exited 1 saying "1
+# problem(s) — fix before reading anything into an e2e failure", which is both
+# wrong and exactly the kind of false signal this script exists to remove.
+fixed() { printf '  \033[32m✓\033[0m %s\n' "$1"; problems=$((problems - 1)); healed=$((healed + 1)); }
 
 # name port config-path binary
 services() {
@@ -53,7 +59,7 @@ while read -r name port config bin; do
     bad "$name was not listening on :$port — restarting"
     nohup "$bin" --config "$config" > "$STACK_DIR/logs/$name.log" 2>&1 &
     sleep 14
-    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1 && ok "$name came back" || bad "$name would not start"
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1 && fixed "$name came back" || bad "$name would not start"
   else
     bad "$name is NOT listening on :$port"
   fi
@@ -99,7 +105,7 @@ for n in alice community bob; do
           > "$STACK_DIR/logs/$n.log" 2>&1 &
         sleep 20
         grep -q "messaging connected to mediator" "$STACK_DIR/logs/$n.log" 2>/dev/null \
-          && ok "$n reconnected" || bad "$n did not reconnect"
+          && fixed "$n reconnected" || bad "$n did not reconnect"
       else
         bad "$n's last websocket event was a DROP — it is deaf on DIDComm (--heal restarts it)"
       fi
@@ -129,7 +135,7 @@ case "$last" in
         > "$STACK_DIR/logs/vtc.log" 2>&1 &
       sleep 20
       grep -q "connected to mediator" "$STACK_DIR/logs/vtc.log" 2>/dev/null \
-        && ok "VTC reconnected" || bad "VTC did not reconnect"
+        && fixed "VTC reconnected" || bad "VTC did not reconnect"
     else
       bad "VTC's last websocket event was a DROP — it is deaf on DIDComm (--heal restarts it)"
     fi
@@ -137,8 +143,12 @@ case "$last" in
 esac
 
 echo
-if [ "$problems" -eq 0 ]; then
-  printf '\033[32mstack looks able to run a ceremony\033[0m\n'
+if [ "$problems" -le 0 ]; then
+  if [ "$healed" -gt 0 ]; then
+    printf '\033[32mstack looks able to run a ceremony (%d healed)\033[0m\n' "$healed"
+  else
+    printf '\033[32mstack looks able to run a ceremony\033[0m\n'
+  fi
   exit 0
 fi
 printf '\033[31m%d problem(s) — fix before reading anything into an e2e failure\033[0m\n' "$problems"

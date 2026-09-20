@@ -2,6 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Imported for its side effect: it tees stdout and stderr into
+// artifacts/<runner>-<timestamp>.log. Every runner imports this module for its
+// capabilities, which makes it the one place that reaches all of them.
+import "./transcript.js";
+
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",

@@ -162,13 +162,33 @@ ios: 1 of 1 statements · meets the published requirements
 ios: You are already a member (member).
 ```
 
+## Every run writes its own transcript
+
+`artifacts/<runner>-<timestamp>.log`, automatically — the terminal still gets
+everything, this is only a copy. Read that file before anything else when a run
+fails.
+
+It exists because a failing run was once diagnosed from a screenshot and a
+page-source dump alone: the run had been piped through `tail`, which buffers
+until the process exits and then keeps only the last lines, so the one line
+naming what the runner was waiting for no longer existed. **Do not pipe a run
+through `tail` or `head`** — you lose the beginning, which is where the
+failure usually is. The transcript captures WebdriverIO's own command log too,
+which is the part that names the selector a dead run was waiting on.
+
 ## Known open
 
-- **The first persona mint is roughly a coin flip.** It goes alice → the DID
-  host over DIDComm through the tunnel and times out often enough to fail
-  about every other run, surfacing as "the VTA did not answer". The runner now
-  keeps the applicant's persona unless the phone is actually a member, so this
-  is paid once rather than every run; `E2E_FRESH_PERSONA=1` forces a re-mint.
-  If a run dies there, just run it again.
+- **`E2E_FRESH_PERSONA=1` is not a working mode.** Forgetting the community
+  mid-session left the iOS app reporting
+  `[TrustTasks:VtiMediatorTransport] socket failed to open` on the My Agent
+  screen, and it did not recover for the rest of the run — the vetter's desk
+  stayed empty because nothing was ever sent. A fresh app launch recovered it,
+  and the next run minted a brand-new persona without trouble. So the phone
+  does not re-open its mediator socket after the persona it was using is
+  dropped underneath it; that is ours, not upstream's, and it is the reason the
+  flag is documented here rather than recommended.
+- The mint itself is **not** the coin flip an earlier version of this section
+  claimed. Two consecutive runs passed, the second from no persona at all. The
+  earlier failures were the fresh-persona path above, not tunnel latency.
 - An invitation cannot be delivered by QR (VTI-32), so the vetter must be
   Android until invite-by-reference exists upstream.
