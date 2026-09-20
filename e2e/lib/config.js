@@ -97,6 +97,21 @@ export const IOS_DEVICE_APP =
 // second PIN input" symptom). 100ms keeps a tiny settle without the stall.
 const ANDROID_SETTINGS = { "appium:settings[waitForIdleTimeout]": 100 };
 
+/**
+ * `fullReset` uninstalls the app at the END of a session as well as the start,
+ * so a rung that uses it deletes its own result on the way out and the next
+ * rung opens a freshly installed app at the Welcome screen. That is right for
+ * a rung run on its own — the suite's standing requirement is that every run
+ * starts from an uninstall — and wrong for a chain, where a later rung needs
+ * the state an earlier one left.
+ *
+ * `E2E_KEEP_APP=1` is the opt-out, for the FIRST rung of a chain: it still
+ * installs and still onboards, it just does not take the app away afterwards.
+ * Later rungs then run with `E2E_KEEP_STATE=1`, which already asks for
+ * `noReset`. Clear the app yourself before the chain if you want it clean.
+ */
+const keepApp = () => process.env.E2E_KEEP_APP === '1'
+
 export function androidCaps(avd = ANDROID_AVD) {
   return {
     platformName: "Android",
@@ -106,7 +121,7 @@ export function androidCaps(avd = ANDROID_AVD) {
     "appium:appPackage": APP_ID,
     "appium:appWaitActivity": "*",
     // fullReset = uninstall before install → satisfies the "uninstall every run" requirement
-    "appium:fullReset": true,
+    "appium:fullReset": !keepApp(),
     // don't auto-launch: we need `adb reverse tcp:8081` in place first so the
     // debug build can reach metro on the host
     "appium:autoLaunch": false,
@@ -186,10 +201,10 @@ export function iosCaps() {
     "appium:platformVersion": IOS_PLATFORM_VERSION,
     "appium:app": IOS_APP,
     "appium:bundleId": APP_ID,
-    "appium:fullReset": true,
+    "appium:fullReset": !keepApp(),
     // bundle version rarely changes between local builds; force reinstall so a
     // freshly built .app always replaces whatever is on the simulator
-    "appium:enforceAppInstall": true,
+    "appium:enforceAppInstall": !keepApp(),
     "appium:newCommandTimeout": 300,
     "appium:autoAcceptAlerts": true,
     // WDA defaults to :8100, which collides with anything else on that port
