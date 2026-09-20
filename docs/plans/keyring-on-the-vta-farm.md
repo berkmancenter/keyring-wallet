@@ -3,6 +3,8 @@
 **Status:** Proposal for review. Not a commitment to implement.
 **Scope:** making Keyring a first-class client of a **Farm-hosted** Personal VTA, at every level of the developer path the ecosystem documents — provisioning, everyday operation, community membership — and making the React Native runtime a supported target of the ecosystem's own TypeScript libraries along the way. No change to the VRC/witness stack except where §6 says so.
 **Siblings:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) owns the transport and operation layers this plan stands on; its [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client itself. [`reference-app-sdk-packaging.md`](./reference-app-sdk-packaging.md) owns what we hand a third-party developer. This plan owns only what changes when the VTA is **somebody else's managed service** rather than one we run.
+**Reviews:** [`2026-09-20-al.md`](./keyring-on-the-vta-farm/2026-09-20-al.md) — Alberto. F0's Farm measurement carried out: service enumeration, and versions per component rather than per stack. Supersedes a same-day conclusion that the Farm was "far behind", which was generalised from its mediator before the VTA and VTC were measured. Scopes the intermediate step.
+
 **Subtasks:** [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) — F2 and F4 for the ecosystem's peer identity vetting ceremony, developed against a local VTI stack until a Farm can host it. [`tsp_rev3_subtask.md`](./keyring-on-the-vta-farm/tsp_rev3_subtask.md) — the TSP Rev 2 → Rev 3 cutover: pack one revision, read two. Parented here because the Prague path forces the question; `openvtc-integration-plan.md` keeps ownership of TSP as a transport.
 **Dependency direction:** optional and additive, not core. No phase of `openvtc-integration-plan.md`, `pnm_cnm_subtask.md`, or `reference-app-sdk-packaging.md` is blocked on this plan, and none should become so. See §1.
 **Reasoning:** [`2026-09-03-al.md`](./keyring-on-the-vta-farm/2026-09-03-al.md) — the measurements behind §3 and §4, the positions adopted, and what they supersede. [`2026-09-04-bm.md`](./keyring-on-the-vta-farm/2026-09-04-bm.md) — why this plan's non-core status needs to be a stated constraint rather than an implicit reading of "sibling," and the one place (§3.4) the original text read otherwise. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
@@ -170,7 +172,31 @@ Advance `@openvtc/trust-tasks`, `pnm-core`, `vti-didcomm-js` and the `dtgwg-trus
 
 **Done when:** the ladder is green at the new pins with any breakage logged rung by rung; a Farm VTA's DID document is committed as a frozen fixture; §9 Q1 is answered with a service-type enumeration rather than an assumption; and the transport table in `ref-06x`'s findings ledger names, for a Farm VTA, which of REST / DIDComm / TSP is **advertised** and which is **reachable** — separately, because upstream's own client treats advertisement and availability as different claims.
 
-**Blocked on:** a Farm account (us). Nothing else.
+**Blocked on:** nothing. The account exists and the measurement is done — see
+[`2026-09-20-al.md`](./keyring-on-the-vta-farm/2026-09-20-al.md).
+
+**Measured, 2026-09-20.** A Farm VTA advertises `VTARest`
+(`https://vta-keyring-al.ic3.dev`, reachable — `/health` and `/openapi.json`
+both answer), and `DIDCommMessaging` and `TSPTransport` both pointing at **one**
+mediator, `https://mediator.ic3.dev/mediator/v1`. So §9 Q1 is answered by
+enumeration: all three transports are advertised, REST is independently
+reachable, and DIDComm and TSP share a single mediator rather than being
+separate routes in.
+
+**The stack is at parity except its mediator**, and the distinction decides what
+the Farm is for:
+
+| Component | Farm | Lab | |
+|---|---|---|---|
+| `vta-service` | 0.34.1 | 0.34.1 | identical, and the same 78 OpenAPI paths |
+| `vtc-service` | 0.11.58 (`vtc.ic3.dev`, shared) | 0.11.58 | identical |
+| mediator | older than 0.26.5 | 0.28.9 | behind |
+
+The protocol surface our client actually talks to — every Trust Task, the whole
+vetting family — is therefore the same on both. What differs is **delivery**:
+VTI-29, VTI-30 and VTI-31 can still appear on the Farm, because their fixes
+(#828, #830, #834) are newer than the mediator it runs, and a finding measured
+there says nothing about upstream's current main.
 
 ### F1 — `did:webvh` resolution on the phone
 
