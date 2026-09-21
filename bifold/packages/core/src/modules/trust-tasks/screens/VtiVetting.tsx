@@ -14,13 +14,27 @@
  */
 
 import { useAgent } from '@bifold/react-hooks'
+import Clipboard from '@react-native-clipboard/clipboard'
+import { useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
+import QRRenderer from '../../../components/misc/QRRenderer'
 import { useTheme } from '../../../contexts/theme'
+import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
@@ -37,6 +51,7 @@ import {
   type VettingTicket,
 } from '../module/vtiVetting'
 import { ensurePersonaFor } from '../module/vtiJoin'
+import { pendingVettingTicket } from '../module/vtiLinks'
 
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
 
@@ -76,6 +91,28 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [manifest, setManifest] = useState<VtiManifest>()
   const [legalName, setLegalName] = useState('')
   const [ticketLink, setTicketLink] = useState('')
+  const navigation = useNavigation()
+  const { width } = useWindowDimensions()
+  // A QR sized for a phone held at arm's length, not for the whole width of an
+  // iPad: past ~240 pt it only gets harder to fit in another camera's frame.
+  const ticketQrSize = Math.min(240, width - 80)
+  const [linkCopied, setLinkCopied] = useState(false)
+
+  // A ticket scanned or pasted anywhere lands here (vtiLinks): fill it in.
+  // The applicant still asks for vetting themselves.
+  useEffect(() => {
+    const takePending = () => {
+      const ticket = pendingVettingTicket.take()
+      if (ticket) setTicketLink(ticket)
+    }
+    takePending()
+    return pendingVettingTicket.subscribe(takePending)
+  }, [])
+
+  const onScanTicket = useCallback(() => {
+    const root = navigation as unknown as { navigate: (name: string, params?: object) => void }
+    root.navigate(Stacks.ConnectStack, { screen: Screens.Scan })
+  }, [navigation])
   const [checklist, setChecklist] = useState<{
     held: number
     needed: number
@@ -411,6 +448,20 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   {x.code}
                 </Text>
                 <Text style={styles.label}>{t('Vetting.OrScan')}</Text>
+                <View style={{ alignItems: 'center' }} testID={testIdWithKey('VettingTicketQr')}>
+                  <QRRenderer value={x.link} size={ticketQrSize} />
+                </View>
+                <Pressable
+                  style={styles.button}
+                  testID={testIdWithKey('VettingCopyTicketLink')}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    Clipboard.setString(x.link)
+                    setLinkCopied(true)
+                  }}
+                >
+                  <Text style={styles.buttonText}>{linkCopied ? t('Vetting.LinkCopied') : t('Vetting.CopyLink')}</Text>
+                </Pressable>
                 <Text style={styles.mono} testID={testIdWithKey('VettingTicketLink')} selectable>
                   {x.link}
                 </Text>
@@ -563,6 +614,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             <Text style={styles.step}>{t('Vetting.ApplicantStep2')}</Text>
             <Text style={styles.h}>{t('Vetting.AskAVetter')}</Text>
             <View style={styles.card}>
+              <Pressable
+                style={styles.button}
+                testID={testIdWithKey('VettingScanTicketButton')}
+                accessibilityRole="button"
+                onPress={onScanTicket}
+              >
+                <Text style={styles.buttonText}>{t('Vetting.ScanTicket')}</Text>
+              </Pressable>
               <Text style={styles.label}>{t('Vetting.PasteTicket')}</Text>
               <TextInput
                 style={styles.input}

@@ -16,11 +16,11 @@ import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
-import { Screens, TabStackParams, TabStacks } from '../types/navigators'
+import { TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
-import { keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
+import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import InAppMessageNotifier from '../components/InAppMessageNotifier'
@@ -59,8 +59,9 @@ const TabStack: React.FC = () => {
     async (deepLink: string) => {
       logger.info(`Handling deeplink: ${deepLink}`)
 
-      // An agent enrolment offer (keyring://vta/enrol?o=…) or a community
-      // invitation (keyring://vti/invitation?c=…) — ours, not DIDComm OOB links.
+      // An agent enrolment offer (keyring://vta/enrol?o=…), a community
+      // invitation (keyring://vti/invitation?c=…) or a vetter's ticket
+      // (vetting-ticket:?…) — ours, not DIDComm OOB links.
       // The same routing the scanner and the paste screen use.
       if (keyringAgentLinkKind(deepLink)) {
         try {
@@ -68,7 +69,7 @@ const TabStack: React.FC = () => {
             await routeKeyringAgentLink(deepLink, agent, (destination) =>
               (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
                 TabStacks.MyAgentStack,
-                { screen: destination === 'VtaLink' ? Screens.VtaLink : Screens.MyAgent }
+                { screen: MY_AGENT_SCREEN[destination] }
               )
             )
           }

@@ -4,33 +4,62 @@
  *
  * Every QR in these flows has a link twin, so scanning, pasting and opening a
  * deep link are the same act and land in the same place — the hand-over the
- * peer-to-peer VRC exchange already uses. Today: an agent enrolment offer and
- * a community invitation. A vetting ticket joins them when the vetting screens
- * are split (plan U5).
+ * peer-to-peer VRC exchange already uses: an agent enrolment offer, a
+ * community invitation, and a vetter's ticket.
  *
  * @module trust-tasks/module/vtiLinks
  */
 
 import type { Agent } from '@credo-ts/core'
 
-import { EnrolmentOfferError, isEnrolmentLink, parseEnrolmentLink } from '@bifold/trust-tasks'
+import { EnrolmentOfferError, isEnrolmentLink, isTicketUri, parseEnrolmentLink } from '@bifold/trust-tasks'
+
+import { Screens } from '../../../types/navigators'
 
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { vtaAgent } from './vtaAgent'
 import { isVtiInvitationLink, parseVtiInvitationLink } from './vtiInvitation'
 
-export type KeyringAgentLinkKind = 'enrolment' | 'invitation'
+export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket'
 
 /** Which of our links this is, if any — cheap, no parsing beyond the prefix. */
 export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undefined {
   const trimmed = text.trim()
   if (isEnrolmentLink(trimmed)) return 'enrolment'
   if (isVtiInvitationLink(trimmed)) return 'invitation'
+  if (isTicketUri(trimmed)) return 'ticket'
   return undefined
 }
 
 /** Where a link lands, inside the My Agent stack. */
-export type MyAgentDestination = 'VtaLink' | 'MyAgent'
+export type MyAgentDestination = 'VtaLink' | 'MyAgent' | 'VtiVetting'
+
+export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
+  VtaLink: Screens.VtaLink,
+  MyAgent: Screens.MyAgent,
+  VtiVetting: Screens.VtiVetting,
+}
+
+/**
+ * A vetter's ticket scanned or pasted outside the vetting screen, held until
+ * that screen takes it. The applicant still asks — taking the ticket only
+ * fills in what they would otherwise paste.
+ */
+let pendingTicket: string | undefined
+const ticketListeners = new Set<() => void>()
+export const pendingVettingTicket = {
+  take(): string | undefined {
+    const ticket = pendingTicket
+    pendingTicket = undefined
+    return ticket
+  },
+  subscribe(listener: () => void) {
+    ticketListeners.add(listener)
+    return () => {
+      ticketListeners.delete(listener)
+    }
+  },
+}
 
 /**
  * Act on one of our links: an enrolment offer goes to the link screen (the
@@ -57,6 +86,12 @@ export async function routeKeyringAgentLink(
       }
       vtaAgent.scanOffer(offer)
       navigate('VtaLink')
+      return
+    }
+    case 'ticket': {
+      pendingTicket = trimmed
+      ticketListeners.forEach((listener) => listener())
+      navigate('VtiVetting')
       return
     }
     case 'invitation': {

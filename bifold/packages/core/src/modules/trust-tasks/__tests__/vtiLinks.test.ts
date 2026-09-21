@@ -1,7 +1,7 @@
-import { encodeEnrolmentLink, type EnrolmentOffer } from '@bifold/trust-tasks'
+import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { vtaAgent } from '../module/vtaAgent'
-import { keyringAgentLinkKind, routeKeyringAgentLink } from '../module/vtiLinks'
+import { keyringAgentLinkKind, pendingVettingTicket, routeKeyringAgentLink } from '../module/vtiLinks'
 
 // Scanning, pasting and opening a deep link are one act (plan §5, U4): the
 // same routing lands an enrolment offer on the link screen and a community
@@ -59,5 +59,26 @@ describe('routing them', () => {
     await routeKeyringAgentLink('keyring://vti/invitation?c=abc', {} as never, navigate)
     expect(mockSaveInvitation).toHaveBeenCalledWith({ id: 'keyring://vti/invitation?c=abc' })
     expect(navigate).toHaveBeenCalledWith('MyAgent')
+  })
+})
+
+describe('a vetter\'s ticket', () => {
+  const ticket = encodeTicketUri({
+    community: 'did:webvh:Qm:community',
+    vetter: 'did:webvh:Qm:vetter',
+    presentation: { code: { code: 'ABCD-EFGH' } },
+  } as never)
+
+  it('is recognised, lands on Vetting, and is taken exactly once', async () => {
+    expect(keyringAgentLinkKind(ticket)).toBe('ticket')
+    const navigate = jest.fn()
+    const heard = jest.fn()
+    const unsubscribe = pendingVettingTicket.subscribe(heard)
+    await routeKeyringAgentLink(ticket, {} as never, navigate)
+    unsubscribe()
+    expect(navigate).toHaveBeenCalledWith('VtiVetting')
+    expect(heard).toHaveBeenCalledTimes(1)
+    expect(pendingVettingTicket.take()).toBe(ticket)
+    expect(pendingVettingTicket.take()).toBeUndefined()
   })
 })
