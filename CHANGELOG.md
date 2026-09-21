@@ -23,7 +23,7 @@ TestFlight internal testers and the Google Play internal testing track.
 - credo-ts 0.7 (the `0.7.1-pr-2704` snapshot that carries DIDComm v2) (#54)
 - One OS authentication prompt per witnessed exchange (#46)
 - Version is plain `MAJOR.MINOR.PATCH` — App Store Connect rejects a pre-release suffix
-- Staging pipeline: Xcode 26 runner, credentials from the `internal` environment, build numbers continue above the previous repository's (from 201)
+- Staging pipeline: Xcode 26 runner, credentials from the `internal` environment, build numbers continue above the previous repository's (from 201); TestFlight upload with `altool` and distribution through the App Store Connect API, with an individual or a team API key
 
 ### Fixed
 

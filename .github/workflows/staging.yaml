@@ -64,9 +64,8 @@ jobs:
             "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
             "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
             "BUILD_PROVISION_PROFILE_BASE64"
-            "APP_STORE_CONNECT_PRIVATE_KEY_95"
-            "APP_STORE_CONNECT_ISSUER_ID"
-            "APP_STORE_CONNECT_KEY_IDENTIFIER_95"
+            "APP_STORE_CONNECT_API_KEY_P8"
+            "APP_STORE_CONNECT_API_KEY_ID"
             "PLAY_STORE_JKS_BASE64"
             "PLAY_STORE_JKS_ALIAS"
             "PLAY_STORE_JKS_PASSWD"
@@ -93,9 +92,8 @@ jobs:
           APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
           BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-          APP_STORE_CONNECT_PRIVATE_KEY_95: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER_95: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           PLAY_STORE_JKS_BASE64: ${{ secrets.PLAY_STORE_JKS_BASE64 }}
           PLAY_STORE_JKS_ALIAS: ${{ secrets.PLAY_STORE_JKS_ALIAS }}
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
@@ -727,6 +725,7 @@ jobs:
           yarn run ios:setup
 
       - name: Bump Build No.
+        id: ios-version
         working-directory: app/ios
         env:
           CURRENT_PROJECT_VERSION: ${{ env.APP_BUILD_NUMBER }}
@@ -736,6 +735,7 @@ jobs:
           # gets MAJOR.MINOR.PATCH only; Android and the tag keep the full version.
           agvtool new-version ${CURRENT_PROJECT_VERSION}
           agvtool new-marketing-version ${MARKETING_VERSION%%-*}
+          echo "version=${MARKETING_VERSION%%-*}" >> $GITHUB_OUTPUT
 
       - name: Create environment settings
         working-directory: app
@@ -757,7 +757,6 @@ jobs:
         with:
           certificate: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           certificate_password: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
-          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
           provisioning_profile: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
 
       - name: Clear Metro bundler cache
@@ -778,11 +777,10 @@ jobs:
           rm -rf ios/build 2>/dev/null || true
           echo "✅ Metro cache cleared"
 
+      # Signing is manual (certificate + profile from the secrets), so the archive
+      # needs no API key and no provisioning updates.
       - name: Archive build
         working-directory: app/ios
-        env:
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
         run: |
           xcodebuild \
           -workspace AriesBifold.xcworkspace \
@@ -791,10 +789,6 @@ jobs:
           -xcconfig ../../release.xcconfig \
           -derivedDataPath xbuild \
           -archivePath ../../AriesBifold.xcarchive \
-          -allowProvisioningUpdates \
-          -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p9" \
-          -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-          -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
           -sdk iphoneos \
           archive
 
@@ -846,13 +840,15 @@ jobs:
         if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/ship-to-itunes
         with:
+          # An individual key (no issuer) or a team key (with APP_STORE_CONNECT_ISSUER_ID).
+          app_store_connect_key_id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           app_store_connect_issuer_id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          app_store_connect_key_identifier: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
-          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
+          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          ipa_path: export/KeyRing.ipa
+          bundle_id: asml.bkc.harvard.wallet
           version_code: ${{ env.APP_BUILD_NUMBER }}
-          version_name: ${{ env.APP_VERSION }}-staging
+          version_name: ${{ steps.ios-version.outputs.version }}
           release_notes: ${{ steps.commit-msg-ios.outputs.release_notes }}
-          distribute_external: "false"
           beta_groups: "KeyRing Internal Testers"
 
   create-staging-tag:
