@@ -61,6 +61,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-35](#vti-35--a-vtc-cannot-advertise-the-tsp-service-it-is-able-to-serve) | A VTC cannot advertise the TSP service it is able to serve | Medium | New | G |
 | [VTI-36](#vti-36--vta-services-tsp-enable-tells-a-self-hosted-vta-to-redeploy-a-log-it-already-serves) | `vta services tsp enable` tells a self-hosted VTA to redeploy a log it already serves | Low | New — documentation | G |
 | [VTI-37](#vti-37--a-consent-refusal-loses-its-challenge-once-the-approver-set-grows) | A consent refusal loses its challenge once the approver set grows | Medium | New | H |
+| [VTI-38](#vti-38--a-cancelled-relationship-is-forgotten-before-the-vta-can-answer-the-cancel) | A cancelled relationship is forgotten before the VTA can answer the cancel | Low | New | H |
 
 ## Stack under test
 
@@ -1160,6 +1161,35 @@ signed requests by reference (a fetch by `correlator`) rather than inline.
 **Measured:** vti `a96fe02f`, 2026-09-21; the bound dates from `f68178ee`
 (2026-08-26), so era G carried it too.
 
+### VTI-38 — A cancelled relationship is forgotten before the VTA can answer the cancel
+
+*Measured on era **H** (see [Stack under test](#stack-under-test)).*
+
+TSP Rev 3 §7.3: a cancellation of a relationship held in both directions is
+answered with a cancellation, *before* it is forgotten. Both halves of the
+stack mean to do this, in the wrong order. On receiving `XRFD` the SDK's
+inbound control path (`affinidi-messaging-sdk`, `protocols/tsp.rs`, read at
+tdk-rs `ad36f0b1`) advances the relationship — to `None` — and only then
+reports `reply_expected = true` because the state *was* `Bidirectional`.
+`vta-service`'s `handle_tsp_control` (`messaging/service.rs`) honours it by
+calling `cancel_relationship`, which computes `SendCancel` from the state now
+stored, `None`, and is refused:
+
+```
+WARN vta_service::messaging::service: could not send a TSP relationship cancellation
+  reason=the peer cancelled a mutual relationship (§7.3)
+  error=Config error: invalid relationship transition: invalid transition: SendCancel in state None
+```
+
+The relationship does end on both sides, so no traffic is misrouted; what is
+lost is the answer §7.3 requires, and with it the one signal that tells the
+cancelling peer the other side agreed. Every mutual cancel will do this.
+Reproduce with `tsp-reference/ref-04s-rev3-relationship` (XRFI → XRFA →
+XRFD against the lab VTA). **Measured:** vti `a96fe02f`, linking
+`affinidi-messaging-sdk` 0.26.12, 2026-09-21. The fix is upstream's to place:
+send the answer before advancing the stored state, or let `cancel_relationship`
+answer from the state the inbound path saw.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -1209,7 +1239,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 1.28 | 2026-09-21 | **Era H, run on devices.** Enrol, invite, the two-phone approval and the full vetting ceremony pass on upstream main. **VTI-24 and VTI-26 validated live** with a phone approver: the VTA pushed the consent request through the approver's own mediator and it was approved in about three seconds — once Keyring minted its `did:peer` with a `DIDCommMessaging` service naming the mediator by DID, a client defect found on the way. New: **VTI-37**, a consent refusal whose `details` pass the 4 KB bound at three approvers loses its challenge, digest and relayable requests. VTI-22 re-met: the lab's `up.sh` now sets alice's enforcement. |
+| 1.28 | 2026-09-21 | **Era H, run on devices.** Enrol, invite, the two-phone approval and the full vetting ceremony pass on upstream main. **VTI-24 and VTI-26 validated live** with a phone approver: the VTA pushed the consent request through the approver's own mediator and it was approved in about three seconds — once Keyring minted its `did:peer` with a `DIDCommMessaging` service naming the mediator by DID, a client defect found on the way. New: **VTI-37**, a consent refusal whose `details` pass the 4 KB bound at three approvers loses its challenge, digest and relayable requests. VTI-22 re-met: the lab's `up.sh` now sets alice's enforcement. Also new: **VTI-38**, a mutual cancel whose §7.3 answer is refused because the transport forgets the relationship first — found by `ref-04s`, which with `ref-04r` also closes TSP Rev 3's remaining lab items (long-form frames through the mediator; XRFI → XRFA → XRFD against upstream's state machine). |
 | 1.27 | 2026-09-21 | **Era H — the lab on upstream main** (vti `a96fe02f`, mediator 0.28.11, daemon `5365da7`). Four more resolved upstream since the report: **VTI-04** (vti #1592), **VTI-07** (tdk-rs #843, verified here), **VTI-14** (vti #1601), and **VTI-03**'s second half (vti #1593, `supplement/0.1`) — whose client half Keyring now implements. |
 | 1.26 | 2026-09-21 | VTI-Q1 withdrawn: we track upstream main, as the Farm does. Its number stays reserved. |
 | 1.25 | 2026-09-21 | **TSP Rev 3 on the ecosystem legs, and what it surfaced.** Era G: the lab carries SDK 0.26.12 and TSP-featured VTA and mediator builds, and the two-device vetting ceremony passes with phone ↔ VTA and phone ↔ VTC on Rev 3. New: **VTI-33** (a mediator without `tsp` drops every TSP frame silently), **VTI-34** (`tsp = true` inert without the feature), **VTI-35** (a VTC cannot publish `#tsp`), **VTI-36** (redeploy advice for a self-hosted log), and **EXT-01** (credo-ts rejects an array `service.type`, which blocked the Farm). Status corrections: **VTI-19** resolved by vti #1581, **VTI-24** and **VTI-26** by vti #1579 — both merged 09-19/20 and missed by earlier versions; VTI-30/31 fixes are on our stack since era E. **VTI-20** raised to medium after it blocked a run. **Era F corrected again:** the Farm VTA is `0.34.1-89ebd895` (#1579's merge commit) and the lab `6bd52cab` — equal version strings, different commits. Questions VTI-Q7–Q11 added. |
