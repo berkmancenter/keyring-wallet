@@ -226,7 +226,19 @@ export async function unpackTrustTaskFromPeer(
   bytes: Uint8Array,
   expectedReceiver: string
 ): Promise<{ plaintext: DidCommV2PlaintextMessage; unpacked: tsp.UnpackedMessage } | undefined> {
-  const unpacked = await session.codec.unpack(bytes, session.identity, session.resolver)
+  let unpacked: tsp.UnpackedMessage
+  try {
+    unpacked = await session.codec.unpack(bytes, session.identity, session.resolver)
+  } catch (error) {
+    // A relationship-forming control frame is not a Trust Task, and it is not
+    // a failure either: it is the peer's ACCEPT to the invite we sent. Reported
+    // as "no Trust Task here" so the caller logs it and the frame is then
+    // acknowledged like any other. Thrown instead, it skipped the
+    // acknowledgement and stayed queued against the peer that sent it — one
+    // stranded accept per applicant, charged to the community.
+    if (String((error as Error)?.message ?? '').startsWith(tsp.CONTROL_FRAME_RECEIVED)) return undefined
+    throw error
+  }
   if (unpacked.receiver !== expectedReceiver) {
     throw new Error(`${LOG_PREFIX} frame addressed to ${unpacked.receiver}, not this persona`)
   }

@@ -321,7 +321,7 @@ export function decodePayloadFrameRev3(
   }
 
   if (bytesEqual(typeCode, cesr.XRFI) || bytesEqual(typeCode, cesr.XRFA) || bytesEqual(typeCode, cesr.XRFD)) {
-    throw new Error('tsp: relationship-forming control message; this codec does not form relationships yet')
+    throw new Error(`${CONTROL_FRAME_RECEIVED}: an invite, accept or cancel is not an application message`)
   }
   if (bytesEqual(typeCode, cesr.XCTL) || bytesEqual(typeCode, cesr.XPAD)) {
     throw new Error('tsp: control or padding payload; not an application message')
@@ -411,6 +411,18 @@ export async function packWithHopsRev3(
   encodeSignatureFrame(signature, out)
   return { bytes: new Uint8Array(out), threadDigest, revision: 'rev3' }
 }
+
+/**
+ * Thrown when an incoming frame is a relationship-forming control message.
+ *
+ * Not an error in the protocol sense: this codec SENDS invites
+ * ({@link packInviteRev3}) and receives the peer's accept in reply, but it does
+ * not consume control frames as application traffic. Exported so a caller can
+ * tell "this was a control frame" from a real decoding failure without matching
+ * on prose — and treat it as handled, because a control frame it never
+ * acknowledges stays queued against the peer that sent it.
+ */
+export const CONTROL_FRAME_RECEIVED = 'tsp: relationship-forming control frame received'
 
 /** §9.2 (D9) fixes the relationship nonce at 128 bits. */
 export const NONCE_LEN = 16

@@ -30,6 +30,7 @@ import { type ApplicationKind, type PackedMessage, type TspRevision, type Unpack
 
 export { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
 export {
+  CONTROL_FRAME_RECEIVED,
   packInviteRev3,
   packRev3,
   packWithHopsRev3,
