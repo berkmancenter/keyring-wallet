@@ -19,6 +19,7 @@ import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import { openDeveloperScreen, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -26,6 +27,34 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const INVITE = path.resolve(here, "../scripts/openvtc/local-vti-stack/invite-persona.sh");
 const APPROVER = path.resolve(here, "../scripts/openvtc/local-vti-stack/approver-setup.sh");
 const platforms = (process.env.PLATFORMS || "android,ios").split(",");
+// E2E_REFUSAL=revoked-grant stages the refusal a community can actually see:
+// the vetter's grant is revoked after the statement is issued and before the
+// applicant applies. The statement then stops counting, the community answers
+// `requestMore` ("vetting:statements:1") and the request stays open as
+// DEFERRED — so this is also the live run of the applicant's way out, which
+// withdraws it. The grant is re-issued afterwards, whatever happened.
+const REFUSAL = process.env.E2E_REFUSAL || "";
+const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
+const STACK_ENV = path.join(process.env.STACK_DIR || path.join(process.env.HOME, "vti-stack"), "stack.env");
+/** One vtc-admin call, as the lab's community administrator; returns its JSON. */
+function admin(...args) {
+  const env = Object.fromEntries(
+    readFileSync(STACK_ENV, "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])
+  );
+  const out = execFileSync("node", [ADMIN, `${env.VTC_URL}/v1`, env.VTC_DID, path.join(path.dirname(STACK_ENV), "vtc-admin-credential.json"), ...args], { encoding: "utf8" });
+  const json = out.slice(out.indexOf("{"));
+  return json ? JSON.parse(json) : undefined;
+}
+/** The vetter this run's desk belongs to: the live grant whose profile was published last. */
+function currentVetter() {
+  const { vetters = [] } = admin("vetters-list") ?? {};
+  const live = vetters.filter((v) => v.live && !v.revoked);
+  live.sort((a, b) => String(b.profile?.updatedAt ?? "").localeCompare(String(a.profile?.updatedAt ?? "")));
+  if (!live[0]) throw new Error("no live vetter grant to revoke");
+  return live[0];
+}
+const deferredCount = () => (admin("join-list", "deferred")?.items ?? []).length;
+let revokedVetterDid;
 const LEGAL_NAME = process.env.E2E_LEGAL_NAME || "Alice Example";
 const keep = (caps) => ({ ...caps, "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false });
 const textOf = async (d, key) => (await byTestId(d, key).getAttribute(d.e2ePlatform === "ios" ? "label" : "text")) || "";
@@ -347,6 +376,30 @@ try {
   } else {
     console.log(`[e2e] ${applicant.e2ePlatform}: vetter grant checked against the status list`);
   }
+  if (REFUSAL === "revoked-grant") {
+    const vetterGrant = currentVetter();
+    revokedVetterDid = vetterGrant.memberDid;
+    const deferredBefore = deferredCount();
+    const revoked = admin("revoke-endorsement", vetterGrant.endorsementId);
+    console.log(`[e2e] community: vetter grant revoked (status-list bit ${revoked?.statusListIndex})`);
+    await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
+    await tapTestIdByCoordinates(applicant, "VettingApplyButton");
+    await scrollToTestId(applicant, "VettingSubmissionState", 6, LOW).catch(() => undefined);
+    const deferred = await waitText(applicant, "VettingSubmissionState", /asked for more/i, 120000);
+    console.log(`[e2e] ${applicant.e2ePlatform}: ${deferred}`);
+    if (!/vetting:statements/.test(deferred)) throw new Error(`${applicant.e2ePlatform}: deferred without naming the missing statement: ${deferred}`);
+    await screenshot(applicant, "vetting-refusal-01-deferred");
+    await scrollToTestId(applicant, "VettingWithdrawButton", 4, LOW);
+    await tapTestIdByCoordinates(applicant, "VettingWithdrawButton");
+    const withdrawn = await waitText(applicant, "VettingSubmissionState", /withdrew/i, 60000);
+    console.log(`[e2e] ${applicant.e2ePlatform}: ${withdrawn}`);
+    await screenshot(applicant, "vetting-refusal-02-withdrawn");
+    const deferredNow = deferredCount();
+    console.log(`[e2e] community: deferred requests ${deferredBefore} before the apply, ${deferredNow} after the withdraw`);
+    if (deferredNow > deferredBefore) throw new Error("the withdrawn request is still listed as deferred");
+    printSuccess("vti-vetting (revoked grant → deferred → withdrawn)");
+    process.exitCode = 0;
+  } else {
   await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
   await tapTestIdByCoordinates(applicant, "VettingApplyButton");
   // The member line sits at the top of the screen; wait for the verdict, then scroll back up.
@@ -358,6 +411,7 @@ try {
 
   printSuccess("vti-vetting");
   process.exitCode = 0;
+  }
 } catch (err) {
   printFailure("vti-vetting", err);
   for (const [d, name] of [[applicant, "applicant"], [vetter, "vetter"]]) {
@@ -367,6 +421,21 @@ try {
 } finally {
   if (keepalive) clearInterval(keepalive);
   try { execFileSync("bash", [INVITE, "--restore-invited"], { stdio: "ignore" }); } catch { /* best effort */ }
+  if (revokedVetterDid) {
+    // A revoked grant cannot be un-revoked; issue a new one and hand it over.
+    try {
+      admin("vetter-grant", revokedVetterDid);
+      // Straight after a grant the community asks for a moment
+      // (`retryAfterSecs: 2`); give it one, twice if need be.
+      for (let attempt = 1; ; attempt++) {
+        await sleep(3000);
+        try { admin("vetter-resend", revokedVetterDid); break; } catch (e) { if (attempt >= 3) throw e; }
+      }
+      console.log("[e2e] community: vetter grant re-issued");
+    } catch (e) {
+      console.log(`[e2e] community: could not re-issue the vetter grant — ${e?.message ?? e}`);
+    }
+  }
   for (const d of [applicant, vetter]) { if (d) { try { await d.deleteSession(); } catch { /* ignore */ } } }
   stopAppium();
 }
