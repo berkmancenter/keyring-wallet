@@ -289,6 +289,21 @@ EOF
   "$VTA_BIN" setup --from "$name/setup.toml" 2>&1 | grep -E "VTA DID" | awk '{print $3}'
 }
 
+# TSP is a CARGO FEATURE on vta-service, not merely a config flag, and it is OFF
+# by default (`default = ["setup","keyring","rest","didcomm","cli-synthesis"]`).
+# A default build has no TSP dispatcher at all, so setting `tsp = true` in
+# config.toml is inert — which is exactly how an evening was spent on
+# 2026-09-20 wondering why flipping it changed nothing. Build the agents with:
+#
+#   cargo build --bin vta --features tsp
+#
+# vtc-service is the opposite: `tsp` is ON by default, receive-side, because a
+# DID document is a contract and a binary that cannot serve what its document
+# advertises drops every conforming client's messages.
+if ! "$VTA_BIN" services --help >/dev/null 2>&1; then
+  echo "  note: this vta binary has no 'services' surface — TSP advertisement will be skipped" >&2
+fi
+
 log "provisioning the VTAs"
 ALICE_DID=$(setup_vta alice 8110 "$ALICE_HOST")
 COMMUNITY_DID=$(setup_vta community 8111 "$COMMUNITY_HOST")
