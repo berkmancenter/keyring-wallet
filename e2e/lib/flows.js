@@ -2060,3 +2060,52 @@ export async function assertContactPhotoReceived(driver, peerName, timeout = 600
     `${driver.e2ePlatform}: no photo (ContactAvatarImage) shown for "${peerName}" within ${timeout}ms`
   );
 }
+
+/**
+ * With the Scan screen already open (e.g. from My Agent's "Link your agent"),
+ * hand it a link through its paste-URL button — the same path a person with
+ * no working camera takes, and how a simulator "scans" (plan UT). Accepts the
+ * camera disclosure on a first visit. Returns once the link was submitted and
+ * not refused; the caller waits for wherever the link leads.
+ */
+export async function pasteLinkOnScanScreen(driver, url) {
+  let pasteReady = false;
+  for (let attempt = 0; attempt < 4 && !pasteReady; attempt++) {
+    await acceptSystemAlertIfPresent(driver);
+    if (await existsTestId(driver, "PasteUrlButton", 8000)) {
+      pasteReady = true;
+      break;
+    }
+    if (await existsTestId(driver, "Continue", 5000)) {
+      await tapTestId(driver, "Continue");
+      pasteReady = await existsTestId(driver, "PasteUrlButton", 10000);
+    }
+  }
+  if (!pasteReady) {
+    await screenshot(driver, "scan-no-paste-button");
+    throw new Error(`${driver.e2ePlatform}: the Scan screen never showed its paste-URL button`);
+  }
+  await tapTestId(driver, "PasteUrlButton", 15000);
+  const input = await waitForTestId(driver, "PastedUrl", 15000);
+  if (driver.e2ePlatform === "android") {
+    await driver.setClipboard(Buffer.from(url, "utf8").toString("base64"), "plaintext");
+    await input.click();
+    await driver.pressKeyCode(279); // KEYCODE_PASTE
+    await sleep(800);
+  } else {
+    await input.setValue(url);
+  }
+  await hideKeyboard(driver);
+  const typed = (await input.getText().catch(() => "")) ?? "";
+  if (typed && typed !== url) {
+    await screenshot(driver, "paste-link-mangled");
+    throw new Error(`${driver.e2ePlatform}: the link was not entered intact (${typed.length}/${url.length} chars)`);
+  }
+  const submit = await scrollToTestId(driver, "ScanPastedUrl");
+  await submit.click();
+  if (await existsTestId(driver, "Try Again", 8000)) {
+    await screenshot(driver, "paste-link-refused");
+    throw new Error(`${driver.e2ePlatform}: the app refused the pasted link`);
+  }
+  console.log(`[e2e] ${driver.e2ePlatform}: link pasted & submitted`);
+}

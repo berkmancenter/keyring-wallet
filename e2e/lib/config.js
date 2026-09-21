@@ -225,6 +225,13 @@ export function iosCaps() {
     "appium:wdaLocalPort": Number(process.env.WDA_LOCAL_PORT || 8100),
     "appium:wdaLaunchTimeout": 180000,
     "appium:simulatorStartupTimeout": 300000,
+    // A second worktree's Metro on another host port: a simulator shares the
+    // host's localhost, so point the app at it with the NSUserDefaults key
+    // React Native's bundle URL provider reads (RCT_jsLocation), passed as a
+    // launch argument — no rebuild, and nothing left behind on the simulator.
+    ...(process.env.METRO_PORT && process.env.METRO_PORT !== "8081"
+      ? { "appium:processArguments": { args: ["-RCT_jsLocation", `localhost:${process.env.METRO_PORT}`] } }
+      : {}),
     ...keepStateCaps(),
   };
 }

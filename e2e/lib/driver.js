@@ -7,7 +7,9 @@ import { mkdirSync, createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 
-const METRO_PORT = 8081;
+// The host port this worktree's Metro serves on; a second worktree runs its
+// own on another port (Android reaches it via debug_http_host, see below).
+const METRO_PORT = Number(process.env.METRO_PORT || 8081);
 const THIS_APP_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
