@@ -292,7 +292,22 @@ try {
   console.log(`[e2e] ${applicant.e2ePlatform}: card sent`);
 
   // — vetter: the card, the human check, the statement
-  const claimEl = await waitForTestId(vetter, "VettingCardClaim", 120000);
+  // Scroll while waiting. The claim renders inside the request card, below the
+  // match code, and on an emulator screen that lands below the fold depending
+  // on where the view happened to be scrolled when the card arrived. Waiting
+  // in place then times out on a card that is on the page — which is how this
+  // step failed about every other run, always reading as the card not
+  // arriving. The runbook's trap table already says to scroll before judging;
+  // this step never did.
+  let claimEl;
+  const claimDeadline = Date.now() + 120000;
+  while (Date.now() < claimDeadline) {
+    claimEl = await scrollToTestId(vetter, "VettingCardClaim", 3).catch(() => undefined);
+    if (claimEl && (await claimEl.isExisting().catch(() => false))) break;
+    claimEl = undefined;
+    await sleep(2000);
+  }
+  if (!claimEl) throw new Error(`${vetter.e2ePlatform}: the card's claims never appeared, even after scrolling`);
   const claim = (await claimEl.getAttribute(isIos(vetter) ? "label" : "text")) || "";
   if (!new RegExp(LEGAL_NAME).test(claim)) throw new Error(`${vetter.e2ePlatform}: unexpected card claim: ${claim}`);
   console.log(`[e2e] ${vetter.e2ePlatform}: card received — ${claim}`);
