@@ -117,4 +117,4 @@ export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
  * `resolveInviteRace`: that is the shape of the work, and flipping this
  * constant is what switches the ecosystem legs over once it exists.
  */
-export const CODEC_FORMS_RELATIONSHIPS = false
+export const CODEC_FORMS_RELATIONSHIPS = true
