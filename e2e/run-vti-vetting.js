@@ -114,13 +114,27 @@ try {
     // clickable and enabled, the tap returns success, and the handler does not
     // run. The same thing bites the Lockout control, which is why
     // `tapTestIdByCoordinates` exists. Tap the centre of its bounds instead.
-    await tapTestIdByCoordinates(vetter, "VettingPublishProfileButton").catch(async () => {
-      await publish.click();
-    });
+    // The button stays disabled until the persona's session is open, and a tap
+    // on a disabled Pressable is silently dropped. A persona fresh from the
+    // invite rung connects a couple of seconds after the desk renders — the
+    // tap landed in that gap on 2026-09-21 and nothing was ever sent. Wait for
+    // it to be enabled, and tap again if the first one still went nowhere.
+    const enabledBy = Date.now() + 60000;
+    while (Date.now() < enabledBy && !(await publish.isEnabled().catch(() => false))) await sleep(1000);
+    const tapPublish = () =>
+      tapTestIdByCoordinates(vetter, "VettingPublishProfileButton").catch(async () => {
+        await publish.click();
+      });
+    await tapPublish();
     const until = Date.now() + 60000;
     let published = false;
+    let retapAt = Date.now() + 15000;
     while (Date.now() < until && !published) {
       published = await byTestId(vetter, "VettingProfilePublished").isExisting().catch(() => false);
+      if (!published && Date.now() > retapAt && (await publish.isEnabled().catch(() => false))) {
+        await tapPublish();
+        retapAt = Date.now() + 15000;
+      }
       if (!published) await sleep(2500);
     }
     const err = await textOf(vetter, "VettingError").catch(() => "");
@@ -325,6 +339,14 @@ try {
   const check = await waitText(applicant, "VettingChecklist", /meets the published requirements/, 120000);
   console.log(`[e2e] ${applicant.e2ePlatform}: ${check}`);
   await screenshot(applicant, "vetting-07-checklist");
+  // Whether the vetter's grant was checked against the community's status
+  // list, and if not, why — a development build prints the stored reason.
+  if (await byTestId(applicant, "VettingGrantUnchecked").isExisting().catch(() => false)) {
+    const why = await textOf(applicant, "VettingGrantUncheckedReason").catch(() => "(no reason shown)");
+    console.log(`[e2e] ${applicant.e2ePlatform}: vetter grant NOT checked — ${why}`);
+  } else {
+    console.log(`[e2e] ${applicant.e2ePlatform}: vetter grant checked against the status list`);
+  }
   await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
   await tapTestIdByCoordinates(applicant, "VettingApplyButton");
   // The member line sits at the top of the screen; wait for the verdict, then scroll back up.
