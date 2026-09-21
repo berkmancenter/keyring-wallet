@@ -3,6 +3,33 @@
 All notable changes to Keyring Wallet are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - Unreleased
+
+First build from the public `berkmancenter/keyring-wallet` repository, shipped to
+TestFlight internal testers and the Google Play internal testing track.
+
+### Added
+
+- Relationship exchange and witness ceremony carried as Trust Tasks, with TSP envelope carriage (#20, #27)
+- The wallet answers `credential-exchange/query` Trust Tasks (#31)
+- DIDComm v2 carriage and TSP over DIDComm v2, behind a developer setting; a DIDComm v2 mediator is provisioned beside the v1 one when the build carries `MEDIATOR_V2_URL` (#54)
+- Witness-observed in-person co-presence over BLE on Android and iOS, with App Attest verification by the witness (#21, #38)
+- Profile photo on R-Cards (#30)
+- Reference-app demos: trading cards and the Approver (#34)
+
+### Changed
+
+- React Native 0.81, React 19; VC 2.0 credentials with `eddsa-rdfc-2022` Data Integrity proofs (#17)
+- credo-ts 0.7 (the `0.7.1-pr-2704` snapshot that carries DIDComm v2) (#54)
+- One OS authentication prompt per witnessed exchange (#46)
+- Version is plain `MAJOR.MINOR.PATCH` — App Store Connect rejects a pre-release suffix
+- Staging pipeline: Xcode 26 runner, credentials from the `internal` environment, build numbers continue above the previous repository's (from 201); TestFlight upload with `altool` and distribution through the App Store Connect API, with an individual or a team API key
+
+### Fixed
+
+- A wallet whose first mediation provisioning was interrupted recovers instead of failing on every start (#50)
+- Android: a single mediator pickup loop, and no volume-manager crash at startup (#43)
+
 ## [0.1.0-alpha.2] - 2026-06-28
 
 ### Added

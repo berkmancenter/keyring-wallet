@@ -3,10 +3,10 @@ name: Staging - Internal Testing Build & Deploy
 on:
   push:
     branches: [staging]
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   calculate-build-number:
@@ -17,15 +17,18 @@ jobs:
       - name: Calculate build number
         id: calc
         run: |
-          OFFSET=5
-          MIN_BUILD_NUMBER=34
+          # The run counter restarted at 1 when the pipeline moved from
+          # AdvancedIdentity, whose uploads reached build ~151. OFFSET must keep
+          # every build above the highest build either store has accepted, and is
+          # only ever raised. A floor alone would repeat the same number on every
+          # run until the counter caught up, and the stores reject a repeat.
+          OFFSET=200
+          MIN_BUILD_NUMBER=201
 
-          CALCULATED_BUILD=$((GITHUB_RUN_NUMBER + OFFSET))
-
-          if [ $CALCULATED_BUILD -lt $MIN_BUILD_NUMBER ]; then
-            BUILD_NUMBER=$MIN_BUILD_NUMBER
-          else
-            BUILD_NUMBER=$CALCULATED_BUILD
+          BUILD_NUMBER=$((GITHUB_RUN_NUMBER + OFFSET))
+          if [ $BUILD_NUMBER -lt $MIN_BUILD_NUMBER ]; then
+            echo "Build number $BUILD_NUMBER is below the floor $MIN_BUILD_NUMBER"
+            exit 1
           fi
 
           echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
@@ -41,13 +44,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Extract version from package.json
         id: get_version
@@ -59,43 +55,63 @@ jobs:
 
   check-secrets:
     runs-on: ubuntu-22.04
+    environment: internal
     steps:
       - name: Check required secrets
         shell: bash
         run: |
-          required_secrets=(
-            "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
-            "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
-            "BUILD_PROVISION_PROFILE_BASE64"
-            "APP_STORE_CONNECT_PRIVATE_KEY_95"
-            "APP_STORE_CONNECT_ISSUER_ID"
-            "APP_STORE_CONNECT_KEY_IDENTIFIER_95"
-            "PLAY_STORE_JKS_BASE64"
-            "PLAY_STORE_JKS_ALIAS"
-            "PLAY_STORE_JKS_PASSWD"
-            "GOOGLE_API_CREDENTIALS_BASE64"
-            "MEDIATOR_URL"
-          )
+          required_secrets=("MEDIATOR_URL")
+          if [ "$DEPLOY_IOS" != "false" ]; then
+            required_secrets+=(
+              "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
+              "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
+              "BUILD_PROVISION_PROFILE_BASE64"
+              "APP_STORE_CONNECT_API_KEY_P8"
+              "APP_STORE_CONNECT_API_KEY_ID"
+            )
+          else
+            echo "ℹ️ iOS is switched off (repository variable DEPLOY_IOS=false)"
+          fi
+          if [ "$DEPLOY_ANDROID" != "false" ]; then
+            required_secrets+=(
+              "PLAY_STORE_JKS_BASE64"
+              "PLAY_STORE_JKS_ALIAS"
+              "PLAY_STORE_JKS_PASSWD"
+              "GOOGLE_API_CREDENTIALS_BASE64"
+            )
+          else
+            echo "ℹ️ Android is switched off (repository variable DEPLOY_ANDROID=false)"
+          fi
 
+          missing=0
           for secret in "${required_secrets[@]}"; do
             if [ -z "${!secret}" ]; then
-              echo "⚠️ Warning: Secret $secret is not set"
+              echo "❌ Secret $secret is not set"
+              missing=1
             else
               echo "✅ Secret $secret is set"
             fi
           done
+
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "ℹ️ SLACK_WEBHOOK_URL is not set; the Slack notification will be skipped"
+          fi
+
+          exit $missing
         env:
           APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
           BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-          APP_STORE_CONNECT_PRIVATE_KEY_95: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER_95: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           PLAY_STORE_JKS_BASE64: ${{ secrets.PLAY_STORE_JKS_BASE64 }}
           PLAY_STORE_JKS_ALIAS: ${{ secrets.PLAY_STORE_JKS_ALIAS }}
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DEPLOY_IOS: ${{ vars.DEPLOY_IOS }}
+          DEPLOY_ANDROID: ${{ vars.DEPLOY_ANDROID }}
 
   test:
     runs-on: ubuntu-22.04
@@ -103,13 +119,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - uses: actions/setup-python@v5
         with:
@@ -130,7 +139,10 @@ jobs:
 
   build-android-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
+    # Repository variable DEPLOY_ANDROID=false switches the platform off.
+    if: vars.DEPLOY_ANDROID != 'false'
     runs-on: ubuntu-22.04
+    environment: internal
     timeout-minutes: 60
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
@@ -140,13 +152,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Verify bifold submodule commit
         run: |
@@ -321,8 +326,12 @@ jobs:
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
+          # Optional: the DIDComm v2 mediator, used only when the developer
+          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
+          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
 
       - name: Create release keystore
         working-directory: app/android/app
@@ -549,7 +558,6 @@ jobs:
           echo "✅ Build verification complete"
 
       - name: Upload Android artifact
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork != true
         uses: actions/upload-artifact@v4
         with:
           name: android-staging-${{ env.APP_BUILD_NUMBER }}
@@ -557,20 +565,9 @@ jobs:
           retention-days: 30
 
       - name: Extract commit message for release notes
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
           CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -586,7 +583,6 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Ship to Google Play Internal Testing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         working-directory: app
         env:
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
@@ -605,7 +601,12 @@ jobs:
 
   build-ios-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
-    runs-on: macos-14
+    # Repository variable DEPLOY_IOS=false switches the platform off.
+    if: vars.DEPLOY_IOS != 'false'
+    # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
+    # since 2026-04-28; macos-26 ships Xcode 26 as its default.
+    runs-on: macos-26
+    environment: internal
     timeout-minutes: 60
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
@@ -614,13 +615,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Verify bifold submodule commit
         run: |
@@ -645,10 +639,10 @@ jobs:
         with:
           working-directory: ./app
 
-      - name: Switch to correct Xcode
+      - name: Show Xcode version
         run: |
-          sudo xcode-select --switch /Applications/Xcode_16.2.app
-          sudo xcode-select -p
+          xcode-select -p
+          xcodebuild -version
 
       - name: Cache pod dependencies
         id: pod-cache
@@ -734,20 +728,28 @@ jobs:
           yarn run ios:setup
 
       - name: Bump Build No.
+        id: ios-version
         working-directory: app/ios
         env:
           CURRENT_PROJECT_VERSION: ${{ env.APP_BUILD_NUMBER }}
           MARKETING_VERSION: ${{ env.APP_VERSION }}
         run: |
+          # App Store Connect rejects a pre-release suffix (ITMS-90060), so iOS
+          # gets MAJOR.MINOR.PATCH only; Android and the tag keep the full version.
           agvtool new-version ${CURRENT_PROJECT_VERSION}
-          agvtool new-marketing-version ${MARKETING_VERSION}
+          agvtool new-marketing-version ${MARKETING_VERSION%%-*}
+          echo "version=${MARKETING_VERSION%%-*}" >> $GITHUB_OUTPUT
 
       - name: Create environment settings
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
+          # Optional: the DIDComm v2 mediator, used only when the developer
+          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
+          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
 
       - name: Update APS environment
         run: |
@@ -758,7 +760,6 @@ jobs:
         with:
           certificate: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
           certificate_password: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
-          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
           provisioning_profile: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
 
       - name: Clear Metro bundler cache
@@ -779,11 +780,10 @@ jobs:
           rm -rf ios/build 2>/dev/null || true
           echo "✅ Metro cache cleared"
 
+      # Signing is manual (certificate + profile from the secrets), so the archive
+      # needs no API key and no provisioning updates.
       - name: Archive build
         working-directory: app/ios
-        env:
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
         run: |
           xcodebuild \
           -workspace AriesBifold.xcworkspace \
@@ -792,22 +792,16 @@ jobs:
           -xcconfig ../../release.xcconfig \
           -derivedDataPath xbuild \
           -archivePath ../../AriesBifold.xcarchive \
-          -allowProvisioningUpdates \
-          -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p9" \
-          -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-          -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
           -sdk iphoneos \
           archive
 
       - name: Export production archive
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/export-ios-archive
         with:
           export_options: "export-options-keyring.plist"
           ouput_artifact_ref: "ios-staging-artifact"
 
       - name: Upload iOS artifact
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: actions/upload-artifact@v4
         with:
           name: ios-staging-${{ env.APP_BUILD_NUMBER }}
@@ -815,20 +809,9 @@ jobs:
           retention-days: 30
 
       - name: Extract commit message for release notes
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-ios
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
           CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -844,22 +827,26 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Ship to TestFlight Internal Testing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/ship-to-itunes
         with:
+          # An individual key (no issuer) or a team key (with APP_STORE_CONNECT_ISSUER_ID).
+          app_store_connect_key_id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           app_store_connect_issuer_id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          app_store_connect_key_identifier: ${{ secrets.APP_STORE_CONNECT_KEY_IDENTIFIER_95 }}
-          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_95 }}
+          app_store_connect_private_key: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          ipa_path: export/KeyRing.ipa
+          bundle_id: asml.bkc.harvard.wallet
           version_code: ${{ env.APP_BUILD_NUMBER }}
-          version_name: ${{ env.APP_VERSION }}-staging
+          version_name: ${{ steps.ios-version.outputs.version }}
           release_notes: ${{ steps.commit-msg-ios.outputs.release_notes }}
-          distribute_external: "false"
           beta_groups: "KeyRing Internal Testers"
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: github.event_name == 'push' && success()
+    # Runs when every platform that ran succeeded; a switched-off platform is skipped.
+    if: ${{ !failure() && !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     env:
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
     steps:
@@ -867,12 +854,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive
 
       - name: Extract version
         id: get_version
@@ -891,21 +872,14 @@ jobs:
 
   notify-team:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: success() # Only notify on successful builds
+    if: ${{ !failure() && !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
+    environment: internal
     env:
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
-          token: ${{ secrets.BIFOLD_REPO_TOKEN }}
-
-      - name: Initialize submodules with PAT
-        run: |
-          git submodule sync --recursive
-          git config submodule.bifold.url "https://${{ secrets.BIFOLD_REPO_TOKEN }}@github.com/berkmancenter/keyring-bifold.git"
-          git submodule update --init --recursive --force
 
       - name: Extract version
         id: get_version
@@ -915,20 +889,9 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Extract commit message for Slack
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-slack
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
           CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -3 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -950,8 +913,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Send Slack Notification
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: env.SLACK_WEBHOOK_URL != ''
         run: |
           curl -X POST -H 'Content-type: application/json' \
             --data "{
