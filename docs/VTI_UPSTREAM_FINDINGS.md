@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.26 — 2026-09-21.** A living document: every finding here was measured
+**Version 1.27 — 2026-09-21.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -26,18 +26,18 @@ from a report or an issue always lands on the right entry.
 | --- | --- | --- | --- | --- |
 | [VTI-01](#vti-01) | An administrator cannot become a vetter, and the first-vetter bootstrap is undocumented | Medium | Open — bootstrap path measured | A |
 | [VTI-02](#vti-02) | An ACL `member` role is not community membership | High | Open | A |
-| [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | **Resolved upstream** — `verifiable-trust-infrastructure` #1591; client work is ours | A |
-| [VTI-04](#vti-04) | A second application from one DID is refused, not answered | Medium | Open — by design, consequences unaddressed | A |
+| [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | **Resolved upstream** — vti #1591 (`withdraw/0.1`) and #1593 (`supplement/0.1`); **client half built** (bifold `877d26f`), not yet run against a live VTC | A |
+| [VTI-04](#vti-04) | A second application from one DID is refused, not answered | Medium | **Resolved upstream** — vti #1592 names the open request; with #1591/#1593 the applicant can now act on it | A |
 | [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | **Resolved upstream** — `affinidi-tdk-rs` #831 | A |
 | [VTI-06](#vti-06) | A misplaced configuration key is accepted in silence | Low | CORS half answered by #831; general case open | A, re-checked on **C** |
-| [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | Open | A |
+| [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | **Resolved upstream** — tdk-rs #843; **verified on our stack** (era H) | A, re-measured on **H** |
 | [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | Open — workaround | A |
 | [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | Open | A |
 | [VTI-10](#vti-10) | A document's issuer must equal the DIDComm sender | Low | **Confirmed by upstream** — deliberate; specification gap stands | A |
 | [VTI-11](#vti-11) | A fresh VTC has an empty ACL and cannot authenticate its own admin | Low | Open | A |
 | [VTI-12](#vti-12) | A community's advertised transports are fixed at mint | Low | Open | A |
 | [VTI-13](#vti-13) | A criterion cannot express "no requirements" | Medium | **Corrected** — misattributed; the refusal is `affinidi-openid4vp`'s and spec-correct. Narrowed, and our answer on the shape is inside | A |
-| [VTI-14](#vti-14) | `cnm`'s vetting subcommands ignore `--url` / `VTA_URL` | Low | Open | A |
+| [VTI-14](#vti-14) | `cnm`'s vetting subcommands ignore `--url` / `VTA_URL` | Low | **Resolved upstream** — vti #1601 | A |
 | [VTI-15](#vti-15) | A VTC DID cannot be used as a `cnm` community | Low | Open | A |
 | [VTI-16](#vti-16) | Minting an admin portal sign-in needs the daemon stopped, then running | Low | Open | A |
 | [VTI-17](#vti-17) | A force re-provision keeps a DID bound to a hostname that no longer exists | Medium | Open | A |
@@ -78,6 +78,7 @@ particular none are the images a VTA Farm currently offers.
 | **F** (Farm) | 2026-09-20 | **vta 0.34.1 · vtc 0.11.58 — identical to the lab.** VTA REST `vta-keyring-al.ic3.dev` (78 OpenAPI paths, same count); community `vtc.ic3.dev`, shared, not ours to administer | `mediator.ic3.dev` — **0.26.4**, reported by its own `/readyz`. The only component behind | DID hosting `dids.ic3.dev` |
 | **E** | 2026-09-20 | unchanged — vta 0.34.1 · vtc 0.11.58 | `15499952` — upstream main, mediator **0.28.9**, carrying #829–#842; published on crates.io despite the changelog heading each section "Unreleased" | `35244b7` — daemon 0.8.3 |
 | **D** | 2026-09-20 | unchanged from C — vta 0.34.1 · vtc 0.11.58 | `b544da04` — the **#829 branch tip**, mediator 0.28.0; this is *not* upstream main, which has since merged #829 and thirteen more (#830–#842) and stands at mediator 0.28.9 | `35244b7` — daemon 0.8.3 |
+| **H** | 2026-09-21 (evening) | `a96fe02f` — upstream main; carries #1579, #1581, #1591–#1593, #1601 and the persona/face work (#1594–#1606); `affinidi-messaging-sdk` 0.26.12 from upstream's own lockfile; `vta` built `--features tsp` | `ad36f0b1` — upstream main, mediator **0.28.11** (#843, #844), `--features tsp` | `5365da7` — upstream main (#205) |
 | **G** | 2026-09-21 | `6bd52cab` as era C, **plus `affinidi-messaging-sdk` 0.26.12** (carries tdk-rs #838) in the lockfile; `vta` built **`--features tsp`**; alice and the community VTA advertise `TSPTransport` (`vta services tsp enable`), the VTC by a DID-log edit (VTI-35) | `15499952` as era E — mediator 0.28.9, rebuilt **`--features tsp`** | `35244b7` — daemon 0.8.3 |
 
 **A correction to era F, measured 2026-09-21.** "Identical to the lab" holds
@@ -239,6 +240,16 @@ codes told apart without parsing prose — `alreadyDecided` means the outcome
 stands and the applicant should be shown it, `notFound` means there is nothing
 to close. Until then the rule of thumb above still holds for our users.
 
+**The second half, and the client, since.** `verifiable-trust-infrastructure`
+#1593 adds `vtc/join-requests/supplement/0.1`, which answers a deferral against
+the request already open, so an applicant no longer has to choose between
+withdrawing (losing their place) and waiting. Keyring now speaks both (bifold
+`877d26f`): a deferred request is supplemented with every statement — the new
+presentation replaces the old one — and withdrawn from a control on the vetting
+screen, with `notFound`, `alreadyDecided` and `notAwaitingEvidence` read from
+the code. Unit-tested; not yet run against a live community, because the lab's
+tunnel was down when it landed.
+
 ---
 
 ## VTI-04
@@ -258,6 +269,10 @@ naively it surfaces as an empty verdict, which tells a person nothing.
 
 **Client-side note.** Keyring distinguishes the two document types and shows
 the community's sentence with the framework code behind a *Details* control.
+
+**Resolved upstream** by `verifiable-trust-infrastructure` #1592: the refusal
+now names the open request, which is what the applicant needs in order to act
+on it — and since #1591 and #1593 there is something to act with (see VTI-03).
 
 ---
 
@@ -372,6 +387,12 @@ ERROR Failed to load LUA scripts: Configuration Error:
 
 Resolving relative paths against the config file's directory would match how
 every other path in that file behaves in practice.
+
+**Resolved upstream** by `affinidi-tdk-rs` #843, and verified on era H: with
+`functions_file = "atm-functions.lua"` beside the config, mediator 0.28.11
+loads it from there and reports the library matches the build. The old
+working-directory form still loads, with a deprecation warning — a kind way to
+change a default.
 
 ---
 
@@ -514,6 +535,9 @@ from the supplied URL, so pointing the CLI at a specific host has no effect.
 Combined with [VTI-15](#vti-15) this made `cnm` unusable against our stack, and
 is why this repository carries its own small admin client
 (`tsp-reference/ref-20-local-vetting/vtc-admin.mjs`).
+
+**Resolved upstream** by `verifiable-trust-infrastructure` #1601: an explicit
+`--url` is honoured on every transport, not only forced REST.
 
 ---
 
@@ -1141,6 +1165,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.27 | 2026-09-21 | **Era H — the lab on upstream main** (vti `a96fe02f`, mediator 0.28.11, daemon `5365da7`). Four more resolved upstream since the report: **VTI-04** (vti #1592), **VTI-07** (tdk-rs #843, verified here), **VTI-14** (vti #1601), and **VTI-03**'s second half (vti #1593, `supplement/0.1`) — whose client half Keyring now implements. |
 | 1.26 | 2026-09-21 | VTI-Q1 withdrawn: we track upstream main, as the Farm does. Its number stays reserved. |
 | 1.25 | 2026-09-21 | **TSP Rev 3 on the ecosystem legs, and what it surfaced.** Era G: the lab carries SDK 0.26.12 and TSP-featured VTA and mediator builds, and the two-device vetting ceremony passes with phone ↔ VTA and phone ↔ VTC on Rev 3. New: **VTI-33** (a mediator without `tsp` drops every TSP frame silently), **VTI-34** (`tsp = true` inert without the feature), **VTI-35** (a VTC cannot publish `#tsp`), **VTI-36** (redeploy advice for a self-hosted log), and **EXT-01** (credo-ts rejects an array `service.type`, which blocked the Farm). Status corrections: **VTI-19** resolved by vti #1581, **VTI-24** and **VTI-26** by vti #1579 — both merged 09-19/20 and missed by earlier versions; VTI-30/31 fixes are on our stack since era E. **VTI-20** raised to medium after it blocked a run. **Era F corrected again:** the Farm VTA is `0.34.1-89ebd895` (#1579's merge commit) and the lab `6bd52cab` — equal version strings, different commits. Questions VTI-Q7–Q11 added. |
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
