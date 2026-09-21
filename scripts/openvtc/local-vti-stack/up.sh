@@ -297,6 +297,13 @@ EOF
 #
 #   cargo build --bin vta --features tsp
 #
+# The MEDIATOR has the same trap, and it cost the most: its default features
+# carry no `tsp`, so it cannot classify a TSP frame at all. The phone then sends
+# a correct invite and a correct task, the VTC logs nothing, and nothing
+# anywhere says why — the frames vanish between the two. Build it with:
+#
+#   cargo build --bin mediator --features tsp
+#
 # vtc-service is the opposite: `tsp` is ON by default, receive-side, because a
 # DID document is a contract and a binary that cannot serve what its document
 # advertises drops every conforming client's messages.
