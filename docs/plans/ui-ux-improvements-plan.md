@@ -2,7 +2,7 @@
 
 **Status:** Proposed. No code written. Target: the live demo at OSS Summit Europe, Prague, 1 October 2026.
 **Upstream asks:** §9 is the running list of what this work needs changed upstream, each with the code it points at; it feeds the reports sent to the maintainers and the upstream findings document.
-**Reasoning:** [`2026-09-21-al.md`](./ui-ux-improvements-plan/2026-09-21-al.md) — the inventory of today's screens, what upstream supports for enrolment and sign-in (measured against the pinned clones), and the design research every principle in §3 cites. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
+**Reasoning:** [`2026-09-21-al.md`](./ui-ux-improvements-plan/2026-09-21-al.md) — the inventory of today's screens, what upstream supports for enrolment and sign-in (measured against the pinned clones), and the design research every principle in §3 cites. [`2026-09-21-bm.md`](./ui-ux-improvements-plan/2026-09-21-bm.md) — why confirmations reuse the app's existing bottom-sheet modal convention (`CommonRemoveModal`/`ModalUsage`) rather than a new screen, and why the match-code checks are the one deliberate exception. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
 **Related plans:** [`keyring-on-the-vta-farm/community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the ceremony, the protocol and the tests; this plan owns how a person meets them. It refines that subtask's §7 (user experience) — §7's screen list and one-scanner rule stand, and the changes this plan makes to them are named in §5. Once adopted, §7 there points here.
 **Code under discussion:** the `feat/prague-farm-membership` branch of both repositories — screens in `bifold/packages/core/src/modules/trust-tasks/screens/` (`MyAgent.tsx`, `VtiCommunity.tsx`, `VtiVetting.tsx`), the developer surface in `app/src/screens/Developer.tsx`, lab scripts in `scripts/openvtc/local-vti-stack/`.
 
@@ -123,14 +123,14 @@ Linked has one connection sub-state:  Online ⇄ Reconnecting(attempt, nextRetry
 
 ### 4.3 Buttons and controls
 
-They use the app's theme as it is: bifold's `Button` with its `ButtonType` (Primary, Secondary, Tertiary, Critical), colours and type from `useTheme()` and the Keyring theme, and the icon set the screens already use. The trust-task screens' hand-rolled `Pressable` buttons are replaced with it.
+They use the app's theme as it is: bifold's `Button` with its `ButtonType` (Primary, Secondary, Tertiary, Critical), colours and type from `useTheme()` and the Keyring theme, and the icon set the screens already use. The trust-task screens' hand-rolled `Pressable` buttons are replaced with it. **Confirmations reuse the app's existing bottom-sheet modal — `CommonRemoveModal`, driven by the `ModalUsage` enum — rather than a new screen or component.** It is already how the app confirms removing a contact, removing a credential, declining an offer and deleting a profile; the trust-task screens have no confirmation UI of their own today, so adopting the shared one breaks nothing local. Evidence and what this supersedes: companion §S–T.
 
 - **One primary button per screen**, at the bottom, where a thumb reaches it. Everything else is Secondary or Tertiary. *(Apple HIG, buttons; EUDI Wallet Design Guide, main controls in the lower half.)*
 - **Labels are verbs that name the outcome:** "Link your agent", "Scan ticket", "Send my name", "Attest". Never "OK" or "Continue" where a verb fits. *(Apple HIG, buttons.)*
 - **A pressed button shows its own progress** and cannot be pressed twice; the action it started is idempotent, so a retry after a timeout does not send twice. *(Apple HIG, buttons.)*
 - **A locked action says why, next to it**, rather than sitting greyed with no explanation: "Unlocks when an admin names you a vetter".
-- **Destructive actions are Critical and confirmed, and the confirm names the outcome** — "Leave *Community*" / "Stay", "Unlink this phone" / "Keep linked" — never "Are you sure?" with Yes / No. Confirmations are kept for what cannot be undone, so they are not clicked through. *(NN/g, confirmation dialogs.)*
-- **Two-sided checks use outcome labels too:** the match-code screens answer "Codes match" / "Codes differ" (§5.3, §5.4).
+- **Destructive actions are Critical and confirmed in the shared modal, and the confirm names the outcome** — "Leave *Community*" / "Stay", "Unlink this phone" / "Keep linked" — never "Are you sure?" with Yes / No. Confirmations are kept for what cannot be undone, so they are not clicked through. *(NN/g, confirmation dialogs.)*
+- **Two-sided checks use outcome labels too:** the match-code screens answer "Codes match" / "Codes differ" (§5.3, §5.4). These stay full-screen, not the shared modal — deliberately: the match code is the in-person ceremony's one determinative check, not a decision already made, and it needs to be the only thing on screen, the way Signal's safety-number view and the Bluetooth numeric-comparison prompt are (principle 8; companion §U).
 - **Targets are at least 44 × 44 pt** (48 dp on Android), with a label, a role and busy/disabled state for screen readers, and a test ID. *(Apple HIG; WCAG 2.2 SC 2.5.8 sets the floor at 24 × 24.)*
 
 `VtiVetting.tsx` stops being one screen with two modes. It becomes two flows reached from the community screen — **Get vetted** and **Vet someone** — with one step per screen (§5.3, §5.4).
@@ -176,7 +176,7 @@ Each journey lists its steps as the person sees them. Anything marked **(off-app
 
 1. **(off-app)** The admin creates an invitation for the person in the portal.
 2. The person scans it with the app's one scanner.
-3. Confirm screen: "Join *Community name* as a member?" → Join (biometric).
+3. Confirm sheet (the app's shared confirmation modal, §4.3): "Join *Community name* as a member?" → Join (biometric).
 4. "Member ✓" — the card appears on the community screen.
 
 **Blocked on upstream:** an invitation is 6,331 bytes and a QR code carries at most 2,953 (VTI-32, High, open). Until invitations travel by reference, the lab hands the link over as a deep link (AirDrop or a message), and the demo does not scan one.
