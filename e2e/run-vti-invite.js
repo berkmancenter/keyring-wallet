@@ -83,7 +83,7 @@ try {
     await openDeveloperScreen(driver);
     for (let i = 0; i < 45; i++) {
       const community = await textOf(driver, "VtaProbeLog").catch(() => "");
-      if (/verdict|no verdict|\[VTI-PROBE\] failed|no manifest/.test(community)) break;
+      if (/verdict|no verdict|manifest only|\[VTI-PROBE\] failed|no manifest/.test(community)) break;
       await sleep(2000);
     }
     for (let i = 0; i < 3; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;

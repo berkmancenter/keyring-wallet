@@ -357,7 +357,14 @@ const Developer: React.FC = () => {
    * VTI_MEDIATOR_DID and VTI_COMMUNITY_DID come from `app/.env`, like the
    * mediator URLs — the local stack mints new DIDs whenever its tunnels change.
    */
-  const handleProbeVtaMediator = async () => {
+  /**
+   * The whole community wire, end to end. A tapped probe applies; the one that
+   * runs on its own when this screen opens stops at the manifest. Every apply
+   * is a real join request from a throwaway did:peer, left open on the
+   * community — which an automatic run did on every e2e reset, and which a
+   * community should only ever see from a persona.
+   */
+  const handleProbeVtaMediator = async (options: { apply?: boolean } = { apply: true }) => {
     if (!agent) {
       Alert.alert('Error', 'Agent not initialized')
       return
@@ -442,6 +449,11 @@ const Developer: React.FC = () => {
         )
         for (const criterion of criteria ?? []) {
           mark('[VTI-PROBE] criterion:', String(criterion.description ?? 'unnamed'))
+        }
+
+        if (!options.apply) {
+          mark('[VTI-PROBE] manifest only — not applying (tap the probe to apply)')
+          return
         }
 
         // Apply. With no credentials in hand the honest presentation is an
@@ -648,7 +660,7 @@ const Developer: React.FC = () => {
   useEffect(() => {
     if (Config.VTI_PROBE_ON_START !== '1' || autoProbed.current || !agent) return
     autoProbed.current = true
-    void handleProbeVtaMediator()
+    void handleProbeVtaMediator({ apply: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent])
 
@@ -982,7 +994,7 @@ const Developer: React.FC = () => {
               },
               isProbingVta && { backgroundColor: ColorPalette.brand.primaryDisabled },
             ]}
-            onPress={handleProbeVtaMediator}
+            onPress={() => handleProbeVtaMediator({ apply: true })}
             disabled={isProbingVta}
             testID={testIdWithKey('ProbeVtaMediatorButton')}
           >

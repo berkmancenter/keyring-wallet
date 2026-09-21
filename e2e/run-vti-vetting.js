@@ -160,7 +160,7 @@ try {
   let probe = "";
   for (let i = 0; i < 45; i++) {
     probe = await textOf(applicant, "VtaProbeLog").catch(() => "");
-    if (/verdict|no verdict|\[VTI-PROBE\] failed|no manifest/.test(probe)) break;
+    if (/verdict|no verdict|manifest only|\[VTI-PROBE\] failed|no manifest/.test(probe)) break;
     await sleep(2000);
   }
   for (let i = 0; i < 3; i++) if (!(await applicant.acceptAlert().then(() => true, () => false))) break;
