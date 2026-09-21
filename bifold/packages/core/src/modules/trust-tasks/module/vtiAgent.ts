@@ -46,6 +46,7 @@ import {
   type TspPeerRevisionStore,
   type TspSessionIdentity,
 } from './vtiTsp'
+import { chooseCarriage, type Carriage } from './tspCapability'
 
 const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
 const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
@@ -158,6 +159,12 @@ class VtiAgentController {
   private pending?: { type: string; resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
   private inbox: ((plaintext: DidCommV2PlaintextMessage) => void)[] = []
   private tsp?: TspSessionIdentity
+  /**
+   * §4.2: the envelope chosen for each peer, decided once per session and kept.
+   * Deciding per message would let one unreachable peer flap a session between
+   * two envelope formats; the plan asks for a session-scoped choice, logged.
+   */
+  private readonly carriageByPeer = new Map<string, Carriage>()
   private peerRevisionStore?: TspPeerRevisionStore
 
   /** Receive what the community sends that is not an answer (credentials, statements). */
@@ -353,7 +360,16 @@ class VtiAgentController {
     const session = this.session
     const did = this.state.did
     if (!session || !did) throw new Error('vtiAgent: not connected')
-    if (this.peerLeg === 'tsp' && this.tsp && this.agent) {
+    // Two ways to end up on TSP for a peer leg, and they are not the same
+    // thing. `peerLeg` is OUR setting — the wallet-to-wallet carriage toggle,
+    // used where the peer is another wallet whose did:peer document advertises
+    // no transports at all, so there is nothing to read. §4.2's rule applies to
+    // a peer that publishes a document: if it advertises TSPTransport and we
+    // hold a TSP identity, we speak TSP whether or not the toggle is on.
+    const capable =
+      this.peerLeg === 'tsp' ||
+      (this.agent ? (await chooseCarriage(this.agent, toDid, Boolean(this.tsp), { decided: this.carriageByPeer })) === 'tsp' : false)
+    if (capable && this.tsp && this.agent) {
       const packed = await packTrustTaskForPeer(this.tsp, did, toDid, {
         ...document,
         type: String(document.type ?? type),
@@ -398,6 +414,35 @@ class VtiAgentController {
     const answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
       this.pending = { type, resolve, sentAt }
     })
+
+    // §4.2 on the ecosystem leg. Unlike `send()` there is no toggle here on
+    // purpose: a community publishes a resolvable document, so its own
+    // advertisement is the whole answer and a local flag could only contradict
+    // it. The reply arrives through `deliver()` either way — `receiveTspFrame`
+    // presents an opened TSP envelope as the same plaintext shape — so nothing
+    // downstream of `ask` needs to know which envelope carried it.
+    if (this.agent && this.tsp) {
+      const carriage = await chooseCarriage(this.agent, communityDid, true, { decided: this.carriageByPeer })
+      if (carriage === 'tsp') {
+        const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, {
+          id: `urn:uuid:${utils.uuid()}`,
+          type,
+          threadId,
+          payload,
+        })
+        await session.sendTspFrame(packed.bytes)
+        this.agent.config.logger.info(
+          `${TSP_LOG_PREFIX} asked ${communityDid} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
+        )
+        const viaTsp = await Promise.race([
+          answer,
+          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+        ])
+        this.pending = undefined
+        return viaTsp
+      }
+    }
+
     const now = Math.floor(Date.now() / 1000)
     await session.sendTo(communityDid, {
       id: `urn:uuid:${utils.uuid()}`,
