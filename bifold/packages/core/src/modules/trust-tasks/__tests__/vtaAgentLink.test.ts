@@ -19,6 +19,10 @@ const mockClient = {
 jest.mock('../module/VtaClient', () => ({
   VTA_TASK: jest.requireActual('../module/VtaClient').VTA_TASK,
   VtaClient: jest.fn(() => mockClient),
+  resolveVtaMediator: jest.fn(async () => ({ did: 'did:peer:2.mediator' })),
+}))
+jest.mock('../module/VtiMediatorTransport', () => ({
+  createVtiClientDid: jest.fn(async () => 'did:peer:2.temporary'),
 }))
 
 const offer: EnrolmentOffer = {
@@ -43,7 +47,7 @@ function controller(overrides: { submit?: jest.Mock; waitForGrant?: jest.Mock; l
       set: async (link) => void saved.push(link),
       clear: async () => undefined,
     }),
-    identityStore: () => ({}) as never,
+    identityStore: () => ({ setManager: async () => undefined }) as never,
     enrol: { submit: submit as never, waitForGrant: waitForGrant as never },
   })
   return { vta, saved, submit, waitForGrant }
@@ -158,5 +162,35 @@ describe('a linked phone after a restart', () => {
     await vta.restore({} as never)
     await new Promise((resolve) => setImmediate(resolve))
     expect(vta.getState().link).toMatchObject({ kind: 'revoked', reason: expect.stringMatching(/not in ACL/) })
+  })
+})
+
+describe('linking without a QR through the controller', () => {
+  it('shows the key, reports "not yet" while the agent refuses it, then links and rotates', async () => {
+    const { vta, saved } = controller()
+    await vta.startManualLink({} as never, offer.vta, 'alice host')
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', did: 'did:peer:2.temporary' })
+
+    mockClient.whoAmI.mockImplementationOnce(async () => {
+      throw new Error('refusing trust task: DID not in ACL')
+    })
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', notYet: true, checking: false })
+    expect(mockClient.rotateManagerKey).not.toHaveBeenCalled()
+
+    await vta.checkManualGrant({} as never)
+    expect(mockClient.rotateManagerKey).toHaveBeenCalledTimes(1)
+    expect(saved).toEqual([{ vtaDid: offer.vta, label: 'alice host', linkedAt: new Date(1_000).toISOString() }])
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  })
+
+  it('an error other than "not added yet" ends the attempt', async () => {
+    const { vta } = controller()
+    await vta.startManualLink({} as never, offer.vta, 'alice host')
+    mockClient.connect.mockImplementationOnce(async () => {
+      throw new Error('the mediator refused the socket')
+    })
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'failed' } })
   })
 })

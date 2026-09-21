@@ -9,6 +9,9 @@
  *       │                                         │ rotated
  *       └──── relink ◀── revoked ◀── linked ◀─────┘
  *
+ *   without a QR (plan §5.1 fallback): notLinked ─keyShown─▶ showingKey
+ *   ─granted─▶ linking — the admin pastes the key into their own console.
+ *
  *   linked carries one connection sub-state:
  *       online ⇄ offline(since, reason) ⇄ reconnecting(attempt, nextRetryAt, since)
  *
@@ -34,6 +37,7 @@ export type VtaLinkState =
   | ({ kind: 'confirming'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
   | ({ kind: 'submitting'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
   | ({ kind: 'awaitingGrant'; offerUrl: string; exp: number; code: string } & VtaIdentityOfAgent)
+  | ({ kind: 'showingKey'; did: string; checking: boolean; notYet?: boolean } & VtaIdentityOfAgent)
   | ({ kind: 'linking'; step: 'connecting' | 'rotating' } & VtaIdentityOfAgent)
   | ({ kind: 'linked'; linkedAt: string; connection: VtaConnection } & VtaIdentityOfAgent)
   | ({ kind: 'revoked'; reason: string } & VtaIdentityOfAgent)
@@ -59,6 +63,9 @@ export type VtaLinkEvent =
   | { type: 'retryScheduled'; attempt: number; nextRetryAt: number }
   | { type: 'accessRevoked'; reason: string }
   | { type: 'relink' }
+  | ({ type: 'keyShown'; did: string } & VtaIdentityOfAgent)
+  | { type: 'grantCheckStarted' }
+  | { type: 'grantNotYet' }
 
 export const initialLinkState: VtaLinkState = { kind: 'notLinked' }
 
@@ -87,15 +94,29 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
       return state.kind === 'confirming' ? { ...state, kind: 'submitting' } : state
 
     case 'cancelled':
-      return state.kind === 'confirming' || state.kind === 'submitting' || state.kind === 'awaitingGrant'
+      return state.kind === 'confirming' ||
+        state.kind === 'submitting' ||
+        state.kind === 'awaitingGrant' ||
+        state.kind === 'showingKey'
         ? { kind: 'notLinked' }
         : state
+
+    case 'keyShown':
+      return state.kind === 'notLinked'
+        ? { kind: 'showingKey', vtaDid: event.vtaDid, label: event.label, did: event.did, checking: false }
+        : state
+
+    case 'grantCheckStarted':
+      return state.kind === 'showingKey' ? { ...state, checking: true, notYet: false } : state
+
+    case 'grantNotYet':
+      return state.kind === 'showingKey' ? { ...state, checking: false, notYet: true } : state
 
     case 'submitted':
       return state.kind === 'submitting' ? { ...state, kind: 'awaitingGrant', code: event.code } : state
 
     case 'granted':
-      return state.kind === 'awaitingGrant'
+      return state.kind === 'awaitingGrant' || state.kind === 'showingKey'
         ? { kind: 'linking', step: 'connecting', vtaDid: state.vtaDid, label: state.label }
         : state
 
@@ -114,7 +135,11 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
         : state
 
     case 'failed':
-      return state.kind === 'submitting' || state.kind === 'awaitingGrant' || state.kind === 'linking'
+      return state.kind === 'notLinked' ||
+        state.kind === 'submitting' ||
+        state.kind === 'awaitingGrant' ||
+        state.kind === 'showingKey' ||
+        state.kind === 'linking'
         ? { kind: 'notLinked', lastError: event.failure }
         : state
 

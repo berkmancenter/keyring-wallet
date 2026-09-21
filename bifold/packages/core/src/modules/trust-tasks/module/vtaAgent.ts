@@ -15,9 +15,10 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
-import { VTA_TASK, VtaClient, type VtaConsentRequest } from './VtaClient'
+import { VTA_TASK, VtaClient, resolveVtaMediator, type VtaConsentRequest } from './VtaClient'
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
+import { createVtiClientDid } from './VtiMediatorTransport'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 
@@ -207,23 +208,7 @@ export class VtaAgentController {
       await enrol.waitForGrant(offer, { fetch: this.deps.fetch, shouldStop: () => !live() })
       if (!live()) return
       this.dispatch({ type: 'granted' })
-
-      // A fresh client: whatever session an earlier link left must not be reused.
-      await this.reset()
-      const client = this.client(agent, offer.vta, identities)
-      this.set({ status: 'connecting', error: undefined })
-      await client.connect()
-      await client.whoAmI()
-      if (!live()) return
-      this.dispatch({ type: 'rotating' })
-      await client.rotateManagerKey()
-      // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
-      await client.whoAmI().catch(() => undefined)
-      const linkedAt = new Date(this.now()).toISOString()
-      await this.linkStore(agent).set({ vtaDid: offer.vta, label: offer.label, linkedAt })
-      this.reconnectAttempt = 0
-      this.set({ status: 'connected', vtaDid: offer.vta, managerDid: client.managerDid })
-      this.dispatch({ type: 'linked', linkedAt })
+      await this.finishLink(agent, offer.vta, offer.label, identities, live)
     } catch (error) {
       if (!live()) return
       const detail = error instanceof Error ? error.message : String(error)
@@ -234,6 +219,100 @@ export class VtaAgentController {
       })
     } finally {
       if (live()) this.offer = undefined
+    }
+  }
+
+  /**
+   * The granted key signs in, rotates onto a long-lived one, and the agent is
+   * remembered — the same for a scanned offer and for a key pasted by hand.
+   * Assumes the machine is in `linking` (it dispatched `granted`).
+   */
+  private async finishLink(
+    agent: Agent,
+    vtaDid: string,
+    label: string,
+    identities: VtiIdentityStore,
+    live: () => boolean,
+    signedIn?: VtaClient
+  ): Promise<void> {
+    let client = signedIn
+    if (!client) {
+      // A fresh client: whatever session an earlier link left must not be reused.
+      await this.reset()
+      client = this.client(agent, vtaDid, identities)
+      this.set({ status: 'connecting', error: undefined })
+      await client.connect()
+      await client.whoAmI()
+    }
+    if (!live()) return
+    this.dispatch({ type: 'rotating' })
+    await client.rotateManagerKey()
+    // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
+    await client.whoAmI().catch(() => undefined)
+    const linkedAt = new Date(this.now()).toISOString()
+    await this.linkStore(agent).set({ vtaDid, label, linkedAt })
+    this.reconnectAttempt = 0
+    this.set({ status: 'connected', vtaDid, managerDid: client.managerDid })
+    this.dispatch({ type: 'linked', linkedAt })
+  }
+
+  /**
+   * Linking without a QR (plan §5.1 fallback): the person names their agent,
+   * the phone mints its temporary key and shows it, and the admin pastes it
+   * into their own console — upstream's Grant access form, or the Farm's
+   * admin-DID step. Nothing is submitted anywhere by the phone.
+   */
+  async startManualLink(agent: Agent, vtaDid: string, label: string): Promise<void> {
+    if (this.state.link.kind !== 'notLinked') return
+    const token = ++this.attemptToken
+    try {
+      const mediator = await resolveVtaMediator(agent, vtaDid)
+      const did = await createVtiClientDid(agent, mediator)
+      await this.identityStore(agent).setManager({
+        vtaDid,
+        did,
+        createdAt: new Date(this.now()).toISOString(),
+        stage: 'temporary',
+      })
+      if (token !== this.attemptToken) return
+      this.dispatch({ type: 'keyShown', vtaDid, label, did })
+    } catch (error) {
+      if (token !== this.attemptToken) return
+      const detail = error instanceof Error ? error.message : String(error)
+      this.dispatch({ type: 'failed', failure: { reason: 'unreachable', detail } })
+    }
+  }
+
+  /**
+   * "I've been added": try to sign in as the shown key. A refusal because the
+   * key is not in the agent's access list yet leaves the key showing, marked
+   * not yet; anything else ends the attempt.
+   */
+  async checkManualGrant(agent: Agent): Promise<void> {
+    const link = this.state.link
+    if (link.kind !== 'showingKey' || link.checking) return
+    const token = this.attemptToken
+    const live = () => token === this.attemptToken
+    const identities = this.identityStore(agent)
+    this.dispatch({ type: 'grantCheckStarted' })
+    try {
+      await this.reset()
+      const client = this.client(agent, link.vtaDid, identities)
+      await client.connect()
+      await client.whoAmI()
+      if (!live()) return
+      this.dispatch({ type: 'granted' })
+      await this.finishLink(agent, link.vtaDid, link.label, identities, live, client)
+    } catch (error) {
+      if (!live()) return
+      const detail = error instanceof Error ? error.message : String(error)
+      if (this.state.link.kind === 'showingKey' && ACCESS_REVOKED.test(detail)) {
+        await this.reset()
+        this.dispatch({ type: 'grantNotYet' })
+        return
+      }
+      this.set({ status: 'failed', error: detail })
+      this.dispatch({ type: 'failed', failure: { reason: 'failed', detail } })
     }
   }
 

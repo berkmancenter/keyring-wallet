@@ -1205,7 +1205,20 @@
     "LinkYourAgentHint": "Scan the code on your agent's page, or paste its link.",
     "StatusOnline": "Online",
     "StatusReconnecting": "Reconnecting…",
-    "StatusOfflineSince": "Offline since {{time}}"
+    "StatusOfflineSince": "Offline since {{time}}",
+    "WithoutQr": "Link without a QR code",
+    "ScanInstead": "Scan a code instead",
+    "AgentAddress": "Your agent's address",
+    "AgentAddressHint": "Your agent's host shows it — it starts with did:. Paste it here.",
+    "ShowMyCode": "Show my code",
+    "GiveKeyTitle": "Give this code to your agent's admin",
+    "GiveKeyBody": "They add it to {{label}}'s access list. Then come back and tap “I've been added”.",
+    "CopyKey": "Copy",
+    "KeyCopied": "Copied",
+    "ShareKey": "Share",
+    "ImAdded": "I've been added",
+    "Checking": "Checking…",
+    "NotAddedYet": "Your agent doesn't accept this phone yet. Check that the admin added this exact code, then try again."
   },
   "MyAgent": {
     "Title": "Your agent",

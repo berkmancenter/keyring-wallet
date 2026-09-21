@@ -607,6 +607,12 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               onPress={onLinkAgent}
               testID={testIdWithKey('LinkYourAgentButton')}
             />
+            <Button
+              title={t('VtaLink.WithoutQr')}
+              buttonType={ButtonType.Tertiary}
+              onPress={() => navigation.navigate(Screens.VtaLink)}
+              testID={testIdWithKey('LinkWithoutQrButton')}
+            />
           </View>
         ) : null}
         {vtaDid ? (

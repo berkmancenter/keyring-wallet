@@ -1050,7 +1050,20 @@
     "LinkYourAgentHint": "Escaneie o código na página do seu agente ou cole o link.",
     "StatusOnline": "Online",
     "StatusReconnecting": "Reconectando…",
-    "StatusOfflineSince": "Offline desde {{time}}"
+    "StatusOfflineSince": "Offline desde {{time}}",
+    "WithoutQr": "Vincular sem código QR",
+    "ScanInstead": "Escanear um código",
+    "AgentAddress": "O endereço do seu agente",
+    "AgentAddressHint": "O provedor do seu agente o mostra — começa com did:. Cole aqui.",
+    "ShowMyCode": "Mostrar meu código",
+    "GiveKeyTitle": "Entregue este código ao administrador do seu agente",
+    "GiveKeyBody": "Ele o adiciona à lista de acesso de {{label}}. Depois volte e toque em “Fui adicionado”.",
+    "CopyKey": "Copiar",
+    "KeyCopied": "Copiado",
+    "ShareKey": "Compartilhar",
+    "ImAdded": "Fui adicionado",
+    "Checking": "Verificando…",
+    "NotAddedYet": "Seu agente ainda não aceita este telefone. Confira se o administrador adicionou exatamente este código e tente novamente."
   },
   "MyAgent": {
     "Title": "Seu agente",

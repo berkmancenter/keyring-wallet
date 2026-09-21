@@ -108,3 +108,36 @@ describe('helpers', () => {
     expect(showsOfflineBanner(initialLinkState, 99999)).toBe(false)
   })
 })
+
+describe('linking without a QR', () => {
+  const shown = reduceLink(initialLinkState, { type: 'keyShown', ...agent, did: 'did:peer:2.temp' })
+
+  it('shows the key, marks a check that finds it not added yet, and links once granted', () => {
+    expect(shown).toEqual({ kind: 'showingKey', ...agent, did: 'did:peer:2.temp', checking: false })
+    const checking = reduceLink(shown, { type: 'grantCheckStarted' })
+    expect(checking).toMatchObject({ checking: true, notYet: false })
+    const notYet = reduceLink(checking, { type: 'grantNotYet' })
+    expect(notYet).toMatchObject({ kind: 'showingKey', checking: false, notYet: true })
+    const linking = reduceLink(reduceLink(notYet, { type: 'grantCheckStarted' }), { type: 'granted' })
+    expect(linking).toMatchObject({ kind: 'linking', step: 'connecting' })
+  })
+
+  it('can be stopped, and a failure keeps its reason', () => {
+    expect(reduceLink(shown, { type: 'cancelled' })).toEqual({ kind: 'notLinked' })
+    expect(reduceLink(shown, { type: 'failed', failure: { reason: 'failed' } })).toMatchObject({
+      kind: 'notLinked',
+      lastError: { reason: 'failed' },
+    })
+  })
+
+  it('an agent that cannot be found is reported before any key is shown', () => {
+    expect(reduceLink(initialLinkState, { type: 'failed', failure: { reason: 'unreachable' } })).toEqual({
+      kind: 'notLinked',
+      lastError: { reason: 'unreachable' },
+    })
+  })
+
+  it('never shows a key over a working link', () => {
+    expect(reduceLink(linked, { type: 'keyShown', ...agent, did: 'x' })).toBe(linked)
+  })
+})

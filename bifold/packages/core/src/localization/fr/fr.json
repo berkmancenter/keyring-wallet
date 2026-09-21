@@ -1151,7 +1151,20 @@
     "LinkYourAgentHint": "Scannez le code affiché sur la page de votre agent, ou collez son lien.",
     "StatusOnline": "En ligne",
     "StatusReconnecting": "Reconnexion…",
-    "StatusOfflineSince": "Hors ligne depuis {{time}}"
+    "StatusOfflineSince": "Hors ligne depuis {{time}}",
+    "WithoutQr": "Relier sans code QR",
+    "ScanInstead": "Scanner un code à la place",
+    "AgentAddress": "L'adresse de votre agent",
+    "AgentAddressHint": "L'hébergeur de votre agent l'affiche — elle commence par did:. Collez-la ici.",
+    "ShowMyCode": "Afficher mon code",
+    "GiveKeyTitle": "Donnez ce code à l'administrateur de votre agent",
+    "GiveKeyBody": "Il l'ajoute à la liste d'accès de {{label}}. Revenez ensuite et touchez « J'ai été ajouté ».",
+    "CopyKey": "Copier",
+    "KeyCopied": "Copié",
+    "ShareKey": "Partager",
+    "ImAdded": "J'ai été ajouté",
+    "Checking": "Vérification…",
+    "NotAddedYet": "Votre agent n'accepte pas encore ce téléphone. Vérifiez que l'administrateur a ajouté exactement ce code, puis réessayez."
   },
   "MyAgent": {
     "Title": "Votre agent",
