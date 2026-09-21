@@ -60,7 +60,22 @@ runs:
           auth=(--api-key "$KEY_ID" --api-issuer individual --api-key-subject user)
         fi
 
-        xcrun altool --upload-app -f "$IPA_PATH" -t ios "${auth[@]}" --output-format normal
+        # altool can exit 0 after "Failed to upload package" (seen on 502s from
+        # Apple's upload service), so judge by its output, and retry: the upload
+        # service fails intermittently while the rest of the API is healthy.
+        for attempt in 1 2 3 4; do
+          log="$RUNNER_TEMP/altool-$attempt.log"
+          status=0
+          xcrun altool --upload-app -f "$IPA_PATH" -t ios "${auth[@]}" --output-format normal 2>&1 | tee "$log" || status=$?
+          if [ "$status" -eq 0 ] && ! grep -qE "Failed to upload|UPLOAD FAILED" "$log"; then
+            echo "Upload succeeded on attempt $attempt"
+            exit 0
+          fi
+          echo "::warning::altool upload attempt $attempt failed (exit $status)"
+          [ "$attempt" -lt 4 ] && sleep $((attempt * 120))
+        done
+        echo "::error::Upload to App Store Connect failed after 4 attempts"
+        exit 1
 
     - name: Distribute in TestFlight
       shell: bash
