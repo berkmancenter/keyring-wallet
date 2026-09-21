@@ -781,8 +781,9 @@ jobs:
           # Also clear React Native cache
           rm -rf $TMPDIR/react-* 2>/dev/null || true
           rm -rf /tmp/react-* 2>/dev/null || true
-          # Clear any Xcode derived data that might have cached bundles
-          rm -rf ios/build 2>/dev/null || true
+          # Not ios/build: React Native 0.81's codegen writes its sources to
+          # ios/build/generated during pod install, and the archive compiles them.
+          # The archive's own derived data lives in ios/xbuild.
           echo "✅ Metro cache cleared"
 
       # Signing is manual (certificate + profile from the secrets), so the archive
