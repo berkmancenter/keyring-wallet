@@ -28,7 +28,13 @@
  */
 
 import type { Agent, VerificationMethod } from '@credo-ts/core'
-import { Kms, MultiBaseEncoder, MultiHashEncoder, TypedArrayEncoder, getPublicJwkFromVerificationMethod } from '@credo-ts/core'
+import {
+  Kms,
+  MultiBaseEncoder,
+  MultiHashEncoder,
+  TypedArrayEncoder,
+  getPublicJwkFromVerificationMethod,
+} from '@credo-ts/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import canonicalize from 'canonicalize'
@@ -190,10 +196,37 @@ export async function verifyDocumentProof(
   document: Record<string, unknown>,
   expectedController: string
 ): Promise<boolean> {
+  const { proof, ...unsecured } = document
+  if (!proof || typeof proof !== 'object') return false
+  if (!Array.isArray(proof))
+    return verifyOneProof(agent, proof as Record<string, unknown>, unsecured, expectedController)
+
+  // A PROOF SET (Data Integrity §2.1.2): several independent proofs, each over
+  // the document without any of them. vtc-service signs its status lists this
+  // way — eddsa-jcs-2022 beside a post-quantum mldsa44-jcs-2024 — and reading
+  // `proof` as one object found no proofValue and called a genuine list
+  // unsigned. Every proof in a suite we implement must verify, and at least one
+  // must be present: a failing one means the document was altered after it was
+  // signed, whatever its siblings say. A suite we do not implement is neither
+  // trusted nor held against the document; it is simply not ours to judge.
+  const ours = proof.filter(
+    (p): p is Record<string, unknown> =>
+      !!p && typeof p === 'object' && (p as Record<string, unknown>).cryptosuite === 'eddsa-jcs-2022'
+  )
+  if (ours.length === 0) return false
+  for (const p of ours) {
+    if (!(await verifyOneProof(agent, p, unsecured, expectedController))) return false
+  }
+  return true
+}
+
+async function verifyOneProof(
+  agent: Agent,
+  p: Record<string, unknown>,
+  unsecured: Record<string, unknown>,
+  expectedController: string
+): Promise<boolean> {
   try {
-    const { proof, ...unsecured } = document
-    if (!proof || typeof proof !== 'object') return false
-    const p = proof as Record<string, unknown>
     if (p.type !== 'DataIntegrityProof' || p.cryptosuite !== 'eddsa-jcs-2022') return false
     if (p.proofPurpose !== 'assertionMethod') return false
     const verificationMethodId = String(p.verificationMethod ?? '')
@@ -220,10 +253,13 @@ export async function verifyDocumentProof(
     signedInput.set(documentHash, configHash.length)
 
     const didDocument = await agent.dids.resolveDidDocument(expectedController)
-    const fragment = verificationMethodId.includes('#') ? verificationMethodId.slice(verificationMethodId.indexOf('#')) : ''
+    const fragment = verificationMethodId.includes('#')
+      ? verificationMethodId.slice(verificationMethodId.indexOf('#'))
+      : ''
     const verificationMethod =
-      didDocument.verificationMethod?.find((m) => m.id === verificationMethodId || (fragment && m.id.endsWith(fragment))) ??
-      firstSigningVerificationMethod(didDocument as never)
+      didDocument.verificationMethod?.find(
+        (m) => m.id === verificationMethodId || (fragment && m.id.endsWith(fragment))
+      ) ?? firstSigningVerificationMethod(didDocument as never)
     if (!verificationMethod) return false
     const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
     const publicKeyBytes = (publicJwk.publicKey as { publicKey: Uint8Array }).publicKey
