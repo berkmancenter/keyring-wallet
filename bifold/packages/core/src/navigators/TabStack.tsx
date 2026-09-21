@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Text, useWindowDimensions, View, StyleSheet, DeviceEventEmitter } from 'react-native'
+import { AppState, Text, useWindowDimensions, View, StyleSheet, DeviceEventEmitter } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -16,11 +16,11 @@ import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
-import { TabStackParams, TabStacks } from '../types/navigators'
+import { Screens, TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
-import { GenericRecordsCommunityStore } from '../modules/trust-tasks/module/VtiCommunityStore'
-import { isVtiInvitationLink, parseVtiInvitationLink } from '../modules/trust-tasks/module/vtiInvitation'
+import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
+import { keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import InAppMessageNotifier from '../components/InAppMessageNotifier'
@@ -59,17 +59,21 @@ const TabStack: React.FC = () => {
     async (deepLink: string) => {
       logger.info(`Handling deeplink: ${deepLink}`)
 
-      // A community invitation (keyring://vti/invitation?c=…) is kept as a
-      // pending invitation and shown on My Agent; it is not a DIDComm OOB link.
-      if (isVtiInvitationLink(deepLink)) {
+      // An agent enrolment offer (keyring://vta/enrol?o=…) or a community
+      // invitation (keyring://vti/invitation?c=…) — ours, not DIDComm OOB links.
+      // The same routing the scanner and the paste screen use.
+      if (keyringAgentLinkKind(deepLink)) {
         try {
           if (agent) {
-            const invitation = parseVtiInvitationLink(deepLink)
-            await new GenericRecordsCommunityStore(agent).saveInvitation(invitation)
-            navigation.navigate(TabStacks.MyAgentStack as never)
+            await routeKeyringAgentLink(deepLink, agent, (destination) =>
+              (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
+                TabStacks.MyAgentStack,
+                { screen: destination === 'VtaLink' ? Screens.VtaLink : Screens.MyAgent }
+              )
+            )
           }
         } catch (err: unknown) {
-          logger.error(`invitation link rejected: ${(err as Error)?.message ?? err}`)
+          logger.error(`agent link rejected: ${(err as Error)?.message ?? err}`)
         } finally {
           dispatch({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [undefined] })
         }
@@ -122,6 +126,18 @@ const TabStack: React.FC = () => {
       dispatch,
     ]
   )
+
+  // A linked phone reconnects to its agent from start-up, and again whenever
+  // the app returns to the foreground (plan §4.2) — not only when a screen
+  // that needs the agent happens to be open.
+  useEffect(() => {
+    if (!agent || !store.authentication.didAuthenticate) return
+    void vtaAgent.restore(agent)
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void vtaAgent.ensureOnline(agent)
+    })
+    return () => subscription.remove()
+  }, [agent, store.authentication.didAuthenticate])
 
   useEffect(() => {
     if (store.deepLink && agent && store.authentication.didAuthenticate) {

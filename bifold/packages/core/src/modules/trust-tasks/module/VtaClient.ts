@@ -28,7 +28,7 @@ import type { Agent } from '@credo-ts/core'
 import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
-import { TRUST_TASK_V2_ENVELOPE_TYPE, signDocumentProof, tsp } from '@bifold/trust-tasks'
+import { TRUST_TASK_V2_ENVELOPE_TYPE, signCompactJws, signDocumentProof, tsp } from '@bifold/trust-tasks'
 
 import { importVtaKey, type VtaExportedKey } from './vtaKeys'
 import {
@@ -61,6 +61,7 @@ export const VTA_TASK = {
   consentRequest: 'https://trusttasks.org/spec/task-consent/request/0.1',
   consentDecision: 'https://trusttasks.org/spec/task-consent/decision/0.1',
   consentGranted: 'https://trusttasks.org/spec/task-consent/granted/0.1',
+  aclSwapKey: 'https://trusttasks.org/spec/acl/swap-key/0.1',
 } as const
 
 /** What a VTA sends an approver: the request document's payload (`consent_request.rs`). */
@@ -477,6 +478,40 @@ export class VtaClient {
 
   whoAmI() {
     return this.task<VtaWhoAmI>(VTA_TASK.whoAmI, {})
+  }
+
+  /**
+   * Move this phone's grant from the key it is signed in with onto a fresh
+   * long-lived one, the way `pnm` does after its first connect: the admin
+   * granted the temporary key for an hour, and a swap does not carry that
+   * expiry over (`operations::acl::swap_acl`). The new key proves it consents
+   * with a VP-JWT addressed to this VTA (`vta-sdk` `AclSwapPresentation`); the
+   * session then reopens as the new key. Returns the new manager DID.
+   */
+  async rotateManagerKey(reason = 'keyring: rotate the linking key onto a long-lived one'): Promise<string> {
+    const current = this.identity?.did
+    if (!this.session?.isOpen || !current) throw new Error(`${LOG_PREFIX} rotate needs an open session`)
+    this.mediator ??= await resolveVtaMediator(this.agent, this.vtaDid)
+    const next = await createVtiClientDid(this.agent, this.mediator)
+    const issuedAt = nowSec()
+    const linkProof = await signCompactJws(this.agent, next, {
+      iss: next,
+      aud: this.vtaDid,
+      iat: issuedAt,
+      exp: issuedAt + 300,
+      nonce: utils.uuid(),
+      vp: { type: ['VerifiablePresentation', 'AclSwapRequest'], holder: next },
+    })
+    await this.task(VTA_TASK.aclSwapKey, { currentSubject: current, newSubject: next, linkProof, reason })
+    await this.store.setManager({
+      vtaDid: this.vtaDid,
+      did: next,
+      createdAt: new Date().toISOString(),
+      stage: 'permanent',
+    })
+    await this.disconnect()
+    await this.connect()
+    return next
   }
 
   async listContexts(): Promise<VtaContext[]> {

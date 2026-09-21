@@ -933,7 +933,8 @@
     "JSONDetails": "JSON details (FR)",
     "MyAgent": "Mon agent",
     "Community": "Communauté",
-    "Vetting": "Vérification"
+    "Vetting": "Vérification",
+    "VtaLink": "Relier votre agent"
   },
   "Loading": {
     "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
@@ -1120,6 +1121,37 @@
       "Title": "{{cardName}} has expired (FR)",
       "CTA": "View offer (FR)"
     }
+  },
+  "VtaLink": {
+    "Screen": "Relier votre agent",
+    "ConfirmTitle": "Relier ce téléphone à {{label}} ?",
+    "ConfirmBody": "Votre agent accepte ce téléphone dès que son administrateur a vérifié que les deux écrans affichent le même code. Rien n'est partagé avant.",
+    "LinkThisPhone": "Relier ce téléphone",
+    "Linking": "Liaison…",
+    "DontLink": "Ne pas relier",
+    "CheckCodeTitle": "Vérifiez le code",
+    "CheckCodeBody": "La page de l'agent affiche aussi un code. L'administrateur n'accorde l'accès que s'il correspond à celui-ci.",
+    "WaitingForGrant": "En attente de l'accord de l'administrateur…",
+    "StopLinking": "Arrêter la liaison",
+    "StepConnecting": "Connexion à votre agent…",
+    "StepRotating": "Sécurisation de la clé de ce téléphone…",
+    "Linked": "Relié",
+    "LinkedBody": "Ce téléphone est maintenant relié à {{label}}.",
+    "Continue": "Continuer",
+    "RevokedTitle": "Ce téléphone n'est plus relié",
+    "RevokedBody": "{{label}} n'accepte plus ce téléphone. Reliez-le à nouveau pour continuer à utiliser votre agent.",
+    "ScanAgain": "Scanner un code de liaison",
+    "NothingToLink": "Scannez le code affiché sur la page de votre agent pour relier ce téléphone.",
+    "FailedTitle": "Ce téléphone n'a pas été relié",
+    "FailedExpired": "Le code a expiré. Demandez-en un nouveau et scannez-le à nouveau.",
+    "FailedRefused": "L'administrateur n'a pas accordé l'accès à ce téléphone.",
+    "FailedUnreachable": "La page de l'agent est injoignable. Vérifiez votre connexion et scannez à nouveau.",
+    "FailedOther": "Un problème est survenu pendant la liaison. Scannez le code à nouveau.",
+    "LinkYourAgent": "Relier votre agent",
+    "LinkYourAgentHint": "Scannez le code affiché sur la page de votre agent, ou collez son lien.",
+    "StatusOnline": "En ligne",
+    "StatusReconnecting": "Reconnexion…",
+    "StatusOfflineSince": "Hors ligne depuis {{time}}"
   },
   "MyAgent": {
     "Title": "Votre agent",

@@ -28,8 +28,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
+import Button, { ButtonType } from '../../../components/buttons/Button'
 import { useTheme } from '../../../contexts/theme'
-import { Screens, type MyAgentStackParams } from '../../../types/navigators'
+import { Screens, Stacks, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
@@ -59,7 +60,10 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
 
   const mediatorDid = config?.mediatorDid
   const communityDid = config?.communityDid
-  const vtaDid = config?.vtaDid
+  // The agent the person linked by QR (plan §5.1) wins over the one a build
+  // bakes in; the baked one stays for builds and runners that predate linking.
+  const linkedVtaDid = vta.link.kind === 'linked' ? vta.link.vtaDid : undefined
+  const vtaDid = linkedVtaDid ?? config?.vtaDid
 
   // What the wallet holds towards communities (§2.4 B): the persona its VTA
   // minted for this community, the invitations it was handed, the memberships
@@ -575,6 +579,18 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     )
   }
 
+  const onLinkAgent = () => {
+    // An attempt already under way is resumed where it is, not restarted.
+    if (vta.link.kind !== 'notLinked' && vta.link.kind !== 'linked') {
+      navigation.navigate(Screens.VtaLink)
+      return
+    }
+    const root = navigation as unknown as { navigate: (name: string, params?: object) => void }
+    // The scanner itself, with its paste-URL button — not `defaultToConnect`,
+    // which opens this wallet's own invitation QR instead.
+    root.navigate(Stacks.ConnectStack, { screen: Screens.Scan })
+  }
+
   // S1 — not connected (and the failed state, which says why and offers a retry).
   const failure = connectError ?? (vtaDid ? vta.error : state.error)
   return (
@@ -582,6 +598,17 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={{ ...TextTheme.headingThree, color: TextTheme.normal.color }}>{t('MyAgent.Title')}</Text>
         <Text style={styles.value}>{t('MyAgent.WhatItIs')}</Text>
+        {vta.link.kind !== 'linked' ? (
+          <View style={styles.card} testID={testIdWithKey('MyAgentLinkCard')}>
+            <Text style={styles.value}>{t('VtaLink.LinkYourAgentHint')}</Text>
+            <Button
+              title={t('VtaLink.LinkYourAgent')}
+              buttonType={ButtonType.Primary}
+              onPress={onLinkAgent}
+              testID={testIdWithKey('LinkYourAgentButton')}
+            />
+          </View>
+        ) : null}
         {vtaDid ? (
           <View style={styles.card} testID={testIdWithKey('MyAgentEnrolCard')}>
             <Text style={styles.label}>{t('MyAgent.ManagerIdentity')}</Text>

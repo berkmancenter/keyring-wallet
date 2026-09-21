@@ -127,31 +127,7 @@ export async function signDocumentProof(
     verificationMethodId?: string
   } = {}
 ): Promise<Record<string, unknown>> {
-  const didDocument = await agent.dids.resolveDidDocument(controllerDid)
-  const verificationMethod = options.verificationMethodId
-    ? (didDocument.dereferenceKey(options.verificationMethodId, ['assertionMethod', 'authentication']) ??
-      firstSigningVerificationMethod(didDocument as never))
-    : firstSigningVerificationMethod(didDocument as never)
-  if (!verificationMethod) {
-    throw new Error(`no verification method on ${controllerDid}`)
-  }
-
-  // The KMS key id is not derivable from the JWK alone: it lives in the
-  // DidRecord's key mapping, with the pre-0.6 fingerprint id as fallback —
-  // the same resolution credo's own W3cJsonLdCredentialService.signCredential
-  // performs (getPublicJwkFromVerificationMethod in that service).
-  const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
-  const relativeKeyId = verificationMethod.id.startsWith(controllerDid)
-    ? verificationMethod.id.slice(controllerDid.length)
-    : verificationMethod.id
-  if (options.kmsKeyId) {
-    publicJwk.keyId = options.kmsKeyId
-  } else {
-    const [didRecord] = await agent.dids.getCreatedDids({ did: controllerDid })
-    publicJwk.keyId =
-      didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ??
-      publicJwk.legacyKeyId
-  }
+  const { verificationMethod, publicJwk } = await resolveSigningKey(agent, controllerDid, options)
   const proofConfig: Record<string, unknown> = {
     type: 'DataIntegrityProof',
     cryptosuite: 'eddsa-jcs-2022',
@@ -177,6 +153,66 @@ export async function signDocumentProof(
     ...document,
     proof: { ...proofConfig, proofValue: `z${TypedArrayEncoder.toBase58(signature)}` },
   }
+}
+
+/**
+ * The verification method a DID signs with here, and the KMS key behind it.
+ * The KMS key id is not derivable from the JWK alone: it lives in the
+ * DidRecord's key mapping, with the pre-0.6 fingerprint id as fallback — the
+ * same resolution credo's own W3cJsonLdCredentialService.signCredential
+ * performs (getPublicJwkFromVerificationMethod in that service).
+ */
+async function resolveSigningKey(
+  agent: Agent,
+  controllerDid: string,
+  options: { kmsKeyId?: string; verificationMethodId?: string }
+) {
+  const didDocument = await agent.dids.resolveDidDocument(controllerDid)
+  const verificationMethod = options.verificationMethodId
+    ? (didDocument.dereferenceKey(options.verificationMethodId, ['assertionMethod', 'authentication']) ??
+      firstSigningVerificationMethod(didDocument as never))
+    : firstSigningVerificationMethod(didDocument as never)
+  if (!verificationMethod) {
+    throw new Error(`no verification method on ${controllerDid}`)
+  }
+  const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
+  const relativeKeyId = verificationMethod.id.startsWith(controllerDid)
+    ? verificationMethod.id.slice(controllerDid.length)
+    : verificationMethod.id
+  if (options.kmsKeyId) {
+    publicJwk.keyId = options.kmsKeyId
+  } else {
+    const [didRecord] = await agent.dids.getCreatedDids({ did: controllerDid })
+    publicJwk.keyId =
+      didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ??
+      publicJwk.legacyKeyId
+  }
+  return { verificationMethod, publicJwk }
+}
+
+/**
+ * A compact EdDSA JWS signed by a DID this agent holds — the form a VTA takes
+ * a proof of possession in (the `linkProof` of `acl/swap-key/0.1`, a VP-JWT)
+ * and the form an enrolment page takes a device's key in. The header's `kid`
+ * is the verification method's full id, so a verifier resolves the same key.
+ */
+export async function signCompactJws(
+  agent: Agent,
+  controllerDid: string,
+  payload: Record<string, unknown>,
+  options: { kmsKeyId?: string; verificationMethodId?: string; typ?: string } = {}
+): Promise<string> {
+  const { verificationMethod, publicJwk } = await resolveSigningKey(agent, controllerDid, options)
+  const kid = verificationMethod.id.startsWith('#') ? `${controllerDid}${verificationMethod.id}` : verificationMethod.id
+  const encode = (value: unknown) => TypedArrayEncoder.toBase64Url(new TextEncoder().encode(JSON.stringify(value)))
+  const signingInput = `${encode({ alg: 'EdDSA', kid, typ: options.typ ?? 'JWT' })}.${encode(payload)}`
+  const kms = agent.dependencyManager.resolve(Kms.KeyManagementApi)
+  const { signature } = await kms.sign({
+    keyId: publicJwk.keyId,
+    data: new TextEncoder().encode(signingInput),
+    algorithm: 'EdDSA',
+  })
+  return `${signingInput}.${TypedArrayEncoder.toBase64Url(signature)}`
 }
 
 /**

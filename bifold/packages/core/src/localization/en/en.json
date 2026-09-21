@@ -996,7 +996,8 @@
     "JSONDetails": "JSON details",
     "MyAgent": "My Agent",
     "Community": "Community",
-    "Vetting": "Vetting"
+    "Vetting": "Vetting",
+    "VtaLink": "Link your agent"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -1174,6 +1175,37 @@
   },
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts"
+  },
+  "VtaLink": {
+    "Screen": "Link your agent",
+    "ConfirmTitle": "Link this phone to {{label}}?",
+    "ConfirmBody": "Your agent accepts this phone once its admin checks that both screens show the same code. Nothing is shared before then.",
+    "LinkThisPhone": "Link this phone",
+    "Linking": "Linking…",
+    "DontLink": "Don't link",
+    "CheckCodeTitle": "Check the code",
+    "CheckCodeBody": "The agent's page shows a code too. The admin grants access only if it matches this one.",
+    "WaitingForGrant": "Waiting for the admin to grant access…",
+    "StopLinking": "Stop linking",
+    "StepConnecting": "Signing in to your agent…",
+    "StepRotating": "Securing this phone's key…",
+    "Linked": "Linked",
+    "LinkedBody": "This phone is now linked to {{label}}.",
+    "Continue": "Continue",
+    "RevokedTitle": "This phone is no longer linked",
+    "RevokedBody": "{{label}} no longer accepts this phone. Link it again to keep using your agent.",
+    "ScanAgain": "Scan a link code",
+    "NothingToLink": "Scan the code your agent's page shows to link this phone.",
+    "FailedTitle": "This phone was not linked",
+    "FailedExpired": "The code expired. Ask for a new one and scan it again.",
+    "FailedRefused": "The admin did not grant access to this phone.",
+    "FailedUnreachable": "The agent's page could not be reached. Check your connection and scan again.",
+    "FailedOther": "Something went wrong while linking. Scan the code again.",
+    "LinkYourAgent": "Link your agent",
+    "LinkYourAgentHint": "Scan the code on your agent's page, or paste its link.",
+    "StatusOnline": "Online",
+    "StatusReconnecting": "Reconnecting…",
+    "StatusOfflineSince": "Offline since {{time}}"
   },
   "MyAgent": {
     "Title": "Your agent",

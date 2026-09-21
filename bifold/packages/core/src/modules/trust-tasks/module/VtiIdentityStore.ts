@@ -27,6 +27,12 @@ export interface VtiManagerIdentity {
   /** The phone's own DID, enrolled on that VTA's ACL. */
   did: string
   createdAt: string
+  /**
+   * `temporary` while it is the key an admin granted for an hour at linking;
+   * `permanent` once the phone has rotated its grant onto a long-lived key
+   * (`acl/swap-key/0.1`). Absent on identities minted before linking existed.
+   */
+  stage?: 'temporary' | 'permanent'
 }
 
 export interface VtiPersona {

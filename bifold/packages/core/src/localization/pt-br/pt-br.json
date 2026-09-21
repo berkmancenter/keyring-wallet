@@ -845,7 +845,8 @@
     "JSONDetails": "JSON details (PT-BR)",
     "MyAgent": "Meu agente",
     "Community": "Comunidade",
-    "Vetting": "Verificação"
+    "Vetting": "Verificação",
+    "VtaLink": "Vincular seu agente"
   },
   "Loading": {
     "TakingTooLong": "Isso esta demorando mais que o normal. Você pode voltar para a home ou continuar esperando.",
@@ -1019,6 +1020,37 @@
   },
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts (PT-BR)"
+  },
+  "VtaLink": {
+    "Screen": "Vincular seu agente",
+    "ConfirmTitle": "Vincular este telefone a {{label}}?",
+    "ConfirmBody": "Seu agente aceita este telefone assim que o administrador confirmar que as duas telas mostram o mesmo código. Nada é compartilhado antes disso.",
+    "LinkThisPhone": "Vincular este telefone",
+    "Linking": "Vinculando…",
+    "DontLink": "Não vincular",
+    "CheckCodeTitle": "Confira o código",
+    "CheckCodeBody": "A página do agente também mostra um código. O administrador só concede acesso se ele for igual a este.",
+    "WaitingForGrant": "Aguardando o administrador conceder acesso…",
+    "StopLinking": "Parar de vincular",
+    "StepConnecting": "Entrando no seu agente…",
+    "StepRotating": "Protegendo a chave deste telefone…",
+    "Linked": "Vinculado",
+    "LinkedBody": "Este telefone agora está vinculado a {{label}}.",
+    "Continue": "Continuar",
+    "RevokedTitle": "Este telefone não está mais vinculado",
+    "RevokedBody": "{{label}} não aceita mais este telefone. Vincule-o novamente para continuar usando seu agente.",
+    "ScanAgain": "Escanear um código de vínculo",
+    "NothingToLink": "Escaneie o código mostrado na página do seu agente para vincular este telefone.",
+    "FailedTitle": "Este telefone não foi vinculado",
+    "FailedExpired": "O código expirou. Peça um novo e escaneie novamente.",
+    "FailedRefused": "O administrador não concedeu acesso a este telefone.",
+    "FailedUnreachable": "Não foi possível acessar a página do agente. Verifique sua conexão e escaneie novamente.",
+    "FailedOther": "Algo deu errado ao vincular. Escaneie o código novamente.",
+    "LinkYourAgent": "Vincular seu agente",
+    "LinkYourAgentHint": "Escaneie o código na página do seu agente ou cole o link.",
+    "StatusOnline": "Online",
+    "StatusReconnecting": "Reconectando…",
+    "StatusOfflineSince": "Offline desde {{time}}"
   },
   "MyAgent": {
     "Title": "Seu agente",
