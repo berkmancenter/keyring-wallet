@@ -320,6 +320,12 @@ log "provisioning the VTAs"
 ALICE_DID=$(setup_vta alice 8110 "$ALICE_HOST")
 COMMUNITY_DID=$(setup_vta community 8111 "$COMMUNITY_HOST")
 BOB_DID=$(setup_vta bob 8112 "$BOB_HOST")
+# The approver rung (run-vti-approve.js) needs alice to ENFORCE its policies.
+# `setup` writes `[policy] enforcement = false`, and with it off the VTA stores
+# the consent rule `approver-setup.sh` writes — `pnm approvals list` shows it —
+# and never evaluates it: the key borrow runs unheld and nothing says why
+# (2026-09-21). Enforcement is config-only; no pnm command sets it.
+sed -i '' '/^\[policy\]/,/^\[/ s/^enforcement = false/enforcement = true/' alice/config.toml
 for n in alice community bob; do
   nohup "$VTA_BIN" --config "$n/config.toml" > "logs/$n.log" 2>&1 &
 done

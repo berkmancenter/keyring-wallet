@@ -20,6 +20,15 @@ strip() { sed -e 's/\x1b\[[0-9;]*m//g' | grep -v "█\|╗\|╝\|║\|^\s*$" || 
 case "${1:-}" in
   add)
     DID="${2:?approver DID}"; TASK="${3:-$TASK_DEFAULT}"
+    # One approver per run. Earlier runs' approvers (a phone reinstalled, a
+    # manager re-minted) otherwise stay in the set, and every one of them adds a
+    # signed request to the refusal's `details` — three were enough to push it
+    # past the framework's size bound, and the VTA then sent the bare code with
+    # no challenge in it (2026-09-21).
+    for stale in $("$PNM" --vta "$VTA_SLUG" approvals list 2>&1 | strip | grep -oE 'did:[a-z]+:[^ ]+' | sort -u); do
+      [ "$stale" = "$DID" ] && continue
+      "$PNM" --vta "$VTA_SLUG" approvals approvers remove "$SET" "$stale" >/dev/null 2>&1 || true
+    done
     "$PNM" --vta "$VTA_SLUG" approvals approvers add "$SET" "$DID" 2>&1 | strip | tail -2 || true
     # The rule is what actually holds a task; `|| true` used to swallow a
     # transient failure here and the run then found "no approval rules" only

@@ -93,15 +93,23 @@ log "every agent's DIDComm ear"
 # it, and nothing said so: each kept serving REST while its websocket stayed
 # down for eleven hours. A persona mint then fails with "the VTA did not
 # answer", which reads as the VTA being gone when it is listening perfectly.
+#
+# A VTA that boots while its own DID cannot be fetched (a tunnel refusing, as
+# ngrok's ERR_NGROK_4026 did to alice on 2026-09-21) skips DIDComm for the
+# whole boot — "DIDComm messaging not started this boot" — and never retries.
+# That is healed like a drop.
 for n in alice community bob; do
-  last=$(grep -nE "messaging connected to mediator|WebSocket connection dropped|Error creating websocket" \
+  last=$(grep -nE "messaging connected to mediator|WebSocket connection dropped|Error creating websocket|DIDComm messaging not started this boot" \
     "$STACK_DIR/logs/$n.log" 2>/dev/null | tail -1)
   case "$last" in
     *"connected to mediator"*) ok "$n's last websocket event was a connect" ;;
     "") bad "no websocket events in $n's log" ;;
     *)
       if [ "$HEAL" = 1 ]; then
-        bad "$n's last websocket event was a DROP — restarting it"
+        case "$last" in
+          *"not started this boot"*) bad "$n skipped DIDComm at boot — restarting it" ;;
+          *) bad "$n's last websocket event was a DROP — restarting it" ;;
+        esac
         case "$n" in alice) port=8110 ;; community) port=8111 ;; bob) port=8112 ;; esac
         for pid in $(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null); do
           kill "$pid"
@@ -113,7 +121,10 @@ for n in alice community bob; do
         grep -q "messaging connected to mediator" "$STACK_DIR/logs/$n.log" 2>/dev/null \
           && fixed "$n reconnected" || bad "$n did not reconnect"
       else
-        bad "$n's last websocket event was a DROP — it is deaf on DIDComm (--heal restarts it)"
+        case "$last" in
+          *"not started this boot"*) bad "$n skipped DIDComm at boot — it is deaf on DIDComm (--heal restarts it)" ;;
+          *) bad "$n's last websocket event was a DROP — it is deaf on DIDComm (--heal restarts it)" ;;
+        esac
       fi
       ;;
   esac
