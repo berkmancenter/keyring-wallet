@@ -24,7 +24,11 @@ stop() { local p; p=$(lsof -nP -iTCP:"$(port_of "$1")" -sTCP:LISTEN -t 2>/dev/nu
 wait_up() { for _ in $(seq 1 40); do lsof -nP -iTCP:"$(port_of "$1")" -sTCP:LISTEN -t >/dev/null 2>&1 && return 0; sleep 1; done; echo "  $1 did not come up on :$(port_of "$1")" >&2; return 1; }
 start() {
   case "$1" in
-    mediator) (cd "$STACK_DIR/mediator" && nohup "$MEDIATOR_BIN" -c "$STACK_DIR/mediator/conf/mediator.toml" > "$STACK_DIR/logs/mediator.log" 2>&1 &) ;;
+    mediator) # the stored-function library must match the binary being started,
+              # or the per-relationship queue gate is configured and inert
+              cp "$TDK_SRC/crates/messaging/affinidi-messaging-mediator/conf/atm-functions.lua" \
+                "$STACK_DIR/mediator/conf/atm-functions.lua" 2>/dev/null && echo "  stored-function library refreshed"
+              (cd "$STACK_DIR/mediator" && nohup "$MEDIATOR_BIN" -c "$STACK_DIR/mediator/conf/mediator.toml" > "$STACK_DIR/logs/mediator.log" 2>&1 &) ;;
     dids)     (cd "$STACK_DIR" && nohup "$WEBVH_BIN" --config dids/config.toml > logs/dids.log 2>&1 &) ;;
     vtc)      (cd "$STACK_DIR" && nohup "$VTC_BIN" --config vtc/config.toml > logs/vtc.log 2>&1 &) ;;
     alice|community|bob) (cd "$STACK_DIR" && nohup "$VTA_BIN" --config "$1/config.toml" > "logs/$1.log" 2>&1 &) ;;

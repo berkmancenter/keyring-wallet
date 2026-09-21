@@ -181,6 +181,11 @@ PYEOF
 cp "$TDK_SRC/crates/messaging/affinidi-messaging-mediator/conf/atm-functions.lua" \
   "$STACK_DIR/mediator/conf/atm-functions.lua" 2>/dev/null \
   && echo "  stored-function library refreshed from this build"
+# Since tdk-rs #843 (our VTI-07) the mediator resolves `functions_file` against
+# the config file's own directory, and the working-directory form is a
+# deprecated fallback it warns about. The library sits beside mediator.toml.
+sed -i '' 's|^functions_file = "./conf/atm-functions.lua"|functions_file = "atm-functions.lua"|' \
+  "$STACK_DIR/mediator/conf/mediator.toml" 2>/dev/null || true
 
 # Keep the queue limits at UPSTREAM DEFAULTS rather than whatever the
 # generating version happened to ship. `queued_send_messages_per_peer` did not

@@ -75,10 +75,16 @@ log "tunnels"
 # A 502 means the tunnel is up and nothing is behind it — the shape a dead
 # service takes from the outside, and the one that reads as a client problem.
 for h in alice community bob vtc dids mediator; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 12 "https://keyring-vti-$h.ngrok.app/" 2>/dev/null)
+  body=$(mktemp)
+  code=$(curl -s -o "$body" -w "%{http_code}" --max-time 12 "https://keyring-vti-$h.ngrok.app/" 2>/dev/null)
+  # ngrok answers its own refusals with an HTML page naming an ERR_NGROK_ code
+  # (4026: the account is out of credit). That is the edge, not the service —
+  # and a VTA whose own hostname is refused cannot resolve its own DID.
+  ngrok_err=$(grep -oE "ERR_NGROK_[0-9]+" "$body" | head -1); rm -f "$body"
   case "$code" in
     502|000) bad "$h tunnel answers $code — nothing behind it" ;;
-    *) ok "$h tunnel answers $code" ;;
+    *) if [ -n "$ngrok_err" ]; then bad "$h tunnel refused by ngrok ($ngrok_err, HTTP $code) — see ngrok.com/docs/errors"
+       else ok "$h tunnel answers $code"; fi ;;
   esac
 done
 
