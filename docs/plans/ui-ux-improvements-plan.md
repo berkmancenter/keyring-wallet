@@ -56,7 +56,7 @@ Each principle carries its source; the evidence is in the dated companion, §C.
 3. **No DIDs, transport names or key identifiers in the main path.** They move behind a **Details** disclosure on the screen they belong to, or to the Developer screen. *(EUDI Wallet Design Guide, ARF annex 8; Bifold's own design guidelines.)*
 4. **Plumbing is automatic.** Connecting to the agent, preparing the persona and opening the community session are things the app does when the person's next action needs them, with named progress while they run — never buttons.
 5. **The Developer screen is for logs, probes and resets only.** No step of any user journey, and no step of the demo, opens it. It is hidden in release builds. *(Android developer options; React Native release builds.)*
-6. **The device being linked shows the QR; the trusted side scans and confirms, naming what is being linked.** Short-lived, single-use, visually distinct from an invitation QR. *(WhatsApp/Signal linked devices; FIDO cross-device sign-in; IETF cross-device security draft.)*
+6. **The phone always does the scanning; the side that holds the authority confirms.** A phone has a good camera and a laptop does not, so a screen that wants something from the phone shows a QR and the phone scans it. The QR is short-lived, single-use and bound to the session that showed it, and it looks different from an invitation QR. Whoever grants something — the agent's admin on a web page, the vetter on their phone — confirms on their own screen after seeing a short code that matches the one on the phone. *(WhatsApp/Signal linked devices; FIDO cross-device sign-in; IETF cross-device security draft, context on the approving device.)*
 7. **A new capability is introduced where it appears, once.** When a vetter grant arrives, a dismissible tip on that community — not a tour. *(NN/g onboarding tutorials; Apple HIG onboarding.)*
 8. **In-person steps: one scan, one short code on both screens, an explicit match / no match.** *(Signal safety numbers; Bluetooth numeric comparison.)*
 9. **Every signing act asks for Face ID or a fingerprint** — sending the card, attesting, applying, joining. It is also how the phone's device-bound key is unlocked, so it is the only "sign-in" a person ever sees.
@@ -101,6 +101,37 @@ Upstream's own client shows the operator's view once connected: "Connected ✓",
 
 **The first-link introduction.** Right after linking, three short dismissible panels introduce the agent as the person's stand-in online: *it keeps your identities*, *it answers communities while your phone is off*, *you approve anything important with your face or fingerprint*. A "What is my agent?" link on the agent screen brings them back. Nothing else in the app repeats this.
 
+### 4.2 State, and how the screens read it
+
+Today the agent's state is a four-value status (`disconnected | connecting | connected | failed` in `vtaAgent.ts`) plus booleans and step strings held in each screen's own `useState`. The screen decides what it is showing by combining them, which is how "Connected" and an error can both be on screen at once. The agent screen and everything that depends on the agent instead read **one state machine**, owned by the module and exposed through the same `useSyncExternalStore` subscription the screens already use.
+
+```
+NotLinked ──scan enrolment QR──▶ AwaitingGrant ──grant seen──▶ Linking ──rotated──▶ Linked
+    ▲                              │ (expires)                    │ (fails)               │
+    └──────────── Re-link ◀────────┴──────────────────────────────┴──── Revoked ◀─────────┤
+                                                                                         │
+Linked has one connection sub-state:  Online ⇄ Reconnecting(attempt, nextRetryAt) ⇄ Offline(since, reason)
+```
+
+- **The persisted and the live are separate.** *Linked* (with host, since, and the phone's key) survives restarts; *Online / Reconnecting / Offline* is recomputed every launch and never stored.
+- **Every transition has a cause the machine names** — a scan, a grant seen, a rotation, the session opening or dropping, the app returning to the foreground, the network changing, the mediator's resync signal — and each is a unit test.
+- **Reconnecting is quiet.** Backoff with a ceiling, an immediate retry on foreground and on network change. The offline banner appears only after a drop has lasted a few seconds, so a brief blip does not flash it.
+- **Each section has its own four states** — loading, empty, error, content — and they do not share a spinner. Once loaded, content stays on screen while offline, marked "Updated 2 min ago", rather than being replaced by an error.
+- **Pull to refresh** reconnects if needed and re-reads what the agent holds.
+- **An action in flight belongs to the machine, not to the button.** Leaving the screen and coming back shows the same "Granting…" or "Sending…" state instead of a fresh, tappable button.
+
+### 4.3 Buttons and controls
+
+They use the app's theme as it is: bifold's `Button` with its `ButtonType` (Primary, Secondary, Tertiary, Critical), colours and type from `useTheme()` and the Keyring theme, and the icon set the screens already use. The trust-task screens' hand-rolled `Pressable` buttons are replaced with it.
+
+- **One primary button per screen**, at the bottom, where a thumb reaches it. Everything else is Secondary or Tertiary. *(Apple HIG, buttons; EUDI Wallet Design Guide, main controls in the lower half.)*
+- **Labels are verbs that name the outcome:** "Link your agent", "Scan ticket", "Send my name", "Attest". Never "OK" or "Continue" where a verb fits. *(Apple HIG, buttons.)*
+- **A pressed button shows its own progress** and cannot be pressed twice; the action it started is idempotent, so a retry after a timeout does not send twice. *(Apple HIG, buttons.)*
+- **A locked action says why, next to it**, rather than sitting greyed with no explanation: "Unlocks when an admin names you a vetter".
+- **Destructive actions are Critical and confirmed, and the confirm names the outcome** — "Leave *Community*" / "Stay", "Unlink this phone" / "Keep linked" — never "Are you sure?" with Yes / No. Confirmations are kept for what cannot be undone, so they are not clicked through. *(NN/g, confirmation dialogs.)*
+- **Two-sided checks use outcome labels too:** the match-code screens answer "Codes match" / "Codes differ" (§5.3, §5.4).
+- **Targets are at least 44 × 44 pt** (48 dp on Android), with a label, a role and busy/disabled state for screen readers, and a test ID. *(Apple HIG; WCAG 2.2 SC 2.5.8 sets the floor at 24 × 24.)*
+
 `VtiVetting.tsx` stops being one screen with two modes. It becomes two flows reached from the community screen — **Get vetted** and **Vet someone** — with one step per screen (§5.3, §5.4).
 
 ## 5. Journeys
@@ -115,26 +146,30 @@ Each journey lists its steps as the person sees them. Anything marked **(off-app
 - `pnm` and the browser extension both do it the same way: the client mints a **temporary** key, shows it, a human with admin rights grants it for an hour, and on the first connect the client rotates to a long-lived key and the temporary one drops out of the access list.
 - The VTA also offers **passkey login** for an admin DID whose document carries a passkey verification method (`/auth/passkey-login/{start,finish}`, and a browser popup at `/auth/portal`). A passkey session carries that DID's role, so it can grant. Native-app passkeys need the VTA's domain to publish `apple-app-site-association` / `assetlinks.json`, which no upstream component does.
 - The Farm provisions the VTA from a passkey-authenticated web console and then waits for the person to **paste** an admin DID. There is no phone hand-off.
+- **A web page for granting already exists upstream:** the browser extension's management console has an **Access** pane whose *Grant access* form takes a pasted `did:key`, a role and an expiry and sends `acl/grant` as the signed-in admin. It has no QR and no camera.
 
-**The journey Keyring builds:**
+**The journey Keyring builds** — linking is a step the person takes, by QR, and the demo shows it live:
 
 | Step | Person sees | Behind it |
 |---|---|---|
-| 1 | "Link your agent" → enters or scans the agent's address | The agent's DID is chosen at runtime, not baked into `app/.env`. **Conditional** on the runtime-configuration change in phase U6. |
-| 2 | A QR code and a Copy/Share button: "Give this to your agent host" | The phone's temporary manager key, `pnm`-style. |
-| 3 | **(off-app)** Someone with admin rights on the agent grants it | See *Granting the phone*, below. |
-| 4 | "Linked ✓" with the host's name, then the first-link introduction (§4.1) | First connect rotates to the long-lived key (the upstream pattern). |
+| 1 | **(off-app)** The agent's admin opens the enrolment page and clicks *Add a phone*. The page shows a QR. | A short-lived, single-use enrolment link bound to that page session. It names the agent, so the app needs no agent address baked into `app/.env`. |
+| 2 | "Link your agent" → **Scan** → "Link this phone to *agent host*?" → Link | The phone mints its temporary key and sends it to the link, signed with that key, so the page knows the phone holds it. |
+| 3 | A short code on the phone: "Check that the page shows the same code" | The key's fingerprint, shown on both screens. |
+| 4 | **(off-app)** The page shows the same code and *Grant*; the admin clicks it | `acl/grant` for the temporary key, an hour's expiry, through the online path. |
+| 5 | "Linked ✓" with the host's name, then the first-link introduction (§4.1) | First connect rotates to the long-lived key (the upstream pattern). |
+| — | Fallback when scanning fails: *Show my code instead* displays the key with Copy/Share, for pasting into upstream's *Grant access* form or the Farm console | The paste path upstream supports today. |
 | — | Later sign-ins: none. The app reconnects on its own and the phone's key unlocks with Face ID or a fingerprint. | The key is **device-bound** and stays so: it never leaves the phone, and a lost phone is re-linked, not restored. That keeps hardware attestation available to the key, and it is phishing-resistant without a passkey. |
 
-**Granting the phone.** The admin role is right — an agent must only accept a device someone authorised says yes to — but a person should not need a terminal to say it. It arrives in three stages:
+**Granting the phone.** The admin role is right — an agent must only accept a device someone authorised says yes to — but a person should not need a terminal to say it. It arrives in four stages:
 
-1. **Automated, now (lab).** The grant is a script call on a *running* VTA (`pnm acl create --did <temporary key> --role admin --expires 1h`), made by the e2e runner with the key it reads off the phone's screen, and by a one-line command for a person in the lab. Nothing restarts.
-2. **A lab enrolment page, next.** A small page served beside the lab stack, standing in for the Farm console's "admin DID" step: the phone shows its QR, the laptop's camera reads it, the page shows the key's short fingerprint next to the one on the phone, and the admin clicks **Grant**. It is tested with browser UI tests (§6, U8) and is the working prototype of the enrolment contract the vetting subtask proposes to the Farm (§9 request 2 there).
-3. **The Farm console, later.** The same exchange on the Farm, once it accepts a device by QR rather than a paste (VTI-Q10). Until then, the person pastes the key there.
+1. **Automated, now (lab).** The grant is a script call on a *running* VTA (`pnm acl create --did <temporary key> --role admin --expires 1h`), made by the e2e runner with the key it reads off the phone's screen. Nothing restarts. This is what the harness uses throughout.
+2. **Upstream's own page, measured.** The browser extension's *Grant access* form, signed in as the lab agent's admin, with the key pasted from the phone's fallback screen. It needs no code from us; U8 first confirms it works against the lab agent.
+3. **The lab enrolment page, experimented locally.** A small page beside the lab stack that adds the QR half upstream's form lacks — steps 1–4 of the journey above. It is where the demo links its phones. It is not a product: it exists to prove the exchange end to end (§6, U8).
+4. **Upstream, from what stage 3 proves.** The exchange is handed to upstream as concrete indications — the enrolment link, the signed key submission, the matching code — for the extension's Access pane and for the Farm console's "admin DID" step (VTI-Q10; the enrolment contract in the vetting subtask's §9 request 2). Keyring then scans whichever of them ships it, and the lab page retires.
 
 **Target, conditional:** step 2–3 collapse into **"Sign in with your passkey"** — the phone opens the VTA's `/auth/portal` in the system browser session (where the VTA's own domain makes the web passkey valid without app association), gets an admin-role session, and grants its own manager key with `acl/grant`. Conditional on: (a) the person's admin DID being a `did:webvh` with a passkey method enrolled, (b) a spike proving the portal session can be handed back to the app, (c) the Farm console enrolling that passkey method. Phase U7 measures it; nothing in U1–U6 depends on it.
 
-**Demo — conditional on §8 decision 1:** if the phones are linked before the talk, the audience sees the agent screen (§4.1) and a slide shows steps 1–3; if linking is shown live, it runs through the lab enrolment page (stage 2 above).
+**Demo:** linking is shown live, through the lab enrolment page on the presenter's laptop, and it is the first thing the audience sees. A second pair of phones, linked beforehand and kept off stage, covers a venue network that fails.
 
 ### 5.2 Join by invitation (stage 1 → 3)
 
@@ -152,7 +187,7 @@ Each journey lists its steps as the person sees them. Anything marked **(off-app
 | 1 | Community screen → **Get vetted**: "This community needs 1 person to check your ID in person." | "Start my vetting", requirements text, identity creation button |
 | 2 | "Your legal name, as on your ID" → Continue | The face field and Save |
 | 3 | **Scan the vetter's ticket** | Pasting a `vetting-ticket:` link, then "Request vetting" |
-| 4 | Waiting for the vetter → **full-screen match code**, "Does the vetter's screen show the same code?" Yes / No | Match code in a card; no explicit confirmation |
+| 4 | Waiting for the vetter → **full-screen match code**, "Does the vetter's screen show the same code?" **Codes match** / **Codes differ** | Match code in a card; no explicit confirmation |
 | 5 | "Send your name to *vetter*?" → Send (biometric) | "Send my card" |
 | 6 | "Statement received ✓ — 1 of 1" → **Apply** (biometric) | Checklist and Apply button |
 | 7 | "Member ✓" | — |
@@ -166,7 +201,7 @@ Refusals and a deferred application (add what is missing, or withdraw) stay on t
 | 1 | Community screen → **Vet someone** | "Open the vetting desk" |
 | 2 | A **ticket QR**, large, with a short typed code under it for when scanning fails | A text link and "New ticket" |
 | 3 | "*Name* wants to be vetted" appears → Open | Request list, "Open session" |
-| 4 | **Full-screen match code**, "Does their screen show the same code?" Yes / No | Match code in a card |
+| 4 | **Full-screen match code**, "Does their screen show the same code?" **Codes match** / **Codes differ** | Match code in a card |
 | 5 | "Check their ID. Does it say *legal name*?" → **I checked — attest** (biometric) | Card claims and the Attest button |
 | 6 | "Statement sent ✓" | — |
 
@@ -199,9 +234,10 @@ Each phase ends with the vetting, invitation and enrolment e2e runners green on 
 ### U3 — Communities home, the community screen and the agent screen
 
 - Rename the tab; build the community screen with the role badge and the stage task list (§4), locked steps shown as locked.
-- Build the agent screen (§4.1): status line, what it holds, what it did, what you can do, Details; the app-wide banner when the agent is not online; the first-link introduction.
+- Build the agent screen (§4.1) on the state machine (§4.2), with the theme's buttons (§4.3): status line, what it holds, what it did, what you can do, Details; the app-wide banner when the agent is not online; the first-link introduction.
+- Replace the trust-task screens' hand-rolled `Pressable` buttons with bifold's `Button`.
 - One-time tip when a vetter grant first appears.
-- **Done when:** each of stages 1–4 renders its own task list in a unit test; the status line reads Online, Reconnecting and Offline in a unit test driven by the session's events; the introduction shows once after linking and again from "What is my agent?"; the tip shows once per grant.
+- **Done when:** each of stages 1–4 renders its own task list in a unit test; every transition of the state machine (§4.2) has a unit test naming its cause, and no screen keeps its own copy of connection state; the status line reads Online, Reconnecting and Offline in a unit test driven by the session's events, and a sub-threshold drop shows no banner; no trust-task screen renders a raw `Pressable` button; the introduction shows once after linking and again from "What is my agent?"; the tip shows once per grant.
 
 ### U4 — One scanner and the ticket QR
 
@@ -210,15 +246,15 @@ Each phase ends with the vetting, invitation and enrolment e2e runners green on 
 
 ### U5 — Two vetting flows, one step per screen
 
-- Split `VtiVetting.tsx` into Get vetted (§5.3) and Vet someone (§5.4); full-screen match code with an explicit Yes / No on both sides; biometric on send, attest and apply.
-- A "No" on the match code ends the session on both phones.
-- **Done when:** the two-device vetting runner is green through the new screens, and a "No" test ends the session on both.
+- Split `VtiVetting.tsx` into Get vetted (§5.3) and Vet someone (§5.4); full-screen match code answered "Codes match" / "Codes differ" on both sides; biometric on send, attest and apply.
+- "Codes differ" on either phone ends the session on both.
+- **Done when:** the two-device vetting runner is green through the new screens, and a "Codes differ" test ends the session on both.
 
 ### U6 — Linking an agent without a stopped daemon
 
-- The phone shows its temporary manager key as a QR plus Copy/Share; rotation on first connect.
+- The phone mints a temporary manager key per link attempt and rotates to the long-lived key on first connect; the *Show my code instead* fallback displays the temporary key with Copy/Share.
 - `enrol-manager.sh` uses the online grant (`pnm acl create … --expires 1h`) against a running VTA, and the enrolment runner calls it with the key it reads off the phone — stage 1 of *Granting the phone* (§5.1).
-- The agent's address is chosen at runtime rather than from `app/.env`. **Conditional:** decide whether the demo build keeps a default agent.
+- The agent's address comes from what the phone scans (U8) or is typed on the fallback path, not from `app/.env`.
 - **Done when:** `run-vta-enrol.js` passes with the VTA never restarted and no human step, and the temporary key is absent from the VTA's access list after the first connect.
 
 ### U7 — Passkey sign-in spike (measure, do not ship)
@@ -226,21 +262,23 @@ Each phase ends with the vetting, invitation and enrolment e2e runners green on 
 - Measure §5.1's target on the lab VTA: enrol a passkey method on an admin `did:webvh`, sign in through `/auth/portal` from an in-app browser session on both platforms, and grant the phone's key.
 - **Done when:** a dated companion records whether it works, what the session hand-back needs, and what the Farm would have to add — as a finding either way.
 
-### U8 — The lab enrolment page
+### U8 — Enrolment by QR: upstream's page first, then the lab page
 
-- Stage 2 of *Granting the phone* (§5.1): a lab-only page beside the stack that reads the phone's QR with the laptop camera, shows the key's short fingerprint, and grants on **Grant** through the same online path as U6. It signs in as the lab admin; it is not deployed anywhere but the lab.
-- Browser UI tests drive it: a fake camera stream carrying the QR image, and, where a passkey stands in front of it, the browser's virtual authenticator.
-- **Done when:** a browser test grants a key shown by a running simulator and the enrolment runner then connects, and the page's fingerprint matches the one on the phone in the same run.
+- **Measure first:** grant a phone's key through upstream's browser extension (*Grant access* in its console's Access pane) against the lab agent, with the key pasted from the phone's fallback screen. Record what it takes, including how the extension itself is admitted as admin.
+- **Then build the lab enrolment page** (§5.1, *Granting the phone*, stage 3): *Add a phone* shows a short-lived, single-use enrolment QR bound to the page session; the phone scans it and submits its temporary key signed with that key; both screens show the key's fingerprint; *Grant* sends `acl/grant` with an hour's expiry. The page runs only in the lab, signed in as the lab agent's admin.
+- **Then write the indications for upstream:** a dated companion describing the exchange as it ran — the link format, the signed submission, the fingerprint check, the expiry — addressed to the extension's Access pane and the Farm console. Whether and how it is sent is a separate decision (§8).
+- Browser UI tests drive the page: the test reads the enrolment link from the page (it is our page, so the link is in the DOM as well as in the QR), hands it to the simulator the way UT scans, and clicks *Grant* once the fingerprints match; where a passkey guards the page, the browser's virtual authenticator answers it.
+- **Done when:** a browser test and a simulator link a phone end to end with no terminal step; a mismatched fingerprint is refused; an expired or reused enrolment link is refused; and the demo phones link through the page on the presenter's laptop.
 
 ### UT — The harness follows the flow (alongside every phase)
 
 What the runners need that no single phase owns:
 
-- **Scanning on simulators.** The iOS simulator has no camera. The scanner's dispatch function takes the scanned text, and dev builds expose it to the runner (a deep link or a test hook), so a runner "scans" by handing over the text the vetter's screen shows. On at least one Android emulator run, a real scan goes through the virtual camera scene.
+- **Scanning on simulators.** The iOS simulator has no camera. The scanner's dispatch function takes the scanned text, and dev builds expose it to the runner (a deep link or a test hook), so a runner "scans" by handing over the text the other screen shows — the vetter's ticket, or the enrolment page's link. On at least one Android emulator run, a real scan goes through the virtual camera scene.
 - **Face ID and fingerprints.** Every signing act now asks for one (principle 9). The runners enrol and match them — Appium's simulator biometric commands on iOS, the emulator's fingerprint command on Android — and one test refuses a non-match.
 - **Resets without the Developer screen.** Leave community (U1) and the lab scripts replace every Developer-screen step; the VTA probe no longer fires in the builds the runners install.
-- **Both-sides confirmations.** The match-code Yes / No is answered on both phones, and one run answers No.
-- **Enrolment without a person.** The runner reads the temporary key off the screen and grants it (U6); the browser tests cover the enrolment page (U8).
+- **Both-sides confirmations.** The match code is answered on both phones, and one run answers "Codes differ".
+- **Enrolment without a person.** The runner reads the temporary key off the screen and grants it (U6); the browser tests cover the enrolment page and hand its link to the simulator (U8).
 - **Test IDs.** The renamed and moved screens keep a documented test-ID map in `e2e/`, so a failure names a screen that exists.
 - **Done when:** all four runners (enrol, invite, approve, vetting) and the browser tests run unattended against the lab stack from a clean install, with no step that opens the Developer screen or waits for a human.
 
@@ -250,6 +288,7 @@ What the runners need that no single phase owns:
 |---|---|---|
 | Invitations by reference (VTI-32) | Scanning an invitation (§5.2) | Upstream |
 | A phone hand-off at the Farm's "admin DID" step (VTI-Q10; the enrolment contract in the vetting subtask's §9 request 2) | Linking without a paste on the Farm (§5.1) | The Farm operator |
+| Enrolment by QR in upstream's own surfaces — the extension's Access pane, the Farm console | Retiring the lab enrolment page (§5.1 stage 4) | Upstream and the Farm operator, after U8 hands them the indications |
 | App association on the VTA domain | A native passkey sign-in (§5.1 target) | Upstream; U7 measures whether the browser-session route avoids needing it |
 | Where the legal name lives — on the phone today, in the VTA's persona faces upstream (proposed design) | Where step 2 of §5.3 stores what it collects | The profile–persona reconciliation in progress on the feature branch |
 
@@ -261,7 +300,9 @@ What the runners need that no single phase owns:
 - **Leave community is in the app** (U1).
 - **The approver stays out of the demo.** Its code and runner stay as they are.
 
+- **Linking is a step the person takes, by QR, and the demo shows it live** (§5.1). So the lab enrolment page (U8) is built before Prague.
+
 **Open:**
 
-1. **Does the demo start with the phones already linked, or show linking live?** Linked beforehand is the safer stage (no camera, no admin step on a conference network); live linking shows the enrolment page (U8) and is the stronger story if U8 lands in time.
-2. **Is the lab enrolment page (U8) built before Prague, or after?** U6 alone covers the harness; U8 is what a live linking demo needs.
+1. **How the indications for upstream are sent** once U8 has run — an issue, a pull request against the extension's Access pane, or a note with the next report. Anything public needs a go.
+2. **Whether the lab enrolment page is guarded by a passkey** or runs as the lab admin with no sign-in. The plan assumes no sign-in; it never leaves the lab.
