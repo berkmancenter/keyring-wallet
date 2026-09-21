@@ -46,6 +46,12 @@ export interface VtiVettingProps {
 
 const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const { t } = useTranslation()
+  // i18next escapes interpolated values for HTML by default, and React Native
+  // renders them as plain text — so a locale date reads "9&#x2F;21&#x2F;26" and a
+  // legal name like O'Brien reads "O&#39;Brien" on the card preview. Nothing on
+  // this screen is HTML; every interpolation goes through here.
+  const tp = (key: string, values: Record<string, unknown>) =>
+    t(key, { ...values, interpolation: { escapeValue: false } }) as string
   const { ColorPalette, TextTheme } = useTheme()
   const { agent } = useAgent()
   const communityDid = config?.communityDid
@@ -330,7 +336,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         <ScrollView contentContainerStyle={styles.content}>
           {seatBanner('vetter')}
           <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>
-            {t('Vetting.YouVetFor', { community: shortDid(persona.communityDid) })}
+            {tp('Vetting.YouVetFor', { community: shortDid(persona.communityDid) })}
           </Text>
 
           <Text style={styles.h}>{t('Vetting.YourProfile')}</Text>
@@ -362,7 +368,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             </Pressable>
             {profile ? (
               <Text style={styles.label} testID={testIdWithKey('VettingProfilePublished')}>
-                {t('Vetting.ProfilePublished', { when: new Date(profile.publishedAt).toLocaleString() })}
+                {tp('Vetting.ProfilePublished', { when: new Date(profile.publishedAt).toLocaleString() })}
               </Text>
             ) : null}
           </View>
@@ -409,7 +415,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   {x.link}
                 </Text>
                 <Text style={styles.label}>
-                  {t('Vetting.TicketValid', { uses: x.usesLeft, until: x.expiresAt.slice(0, 10) })}
+                  {tp('Vetting.TicketValid', { uses: x.usesLeft, until: x.expiresAt.slice(0, 10) })}
                 </Text>
               </View>
             ))}
@@ -503,7 +509,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         {seatBanner('applicant')}
         {membershipRole ? (
           <Text style={styles.value} testID={testIdWithKey('VettingAlreadyMember')}>
-            {t('Vetting.AlreadyMember', { role: membershipRole })}
+            {tp('Vetting.AlreadyMember', { role: membershipRole })}
           </Text>
         ) : null}
 
@@ -548,7 +554,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         {application ? (
           <>
             <Text style={styles.value} testID={testIdWithKey('VettingRequirements')}>
-              {t('Vetting.Requirements', {
+              {tp('Vetting.Requirements', {
                 n: application.minStatements,
                 claims: application.requiredClaims.join(', '),
               })}
@@ -594,7 +600,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                       {r.session.matchCode}
                     </Text>
                     <Text style={styles.label}>
-                      {t('Vetting.CardPreview', { name: legalName || application.claims['name.legal'] || '' })}
+                      {tp('Vetting.CardPreview', { name: legalName || application.claims['name.legal'] || '' })}
                     </Text>
                     <Pressable
                       style={styles.button}
@@ -616,7 +622,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             <Text style={styles.h}>{t('Vetting.Checklist')}</Text>
             <View style={styles.card}>
               <Text style={styles.value} testID={testIdWithKey('VettingChecklist')}>
-                {t('Vetting.ChecklistLine', {
+                {tp('Vetting.ChecklistLine', {
                   held: checklist?.held ?? 0,
                   needed: checklist?.needed ?? application.minStatements,
                 })}
@@ -624,7 +630,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               </Text>
               {checklist?.discounted ? (
                 <Text style={styles.error} testID={testIdWithKey('VettingDiscounted')}>
-                  {t('Vetting.Discounted', { n: checklist.discounted })}
+                  {tp('Vetting.Discounted', { n: checklist.discounted })}
                 </Text>
               ) : null}
               {/*
@@ -635,7 +641,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               */}
               {checklist?.unchecked?.length ? (
                 <Text style={styles.label} testID={testIdWithKey('VettingGrantUnchecked')}>
-                  {t('Vetting.GrantUnchecked', { n: checklist.unchecked.length })}
+                  {tp('Vetting.GrantUnchecked', { n: checklist.unchecked.length })}
                 </Text>
               ) : null}
               {/*
@@ -647,8 +653,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   {checklist.needs
                     .map((need) =>
                       need.kind === 'method'
-                        ? t('Vetting.NeedsMethod', { n: need.n, method: t(`Vetting.Method.${need.method}`) })
-                        : t('Vetting.NeedsStatements', { n: need.n })
+                        ? tp('Vetting.NeedsMethod', { n: need.n, method: t(`Vetting.Method.${need.method}`) })
+                        : tp('Vetting.NeedsStatements', { n: need.n })
                     )
                     .join(' · ')}
                 </Text>
@@ -660,14 +666,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               */}
               {checklist && !checklist.independenceOk ? (
                 <Text style={styles.label} testID={testIdWithKey('VettingIndependence')}>
-                  {t('Vetting.IndependenceCapped', {
+                  {tp('Vetting.IndependenceCapped', {
                     relationships: checklist.exceededCaps.map((c) => c.relationship).join(', '),
                   })}
                 </Text>
               ) : null}
               {checklist?.unreadableMaxAge ? (
                 <Text style={styles.label} testID={testIdWithKey('VettingUnreadableAge')}>
-                  {t('Vetting.UnreadableMaxAge', { value: checklist.unreadableMaxAge })}
+                  {tp('Vetting.UnreadableMaxAge', { value: checklist.unreadableMaxAge })}
                 </Text>
               ) : null}
               {checklist?.meets && !membershipRole ? (
@@ -734,14 +740,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 <View testID={testIdWithKey('VettingSubmission')}>
                   <Text style={styles.label} testID={testIdWithKey('VettingSubmissionState')}>
                     {application.submission.state === 'deferred'
-                      ? t('Vetting.SubmissionDeferred', {
+                      ? tp('Vetting.SubmissionDeferred', {
                           needs: (application.submission.needs ?? []).join(', ') || '—',
                         })
                       : application.submission.state === 'pending'
                         ? t('Vetting.SubmissionPending')
                         : application.submission.state === 'withdrawn'
                           ? t('Vetting.SubmissionWithdrawn')
-                          : t('Vetting.SubmissionDecided', { effect: application.submission.effect ?? '—' })}
+                          : tp('Vetting.SubmissionDecided', { effect: application.submission.effect ?? '—' })}
                   </Text>
                   {application.submission.state === 'deferred' || application.submission.state === 'pending' ? (
                     <Pressable
