@@ -156,6 +156,11 @@ asserts a delivery-request goes out; a second asserts the solicited case is
 unchanged. On the stack, a message delivered while the live socket is
 interrupted is collected without waiting for the backstop poll.
 
+**Standing:** built (bifold `ace407c`): a pickup `status` with no `thid` and a
+non-zero `message_count` starts one drain, at most one per second; five tests
+drive it through `handleFrame`, both acceptance cases included. The on-stack
+half — a push dropped under load, collected before the poll — is still to run.
+
 ### M2 — Read a refusal
 
 **Blocked on:** M0.
