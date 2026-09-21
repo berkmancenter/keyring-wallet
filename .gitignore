@@ -94,3 +94,6 @@ external/
 # local run output and IDE state
 artifacts/
 .cursor/
+
+# The hybrid profile the lab/farm switcher keeps beside the others.
+.env.hybrid
