@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.27 — 2026-09-21.** A living document: every finding here was measured
+**Version 1.28 — 2026-09-21.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -47,9 +47,9 @@ from a report or an issue always lands on the right entry.
 | [VTI-21](#vti-21--no-channel-delivers-an-invitation-to-its-invitee) | No channel delivers an invitation to its invitee | Medium | **Confirmed by upstream** in source | A |
 | [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | Open | A |
 | [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open | A |
-| [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579 (with VTI-26); on the Farm's VTA image, not yet on our stack | A |
+| [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579 (with VTI-26); **validated live on era H** with a phone approver | A |
 | [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open | B |
-| [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579; on the Farm's VTA image, not yet on our stack. Keyring's relay stays as the fallback #1579 itself keeps | B |
+| [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579; **validated live on era H** with a phone approver. Keyring's relay stays as the fallback #1579 itself keeps | B |
 | [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open | B |
 | [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 | B, re-measured on **C**: gone |
 | [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | **Fixed upstream** — `affinidi-tdk-rs` #828, and re-measured on era E at upstream's stock limits with the per-relationship gate actually live: the ceremony passes | B |
@@ -60,6 +60,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-34](#vti-34--tsp--true-is-inert-on-a-vta-built-without-the-tsp-feature-and-nothing-says-so) | `tsp = true` is inert on a VTA built without the `tsp` feature, and nothing says so | Medium | New | G |
 | [VTI-35](#vti-35--a-vtc-cannot-advertise-the-tsp-service-it-is-able-to-serve) | A VTC cannot advertise the TSP service it is able to serve | Medium | New | G |
 | [VTI-36](#vti-36--vta-services-tsp-enable-tells-a-self-hosted-vta-to-redeploy-a-log-it-already-serves) | `vta services tsp enable` tells a self-hosted VTA to redeploy a log it already serves | Low | New — documentation | G |
+| [VTI-37](#vti-37--a-consent-refusal-loses-its-challenge-once-the-approver-set-grows) | A consent refusal loses its challenge once the approver set grows | Medium | New | H |
 
 ## Stack under test
 
@@ -787,6 +788,18 @@ live validation against a phone-shaped `did:webvh` approver has not been run;
 that is a run we can offer. The Farm's VTA image (`0.34.1-89ebd895`) is that
 merge commit; the lab is not on it yet.
 
+**Validated live on era H, 2026-09-21** — the run #1579 said it lacked. An
+Android manager's `keys/export-secret` was held for consent; alice logged
+*"pushing consent request to approver … transport=didcomm"* with the iPhone
+approver's own mediator as the route, the iPhone approved about three seconds
+later, and the manager collected the grant. One precondition, and it was ours:
+the approver's `did:peer` has to carry a `DIDCommMessaging` service naming its
+mediator **by DID** — what `resolve_mediator_did_with_resolver` reads. Keyring
+had been minting a DIDComm v1 `did-communication` service holding the socket
+URL, which #1579 correctly reads as "no route"; fixed in the client (bifold
+`1fcd7b5`). An approver minted before that fix is still unroutable and is
+reached only by relay, which is the behaviour #1579 specifies.
+
 ### VTI-27 — An authentication or ACL refusal over DIDComm is a `problem-report`, not a `trust-task-error`
 
 *Measured on era **B** (see [Stack under test](#stack-under-test)).*
@@ -1116,6 +1129,37 @@ agent offline, with no re-provisioning and so no new DIDs to cascade.
 
 ---
 
+### VTI-37 — A consent refusal loses its challenge once the approver set grows
+
+*Measured on era **H** (see [Stack under test](#stack-under-test)).*
+
+A task held for consent is refused with `auth:consent_required`, and its
+`details` carry everything the requester needs to act: the `payloadDigest` it
+correlates the grant by, and one **VTA-signed consent request per approver** in
+`consentRequests` — the documents a requester relays when the VTA has no route
+to an approver (VTI-26). vti #1131 bounded `details` at 4,096 bytes of
+canonical JSON (`DETAILS_MAX_JCS_BYTES`, `vta-service/src/trust_tasks/helpers.rs`)
+and drops the whole member past it, keeping the code. With two approvers the
+challenge fitted; with **three it did not**: alice logged *"error
+`details` exceeds the framework bound and was dropped; the code still went out
+members=8"*, and the requester received a bare `auth:consent_required` — no
+digest, and nothing to relay.
+
+The consequence lands on exactly the case the relay exists for. When every
+approver is routable the VTA's own push still reaches them (measured: the
+approval arrived), so only correlation is lost. When one is not — a `did:key`
+device the VTA has no mediator for, or any approver whose document names no
+mediator — the request that would have been relayed is gone, and that approver
+is never asked. A set of several approvers is the ordinary shape of a
+"two of three devices" rule, so this is not an edge case.
+
+Keyring now reads a bare `auth:consent_required` as held and re-submits until
+the grant lands (bifold `3c9b517`); it cannot recover the relay. Possible
+upstream answers: exempt the consent challenge from the bound, or carry the
+signed requests by reference (a fetch by `correlator`) rather than inline.
+**Measured:** vti `a96fe02f`, 2026-09-21; the bound dates from `f68178ee`
+(2026-08-26), so era G carried it too.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -1165,6 +1209,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.28 | 2026-09-21 | **Era H, run on devices.** Enrol, invite, the two-phone approval and the full vetting ceremony pass on upstream main. **VTI-24 and VTI-26 validated live** with a phone approver: the VTA pushed the consent request through the approver's own mediator and it was approved in about three seconds — once Keyring minted its `did:peer` with a `DIDCommMessaging` service naming the mediator by DID, a client defect found on the way. New: **VTI-37**, a consent refusal whose `details` pass the 4 KB bound at three approvers loses its challenge, digest and relayable requests. VTI-22 re-met: the lab's `up.sh` now sets alice's enforcement. |
 | 1.27 | 2026-09-21 | **Era H — the lab on upstream main** (vti `a96fe02f`, mediator 0.28.11, daemon `5365da7`). Four more resolved upstream since the report: **VTI-04** (vti #1592), **VTI-07** (tdk-rs #843, verified here), **VTI-14** (vti #1601), and **VTI-03**'s second half (vti #1593, `supplement/0.1`) — whose client half Keyring now implements. |
 | 1.26 | 2026-09-21 | VTI-Q1 withdrawn: we track upstream main, as the Farm does. Its number stays reserved. |
 | 1.25 | 2026-09-21 | **TSP Rev 3 on the ecosystem legs, and what it surfaced.** Era G: the lab carries SDK 0.26.12 and TSP-featured VTA and mediator builds, and the two-device vetting ceremony passes with phone ↔ VTA and phone ↔ VTC on Rev 3. New: **VTI-33** (a mediator without `tsp` drops every TSP frame silently), **VTI-34** (`tsp = true` inert without the feature), **VTI-35** (a VTC cannot publish `#tsp`), **VTI-36** (redeploy advice for a self-hosted log), and **EXT-01** (credo-ts rejects an array `service.type`, which blocked the Farm). Status corrections: **VTI-19** resolved by vti #1581, **VTI-24** and **VTI-26** by vti #1579 — both merged 09-19/20 and missed by earlier versions; VTI-30/31 fixes are on our stack since era E. **VTI-20** raised to medium after it blocked a run. **Era F corrected again:** the Farm VTA is `0.34.1-89ebd895` (#1579's merge commit) and the lab `6bd52cab` — equal version strings, different commits. Questions VTI-Q7–Q11 added. |
