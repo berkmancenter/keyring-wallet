@@ -688,10 +688,18 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         void receiveIssue(stores!.community, persona.did, msg, { via: 'vetting' })
                       })
                       try {
-                        const verdict = await vtiAgent.apply(communityDid, m, {
-                          credentials: statements,
-                          requirementsDigest: application?.requirementsDigest,
-                        })
+                        // Submits, or answers an open deferral in place — a
+                        // second submit while one is open would be refused.
+                        const verdict = await applicantRef.current!.submit(
+                          m,
+                          statements,
+                          application?.requirementsDigest
+                        )
+                        // A deferral or a referral leaves the request open;
+                        // the submission card says where it stands and what
+                        // the applicant can do. Only a verdict that closes it
+                        // without admitting them is an error.
+                        if (verdict.effect === 'requestMore' || verdict.effect === 'refer') return
                         if (verdict.effect !== 'allow')
                           throw new Error(
                             `${verdict.effect}${verdict.needs.length ? `: ${verdict.needs.join(', ')}` : ''}`
@@ -712,8 +720,47 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   }
                 >
                   {busy === 'apply' ? <ActivityIndicator color="#FFFFFF" /> : null}
-                  <Text style={styles.buttonText}>{t('MyAgent.Apply')}</Text>
+                  <Text style={styles.buttonText}>
+                    {application?.submission?.state === 'deferred' ? t('Vetting.SendAgain') : t('MyAgent.Apply')}
+                  </Text>
                 </Pressable>
+              ) : null}
+              {/*
+                Where the join request stands, once there is one. A deferral is
+                the community asking for more, not a failure: the applicant can
+                gather and send again, or close it and be free to apply anew.
+              */}
+              {application?.submission && !membershipRole ? (
+                <View testID={testIdWithKey('VettingSubmission')}>
+                  <Text style={styles.label} testID={testIdWithKey('VettingSubmissionState')}>
+                    {application.submission.state === 'deferred'
+                      ? t('Vetting.SubmissionDeferred', {
+                          needs: (application.submission.needs ?? []).join(', ') || '—',
+                        })
+                      : application.submission.state === 'pending'
+                        ? t('Vetting.SubmissionPending')
+                        : application.submission.state === 'withdrawn'
+                          ? t('Vetting.SubmissionWithdrawn')
+                          : t('Vetting.SubmissionDecided', { effect: application.submission.effect ?? '—' })}
+                  </Text>
+                  {application.submission.state === 'deferred' || application.submission.state === 'pending' ? (
+                    <Pressable
+                      style={[styles.button, { backgroundColor: ColorPalette.grayscale.mediumGrey }]}
+                      testID={testIdWithKey('VettingWithdrawButton')}
+                      accessibilityRole="button"
+                      disabled={!!busy}
+                      onPress={() =>
+                        run('withdraw', async () => {
+                          const outcome = await applicantRef.current!.withdraw()
+                          if (outcome === 'nothingOpen') throw new Error(t('Vetting.WithdrawNothingOpen'))
+                        })
+                      }
+                    >
+                      {busy === 'withdraw' ? <ActivityIndicator color="#FFFFFF" /> : null}
+                      <Text style={styles.buttonText}>{t('Vetting.Withdraw')}</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               ) : null}
             </View>
           </>

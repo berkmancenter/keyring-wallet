@@ -1149,6 +1149,13 @@
     "DeskStep2": "Passo 2 · Pedidos na sua mesa",
     "ApplicantStep1": "Passo 1 · Seu rosto",
     "ApplicantStep2": "Passo 2 · Pedir a um verificador",
-    "ApplicantStep3": "Passo 3 · Candidatar-se"
+    "ApplicantStep3": "Passo 3 · Candidatar-se",
+    "SubmissionDeferred": "A comunidade pediu mais: {{needs}}. Sua solicitação continua aberta — reúna o que falta e envie de novo, ou retire-a.",
+    "SubmissionPending": "Sua solicitação está com a comunidade, aguardando a decisão.",
+    "SubmissionWithdrawn": "Você retirou sua solicitação. Pode se candidatar de novo.",
+    "SubmissionDecided": "A comunidade decidiu sobre sua solicitação ({{effect}}).",
+    "SendAgain": "Enviar minhas declarações de novo",
+    "Withdraw": "Retirar minha solicitação",
+    "WithdrawNothingOpen": "Não havia solicitação aberta para retirar — você pode se candidatar."
   }
 }

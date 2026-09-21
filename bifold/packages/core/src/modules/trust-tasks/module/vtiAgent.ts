@@ -52,6 +52,8 @@ import { chooseCarriage, type Carriage } from './tspCapability'
 const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
 const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
+const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
 
 /**
  * A community refusing, in its own terms. `code` is the framework's — e.g.
@@ -69,6 +71,25 @@ export class VtiRefusal extends Error {
     super(message)
     this.name = 'VtiRefusal'
   }
+}
+
+/**
+ * What a join-request refusal means for the applicant, read from its code.
+ *
+ * The codes are declared per task (`vtc/join-requests/withdraw:notFound`,
+ * `…/supplement:alreadyDecided`, `…/supplement:notAwaitingEvidence`), so the
+ * meaning is the part after the colon — never the prose, which a community
+ * may word as it likes. `alreadyDecided` means an outcome stands and the
+ * applicant should be shown it; `notFound` means there is nothing open to act
+ * on; `notAwaitingEvidence` means the request is queued for a decision the
+ * community owes, so supplying more changes nothing.
+ */
+export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence'
+
+export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
+  if (!(refusal instanceof VtiRefusal)) return undefined
+  const reason = refusal.code.split(':').pop()
+  return reason === 'notFound' || reason === 'alreadyDecided' || reason === 'notAwaitingEvidence' ? reason : undefined
 }
 
 /** A refusal arrives as a document in its own right, not as a verdict. */
@@ -484,7 +505,9 @@ class VtiAgentController {
     // presents an opened TSP envelope as the same plaintext shape — so nothing
     // downstream of `ask` needs to know which envelope carried it.
     if (this.agent && this.tsp) {
-      const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), { decided: this.carriageByPeer })
+      const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), {
+        decided: this.carriageByPeer,
+      })
       if (carriage === 'tsp') {
         await this.ensureGreeted(communityDid)
         const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, {
@@ -604,39 +627,8 @@ class VtiAgentController {
     }
   }
 
-  /**
-   * Apply. With no credentials in hand the honest presentation is an empty one:
-   * the community answers `requestMore` naming what it still needs, rather than
-   * the wallet guessing at requirements it cannot yet meet.
-   */
-  async apply(
-    communityDid: string,
-    manifest: VtiManifest,
-    options: { credentials?: unknown[]; requirementsDigest?: string } = {}
-  ): Promise<VtiVerdict> {
-    // The presentation is unsigned: the community takes the holder from the
-    // sealed envelope's sender (VTI-9), so what matters is that the
-    // credentials inside name that same DID as their subject.
-    const answer = await this.ask(communityDid, SUBMIT, {
-      vp: {
-        '@context': ['https://www.w3.org/ns/credentials/v2'],
-        type: ['VerifiablePresentation'],
-        holder: this.state.did,
-        verifiableCredential: options.credentials ?? [],
-      },
-      registryConsent: false,
-      // The community's `select_criterion` reads this digest to decide WHICH
-      // criterion the applicant gathered against, and records
-      // `applicant_digest_matches: false` when it is absent — which its policy
-      // may weigh. With more than one vetting criterion an absent digest means
-      // gathering against one and being judged against another, so send the
-      // digest of the criterion this application was actually built for and
-      // fall back to the manifest's only when there is nothing better.
-      extensions: (() => {
-        const digest = options.requirementsDigest ?? manifest.requirementsDigest
-        return digest ? { requirementsDigest: digest } : {}
-      })(),
-    })
+  /** The verdict a submit or a supplement carries — deliberately the same shape. */
+  private verdictOf(answer: DidCommV2PlaintextMessage | undefined): VtiVerdict {
     if (!answer) throw new Error('vtiAgent: the community did not answer')
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
@@ -656,6 +648,86 @@ class VtiAgentController {
       needs: payload?.verdict?.with?.needs ?? [],
       with: payload?.verdict?.with,
     }
+  }
+
+  private presentation(credentials?: unknown[]) {
+    return {
+      '@context': ['https://www.w3.org/ns/credentials/v2'],
+      type: ['VerifiablePresentation'],
+      holder: this.state.did,
+      verifiableCredential: credentials ?? [],
+    }
+  }
+
+  /**
+   * Answer a deferral in place (`vtc/join-requests/supplement/0.1`) rather
+   * than submitting again, which a community refuses while a request is open
+   * (VTI-04). The presentation REPLACES the one on the request — the community
+   * evaluates this one alone — so it must carry every statement, not only the
+   * ones gathered since. Refusals surface as `VtiRefusal`; read them with
+   * `joinRequestRefusal`.
+   */
+  async supplement(
+    communityDid: string,
+    options: { credentials?: unknown[]; requestId?: string; requirementsDigest?: string } = {}
+  ): Promise<VtiVerdict> {
+    const answer = await this.ask(communityDid, SUPPLEMENT, {
+      vp: this.presentation(options.credentials),
+      ...(options.requestId ? { requestId: options.requestId } : {}),
+      ...(options.requirementsDigest ? { extensions: { requirementsDigest: options.requirementsDigest } } : {}),
+    })
+    return this.verdictOf(answer)
+  }
+
+  /**
+   * Close the applicant's own open request (`vtc/join-requests/withdraw/0.1`),
+   * which frees them to apply again. The id is optional by design: without it
+   * the community resolves the request from who is asking.
+   */
+  async withdraw(
+    communityDid: string,
+    options: { requestId?: string; reason?: string } = {}
+  ): Promise<{ requestId?: string; status: string }> {
+    const answer = await this.ask(communityDid, WITHDRAW, {
+      ...(options.requestId ? { requestId: options.requestId } : {}),
+      ...(options.reason ? { reason: options.reason } : {}),
+    })
+    if (!answer) throw new Error('vtiAgent: the community did not answer')
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const payload = (answer.body as { payload?: { requestId?: string; status?: string } } | undefined)?.payload
+    return { requestId: payload?.requestId, status: payload?.status ?? 'withdrawn' }
+  }
+
+  /**
+   * Apply. With no credentials in hand the honest presentation is an empty one:
+   * the community answers `requestMore` naming what it still needs, rather than
+   * the wallet guessing at requirements it cannot yet meet.
+   */
+  async apply(
+    communityDid: string,
+    manifest: VtiManifest,
+    options: { credentials?: unknown[]; requirementsDigest?: string } = {}
+  ): Promise<VtiVerdict> {
+    // The presentation is unsigned: the community takes the holder from the
+    // sealed envelope's sender (VTI-9), so what matters is that the
+    // credentials inside name that same DID as their subject.
+    const answer = await this.ask(communityDid, SUBMIT, {
+      vp: this.presentation(options.credentials),
+      registryConsent: false,
+      // The community's `select_criterion` reads this digest to decide WHICH
+      // criterion the applicant gathered against, and records
+      // `applicant_digest_matches: false` when it is absent — which its policy
+      // may weigh. With more than one vetting criterion an absent digest means
+      // gathering against one and being judged against another, so send the
+      // digest of the criterion this application was actually built for and
+      // fall back to the manifest's only when there is nothing better.
+      extensions: (() => {
+        const digest = options.requirementsDigest ?? manifest.requirementsDigest
+        return digest ? { requirementsDigest: digest } : {}
+      })(),
+    })
+    return this.verdictOf(answer)
   }
 }
 

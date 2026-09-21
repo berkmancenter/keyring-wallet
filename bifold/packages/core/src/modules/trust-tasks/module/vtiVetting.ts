@@ -37,13 +37,8 @@ import type { VtiCommunityStore, VtiHeldCredential } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './vtiInbox'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
-import { vtiAgent, type VtiManifest } from './vtiAgent'
-import {
-  checkCredentialStatus,
-  checkStatusEntry,
-  statusEntryOf,
-  type CredentialStatusResult,
-} from './vtiStatusList'
+import { joinRequestRefusal, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
+import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
@@ -162,6 +157,24 @@ export interface VettingVetterProfile {
   publishedAt: string
 }
 
+/**
+ * Where the join request this application produced stands, as the community
+ * last told us. `deferred` means the community asked for more and is waiting
+ * on the applicant — the one state `supplement` answers; `pending` means the
+ * community owes the decision. Both are open, and both can be withdrawn.
+ */
+export interface VettingSubmission {
+  requestId?: string
+  state: 'deferred' | 'pending' | 'decided' | 'withdrawn'
+  effect?: string
+  needs?: string[]
+  at: string
+}
+
+/** A verdict effect that leaves the request open, and on whom it waits. */
+const openStateOf = (effect: string): 'deferred' | 'pending' | undefined =>
+  effect === 'requestMore' ? 'deferred' : effect === 'refer' || effect === 'pending' ? 'pending' : undefined
+
 /** The applicant's one application to one community. */
 export interface VettingApplication {
   communityDid: string
@@ -185,6 +198,8 @@ export interface VettingApplication {
   claims: Record<string, string>
   requests: VettingApplicationRequest[]
   startedAt: string
+  /** The join request this application produced, once submitted. */
+  submission?: VettingSubmission
 }
 
 export interface VtiVettingStore {
@@ -1004,6 +1019,86 @@ export class VtiApplicant {
    * why. An applicant offline in a basement is not an applicant with a revoked
    * vetter, and collapsing the two would refuse someone for having no signal.
    */
+  /**
+   * Send the application — or, when the community deferred an earlier one,
+   * answer that deferral in place. A second submit while a request is open is
+   * refused (VTI-04), so an open deferred request is supplemented instead, with
+   * every statement: a supplement replaces the presentation, it does not add
+   * to it. What the community says is recorded, so the next call knows which
+   * of the two to make.
+   */
+  async submit(manifest: VtiManifest, statements: unknown[], requirementsDigest?: string): Promise<VtiVerdict> {
+    const application = await this.app()
+    const communityDid = this.persona.communityDid
+    const open = application.submission?.state === 'deferred' ? application.submission : undefined
+    let verdict: VtiVerdict
+    if (open) {
+      try {
+        verdict = await vtiAgent.supplement(communityDid, {
+          credentials: statements,
+          requestId: open.requestId,
+          requirementsDigest,
+        })
+      } catch (e) {
+        const reason = joinRequestRefusal(e)
+        if (reason === 'notFound') {
+          // Nothing open after all — withdrawn elsewhere or swept by retention.
+          // A fresh submission is the honest next step, not an error.
+          verdict = await vtiAgent.apply(communityDid, manifest, { credentials: statements, requirementsDigest })
+        } else {
+          if (reason === 'alreadyDecided') await this.recordSubmission({ ...open, state: 'decided' })
+          throw e
+        }
+      }
+    } else {
+      verdict = await vtiAgent.apply(communityDid, manifest, { credentials: statements, requirementsDigest })
+    }
+    await this.recordSubmission({
+      requestId: verdict.requestId ?? open?.requestId,
+      state: openStateOf(verdict.effect) ?? 'decided',
+      effect: verdict.effect,
+      needs: verdict.needs,
+      at: new Date().toISOString(),
+    })
+    return verdict
+  }
+
+  /**
+   * Close this application's open request, so the applicant is free to apply
+   * again. `alreadyDecided` means an outcome stands and is recorded as such;
+   * `notFound` means nothing was open, which leaves the applicant exactly
+   * where a withdrawal would have — so it is not an error to them.
+   */
+  async withdraw(reason?: string): Promise<'withdrawn' | 'nothingOpen' | 'alreadyDecided'> {
+    const application = await this.app()
+    const requestId = application.submission?.requestId
+    try {
+      await vtiAgent.withdraw(this.persona.communityDid, { requestId, reason })
+      await this.recordSubmission({ requestId, state: 'withdrawn', at: new Date().toISOString() })
+      return 'withdrawn'
+    } catch (e) {
+      const refusal = joinRequestRefusal(e)
+      if (refusal === 'notFound') {
+        await this.recordSubmission(undefined)
+        return 'nothingOpen'
+      }
+      if (refusal === 'alreadyDecided') {
+        await this.recordSubmission({
+          ...(application.submission ?? { at: new Date().toISOString() }),
+          state: 'decided',
+        })
+        return 'alreadyDecided'
+      }
+      throw e
+    }
+  }
+
+  private async recordSubmission(submission: VettingSubmission | undefined): Promise<void> {
+    const application = await this.app()
+    await this.store.saveApplication({ ...application, submission })
+    this.onChange?.()
+  }
+
   async refreshGrantStatus(): Promise<void> {
     const application = await this.app()
     const checkable = application.requests.filter((r) => r.grantStatusEntry)
