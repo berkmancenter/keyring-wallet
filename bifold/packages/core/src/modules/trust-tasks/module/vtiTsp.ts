@@ -117,6 +117,38 @@ export async function tspSessionForPersona(agent: Agent, persona: VtiPersona): P
   }
 }
 
+/**
+ * Everything a session needs to speak TSP as the phone's own MANAGER identity —
+ * the `did:peer` it enrolled with its VTA — rather than as a persona.
+ *
+ * This is what puts the phone↔VTA leg on TSP. A persona borrows its keys from
+ * the VTA; the manager's key was minted here, so it is in the wallet's own KMS.
+ * One Ed25519 key backs both ports: `keyAgreementFromAskarKey` converts it to
+ * X25519 at use, which is exactly how a did:peer:2 derives its agreement key
+ * from the same inception key. The public halves come from the manager's own
+ * document, so what this identity claims is what the VTA's resolver will see.
+ */
+export async function tspSessionForManager(agent: Agent, managerDid: string): Promise<TspSessionIdentity> {
+  const { didDocument, keys } = await agent.dids.resolveCreatedDidDocumentWithKeys(managerDid)
+  const signingRef = didDocument.assertionMethod?.[0] ?? didDocument.authentication?.[0]
+  const signingVm =
+    typeof signingRef === 'string' ? didDocument.dereferenceKey(signingRef, ['assertionMethod', 'authentication']) : signingRef
+  if (!signingVm) throw new Error(`${LOG_PREFIX} ${managerDid} has no signing verification method`)
+  const kmsKey = (keys ?? []).find((key) => signingVm.id.endsWith(key.didDocumentRelativeKeyId))
+  if (!kmsKey) throw new Error(`${LOG_PREFIX} no KMS key backs ${signingVm.id}`)
+
+  const resolver = createVtiVidResolver(agent)
+  const published = await resolver.resolve(managerDid)
+  return {
+    identity: {
+      signingKey: signingKeyFromEd25519Key(agent, kmsKey.kmsKeyId, published.signingPublicKey),
+      keyAgreement: keyAgreementFromAskarKey(agent, kmsKey.kmsKeyId, published.encryptionPublicKey),
+    },
+    resolver,
+    codec: tsp.createTspCodec(),
+  }
+}
+
 /** Short-form or long-form, for a log line. */
 export const frameForm = (bytes: Uint8Array) => (bytes[0] === tsp.TSP_MAGIC_BYTE_LONG ? 'long' : 'short')
 

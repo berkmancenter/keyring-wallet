@@ -28,7 +28,7 @@ import type { Agent } from '@credo-ts/core'
 import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
-import { TRUST_TASK_V2_ENVELOPE_TYPE, signDocumentProof } from '@bifold/trust-tasks'
+import { TRUST_TASK_V2_ENVELOPE_TYPE, signDocumentProof, tsp } from '@bifold/trust-tasks'
 
 import { importVtaKey, type VtaExportedKey } from './vtaKeys'
 import {
@@ -42,6 +42,13 @@ import {
 } from './VtiMediatorTransport'
 import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
 import { VtiRefusal } from './vtiAgent'
+import { chooseCarriage, type Carriage } from './tspCapability'
+import {
+  packTrustTaskForPeer,
+  tspSessionForManager,
+  unpackTrustTaskFromPeer,
+  type TspSessionIdentity,
+} from './vtiTsp'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
@@ -153,6 +160,12 @@ export class VtaClient {
    * derives from its own result document rather than echoing our thread id.
    */
   private pending?: { resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
+  /** The manager's TSP identity, when this build and this wallet can supply one. */
+  private tsp?: TspSessionIdentity
+  /** §4.2's per-peer decision, taken once per session. */
+  private readonly carriageByPeer = new Map<string, Carriage>()
+  /** Whether the VTA has been greeted (§7.2.2) this session. */
+  private greeted = false
   private queue: Promise<unknown> = Promise.resolve()
 
   private deliver(plaintext: DidCommV2PlaintextMessage): void {
@@ -227,9 +240,26 @@ export class VtaClient {
     this.mediator ??= await resolveVtaMediator(this.agent, this.vtaDid)
     const did = await this.ensureManagerIdentity()
     this.identity = await vtiClientIdentityFromDid(this.agent, did)
+    // Best effort: a wallet whose manager key cannot back TSP ports simply
+    // stays on DIDComm, and §4.2 says so rather than failing the connect.
+    this.tsp = await tspSessionForManager(this.agent, did).catch(() => undefined)
+    this.greeted = false
+    this.carriageByPeer.clear()
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {
       onError: (error) => this.options.onError?.(error),
       onMessage: (plaintext) => this.deliver(plaintext),
+      // The VTA answers the way it was asked, so a request sent over TSP comes
+      // back over TSP. Opened here and handed to the same `deliver` a DIDComm
+      // reply reaches — unpacking presents the document in the plaintext shape
+      // every caller already reads.
+      ...(this.tsp
+        ? {
+            onTspFrame: async (bytes: Uint8Array) => {
+              const opened = await unpackTrustTaskFromPeer(this.tsp as TspSessionIdentity, bytes, did)
+              if (opened) this.deliver(opened.plaintext)
+            },
+          }
+        : {}),
     })
     await session.start()
     this.session = session
@@ -323,6 +353,28 @@ export class VtaClient {
       const reply = new Promise<DidCommV2PlaintextMessage>((resolve) => {
         this.pending = { resolve, sentAt }
       })
+      // §4.2 on the VTA leg: read what the VTA advertises and speak TSP when it
+      // offers it and this wallet can introduce itself. A VTA built without the
+      // `tsp` feature advertises nothing, and this stays on DIDComm.
+      const carriage = await chooseCarriage(
+        this.agent,
+        this.vtaDid,
+        Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS,
+        { decided: this.carriageByPeer }
+      )
+      if (carriage === 'tsp' && this.tsp) {
+        if (!this.greeted) {
+          this.greeted = true
+          // Our mediator, then us: §5.3.3 ends a hop list at our own VID.
+          const route = [this.mediator!.did, did]
+          const invite = await tsp.packInviteRev3(did, this.vtaDid, this.tsp.identity, this.tsp.resolver, { route })
+          await session.sendTspFrame(invite.bytes)
+          this.agent.config.logger.info(`${LOG_PREFIX} greeted ${this.vtaDid} with an XRFI invite`)
+        }
+        const packed = await packTrustTaskForPeer(this.tsp, did, this.vtaDid, document)
+        await session.sendTspFrame(packed.bytes)
+        this.agent.config.logger.info(`${LOG_PREFIX} asked ${this.vtaDid} ${type} over ${packed.revision}`)
+      } else
       await session.sendTo(this.vtaDid, {
         id: `urn:uuid:${utils.uuid()}`,
         typ: 'application/didcomm-plain+json',
