@@ -1,9 +1,9 @@
 # TSP Rev 3 — packing one revision, reading two
 
-**Status:** In code. R2–R4 and R6 are implemented and unit-tested on `feat/tsp-rev3`; R1's runnable rung and R5 (relationship control) are open; R7 waits on a device run against upstream's services.
+**Status:** In code on `feat/prague-farm-membership`. R2–R6 are implemented and unit-tested; R7 is green against upstream's services in the lab — the two-device vetting ceremony passes with phone ↔ VTA and phone ↔ VTC on Rev 3 (see [`2026-09-21-al.md`](./2026-09-21-al.md)). R1's runnable rung and the applicant ↔ vetter leg on Rev 3 are open.
 **Parent:** [`keyring-on-the-vta-farm.md`](../keyring-on-the-vta-farm.md) — parented here because the Prague work is what forces the question, not because Rev 3 is Farm-specific.
 **Siblings:** [`openvtc-integration-plan.md`](../openvtc-integration-plan.md) owns TSP as a transport and keeps that ownership; this subtask owns only the Rev 2 → Rev 3 migration of the stack it already built. [`community_vetting_subtask.md`](./community_vetting_subtask.md) §3.6 defers this work here and is designed not to depend on it.
-**Reasoning:** [`2026-09-15-bm.md`](./2026-09-15-bm.md) Part 2 — the measurements behind §2–§3, the executable demux check behind §3.3, and the positions they supersede. [`2026-09-18-al.md`](./2026-09-18-al.md) — the re-measurement of upstream that moved §3.6, the adopt-versus-port decision behind §2.5, and what R2–R6 landed as. This document states current design only; see [`CLAUDE.md`](../CLAUDE.md).
+**Reasoning:** [`2026-09-15-bm.md`](./2026-09-15-bm.md) Part 2 — the measurements behind §2–§3, the executable demux check behind §3.3, and the positions they supersede. [`2026-09-18-al.md`](./2026-09-18-al.md) — the re-measurement of upstream that moved §3.6, the adopt-versus-port decision behind §2.5, and what R2–R6 landed as. [`2026-09-20-al.md`](./2026-09-20-al.md) §12–§16 — the night R5 and R7 were executed, in the order the blockers were found. [`2026-09-21-al.md`](./2026-09-21-al.md) — R5 and R7's standings moved, and the version record corrected. This document states current design only; see [`CLAUDE.md`](../CLAUDE.md).
 **Dependency direction:** nothing in the vetting path, the PNM client or the VRC/witness stack waits on this. Rev 3 lands when upstream ships it.
 **Baseline (read 2026-09-18):** `vta-browser-plugin` main **bfdb0dc** — Rev 3 merged (#253) with the follow-ups #249–#252, `@openvtc/vti-tsp-js` **0.3.0** in-tree · `@openvtc/vti-tsp-js` **0.2.0** still the latest on npm, Rev 2 · `@openvtc/vti-didcomm-js` **0.10.1** on npm, whose 0.10.0 fixed the demux of §3.3 · `affinidi-tsp` **0.2.1** (the crate mediator 0.26 links) is Rev 3 and classifies both framings · our TSP stack on the vendored **0.3.0** build (`bifold/packages/trust-tasks/vendor/`). Re-measure before acting, per [`scripts/openvtc/README.md`](../../../scripts/openvtc/README.md).
 
@@ -179,7 +179,7 @@ Track `feat/tsp-rev2-rev3-dual-handler`; re-derive the Hermes patch against it; 
 
 **Done when:** an application message sent without a formed relationship is refused locally rather than silently dropped by the peer; invite/accept round-trips against upstream's own state machine; the race and cancel resolutions are covered.
 **Blocked on:** R4.
-**Standing:** open. Both ends of the peer leg are Keyring and neither enforces §7.2.2, so the leg works without it; a Rev 3 control frame that does arrive is refused by name. The control codec (`XRFI`/`XRFA`/`XRFD` with the self-addressing digest) is the next port; the state machine is the package's.
+**Standing:** done for the send-only introduction upstream's services use. `packInviteRev3` builds `XRFI` over the custody ports and is byte-identical to the package's deterministic invite; one invite per peer per session precedes the first Trust Task, routed via our mediator with a `Reply_Path` of `[mediator, us]`; a received `XRFA` is acknowledged and released rather than refused. `XRFD` (cancel) and the race resolution are not built — no peer in the ecosystem legs has needed them yet.
 
 ### R6 — Cutover and the per-peer record
 
@@ -195,7 +195,7 @@ Against upstream's own client and a running VTA/mediator on Rev 3.
 
 **Done when:** a Trust Task round-trips both directions with upstream's implementation; a message above 12,285 bytes survives the mediator; the Rev 2 fixtures in `ref-00…04` are marked with the revision that produced them and retained rather than regenerated.
 **Blocked on:** R6 and upstream's services running Rev 3.
-**Standing:** open; needs a two-device run with `VTI_PEER_LEG=tsp` against the local stack (mediator 0.26 with `local_direct_delivery_allowed`), which the unit tests cannot stand in for.
+**Standing:** green in the lab for the ecosystem legs. The carriage is chosen from the peer's published `TSPTransport` (§4.2 of the parent plan), and the vetting ceremony passes on two devices with phone ↔ VTA (manager key backing both TSP ports) and phone ↔ VTC on Rev 3, against `vta-service` and `vtc-service` built with TSP and a mediator built `--features tsp`. Open: the applicant ↔ vetter leg (persona documents advertise no `TSPTransport`), a message above 12,285 bytes through the mediator, and the same run on the Farm.
 
 ---
 
