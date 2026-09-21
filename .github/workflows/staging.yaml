@@ -604,7 +604,7 @@ jobs:
     # Repository variable DEPLOY_IOS=false switches the platform off.
     if: vars.DEPLOY_IOS != 'false'
     # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
-    # since 2026-04-28; macos-26 ships Xcode 26 as its default.
+    # since 2026-04-28; macos-26 carries every Xcode 26 release.
     runs-on: macos-26
     environment: internal
     timeout-minutes: 60
@@ -639,8 +639,11 @@ jobs:
         with:
           working-directory: ./app
 
-      - name: Show Xcode version
+      # Pinned to the Xcode used for local builds. Xcode 26.4+ (clang) rejects
+      # fmt 11.0.2's consteval format strings, which React Native 0.81 bundles.
+      - name: Select Xcode 26.3
         run: |
+          sudo xcode-select --switch /Applications/Xcode_26.3.app
           xcode-select -p
           xcodebuild -version
 
