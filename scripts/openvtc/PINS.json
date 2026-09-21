@@ -1,12 +1,12 @@
 {
-  "updated": "2026-09-20",
+  "updated": "2026-09-21",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
-      "sha": "89d70c4",
-      "commitDate": "2026-08-17",
-      "pinnedOn": "2026-08-17",
-      "why": "Cypress release tag (== main 89d70c4): our noble HPKE merged (#116) and shipped as vti-tsp-js 0.2.0 + pnm-core 0.4.0; Web Store packaging",
+      "sha": "d045a7a",
+      "commitDate": "2026-09-21",
+      "pinnedOn": "2026-09-21",
+      "why": "Prior art for the persona/face model (#263-#265) that the profile-persona link must be reconciled with; the TSP oracle stays the vendored tsp-js 0.3.0 build.",
       "watch": [
         "packages/tsp-js/",
         "packages/core/src/vta/",
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "c9bc3a69",
-      "commitDate": "2026-09-20",
-      "pinnedOn": "2026-09-20",
-      "why": "Reconcile the pin with what is actually running: the pin sat at Cypress 187ad9cd (vta-service 0.17.0) while the lab, the VTA Farm and upstream main all run vta-service 0.34.1 / vtc-service 0.11.58. Anyone reading external/ as ground truth was reading 17 minor versions below the software under test. Carries #1591 (vtc/join-requests/withdraw/0.1, our KR-03) and #1588 (takes the SDK re-establish fix).",
+      "sha": "a96fe02f",
+      "commitDate": "2026-09-21",
+      "pinnedOn": "2026-09-21",
+      "why": "Match the lab, which moves to upstream main (a96fe02f) this session: carries vti #1579 (VTI-24/26), #1581 (VTI-19), #1591/#1593 (withdraw + supplement, VTI-03), #1592 (VTI-04), #1601 (VTI-14) and the persona/face model (#1594-#1606).",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
@@ -59,10 +59,10 @@
     },
     "dtgwg-trust-tasks-tf": {
       "url": "https://github.com/trustoverip/dtgwg-trust-tasks-tf.git",
-      "sha": "7e0d755",
-      "commitDate": "2026-08-16",
-      "pinnedOn": "2026-08-17",
-      "why": "The Cypress-lock trust-tasks: 0.9.0 libraries (#236 §4.9.3 task digest, #237 payloadPolicy validation), task control §12, trust-task-ok §8.6",
+      "sha": "bdae1cf9",
+      "commitDate": "2026-09-21",
+      "pinnedOn": "2026-09-21",
+      "why": "Specifications for vtc/join-requests/withdraw/0.1 and supplement/0.1, which the client now implements (VTI-03 client half).",
       "watch": [
         "SPEC.md",
         "specs/_framework/",
