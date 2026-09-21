@@ -8,6 +8,7 @@
  *
  * @module trust-tasks/tsp
  */
+export * from './shared'
 export * from './ports'
 export * as hpke from './hpke'
 export * from './direct'

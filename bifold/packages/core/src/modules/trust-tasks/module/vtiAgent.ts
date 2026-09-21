@@ -165,6 +165,21 @@ class VtiAgentController {
    * two envelope formats; the plan asks for a session-scoped choice, logged.
    */
   private readonly carriageByPeer = new Map<string, Carriage>()
+
+  /**
+   * Can this session START a TSP conversation with a peer it has no
+   * relationship with?
+   *
+   * Holding a TSP identity is necessary and not sufficient. Rev 3 requires an
+   * introduction before any traffic, and a peer that does not get one drops
+   * what follows without answering — so choosing TSP without being able to
+   * form a relationship produces silence, which is strictly worse than the
+   * DIDComm we would otherwise have used. `tsp.CODEC_FORMS_RELATIONSHIPS`
+   * carries that fact from the codec that knows it.
+   */
+  private canInitiateTsp(): boolean {
+    return Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS
+  }
   private peerRevisionStore?: TspPeerRevisionStore
 
   /** Receive what the community sends that is not an answer (credentials, statements). */
@@ -368,7 +383,9 @@ class VtiAgentController {
     // hold a TSP identity, we speak TSP whether or not the toggle is on.
     const capable =
       this.peerLeg === 'tsp' ||
-      (this.agent ? (await chooseCarriage(this.agent, toDid, Boolean(this.tsp), { decided: this.carriageByPeer })) === 'tsp' : false)
+      (this.agent
+        ? (await chooseCarriage(this.agent, toDid, this.canInitiateTsp(), { decided: this.carriageByPeer })) === 'tsp'
+        : false)
     if (capable && this.tsp && this.agent) {
       const packed = await packTrustTaskForPeer(this.tsp, did, toDid, {
         ...document,
@@ -422,7 +439,7 @@ class VtiAgentController {
     // presents an opened TSP envelope as the same plaintext shape — so nothing
     // downstream of `ask` needs to know which envelope carried it.
     if (this.agent && this.tsp) {
-      const carriage = await chooseCarriage(this.agent, communityDid, true, { decided: this.carriageByPeer })
+      const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), { decided: this.carriageByPeer })
       if (carriage === 'tsp') {
         const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, {
           id: `urn:uuid:${utils.uuid()}`,

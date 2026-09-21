@@ -86,3 +86,30 @@ export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
   return true
 }
+
+/**
+ * Can this codec form a TSP relationship — that is, send the introduction a
+ * Rev 3 peer requires before it will accept anything?
+ *
+ * **No, and that is load-bearing.** TSP Rev 3 makes the introduction
+ * mandatory: two parties exchange one before any real traffic, and without it
+ * traffic is **dropped rather than refused** — no answer, no error, nothing on
+ * the wire to read. `decodePayloadFrameRev3` recognises the relationship-forming
+ * control frames (`XRFI`/`XRFA`/`XRFD`) and refuses them by name; nothing here
+ * emits one.
+ *
+ * Measured 2026-09-21: with the community VTC advertising `TSPTransport`, the
+ * vetting ceremony ran the whole way through — card sent, statement issued,
+ * requirements met — and then died at *Apply*, the one leg that talks to the
+ * community. Silently, exactly as the revision specifies.
+ *
+ * Envelope selection reads this so it never chooses a transport it cannot
+ * complete a handshake on. Wallet-to-wallet TSP is unaffected and still works,
+ * because both ends are this codec and neither asks for an introduction — it
+ * is a peer running the upstream stack that will not talk to us.
+ *
+ * Upstream's own `@openvtc/vti-tsp-js` exports `packInvite`, `packNested` and
+ * `resolveInviteRace`: that is the shape of the work, and flipping this
+ * constant is what switches the ecosystem legs over once it exists.
+ */
+export const CODEC_FORMS_RELATIONSHIPS = false
