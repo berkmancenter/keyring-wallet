@@ -41,15 +41,20 @@ function portInUse(port) {
  */
 async function checkMetroIsThisWorktree() {
   if (!(await portInUse(METRO_PORT))) return; // nothing running yet — Metro's own absence is a separate, self-evident failure later
-  let ps;
+  // The process listening on THIS port — not the first Metro in `ps`, which on
+  // a shared machine can be another worktree's Metro on another port.
+  let metroAppDir;
   try {
-    ps = execSync("ps -eo pid,args", { encoding: "utf8" });
+    const pid = execSync(`lsof -nP -iTCP:${METRO_PORT} -sTCP:LISTEN -t`, { encoding: "utf8" }).trim().split("\n")[0];
+    if (!pid) return;
+    const cwd = execSync(`lsof -a -p ${pid} -d cwd -Fn`, { encoding: "utf8" })
+      .split("\n")
+      .find((line) => line.startsWith("n"));
+    if (!cwd) return;
+    metroAppDir = path.resolve(cwd.slice(1));
   } catch {
     return; // can't introspect processes on this platform — don't block the run over it
   }
-  const match = ps.match(/(\S+\/app)\/node_modules\/react-native\/cli\.js\s+start/);
-  if (!match) return; // something else owns the port, or we can't identify it — not our call to make
-  const metroAppDir = path.resolve(match[1]);
   if (metroAppDir !== THIS_APP_DIR) {
     throw new Error(
       `Metro on :${METRO_PORT} is serving ${metroAppDir}, not this worktree's ` +
