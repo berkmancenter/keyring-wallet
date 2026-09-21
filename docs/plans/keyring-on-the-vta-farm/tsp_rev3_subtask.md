@@ -179,7 +179,7 @@ Track `feat/tsp-rev2-rev3-dual-handler`; re-derive the Hermes patch against it; 
 
 **Done when:** an application message sent without a formed relationship is refused locally rather than silently dropped by the peer; invite/accept round-trips against upstream's own state machine; the race and cancel resolutions are covered.
 **Blocked on:** R4.
-**Standing:** done for the send-only introduction upstream's services use. `packInviteRev3` builds `XRFI` over the custody ports and is byte-identical to the package's deterministic invite; one invite per peer per session precedes the first Trust Task, routed via our mediator with a `Reply_Path` of `[mediator, us]`; a received `XRFA` is acknowledged and released rather than refused. `XRFD` (cancel) and the race resolution are not built — no peer in the ecosystem legs has needed them yet.
+**Standing:** done for the send-only introduction upstream's services use. `packInviteRev3` builds `XRFI` over the custody ports and is byte-identical to the package's deterministic invite; one invite per peer per session precedes the first Trust Task, routed via our mediator with a `Reply_Path` of `[mediator, us]`; a received `XRFA` is acknowledged and released rather than refused. The accept (`XRFA`) and cancel (`XRFD`) frames are packed too, byte-identical to the package's (bifold `609ff45`), but nothing sends them yet: no peer in the ecosystem legs invites us, and forgetting a community does not yet end its relationship. The invite race is not built.
 
 ### R6 — Cutover and the per-peer record
 
