@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.25 — 2026-09-21.** A living document: every finding here was measured
+**Version 1.26 — 2026-09-21.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1126,7 +1126,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 
 | # | Ask | Why |
 | --- | --- | --- |
-| VTI-Q1 | Is `VTI-Eucalyptus-RC-0` the pin you want a client on, or main? | We run main (0.34.1) because it carries the VTI-28 fix; a client needs to know which surface is the contract. |
+| ~~VTI-Q1~~ | ~~Is `VTI-Eucalyptus-RC-0` the pin you want a client on, or main?~~ | **Withdrawn 2026-09-21.** We track upstream main, which is also what the Farm runs; the number stays reserved. |
 | VTI-Q2 | Will the reference client keep accepting a DIDComm-carried `vetting/request/0.1`, or must a peer speak TSP Rev 3? | Keyring can do either per build; the answer decides the demo's default. |
 | VTI-Q3 | `vtc/vetting/vetters/list/0.1` skips a vetter with no published profile and a vetter with no live grant alike, so absence cannot distinguish *revoked* from *unlisted*. Is a status field, or a by-DID lookup, wanted? | An applicant checking whether its vetter is still live has to fall back to the credential's own status list; a one-line answer from the list route would make the common case cheap. |
 | VTI-Q4 | Is borrowing a persona's signing key from the VTA the expected pattern for signing a Vetting Card (D19), or should the VTA sign it? | We borrow, as the reference client does; confirming it settles our custody model. |
@@ -1141,6 +1141,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.26 | 2026-09-21 | VTI-Q1 withdrawn: we track upstream main, as the Farm does. Its number stays reserved. |
 | 1.25 | 2026-09-21 | **TSP Rev 3 on the ecosystem legs, and what it surfaced.** Era G: the lab carries SDK 0.26.12 and TSP-featured VTA and mediator builds, and the two-device vetting ceremony passes with phone ↔ VTA and phone ↔ VTC on Rev 3. New: **VTI-33** (a mediator without `tsp` drops every TSP frame silently), **VTI-34** (`tsp = true` inert without the feature), **VTI-35** (a VTC cannot publish `#tsp`), **VTI-36** (redeploy advice for a self-hosted log), and **EXT-01** (credo-ts rejects an array `service.type`, which blocked the Farm). Status corrections: **VTI-19** resolved by vti #1581, **VTI-24** and **VTI-26** by vti #1579 — both merged 09-19/20 and missed by earlier versions; VTI-30/31 fixes are on our stack since era E. **VTI-20** raised to medium after it blocked a run. **Era F corrected again:** the Farm VTA is `0.34.1-89ebd895` (#1579's merge commit) and the lab `6bd52cab` — equal version strings, different commits. Questions VTI-Q7–Q11 added. |
 | 1.2 | 2026-09-16 | VTI-17…VTI-20, all from standing a personal VTA up for a phone to manage: a force re-provision keeps a host-bound DID; a self-managed DID-hosting daemon without a mediator cannot be registered; the resolver bursts into rate limits; a serverless persona mint is not served. Also records the measurement that upstream's reference client **borrows a persona's private key** from the VTA (`keys/export-secret/0.1`) and seals locally — the VTA is a custodian, not a proxy. |
 | 1.3 | 2026-09-16 | VTI-21: no delivery channel for invitations; persona services confirmed at mint |
