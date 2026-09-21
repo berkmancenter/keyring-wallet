@@ -20,6 +20,7 @@ import { TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
+import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
@@ -154,6 +155,7 @@ const TabStack: React.FC = () => {
       edges={['left', 'right', 'top']}
     >
       {GradientBg && <GradientBg style={StyleSheet.absoluteFillObject} />}
+      <VtaOfflineBanner />
       <Tab.Navigator
         initialRouteName={TabStacks.ContactStack}
         screenOptions={{

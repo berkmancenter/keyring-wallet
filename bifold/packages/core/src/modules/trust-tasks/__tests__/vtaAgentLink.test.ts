@@ -37,14 +37,18 @@ const offer: EnrolmentOffer = {
 
 function controller(overrides: { submit?: jest.Mock; waitForGrant?: jest.Mock; linked?: unknown } = {}) {
   const saved: unknown[] = []
+  let stored = overrides.linked as never
   const vta = new VtaAgentController()
   const submit = overrides.submit ?? jest.fn(async () => ({ did: 'did:peer:2.temp', code: 'ABCD-EFGH' }))
   const waitForGrant = overrides.waitForGrant ?? jest.fn(async () => undefined)
   vta.configure({
     now: () => 1_000,
     linkStore: () => ({
-      get: async () => overrides.linked as never,
-      set: async (link) => void saved.push(link),
+      get: async () => stored,
+      set: async (link) => {
+        saved.push(link)
+        stored = link as never
+      },
       clear: async () => undefined,
     }),
     identityStore: () => ({ setManager: async () => undefined }) as never,
@@ -192,5 +196,35 @@ describe('linking without a QR through the controller', () => {
     })
     await vta.checkManualGrant({} as never)
     expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'failed' } })
+  })
+})
+
+describe("the agent screen's state", () => {
+  it('a fresh link plays the introduction once, and dismissing it is remembered', async () => {
+    const { vta, saved } = controller()
+    vta.scanOffer(offer)
+    await vta.confirmOffer({} as never)
+    expect(vta.getState().introSeen).toBe(false)
+    expect(vta.getState().activity.map((a) => a.kind)).toEqual(['linked'])
+    await vta.markIntroSeen({} as never)
+    expect(vta.getState().introSeen).toBe(true)
+    expect(saved[saved.length - 1]).toMatchObject({ introSeenAt: new Date(1_000).toISOString() })
+    vta.showIntro()
+    expect(vta.getState().introSeen).toBe(false)
+  })
+
+  it('a restored link that already saw the introduction does not show it again', async () => {
+    const { vta } = controller({ linked: { vtaDid: offer.vta, label: 'x', linkedAt: 't0', introSeenAt: 't1' } })
+    await vta.restore({} as never)
+    expect(vta.getState().introSeen).toBe(true)
+  })
+
+  it('records going offline and coming back, not every retry', async () => {
+    const { vta } = controller({ linked: { vtaDid: offer.vta, label: 'x', linkedAt: 't0', introSeenAt: 't1' } })
+    await vta.restore({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().link).toMatchObject({ connection: { kind: 'online' } })
+    // restored → online is the first connect of the session, noted as back online
+    expect(vta.getState().activity.map((a) => a.kind)).toEqual(['reconnected'])
   })
 })

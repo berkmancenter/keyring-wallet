@@ -80,6 +80,7 @@ export enum Screens {
   VtiCommunity = 'Community',
   VtiVetting = 'Vetting',
   VtaLink = 'Link your agent',
+  VtaAgent = 'Your agent',
 }
 
 export enum Stacks {
@@ -140,6 +141,7 @@ export type MyAgentStackParams = {
   [Screens.VtiCommunity]: { communityDid: string }
   [Screens.VtiVetting]: undefined
   [Screens.VtaLink]: undefined
+  [Screens.VtaAgent]: undefined
 }
 
 export type OnboardingStackParams = {

@@ -18,6 +18,8 @@ export interface VtaLink {
   /** The agent host's human name, from the enrolment offer. */
   label: string
   linkedAt: string
+  /** When the person dismissed the first-link introduction; absent until then. */
+  introSeenAt?: string
 }
 
 export interface VtaLinkStore {

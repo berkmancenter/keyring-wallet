@@ -44,7 +44,18 @@ export interface VtaAgentState {
    * above stays for the screens that predate linking.
    */
   link: VtaLinkState
+  /** Whether the first-link introduction has been seen (plan §4.1). */
+  introSeen: boolean
+  /** What the agent did, newest first, in this session — the agent screen's "What your agent did". */
+  activity: VtaActivity[]
 }
+
+export interface VtaActivity {
+  at: number
+  kind: 'linked' | 'reconnected' | 'wentOffline' | 'revoked' | 'approved' | 'denied'
+}
+
+const ACTIVITY_LIMIT = 20
 
 /** What the controller needs from outside, replaceable in tests. */
 export interface VtaAgentDeps {
@@ -64,7 +75,13 @@ const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
 type Listener = () => void
 
 export class VtaAgentController {
-  private state: VtaAgentState = { status: 'disconnected', approvals: [], link: initialLinkState }
+  private state: VtaAgentState = {
+    status: 'disconnected',
+    approvals: [],
+    link: initialLinkState,
+    introSeen: true,
+    activity: [],
+  }
   private listeners = new Set<Listener>()
   private current?: { client: VtaClient; vtaDid: string; store: VtiIdentityStore }
   private deps: VtaAgentDeps = {}
@@ -94,8 +111,34 @@ export class VtaAgentController {
   }
 
   private dispatch(event: VtaLinkEvent) {
-    const next = reduceLink(this.state.link, event)
-    if (next !== this.state.link) this.set({ link: next })
+    const previous = this.state.link
+    const next = reduceLink(previous, event)
+    if (next === previous) return
+    this.set({ link: next })
+    // The activity list records what changed for the person, not every retry.
+    const wasOnline = previous.kind === 'linked' && previous.connection.kind === 'online'
+    const isOnline = next.kind === 'linked' && next.connection.kind === 'online'
+    if (event.type === 'linked') this.note('linked')
+    else if (event.type === 'accessRevoked') this.note('revoked')
+    else if (wasOnline && !isOnline) this.note('wentOffline')
+    else if (!wasOnline && isOnline && previous.kind === 'linked') this.note('reconnected')
+  }
+
+  private note(kind: VtaActivity['kind']) {
+    this.set({ activity: [{ at: this.now(), kind }, ...this.state.activity].slice(0, ACTIVITY_LIMIT) })
+  }
+
+  /** The person dismissed the first-link introduction; it does not come back on its own. */
+  async markIntroSeen(agent: Agent): Promise<void> {
+    this.set({ introSeen: true })
+    const store = this.linkStore(agent)
+    const link = await store.get().catch(() => undefined)
+    if (link) await store.set({ ...link, introSeenAt: new Date(this.now()).toISOString() })
+  }
+
+  /** "What is my agent?" — show the introduction again. */
+  showIntro() {
+    this.set({ introSeen: false })
   }
 
   subscribe = (listener: Listener) => {
@@ -168,6 +211,7 @@ export class VtaAgentController {
       .get()
       .catch(() => undefined)
     this.dispatch({ type: 'restored', link, now: this.now() })
+    this.set({ introSeen: !link || Boolean(link.introSeenAt) })
     if (link) void this.ensureOnline(agent)
   }
 
@@ -251,6 +295,7 @@ export class VtaAgentController {
     await client.whoAmI().catch(() => undefined)
     const linkedAt = new Date(this.now()).toISOString()
     await this.linkStore(agent).set({ vtaDid, label, linkedAt })
+    this.set({ introSeen: false })
     this.reconnectAttempt = 0
     this.set({ status: 'connected', vtaDid, managerDid: client.managerDid })
     this.dispatch({ type: 'linked', linkedAt })
@@ -383,6 +428,7 @@ export class VtaAgentController {
     try {
       await client.decideConsent(approval, decision, reason)
       this.update(id, { status: decision === 'approve' ? 'approved' : 'denied' })
+      this.note(decision === 'approve' ? 'approved' : 'denied')
     } catch (error) {
       this.update(id, { status: 'failed', error: error instanceof Error ? error.message : String(error) })
       throw error

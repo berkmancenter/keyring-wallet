@@ -105,7 +105,8 @@ const VtaLink: React.FC = () => {
   }, [navigation])
 
   const onDone = useCallback(() => {
-    navigation.navigate(Screens.MyAgent as never)
+    // The agent screen, where the first-link introduction plays once.
+    navigation.navigate(Screens.VtaAgent as never)
   }, [navigation])
 
   const failureText = (failure?: VtaLinkFailure) => {

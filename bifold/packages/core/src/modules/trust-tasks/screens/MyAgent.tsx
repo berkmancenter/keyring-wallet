@@ -535,6 +535,14 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
+          {vta.link.kind === 'linked' ? (
+            <Button
+              title={t('VtaLink.OpenYourAgent')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => navigation.navigate(Screens.VtaAgent)}
+              testID={testIdWithKey('OpenYourAgentButton')}
+            />
+          ) : null}
           <View style={styles.card} testID={testIdWithKey('MyAgentCard')}>
             <View style={styles.row}>
               <Icon name="check-circle" size={18} color={ColorPalette.semantic.success} />
