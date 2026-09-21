@@ -85,6 +85,9 @@ const main = async () => {
 
   // The build shows up a few minutes after the upload, then processes.
   const deadline = Date.now() + timeoutMs
+  // An uploaded build shows up within minutes; processing can take longer.
+  const VISIBLE_MINUTES = 20
+  const visibleDeadline = Date.now() + VISIBLE_MINUTES * 60 * 1000
   let build
   for (;;) {
     const builds = await api(
@@ -98,6 +101,9 @@ const main = async () => {
     if (state === 'VALID') break
     if (state === 'FAILED' || state === 'INVALID') throw new Error(`Build processing ended in ${state}`)
     if (Date.now() > deadline) throw new Error(`Build still ${state} after ${timeoutMs / 60000} minutes`)
+    if (!build && Date.now() > visibleDeadline) {
+      throw new Error(`Build never appeared in App Store Connect after ${VISIBLE_MINUTES} minutes; the upload most likely failed`)
+    }
     await sleep(30_000)
   }
 

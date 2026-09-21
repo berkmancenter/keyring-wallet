@@ -607,7 +607,7 @@ jobs:
     # since 2026-04-28; macos-26 carries every Xcode 26 release.
     runs-on: macos-26
     environment: internal
-    timeout-minutes: 60
+    timeout-minutes: 120
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
