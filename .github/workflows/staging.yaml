@@ -60,18 +60,28 @@ jobs:
       - name: Check required secrets
         shell: bash
         run: |
-          required_secrets=(
-            "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
-            "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
-            "BUILD_PROVISION_PROFILE_BASE64"
-            "APP_STORE_CONNECT_API_KEY_P8"
-            "APP_STORE_CONNECT_API_KEY_ID"
-            "PLAY_STORE_JKS_BASE64"
-            "PLAY_STORE_JKS_ALIAS"
-            "PLAY_STORE_JKS_PASSWD"
-            "GOOGLE_API_CREDENTIALS_BASE64"
-            "MEDIATOR_URL"
-          )
+          required_secrets=("MEDIATOR_URL")
+          if [ "$DEPLOY_IOS" != "false" ]; then
+            required_secrets+=(
+              "APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64"
+              "APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD"
+              "BUILD_PROVISION_PROFILE_BASE64"
+              "APP_STORE_CONNECT_API_KEY_P8"
+              "APP_STORE_CONNECT_API_KEY_ID"
+            )
+          else
+            echo "ℹ️ iOS is switched off (repository variable DEPLOY_IOS=false)"
+          fi
+          if [ "$DEPLOY_ANDROID" != "false" ]; then
+            required_secrets+=(
+              "PLAY_STORE_JKS_BASE64"
+              "PLAY_STORE_JKS_ALIAS"
+              "PLAY_STORE_JKS_PASSWD"
+              "GOOGLE_API_CREDENTIALS_BASE64"
+            )
+          else
+            echo "ℹ️ Android is switched off (repository variable DEPLOY_ANDROID=false)"
+          fi
 
           missing=0
           for secret in "${required_secrets[@]}"; do
@@ -100,6 +110,8 @@ jobs:
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DEPLOY_IOS: ${{ vars.DEPLOY_IOS }}
+          DEPLOY_ANDROID: ${{ vars.DEPLOY_ANDROID }}
 
   test:
     runs-on: ubuntu-22.04
@@ -127,6 +139,8 @@ jobs:
 
   build-android-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
+    # Repository variable DEPLOY_ANDROID=false switches the platform off.
+    if: vars.DEPLOY_ANDROID != 'false'
     runs-on: ubuntu-22.04
     environment: internal
     timeout-minutes: 60
@@ -544,7 +558,6 @@ jobs:
           echo "✅ Build verification complete"
 
       - name: Upload Android artifact
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.fork != true
         uses: actions/upload-artifact@v4
         with:
           name: android-staging-${{ env.APP_BUILD_NUMBER }}
@@ -552,20 +565,9 @@ jobs:
           retention-days: 30
 
       - name: Extract commit message for release notes
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
           CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -581,7 +583,6 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Ship to Google Play Internal Testing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         working-directory: app
         env:
           GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
@@ -600,6 +601,8 @@ jobs:
 
   build-ios-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
+    # Repository variable DEPLOY_IOS=false switches the platform off.
+    if: vars.DEPLOY_IOS != 'false'
     # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
     # since 2026-04-28; macos-26 ships Xcode 26 as its default.
     runs-on: macos-26
@@ -793,14 +796,12 @@ jobs:
           archive
 
       - name: Export production archive
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/export-ios-archive
         with:
           export_options: "export-options-keyring.plist"
           ouput_artifact_ref: "ios-staging-artifact"
 
       - name: Upload iOS artifact
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: actions/upload-artifact@v4
         with:
           name: ios-staging-${{ env.APP_BUILD_NUMBER }}
@@ -808,20 +809,9 @@ jobs:
           retention-days: 30
 
       - name: Extract commit message for release notes
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-ios
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
           CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
@@ -837,7 +827,6 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Ship to TestFlight Internal Testing
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         uses: ./.github/workflows/actions/ship-to-itunes
         with:
           # An individual key (no issuer) or a team key (with APP_STORE_CONNECT_ISSUER_ID).
@@ -853,7 +842,8 @@ jobs:
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: success()
+    # Runs when every platform that ran succeeded; a switched-off platform is skipped.
+    if: ${{ !failure() && !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -882,7 +872,7 @@ jobs:
 
   notify-team:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: success() # Only notify on successful builds
+    if: ${{ !failure() && !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
     environment: internal
     env:
@@ -899,20 +889,9 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Extract commit message for Slack
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-slack
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            COMMIT_MSG="${{ github.event.pull_request.title }}"
-            if [ -n "${{ github.event.pull_request.body }}" ]; then
-              COMMIT_MSG="$COMMIT_MSG - ${{ github.event.pull_request.body }}"
-            fi
-          else
-            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
-            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" == "null" ]; then
-              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-            fi
-          fi
+          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
           CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -3 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
