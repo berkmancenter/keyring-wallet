@@ -113,6 +113,38 @@ for n in alice community bob; do
   esac
 done
 
+log "the DID host's DIDComm ear"
+# The gap that cost a rebuild at 03:00 on 2026-09-21. Restarting the mediator
+# drops every client socket, and the DID-hosting daemon does not always get one
+# back — its last three websocket events were "Error creating websocket
+# connection" and it simply stayed deaf, serving HTTP the whole time so both
+# the process check and the tunnel check passed. A persona mint then fails as
+# `bad gateway: ... request timed out after 30s` inside the VTA, which reads as
+# a VTA fault and is not one. Everything that mints a DID depends on this
+# socket, so it is checked like the others.
+last=$(grep -nE "DIDComm service started successfully|messaging service started|Error creating websocket|WebSocket connection dropped" \
+  "$STACK_DIR/logs/dids.log" 2>/dev/null | tail -1)
+case "$last" in
+  *"service started"*) ok "the DID host's last messaging event was a start" ;;
+  "") bad "no messaging events in the DID host's log" ;;
+  *)
+    if [ "$HEAL" = 1 ]; then
+      bad "the DID host's last messaging event was a FAILURE — restarting it"
+      for pid in $(lsof -nP -iTCP:8534 -sTCP:LISTEN -t 2>/dev/null); do
+        kill "$pid"
+        for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+      done
+      nohup "$WEBVH_SRC/target/debug/did-hosting-daemon" --config "$STACK_DIR/dids/config.toml" \
+        > "$STACK_DIR/logs/dids.log" 2>&1 &
+      sleep 25
+      grep -q "DIDComm service started successfully" "$STACK_DIR/logs/dids.log" 2>/dev/null \
+        && fixed "the DID host reconnected" || bad "the DID host did not reconnect"
+    else
+      bad "the DID host is deaf on DIDComm — every persona mint will time out (--heal restarts it)"
+    fi
+    ;;
+esac
+
 log "the community's DIDComm ear"
 # The one that cost the most: the VTC serves REST happily while its mediator
 # websocket is gone, so a manifest fetch succeeds and every Trust Task asked

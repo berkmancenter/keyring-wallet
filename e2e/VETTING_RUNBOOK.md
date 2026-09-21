@@ -178,6 +178,32 @@ through `tail` or `head`** — you lose the beginning, which is where the
 failure usually is. The transcript captures WebdriverIO's own command log too,
 which is the part that names the selector a dead run was waiting on.
 
+## Rebuilding the vetter after something wipes it
+
+`run-vrc-exchange-tsp` and the other VRC runners do a **fresh install with
+onboarding on both devices**, which destroys the vetter's onboarding, persona,
+membership and grant. The ceremony then stops at "Welcome / Get Started". To
+put it back, in this order:
+
+```sh
+ANDROID_AVD=API36_S25_A E2E_KEEP_APP=1 PLATFORM=android node run-vta-enrol.js
+ANDROID_AVD=API36_S25_A E2E_KEEP_STATE=1 E2E_KEEP_APP=1 PLATFORM=android node run-vti-invite.js
+# the persona DID is printed by that run; grant it, then resend
+node ../tsp-reference/ref-20-local-vetting/vtc-admin.mjs "$VTC_URL/v1" "$VTC_DID" \
+  ~/vti-stack/vtc-admin-credential.json vetter-grant   <persona did>
+node ../tsp-reference/ref-20-local-vetting/vtc-admin.mjs "$VTC_URL/v1" "$VTC_DID" \
+  ~/vti-stack/vtc-admin-credential.json vetter-resend  <persona did>
+```
+
+**The resend is not optional in practice.** A grant issued while the app is
+busy elsewhere is not picked up, and the ceremony then fails at
+*publish profile* with the vetter looking perfectly healthy. Issue, then
+resend, then run.
+
+**Force-stop the app between the invite rung and the ceremony.** The invite
+leaves the phone on its result screen, and the vetting runner starts by looking
+for controls that screen does not have.
+
 ## Known open
 
 - **`E2E_FRESH_PERSONA=1` is not a working mode.** Forgetting the community
