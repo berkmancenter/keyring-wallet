@@ -47,6 +47,8 @@ import {
   createPeerDidDocumentFromServices,
   getPublicJwkFromVerificationMethod,
   Kms,
+  NewDidCommV2Service,
+  NewDidCommV2ServiceEndpoint,
   PeerDidNumAlgo,
   TypedArrayEncoder,
   utils,
@@ -178,8 +180,18 @@ export interface VtiClientIdentity {
  * through *our* mediator, which has nothing to do with this leg — here the ATM
  * socket is the routing, because the mediator delivers to whichever DID logged
  * in. So this builds the `did:peer:2` directly: one Ed25519 key in Askar, the
- * matching X25519 keyAgreement derived by Credo, and the mediator's own
- * endpoint as the service.
+ * matching X25519 keyAgreement derived by Credo, and a `DIDCommMessaging`
+ * service naming the mediator by its DID.
+ *
+ * That service is how a VTA reaches this phone when it is not the one asking.
+ * An approver is pushed a consent request only if its DID document carries a
+ * `DIDCommMessaging` service whose endpoint is a mediator DID (vti #1579,
+ * `resolve_mediator_did_with_resolver`) — the shape the reference client mints,
+ * `{"t":"dm","s":…,"a":["didcomm/v2"]}`. Credo's helper writes a DIDComm v1
+ * `did-communication` service with the socket URL instead, which the VTA reads
+ * as "no route": the approval was never pushed, and the phone saw it only
+ * because My Agent went and fetched it (2026-09-21). A DID already minted
+ * keeps its old service; only new mints carry this one.
  */
 export async function createVtiClientDid(agent: Agent, mediator: VtiMediatorEndpoints): Promise<string> {
   const key = await agent.kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' } })
@@ -195,6 +207,14 @@ export async function createVtiClientDid(agent: Agent, mediator: VtiMediatorEndp
     ],
     true
   )
+  // The builder above supplies the keys; the service is replaced with the v2
+  // one before the DID is encoded, since the DID string is the document.
+  didDocument.service = [
+    new NewDidCommV2Service({
+      id: '#didcomm',
+      serviceEndpoint: new NewDidCommV2ServiceEndpoint({ uri: mediator.did, accept: ['didcomm/v2'] }),
+    }),
+  ]
   const created = await agent.dids.create({
     method: 'peer',
     didDocument,
