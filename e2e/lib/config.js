@@ -116,6 +116,13 @@ const ANDROID_SETTINGS = { "appium:settings[waitForIdleTimeout]": 100 };
  * `noReset`. Clear the app yourself before the chain if you want it clean.
  */
 const keepApp = () => process.env.E2E_KEEP_APP === '1'
+// E2E_KEEP_STATE=1 means "this session must not touch the installed app".
+// The comment above promised it; the capabilities did not honour it, so a
+// session opened from a helper script without the runners' own keep() wrapper
+// reinstalled the app and wiped its state (2026-09-21: the iPhone applicant).
+const keepState = () => process.env.E2E_KEEP_STATE === '1'
+const keepStateCaps = () =>
+  keepState() ? { "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false } : {}
 
 export function androidCaps(avd = ANDROID_AVD) {
   return {
@@ -135,6 +142,7 @@ export function androidCaps(avd = ANDROID_AVD) {
     "appium:adbExecTimeout": 120000,
     "appium:uiautomator2ServerLaunchTimeout": 120000,
     ...ANDROID_SETTINGS,
+    ...keepStateCaps(),
   };
 }
 
@@ -217,5 +225,6 @@ export function iosCaps() {
     "appium:wdaLocalPort": Number(process.env.WDA_LOCAL_PORT || 8100),
     "appium:wdaLaunchTimeout": 180000,
     "appium:simulatorStartupTimeout": 300000,
+    ...keepStateCaps(),
   };
 }
