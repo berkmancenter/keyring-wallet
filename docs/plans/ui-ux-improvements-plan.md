@@ -269,10 +269,10 @@ Each phase ends with the vetting, invitation and enrolment e2e runners green on 
 ### U8 — Enrolment by QR: upstream's page first, then the lab page
 
 - **Measure first:** grant a phone's key through upstream's browser extension (*Grant access* in its console's Access pane) against the lab agent, with the key pasted from the phone's fallback screen. Record what it takes, including how the extension itself is admitted as admin.
-- **Then build the lab enrolment page** (§5.1, *Granting the phone*, stage 3): *Add a phone* shows a short-lived, single-use enrolment QR bound to the page session; the phone scans it and submits its temporary key signed with that key; both screens show the key's fingerprint; *Grant* sends `acl/grant` with an hour's expiry. The page runs only in the lab, signed in as the lab agent's admin.
-- **Then write the indications for upstream:** a dated companion describing the exchange as it ran — the link format, the signed submission, the fingerprint check, the expiry — addressed to the extension's Access pane and the Farm console. The asks it produces are U-1, U-3 and U-5 in §9; how they are sent is open (§8).
+- **Then build the lab enrolment page** (§5.1, *Granting the phone*, stage 3): *Add a phone* shows a short-lived, single-use enrolment QR bound to the page session; the phone scans it and submits its temporary key signed with that key; both screens show the key's fingerprint; *Grant* sends `acl/grant` with an hour's expiry. The page runs only in the lab, with no login of its own, acting as the lab agent's admin.
+- **Then write the indications for upstream:** a dated companion describing the exchange as it ran — the link format, the signed submission, the fingerprint check, the expiry — addressed to the extension's Access pane and the Farm console. The asks it produces are U-1, U-3 and U-5 in §9, sent with the next report (§8).
 - The page shows the link twin under its QR (*Copy link*), so a person can also send it to the phone and paste it.
-- Browser UI tests drive the page: the test reads the enrolment link from the page, puts it on the simulator's clipboard and pastes it through the Scan screen, as UT describes, and clicks *Grant* once the fingerprints match; where a passkey guards the page, the browser's virtual authenticator answers it.
+- Browser UI tests drive the page: the test reads the enrolment link from the page, puts it on the simulator's clipboard and pastes it through the Scan screen, as UT describes, and clicks *Grant* once the fingerprints match; the page has no login, so the tests need no authenticator.
 - **Done when:** a browser test and a simulator link a phone end to end with no terminal step; a mismatched fingerprint is refused; an expired or reused enrolment link is refused; and the demo phones link through the page on the presenter's laptop.
 
 ### UT — The harness follows the flow (alongside every phase)
@@ -307,10 +307,10 @@ What the runners need that no single phase owns:
 
 - **Linking is a step the person takes, by QR, and the demo shows it live** (§5.1). So the lab enrolment page (U8) is built before Prague.
 
-**Open:**
+- **The asks in §9 go to upstream in the report we already send the maintainers**, each with its code references, when it is ready. No separate issue or pull request.
+- **The lab enrolment page has no login for now.** It runs only on our laptop, for tests and the demo; a login is revisited if it ever leaves the lab.
 
-1. **How do we send upstream the asks in §9?** Options: attach them to the next report we already send the maintainers, open an issue, or open a pull request with the change. Anything public waits for a go.
-2. **Does the lab enrolment page need a login?** It runs only on our laptop in the lab. The plan assumes no login.
+**Open:** none.
 
 ## 9. What we ask upstream
 
