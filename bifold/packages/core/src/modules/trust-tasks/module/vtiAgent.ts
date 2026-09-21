@@ -207,7 +207,13 @@ class VtiAgentController {
     if (this.greeted.has(toDid)) return
     this.greeted.add(toDid)
     try {
-      const route = this.mediatorDid ? [this.mediatorDid] : []
+      // §5.3.3: a hop list ends at the destination's OWN VID, not its
+      // intermediary's — so the path back to us is our mediator, then us.
+      // Advertising the mediator alone is the Rev 2 shape, and a Rev 3 peer
+      // cannot route an accept over it: the VTC logged "a routed message
+      // requires at least one onward hop" and never answered the invite.
+      // Upstream's own `form_relationship_routed` sends exactly this pair.
+      const route = this.mediatorDid ? [this.mediatorDid, did] : []
       const invite = await greetPeerOverTsp(this.tsp, did, toDid, route)
       await session.sendTspFrame(invite.bytes)
       this.agent.config.logger.info(
