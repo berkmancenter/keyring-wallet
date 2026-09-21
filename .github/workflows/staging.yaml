@@ -724,7 +724,9 @@ jobs:
       - name: Install iOS dependencies
         working-directory: app
         run: |
-          export USE_HERMES=true
+          # '1', not 'true': ExpoModulesCore.podspec only treats '1' (or unset) as
+          # Hermes, and otherwise depends on React-jsc, which RN 0.81 does not ship.
+          export USE_HERMES=1
           yarn run ios:setup
 
       - name: Bump Build No.
