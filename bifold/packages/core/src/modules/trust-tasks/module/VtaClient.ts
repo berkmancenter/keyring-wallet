@@ -43,12 +43,7 @@ import {
 import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
 import { VtiRefusal } from './vtiAgent'
 import { chooseCarriage, type Carriage } from './tspCapability'
-import {
-  packTrustTaskForPeer,
-  tspSessionForManager,
-  unpackTrustTaskFromPeer,
-  type TspSessionIdentity,
-} from './vtiTsp'
+import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
@@ -117,15 +112,33 @@ export interface VtaMintedDid {
 
 const nowSec = () => Math.floor(Date.now() / 1000)
 
-/** The consent challenge inside a refusal, when that is what the refusal is. */
-function consentPendingOf(error: unknown): { payloadDigest?: string; requests: Record<string, unknown>[] } | undefined {
+const CONSENT_REQUIRED = 'auth:consent_required'
+
+/**
+ * The consent challenge inside a refusal, when that is what the refusal is.
+ *
+ * The challenge normally rides in `details`, but a VTA drops `details` that
+ * exceed the framework's size bound and sends the code alone — which one signed
+ * request per approver reaches at three approvers (2026-09-21, "error `details`
+ * exceeds the framework bound and was dropped"). The task is still held, so a
+ * bare `auth:consent_required` is read as held too: there is nothing to relay
+ * and no digest to wait on, but re-submitting still collects the grant.
+ */
+export function consentPendingOf(
+  error: unknown
+): { payloadDigest?: string; requests: Record<string, unknown>[] } | undefined {
   if (!(error instanceof VtiRefusal)) return undefined
   const details = error.details as
     | { reason?: string; consentRequests?: (Record<string, unknown> & { payload?: { payloadDigest?: string } })[] }
     | undefined
-  if (details?.reason !== 'auth:consent_required') return undefined
-  const requests = details.consentRequests ?? []
-  return { payloadDigest: requests[0]?.payload?.payloadDigest, requests }
+  if (details?.reason === CONSENT_REQUIRED) {
+    const requests = details.consentRequests ?? []
+    return { payloadDigest: requests[0]?.payload?.payloadDigest, requests }
+  }
+  if (details === undefined && (error.code === CONSENT_REQUIRED || error.message.includes(CONSENT_REQUIRED))) {
+    return { requests: [] }
+  }
+  return undefined
 }
 
 /**
@@ -375,17 +388,17 @@ export class VtaClient {
         await session.sendTspFrame(packed.bytes)
         this.agent.config.logger.info(`${LOG_PREFIX} asked ${this.vtaDid} ${type} over ${packed.revision}`)
       } else
-      await session.sendTo(this.vtaDid, {
-        id: `urn:uuid:${utils.uuid()}`,
-        typ: 'application/didcomm-plain+json',
-        type: TRUST_TASK_V2_ENVELOPE_TYPE,
-        from: did,
-        to: [this.vtaDid],
-        thid: threadId,
-        created_time: nowSec(),
-        expires_time: nowSec() + 300,
-        body: document,
-      })
+        await session.sendTo(this.vtaDid, {
+          id: `urn:uuid:${utils.uuid()}`,
+          typ: 'application/didcomm-plain+json',
+          type: TRUST_TASK_V2_ENVELOPE_TYPE,
+          from: did,
+          to: [this.vtaDid],
+          thid: threadId,
+          created_time: nowSec(),
+          expires_time: nowSec() + 300,
+          body: document,
+        })
       const answer = await Promise.race([
         reply,
         new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
