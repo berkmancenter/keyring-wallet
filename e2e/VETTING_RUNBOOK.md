@@ -129,6 +129,10 @@ elsewhere on the page.
 | a screen "connected" but receiving nothing | stale in-process state outliving the socket; always call `vtiAgent.connect`, it returns immediately when the socket is open |
 | `[VTI-PROBE] failed … status: 421` on the phone, while `curl` to the same host is fine | **HTTP/2 connection coalescing.** Our six services sit on `*.ngrok.app` behind one wildcard certificate and the same IPs, so the phone reuses a connection opened for one host to talk to another and the edge answers `421 Misdirected Request`. `curl` opens a fresh connection per host and never sees it. Intermittent — re-run. It is a property of the ngrok fixture, not of the stack |
 | the run reports the vetter never accepted, and the applicant's own screen shows a status from the PREVIOUS run | the probe failed, so membership read as unknown; the runner now resets in that case instead of assuming non-membership |
+| every persona mint fails as "bad gateway", or `stack-health.sh` reports a tunnel `refused by ngrok (ERR_NGROK_4026)` | the ngrok account is **out of credit**; only some hostnames may be refused. Nothing local fixes it — top up the account |
+| a fresh iOS install stops at "Error during call to 'onInitializeContext' … didcomm" | the wallet's own mediator (`yarn mediator`) or its cloudflared tunnel has died. Restart it **with the same flags** (`--didcomm-v2` if the build uses v2), then rebuild — the invitation is baked in |
+| the rebuilt app still dials the OLD mediator | two causes, check both. (1) Xcode's incremental build did not regenerate `build/e2e-dd/Build/Products/GeneratedInfoPlistDotEnv.h`: delete it and rebuild. (2) The wallet saved the old URL as `selectedMediator` on its first launch: uninstall by the real bundle id — `xcrun simctl uninstall booted asml.bkc.harvard.wallet` (not `com.ariesbifold`, which silently uninstalls nothing) |
+| a helper script's session wiped the app | before 2026-09-21 `E2E_KEEP_STATE=1` did not reach the capabilities; it does now, but open ad-hoc sessions with it set |
 
 ## Debugging, in the order that pays
 
