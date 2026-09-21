@@ -186,10 +186,10 @@ export function decodeEncodedList(encoded: string): Uint8Array | string {
  * Bit order is most-significant-first within each byte: index 0 is `0x80` of
  * byte 0, index 7 is `0x01` of byte 0, index 8 is `0x80` of byte 1. This is
  * what the W3C encoding prescribes and what StatusList2021 before it used.
- * It is isolated here on purpose — it is the one convention in this file that
- * a reading of the specification cannot settle beyond doubt, so it is checked
- * against a real revoked credential from a live community in the vetting e2e
- * rather than trusted on the strength of the prose.
+ * Settled against the issuer rather than the prose: affinidi-status-list 0.1.5,
+ * which vtc-service builds with, sets and reads bits `7 - (index % 8)` — "MSB
+ * first per spec" — and a live community's list, which carries decoy bits, is
+ * read correctly by this function (`__tests__/proofSet.test.ts`).
  */
 export function bitAt(bits: Uint8Array, index: number): boolean | string {
   const byte = index >>> 3

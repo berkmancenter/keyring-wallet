@@ -65,6 +65,9 @@ const DELIVERY_REQUEST = 'https://didcomm.org/messagepickup/3.0/delivery-request
 const DELIVERY_POLL_MS = 15000
 const DELIVERY = 'https://didcomm.org/messagepickup/3.0/delivery'
 const PICKUP_PROTOCOL = 'https://didcomm.org/messagepickup/3.0/'
+const PICKUP_STATUS = 'https://didcomm.org/messagepickup/3.0/status'
+/** A resync never starts a second drain within this long of the last one. */
+const RESYNC_DEBOUNCE_MS = 1000
 const PLAIN = 'application/didcomm-plain+json'
 const WS_APP_SUBPROTOCOL = 'didcomm'
 
@@ -460,7 +463,9 @@ export class VtiMediatorSession {
     // And a live push can be missed — measured: a vetting statement sat in the
     // recipient's queue while its socket was open (VTI-24's shape again). A
     // periodic delivery-request is the backstop; an empty queue answers with a
-    // `status`, which handleFrame ignores.
+    // `status`, which handleFrame treats as the answer it is. The mediator's own
+    // resync signal (tdk-rs #830) makes a missed push visible sooner — see
+    // `heardPickup`.
     if (this.pollTimer) clearInterval(this.pollTimer)
     this.pollTimer = setInterval(() => {
       if (this.socket?.readyState === 1) void this.requestDelivery().catch(() => undefined)
@@ -473,6 +478,7 @@ export class VtiMediatorSession {
    * `recipient_did` it answers a problem-report and nothing is delivered.
    */
   private async requestDelivery(): Promise<void> {
+    this.lastDeliveryRequestAt = Date.now()
     await this.send({
       id: uuid(),
       typ: PLAIN,
@@ -510,6 +516,32 @@ export class VtiMediatorSession {
     return plaintext
   }
 
+  private lastDeliveryRequestAt = 0
+
+  /**
+   * A Pickup 3.0 frame from the mediator is bookkeeping, never a message for
+   * the agent, and is never acknowledged. One kind of it asks for action.
+   *
+   * After it drops a live push, the mediator raises a resync and sends a
+   * `status` carrying the inbox's live `message_count` (tdk-rs #830, rate-
+   * limited to one per five seconds). Unlike the status that answers our own
+   * live-delivery-change or delivery-request, it answers nothing — it carries
+   * no `thid` — so it is told apart by that. Ignoring it, as this transport
+   * did, leaves the missed message waiting for the backstop poll; it is the
+   * one signal that makes a longer poll interval safe
+   * (message-protection-plan M1).
+   *
+   * A solicited status keeps its meaning: an empty queue answering our poll.
+   */
+  private heardPickup(plaintext: { type?: unknown; thid?: unknown; body?: unknown }): void {
+    if (plaintext.type !== PICKUP_STATUS || plaintext.thid) return
+    const count = Number((plaintext.body as { message_count?: unknown } | undefined)?.message_count ?? 1)
+    if (!(count > 0)) return
+    if (Date.now() - this.lastDeliveryRequestAt < RESYNC_DEBOUNCE_MS) return
+    this.agent.config.logger.debug(`${LOG_PREFIX} resync: ${count} waiting after a dropped push — draining`)
+    void this.requestDelivery().catch(() => undefined)
+  }
+
   /** Hand a delivered frame to Credo, then acknowledge it — never the other way round. */
   private async handleFrame(raw: string): Promise<void> {
     try {
@@ -524,7 +556,10 @@ export class VtiMediatorSession {
       // which is this transport's own bookkeeping rather than a message for the
       // agent: Credo has no handler for it and rejects it as invalid. Frames
       // carrying a peer's message are JWEs, so a plaintext `status` is ours.
-      if (isPickup(frame.type)) return
+      if (isPickup(frame.type)) {
+        this.heardPickup(frame)
+        return
+      }
       if (this.options.onMessage && typeof frame.protected === 'string') {
         const plaintext = await this.unpack(frame as unknown as DidCommV2EncryptedMessage)
         // A `delivery` answering our delivery-request wraps the queued messages
@@ -539,7 +574,11 @@ export class VtiMediatorSession {
         // `live-delivery-change` looks exactly like a peer's message until then.
         // Its own frames are never queued messages: acknowledging one provokes
         // another status reply, forever (vti-didcomm-js, mediator-transport.js).
-        if (isPickup(plaintext.type) || plaintext.from === this.mediator.did) return
+        if (isPickup(plaintext.type)) {
+          this.heardPickup(plaintext)
+          return
+        }
+        if (plaintext.from === this.mediator.did) return
         // The mediator ids a stored message by sha256(packed bytes) and streams
         // those exact bytes, so the hash of the raw frame is the queue id that
         // acknowledges a live delivery (affinidi-messaging-sdk, websocket.rs)
@@ -707,7 +746,8 @@ export class VtiMediatorSession {
    * bytes are already sealed and signed; nothing is packed to the mediator.
    */
   async sendTspFrame(bytes: Uint8Array): Promise<void> {
-    if (!tsp.isTspFrameBytes(bytes)) throw new Error(`${LOG_PREFIX} not a TSP frame (leading byte 0x${(bytes[0] ?? 0).toString(16)})`)
+    if (!tsp.isTspFrameBytes(bytes))
+      throw new Error(`${LOG_PREFIX} not a TSP frame (leading byte 0x${(bytes[0] ?? 0).toString(16)})`)
     await this.ensureOpen()
     if (!this.socket || this.socket.readyState !== 1) {
       throw new Error(`${LOG_PREFIX} socket is not open`)
