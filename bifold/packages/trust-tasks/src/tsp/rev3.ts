@@ -459,7 +459,12 @@ const bytesOf = (write: (out: number[]) => void): Uint8Array => {
  * message on a mismatch, which is what makes the correlation checkable —
  * Rev 2 correlated on a hash that was never transmitted.
  */
-function deriveSaid(envelopeFields: Uint8Array, typeCode: Uint8Array, before: Uint8Array, after: Uint8Array): Uint8Array {
+function deriveSaid(
+  envelopeFields: Uint8Array,
+  typeCode: Uint8Array,
+  before: Uint8Array,
+  after: Uint8Array
+): Uint8Array {
   return sha256(concat(envelopeFields, typeCode, before, new Uint8Array(ENCODED_DIGEST_LEN).fill(SAID_DUMMY), after))
 }
 
@@ -529,8 +534,24 @@ export async function packInviteRev3(
   encodeVidList(route, frameBody)
   cesr.encodeCount(cesr.TSP_HOP_LIST, 0, frameBody)
   encodeEmptyPadding(frameBody)
-  if (frameBody.length % 3 !== 0) throw new Error('tsp: control frame not a multiple of 3 bytes')
+  return sealControlFrame(frameBody, fields, receiverVid, senderIdentity, resolver, digest, unsafe)
+}
 
+/**
+ * Frame, seal and sign a control payload body — the part every control
+ * message shares with every other. Kept in one place so the invite, the
+ * accept and the cancel cannot drift apart on the envelope.
+ */
+async function sealControlFrame(
+  frameBody: number[],
+  fields: Uint8Array,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  threadDigest: Uint8Array,
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  if (frameBody.length % 3 !== 0) throw new Error('tsp: control frame not a multiple of 3 bytes')
   const framed: number[] = []
   cesr.encodeCount(cesr.TSP_PAYLOAD, frameBody.length / 3, framed)
   for (const b of frameBody) framed.push(b)
@@ -549,7 +570,74 @@ export async function packInviteRev3(
   const signature = await senderIdentity.signingKey.sign(wireBytes)
   const out = Array.from(wireBytes)
   encodeSignatureFrame(signature, out)
-  return { bytes: new Uint8Array(out), threadDigest: digest, revision: 'rev3' }
+  return { bytes: new Uint8Array(out), threadDigest, revision: 'rev3' }
+}
+
+const DIGEST_LEN = 32
+
+/**
+ * Pack a relationship accept (`XRFA`, §7.2, §9.3), answering an invite we
+ * received. Needed the day a peer invites US first — a vetter's wallet, or
+ * an agent that opens the conversation — since an invite left unanswered
+ * leaves that peer holding a one-sided relationship.
+ *
+ * Upstream's layout puts the echoed invite digest BEFORE the accept's own
+ * digest — the opposite order from the layout comment beside it — and the
+ * echoed digest is derivation input. Followed as the code writes it, since the
+ * code is what a peer parses; proven byte-identical in `tspControl.test.ts`.
+ *
+ * ```text
+ *   XRFA  sndr  Reply_Digest  Digest  pad
+ * ```
+ */
+export async function packAcceptRev3(
+  inviteDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  if (inviteDigest.length !== DIGEST_LEN) throw new Error('tsp: an accept must name the invite it answers')
+  const fields = encodeFieldsRev3(senderVid, receiverVid)
+  const before = concat(
+    bytesOf((out) => encodeSenderField(senderVid, out)),
+    bytesOf((out) => cesr.encodeFixedData(cesr.TSP_SHA256, inviteDigest, out))
+  )
+  const digest = deriveSaid(fields, cesr.XRFA, before, new Uint8Array(0))
+  const frameBody: number[] = []
+  for (const b of cesr.XRFA) frameBody.push(b)
+  for (const b of before) frameBody.push(b)
+  cesr.encodeFixedData(cesr.TSP_SHA256, digest, frameBody)
+  encodeEmptyPadding(frameBody)
+  return sealControlFrame(frameBody, fields, receiverVid, senderIdentity, resolver, digest, unsafe)
+}
+
+/**
+ * Pack a relationship cancel (`XRFD`, §7.3): end a relationship we formed.
+ * The digest names the relationship-forming message it ends — a reference,
+ * echoed rather than derived — and is also the returned thread digest.
+ *
+ * ```text
+ *   XRFD  sndr  Digest  pad
+ * ```
+ */
+export async function packCancelRev3(
+  relationshipDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  if (relationshipDigest.length !== DIGEST_LEN) throw new Error('tsp: a cancel must name the relationship it ends')
+  const fields = encodeFieldsRev3(senderVid, receiverVid)
+  const frameBody: number[] = []
+  for (const b of cesr.XRFD) frameBody.push(b)
+  encodeSenderField(senderVid, frameBody)
+  cesr.encodeFixedData(cesr.TSP_SHA256, relationshipDigest, frameBody)
+  encodeEmptyPadding(frameBody)
+  return sealControlFrame(frameBody, fields, receiverVid, senderIdentity, resolver, relationshipDigest, unsafe)
 }
 
 /**

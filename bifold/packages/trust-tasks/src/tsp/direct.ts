@@ -25,12 +25,22 @@ import { peekRevision as peekRevisionUpstream, sha256 } from '@openvtc/vti-tsp-j
 
 import type { TspIdentity, VidResolver } from './ports'
 import { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
-import { packInviteRev3, packRev3, packWithHopsRev3, unpackRev3, type UnsafeDeterministicPack } from './rev3'
+import {
+  packAcceptRev3,
+  packCancelRev3,
+  packInviteRev3,
+  packRev3,
+  packWithHopsRev3,
+  unpackRev3,
+  type UnsafeDeterministicPack,
+} from './rev3'
 import { type ApplicationKind, type PackedMessage, type TspRevision, type UnpackedMessage } from './shared'
 
 export { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
 export {
   CONTROL_FRAME_RECEIVED,
+  packAcceptRev3,
+  packCancelRev3,
   packInviteRev3,
   packRev3,
   packWithHopsRev3,
@@ -161,6 +171,30 @@ export function __unsafeDeterministicPackInviteRev3(
   unsafe: UnsafeDeterministicPack
 ): Promise<PackedMessage> {
   return packInviteRev3(senderVid, receiverVid, senderIdentity, resolver, options, unsafe)
+}
+
+/** Test-only deterministic Rev 3 accept (`XRFA`), for checking against upstream. */
+export function __unsafeDeterministicPackAcceptRev3(
+  inviteDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packAcceptRev3(inviteDigest, senderVid, receiverVid, senderIdentity, resolver, unsafe)
+}
+
+/** Test-only deterministic Rev 3 cancel (`XRFD`), for checking against upstream. */
+export function __unsafeDeterministicPackCancelRev3(
+  relationshipDigest: Uint8Array,
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  unsafe: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packCancelRev3(relationshipDigest, senderVid, receiverVid, senderIdentity, resolver, unsafe)
 }
 
 /** Test-only deterministic Rev 3 packing, for reproducing published vectors. */
