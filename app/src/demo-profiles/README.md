@@ -31,6 +31,15 @@ To run the app on the starter instead, change one line in `App.tsx`:
 const container = new StarterContainer(bifoldContainer).init()
 ```
 
+If the use case is a game — a party game, a networking icebreaker, anything
+shaped like "everyone connects to a host, then does something together" —
+read Claude Code's `new-game` skill before copying the starter by hand. A
+witness is already a many-to-one hub with a live connection graph, a control
+surface for a human, and a way to message any connected wallet at any time;
+the skill covers that ground, the demo-profile extension points and their
+single-slot collision risk (see "The `DemoProfile` shape" below), and a
+fully worked example design at the level of specific files and classes.
+
 ## Skinning credentials without hosting anything
 
 `starter/ocaBundles.ts` ships OCA bundles _inside the app_.
@@ -50,6 +59,11 @@ rarity grade taken from what the exchange actually proved (hardware-signed,
 witnessed, both). The exchange itself is untouched: this is Keyring's VRC
 flow, with the R-Card's photo (`modules/vrc/utils/rcardPhoto.ts`) rendered
 differently.
+
+Restyling this demo — new colours, layout, grading rules, what's printed on
+the card — is exactly what Claude Code's `customizing-trading-card` skill is
+for: it maps a plain-language request onto the file that owns it and names
+what has to stay put (the e2e testIDs, the VRC exchange underneath).
 
 Two registrations, both additive:
 
