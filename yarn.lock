@@ -3003,7 +3003,7 @@ __metadata:
 
 "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch":
   version: 0.7.1-pr-2704-20260909134930
-  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch::version=0.7.1-pr-2704-20260909134930&hash=a788b7"
+  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch::version=0.7.1-pr-2704-20260909134930&hash=212cb5"
   dependencies:
     "@animo-id/pex": "npm:^6.1.1"
     "@astronautlabs/jsonpath": "npm:^1.1.2"
@@ -3046,7 +3046,7 @@ __metadata:
     web-did-resolver: "npm:^2.0.32"
     webcrypto-core: "npm:^1.8.1"
     zod: "npm:^4.3.6"
-  checksum: 10c0/b1d8f386950876566556e97e9a2a0fe637951ed5e325e6fc1772056c299fb14cd591d84f2c70a3adb0d6a79d498d098f8069de607af184f857aec43ed3bc4c5c
+  checksum: 10c0/4a0a904f7fc31b6e89c3542e425639d6e230ca771936ec25526aee5314c45c7b2d6fdbab474bd39ce92b7a7f9e400fc2956a1077d3b623f9b0f8f35afd9b8633
   languageName: node
   linkType: hard
 
