@@ -16,6 +16,10 @@
  *
  * Usage: PLATFORM=android node run-vta-link.js   (or PLATFORM=ios)
  *   ENROL_PORT=8190  ENROL_URL=http://localhost:8190  METRO_PORT=8082
+ * LINK_MODE=manual: the no-QR fallback instead — the phone shows its key, the
+ *   runner grants it with enrol-manager.sh (the online grant), then
+ *   "I've been added"; the first check before the grant must say "not yet".
+ * Both modes end on the agent screen: introduction, then status Online.
  * Real iPhone/iPad: PLATFORM=ios IOS_UDID=<hardware udid> with IOS_DEVICE_APP
  *   pointing at a FORCE_BUNDLING device build, and ENROL_PUBLIC_URL an https
  *   URL the device can reach (ATS allows plain http to localhost only).
@@ -43,6 +47,28 @@ const VTA_SLUG = process.env.VTA_SLUG || "alice";
 // emulator behind adb reverse); an https tunnel for a real device.
 const ENROL_PUBLIC_URL = process.env.ENROL_PUBLIC_URL || ENROL_URL;
 const IOS_UDID = process.env.IOS_UDID || "";
+const LINK_MODE = process.env.LINK_MODE || "qr";
+const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
+
+function aliceVtaDid() {
+  const env = execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$ALICE_VTA_DID"`], {
+    encoding: "utf8",
+  });
+  if (!env.startsWith("did:")) throw new Error("ALICE_VTA_DID not found in ~/vti-stack/stack.env");
+  return env;
+}
+
+/** The agent screen after linking: the introduction once, then the status. */
+async function checkAgentScreen(driver) {
+  await waitForTestId(driver, "AgentIntro", 30000);
+  await screenshot(driver, "link-06-intro");
+  for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
+  await waitForTestId(driver, "AgentHome", 30000);
+  const status = (await textOf(driver, "VtaStatusText")).trim();
+  console.log(`[e2e] agent screen status: ${status}`);
+  if (!/online/i.test(status)) throw new Error(`agent screen status is "${status}", not Online`);
+  await screenshot(driver, "link-07-agent-home");
+}
 
 const textOf = async (driver, key) =>
   (await byTestId(driver, key).getAttribute(driver.e2ePlatform === "ios" ? "label" : "text")) || "";
@@ -148,6 +174,33 @@ try {
     await completeOnboarding(driver, { firstName: "Link", lastName: "Phone" });
   }
 
+  if (LINK_MODE === "manual") {
+    // The no-QR fallback: name the agent, show the key, grant it by hand.
+    await dismissTourIfPresent(driver);
+    await (await waitForTestId(driver, "MyAgent", 30000)).click();
+    await tapTestId(driver, "LinkWithoutQrButton", 30000);
+    await tapTestId(driver, "VtaLinkWithoutQr", 15000);
+    const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
+    await address.setValue(aliceVtaDid());
+    await tapTestId(driver, "VtaLinkShowMyCode", 15000);
+    await waitForTestId(driver, "VtaLinkManualDid", 60000);
+    const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
+    console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
+    await screenshot(driver, "link-m1-key");
+    await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+    await waitForTestId(driver, "VtaLinkNotYet", 60000);
+    console.log("[e2e] before the grant: not yet");
+    execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
+    await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+    await waitForTestId(driver, "VtaLinkDone", 180000);
+    await screenshot(driver, "link-m2-linked");
+    if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
+    console.log("[e2e] the temporary key is no longer in the ACL");
+    await tapTestId(driver, "VtaLinkContinue", 15000);
+    await checkAgentScreen(driver);
+    printSuccess("VTA LINK WITHOUT QR — not yet, then granted by hand and rotated");
+    process.exitCode = 0;
+  } else {
   // 1 — the admin sees codes that differ and refuses: the phone must say so.
   const refused = await api("POST", "/api/offers");
   await openLinkFlow(driver, refused.link);
@@ -183,11 +236,11 @@ try {
   console.log("[e2e] the temporary key is no longer in the ACL");
 
   await tapTestId(driver, "VtaLinkContinue", 15000);
-  await waitForTestId(driver, "MyAgentCard", 120000);
-  await screenshot(driver, "link-05-my-agent");
+  await checkAgentScreen(driver);
 
   printSuccess("VTA LINK BY QR — refused, then granted and rotated");
   process.exitCode = 0;
+  }
 } catch (err) {
   console.error(err);
   if (driver) {
