@@ -25,11 +25,12 @@ import { peekRevision as peekRevisionUpstream, sha256 } from '@openvtc/vti-tsp-j
 
 import type { TspIdentity, VidResolver } from './ports'
 import { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
-import { packRev3, packWithHopsRev3, unpackRev3, type UnsafeDeterministicPack } from './rev3'
+import { packInviteRev3, packRev3, packWithHopsRev3, unpackRev3, type UnsafeDeterministicPack } from './rev3'
 import { type ApplicationKind, type PackedMessage, type TspRevision, type UnpackedMessage } from './shared'
 
 export { packRev2, packWithHopsRev2, unpackRev2 } from './rev2'
 export {
+  packInviteRev3,
   packRev3,
   packWithHopsRev3,
   unpackRev3,
@@ -146,6 +147,19 @@ export function createTspCodec(options: { packs: TspRevision } = { packs: 'rev3'
     packWithHops: packs === 'rev2' ? packWithHopsRev2 : packWithHopsRev3,
     unpack,
   }
+}
+
+/** Test-only deterministic Rev 3 invite packing, for checking our `XRFI`
+ *  against upstream's byte for byte from the same ephemeral and nonce. */
+export function __unsafeDeterministicPackInviteRev3(
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  options: { route?: string[]; nonce: Uint8Array },
+  unsafe: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  return packInviteRev3(senderVid, receiverVid, senderIdentity, resolver, options, unsafe)
 }
 
 /** Test-only deterministic Rev 3 packing, for reproducing published vectors. */

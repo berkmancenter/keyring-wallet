@@ -412,6 +412,134 @@ export async function packWithHopsRev3(
   return { bytes: new Uint8Array(out), threadDigest, revision: 'rev3' }
 }
 
+/** §9.2 (D9) fixes the relationship nonce at 128 bits. */
+export const NONCE_LEN = 16
+/** A digest field on the wire: the one-byte `I` code plus its 32 bytes. This is
+ *  the width the SAID derivation dummies out, so it is stated once. */
+const ENCODED_DIGEST_LEN = 33
+/** The byte the SAID derivation fills its own slot with. */
+const SAID_DUMMY = 0x23
+
+const concat = (...parts: Uint8Array[]): Uint8Array => {
+  const total = parts.reduce((n, p) => n + p.length, 0)
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const p of parts) {
+    out.set(p, at)
+    at += p.length
+  }
+  return out
+}
+
+const bytesOf = (write: (out: number[]) => void): Uint8Array => {
+  const out: number[] = []
+  write(out)
+  return new Uint8Array(out)
+}
+
+/**
+ * Derive a self-addressing `TSP_Digest` (§7.2.1).
+ *
+ * Covers the message's own envelope fields and payload fields, with the
+ * digest's own slot filled by {@link SAID_DUMMY} over its full encoded width.
+ * The `-E` and `-Z` framing tags and the padding field are excluded; the
+ * payload type code is included. A receiver recomputes it and refuses the
+ * message on a mismatch, which is what makes the correlation checkable —
+ * Rev 2 correlated on a hash that was never transmitted.
+ */
+function deriveSaid(envelopeFields: Uint8Array, typeCode: Uint8Array, before: Uint8Array, after: Uint8Array): Uint8Array {
+  return sha256(concat(envelopeFields, typeCode, before, new Uint8Array(ENCODED_DIGEST_LEN).fill(SAID_DUMMY), after))
+}
+
+/** Generate a 128-bit relationship nonce. */
+export function generateNonce(): Uint8Array {
+  const nonce = new Uint8Array(NONCE_LEN)
+  globalThis.crypto.getRandomValues(nonce)
+  return nonce
+}
+
+/**
+ * Pack a relationship-forming invite (`XRFI`, §7.2, §9.3).
+ *
+ * **This is what makes every other Rev 3 message deliverable.** §7.2.2: *"It is
+ * not permissible that one endpoint which has learned a VID of the other simply
+ * starts with an application level message without first having an exchange of
+ * TSP control messages."* A peer that has not been greeted **drops** what
+ * follows rather than refusing it, so the sender sees only a timeout — which is
+ * exactly how it presented when the community began advertising TSP and the
+ * ceremony died at its last step with nothing on the wire to read.
+ *
+ * Send-only: the peer records the invite on arrival and a recorded relationship
+ * already admits application messages, so traffic flows without waiting for the
+ * accept. The thread digest is returned because an accept echoes it and a later
+ * cancellation names it; it cannot be known before packing, since the
+ * derivation covers the envelope this call builds.
+ *
+ * The wire layout, §9.3:
+ *
+ * ```text
+ *   XRFI  sndr  Digest  Nonce  Reply_Path  Referral  pad
+ * ```
+ *
+ * `route` is the §7.2.4 `Reply_Path` the accept travels back over. Referrals
+ * are not emitted — an empty `-J` group says this invite introduces nobody.
+ */
+export async function packInviteRev3(
+  senderVid: string,
+  receiverVid: string,
+  senderIdentity: Pick<TspIdentity, 'signingKey'>,
+  resolver: VidResolver,
+  options: { route?: string[]; nonce?: Uint8Array } = {},
+  unsafe?: UnsafeDeterministicPack
+): Promise<PackedMessage> {
+  const route = options.route ?? []
+  const nonce = options.nonce ?? generateNonce()
+  if (nonce.length !== NONCE_LEN) throw new Error(`tsp: an invite must carry a ${NONCE_LEN * 8}-bit nonce`)
+
+  const fields = encodeFieldsRev3(senderVid, receiverVid)
+  const senderField = bytesOf((out) => encodeSenderField(senderVid, out))
+
+  // The derivation input after the digest slot is REBUILT rather than sliced
+  // out of the frame: §9.3 excludes the referral field's own code and count, so
+  // the bytes there and the bytes here are deliberately different.
+  const after = concat(
+    bytesOf((out) => cesr.encodeFixedData(cesr.TSP_NONCE, nonce, out)),
+    bytesOf((out) => encodeVidList(route, out)),
+    bytesOf((out) => cesr.encodeCount(cesr.TSP_HOP_LIST, 0, out))
+  )
+  const digest = deriveSaid(fields, cesr.XRFI, senderField, after)
+
+  const frameBody: number[] = []
+  for (const b of cesr.XRFI) frameBody.push(b)
+  for (const b of senderField) frameBody.push(b)
+  cesr.encodeFixedData(cesr.TSP_SHA256, digest, frameBody)
+  cesr.encodeFixedData(cesr.TSP_NONCE, nonce, frameBody)
+  encodeVidList(route, frameBody)
+  cesr.encodeCount(cesr.TSP_HOP_LIST, 0, frameBody)
+  encodeEmptyPadding(frameBody)
+  if (frameBody.length % 3 !== 0) throw new Error('tsp: control frame not a multiple of 3 bytes')
+
+  const framed: number[] = []
+  cesr.encodeCount(cesr.TSP_PAYLOAD, frameBody.length / 3, framed)
+  for (const b of frameBody) framed.push(b)
+  const frame = new Uint8Array(framed)
+
+  const { encryptionPublicKey: receiverEncPk } = await resolver.resolve(receiverVid)
+  const ephemeralSk = unsafe ? hpke.deriveKeyPair(unsafe.__unsafeIkmE).sk : undefined
+  const sealed = hpke.sealBase(frame, fields, receiverEncPk, cesr.TSP_INFO, ephemeralSk)
+  const ciphertext = new Uint8Array(sealed.enc.length + sealed.ciphertext.length)
+  ciphertext.set(sealed.enc, 0)
+  ciphertext.set(sealed.ciphertext, sealed.enc.length)
+  const field: number[] = []
+  cesr.encodeVariableData(cesr.TSP_HPKE_BASE_CIPHERTEXT, ciphertext, field)
+
+  const wireBytes = finalizeFrameRev3(fields, new Uint8Array(field))
+  const signature = await senderIdentity.signingKey.sign(wireBytes)
+  const out = Array.from(wireBytes)
+  encodeSignatureFrame(signature, out)
+  return { bytes: new Uint8Array(out), threadDigest: digest, revision: 'rev3' }
+}
+
 /**
  * Unpack a Rev 3 message: decode the envelope, verify the indexed signature
  * against the claimed sender's key as `resolver` gives it, then HPKE-Base

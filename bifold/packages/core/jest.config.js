@@ -18,6 +18,12 @@ module.exports = {
     // import of class-transformer has to land on one copy (Metro does the same via its
     // singleton list; see didcomm_v2_subtask.md C10).
     '^class-transformer$': '<rootDir>/../../node_modules/class-transformer',
+    // @openvtc/vti-tsp-js ships its test-vector helpers behind an exports-map
+    // subpath with only `import`/`types` conditions, which jest (CJS) will not
+    // resolve. They are how the relationship-forming invite is checked against
+    // upstream's own bytes, so the path is mapped rather than the check dropped.
+    '^@openvtc/vti-tsp-js/unsafe-testing$':
+      '<rootDir>/../../../node_modules/@openvtc/vti-tsp-js/dist/unsafe-testing.js',
     // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
     // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
     '^@verifiables/request-converter$': require('fs').existsSync(
