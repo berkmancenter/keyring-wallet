@@ -100,6 +100,31 @@ node tsp-reference/ref-20-local-vetting/vtc-admin.mjs "$VTC_URL/v1" "$VTC_DID" \
 node ... vtc-admin.mjs ... vetter-resend <vetter persona did>
 ```
 
+## Refusal paths
+
+The same runner stages the refusals a lab community can show, one per run:
+
+```sh
+E2E_REFUSAL=revoked-grant ANDROID_AVD=API36_S25_A PLATFORMS=ios,android E2E_KEEP_STATE=1 node run-vti-vetting.js
+E2E_REFUSAL=bad-ticket    ANDROID_AVD=API36_S25_A PLATFORMS=ios,android E2E_KEEP_STATE=1 node run-vti-vetting.js
+```
+
+- **`revoked-grant`** — the vetter's grant is revoked after the statement is
+  issued and before the applicant applies. Under the lab's default join policy
+  that is not a rejection: the statement stops counting and the community
+  answers `requestMore` (`vetting:statements:1`), keeping the request open as
+  **deferred**. The run then withdraws it — the live test of the applicant's
+  way out — and re-issues and re-sends the vetter's grant afterwards, whatever
+  happened. A specific deny code needs a custom `vtc.join` policy; the default
+  one never denies.
+- **`bad-ticket`** — the ticket's secret is altered before pasting. The vetter
+  answers `vetting/request:invalidTicket` and the request reads *Refused*. A
+  wrong short **code** is never answered at all, by design, so it has nothing
+  to assert on.
+- Not stageable from the screens: a vetter **declining** (the desk has no
+  control for `vetting/decline/0.1`), and **capacity** (no community setting;
+  the code exists only as a vetter→applicant refusal nothing emits).
+
 ## Taps: use adb, not WebDriver
 
 A React Native `Pressable` can accept a WebDriver tap and never run its
@@ -135,6 +160,9 @@ elsewhere on the page.
 | the approver rung fails "manager was not held for consent", with the rule listed by `pnm approvals list` | alice is not ENFORCING its policies: `setup` writes `[policy] enforcement = false`, and the VTA then stores the rule and never evaluates it. `up.sh` sets it to `true` for alice now; an older lab needs it set by hand and alice restarted. No pnm command changes it |
 | the manager's probe says `failed task failed: auth:consent_required` rather than "consent required" | the approver set had grown (every reinstalled phone adds one) until the refusal's `details` passed the framework's size bound, and the VTA sent the code alone — alice logs "error `details` exceeds the framework bound and was dropped". `approver-setup.sh add` now trims the set to the one approver, and the client reads a bare code as held |
 | alice logs "no mediator route for consent approver" for the phone | that phone's manager DID was minted before 2026-09-21 and advertises a DIDComm v1 service; the VTA cannot push to it and the approval is found only when My Agent fetches it. Reinstall the approver to mint a DID with the v2 service |
+| "the profile was not published" on a vetter fresh from the invite rung | the Publish button is disabled until the persona's session opens, and a tap on a disabled Pressable is dropped in silence; the persona connected two seconds after the desk rendered. The runner now waits for the button to enable and re-taps |
+| every session times out at `POST /session` on :4723 | a long-lived Appium stopped answering (its `/status` hangs too). Stop it **by PID** and let the runner start its own |
+| the emulator shows "System UI isn't responding" over a pulled-down shade | host load — measured at a load average of 29 with a second session's builds running. Tap *Wait*, `adb shell cmd statusbar collapse`, re-run |
 | a helper script's session wiped the app | before 2026-09-21 `E2E_KEEP_STATE=1` did not reach the capabilities; it does now, but open ad-hoc sessions with it set |
 
 ## Debugging, in the order that pays
