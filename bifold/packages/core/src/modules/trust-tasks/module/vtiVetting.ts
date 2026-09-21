@@ -855,6 +855,7 @@ export class VtiApplicant {
           { allowInsecureLocal: __DEV__ }
         )
       : undefined
+    if (status?.state === 'unknown') this.logUncheckedGrant(vetterDid, status.reason)
     await this.update(vetterDid, {
       status: 'accepted',
       requestId: String(p.requestId ?? ''),
@@ -1099,6 +1100,12 @@ export class VtiApplicant {
     this.onChange?.()
   }
 
+  // The checklist shows only how many grants could not be checked; the reason
+  // lives in the record. Say it where a developer will look.
+  private logUncheckedGrant(vetterDid: string, reason: string): void {
+    this.agent.config.logger.warn(`[VTI] vetter grant status not checked: ${reason}`, { vetterDid })
+  }
+
   async refreshGrantStatus(): Promise<void> {
     const application = await this.app()
     const checkable = application.requests.filter((r) => r.grantStatusEntry)
@@ -1113,6 +1120,7 @@ export class VtiApplicant {
     )
     for (const { vetterDid, result } of results) {
       if (result.state === 'unknown') {
+        this.logUncheckedGrant(vetterDid, result.reason)
         await this.update(vetterDid, {
           grantStatusReason: result.reason,
           grantStatusCheckedAt: result.checkedAt,

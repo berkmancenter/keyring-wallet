@@ -644,6 +644,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   {tp('Vetting.GrantUnchecked', { n: checklist.unchecked.length })}
                 </Text>
               ) : null}
+              {/* The reason stays in the record; a developer build says it. */}
+              {__DEV__ && checklist?.unchecked?.length ? (
+                <Text style={styles.label} testID={testIdWithKey('VettingGrantUncheckedReason')}>
+                  {checklist.unchecked.map((u) => u.reason).join('\n')}
+                </Text>
+              ) : null}
               {/*
                 What is still missing, in the community's own terms — a count
                 alone cannot say "one of them has to be in person".
