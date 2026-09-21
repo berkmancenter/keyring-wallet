@@ -38,6 +38,7 @@ import {
   frameForm,
   getPeerLegCarriage,
   LOG_PREFIX as TSP_LOG_PREFIX,
+  greetPeerOverTsp,
   packTrustTaskForPeer,
   tspSessionForPersona,
   unpackTrustTaskFromPeer,
@@ -180,6 +181,42 @@ class VtiAgentController {
   private canInitiateTsp(): boolean {
     return Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS
   }
+
+  /**
+   * Peers this session has already greeted (§7.2.2). One invite per peer per
+   * session: the relationship is recorded on the peer's side on arrival, and a
+   * second invite would be a fresh relationship, not a repeat of this one.
+   */
+  private readonly greeted = new Set<string>()
+
+  /** The mediator this session rides, kept because an invite must be ROUTED
+   *  through it — a mediator refuses direct delivery unless configured for it. */
+  private mediatorDid?: string
+
+  /**
+   * Send the invite that makes a peer willing to accept our traffic, once.
+   *
+   * A failure here is logged and not thrown: the send that follows is what
+   * reports the outcome, and the peer may already know us from an earlier
+   * session, in which case the invite was never needed.
+   */
+  private async ensureGreeted(toDid: string): Promise<void> {
+    const session = this.session
+    const did = this.state.did
+    if (!session || !did || !this.tsp || !this.agent) return
+    if (this.greeted.has(toDid)) return
+    this.greeted.add(toDid)
+    try {
+      const route = this.mediatorDid ? [this.mediatorDid] : []
+      const invite = await greetPeerOverTsp(this.tsp, did, toDid, route)
+      await session.sendTspFrame(invite.bytes)
+      this.agent.config.logger.info(
+        `${TSP_LOG_PREFIX} greeted ${toDid} with an XRFI invite (${invite.bytes.length} bytes, route ${route.length})`
+      )
+    } catch (error) {
+      this.agent.config.logger.warn(`${TSP_LOG_PREFIX} could not greet ${toDid}: ${error}`)
+    }
+  }
   private peerRevisionStore?: TspPeerRevisionStore
 
   /** Receive what the community sends that is not an answer (credentials, statements). */
@@ -254,6 +291,7 @@ class VtiAgentController {
       this.set({ status: 'resolving', error: undefined })
       const mediator = await resolveVtiMediator(agent, mediatorDid)
       this.mediator = mediator
+      this.mediatorDid = mediatorDid
       this.set({ status: 'authenticating', host: hostOf(mediator.wsEndpoint) })
 
       // Under §2.4 B the identity a community sees is a persona the VTA minted
@@ -387,6 +425,7 @@ class VtiAgentController {
         ? (await chooseCarriage(this.agent, toDid, this.canInitiateTsp(), { decided: this.carriageByPeer })) === 'tsp'
         : false)
     if (capable && this.tsp && this.agent) {
+      await this.ensureGreeted(toDid)
       const packed = await packTrustTaskForPeer(this.tsp, did, toDid, {
         ...document,
         type: String(document.type ?? type),
@@ -441,6 +480,7 @@ class VtiAgentController {
     if (this.agent && this.tsp) {
       const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), { decided: this.carriageByPeer })
       if (carriage === 'tsp') {
+        await this.ensureGreeted(communityDid)
         const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, {
           id: `urn:uuid:${utils.uuid()}`,
           type,

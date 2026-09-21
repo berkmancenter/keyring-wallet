@@ -297,8 +297,15 @@ describe('vtiAgent — the peer leg on TSP', () => {
     controller.state = { status: 'connected', did: applicant.vid, peerLeg: 'tsp', tspReady: true }
     await vtiAgent.send(vetter.vid, request.type, request)
     expect(controller.session!.sendTo).not.toHaveBeenCalled()
-    expect(controller.session!.sendTspFrame).toHaveBeenCalledTimes(1)
-    const bytes = controller.session!.sendTspFrame.mock.calls[0][0] as Uint8Array
+    // Two frames, and the order is the protocol: §7.2.2 forbids opening with
+    // an application message, so the greeting (`XRFI`) goes first and the task
+    // second. A peer that has not been greeted drops what follows in silence,
+    // so this is not an optimisation to collapse.
+    expect(controller.session!.sendTspFrame).toHaveBeenCalledTimes(2)
+    expect(logs.some((l) => /\[TrustTasks:VtiTsp\] greeted did:webvh:example:vetter with an XRFI invite/.test(l))).toBe(
+      true
+    )
+    const bytes = controller.session!.sendTspFrame.mock.calls[1][0] as Uint8Array
     const opened = await unpackTrustTaskFromPeer(sessionFor(vetter), bytes, vetter.vid)
     expect(opened!.plaintext.body).toEqual(request)
     expect(logs.some((l) => /\[TrustTasks:VtiTsp\] sent rev3 short frame to did:webvh:example:vetter/.test(l))).toBe(

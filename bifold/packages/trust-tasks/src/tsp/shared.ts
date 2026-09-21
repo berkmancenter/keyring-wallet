@@ -91,7 +91,8 @@ export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
  * Can this codec form a TSP relationship — that is, send the introduction a
  * Rev 3 peer requires before it will accept anything?
  *
- * **No, and that is load-bearing.** TSP Rev 3 makes the introduction
+ * **Yes, since `packInviteRev3`.** What follows is why it has to be asked at
+ * all, because the failure it prevents is silent. TSP Rev 3 makes the introduction
  * mandatory: two parties exchange one before any real traffic, and without it
  * traffic is **dropped rather than refused** — no answer, no error, nothing on
  * the wire to read. `decodePayloadFrameRev3` recognises the relationship-forming
@@ -112,4 +113,4 @@ export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
  * `resolveInviteRace`: that is the shape of the work, and flipping this
  * constant is what switches the ecosystem legs over once it exists.
  */
-export const CODEC_FORMS_RELATIONSHIPS = false
+export const CODEC_FORMS_RELATIONSHIPS = true

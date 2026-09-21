@@ -134,6 +134,32 @@ export async function packTrustTaskForPeer(
 }
 
 /**
+ * Greet a peer so it will accept what follows (§7.2.2).
+ *
+ * Rev 3 forbids opening with an application message: a peer that holds no
+ * relationship with the sender **drops** it rather than refusing, so nothing
+ * comes back and the sender sees a timeout. One invite fixes that for the
+ * lifetime of the relationship — the peer records it on arrival and a recorded
+ * relationship already admits application messages, so this is send-only and
+ * there is nothing to await.
+ *
+ * **Routed, not direct**, and this is the part that is easy to get wrong.
+ * Every frame this session sends travels through the mediator, and the invite
+ * has to travel the same way: a mediator refuses direct delivery unless
+ * configured to allow it, so a direct invite fails while looking like a
+ * protocol fault. The route is also what tells the peer where to send its
+ * accept (§7.2.4).
+ */
+export async function greetPeerOverTsp(
+  session: TspSessionIdentity,
+  fromDid: string,
+  toDid: string,
+  route: string[]
+): Promise<tsp.PackedMessage> {
+  return tsp.packInviteRev3(fromDid, toDid, session.identity, session.resolver, { route })
+}
+
+/**
  * The shape the rest of the module reads — `vtiVetting` and the inbox handle
  * a DIDComm v2 plaintext, reading `type`, `id`, `thid`, `from` and `body`. A
  * Trust Task document that arrived over TSP is presented the same way: the
