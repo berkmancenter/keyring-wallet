@@ -182,8 +182,10 @@ export function iosDeviceCaps(udid, ports = {}) {
     "appium:udid": udid,
     "appium:app": IOS_DEVICE_APP,
     "appium:bundleId": APP_ID,
-    "appium:fullReset": true,
-    "appium:enforceAppInstall": true,
+    // A chain of real-device rungs keeps the app between them, as simulator
+    // rungs do: E2E_KEEP_APP on the first, E2E_KEEP_STATE on the rest.
+    "appium:fullReset": !keepApp(),
+    "appium:enforceAppInstall": !keepApp(),
     "appium:xcodeOrgId": IOS_TEAM_ID,
     "appium:xcodeSigningId": "Apple Development",
     // unique WDA bundle id so provisioning under the team doesn't collide
@@ -203,6 +205,7 @@ export function iosDeviceCaps(udid, ports = {}) {
     "appium:newCommandTimeout": 600,
     "appium:autoAcceptAlerts": true,
     "appium:wdaLaunchTimeout": 300000,
+    ...keepStateCaps(),
   };
 }
 

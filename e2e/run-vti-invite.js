@@ -11,8 +11,9 @@
  * Usage: E2E_KEEP_STATE=1 PLATFORM=android node run-vti-invite.js  (or ios)
  */
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
-import { androidCaps, iosCaps } from "./lib/config.js";
-import { completeOnboarding, enableDidCommV2, leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
+import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
+import os from "node:os";
+import { completeOnboarding, enableDidCommV2, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -28,7 +29,12 @@ const ANDROID_SERIAL = process.env.ANDROID_SERIAL || "emulator-5554";
 const textOf = async (driver, key) =>
   (await byTestId(driver, key).getAttribute(driver.e2ePlatform === "ios" ? "label" : "text")) || "";
 
-function openLink(url) {
+// A real iPhone/iPad (IOS_UDID): no simctl, and a deep link truncates the
+// ~6 KB invitation (VTI-32) — it is pasted into the scanner instead.
+const IOS_UDID = process.env.IOS_UDID || "";
+
+async function openLink(url) {
+  if (platform === "ios" && IOS_UDID) return pasteLinkFromHome(driver, url);
   if (platform === "ios") execFileSync("xcrun", ["simctl", "openurl", "booted", url], { stdio: "inherit" });
   else execFileSync("adb", ["-s", ANDROID_SERIAL, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", `'${url}'`, ANDROID_PKG], { stdio: "inherit" });
 }
@@ -62,10 +68,19 @@ let driver;
 try {
   execFileSync("bash", [INVITE, "--invitation-only"], { stdio: "inherit" });
   await ensureAppium();
-  const caps = platform === "android" ? androidCaps() : iosCaps();
+  const caps =
+    platform === "android"
+      ? androidCaps()
+      : IOS_UDID
+        ? iosDeviceCaps(IOS_UDID, {
+            wdaLocalPort: Number(process.env.WDA_LOCAL_PORT || 8130),
+            mjpegServerPort: Number(process.env.MJPEG_PORT || 9130),
+            derivedDataPath: path.join(os.homedir(), `Library/Developer/Xcode/DerivedData/WDA-e2e-${IOS_UDID.slice(-8)}`),
+          })
+        : iosCaps();
   driver = await createSession(
     platform,
-    keepState ? { ...caps, "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false } : undefined
+    keepState ? { ...caps, "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false } : caps
   );
   if (keepState) {
     await waitForTestId(driver, "EnterPIN", 120000).catch(() => undefined);
@@ -104,7 +119,7 @@ try {
   const link = /INVITATION_LINK=(\S+)/.exec(out)?.[1];
   if (!link) throw new Error(`no invitation link:\n${out}`);
   console.log(`[e2e] invitation issued (${link.length} chars)`);
-  openLink(link);
+  await openLink(link);
   // The card sits below Approvals and the Vetting row; UiAutomator only
   // reports what is on screen, so poll with a scroll rather than a wait.
   let invitationCard;

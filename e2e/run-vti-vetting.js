@@ -13,9 +13,12 @@
  *   Android → Apply                                → allow → Member · Vetted
  *
  * Usage: E2E_KEEP_STATE=1 node run-vti-vetting.js   (PLATFORMS=android,ios)
+ * Two real iOS devices: PLATFORMS=ios,ios APPLICANT_IOS_UDID=… VETTER_IOS_UDID=…
+ *   (each gets its own WebDriverAgent port: 8131 applicant, 8130 vetter)
  */
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
-import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./lib/config.js";
+import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
+import os from "node:os";
 import { leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
@@ -124,8 +127,19 @@ try {
   execFileSync("bash", [INVITE, "--vetting-only"], { stdio: "inherit" });
   execFileSync("bash", [APPROVER, "clear"], { stdio: "ignore" });
   await ensureAppium();
-  applicant = await createSession(platforms[0], keep(platforms[0] === "android" ? androidCaps() : iosCaps()));
-  vetter = await createSession(platforms[1], keep(platforms[1] === "android" ? androidCaps() : iosCaps()));
+  // A real iPhone/iPad per role when its UDID is given; otherwise a simulator.
+  const capsFor = (platform, udid, wdaLocalPort, mjpegServerPort) =>
+    platform === "android"
+      ? androidCaps()
+      : udid
+        ? iosDeviceCaps(udid, {
+            wdaLocalPort,
+            mjpegServerPort,
+            derivedDataPath: path.join(os.homedir(), `Library/Developer/Xcode/DerivedData/WDA-e2e-${udid.slice(-8)}`),
+          })
+        : iosCaps();
+  applicant = await createSession(platforms[0], keep(capsFor(platforms[0], process.env.APPLICANT_IOS_UDID, 8131, 9131)));
+  vetter = await createSession(platforms[1], keep(capsFor(platforms[1], process.env.VETTER_IOS_UDID, 8130, 9130)));
   console.log(`[e2e] applicant = ${platforms[0]}, vetter = ${platforms[1]}`);
   keepalive = setInterval(() => { vetter.getWindowSize().catch(() => undefined); applicant.getWindowSize().catch(() => undefined); }, 20000);
   await Promise.all([unlockToHome(applicant), unlockToHome(vetter)]);

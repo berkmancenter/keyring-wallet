@@ -2202,3 +2202,18 @@ export async function leaveCommunityInApp(driver) {
   console.log(`[e2e] ${driver.e2ePlatform}: left the community (persona, membership, invitations, vetting)`);
   return true;
 }
+
+/**
+ * From anywhere in the app: open the scanner from the QR tab and hand it a
+ * link through its paste-URL button — how a real device receives a link the
+ * runner cannot deep-link into (there is no `simctl openurl` for a phone),
+ * and how a long invitation gets past iOS truncating it as a deep link
+ * (VTI-32): the paste carries the whole text.
+ */
+export async function pasteLinkFromHome(driver, link) {
+  await ensureAppForeground(driver);
+  await dismissTourIfPresent(driver);
+  await openQrSheet(driver);
+  await tapTestId(driver, "ScanQRCode", 15000);
+  await pasteLinkOnScanScreen(driver, link);
+}
