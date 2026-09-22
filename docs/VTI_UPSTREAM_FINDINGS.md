@@ -1069,7 +1069,8 @@ handed over out of band — and out of band in a wallet means a QR. So the one
 mechanism available is the one the payload cannot use.
 
 It shows up on iOS first for an unrelated reason: `xcrun simctl openurl`
-truncates a URL this long, and the client then reports `invitation link
+truncates a URL this long (at 2048 characters, measured 2026-09-22: a
+1,930-character link arrives whole, a 2,063-character one does not), and the client then reports `invitation link
 rejected: JSON Parse error: Unexpected end of input`, which reads as a
 malformed credential rather than a truncated one. Android's `am start`
 tolerates the length, which is why the same rung passes there — a platform
