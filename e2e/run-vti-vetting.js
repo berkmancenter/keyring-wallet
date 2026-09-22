@@ -39,6 +39,11 @@ const platforms = (process.env.PLATFORMS || "android,ios").split(",");
 // withdraws it. The grant is re-issued afterwards, whatever happened.
 // E2E_REFUSAL=supplement: the same deferral, answered in place — the grant is
 // re-issued, and the applicant's second apply supplements the open request.
+// E2E_REFUSAL=dead-grant: the ticket is issued while the grant is live, the
+// grant is revoked before the applicant redeems it, and the same ticket is
+// used again after the role is restored. It proves the refusal does not SPEND
+// the ticket — "a refusal happened" is equally true of a version that burns
+// it, which is what the tidier-looking code does.
 const REFUSAL = process.env.E2E_REFUSAL || "";
 const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
 const STACK_ENV = path.join(process.env.STACK_DIR || path.join(process.env.HOME, "vti-stack"), "stack.env");
@@ -286,6 +291,28 @@ try {
   console.log(`[e2e] ${vetter.e2ePlatform}: ticket ${code} (${link.length} chars)`);
   await screenshot(vetter, "vetting-01-ticket");
 
+  // E2E_REFUSAL=dead-grant: the ticket is issued while the grant is live and
+  // the grant dies before the applicant redeems it — the case the desk cannot
+  // reach, because the acceptance happens in the module when the ticket
+  // arrives. The refusal must not spend the ticket, so the same ticket has to
+  // work again once the role is restored; a version that refuses AND burns it
+  // passes every check up to that point.
+  if (REFUSAL === "dead-grant") {
+    const live = currentVetter();
+    revokedVetterDid = live.memberDid;
+    const revoked = admin("revoke-endorsement", live.endorsementId);
+    console.log(`[e2e] community: vetter grant revoked before the ticket is used (status-list bit ${revoked?.statusListIndex})`);
+    // The vetter's own desk must say so — the seat stays, the reason appears.
+    await scrollToTestId(vetter, "VettingStandingLine", 6, { direction: "up" }).catch(() => undefined);
+    const said = await waitText(vetter, "VettingStandingLine", /taken away|revok/i, 120000);
+    console.log(`[e2e] ${vetter.e2ePlatform}: the desk says "${said}"`);
+    const ticketButton = byTestId(vetter, "VettingNewTicketButton");
+    if ((await ticketButton.isEnabled().catch(() => false)) === true) {
+      throw new Error("the desk still offers a new ticket with no live grant");
+    }
+    await screenshot(vetter, "vetting-dead-grant-01-desk");
+  }
+
   // — applicant: start over, identity, face, application, request
   // Reset UNCONDITIONALLY — the vetting state, not membership, is what breaks
   // a ceremony: an applicant that finished a previous run holds "1 of 1
@@ -340,53 +367,115 @@ try {
   await tapTestIdByCoordinates(applicant, "VettingStartButton");
   await waitForTestId(applicant, "VettingRequirements", 60000);
   console.log(`[e2e] ${applicant.e2ePlatform}: ${await textOf(applicant, "VettingRequirements")}`);
-  // `setValue` with a link this long silently does nothing on iOS often
-  // enough to matter: the field keeps its placeholder, "Request vetting" is
-  // then tapped with an empty ticket, and the run reports that the vetter
-  // never accepted — when nothing was ever sent. Set it, read it back, retry.
-  {
-    // The Request button is disabled on REACT state (`!ticketLink.trim()`),
-    // not on the field's text. `setValue` writes the native text without
-    // firing `onChangeText`, so the field can show all 324 characters while
-    // the component still believes it is empty — the button stays disabled,
-    // the tap is swallowed, and the run reports that the vetter never
-    // accepted when nothing was ever sent. So the check that matters is not
-    // what the field holds, it is whether the button came alive.
-    const field = await scrollToTestId(applicant, "VettingTicketInput", 4);
-    let enabled = false;
-    for (let i = 0; i < 4 && !enabled; i++) {
-      await field.clearValue().catch(() => undefined);
-      await field.click().catch(() => undefined); // focus, so typing raises events
-      if (i === 0) {
-        await field.setValue(link).catch(() => undefined);
-      } else {
-        await field.addValue(link).catch(() => undefined);
+  /**
+   * Hand the vetter's ticket to the applicant and send the request.
+   *
+   * Extracted verbatim so `dead-grant` can do it twice — once against a dead
+   * grant, once after the role is restored — and every line of it was earned
+   * from a real failure, so nothing here is incidental. The second call does
+   * NOT start from the same screen as the first: it runs after a refusal, so
+   * it waits for the ticket field before touching anything rather than
+   * assuming the screen it left.
+   */
+  const presentTicket = async (link) => {
+    await scrollToTestId(applicant, "VettingTicketInput", 6).catch(() => undefined);
+    await waitForTestId(applicant, "VettingTicketInput", 60000);
+    // `setValue` with a link this long silently does nothing on iOS often
+    // enough to matter: the field keeps its placeholder, "Request vetting" is
+    // then tapped with an empty ticket, and the run reports that the vetter
+    // never accepted — when nothing was ever sent. Set it, read it back, retry.
+    {
+      // The Request button is disabled on REACT state (`!ticketLink.trim()`),
+      // not on the field's text. `setValue` writes the native text without
+      // firing `onChangeText`, so the field can show all 324 characters while
+      // the component still believes it is empty — the button stays disabled,
+      // the tap is swallowed, and the run reports that the vetter never
+      // accepted when nothing was ever sent. So the check that matters is not
+      // what the field holds, it is whether the button came alive.
+      const field = await scrollToTestId(applicant, "VettingTicketInput", 4);
+      let enabled = false;
+      for (let i = 0; i < 4 && !enabled; i++) {
+        await field.clearValue().catch(() => undefined);
+        await field.click().catch(() => undefined); // focus, so typing raises events
+        if (i === 0) {
+          await field.setValue(link).catch(() => undefined);
+        } else {
+          await field.addValue(link).catch(() => undefined);
+        }
+        await sleep(1200);
+        enabled = await byTestId(applicant, "VettingRequestButton").isEnabled().catch(() => false);
+        const held = ((await field.getAttribute(isIos(applicant) ? "value" : "text")) || "").trim();
+        console.log(`[e2e] ${applicant.e2ePlatform}: ticket field ${held.length}/${link.length} chars, request button ${enabled ? "enabled" : "still disabled"}`);
       }
-      await sleep(1200);
-      enabled = await byTestId(applicant, "VettingRequestButton").isEnabled().catch(() => false);
-      const held = ((await field.getAttribute(isIos(applicant) ? "value" : "text")) || "").trim();
-      console.log(`[e2e] ${applicant.e2ePlatform}: ticket field ${held.length}/${link.length} chars, request button ${enabled ? "enabled" : "still disabled"}`);
+      if (!enabled) throw new Error(`${applicant.e2ePlatform}: the ticket never reached the component — request button stayed disabled`);
+      // Typing leaves the keyboard up, which displaces the Request button off
+      // the screen: it reports enabled and `visible="false"`, so a coordinate
+      // tap computed from its location lands somewhere else entirely and the
+      // run reports "request sent" having sent nothing.
+      await byTestId(applicant, "VettingSeatBanner").click().catch(() => undefined);
+      await sleep(800);
     }
-    if (!enabled) throw new Error(`${applicant.e2ePlatform}: the ticket never reached the component — request button stayed disabled`);
-    // Typing leaves the keyboard up, which displaces the Request button off
-    // the screen: it reports enabled and `visible="false"`, so a coordinate
-    // tap computed from its location lands somewhere else entirely and the
-    // run reports "request sent" having sent nothing.
-    await byTestId(applicant, "VettingSeatBanner").click().catch(() => undefined);
-    await sleep(800);
-  }
-  await scrollToTestId(applicant, "VettingRequestButton", 4);
-  // Confirm the tap did something: a request card appears once the request is
-  // saved. Without this the run announces "request sent" on a tap it never
-  // verified, and the failure surfaces much later as the vetter not accepting.
-  await tapTestIdReliable(
-    applicant,
-    "VettingRequestButton",
-    () => byTestId(applicant, "VettingRequestCard").isExisting().catch(() => false),
-    { attempts: 4, settleMs: 3000 }
-  );
-  console.log(`[e2e] ${applicant.e2ePlatform}: request sent`);
+    await scrollToTestId(applicant, "VettingRequestButton", 4);
+    // Confirm the tap did something: a request card appears once the request is
+    // saved. Without this the run announces "request sent" on a tap it never
+    // verified, and the failure surfaces much later as the vetter not accepting.
+    await tapTestIdReliable(
+      applicant,
+      "VettingRequestButton",
+      () => byTestId(applicant, "VettingRequestCard").isExisting().catch(() => false),
+      { attempts: 4, settleMs: 3000 }
+    );
+    console.log(`[e2e] ${applicant.e2ePlatform}: request sent`);
+  };
+
+  await presentTicket(link);
   await scrollToTestId(applicant, "VettingRequestStatus", 4, LOW).catch(() => undefined);
+  if (REFUSAL === "dead-grant") {
+    // The applicant is told, immediately, rather than after a whole ceremony.
+    const status = await waitText(applicant, "VettingRequestStatus", /Refused/i, 120000);
+    console.log(`[e2e] ${applicant.e2ePlatform}: ${status} — the vetter's grant had died`);
+    await screenshot(applicant, "vetting-dead-grant-02-refused");
+
+    // Restore the role, and resend it: delivery of a re-granted vetter role is
+    // a separate defect, so without this the last step could fail for a reason
+    // that has nothing to do with the ticket.
+    admin("vetter-grant", revokedVetterDid);
+    for (let attempt = 1; ; attempt++) {
+      await sleep(3000);
+      try { admin("vetter-resend", revokedVetterDid); break; } catch (e) { if (attempt >= 3) throw e; }
+    }
+    console.log("[e2e] community: vetter granted again");
+
+    // The vetter's app must HOLD the restored grant before the ticket is worth
+    // re-presenting. Without this check a failure below would look like the
+    // ticket having been spent when it was really the grant never arriving —
+    // a rung that appears to catch one bug while catching another.
+    await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
+    const restored = Date.now() + 180000;
+    let holdsAgain = false;
+    while (!holdsAgain && Date.now() < restored) {
+      holdsAgain =
+        (await byTestId(vetter, "VettingNewTicketButton").isEnabled().catch(() => false)) === true &&
+        !(await byTestId(vetter, "VettingStandingLine").isExisting().catch(() => false));
+      if (!holdsAgain) await sleep(5000);
+    }
+    if (!holdsAgain) {
+      await screenshot(vetter, "vetting-dead-grant-03-not-restored");
+      throw new Error("the vetter's app never received the restored grant — the ticket check cannot mean anything");
+    }
+    console.log(`[e2e] ${vetter.e2ePlatform}: the desk shows the role restored`);
+    // Re-granted here, so the run's cleanup has nothing to put back.
+    revokedVetterDid = undefined;
+
+    // The assertion that cannot be faked: the SAME ticket, used again.
+    await presentTicket(link);
+    const second = await waitText(applicant, "VettingRequestStatus", /Accepted/i, 180000);
+    console.log(`[e2e] ${applicant.e2ePlatform}: ${second} — the refusal did not spend the ticket`);
+    await screenshot(applicant, "vetting-dead-grant-04-accepted");
+    printSuccess("vti-vetting (grant died before the ticket was used → refused, ticket still good)");
+    process.exitCode = 0;
+    throw Object.assign(new Error("done"), { done: true });
+  }
   if (REFUSAL === "bad-ticket") {
     const status = await waitText(applicant, "VettingRequestStatus", /Refused/i, 120000);
     console.log(`[e2e] ${applicant.e2ePlatform}: ${status} — the vetter refused an altered ticket`);
