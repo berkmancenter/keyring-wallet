@@ -1215,7 +1215,10 @@
     "OpenYourAgent": "Votre agent",
     "IWasInvited": "J'ai été invité",
     "IWasInvitedHint": "Envoyez votre identité à l'admin, puis rejoignez.",
-    "ShareIdentity": "Partager votre identité pour {{community}}"
+    "ShareIdentity": "Partager votre identité pour {{community}}",
+    "VetterRevoked": "Votre rôle de vérificateur pour {{community}} a été retiré par son admin.",
+    "VetterExpired": "Votre rôle de vérificateur pour {{community}} a pris fin le {{date}}.",
+    "VetterNotYet": "Votre rôle de vérificateur pour {{community}} commence le {{date}}."
   },
   "Invited": {
     "IntroTitle": "Dites à l'admin qui inviter",

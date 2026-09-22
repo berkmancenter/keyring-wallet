@@ -1269,7 +1269,10 @@
     "OpenYourAgent": "Your agent",
     "IWasInvited": "I was invited",
     "IWasInvitedHint": "Send your identity to the admin, then join.",
-    "ShareIdentity": "Share your identity for {{community}}"
+    "ShareIdentity": "Share your identity for {{community}}",
+    "VetterRevoked": "Your vetter role for {{community}} was withdrawn by its admin.",
+    "VetterExpired": "Your vetter role for {{community}} ended on {{date}}.",
+    "VetterNotYet": "Your vetter role for {{community}} starts on {{date}}."
   },
   "Invited": {
     "IntroTitle": "Tell the admin who to invite",

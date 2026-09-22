@@ -1114,7 +1114,10 @@
     "OpenYourAgent": "Seu agente",
     "IWasInvited": "Fui convidado",
     "IWasInvitedHint": "Envie sua identidade ao admin e depois entre.",
-    "ShareIdentity": "Compartilhar sua identidade para {{community}}"
+    "ShareIdentity": "Compartilhar sua identidade para {{community}}",
+    "VetterRevoked": "Seu papel de verificador em {{community}} foi retirado pelo admin.",
+    "VetterExpired": "Seu papel de verificador em {{community}} terminou em {{date}}.",
+    "VetterNotYet": "Seu papel de verificador em {{community}} começa em {{date}}."
   },
   "Invited": {
     "IntroTitle": "Diga ao admin quem convidar",

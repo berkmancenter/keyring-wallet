@@ -30,6 +30,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
+import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 
 import { didName, shareIdentity } from './identityShare'
 import { openScanner } from './openScanner'
@@ -39,6 +40,8 @@ interface Holdings {
   personas: VtiPersona[]
   memberships: VtiMembership[]
   vetterFor: string[]
+  /** Communities where this phone was a vetter and is not now: why, for the person. */
+  lapsed: { communityDid: string; grant: Exclude<VetterGrantState, { state: 'active' } | { state: 'none' }> }[]
 }
 
 
@@ -76,13 +79,25 @@ const VtaAgentHome: React.FC = () => {
         new GenericRecordsIdentityStore(agent).listPersonas(),
         communities.listMemberships(),
       ])
+      // A vetter is one whose grant still stands — in its window and not
+      // revoked — not one who was ever granted.
       const grants = await Promise.all(
         personas.map(async (p) => {
           const held = await communities.listHeldCredentials('vetter-grant', p.communityDid)
-          return held.some((g) => g.subjectDid === p.did) ? p.communityDid : undefined
+          const own = held.filter((g) => g.subjectDid === p.did)
+          return { communityDid: p.communityDid, grant: await ownVetterGrantState(agent, own, { allowInsecureLocal: __DEV__ }) }
         })
       )
-      setHoldings({ personas, memberships, vetterFor: grants.filter((x): x is string => Boolean(x)) })
+      setHoldings({
+        personas,
+        memberships,
+        vetterFor: grants.filter((g) => g.grant.state === 'active').map((g) => g.communityDid),
+        lapsed: grants.flatMap((g) =>
+          g.grant.state === 'revoked' || g.grant.state === 'expired' || g.grant.state === 'notYetValid'
+            ? [{ communityDid: g.communityDid, grant: g.grant }]
+            : []
+        ),
+      })
       setHoldingsError(false)
     } catch {
       // Keep what was shown; say it could not be refreshed.
@@ -163,6 +178,20 @@ const VtaAgentHome: React.FC = () => {
   const activityText = (a: VtaActivity) => t(`VtaLink.Activity.${a.kind}`)
   const isVetter = (holdings?.vetterFor.length ?? 0) > 0
   const isMember = (holdings?.memberships.length ?? 0) > 0
+  const lapsed = holdings?.lapsed ?? []
+  const day = (iso: string) => new Date(iso).toLocaleDateString()
+  const lapsedText = (communityDid: string, grant: Holdings['lapsed'][number]['grant']) => {
+    const community = didName(communityDid)
+    const opts = { community, interpolation: { escapeValue: false } }
+    switch (grant.state) {
+      case 'revoked':
+        return t('VtaLink.VetterRevoked', opts)
+      case 'expired':
+        return t('VtaLink.VetterExpired', { ...opts, date: day(grant.validUntil) })
+      case 'notYetValid':
+        return t('VtaLink.VetterNotYet', { ...opts, date: day(grant.validFrom) })
+    }
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -276,7 +305,14 @@ const VtaAgentHome: React.FC = () => {
               testID={testIdWithKey('AgentVetOthers')}
             />
           </View>
-          {!isVetter ? (
+          {!isVetter && lapsed.length > 0
+            ? lapsed.map(({ communityDid, grant }) => (
+                <ThemedText key={communityDid} style={styles.muted} testID={testIdWithKey('AgentVetterLapsed')}>
+                  {lapsedText(communityDid, grant)}
+                </ThemedText>
+              ))
+            : null}
+          {!isVetter && lapsed.length === 0 ? (
             <ThemedText style={styles.muted} testID={testIdWithKey('AgentVetOthersLocked')}>
               {t('VtaLink.VetOthersLocked')}
             </ThemedText>
