@@ -39,6 +39,7 @@ import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
+import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
@@ -411,10 +412,31 @@ export class VtiVetterDesk {
     this.onChange?.()
   }
 
-  /** The vetter grant this persona holds for its community, if delivered. */
+  /**
+   * The vetter grant this persona should act under: the newest one that is
+   * actually live, with its state, or the newest one and the reason it cannot
+   * be used.
+   *
+   * This used to be "the first grant the store returns whose subject is this
+   * persona", which is not a choice at all once a vetter has been re-granted
+   * and holds several. It signed statements under revoked grants while a live
+   * one sat beside them; the community discounted those statements and the
+   * applicant was told "the vetter's grant did not cover the moment they
+   * signed" — with nothing on the vetter's side saying so (keyring-test,
+   * 2026-09-22). The evaluation lives in `vtiGrantState`, which the agent
+   * screens already use, so the grant a screen says you hold is now the grant
+   * this signs with.
+   */
+  async grantWithState(): Promise<Awaited<ReturnType<typeof pickOwnVetterGrant>>> {
+    const all = await this.communityStore.listHeldCredentials('vetter-grant', this.persona.communityDid)
+    const mine = all.filter((g) => g.subjectDid === this.persona.did)
+    return pickOwnVetterGrant(this.agent, mine.length > 0 ? mine : all, { allowInsecureLocal: __DEV__ })
+  }
+
+  /** The grant to act under, or nothing when none of those held is live. */
   async grant(): Promise<VtiHeldCredential | undefined> {
-    const grants = await this.communityStore.listHeldCredentials('vetter-grant', this.persona.communityDid)
-    return grants.find((g) => g.subjectDid === this.persona.did) ?? grants[0]
+    const picked = await this.grantWithState()
+    return picked.state.state === 'active' ? picked.held : undefined
   }
 
   /** Cut a ticket: one use, fourteen days, both forms. */
@@ -482,6 +504,23 @@ export class VtiVetterDesk {
       if (presented?.ticketId) await this.refuse(m, applicantDid, 'vetting/request:invalidTicket')
       return
     }
+    // A ticket outstanding when the grant dies would otherwise start a ceremony
+    // that cannot finish: the whole exchange runs, and the applicant learns at
+    // the end that no statement counted. Refuse it now, to the APPLICANT, who is
+    // the stranger to this problem and the one whose time it wastes. The
+    // vetter's own desk explains its standing and will not cut a new ticket, so
+    // this refusal is not the only thing either party has to go on.
+    //
+    // Before the ticket is spent, deliberately: a single-use ticket burned here
+    // would make the applicant ask the vetter for another one to recover from
+    // the vetter's own problem. Restore the grant and the ticket they already
+    // hold still works.
+    const standing = await this.grantWithState()
+    if (standing.state.state !== 'active') {
+      await this.refuse(m, applicantDid, vetterNotEligibleReason(standing.state.state))
+      return
+    }
+
     ticket.usesLeft -= 1
     ticket.boundTo = applicantDid
     await this.store.saveTicket(ticket)

@@ -81,9 +81,48 @@ export async function ownVetterGrantState(
   grants: VtiHeldCredential[],
   options: Options = {}
 ): Promise<VetterGrantState> {
-  if (grants.length === 0) return { state: 'none' }
+  return (await pickOwnVetterGrant(agent, grants, options)).state
+}
+
+/**
+ * Which grant to act under, and what it is — the same choice
+ * [`ownVetterGrantState`] reports, so the grant a screen says you hold is the
+ * grant the app signs with.
+ *
+ * A vetter who has been re-granted holds several grants for one community, and
+ * "the first one the store returns" is not a choice: it was signing statements
+ * under revoked grants while a live one sat beside it, which the community then
+ * discounted and the applicant read as "your vetter's grant did not cover the
+ * moment they signed" (2026-09-22, keyring-test). Newest first, and an active
+ * grant beats any superseded one.
+ *
+ * When nothing is active this still returns the newest grant with its state, so
+ * a caller can say WHY it will not act — "your grant was revoked" is worth more
+ * to the person than an empty result.
+ */
+export async function pickOwnVetterGrant(
+  agent: Agent,
+  grants: VtiHeldCredential[],
+  options: Options = {}
+): Promise<{ held?: VtiHeldCredential; state: VetterGrantState }> {
+  if (grants.length === 0) return { state: { state: 'none' } }
   const newestFirst = [...grants].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
   const states = await Promise.all(newestFirst.map((g) => grantState(agent, g, options)))
-  const active = states.find((s) => s.state === 'active')
-  return active ?? states[0]
+  const active = states.findIndex((s) => s.state === 'active')
+  const at = active >= 0 ? active : 0
+  return { held: newestFirst[at], state: states[at] }
+}
+
+/**
+ * How a refusal names a vetter who cannot vet — one place, because two layers
+ * say it and a test that rebuilt the string would pass while they drifted.
+ *
+ * The applicant hears this when a ticket is redeemed against a grant that is no
+ * longer live; the vetter's own desk explains the same state in its own words.
+ * The state travels with it deliberately: revoked, expired and notYetValid want
+ * different things from the person who reads them — ask again, ask again, or
+ * simply wait.
+ */
+export function vetterNotEligibleReason(state: VetterGrantState['state']): string {
+  return `vetting/request:vetterNotEligible:${state}`
 }
