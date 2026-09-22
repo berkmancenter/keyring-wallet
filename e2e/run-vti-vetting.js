@@ -472,7 +472,11 @@ try {
     }
     if (!holdsAgain) {
       await screenshot(vetter, "vetting-dead-grant-03-not-restored");
-      throw new Error("the community lists the grant live but the vetter's app never received it — delivery, not the ticket");
+      throw new Error(
+        "the community lists the grant live but the vetter's app does not show it: delivery — either the community never pushed it, " +
+          "or `vetter-resend` itself failed and this run retried it three times without saying so, or the app failed to collect it. " +
+          "Not the ticket, and not the same bug in all three cases."
+      );
     }
     // The mirror image, which after keyring-bifold#70 should be impossible:
     // the app acting on a grant the community has withdrawn. Its chooser reads
