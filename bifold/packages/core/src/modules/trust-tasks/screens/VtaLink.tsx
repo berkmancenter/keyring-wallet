@@ -212,6 +212,9 @@ const VtaLink: React.FC = () => {
           <ThemedText>
             {t('VtaLink.GiveKeyBody', { label: link.label, interpolation: { escapeValue: false } })}
           </ThemedText>
+          {/* Where the admin puts it, with no upstream change: the VTA browser
+              extension's Grant access form, or pnm from a terminal. */}
+          <ThemedText testID={testIdWithKey('VtaLinkGiveKeyHow')}>{t('VtaLink.GiveKeyHow')}</ThemedText>
           <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkManualDid')} selectable>
             {link.did}
           </ThemedText>

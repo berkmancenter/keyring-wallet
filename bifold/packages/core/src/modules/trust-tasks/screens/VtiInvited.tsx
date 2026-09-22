@@ -36,6 +36,7 @@ import { ensurePersonaFor, joinCommunity } from '../module/vtiJoin'
 
 import { didName, identityShareText, shareIdentity } from './identityShare'
 import { openScanner } from './openScanner'
+import { useCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
 type Step = 'intro' | 'share' | 'waiting' | 'joined'
@@ -50,7 +51,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const navigation = useNavigation()
   const { ColorPalette, TextTheme } = useTheme()
   const { width } = useWindowDimensions()
-  const communityDid = config?.communityDid
+  const communityDid = useCommunityDid(config?.communityDid)
   const mediatorDid = config?.mediatorDid
   const vtaDid = useVtaDid(config?.vtaDid)
 

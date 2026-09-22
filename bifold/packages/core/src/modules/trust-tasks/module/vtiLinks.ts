@@ -12,15 +12,16 @@
 
 import type { Agent } from '@credo-ts/core'
 
-import { EnrolmentOfferError, isEnrolmentLink, isTicketUri, parseEnrolmentLink } from '@bifold/trust-tasks'
+import { EnrolmentOfferError, isEnrolmentLink, isTicketUri, parseEnrolmentLink, parseTicketUri } from '@bifold/trust-tasks'
 
 import { Screens } from '../../../types/navigators'
 
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { vtaAgent } from './vtaAgent'
+import { communityTarget, isCommunityLink, parseCommunityLink } from './vtiCommunityLink'
 import { isVtiInvitationLink, parseVtiInvitationLink } from './vtiInvitation'
 
-export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket'
+export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket' | 'community'
 
 /** Which of our links this is, if any — cheap, no parsing beyond the prefix. */
 export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undefined {
@@ -28,16 +29,18 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   if (isEnrolmentLink(trimmed)) return 'enrolment'
   if (isVtiInvitationLink(trimmed)) return 'invitation'
   if (isTicketUri(trimmed)) return 'ticket'
+  if (isCommunityLink(trimmed)) return 'community'
   return undefined
 }
 
 /** Where a link lands, inside the My Agent stack. */
-export type MyAgentDestination = 'VtaLink' | 'MyAgent' | 'VtiVetting'
+export type MyAgentDestination = 'VtaLink' | 'MyAgent' | 'VtiVetting' | 'VtiJoin'
 
 export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtaLink: Screens.VtaLink,
   MyAgent: Screens.MyAgent,
   VtiVetting: Screens.VtiVetting,
+  VtiJoin: Screens.VtiJoin,
 }
 
 /**
@@ -89,14 +92,34 @@ export async function routeKeyringAgentLink(
       return
     }
     case 'ticket': {
+      // The ticket names the community it is for: that is the one being joined.
+      try {
+        const ticket = parseTicketUri(trimmed)
+        if (ticket.community) communityTarget.set({ communityDid: ticket.community })
+      } catch {
+        // an unreadable ticket is reported by the vetting screen, where it is used
+      }
       pendingTicket = trimmed
       ticketListeners.forEach((listener) => listener())
       navigate('VtiVetting')
       return
     }
     case 'invitation': {
-      await new GenericRecordsCommunityStore(agent).saveInvitation(parseVtiInvitationLink(trimmed))
+      const invitation = parseVtiInvitationLink(trimmed)
+      if (invitation.communityDid) communityTarget.set({ communityDid: invitation.communityDid })
+      await new GenericRecordsCommunityStore(agent).saveInvitation(invitation)
       navigate('MyAgent')
+      return
+    }
+    case 'community': {
+      let link
+      try {
+        link = parseCommunityLink(trimmed)
+      } catch {
+        throw new Error('This community link could not be read.')
+      }
+      communityTarget.set(link)
+      navigate('VtiJoin')
       return
     }
     default:

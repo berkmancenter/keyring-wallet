@@ -31,9 +31,9 @@ import { GenericRecordsCommunityStore, type VtiMembership } from '../module/VtiC
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
+import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
 
 import { didName, shareIdentity } from './identityShare'
-import { openScanner } from './openScanner'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
 interface Holdings {
@@ -67,7 +67,23 @@ const VtaAgentHome: React.FC = () => {
     row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     mono: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
-    locked: { opacity: 0.55 },
+    strip: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 },
+    stop: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+    stopNow: { backgroundColor: ColorPalette.brand.primary },
+    stopNowText: { color: ColorPalette.grayscale.white, fontWeight: '700' },
+    stopDone: { color: ColorPalette.semantic.success, fontWeight: '700' },
+    tip: { borderLeftWidth: 4, borderLeftColor: ColorPalette.semantic.success },
+    door: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 12,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      minHeight: 64,
+    },
+    doorNext: { borderWidth: 2, borderColor: ColorPalette.brand.primary },
     link: { color: ColorPalette.brand.link, textDecorationLine: 'underline' },
   })
 
@@ -108,6 +124,9 @@ const VtaAgentHome: React.FC = () => {
   useEffect(() => {
     void load()
   }, [load])
+  // A grant, a card or an invitation that arrives while this screen is open
+  // shows without a visit to Vetting: the persona inbox says when it stored one.
+  useVtiPersonaDeliveries(() => void load())
 
   const onRefresh = useCallback(async () => {
     if (!agent) return
@@ -118,7 +137,6 @@ const VtaAgentHome: React.FC = () => {
   }, [agent, load])
 
   const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
-  const scan = () => openScanner(navigation)
 
   if (link.kind !== 'linked') {
     return (
@@ -205,12 +223,102 @@ const VtaAgentHome: React.FC = () => {
             {link.label}
           </ThemedText>
           <VtaStatusLine connection={link.connection} />
+          <View style={styles.strip} testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
+            {[
+              { key: 'Linked', done: true, now: false },
+              { key: 'Join', done: isMember, now: !isMember },
+              { key: 'Member', done: isMember, now: false },
+            ].map((stop, i) => (
+              <React.Fragment key={stop.key}>
+                {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
+                <View
+                  style={[styles.stop, stop.now ? styles.stopNow : undefined]}
+                  accessibilityState={{ selected: stop.now }}
+                >
+                  <ThemedText style={stop.done ? styles.stopDone : stop.now ? styles.stopNowText : styles.muted}>
+                    {stop.done ? '✓ ' : ''}
+                    {t(`VtaLink.Journey${stop.key}`)}
+                  </ThemedText>
+                </View>
+              </React.Fragment>
+            ))}
+          </View>
           <Pressable
             onPress={() => vtaAgent.showIntro()}
             accessibilityRole="link"
             testID={testIdWithKey('WhatIsMyAgent')}
           >
             <ThemedText style={styles.link}>{t('VtaLink.WhatIsMyAgent')}</ThemedText>
+          </Pressable>
+        </View>
+
+        {/* The vetter role is news, not a step: it shows when an admin grants it. */}
+        {holdings?.vetterFor.map((communityDid) => (
+          <View key={communityDid} style={[styles.card, styles.tip]} testID={testIdWithKey('AgentVetterCard')}>
+            <ThemedText variant="bold">
+              {t('VtaLink.YouCanVet', { community: didName(communityDid), interpolation: { escapeValue: false } })}
+            </ThemedText>
+            <ThemedText style={styles.muted}>{t('VtaLink.YouCanVetBody')}</ThemedText>
+            <Button
+              title={t('VtaLink.OpenDesk')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => go(Screens.VtiVetting)}
+              testID={testIdWithKey('AgentVetOthers')}
+            />
+          </View>
+        ))}
+        {!isVetter && lapsed.length > 0 ? (
+          <View style={styles.card}>
+            {lapsed.map(({ communityDid, grant }) => (
+              <ThemedText key={communityDid} style={styles.muted} testID={testIdWithKey('AgentVetterLapsed')}>
+                {lapsedText(communityDid, grant)}
+              </ThemedText>
+            ))}
+          </View>
+        ) : null}
+
+        {/* Start from what the person wants: two doors, one marked as next. */}
+        <View style={styles.card} testID={testIdWithKey('AgentDoors')}>
+          {isMember ? (
+            <>
+              <ThemedText variant="labelTitle">{t('VtaLink.YourCommunities')}</ThemedText>
+              <Button
+                title={t('VtaLink.OpenCommunities')}
+                buttonType={ButtonType.Primary}
+                onPress={() => go(Screens.MyAgent)}
+                testID={testIdWithKey('AgentOpenCommunities')}
+              />
+            </>
+          ) : (
+            <ThemedText variant="headingFour" accessibilityRole="header">
+              {t('VtaLink.WhatBringsYou')}
+            </ThemedText>
+          )}
+          <Pressable
+            style={[styles.door, isMember ? undefined : styles.doorNext]}
+            onPress={() => go(Screens.VtiInvited)}
+            accessibilityRole="button"
+            testID={testIdWithKey('AgentInvited')}
+          >
+            <Icon name="email-open-outline" size={24} color={ColorPalette.brand.primary} />
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="bold">{t('VtaLink.IWasInvited')}</ThemedText>
+              <ThemedText style={styles.muted}>{t('VtaLink.IWasInvitedHint')}</ThemedText>
+            </View>
+            <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+          </Pressable>
+          <Pressable
+            style={[styles.door, isMember ? undefined : styles.doorNext]}
+            onPress={() => go(Screens.VtiJoin)}
+            accessibilityRole="button"
+            testID={testIdWithKey('AgentJoinCommunity')}
+          >
+            <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
+            <View style={{ flex: 1 }}>
+              <ThemedText variant="bold">{isMember ? t('VtaLink.JoinAnother') : t('VtaLink.WantToJoin')}</ThemedText>
+              <ThemedText style={styles.muted}>{t('VtaLink.WantToJoinHint')}</ThemedText>
+            </View>
+            <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
           </Pressable>
         </View>
 
@@ -273,50 +381,6 @@ const VtaAgentHome: React.FC = () => {
               </ThemedText>
             ))
           )}
-        </View>
-
-        <View style={styles.card} testID={testIdWithKey('AgentCanDo')}>
-          <ThemedText variant="labelTitle">{t('VtaLink.CanDo')}</ThemedText>
-          <Button
-            title={t('VtaLink.JoinCommunity')}
-            buttonType={ButtonType.Secondary}
-            onPress={scan}
-            testID={testIdWithKey('AgentJoinCommunity')}
-          />
-          <Button
-            title={t('VtaLink.IWasInvited')}
-            buttonType={ButtonType.Secondary}
-            onPress={() => go(Screens.VtiInvited)}
-            testID={testIdWithKey('AgentInvited')}
-          />
-          <ThemedText style={styles.muted}>{t('VtaLink.IWasInvitedHint')}</ThemedText>
-          <Button
-            title={isMember ? t('VtaLink.OpenCommunities') : t('VtaLink.GetVetted')}
-            buttonType={ButtonType.Secondary}
-            onPress={() => go(isMember ? Screens.MyAgent : Screens.VtiVetting)}
-            testID={testIdWithKey('AgentGetVetted')}
-          />
-          <View style={isVetter ? undefined : styles.locked}>
-            <Button
-              title={t('VtaLink.VetOthers')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => go(Screens.VtiVetting)}
-              disabled={!isVetter}
-              testID={testIdWithKey('AgentVetOthers')}
-            />
-          </View>
-          {!isVetter && lapsed.length > 0
-            ? lapsed.map(({ communityDid, grant }) => (
-                <ThemedText key={communityDid} style={styles.muted} testID={testIdWithKey('AgentVetterLapsed')}>
-                  {lapsedText(communityDid, grant)}
-                </ThemedText>
-              ))
-            : null}
-          {!isVetter && lapsed.length === 0 ? (
-            <ThemedText style={styles.muted} testID={testIdWithKey('AgentVetOthersLocked')}>
-              {t('VtaLink.VetOthersLocked')}
-            </ThemedText>
-          ) : null}
         </View>
 
         <View style={styles.card}>
