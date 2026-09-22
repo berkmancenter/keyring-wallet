@@ -175,7 +175,13 @@ async function main() {
     const [typeUri, payloadJson] = args;
     if (!typeUri) throw new Error("usage: task <typeUri> [jsonPayload]");
     const payload = payloadJson ? JSON.parse(payloadJson) : {};
-    const res = await client.sendAndWait(typeUri, doc(typeUri, payload));
+    // ENVELOPE=1 as for `withdraw`: a VTA's DIDComm router keys on the task URI
+    // and does not list every verb its dispatcher serves, so a task-typed
+    // `auth/whoami` comes back "unsupported message type". The wallet sends the
+    // binding envelope, and a probe that wants to see what the wallet sees must
+    // send it too.
+    const wireType = process.env.ENVELOPE ? ENVELOPE_TYPE : typeUri;
+    const res = await client.sendAndWait(wireType, doc(typeUri, payload));
     console.log(JSON.stringify(res, null, 2));
     return;
   }
