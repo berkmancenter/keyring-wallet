@@ -16,7 +16,7 @@
  * Two real iOS devices: PLATFORMS=ios,ios APPLICANT_IOS_UDID=… VETTER_IOS_UDID=…
  *   (each gets its own WebDriverAgent port: 8131 applicant, 8130 vetter)
  */
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
+import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
@@ -107,6 +107,19 @@ async function waitInCurrentRequest(d, key, ms = 60000) {
 
 
 async function unlockToHome(d) {
+  // This suite needs a device that has been through the journey once: a wallet
+  // created, an agent linked. Pointed at a fresh one it used to wait out
+  // 120s for a PIN screen that was never coming and then 300s for a Contacts
+  // tab, and report "EnterPIN not found" — which says nothing about the real
+  // problem. Three runs were lost to that on two platforms before it was worth
+  // ten seconds to say so. Onboarding is the first screen, so it is cheap to
+  // recognise.
+  if (await existsTestId(d, "GetStarted", 8000)) {
+    throw new Error(
+      `${d.e2ePlatform}: this device has no wallet yet — it is sitting on onboarding. ` +
+        `Run run-vta-link.js against it first (it onboards and links an agent); this suite starts from a linked phone.`
+    );
+  }
   await waitForTestId(d, "EnterPIN", 120000).catch(() => undefined);
   await unlockIfLocked(d);
   // A kept-state app resumes on whatever screen it was left on, and the VTA
