@@ -116,7 +116,8 @@
     "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter",
     "@openvtc/vti-tsp-js@npm:0.1.0": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch",
     "json-canonicalize": "2.0.0",
-    "rxjs": "7.8.2"
+    "rxjs": "7.8.2",
+    "@scure/base@npm:^2.0.0": "patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {
