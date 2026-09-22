@@ -404,9 +404,19 @@ try {
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
     await screenshot(driver, "link-m1-key");
-    await tapTestId(driver, "VtaLinkCheckGrant", 15000);
-    await waitForTestId(driver, "VtaLinkNotYet", 60000);
-    console.log("[e2e] before the grant: not yet");
+    // GRANT_FIRST=1 skips the pre-grant check. It exists to isolate one
+    // variable: in the ordinary manual flow the phone signs in BEFORE its key
+    // is in the ACL, on purpose, so the screen can say "not yet" — and a VTA
+    // that answers an unknown peer with silence rather than a refusal leaves
+    // that sign-in hanging. Granting first makes the same flow sign in with a
+    // key the VTA already knows, which is what the QR journey does.
+    if (process.env.GRANT_FIRST !== "1") {
+      await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+      await waitForTestId(driver, "VtaLinkNotYet", 60000);
+      console.log("[e2e] before the grant: not yet");
+    } else {
+      console.log("[e2e] GRANT_FIRST=1: granting before the first sign-in");
+    }
     execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
     await tapTestId(driver, "VtaLinkCheckGrant", 15000);
     await waitForTestId(driver, "VtaLinkDone", 180000);

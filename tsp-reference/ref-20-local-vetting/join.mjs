@@ -166,6 +166,20 @@ async function main() {
     return;
   }
 
+  // `task <typeUri> [jsonPayload]` — any Trust Task, to a VTA or a community,
+  // as an identity the peer may not know. Added to read the exact refusal a
+  // client receives when it asks before it is authorised: the VTA's own log
+  // says "DID not in ACL", but what the wallet must match on is the document
+  // that reaches it, which is not the same string.
+  if (command === "task") {
+    const [typeUri, payloadJson] = args;
+    if (!typeUri) throw new Error("usage: task <typeUri> [jsonPayload]");
+    const payload = payloadJson ? JSON.parse(payloadJson) : {};
+    const res = await client.sendAndWait(typeUri, doc(typeUri, payload));
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
   console.error(`unknown command ${command}`);
   process.exit(1);
 }
