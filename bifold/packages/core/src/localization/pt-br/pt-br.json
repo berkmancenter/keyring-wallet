@@ -1037,6 +1037,12 @@
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts (PT-BR)"
   },
+  "Community": {
+    "Leave": "Sair da comunidade",
+    "LeaveExplains": "Este telefone esquece sua identidade, seu cartão e sua verificação nesta comunidade. Para voltar, você entra de novo.",
+    "LeaveConfirm": "Sair da comunidade",
+    "Stay": "Ficar"
+  },
   "VtaLink": {
     "Screen": "Vincular seu agente",
     "ConfirmTitle": "Vincular este telefone a {{label}}?",

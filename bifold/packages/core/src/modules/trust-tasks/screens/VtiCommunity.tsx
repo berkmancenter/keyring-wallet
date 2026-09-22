@@ -9,7 +9,8 @@
  */
 
 import type { RouteProp } from '@react-navigation/native'
-import { useRoute } from '@react-navigation/native'
+import { useAgent } from '@bifold/react-hooks'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -20,6 +21,7 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtiAgent, VtiRefusal, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
+import { leaveCommunity } from '../module/vtiLeave'
 
 const VtiCommunity: React.FC = () => {
   const { t } = useTranslation()
@@ -34,6 +36,25 @@ const VtiCommunity: React.FC = () => {
   // A refusal's framework code belongs behind Details, not in the sentence.
   const [refusalCode, setRefusalCode] = useState<string>()
   const [showDetails, setShowDetails] = useState(false)
+  const { agent } = useAgent()
+  const navigation = useNavigation()
+  // Leaving cannot be undone from the phone, so it asks once, in place, with
+  // buttons that say what each does (plan §4.3).
+  const [confirmingLeave, setConfirmingLeave] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+
+  const onLeave = useCallback(async () => {
+    if (!agent) return
+    setLeaving(true)
+    try {
+      await leaveCommunity(agent, communityDid)
+      navigation.goBack()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setLeaving(false)
+      setConfirmingLeave(false)
+    }
+  }, [agent, communityDid, navigation])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -157,6 +178,46 @@ const VtiCommunity: React.FC = () => {
             {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>{t('MyAgent.Apply')}</Text>}
           </Pressable>
         ) : null}
+
+        {confirmingLeave ? (
+          <View style={styles.card} testID={testIdWithKey('LeaveCommunityConfirmCard')}>
+            <Text style={styles.value}>{t('Community.LeaveExplains')}</Text>
+            <Pressable
+              style={[styles.button, { backgroundColor: ColorPalette.semantic.error }]}
+              testID={testIdWithKey('LeaveCommunityConfirm')}
+              accessibilityRole="button"
+              disabled={leaving}
+              onPress={() => void onLeave()}
+            >
+              {leaving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.buttonText}>{t('Community.LeaveConfirm')}</Text>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.button, { backgroundColor: ColorPalette.grayscale.mediumGrey }]}
+              testID={testIdWithKey('LeaveCommunityStay')}
+              accessibilityRole="button"
+              disabled={leaving}
+              onPress={() => setConfirmingLeave(false)}
+            >
+              <Text style={styles.buttonText}>{t('Community.Stay')}</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={[
+              styles.button,
+              { backgroundColor: 'transparent', borderWidth: 1, borderColor: ColorPalette.semantic.error },
+            ]}
+            testID={testIdWithKey('LeaveCommunityButton')}
+            accessibilityRole="button"
+            onPress={() => setConfirmingLeave(true)}
+          >
+            <Text style={[styles.buttonText, { color: ColorPalette.semantic.error }]}>{t('Community.Leave')}</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   )

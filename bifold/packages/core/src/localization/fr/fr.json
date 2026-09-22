@@ -1138,6 +1138,12 @@
       "CTA": "View offer (FR)"
     }
   },
+  "Community": {
+    "Leave": "Quitter la communauté",
+    "LeaveExplains": "Ce téléphone oublie votre identité, votre carte et votre vérification pour cette communauté. Pour revenir, vous la rejoignez à nouveau.",
+    "LeaveConfirm": "Quitter la communauté",
+    "Stay": "Rester"
+  },
   "VtaLink": {
     "Screen": "Relier votre agent",
     "ConfirmTitle": "Relier ce téléphone à {{label}} ?",

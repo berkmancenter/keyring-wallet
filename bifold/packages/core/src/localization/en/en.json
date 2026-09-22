@@ -1192,6 +1192,12 @@
   "Banner": {
     "AlertsLength": "You have {{ alerts }} alerts"
   },
+  "Community": {
+    "Leave": "Leave community",
+    "LeaveExplains": "This phone forgets your identity, card and vetting for this community. To come back, you join again.",
+    "LeaveConfirm": "Leave community",
+    "Stay": "Stay"
+  },
   "VtaLink": {
     "Screen": "Link your agent",
     "ConfirmTitle": "Link this phone to {{label}}?",
