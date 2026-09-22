@@ -178,6 +178,11 @@ async function testerJourney(driver) {
   const firstStep = ["VettingLegalNameInput", "VettingStartButton", "VettingStepIndicator", "VettingCreateIdentityButton"];
   let reached;
   for (let i = 0; i < 40 && !reached; i++) {
+    // Making the identity can fail (the agent's DID host did not answer):
+    // the screen says so — stop there rather than wait out the timeout.
+    if (await existsTestId(driver, "JoinError", 500)) {
+      throw new Error(`making the identity failed: ${await textOf(driver, "JoinError")}`);
+    }
     if (await notConfiguredShown(driver)) {
       await screenshot(driver, "journey-vetting-not-configured");
       throw new Error('vetting says "No agent is configured" with a linked agent');

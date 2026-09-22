@@ -163,9 +163,17 @@ export async function createSession(platform, capsOverride) {
     // host port 8081 — lets this suite run its own metro on another port
     // without touching that unrelated process.
     const metroPort = process.env.METRO_PORT || "8081";
-    execSync(`adb -s ${udid} reverse tcp:8081 tcp:${metroPort}`);
-    console.log(`[e2e] adb reverse tcp:8081 -> tcp:${metroPort} set up on ${udid}`);
-    if (metroPort !== "8081") {
+    // A Release APK bundles its JS: it needs no Metro, and touching the
+    // device's tcp:8081 reverse would only disturb whoever else uses it.
+    const { ANDROID_APK } = await import("./config.js");
+    const releaseApk = process.env.E2E_RELEASE === "1" || /release/i.test(ANDROID_APK);
+    if (!releaseApk) {
+      execSync(`adb -s ${udid} reverse tcp:8081 tcp:${metroPort}`);
+      console.log(`[e2e] adb reverse tcp:8081 -> tcp:${metroPort} set up on ${udid}`);
+    } else {
+      console.log(`[e2e] release APK: no Metro, tcp:8081 left as it is on ${udid}`);
+    }
+    if (!releaseApk && metroPort !== "8081") {
       // This app's debug bundle loader resolves the packager via
       // 10.0.2.2:8081 (the emulator's host alias) BEFORE consulting the
       // adb-reverse-mapped localhost:8081 — so on a non-default METRO_PORT,
