@@ -374,6 +374,13 @@ function adbTap(driver, x, y) {
 
 export async function tapElement(driver, el) {
   await el.waitForDisplayed({ timeout: 30000 });
+  // iOS: let XCUITest tap the element it resolved — a coordinate from the
+  // element's rect misses on an iPad whose app runs in an inset window (see
+  // tapTestIdByCoordinates). Android keeps its adb / clickGesture path.
+  if (driver.e2ePlatform === "ios") {
+    await el.click();
+    return el;
+  }
   const { x, y } = await el.getLocation();
   const { width, height } = await el.getSize();
   const cx = Math.floor(x + width / 2);

@@ -19,7 +19,7 @@
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
-import { leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
+import { handleBiometricConfirmIfPresent, leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -370,6 +370,11 @@ try {
   console.log("[e2e] codes match — confirmed on both phones");
   await scrollToTestId(applicant, "VettingSendCardButton", 4, LOW);
   await tapTestIdByCoordinates(applicant, "VettingSendCardButton");
+  // Every signing act asks for the person's face or fingerprint. On a real
+  // device with biometrics on, tap Confirm and hand the OS prompt to the
+  // operator; elsewhere the modal never appears and this is a no-op.
+  await sleep(1500);
+  await handleBiometricConfirmIfPresent(applicant);
   console.log(`[e2e] ${applicant.e2ePlatform}: card sent`);
 
   // — vetter: the card, the human check, the statement
@@ -395,6 +400,8 @@ try {
   await screenshot(vetter, "vetting-05-card");
   const attest = await scrollToTestId(vetter, "VettingAttestButton", 6);
   await tapElement(vetter, attest);
+  await sleep(1500);
+  await handleBiometricConfirmIfPresent(vetter);
   await waitForTestId(vetter, "VettingStatementIssued", 60000);
   console.log(`[e2e] ${vetter.e2ePlatform}: statement issued`);
   await screenshot(vetter, "vetting-06-attested");
@@ -422,6 +429,8 @@ try {
     console.log(`[e2e] community: vetter grant revoked (status-list bit ${revoked?.statusListIndex})`);
     await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
     await tapTestIdByCoordinates(applicant, "VettingApplyButton");
+    await sleep(1500);
+    await handleBiometricConfirmIfPresent(applicant);
     await scrollToTestId(applicant, "VettingSubmissionState", 6, LOW).catch(() => undefined);
     const deferred = await waitText(applicant, "VettingSubmissionState", /asked for more/i, 120000);
     console.log(`[e2e] ${applicant.e2ePlatform}: ${deferred}`);
@@ -440,6 +449,8 @@ try {
   } else {
   await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
   await tapTestIdByCoordinates(applicant, "VettingApplyButton");
+    await sleep(1500);
+    await handleBiometricConfirmIfPresent(applicant);
   // The member line sits at the top of the screen; wait for the verdict, then scroll back up.
   await sleep(8000);
   await scrollToTestId(applicant, "VettingAlreadyMember", 8, { ...LOW, direction: "up" }).catch(() => undefined);
