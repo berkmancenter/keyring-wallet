@@ -567,7 +567,22 @@
     "ShowDetails": "Mostrar detalhes do erro",
     "NoDetails": "Nenhum detalhe de erro disponível",
     "CopyLink": "Copiar link",
-    "LinkCopied": "Link copiado para a área de transferência"
+    "LinkCopied": "Link copiado para a área de transferência",
+    "StepOf": "Etapa {{n}} de {{of}}",
+    "CompareCodes": "Compare os códigos",
+    "CodesMatch": "Os códigos batem",
+    "CodesDiffer": "Os códigos são diferentes",
+    "MatchQuestionApplicant": "A tela do verificador mostra o mesmo código?",
+    "MatchQuestionVetter": "A tela da pessoa mostra o mesmo código?",
+    "CodesDifferEnded": "A última sessão terminou sem declaração. Se os códigos eram diferentes, avise o verificador e peça um novo tíquete.",
+    "WaitingForVetter": "Aguardando o verificador abrir a sessão…",
+    "WaitingForStatement": "O verificador está conferindo seu documento…",
+    "WaitingForCard": "Aguardando o nome da pessoa…",
+    "CheckTheirId": "Confira o documento — ele diz isto?",
+    "VetSomeoneElse": "Verificar outra pessoa",
+    "SomeoneWantsVetting": "Alguém quer ser verificado",
+    "SendNameTitle": "Enviar seu nome",
+    "AskAnotherVetter": "Pedir a outro verificador"
   },
   "PasteUrl": {
     "PasteUrl": "Paste a URL (PT-BR)",

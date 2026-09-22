@@ -659,7 +659,22 @@
     "ShowDetails": "Show error details",
     "NoDetails": "No error details available",
     "CopyLink": "Copy link",
-    "LinkCopied": "Link copied to clipboard"
+    "LinkCopied": "Link copied to clipboard",
+    "StepOf": "Step {{n}} of {{of}}",
+    "CompareCodes": "Compare the codes",
+    "CodesMatch": "Codes match",
+    "CodesDiffer": "Codes differ",
+    "MatchQuestionApplicant": "Does the vetter's screen show the same code?",
+    "MatchQuestionVetter": "Does their screen show the same code?",
+    "CodesDifferEnded": "The last session ended without a statement. If the codes differed, tell the vetter and ask for a new ticket.",
+    "WaitingForVetter": "Waiting for the vetter to open the session…",
+    "WaitingForStatement": "The vetter is checking your document…",
+    "WaitingForCard": "Waiting for their name…",
+    "CheckTheirId": "Check their ID — does it say this?",
+    "VetSomeoneElse": "Vet someone else",
+    "SomeoneWantsVetting": "Someone wants to be vetted",
+    "SendNameTitle": "Send your name",
+    "AskAnotherVetter": "Ask another vetter"
   },
   "PasteUrl": {
     "PasteUrl": "Paste a URL",

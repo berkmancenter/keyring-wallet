@@ -1008,6 +1008,16 @@ export class VtiApplicant {
   }
 
   /**
+   * The applicant saw a match code that differs from the vetter's: end this
+   * session on this phone. The protocol gives the applicant no decline of its
+   * own (only the vetter declines, `vetting/decline/0.1`), so the screen asks
+   * the person to tell the vetter, whose "Codes differ" ends it on theirs.
+   */
+  async abandonSession(vetterDid: string): Promise<void> {
+    await this.update(vetterDid, { status: 'declined' })
+  }
+
+  /**
    * Re-ask the community whether each vetter's grant is still live.
    *
    * A grant checked when it arrived says nothing about this afternoon, and the
