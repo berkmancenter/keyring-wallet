@@ -504,6 +504,18 @@ export class VtiVetterDesk {
       if (presented?.ticketId) await this.refuse(m, applicantDid, 'vetting/request:invalidTicket')
       return
     }
+    // A ticket outstanding when the grant dies would otherwise start a ceremony
+    // that cannot finish: the whole exchange runs, and the applicant learns at
+    // the end that no statement counted. Refuse it now, to the APPLICANT, who is
+    // the stranger to this problem and the one whose time it wastes. The
+    // vetter's own desk explains its standing and will not cut a new ticket, so
+    // this refusal is not the only thing either party has to go on.
+    const standing = await this.grantWithState()
+    if (standing.state.state !== 'active') {
+      await this.refuse(m, applicantDid, `vetting/request:vetterNotEligible:${standing.state.state}`)
+      return
+    }
+
     ticket.usesLeft -= 1
     ticket.boundTo = applicantDid
     await this.store.saveTicket(ticket)
