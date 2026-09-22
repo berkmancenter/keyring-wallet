@@ -24,7 +24,7 @@
  *   (run it on a store-config build — Release, no VTI_VTA_DID, no probe): back
  *   from the agent screen, a tab switch and a relaunch must never bring the
  *   "Linked" screen back; Get vetted must reach its first step, not "No agent
- *   is configured"; I want to join goes community → what it asks → Join as
+ *   is configured"; I want to join goes community → what it asks → identity
  *   → vetting (not "No agent is configured"), and "a different community"
  *   opens the scanner; nothing offers a locked "Vet someone"; I was invited
  *   opens its flow; a pasted community link opens Join on that community.
@@ -142,18 +142,18 @@ async function testerJourney(driver) {
   await assertNoLinkedScreen(driver, "after a tab switch");
 
   // I want to join a community (Door 2): the suggested community, what it
-  // asks, Join as (makes the identity), then vetting — as the linked agent.
+  // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
   if (await existsTestId(driver, "JoinThisCommunity", 10000)) await tapTestId(driver, "JoinThisCommunity", 5000);
   await waitForTestId(driver, "JoinAsks", 15000);
   console.log("[e2e] journey: Join a community shows what it asks for");
   await tapTestId(driver, "JoinStart", 15000);
-  await waitForTestId(driver, "JoinAs", 15000);
-  await screenshot(driver, "journey-join-as");
+  await waitForTestId(driver, "JoinMakeIdentity", 15000);
+  await screenshot(driver, "journey-join-identity");
   await tapTestId(driver, "JoinAsContinue", 15000);
   await handleBiometricConfirmIfPresent(driver);
-  if (await existsTestId(driver, "JoinError", 3000)) throw new Error(`Join as failed: ${await textOf(driver, "JoinError")}`);
+  if (await existsTestId(driver, "JoinError", 3000)) throw new Error(`making the identity failed: ${await textOf(driver, "JoinError")}`);
   const firstStep = ["VettingLegalNameInput", "VettingStartButton", "VettingStepIndicator", "VettingCreateIdentityButton"];
   let reached;
   for (let i = 0; i < 40 && !reached; i++) {
@@ -165,9 +165,9 @@ async function testerJourney(driver) {
   }
   if (!reached) {
     await screenshot(driver, "journey-join-vetting");
-    throw new Error("Join as did not hand over to vetting");
+    throw new Error("making the identity did not hand over to vetting");
   }
-  console.log(`[e2e] journey: Join as → vetting reached ${reached}`);
+  console.log(`[e2e] journey: identity → vetting reached ${reached}`);
   await screenshot(driver, "journey-join-vetting");
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
 
