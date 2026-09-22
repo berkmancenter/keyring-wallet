@@ -54,6 +54,8 @@ import { ensurePersonaFor } from '../module/vtiJoin'
 import { pendingVettingTicket } from '../module/vtiLinks'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
+import { useVtaDid } from './VtaStatus'
+
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
 
 export interface VtiVettingProps {
@@ -72,7 +74,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const { agent } = useAgent()
   const communityDid = config?.communityDid
   const mediatorDid = config?.mediatorDid
-  const vtaDid = config?.vtaDid
+  const vtaDid = useVtaDid(config?.vtaDid)
 
   const [persona, setPersona] = useState<VtiPersona>()
   const [grant, setGrant] = useState<VtiHeldCredential>()

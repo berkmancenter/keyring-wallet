@@ -39,6 +39,8 @@ import { vtiAgent } from '../module/vtiAgent'
 import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 
+import { useVtaDid } from './VtaStatus'
+
 /** Which seat this phone would take at a vetting: decided by what it holds. */
 type VettingSeat = 'vetter' | 'applicant'
 
@@ -62,8 +64,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const communityDid = config?.communityDid
   // The agent the person linked by QR (plan §5.1) wins over the one a build
   // bakes in; the baked one stays for builds and runners that predate linking.
-  const linkedVtaDid = vta.link.kind === 'linked' ? vta.link.vtaDid : undefined
-  const vtaDid = linkedVtaDid ?? config?.vtaDid
+  const vtaDid = useVtaDid(config?.vtaDid)
 
   // What the wallet holds towards communities (§2.4 B): the persona its VTA
   // minted for this community, the invitations it was handed, the memberships
