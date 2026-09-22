@@ -37,7 +37,7 @@ import type { VtiCommunityStore, VtiHeldCredential } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './vtiInbox'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
-import { joinRequestRefusal, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
+import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
 
 export const VETTING = {
@@ -1062,7 +1062,24 @@ export class VtiApplicant {
         }
       }
     } else {
-      verdict = await vtiAgent.apply(communityDid, manifest, { credentials: statements, requirementsDigest })
+      try {
+        verdict = await vtiAgent.apply(communityDid, manifest, { credentials: statements, requirementsDigest })
+      } catch (e) {
+        // The community already holds an open request from this applicant that
+        // the phone lost track of (a reinstall, another device). Its refusal
+        // names the request (vti #1592): record it, so withdraw and supplement
+        // act on it and the screen can say "you already applied", then let the
+        // refusal through.
+        const already = openJoinRequestOf(e)
+        if (already) {
+          await this.recordSubmission({
+            requestId: already.requestId,
+            state: already.status === 'deferred' ? 'deferred' : 'pending',
+            at: new Date().toISOString(),
+          })
+        }
+        throw e
+      }
     }
     await this.recordSubmission({
       requestId: verdict.requestId ?? open?.requestId,
