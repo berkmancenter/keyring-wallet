@@ -393,6 +393,13 @@ try {
     const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
     // Return on the keyboard submits the address, as a person would.
     await address.setValue(`${runnerVtaDid()}\n`);
+    // The key is revealed by "Show my code", which the screen enables once the
+    // address looks like a DID — it does not appear on submit. Measured on
+    // Android, 2026-09-22: the run waited out 60s on a screen that was only
+    // waiting for the tap.
+    if (await existsTestId(driver, "VtaLinkShowMyCode", 5000)) {
+      await tapTestId(driver, "VtaLinkShowMyCode", 15000);
+    }
     await waitForTestId(driver, "VtaLinkManualDid", 60000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);

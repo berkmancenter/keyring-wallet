@@ -39,9 +39,14 @@ done
 (cd "$ROOT/bifold/packages/trust-tasks" && yarn build >/dev/null)
 # A stale generated header keeps the old values (VETTING_RUNBOOK traps).
 find "$DD" -name GeneratedInfoPlistDotEnv.h -delete 2>/dev/null || true
+# TESTFLIGHT_SDK=iphoneos: the same Release build for a real device, signed
+# with the team the device runs use (IOS_TEAM_ID).
+SDK="${TESTFLIGHT_SDK:-iphonesimulator}"
+SIGN=()
+[ "$SDK" = iphoneos ] && SIGN=(-allowProvisioningUpdates DEVELOPMENT_TEAM="${IOS_TEAM_ID:-947XHQ9DVC}" CODE_SIGN_STYLE=Automatic)
 (cd "$APP/ios" && xcodebuild -workspace AriesBifold.xcworkspace -scheme AriesBifold -configuration Release \
-  -sdk iphonesimulator -derivedDataPath "$DD" ONLY_ACTIVE_ARCH=YES ARCHS=arm64 >"$DD.log" 2>&1) || {
+  -sdk "$SDK" -derivedDataPath "$DD" ONLY_ACTIVE_ARCH=YES ARCHS=arm64 ${SIGN[@]+"${SIGN[@]}"} >"$DD.log" 2>&1) || {
   echo "build-testflight-sim: xcodebuild failed — see $DD.log" >&2
   exit 1
 }
-echo "$DD/Build/Products/Release-iphonesimulator/KeyRing.app"
+echo "$DD/Build/Products/Release-$SDK/KeyRing.app"

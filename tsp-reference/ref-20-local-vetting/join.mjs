@@ -17,6 +17,8 @@
  *   node join.mjs <communityDid> <mediatorDid> <command> [args]
  *     manifest
  *     submit <requirementsDigest> [vpJsonFile]
+ *     status [requestId]
+ *     withdraw [requestId]
  *
  * Env:
  *   APPLICANT_X25519_SECRET_KEY  reuse a holder across runs (printed on first).
@@ -30,6 +32,11 @@ import WebSocketImpl from "ws";
 const TASK_MANIFEST = "https://trusttasks.org/spec/vtc/join-requests/manifest/0.2";
 const TASK_SUBMIT = "https://trusttasks.org/spec/vtc/join-requests/submit/0.2";
 const TASK_STATUS = "https://trusttasks.org/spec/vtc/join-requests/status/0.1";
+// WITHDRAW_TASK_URI overrides the version, to tell "not implemented" apart
+// from "implemented under another version string".
+const ENVELOPE_TYPE = "https://trusttasks.org/binding/didcomm/0.1/envelope";
+const TASK_WITHDRAW =
+  process.env.WITHDRAW_TASK_URI || "https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1";
 
 const bytesToHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const hexToBytes = (h) => new Uint8Array(h.match(/.{2}/g).map((b) => parseInt(b, 16)));
@@ -133,6 +140,28 @@ async function main() {
 
   if (command === "status") {
     const res = await client.sendAndWait(TASK_STATUS, doc(TASK_STATUS, { requestId: args[0] }));
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  // Close this applicant's own open request. Here to answer one question
+  // without a phone in the loop: does the community answer
+  // `join-requests/withdraw/0.1` for a request it lists as deferred? A phone
+  // that submits, is deferred, and then sees "the community did not answer"
+  // cannot tell a reply lost once from a route that never answers — this
+  // client asks the same community for the same verb over the same carriage,
+  // and its answer (or its silence) is the community's, not the wallet's.
+  // The id is optional, as it is for Keyring: without it the community
+  // resolves the request from who is asking.
+  if (command === "withdraw") {
+    const payload = { ...(args[0] ? { requestId: args[0] } : {}), reason: "ref-20 probe" };
+    // ENVELOPE=1 sends the same document under the binding envelope's type
+    // instead of the task's own. Upstream's DIDComm router keys on the task
+    // URI and is a hand-written second list; the envelope's one arm reaches
+    // the dispatcher, so this tells "the service lacks the verb" apart from
+    // "the DIDComm router was never told about the verb".
+    const wireType = process.env.ENVELOPE ? ENVELOPE_TYPE : TASK_WITHDRAW;
+    const res = await client.sendAndWait(wireType, doc(TASK_WITHDRAW, payload));
     console.log(JSON.stringify(res, null, 2));
     return;
   }
