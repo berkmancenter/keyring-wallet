@@ -1,87 +1,94 @@
-name: Ship to iTunes
-description: Upload an artifact to iTunes Connect
+name: Ship to TestFlight
+description: Upload a signed .ipa to App Store Connect and distribute it to TestFlight groups
 
 inputs:
+  app_store_connect_key_id:
+    description: The App Store Connect API key ID
+    required: true
   app_store_connect_issuer_id:
-    description: The iTunes Connect issuer ID
-    required: true
-  app_store_connect_key_identifier:
-    description: The iTunes Connect key identifier
-    required: true
-  app_store_connect_private_key:
     description: |
-      The iTunes Connect private key.
+      The issuer ID of a team API key. Leave empty for an individual API key,
+      which has no issuer.
+    required: false
+    default: ''
+  app_store_connect_private_key:
+    description: The API key's .p8 contents (PEM text)
+    required: true
+  ipa_path:
+    description: Path to the signed .ipa
+    required: true
+  bundle_id:
+    description: The app's bundle identifier
     required: true
   version_code:
-    description: |
-      The build number for the release notes. i.e 1471
+    description: The build number (CFBundleVersion), i.e. 201
     required: true
   version_name:
-    description: |
-      The version name for the release notes. i.e 1.0.1
+    description: The marketing version (CFBundleShortVersionString), i.e. 0.2.0
     required: true
-  distribute_external:
-    description: Whether to distribute to external testers
-    required: false
-    default: 'false'
   beta_groups:
-    description: Comma-separated list of beta groups
-    required: false
-    default: 'The Team, IDIM Team'
+    description: Comma-separated TestFlight group names
+    required: true
   release_notes:
-    description: Release notes for TestFlight. If not provided, will use version-based default.
+    description: TestFlight "What to Test" text. Defaults to a version-based line.
     required: false
     default: ''
 
 runs:
   using: composite
   steps:
-    # https://blog.codemagic.io/app-store-connect-api-codemagic-cli-tools/
-    - name: Install Codemagic CLI Tools
+    - name: Upload to App Store Connect
       shell: bash
-      run: |
-        pip3 install codemagic-cli-tools
-
-    - name: Ship to iTunes
-      shell: bash {0}
       env:
-        APP_STORE_CONNECT_ISSUER_ID: ${{ inputs.app_store_connect_issuer_id }}
-        APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ inputs.app_store_connect_key_identifier }}
-        APP_STORE_CONNECT_PRIVATE_KEY: ${{ inputs.app_store_connect_private_key }}
-        VERSION_CODE: ${{ inputs.version_code }}
-        VERSION_NAME: ${{ inputs.version_name }}
-        DISTRIBUTE_EXTERNAL: ${{ inputs.distribute_external }}
-        BETA_GROUPS: ${{ inputs.beta_groups }}
-        RELEASE_NOTES: ${{ inputs.release_notes }}
+        KEY_ID: ${{ inputs.app_store_connect_key_id }}
+        ISSUER_ID: ${{ inputs.app_store_connect_issuer_id }}
+        PRIVATE_KEY: ${{ inputs.app_store_connect_private_key }}
+        IPA_PATH: ${{ inputs.ipa_path }}
       run: |
-        export PATH=$PATH:/Library/Frameworks/Python.framework/Versions/3.11/bin
-        
-        echo "Publishing to TestFlight with beta group: $BETA_GROUPS"
-        echo "---"
-        
-        # Determine release notes: use provided notes, or fallback to version-based
-        if [ -n "$RELEASE_NOTES" ] && [ "$RELEASE_NOTES" != "" ]; then
-          WHATS_NEW="$RELEASE_NOTES"
+        set -euo pipefail
+        export API_PRIVATE_KEYS_DIR="$RUNNER_TEMP/private_keys"
+        mkdir -p "$API_PRIVATE_KEYS_DIR"
+
+        # altool finds the key by file name: AuthKey_<id>.p8 for a team key,
+        # ApiKey_<id>.p8 for an individual key. An individual key has no issuer;
+        # altool still insists on the flag, and ignores its value.
+        if [ -n "$ISSUER_ID" ]; then
+          printf '%s\n' "$PRIVATE_KEY" > "$API_PRIVATE_KEYS_DIR/AuthKey_${KEY_ID}.p8"
+          auth=(--api-key "$KEY_ID" --api-issuer "$ISSUER_ID")
         else
-          WHATS_NEW="Release ${VERSION_NAME}-${VERSION_CODE}"
+          printf '%s\n' "$PRIVATE_KEY" > "$API_PRIVATE_KEYS_DIR/ApiKey_${KEY_ID}.p8"
+          auth=(--api-key "$KEY_ID" --api-issuer individual --api-key-subject user)
         fi
-        
-        echo "Release notes: $WHATS_NEW"
-        
-        # Simple publish command with single beta group
-        if [ "$DISTRIBUTE_EXTERNAL" = "true" ]; then
-          app-store-connect publish \
-            --enable-package-validation \
-            --max-build-processing-wait 10 \
-            --testflight \
-            --distribute-external \
-            --beta-group "$BETA_GROUPS" \
-            --whats-new "$WHATS_NEW"
-        else
-          app-store-connect publish \
-            --enable-package-validation \
-            --max-build-processing-wait 10 \
-            --testflight \
-            --beta-group "$BETA_GROUPS" \
-            --whats-new "$WHATS_NEW"
-        fi
+
+        # altool can exit 0 after "Failed to upload package" (seen on 502s from
+        # Apple's upload service), so judge by its output, and retry: the upload
+        # service fails intermittently while the rest of the API is healthy.
+        for attempt in 1 2 3 4; do
+          log="$RUNNER_TEMP/altool-$attempt.log"
+          status=0
+          xcrun altool --upload-app -f "$IPA_PATH" -t ios "${auth[@]}" --output-format normal 2>&1 | tee "$log" || status=$?
+          if [ "$status" -eq 0 ] && ! grep -qE "Failed to upload|UPLOAD FAILED" "$log"; then
+            echo "Upload succeeded on attempt $attempt"
+            exit 0
+          fi
+          echo "::warning::altool upload attempt $attempt failed (exit $status)"
+          [ "$attempt" -lt 4 ] && sleep $((attempt * 120))
+        done
+        echo "::error::Upload to App Store Connect failed after 4 attempts"
+        exit 1
+
+    - name: Distribute in TestFlight
+      shell: bash
+      env:
+        ASC_KEY_ID: ${{ inputs.app_store_connect_key_id }}
+        ASC_ISSUER_ID: ${{ inputs.app_store_connect_issuer_id }}
+        BUNDLE_ID: ${{ inputs.bundle_id }}
+        APP_VERSION: ${{ inputs.version_name }}
+        BUILD_NUMBER: ${{ inputs.version_code }}
+        BETA_GROUPS: ${{ inputs.beta_groups }}
+        WHATS_NEW: ${{ inputs.release_notes || format('Release {0} ({1})', inputs.version_name, inputs.version_code) }}
+      run: |
+        set -euo pipefail
+        prefix=$([ -n "$ASC_ISSUER_ID" ] && echo AuthKey || echo ApiKey)
+        ASC_KEY_PATH="$RUNNER_TEMP/private_keys/${prefix}_${ASC_KEY_ID}.p8" \
+          node scripts/testflight/distribute.mjs
