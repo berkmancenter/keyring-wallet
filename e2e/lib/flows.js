@@ -2095,8 +2095,25 @@ export async function pasteLinkOnScanScreen(driver, url) {
   } else {
     await input.setValue(url);
   }
+  let typed = (await input.getText().catch(() => "")) ?? "";
+  // A slow phone now and then drops or reorders a key in a long link typed in
+  // one go (a ~6 KB invitation on the iPhone 11): clear the field and type it
+  // again.
+  for (let attempt = 1; driver.e2ePlatform === "ios" && typed && typed !== url && attempt <= 4; attempt++) {
+    console.log(`[e2e] ios: the link went in wrong (${typed.length}/${url.length}) — typing it again (${attempt}/4)`);
+    await input.clearValue().catch(() => undefined);
+    await sleep(500);
+    await input.setValue(url);
+    typed = (await input.getText().catch(() => "")) ?? "";
+  }
   await hideKeyboard(driver);
-  const typed = (await input.getText().catch(() => "")) ?? "";
+  if (driver.e2ePlatform === "ios" && (await driver.isKeyboardShown().catch(() => false))) {
+    // The helper's fixed tap point can land inside this screen's tall paste
+    // field; tap the instruction text above it, which blurs the field.
+    const hint = driver.$('-ios predicate string:type == "XCUIElementTypeStaticText" AND label BEGINSWITH "Paste a URL below"');
+    if (await hint.isExisting().catch(() => false)) await hint.click().catch(() => undefined);
+    await sleep(800);
+  }
   if (typed && typed !== url) {
     await screenshot(driver, "paste-link-mangled");
     throw new Error(`${driver.e2ePlatform}: the link was not entered intact (${typed.length}/${url.length} chars)`);
