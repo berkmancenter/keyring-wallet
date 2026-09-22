@@ -15,7 +15,16 @@ import Clipboard from '@react-native-clipboard/clipboard'
 import { useNavigation } from '@react-navigation/native'
 import React, { useCallback, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native'
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Share,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -337,6 +346,11 @@ const VtaLink: React.FC = () => {
                 autoCorrect={false}
                 accessibilityLabel={t('VtaLink.AgentAddress')}
                 testID={testIdWithKey('VtaLinkAgentAddress')}
+                // The keyboard's own key submits, so it never has to be
+                // dismissed to reach the button it covers.
+                returnKeyType="go"
+                onSubmitEditing={onShowMyCode}
+                submitBehavior="blurAndSubmit"
               />
             </View>
           ) : null}
@@ -379,8 +393,12 @@ const VtaLink: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>{body}</ScrollView>
-      {actions ? <View style={styles.actions}>{actions}</View> : null}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {body}
+        </ScrollView>
+        {actions ? <View style={styles.actions}>{actions}</View> : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
