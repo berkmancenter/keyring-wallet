@@ -207,6 +207,9 @@ try {
       ? issued.replace(/([?&]secret=)([^&]+)/, (_, k, v) => `${k}${v.slice(0, -4)}${v.slice(-4) === "AAAA" ? "BBBB" : "AAAA"}`)
       : issued;
   if (REFUSAL === "bad-ticket" && link === issued) throw new Error("the ticket link carries no secret to alter");
+  // The code sits above the QR and the link: scrolling down to the link puts
+  // it off the top of the screen, where Android reports no such element.
+  await scrollToTestId(vetter, "VettingTicketCode", 4, { direction: "up" }).catch(() => undefined);
   const code = (await textOf(vetter, "VettingTicketCode")).trim();
   if (!link.startsWith("vetting-ticket:")) throw new Error(`no ticket link on the vetter: ${link.slice(0, 60)}`);
   console.log(`[e2e] ${vetter.e2ePlatform}: ticket ${code} (${link.length} chars)`);
