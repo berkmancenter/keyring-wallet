@@ -1,12 +1,12 @@
 {
-  "updated": "2026-09-21",
+  "updated": "2026-09-22",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
-      "sha": "d045a7a",
+      "sha": "9643c57",
       "commitDate": "2026-09-21",
-      "pinnedOn": "2026-09-21",
-      "why": "Prior art for the persona/face model (#263-#265) that the profile-persona link must be reconciled with; the TSP oracle stays the vendored tsp-js 0.3.0 build.",
+      "pinnedOn": "2026-09-22",
+      "why": "Phase 0 of the Farm plan: build the upstream extension at current main to link it to a Farm VTA and sign in to a hosted community; carries #266 (an added agent is stored when it connects) and trust-tasks 0.19.17 on top of d045a7a's persona/face model",
       "watch": [
         "packages/tsp-js/",
         "packages/core/src/vta/",
