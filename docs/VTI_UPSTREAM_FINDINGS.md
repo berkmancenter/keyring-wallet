@@ -1480,6 +1480,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q13 | Which sign-in should a community administrator use in the admin console, and could the console say so? | Plain *Sign in with VTA wallet* presents the browser client's holder `did:key`; only *VTA-proxied SIOP* presents the VTA DID that the community's access list names. Nothing on the page tells an administrator which one works. [Details](#question-details). |
 | VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). |
 | VTI-Q15 | Does `first-vtc` serve TSP Rev 3 today, and are the Farm and storm mediators on each other's relay allowlists? | Its DID advertises `TSPTransport` via the storm mediator, and storm stores an XRFI for it, but no XRFA came back within 90 s on either route. DIDComm to the same community answers in about 1 s. [Details](#farm-cross-mediator-round-trip-2026-09-22). |
+| VTI-Q16 | Could a community's manifest, or the VTA and mediator documents, say whether the operator of a member's VTA and of the mediator differs from the VTC's operator, so a client can tell a vetter whether hidden-mode anonymity holds for them? | The hidden-vetter design makes it a deployment rule that the vetter's VTA and the mediator are not run by the VTC's operator: a vetter's VTA can compute every tag its user produces. Nothing a client can read says which operator runs what, so a Farm hosting both a member's VTA and the community's VTC would silently void anonymity. [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -1539,6 +1540,31 @@ so does Keyring (bifold `modules/trust-tasks/module/vtiAgent.ts:717`).
 (d) Keyring sends `false` and does not ask. Once upstream defines the effect,
 the "Get vetted" apply step gains a plain opt-in.
 
+**VTI-Q16 — operator separation for hidden vetting.**
+(a) In the hidden-vetter design, anonymity holds against the VTC, other
+members, applicants and the mediator, but not against the vetter's own VTA.
+So hidden mode requires that the vetter's VTA is not operated by the VTC's
+operator (the rule the design already sets for the mediator). Expected: a
+machine-readable way for a client to check this before a vetter attests in
+hidden mode. For example, an operator identifier in the VTA's and mediator's
+DID documents or service metadata, compared with the VTC's, or a field in
+the community's manifest (such as `vetting.anonymity`) that the community
+asserts. Today the rule can only be stated in governance text.
+(b) Not a defect, and there is nothing to reproduce: hidden mode is not built
+upstream yet. What can be observed today is that neither a VTA's document, a
+mediator's, nor a VTC's manifest carries an operator identity. Checked at VTI
+`187ad9cd`; to be re-checked at `3dcbfe98`.
+(c) openvtc `docs/design/vetting-process.md` §14.2 (V2: "k-of-n proofs over
+hidden vetters"); Keyring's zero-knowledge plan
+(`docs/plans/zero-knowledge-plan.md` §3.5).
+(d) Meanwhile: the Farm currently satisfies the rule (it hosts VTAs and a
+mediator, while `first-vtc` runs on another operator's stack). Our
+single-host lab never does, so no demo on it may call vetters anonymous
+from the community. Keyring will show a warning on the community screen
+once a source field exists. Related to VTI-Q6: in hidden mode an
+attestation is stored and verified in the applicant's VTA, so for that
+mode the answer to Q6 is "the VTA's vault, not the device".
+
 **VTI-Q12 on the Farm.** (a) The hosted admin console's *Invitations* form
 requires the invitee's DID, as the route does, so a console user cannot issue
 an open or bearer invitation either. The page
@@ -1573,7 +1599,7 @@ offer that a phone scans (`pnm acl create --expires 1h` behind a QR).
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 1.31 | 2026-09-22 | **Upstream's response mapped.** Their remediation plan (basis VTI `3dcbfe98`, TDK `1eeebba1`, webvh `88fc6464`, against our v1.27) numbers the findings `KR-NN` = `VTI-NN`. Every status now carries their answer: 23 shipped, 4 already fixed (VTI-08, -09, -27, -28), 3 answered in docs, 4 declined or re-scoped (VTI-02, -10, -13, and -12 pending), and reproductions owed by us for VTI-06, VTI-12 and VTI-25. Nothing is marked verified on our stack before the pin bump. **Era F′:** the Farm's VTAs now run `0.37.1-d9a5be02`, with #1619, #1622 and #1634 and without #1642, #1646 and #1648. Phones linked as admin are unaffected. New section [Upstream's response](#upstreams-response-2026-09-22) records the owed reproductions, the client-facing wire changes (vti #1646, #1642, #1615) and the answered questions. |
+| 1.31 | 2026-09-22 | **Upstream's response mapped.** Their remediation plan (basis VTI `3dcbfe98`, TDK `1eeebba1`, webvh `88fc6464`, against our v1.27) numbers the findings `KR-NN` = `VTI-NN`. Every status now carries their answer: 23 shipped, 4 already fixed (VTI-08, -09, -27, -28), 3 answered in docs, 4 declined or re-scoped (VTI-02, -10, -13, and -12 pending), and reproductions owed by us for VTI-06, VTI-12 and VTI-25. Nothing is marked verified on our stack before the pin bump. **Era F′:** the Farm's VTAs now run `0.37.1-d9a5be02`, with #1619, #1622 and #1634 and without #1642, #1646 and #1648. Phones linked as admin are unaffected. New section [Upstream's response](#upstreams-response-2026-09-22) records the owed reproductions, the client-facing wire changes (vti #1646, #1642, #1615) and the answered questions. New question **VTI-Q16**: how a client can tell whether hidden-vetting anonymity holds (operator separation between a vetter's VTA, the mediator and the VTC). |
 | 1.30 | 2026-09-22 | **The Farm, measured read-only from public endpoints (steps 1–2 of the Farm plan).** **VTI-Q8 answered**: the Farm mediator is 0.28.23, ahead of the lab. The storm mediator that `first-vtc` names reports `degraded` (stored functions restarting, as era E's lab did), and `first-vtc`'s own host serves a stale version-1 copy of its log (upstream's known mirror case). EXT-01 extends to the storm mediator. **The cross-mediator round trip works over DIDComm**: `first-vtc`'s manifest comes back storm → Farm, live, in about 1 s on all three sender routes, given a sender DID that names its mediator. Over TSP, storm stores the invite but no accept returns (**VTI-Q15**). The Farm mediator was down twice for a few minutes during the run. See [Farm cross-mediator round trip](#farm-cross-mediator-round-trip-2026-09-22). From the Phase 0 Farm run: **VTI-40**, the browser client's consent window can turn an Approve into a Deny. **VTI-Q13** asks which admin sign-in to use, **VTI-Q14** what `registryConsent` grants, and VTI-Q10 and VTI-Q12 gain Farm evidence. A [Question details](#question-details) section now carries the (a)–(d) record for questions. |
 | 1.29 | 2026-09-22 | **VTI-39** (a TSP reply that fails once is lost) added earlier; now **VTI-Q12**: an open invitation not bound to a subject DID in advance, the upstream half of Keyring's "I was invited" journey. |
 | 1.28 | 2026-09-21 | **Era H, run on devices.** Enrol, invite, the two-phone approval and the full vetting ceremony pass on upstream main. **VTI-24 and VTI-26 validated live** with a phone approver: the VTA pushed the consent request through the approver's own mediator and it was approved in about three seconds — once Keyring minted its `did:peer` with a `DIDCommMessaging` service naming the mediator by DID, a client defect found on the way. New: **VTI-37**, a consent refusal whose `details` pass the 4 KB bound at three approvers loses its challenge, digest and relayable requests. VTI-22 re-met: the lab's `up.sh` now sets alice's enforcement. Also new: **VTI-38**, a mutual cancel whose §7.3 answer is refused because the transport forgets the relationship first — found by `ref-04s`, which with `ref-04r` also closes TSP Rev 3's remaining lab items (long-form frames through the mediator; XRFI → XRFA → XRFD against upstream's state machine). |
