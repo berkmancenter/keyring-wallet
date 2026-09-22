@@ -43,8 +43,12 @@ const IOS_UDID = process.env.IOS_UDID || "";
 const INVITE_VIA = process.env.INVITE_VIA || "my-agent";
 
 async function openLink(url) {
-  if (platform === "ios" && IOS_UDID) return pasteLinkFromHome(driver, url);
-  if (platform === "ios") execFileSync("xcrun", ["simctl", "openurl", "booted", url], { stdio: "inherit" });
+  // `simctl openurl` cuts a URL at 2048 characters (measured 2026-09-22: 1930
+  // arrives whole, 2063 does not), so a simulator gets a long link pasted too.
+  if (platform === "ios" && (IOS_UDID || url.length > 2000)) return pasteLinkFromHome(driver, url);
+  // "booted" is the first booted simulator, which is not this session's when
+  // another is up (the debug suite's beside a Release build's): address ours.
+  if (platform === "ios") execFileSync("xcrun", ["simctl", "openurl", driver?.capabilities?.udid || "booted", url], { stdio: "inherit" });
   else execFileSync("adb", ["-s", ANDROID_SERIAL, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", `'${url}'`, ANDROID_PKG], { stdio: "inherit" });
 }
 
