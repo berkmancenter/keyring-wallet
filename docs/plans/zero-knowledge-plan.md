@@ -4,7 +4,7 @@
 **Reasoning:** [`2026-09-22-al.md`](./zero-knowledge-plan/2026-09-22-al.md) — the research behind §2–§4: the positions it supersedes (on-device proving), the evidence for each, and what was not verifiable.
 **Siblings consulted:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 owns the credential-format decisions this plan inherits (VRC/VWC proof sets, evidence commitments, canonical transcript); [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client architecture, consent card and approvals this plan's step-up rides on; [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the V0 vetting ceremony that hidden vetting keeps unchanged, and its §2.4 decision gates Track Z1; [`vsc-migration-plan.md`](./vsc-migration-plan.md) owns the witness-credential type Track Z2 would present; [`ui-ux-improvements-plan.md`](./ui-ux-improvements-plan.md) owns the vetting screens Track Z1 changes.
 **Dependency direction:** nothing in the sibling plans waits on this one. This plan waits on upstream (§8) and on two sibling decisions (§3.3, §3.4).
-**Baseline (read 2026-09-22):** our pins — VTI **187ad9cd** (vta-sdk 0.25.0), `vta-browser-plugin` **89d70c4** (advance to **9643c57** in flight on `chore/pin-vta-browser-plugin-9643c57`); `OpenVTC/openvtc` clone **177a218** (not in `PINS.json`). Upstream heads the design review was written against, both **descendants** of our pins — VTI **6f26af19** (vta-sdk 0.48.0) and openvtc **63d1fa1**. `trustoverip/dtgwg-zkp-tf` **a42bf8c0**, `mitchuski/dtgwg-zkp-mage` **1be94c80**, `affinidi/affinidi-zkp-crypto-rs` **c23a4b71** (public, not cloned). `predicate-credential-system` **not reachable** from this repo (§8 B1).
+**Baseline (read 2026-09-22):** our pins — VTI **187ad9cd** (vta-sdk 0.25.0), `vta-browser-plugin` **89d70c4** (advance to **9643c57** in flight on `chore/pin-vta-browser-plugin-9643c57`); `OpenVTC/openvtc` clone **177a218** (not in `PINS.json`). Upstream heads the design review was written against, both **descendants** of our pins — VTI **6f26af19** (vta-sdk 0.48.0) and openvtc **63d1fa1**. `trustoverip/dtgwg-zkp-tf` **a42bf8c0**, `mitchuski/dtgwg-zkp-mage` **1be94c80**, `affinidi/affinidi-zkp-crypto-rs` **c23a4b71** (public, not cloned). `predicate-credential-system` **not reachable** from this repo (§8 B1). The running stacks are not on the reference pins: the local lab runs VTI **a96fe02f**, with a bump to **3dcbfe98** queued; Farm VTAs run vta **0.37.1** (`d9a5be02`). ZK0 reconciles all three.
 
 **References:**
 
@@ -94,9 +94,9 @@ Four duties, none of them cryptographic beyond the signature Keyring already mak
 3. **Carry the ceremony.** The V0 vetting ceremony (ticket, request, session, signed Vetting Card, match code, human check) is unchanged in hidden mode. Only the artifact returned and what the VTC verifies change ([[HIDDEN-VETTER]], "The ceremony is untouched").
 4. **Keep no ZK state.** No `usk`, token, attestation, tag, serial or proof is persisted on the phone, and none is cached for display. The boundary [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.6 draws ("no local mirror of state a counterparty owns") covers all of it, because the VTA owns it. Idempotence ledger entries for in-flight tasks are the one exception, and they are ids, not ZK material.
 
-### 3.3 Track Z1 is conditional on option B of the vetting subtask's §2.4
+### 3.3 Track Z1 rests on option B of the vetting subtask's §2.4
 
-*Conditional design.* Hidden vetting puts the PCS engine in the member's VTA, so it exists for a Keyring user only if a VTA is the member ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.4, option B). Under option A (the phone is the agent) the phone would have to carry the PCS engine, the key kind and the drip. That is exactly what §3.1 rules out, so **this plan designs no A path**. Under A, hidden-mode communities are closed to Keyring members, and the UI says so rather than degrading silently. That subtask still reads the decision as open. Z1's phases start only once it is taken.
+Option B (Keyring drives its own VTA, the persona is the member, the VTA signs) was decided by Alberto on 2026-09-18. [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.4 on `origin/main` still reads **Open**, and that document needs updating by its owner; this is not a re-decision. Hidden vetting puts the PCS engine in the member's VTA, so it exists for a Keyring user only if a VTA is the member ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.4, option B). Under option A (the phone is the agent) the phone would have to carry the PCS engine, the key kind and the drip. That is exactly what §3.1 rules out, so **this plan designs no A path**. Under A, hidden-mode communities are closed to Keyring members, and the UI says so rather than degrading silently. Were B ever reversed, Z1 would be void, not redesigned.
 
 ### 3.4 Keyring's own credentials meet zero knowledge in the VTA, after the in-person exchange
 
@@ -112,6 +112,7 @@ This keeps §3.1 and resolves the tension with the vetting subtask's §2.6 witho
 *"Hidden mode requires that the vetter's VTA is not operated by the VTC operator, the same rule the design already sets for the mediator"* ([[HIDDEN-VETTER]]). The vetter's own VTA can compute every tag its user produces. That is accepted trust, the same trust already placed in it for persona keys. Two consequences for sibling plans:
 
 - **The Farm.** [`keyring-on-the-vta-farm.md`](./keyring-on-the-vta-farm.md) targets a Farm-hosted VTA. If one operator hosts both a member's VTA and the community's VTC, hidden mode is void for that member, and Keyring should warn rather than let the vetter believe they are anonymous. Keyring cannot detect operator identity by itself, so this needs a manifest or Farm signal (§8 B5).
+  Today the Farm hosts VTAs and the mediator, and the first community VTC runs on a separate operator's stack, so the rule currently holds there.
 - **The local stack.** Our development stack runs VTA, VTC and mediator on one host under one operator. That is fine for testing mechanics. No demonstration on it may describe vetters as anonymous from the community.
 
 ## 4. Tracks
@@ -166,7 +167,7 @@ Each phase starts only on instruction. Every phase that touches upstream behavio
 ### ZK0 — Baseline and access
 
 - Get read access to `predicate-credential-system` and pin it in `external/` via `setup-external.mjs`, alongside `OpenVTC/openvtc`, which is cloned but unpinned today.
-- Advance the VTI pin from `187ad9cd` (vta-sdk 0.25) to at least the review's `6f26af19` (0.48), coordinated with whoever owns pin advances at the time.
+- Advance the VTI pin from `187ad9cd` (vta-sdk 0.25) to at least the review's `6f26af19` (0.48), coordinated with the owner of the pins and the lab stack; the lab's own bump (to `3dcbfe98`) is queued behind the Farm work.
 - Re-read §2.2's upstream-status column against the new pins and correct this plan.
 
 **Done when:** both repositories are pinned with a `--why`; every upstream claim in §2.2 and §5 cites a file at a pinned commit rather than the review; §8 B1 is closed or its owner is named.
@@ -191,7 +192,7 @@ Add the approval of an attest step-up to Keyring's approvals path, carrying Secu
 
 Implement §4.1's table on the screens of [`ui-ux-improvements-plan.md`](./ui-ux-improvements-plan.md).
 
-**Depends on** §3.3's decision being B, ZK1, ZK2, and upstream's `vtc-service` and `vta-service` steps.
+**Depends on** ZK1, ZK2, and upstream's `vtc-service` and `vta-service` steps.
 
 **Done when:** the vetting subtask's V0 e2e matrix re-runs green in hidden mode on the local stack in all four pairings (Keyring or headless openvtc as vetter × Keyring or openvtc as applicant). A test asserts the VTC's token-fetch log is identical for a vetter who attested and one who did not (C3). A test asserts that nothing of §3.2 item 4 exists in the app's store after a full admission. The demo script contains no anonymity claim on a single-operator stack (§3.5).
 
@@ -208,7 +209,7 @@ Implement §4.1's table on the screens of [`ui-ux-improvements-plan.md`](./ui-ux
 
 | Sibling | What this plan needs from it | What it gets back |
 |---|---|---|
-| [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) | The §2.4 decision (gates Z1); the V0 e2e matrix ZK3 re-runs; the vetter role in Keyring | A hidden-mode variant of its ceremony with the same screens and a changed artifact |
+| [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) | §2.4 updated to record B; the V0 e2e matrix ZK3 re-runs; the vetter role in Keyring | A hidden-mode variant of its ceremony with the same screens and a changed artifact |
 | [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) | Approvals (P3) and the credential vault client (step 1) | A second consumer of approvals that needs attestation evidence |
 | [`ui-ux-improvements-plan.md`](./ui-ux-improvements-plan.md) | The vetter and applicant flows | §4.1's changes to them |
 | [`keyring-on-the-vta-farm.md`](./keyring-on-the-vta-farm.md) | An operator-separation signal (§3.5) | A deployment rule to state before hidden-mode communities run on a Farm |
@@ -218,7 +219,6 @@ Implement §4.1's table on the screens of [`ui-ux-improvements-plan.md`](./ui-ux
 
 **Not decided (ours):**
 
-- **D1** — §3.3: option A or B of the vetting subtask's §2.4. Blocks Z1 (ZK1–ZK3).
 - **D2** — §3.4: BBS issuer key custody (R-DID or VTA `did:webvh`) and post-issuance proof addition. Blocks ZK4.
 - **D3** — whether Keyring pursues the vetter role at all, or stays applicant-only in hidden mode. The table in §4.1 assumes both. Blocks ZK3's scope.
 
