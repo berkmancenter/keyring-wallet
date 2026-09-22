@@ -15,7 +15,7 @@ jest.mock('../module/vtiAgent', () => ({
       mockHandlers.push(h)
       return () => mockHandlers.splice(mockHandlers.indexOf(h), 1)
     },
-    getState: () => ({ status: mockAgentState.status }),
+    getState: () => ({ status: mockAgentState.status, did: mockAgentState.isConnected ? mockPersona.did : undefined }),
     get isConnected() {
       return mockAgentState.isConnected
     },
@@ -85,6 +85,18 @@ describe('startPersonaInbox', () => {
     expect(mockReceiveIssue).toHaveBeenCalledWith(expect.anything(), mockPersona.did, expect.anything())
     expect(seen).toEqual([{ communityDid: mockPersona.communityDid, kinds: ['vetter-grant'] }])
     sub.remove()
+    stop()
+  })
+
+  it('stores nothing while the session belongs to another identity', async () => {
+    mockReceiveIssue.mockResolvedValue([{ kind: 'vetter-grant', communityDid: mockPersona.communityDid }])
+    mockAgentState.isConnected = true // held by another flow…
+    const stop = startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+    await flush()
+    mockAgentState.isConnected = false // …and now connected as nobody this inbox knows
+    mockHandlers[0]({ type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1' })
+    await flush()
+    expect(mockReceiveIssue).not.toHaveBeenCalled()
     stop()
   })
 

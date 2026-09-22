@@ -25,6 +25,7 @@ import { tsp } from '@bifold/trust-tasks'
 
 import type { VtiPersona } from './VtiIdentityStore'
 import {
+  advertisedMediatorDid,
   createVtiClientDid,
   resolveVtiMediator,
   resolveDidDocumentRetrying,
@@ -84,12 +85,39 @@ export class VtiRefusal extends Error {
  * on; `notAwaitingEvidence` means the request is queued for a decision the
  * community owes, so supplying more changes nothing.
  */
-export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence'
+export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence' | 'requestAlreadyOpen'
 
 export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
   if (!(refusal instanceof VtiRefusal)) return undefined
   const reason = refusal.code.split(':').pop()
-  return reason === 'notFound' || reason === 'alreadyDecided' || reason === 'notAwaitingEvidence' ? reason : undefined
+  return reason === 'notFound' ||
+    reason === 'alreadyDecided' ||
+    reason === 'notAwaitingEvidence' ||
+    reason === 'requestAlreadyOpen'
+    ? reason
+    : undefined
+}
+
+/**
+ * The applicant's request that is still open, when a submit is refused
+ * because one is (`vtc/join-requests/submit:requestAlreadyOpen`, vti #1592).
+ *
+ * The refusal's `details` names it: `requestId` is what withdraw and supplement
+ * take, and `status` says who the request is waiting on — `deferred` waits on
+ * the applicant (supply what was asked, or withdraw), `pending` on the
+ * community (it will move on its own). A status the client does not know is
+ * passed through as it came, so a screen can still offer withdraw.
+ */
+export interface OpenJoinRequest {
+  requestId: string
+  status: 'pending' | 'deferred' | (string & {})
+}
+
+export const openJoinRequestOf = (refusal: unknown): OpenJoinRequest | undefined => {
+  if (joinRequestRefusal(refusal) !== 'requestAlreadyOpen') return undefined
+  const details = (refusal as VtiRefusal).details as { requestId?: unknown; status?: unknown } | undefined
+  if (typeof details?.requestId !== 'string' || !details.requestId) return undefined
+  return { requestId: details.requestId, status: typeof details.status === 'string' ? details.status : 'pending' }
 }
 
 /** A refusal arrives as a document in its own right, not as a verdict. */
@@ -204,9 +232,14 @@ class VtiAgentController {
   }
 
   /**
-   * Peers this session has already greeted (§7.2.2). One invite per peer per
-   * session: the relationship is recorded on the peer's side on arrival, and a
-   * second invite would be a fresh relationship, not a repeat of this one.
+   * Relationships this wallet has already opened (§7.2.2), keyed by OUR DID
+   * and the peer's: one invite per pair. The relationship is recorded on the
+   * peer's side on arrival, and a second invite would be a fresh relationship,
+   * not a repeat. Keyed by the pair because the controller reconnects as
+   * different identities — a persona left and a new one made — and a greeting
+   * one identity sent does not introduce another: measured 2026-09-22, a new
+   * persona's join went out over TSP unannounced and the community discarded
+   * it ("no relationship with …"), so the phone heard nothing.
    */
   private readonly greeted = new Set<string>()
 
@@ -225,8 +258,9 @@ class VtiAgentController {
     const session = this.session
     const did = this.state.did
     if (!session || !did || !this.tsp || !this.agent) return
-    if (this.greeted.has(toDid)) return
-    this.greeted.add(toDid)
+    const pair = `${did} ${toDid}`
+    if (this.greeted.has(pair)) return
+    this.greeted.add(pair)
     try {
       // §5.3.3: a hop list ends at the destination's OWN VID, not its
       // intermediary's — so the path back to us is our mediator, then us.
@@ -294,9 +328,24 @@ class VtiAgentController {
    * Resolve the mediator a VTI agent advertises, mint this wallet's member DID,
    * log in and hold the socket. Idempotent while the socket is open.
    */
+  /** The connect in flight, so a second caller waits for it instead of racing it. */
+  private connecting?: Promise<void>
+
+  /**
+   * Open (or keep) the session as `identity` or `persona`.
+   *
+   * Serialised: a call made while another is in flight waits for it, then
+   * re-checks — the persona inbox and a join can both ask for the same
+   * persona, and two sockets for one DID end with the mediator closing one
+   * (`w.websocket.duplicate-channel`).
+   *
+   * The mediator is the one the persona's own DID document names, when it
+   * names one; `mediatorDid` is the fallback for an identity that advertises
+   * none (a fresh did:peer) and for a persona whose document cannot be read.
+   */
   async connect(
     agent: Agent,
-    mediatorDid: string,
+    mediatorDid: string | undefined,
     options: {
       identity?: VtiClientIdentity
       /**
@@ -310,12 +359,35 @@ class VtiAgentController {
       peerRevisionStore?: TspPeerRevisionStore
     } = {}
   ): Promise<void> {
+    while (this.connecting) await this.connecting.catch(() => undefined)
+    const attempt = this.connectNow(agent, mediatorDid, options)
+    this.connecting = attempt
+    try {
+      await attempt
+    } finally {
+      if (this.connecting === attempt) this.connecting = undefined
+    }
+  }
+
+  private async connectNow(
+    agent: Agent,
+    configuredMediatorDid: string | undefined,
+    options: { identity?: VtiClientIdentity; persona?: VtiPersona; peerRevisionStore?: TspPeerRevisionStore }
+  ): Promise<void> {
     this.agent = agent
     const wantedDid = options.persona?.did ?? options.identity?.did
     if (this.session?.isOpen && (!wantedDid || wantedDid === this.state.did)) return
     if (this.session) await this.disconnect()
     try {
       this.set({ status: 'resolving', error: undefined })
+      const own = options.persona
+        ? await advertisedMediatorDid(agent, options.persona.did).catch(() => undefined)
+        : undefined
+      const mediatorDid = own ?? configuredMediatorDid
+      if (!mediatorDid) throw new Error('vtiAgent: no mediator — the persona names none and none is configured')
+      if (own && configuredMediatorDid && own !== configuredMediatorDid) {
+        agent.config.logger.info(`vtiAgent: ${options.persona?.did} is reached through its own mediator ${own}, not the configured one`)
+      }
       const mediator = await resolveVtiMediator(agent, mediatorDid)
       this.mediator = mediator
       this.mediatorDid = mediatorDid
@@ -494,7 +566,7 @@ class VtiAgentController {
 
     const threadId = `urn:uuid:${utils.uuid()}`
     const sentAt = Date.now()
-    const answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
+    let answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
       this.pending = { type, resolve, sentAt }
     })
 
@@ -525,7 +597,18 @@ class VtiAgentController {
           new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
         ])
         this.pending = undefined
-        return viaTsp
+        if (viaTsp) return viaTsp
+        // A community can advertise TSPTransport and not answer it — measured
+        // on the VTA Farm's first-vtc (VTI-Q15): its mediator stores the frame
+        // and nothing comes back. Ask once more over DIDComm, and keep DIDComm
+        // for this community for the rest of the session.
+        this.agent.config.logger.warn(
+          `${TSP_LOG_PREFIX} ${communityDid} did not answer ${type} over TSP in ${timeoutMs}ms — asking over DIDComm`
+        )
+        this.carriageByPeer.set(communityDid, 'didcomm')
+        answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
+          this.pending = { type, resolve, sentAt: Date.now() }
+        })
       }
     }
 
@@ -584,8 +667,9 @@ class VtiAgentController {
 
   /**
    * The manifest over the community's REST endpoint, which its DID document
-   * advertises as a `VTCRest` service. The published endpoint omits the API's
-   * version prefix (VTI-15), so `/v1` is added here. Returns undefined for
+   * advertises as a `VTCRest` service. Communities minted before vti #1615
+   * publish it without the API's version prefix (VTI-15) and later ones with
+   * it, so `/v1` is added only when it is missing. Returns undefined for
    * anything that is not a usable manifest — a community that has turned the
    * public read off, a network that is not there, an error document — so the
    * caller can fall back to asking over DIDComm.
@@ -599,7 +683,7 @@ class VtiAgentController {
       const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
       if (!base) return undefined
       const now = new Date().toISOString()
-      const response = await fetch(`${base.replace(/\/$/, '')}/v1/trust-tasks`, {
+      const response = await fetch(vtcRestUrl(base, 'trust-tasks'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -732,3 +816,13 @@ class VtiAgentController {
 }
 
 export const vtiAgent = new VtiAgentController()
+
+/**
+ * A path under a community's REST API, from the `VTCRest` endpoint its DID
+ * document advertises: with or without the `/v1` prefix (vti #1615 added it to
+ * newly minted communities; older ones omit it), never doubled.
+ */
+export function vtcRestUrl(base: string, path: string): string {
+  const root = base.replace(/\/+$/, '')
+  return `${/\/v1$/.test(root) ? root : `${root}/v1`}/${path.replace(/^\/+/, '')}`
+}

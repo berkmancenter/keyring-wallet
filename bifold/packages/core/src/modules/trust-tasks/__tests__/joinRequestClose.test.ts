@@ -6,7 +6,7 @@
  * recorded, and what each declared refusal code means — not the wire, which
  * the agent owns. Refusals are read by their code, never by their prose.
  */
-import { VtiRefusal, joinRequestRefusal } from '../module/vtiAgent'
+import { VtiRefusal, joinRequestRefusal, openJoinRequestOf } from '../module/vtiAgent'
 
 const mockApply = jest.fn()
 const mockSupplement = jest.fn()
@@ -98,6 +98,46 @@ describe('reading a join-request refusal', () => {
     // The sentence says "not found" and the code says something else: the code wins.
     expect(joinRequestRefusal(new VtiRefusal('taskFailed', 'request not found'))).toBeUndefined()
     expect(joinRequestRefusal(new Error('vtc/join-requests/withdraw:notFound'))).toBeUndefined()
+  })
+})
+
+describe('an application already open at the community (vti #1592)', () => {
+  const already = (details: unknown) =>
+    new VtiRefusal('vtc/join-requests/submit:requestAlreadyOpen', 'a request is already open', details)
+
+  it('names the open request and who it waits on', () => {
+    expect(joinRequestRefusal(already({ requestId: 'r9', status: 'deferred' }))).toBe('requestAlreadyOpen')
+    expect(openJoinRequestOf(already({ requestId: 'r9', status: 'deferred', reason: 'conflict' }))).toEqual({
+      requestId: 'r9',
+      status: 'deferred',
+    })
+    expect(openJoinRequestOf(already({ requestId: 'r9' }))).toEqual({ requestId: 'r9', status: 'pending' })
+  })
+
+  it('reads nothing from another refusal, or one with no request named', () => {
+    expect(openJoinRequestOf(new VtiRefusal('vtc/join-requests/withdraw:notFound', 'x', { requestId: 'r9' }))).toBeUndefined()
+    expect(openJoinRequestOf(already(undefined))).toBeUndefined()
+    expect(openJoinRequestOf(new Error('requestAlreadyOpen'))).toBeUndefined()
+  })
+
+  it('records the open request a refused apply names, so withdraw and supplement can act on it', async () => {
+    const { applicant, store } = applicantWith(baseApplication())
+    mockApply.mockRejectedValue(already({ requestId: 'r9', status: 'deferred' }))
+
+    await expect(applicant.submit(manifest, ['s1'], 'digest-1')).rejects.toBeInstanceOf(VtiRefusal)
+
+    expect(store.current().submission).toMatchObject({ requestId: 'r9', state: 'deferred' })
+    // The next submit answers that request instead of opening another.
+    mockSupplement.mockResolvedValue({ requestId: 'r9', effect: 'allow', needs: [] })
+    await applicant.submit(manifest, ['s1'], 'digest-1')
+    expect(mockSupplement).toHaveBeenCalledWith(COMMUNITY, expect.objectContaining({ requestId: 'r9' }))
+  })
+
+  it('records a pending one as waiting on the community', async () => {
+    const { applicant, store } = applicantWith(baseApplication())
+    mockApply.mockRejectedValue(already({ requestId: 'r7', status: 'pending' }))
+    await expect(applicant.submit(manifest, ['s1'], 'digest-1')).rejects.toBeInstanceOf(VtiRefusal)
+    expect(store.current().submission).toMatchObject({ requestId: 'r7', state: 'pending' })
   })
 })
 
