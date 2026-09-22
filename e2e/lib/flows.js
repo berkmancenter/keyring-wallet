@@ -2101,11 +2101,22 @@ export async function pasteLinkOnScanScreen(driver, url) {
     await screenshot(driver, "paste-link-mangled");
     throw new Error(`${driver.e2ePlatform}: the link was not entered intact (${typed.length}/${url.length} chars)`);
   }
-  const submit = await scrollToTestId(driver, "ScanPastedUrl");
-  await submit.click();
-  if (await existsTestId(driver, "Try Again", 8000)) {
-    await screenshot(driver, "paste-link-refused");
-    throw new Error(`${driver.e2ePlatform}: the app refused the pasted link`);
+  // On a slow phone the first tap can land before React has the pasted text,
+  // while Continue is still disabled — it is ignored without a word. Tap
+  // until the paste screen is gone (or the app says why it refused).
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const submit = await scrollToTestId(driver, "ScanPastedUrl");
+    await submit.click();
+    if (await existsTestId(driver, "Try Again", 8000)) {
+      await screenshot(driver, "paste-link-refused");
+      throw new Error(`${driver.e2ePlatform}: the app refused the pasted link`);
+    }
+    if (!(await existsTestId(driver, "PastedUrl", 2000))) break;
+    if (attempt === 3) {
+      await screenshot(driver, "paste-link-stuck");
+      throw new Error(`${driver.e2ePlatform}: Continue on the paste screen did nothing, three times`);
+    }
+    console.log(`[e2e] ${driver.e2ePlatform}: still on the paste screen — tapping Continue again`);
   }
   console.log(`[e2e] ${driver.e2ePlatform}: link pasted & submitted`);
 }
