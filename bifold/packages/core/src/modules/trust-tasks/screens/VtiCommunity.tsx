@@ -25,11 +25,14 @@ import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { vtiAgent, VtiRefusal, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
 import { leaveCommunity } from '../module/vtiLeave'
 
+import { useCommunityCalled } from './useCommunity'
+
 const VtiCommunity: React.FC = () => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const { params } = useRoute<RouteProp<MyAgentStackParams, Screens.VtiCommunity>>()
   const communityDid = params.communityDid
+  const called = useCommunityCalled(communityDid)
 
   const [manifest, setManifest] = useState<VtiManifest>()
   const [verdict, setVerdict] = useState<VtiVerdict>()
@@ -124,11 +127,32 @@ const VtiCommunity: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
+        {/* What it is called, not what it is keyed by. The DID was the
+            headline here; it is the only checkable thing on the screen, so it
+            stays — one tap away, in the same place as every other detail. */}
         <View style={styles.card}>
           <Text style={styles.label}>{t('MyAgent.Community')}</Text>
-          <Text style={styles.value} testID={testIdWithKey('CommunityDid')}>
-            {communityDid}
+          <Text style={styles.value} testID={testIdWithKey('CommunityName')}>
+            {called.name ?? t('Join.Unnamed')}
           </Text>
+          {called.name && called.claimed ? (
+            <Text style={styles.label} testID={testIdWithKey('CommunityNameClaimed')}>
+              {t('Join.NameFromLink')}
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={() => setShowDetails(!showDetails)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showDetails }}
+            testID={testIdWithKey('CommunityDetailsToggle')}
+          >
+            <Text style={[styles.label, { textDecorationLine: 'underline' }]}>{t('VtaLink.Details')}</Text>
+          </Pressable>
+          {showDetails ? (
+            <Text style={styles.value} selectable testID={testIdWithKey('CommunityDid')}>
+              {communityDid}
+            </Text>
+          ) : null}
         </View>
 
         <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.WhatIsAsked')}</Text>

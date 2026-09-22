@@ -34,7 +34,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { ensurePersonaFor } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
-import { didName } from './identityShare'
+import { communityName } from './communityName'
 import { openScanner } from './openScanner'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { useCommunity } from './useCommunity'
@@ -101,7 +101,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const community = useCommunity(config?.communityDid)
   const chosenByLink = useSyncExternalStore(communityTarget.subscribe, communityTarget.getViewing)
   const communityDid = community?.communityDid
-  const name = community?.name ?? (communityDid ? didName(communityDid) : '')
+  // What to call it, and how much to claim for that name (see communityName).
+  const called = communityName(communityDid ?? '', community)
+  const name = called.name ?? called.technical
 
   // A community named by a link goes straight to what it asks; the build's
   // suggestion is offered first, beside "a different community".
@@ -124,6 +126,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (vtiAgent.getState().status !== 'connected') return
     vtiAgent
       .fetchManifest(communityDid)
+      // Reading the manifest also teaches the app what the community calls
+      // itself; vtiAgent does that for every fetch, so nothing is needed here.
       .then((m) => live && setAsks(asksFrom(m)))
       .catch(() => undefined)
     return () => {
@@ -204,13 +208,28 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             {t('Join.WhichTitle')}
           </ThemedText>
           <ThemedText>{t('Join.WhichBody')}</ThemedText>
+          {/* The build's suggestion, said to be one. It used to offer "Join
+              <hostname>", which read as the community's name when nothing had
+              named it at all (tester report #14). A name is shown only when
+              something actually gave one; otherwise the card says so and the
+              DID's host stands as the identifier, not as a name. */}
           {communityDid ? (
             <View style={styles.card} testID={testIdWithKey('JoinSuggested')}>
               <View style={styles.row}>
                 <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
-                <ThemedText variant="bold">{name}</ThemedText>
+                <ThemedText variant="bold" testID={testIdWithKey('JoinSuggestedName')}>
+                  {called.name ?? t('Join.Unnamed')}
+                </ThemedText>
               </View>
               <ThemedText style={styles.muted}>{t('Join.Suggested')}</ThemedText>
+              {called.name && called.claimed ? (
+                <ThemedText style={styles.muted} testID={testIdWithKey('JoinNameClaimed')}>
+                  {t('Join.NameFromLink')}
+                </ThemedText>
+              ) : null}
+              <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedWhere')}>
+                {called.technical}
+              </ThemedText>
             </View>
           ) : null}
         </>
@@ -219,7 +238,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         <>
           {communityDid ? (
             <Button
-              title={t('Join.JoinThis', { community: name, interpolation: { escapeValue: false } })}
+              title={
+                called.name
+                  ? t('Join.JoinThis', { community: called.name, interpolation: { escapeValue: false } })
+                  : t('Join.JoinSuggested')
+              }
               buttonType={ButtonType.Primary}
               onPress={() => setStep('asks')}
               testID={testIdWithKey('JoinThisCommunity')}
