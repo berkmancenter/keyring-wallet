@@ -75,7 +75,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const [invitations, setInvitations] = useState<VtiInvitation[]>([])
   const [memberships, setMemberships] = useState<VtiMembership[]>([])
   const [seat, setSeat] = useState<VettingSeat>('applicant')
-  const grantCheck = useRef<{ key: string; at: number; vetter: boolean }>()
+  const grantCheck = useRef<{ key: string; at: number; vetter: boolean } | undefined>(undefined)
   const [busy, setBusy] = useState<'identity' | 'join'>()
   const [activity, setActivity] = useState<string[]>([])
   const [holdingError, setHoldingError] = useState<string>()
