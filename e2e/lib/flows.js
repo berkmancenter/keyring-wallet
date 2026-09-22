@@ -2143,25 +2143,31 @@ export async function leaveCommunityInApp(driver) {
   const until = Date.now() + 180000;
   let connectedSince;
   let row;
+  // Android's UiAutomator does not report off-screen children, and scrollToTestId
+  // looks down N swipes then back up N — so each look covers the WHOLE screen
+  // (8 each way), never a couple of swipes that return to where they began.
+  const seen = async (key, swipes = 8) => {
+    const el = await scrollToTestId(driver, key, swipes).catch(() => undefined);
+    return el && (await el.isExisting().catch(() => false)) ? el : undefined;
+  };
   while (Date.now() < until) {
-    row = await scrollToTestId(driver, "MyAgentCommunityRow", 2).catch(() => undefined);
-    if (row && (await row.isExisting().catch(() => false))) break;
-    row = undefined;
-    const connected = await byTestId(driver, "MyAgentCard").isExisting().catch(() => false);
+    row = await seen("MyAgentCommunityRow");
+    if (row) break;
+    const connected = await seen("MyAgentCard", 3);
     if (connected) {
       connectedSince ??= Date.now();
       // Whether the phone HOLDS a community is read from what it shows, not
       // from the row: the row appears only once the community session is up.
       // An identity, a vetting entry or "Reach the community" means there is
       // one — bring its session up so the row renders, then leave it.
-      const reach = byTestId(driver, "ConnectCommunityButton");
+      const reach = await seen("ConnectCommunityButton", 3);
       const holdsOne =
-        (await reach.isExisting().catch(() => false)) ||
-        (await byTestId(driver, "MyAgentVettingRow").isExisting().catch(() => false)) ||
-        (await byTestId(driver, "MyAgentIdentityCard").isExisting().catch(() => false)) ||
-        (await byTestId(driver, "MyAgentPersonaDid").isExisting().catch(() => false));
+        Boolean(reach) ||
+        Boolean(await seen("MyAgentVettingRow", 4)) ||
+        Boolean(await seen("MyAgentIdentityCard", 4)) ||
+        Boolean(await seen("MyAgentPersonaDid", 4));
       if (holdsOne) {
-        if (await reach.isExisting().catch(() => false)) {
+        if (reach) {
           await reach.click().catch(() => undefined);
           console.log(`[e2e] ${driver.e2ePlatform}: reaching the community before leaving it`);
         }
