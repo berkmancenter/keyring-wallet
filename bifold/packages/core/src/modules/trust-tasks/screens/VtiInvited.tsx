@@ -36,6 +36,7 @@ import { ensurePersonaFor, joinCommunity } from '../module/vtiJoin'
 
 import { didName, identityShareText, shareIdentity } from './identityShare'
 import { openScanner } from './openScanner'
+import { useCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
 type Step = 'intro' | 'share' | 'waiting' | 'joined'
@@ -50,7 +51,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const navigation = useNavigation()
   const { ColorPalette, TextTheme } = useTheme()
   const { width } = useWindowDimensions()
-  const communityDid = config?.communityDid
+  const communityDid = useCommunityDid(config?.communityDid)
   const mediatorDid = config?.mediatorDid
   const vtaDid = useVtaDid(config?.vtaDid)
 
@@ -131,7 +132,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   }, [agent, vtaDid, communityDid, load, t])
 
   const onJoin = useCallback(async () => {
-    if (!agent || !vtaDid || !mediatorDid || !invitation) return
+    if (!agent || !vtaDid || !invitation) return
     setError(undefined)
     setBusy(true)
     try {
@@ -156,7 +157,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
 
   const scan = () => openScanner(navigation)
 
-  if (!communityDid || !vtaDid || !mediatorDid) {
+  if (!communityDid || !vtaDid) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>

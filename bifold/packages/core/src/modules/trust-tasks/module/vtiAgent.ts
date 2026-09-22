@@ -25,6 +25,7 @@ import { tsp } from '@bifold/trust-tasks'
 
 import type { VtiPersona } from './VtiIdentityStore'
 import {
+  advertisedMediatorDid,
   createVtiClientDid,
   resolveVtiMediator,
   resolveDidDocumentRetrying,
@@ -231,9 +232,14 @@ class VtiAgentController {
   }
 
   /**
-   * Peers this session has already greeted (§7.2.2). One invite per peer per
-   * session: the relationship is recorded on the peer's side on arrival, and a
-   * second invite would be a fresh relationship, not a repeat of this one.
+   * Relationships this wallet has already opened (§7.2.2), keyed by OUR DID
+   * and the peer's: one invite per pair. The relationship is recorded on the
+   * peer's side on arrival, and a second invite would be a fresh relationship,
+   * not a repeat. Keyed by the pair because the controller reconnects as
+   * different identities — a persona left and a new one made — and a greeting
+   * one identity sent does not introduce another: measured 2026-09-22, a new
+   * persona's join went out over TSP unannounced and the community discarded
+   * it ("no relationship with …"), so the phone heard nothing.
    */
   private readonly greeted = new Set<string>()
 
@@ -252,8 +258,9 @@ class VtiAgentController {
     const session = this.session
     const did = this.state.did
     if (!session || !did || !this.tsp || !this.agent) return
-    if (this.greeted.has(toDid)) return
-    this.greeted.add(toDid)
+    const pair = `${did} ${toDid}`
+    if (this.greeted.has(pair)) return
+    this.greeted.add(pair)
     try {
       // §5.3.3: a hop list ends at the destination's OWN VID, not its
       // intermediary's — so the path back to us is our mediator, then us.
@@ -321,9 +328,24 @@ class VtiAgentController {
    * Resolve the mediator a VTI agent advertises, mint this wallet's member DID,
    * log in and hold the socket. Idempotent while the socket is open.
    */
+  /** The connect in flight, so a second caller waits for it instead of racing it. */
+  private connecting?: Promise<void>
+
+  /**
+   * Open (or keep) the session as `identity` or `persona`.
+   *
+   * Serialised: a call made while another is in flight waits for it, then
+   * re-checks — the persona inbox and a join can both ask for the same
+   * persona, and two sockets for one DID end with the mediator closing one
+   * (`w.websocket.duplicate-channel`).
+   *
+   * The mediator is the one the persona's own DID document names, when it
+   * names one; `mediatorDid` is the fallback for an identity that advertises
+   * none (a fresh did:peer) and for a persona whose document cannot be read.
+   */
   async connect(
     agent: Agent,
-    mediatorDid: string,
+    mediatorDid: string | undefined,
     options: {
       identity?: VtiClientIdentity
       /**
@@ -337,12 +359,35 @@ class VtiAgentController {
       peerRevisionStore?: TspPeerRevisionStore
     } = {}
   ): Promise<void> {
+    while (this.connecting) await this.connecting.catch(() => undefined)
+    const attempt = this.connectNow(agent, mediatorDid, options)
+    this.connecting = attempt
+    try {
+      await attempt
+    } finally {
+      if (this.connecting === attempt) this.connecting = undefined
+    }
+  }
+
+  private async connectNow(
+    agent: Agent,
+    configuredMediatorDid: string | undefined,
+    options: { identity?: VtiClientIdentity; persona?: VtiPersona; peerRevisionStore?: TspPeerRevisionStore }
+  ): Promise<void> {
     this.agent = agent
     const wantedDid = options.persona?.did ?? options.identity?.did
     if (this.session?.isOpen && (!wantedDid || wantedDid === this.state.did)) return
     if (this.session) await this.disconnect()
     try {
       this.set({ status: 'resolving', error: undefined })
+      const own = options.persona
+        ? await advertisedMediatorDid(agent, options.persona.did).catch(() => undefined)
+        : undefined
+      const mediatorDid = own ?? configuredMediatorDid
+      if (!mediatorDid) throw new Error('vtiAgent: no mediator — the persona names none and none is configured')
+      if (own && configuredMediatorDid && own !== configuredMediatorDid) {
+        agent.config.logger.info(`vtiAgent: ${options.persona?.did} is reached through its own mediator ${own}, not the configured one`)
+      }
       const mediator = await resolveVtiMediator(agent, mediatorDid)
       this.mediator = mediator
       this.mediatorDid = mediatorDid
@@ -521,7 +566,7 @@ class VtiAgentController {
 
     const threadId = `urn:uuid:${utils.uuid()}`
     const sentAt = Date.now()
-    const answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
+    let answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
       this.pending = { type, resolve, sentAt }
     })
 
@@ -552,7 +597,18 @@ class VtiAgentController {
           new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
         ])
         this.pending = undefined
-        return viaTsp
+        if (viaTsp) return viaTsp
+        // A community can advertise TSPTransport and not answer it — measured
+        // on the VTA Farm's first-vtc (VTI-Q15): its mediator stores the frame
+        // and nothing comes back. Ask once more over DIDComm, and keep DIDComm
+        // for this community for the rest of the session.
+        this.agent.config.logger.warn(
+          `${TSP_LOG_PREFIX} ${communityDid} did not answer ${type} over TSP in ${timeoutMs}ms — asking over DIDComm`
+        )
+        this.carriageByPeer.set(communityDid, 'didcomm')
+        answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
+          this.pending = { type, resolve, sentAt: Date.now() }
+        })
       }
     }
 

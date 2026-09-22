@@ -23,6 +23,8 @@ import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
+import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
+import { useCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import InAppMessageNotifier from '../components/InAppMessageNotifier'
@@ -49,7 +51,13 @@ const TabStack: React.FC = () => {
   // What a community sends this phone's persona — a vetter grant, a membership —
   // is collected from unlock, not only while Vetting is open.
   const onInboxError = useCallback((e: unknown) => logger.warn(`persona inbox: ${(e as Error)?.message ?? e}`), [logger])
-  useVtiPersonaInbox(agent, { mediatorDid: vti?.mediatorDid, communityDid: vti?.communityDid, onError: onInboxError })
+  // The community chosen by a link before this launch comes back first.
+  useEffect(() => {
+    void communityTarget.restore()
+  }, [])
+  // The community a link chose (else the build's suggestion) gets the inbox.
+  const inboxCommunityDid = useCommunityDid(vti?.communityDid)
+  useVtiPersonaInbox(agent, { mediatorDid: vti?.mediatorDid, communityDid: inboxCommunityDid, onError: onInboxError })
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
