@@ -1281,7 +1281,15 @@
     "AsksOther": "Elle demande des justificatifs qu’elle décrit ainsi :",
     "AsksNothing": "Elle ne demande rien — vous pouvez postuler tout de suite.",
     "MakeIdentityTitle": "Votre identité pour {{community}}",
-    "MakeIdentityBody": "{{community}} reçoit une nouvelle identité créée pour elle seule par votre agent. Vous confirmez avec votre visage ou votre empreinte."
+    "MakeIdentityBody": "{{community}} reçoit une nouvelle identité créée pour elle seule par votre agent. Vous confirmez avec votre visage ou votre empreinte.",
+    "AsTitle": "Sous quel profil rejoignez-vous ?",
+    "AsBody": "{{community}} reçoit une nouvelle identité créée pour elle seule. Votre profil en remplit le nom, une fois — rien d’autre n’est lié.",
+    "AsNoProfile": "Vous n'avez pas encore de profil — créez-en un ci-dessous, ou saisissez votre nom devant le vérificateur.",
+    "ProfileLabel": "Profil {{label}}",
+    "FromProfile": "Depuis votre profil {{profile}} — corrigez ici si votre nom légal diffère.",
+    "FromYourProfile": "Depuis votre profil — corrigez ici si votre nom légal diffère.",
+    "CreateProfile": "Créer un nouveau profil",
+    "CreateProfileHint": "Un profil rien que pour cela — ses informations vont une fois dans l’identité."
   },
   "MyAgent": {
     "Title": "Votre agent",

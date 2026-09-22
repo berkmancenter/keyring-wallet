@@ -32,9 +32,11 @@ import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { ensurePersonaFor } from '../module/vtiJoin'
+import { joinSeed } from '../module/vtiJoinSeed'
 
 import { didName } from './identityShare'
 import { openScanner } from './openScanner'
+import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
@@ -107,6 +109,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const [asks, setAsks] = useState<Asks>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const joinAs = useJoinAsChoice(navigation)
 
   useEffect(() => {
     if (chosenByLink) setStep((s) => (s === 'which' ? 'asks' : s))
@@ -149,6 +152,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     setBusy(true)
     try {
       await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+      // Seed by copy: the chosen profile fills the identity's name in once.
+      if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
       const stack = navigation as unknown as { navigate: (name: string) => void }
       stack.navigate(Screens.VtiVetting)
     } catch (e) {
@@ -156,7 +161,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     } finally {
       setBusy(false)
     }
-  }, [agent, vtaDid, communityDid, name, navigation, t])
+  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected])
 
   if (!vtaDid) {
     return (
@@ -277,10 +282,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       body = (
         <>
           <ThemedText variant="headingThree" accessibilityRole="header">
-            {t('Join.MakeIdentityTitle', { community: name, interpolation: { escapeValue: false } })}
+            {t('Join.AsTitle')}
           </ThemedText>
           <View testID={testIdWithKey('JoinMakeIdentity')}>
-            <ThemedText>{t('Join.MakeIdentityBody', { community: name, interpolation: { escapeValue: false } })}</ThemedText>
+            <JoinAs
+              community={name}
+              options={joinAs.options}
+              selectedId={joinAs.selectedId}
+              onSelect={joinAs.setSelectedId}
+              onCreate={joinAs.createProfile}
+            />
           </View>
           {errorLine}
         </>
