@@ -23,7 +23,7 @@ import {
 } from '@credo-ts/didcomm'
 
 import { IndyVdrAnonCredsRegistry, IndyVdrModule, IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
-import { WebVhAnonCredsRegistry, WebVhDidResolver } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { useAgent } from '@bifold/react-hooks'
 import { OpenId4VcModule } from '@credo-ts/openid4vc'
 import { SecureEnvironmentKeyManagementService } from '@credo-ts/react-native'
@@ -33,6 +33,7 @@ import { askar } from '@openwallet-foundation/askar-react-native'
 import { indyVdr } from '@hyperledger/indy-vdr-react-native'
 import Config from 'react-native-config'
 import { WalletSecret } from '../types/security'
+import { RetryingWebVhDidResolver } from './RetryingWebVhDidResolver'
 
 interface GetAgentModulesOptions {
   walletSecret: WalletSecret
@@ -152,7 +153,7 @@ export function getAgentModules({
       : {}),
     dids: new DidsModule({
       resolvers: [
-        new WebVhDidResolver(),
+        new RetryingWebVhDidResolver(),
         new WebDidResolver(),
         new JwkDidResolver(),
         new KeyDidResolver(),
