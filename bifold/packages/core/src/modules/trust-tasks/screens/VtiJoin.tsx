@@ -181,6 +181,17 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     </ThemedText>
   ) : null
 
+  // What the community asks, as one sentence: the card's accessibility label.
+  const asksSentence = (() => {
+    if (asks?.invitationOnly) return t('Join.AsksInvitationOnly')
+    if (asks?.kind === 'open') return t('Join.AsksNothing')
+    if (asks?.kind === 'other') return [t('Join.AsksOther'), ...asks.descriptions].join(' ')
+    const claims = (asks ? asks.claims : ['name.legal']).map((c) =>
+      c === 'name.legal' ? t('Join.AsksLegalName') : c
+    )
+    return [t('Join.AsksStatements', { count: asks?.statements ?? 1 }), ...claims].join('. ')
+  })()
+
   let body: React.ReactNode
   let actions: React.ReactNode
   const current: Step = !communityDid ? 'which' : step
@@ -230,7 +241,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           <ThemedText variant="headingThree" accessibilityRole="header">
             {t('Join.AsksTitle', { community: name, interpolation: { escapeValue: false } })}
           </ThemedText>
-          <View style={styles.card} testID={testIdWithKey('JoinAsks')}>
+          {/* The lines below are separate nodes, so the card says the whole
+              sentence itself — for a screen reader, and for the harness. */}
+          <View
+            style={styles.card}
+            testID={testIdWithKey('JoinAsks')}
+            accessible
+            accessibilityLabel={asksSentence}
+          >
             {asks?.invitationOnly ? (
               <ThemedText>{t('Join.AsksInvitationOnly')}</ThemedText>
             ) : asks?.kind === 'open' ? (

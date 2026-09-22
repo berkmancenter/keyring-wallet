@@ -114,4 +114,13 @@ describe('I want to join a community', () => {
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsCreateProfile'))))
     expect(navigation.navigate).toHaveBeenCalledWith(Screens.EditRCard)
   })
+
+  it('the "what it asks" card says the whole sentence itself', async () => {
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    const card = tree.getByTestId(testIdWithKey('JoinAsks'))
+    // Without a session the screen shows what every vetting community asks.
+    expect(card.props.accessibilityLabel).toContain('Join.AsksStatements')
+    expect(card.props.accessibilityLabel).toContain('Join.AsksLegalName')
+  })
 })
