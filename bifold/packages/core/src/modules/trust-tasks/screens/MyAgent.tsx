@@ -658,15 +658,22 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             {failure}
           </Text>
         ) : null}
-        <Pressable
-          style={styles.button}
-          testID={testIdWithKey('ConnectMyAgentButton')}
-          accessibilityRole="button"
-          onPress={onConnect}
-        >
-          <Text style={styles.buttonText}>{failure ? t('MyAgent.TryAgain') : t('MyAgent.Connect')}</Text>
-        </Pressable>
-        <Text style={styles.label}>{t('MyAgent.ConnectExplains')}</Text>
+        {/* Only when there is an agent to connect to — a linked one or one the
+            build names. With neither, "Link your agent" above is the way in,
+            and this could only fail. */}
+        {vtaDid ? (
+          <>
+            <Pressable
+              style={styles.button}
+              testID={testIdWithKey('ConnectMyAgentButton')}
+              accessibilityRole="button"
+              onPress={onConnect}
+            >
+              <Text style={styles.buttonText}>{failure ? t('MyAgent.TryAgain') : t('MyAgent.Connect')}</Text>
+            </Pressable>
+            <Text style={styles.label}>{t('MyAgent.ConnectExplains')}</Text>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   )
