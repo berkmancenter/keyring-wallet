@@ -412,7 +412,17 @@ try {
     // key the VTA already knows, which is what the QR journey does.
     if (process.env.GRANT_FIRST !== "1") {
       await tapTestId(driver, "VtaLinkCheckGrant", 15000);
-      await waitForTestId(driver, "VtaLinkNotYet", 60000);
+      // "Not yet" renders at the BOTTOM of the key card, below a ~350-character
+      // did:peer, so on a phone screen it is off the bottom of the scroll view
+      // — and Android's UiAutomator does not report off-screen children, so a
+      // plain wait never sees it however long it waits. Scroll for it.
+      const notYetBy = Date.now() + 60000;
+      let notYet;
+      while (!notYet && Date.now() < notYetBy) {
+        notYet = await scrollToTestId(driver, "VtaLinkNotYet", 4).catch(() => undefined);
+        if (!notYet) await sleep(2000);
+      }
+      if (!notYet) throw new Error(`${driver.e2ePlatform}: the phone never said the key was not added yet`);
       console.log("[e2e] before the grant: not yet");
     } else {
       console.log("[e2e] GRANT_FIRST=1: granting before the first sign-in");
