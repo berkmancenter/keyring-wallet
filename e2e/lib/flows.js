@@ -2135,11 +2135,35 @@ export async function leaveCommunityInApp(driver) {
   // start offers "Connect my agent" first (as openVetting in the runner does).
   const connect = byTestId(driver, "ConnectMyAgentButton");
   if (await connect.isExisting().catch(() => false)) await connect.click();
-  await waitForTestId(driver, "MyAgentCommunityRow", 180000).catch(() => undefined);
-  const row = await scrollToTestId(driver, "MyAgentCommunityRow", 6).catch(() => undefined);
-  if (!row || !(await row.isExisting().catch(() => false))) {
-    console.log(`[e2e] ${driver.e2ePlatform}: no community to leave`);
-    return false;
+  // Tell "nothing to leave" (connected, no community row) apart from "could
+  // not look" (never connected, or the row never rendered). The second must
+  // fail loudly: an applicant silently NOT reset carries "meets the published
+  // requirements" into the next run, which then fails much later as "the
+  // vetter never accepted" (three runs lost on 2026-09-20).
+  const until = Date.now() + 180000;
+  let connectedSince;
+  let row;
+  while (Date.now() < until) {
+    row = await scrollToTestId(driver, "MyAgentCommunityRow", 2).catch(() => undefined);
+    if (row && (await row.isExisting().catch(() => false))) break;
+    row = undefined;
+    const connected = await byTestId(driver, "MyAgentCard").isExisting().catch(() => false);
+    if (connected) {
+      connectedSince ??= Date.now();
+      if (Date.now() - connectedSince > 20000) {
+        console.log(`[e2e] ${driver.e2ePlatform}: agent connected and no community row — nothing to leave`);
+        return false;
+      }
+    }
+    await sleep(2000);
+  }
+  if (!row) {
+    await screenshot(driver, "leave-community-no-row");
+    throw new Error(
+      `${driver.e2ePlatform}: could not reach the community to leave it — ` +
+        (connectedSince ? "the community row never rendered" : "the agent never connected") +
+        " within 180s; refusing to skip the reset"
+    );
   }
   await row.click();
   const leave = await scrollToTestId(driver, "LeaveCommunityButton", 8);

@@ -222,6 +222,15 @@ try {
   // re-mint, which is cheap and reliable. Determinism is worth more than the minute.
   await leaveCommunityInApp(applicant);
   await openVetting(applicant);
+  // The reset must have taken: a fresh applicant has no persona (Create
+  // identity) or at least no checklist that already meets the requirements.
+  const stale = await byTestId(applicant, "VettingChecklist")
+    .getAttribute(isIos(applicant) ? "label" : "text")
+    .catch(() => "");
+  if (/meets the published requirements/.test(stale || "")) {
+    await screenshot(applicant, "vetting-applicant-not-reset");
+    throw new Error(`${applicant.e2ePlatform}: the applicant was not reset — it still meets the requirements from a previous run`);
+  }
   const create = await byTestId(applicant, "VettingCreateIdentityButton").isExisting();
   if (create) { await byTestId(applicant, "VettingCreateIdentityButton").click(); console.log(`[e2e] ${applicant.e2ePlatform}: creating an identity`); }
   await waitForTestId(applicant, "VettingLegalNameInput", 240000);
