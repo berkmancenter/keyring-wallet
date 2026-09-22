@@ -23,7 +23,7 @@ module.exports = {
     // resolve. They are how the relationship-forming invite is checked against
     // upstream's own bytes, so the path is mapped rather than the check dropped.
     '^@openvtc/vti-tsp-js/unsafe-testing$':
-      '<rootDir>/../../../node_modules/@openvtc/vti-tsp-js/dist/unsafe-testing.js',
+      '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/unsafe-testing.js',
     // credo 0.7's mdoc code imports @verifiables/request-converter, whose exports map has
     // only `import`/`types` conditions; jest (CJS) cannot resolve it without a mapping.
     '^@verifiables/request-converter$': require('fs').existsSync(
