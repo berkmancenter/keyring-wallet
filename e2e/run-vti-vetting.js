@@ -192,7 +192,15 @@ try {
   );
   await scrollToTestId(vetter, "VettingTicketLink", 4).catch(() => undefined);
   await waitForTestId(vetter, "VettingTicketLink", 30000);
-  const link = (await textOf(vetter, "VettingTicketLink")).trim();
+  const issued = (await textOf(vetter, "VettingTicketLink")).trim();
+  // E2E_REFUSAL=bad-ticket: the same ticket with its secret altered. Its id is
+  // one the vetter issued, so the vetter answers `vetting/request:invalidTicket`
+  // (a wrong CODE is never answered at all, by design — nothing to assert on).
+  const link =
+    REFUSAL === "bad-ticket"
+      ? issued.replace(/([?&]secret=)([^&]+)/, (_, k, v) => `${k}${v.slice(0, -4)}${v.slice(-4) === "AAAA" ? "BBBB" : "AAAA"}`)
+      : issued;
+  if (REFUSAL === "bad-ticket" && link === issued) throw new Error("the ticket link carries no secret to alter");
   const code = (await textOf(vetter, "VettingTicketCode")).trim();
   if (!link.startsWith("vetting-ticket:")) throw new Error(`no ticket link on the vetter: ${link.slice(0, 60)}`);
   console.log(`[e2e] ${vetter.e2ePlatform}: ticket ${code} (${link.length} chars)`);
@@ -313,6 +321,14 @@ try {
   );
   console.log(`[e2e] ${applicant.e2ePlatform}: request sent`);
   await scrollToTestId(applicant, "VettingRequestStatus", 4, LOW).catch(() => undefined);
+  if (REFUSAL === "bad-ticket") {
+    const status = await waitText(applicant, "VettingRequestStatus", /Refused/i, 120000);
+    console.log(`[e2e] ${applicant.e2ePlatform}: ${status} — the vetter refused an altered ticket`);
+    await screenshot(applicant, "vetting-refusal-bad-ticket");
+    printSuccess("vti-vetting (altered ticket → refused by the vetter)");
+    process.exitCode = 0;
+    throw Object.assign(new Error("done"), { done: true });
+  }
   await waitText(applicant, "VettingRequestStatus", /Accepted/i, 120000);
   console.log(`[e2e] ${applicant.e2ePlatform}: accepted`);
   await screenshot(applicant, "vetting-02-accepted");
@@ -413,11 +429,15 @@ try {
   process.exitCode = 0;
   }
 } catch (err) {
+  if (err?.done) {
+    // a refusal mode that ended where it meant to
+  } else {
   printFailure("vti-vetting", err);
   for (const [d, name] of [[applicant, "applicant"], [vetter, "vetter"]]) {
     if (d) { try { await screenshot(d, `vetting-failure-${name}`); await dumpSource(d, `vetting-failure-${name}`); } catch { /* ignore */ } }
   }
   process.exitCode = 1;
+  }
 } finally {
   if (keepalive) clearInterval(keepalive);
   try { execFileSync("bash", [INVITE, "--restore-invited"], { stdio: "ignore" }); } catch { /* best effort */ }
