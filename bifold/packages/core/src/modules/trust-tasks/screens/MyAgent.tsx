@@ -331,6 +331,16 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                   {persona.did}
                 </Text>
                 <Text style={styles.label}>{t('MyAgent.ShareIdentity')}</Text>
+                {/* The community screen — and Leave community on it — whether or
+                    not this phone is a member yet: an applicant holds a persona
+                    and vetting state to leave too. */}
+                <Pressable
+                  testID={testIdWithKey('MyAgentOpenCommunity')}
+                  accessibilityRole="link"
+                  onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid })}
+                >
+                  <Text style={[styles.label, { textDecorationLine: 'underline' }]}>{t('Community.Open')}</Text>
+                </Pressable>
               </>
             ) : (
               <>
@@ -440,7 +450,13 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
 
       <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Communities')}</Text>
       {memberships.map((m) => (
-        <View key={m.communityDid} style={styles.card} testID={testIdWithKey('MyAgentMembershipCard')}>
+        <Pressable
+          key={m.communityDid}
+          style={styles.card}
+          testID={testIdWithKey('MyAgentMembershipCard')}
+          accessibilityRole="button"
+          onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid: m.communityDid })}
+        >
           <View style={styles.row}>
             <Icon name="card-account-details" size={18} color={ColorPalette.semantic.success} />
             <Text style={styles.value}>{t('MyAgent.Member')}</Text>
@@ -450,7 +466,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             {m.role} · {viaText(m.via)}
           </Text>
           <Text style={styles.label}>{t('MyAgent.MemberSince', { date: m.grantedAt.slice(0, 10) })}</Text>
-        </View>
+        </Pressable>
       ))}
       {communityDid && !memberships.some((m) => m.communityDid === communityDid) ? (
         <Pressable

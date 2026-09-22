@@ -1139,6 +1139,7 @@
     }
   },
   "Community": {
+    "Open": "Ouvrir cette communauté",
     "Leave": "Quitter la communauté",
     "LeaveExplains": "Ce téléphone oublie votre identité, votre carte et votre vérification pour cette communauté. Pour revenir, vous la rejoignez à nouveau.",
     "LeaveConfirm": "Quitter la communauté",

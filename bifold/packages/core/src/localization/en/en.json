@@ -1193,6 +1193,7 @@
     "AlertsLength": "You have {{ alerts }} alerts"
   },
   "Community": {
+    "Open": "Open this community",
     "Leave": "Leave community",
     "LeaveExplains": "This phone forgets your identity, card and vetting for this community. To come back, you join again.",
     "LeaveConfirm": "Leave community",

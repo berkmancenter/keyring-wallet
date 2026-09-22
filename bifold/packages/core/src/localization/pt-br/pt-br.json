@@ -1038,6 +1038,7 @@
     "AlertsLength": "You have {{ alerts }} alerts (PT-BR)"
   },
   "Community": {
+    "Open": "Abrir esta comunidade",
     "Leave": "Sair da comunidade",
     "LeaveExplains": "Este telefone esquece sua identidade, seu cartão e sua verificação nesta comunidade. Para voltar, você entra de novo.",
     "LeaveConfirm": "Sair da comunidade",
