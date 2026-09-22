@@ -19,7 +19,7 @@
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
-import { handleBiometricConfirmIfPresent, leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
+import { handleBiometricConfirmIfPresent, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
@@ -47,7 +47,11 @@ function admin(...args) {
   const env = Object.fromEntries(
     readFileSync(STACK_ENV, "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])
   );
-  const out = execFileSync("node", [ADMIN, `${env.VTC_URL}/v1`, env.VTC_DID, path.join(path.dirname(STACK_ENV), "vtc-admin-credential.json"), ...args], { encoding: "utf8" });
+  // Another community than the lab's (a Farm Full Stack's) is named outright.
+  const base = process.env.KEYRING_COMMUNITY_REST || `${env.VTC_URL}/v1`;
+  const did = process.env.KEYRING_COMMUNITY_DID || env.VTC_DID;
+  const cred = process.env.KEYRING_COMMUNITY_ADMIN_CRED || path.join(path.dirname(STACK_ENV), "vtc-admin-credential.json");
+  const out = execFileSync("node", [ADMIN, base, did, cred, ...args], { encoding: "utf8" });
   const json = out.slice(out.indexOf("{"));
   return json ? JSON.parse(json) : undefined;
 }
@@ -158,8 +162,12 @@ try {
             derivedDataPath: path.join(os.homedir(), `Library/Developer/Xcode/DerivedData/WDA-e2e-${udid.slice(-8)}`),
           })
         : iosCaps();
-  applicant = await createSession(platforms[0], keep(capsFor(platforms[0], process.env.APPLICANT_IOS_UDID, 8131, 9131)));
-  vetter = await createSession(platforms[1], keep(capsFor(platforms[1], process.env.VETTER_IOS_UDID, 8130, 9130)));
+  // Two simulators, one per role (APPLICANT_IOS_SIM / VETTER_IOS_SIM name them):
+  // each needs its own device and its own WebDriverAgent port.
+  const simCaps = (caps, name, wdaLocalPort, mjpegServerPort) =>
+    name ? { ...caps, "appium:deviceName": name, "appium:wdaLocalPort": wdaLocalPort, "appium:mjpegServerPort": mjpegServerPort } : caps;
+  applicant = await createSession(platforms[0], keep(simCaps(capsFor(platforms[0], process.env.APPLICANT_IOS_UDID, 8131, 9131), process.env.APPLICANT_IOS_SIM, 8133, 9133)));
+  vetter = await createSession(platforms[1], keep(simCaps(capsFor(platforms[1], process.env.VETTER_IOS_UDID, 8130, 9130), process.env.VETTER_IOS_SIM, 8134, 9134)));
   console.log(`[e2e] applicant = ${platforms[0]}, vetter = ${platforms[1]}`);
   keepalive = setInterval(() => { vetter.getWindowSize().catch(() => undefined); applicant.getWindowSize().catch(() => undefined); }, 20000);
   await Promise.all([unlockToHome(applicant), unlockToHome(vetter)]);
@@ -274,7 +282,24 @@ try {
   // so the harness no longer opens the Developer screen; it costs a persona
   // re-mint, which is cheap and reliable. Determinism is worth more than the minute.
   await leaveCommunityInApp(applicant);
-  await openVetting(applicant);
+  if (process.env.APPLICANT_DOOR === "link") {
+    // Door 2, as a person meets it: a community link → what it asks → make
+    // the identity (Face ID) → straight into Get vetted for that community.
+    const communityDid = process.env.KEYRING_COMMUNITY_DID;
+    if (!communityDid) throw new Error("APPLICANT_DOOR=link needs KEYRING_COMMUNITY_DID");
+    const name = process.env.KEYRING_COMMUNITY_NAME || "keyring-test";
+    await pasteLinkFromHome(applicant, `keyring://vti/community?d=${encodeURIComponent(communityDid)}&n=${encodeURIComponent(name)}`);
+    await waitForTestId(applicant, "JoinAsks", 60000);
+    const asks = await textOf(applicant, "JoinAsks").catch(() => "");
+    console.log(`[e2e] ${applicant.e2ePlatform}: the community asks — ${asks.replace(/\s+/g, " ").slice(0, 160)}`);
+    await (await waitForTestId(applicant, "JoinStart", 30000)).click();
+    await waitForTestId(applicant, "JoinMakeIdentity", 30000);
+    await tapTestIdByCoordinates(applicant, "JoinAsContinue");
+    await handleBiometricConfirmIfPresent(applicant);
+    console.log(`[e2e] ${applicant.e2ePlatform}: joining through the link — making the identity`);
+  } else {
+    await openVetting(applicant);
+  }
   // The reset must have taken: a fresh applicant has no persona (Create
   // identity) or at least no checklist that already meets the requirements.
   const stale = await byTestId(applicant, "VettingChecklist")
@@ -500,7 +525,7 @@ try {
       await handleBiometricConfirmIfPresent(applicant);
       // The community must take it as a supplement to the open request — not a
       // second application (which it would refuse as requestAlreadyOpen).
-      let supplemented = "";
+      let supplemented = process.env.KEYRING_COMMUNITY_REST ? "(a remote community: its log is not ours to read)" : "";
       for (let i = 0; i < 30 && !supplemented; i++) {
         await sleep(2000);
         supplemented = vtcLogSince(tappedAt).find((l) => /join request supplemented/.test(l)) ?? "";
