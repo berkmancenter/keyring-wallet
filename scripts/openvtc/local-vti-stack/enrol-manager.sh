@@ -7,7 +7,10 @@
 # the phone minted the DID, the operator admits it.
 #
 #   ./enrol-manager.sh [--offline] <did> [vta-name] [role]
-#                                   default vta-name=alice, role=admin
+#                                   default vta-name=$RUNNER_VTA (bob), role=admin
+#
+# alice is reserved for Alberto's TestFlight phone (2026-09-22): runners enrol
+# on the runner VTA, bob, unless told otherwise.
 #
 # ONLINE (default): grants on the RUNNING VTA with `pnm acl create`, as that
 # VTA's existing admin (PNM_HOME, default $STACK_DIR/pnm-<vta-name>). Upstream
@@ -30,7 +33,7 @@ set -euo pipefail
 MODE=online
 if [ "${1:-}" = "--offline" ]; then MODE=offline; shift; fi
 DID="${1:?usage: enrol-manager.sh [--offline] <did> [vta-name] [role]}"
-NAME="${2:-alice}"
+NAME="${2:-${RUNNER_VTA:-bob}}"
 ROLE="${3:-admin}"
 STACK_DIR="${STACK_DIR:-$HOME/vti-stack}"
 VTA_BIN="${VTA_BIN:-$HOME/Documents/vti-main/target/debug/vta}"

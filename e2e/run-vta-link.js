@@ -38,11 +38,15 @@ const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PAGE_DIR = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-page");
-const ENROL_PORT = process.env.ENROL_PORT || "8190";
+// 8190 serves alice's page, which is the TestFlight phone's; runners take 8192.
+const ENROL_PORT = process.env.ENROL_PORT || "8192";
 const ENROL_URL = process.env.ENROL_URL || `http://localhost:${ENROL_PORT}`;
 const PNM = process.env.PNM_BIN || path.join(os.homedir(), "Documents/vti-main/target/debug/pnm");
-const PNM_HOME = process.env.PNM_HOME || path.join(os.homedir(), "vti-stack/pnm-alice");
-const VTA_SLUG = process.env.VTA_SLUG || "alice";
+// The runner VTA. alice is Alberto's TestFlight agent since 2026-09-22 and no
+// runner links to, mints on or grants on it.
+const VTA_SLUG = process.env.VTA_SLUG || process.env.RUNNER_VTA || "bob";
+if (VTA_SLUG === "alice") throw new Error("alice is reserved for the TestFlight phone — use a runner VTA (RUNNER_VTA=bob)");
+const PNM_HOME = process.env.PNM_HOME || path.join(os.homedir(), `vti-stack/pnm-${VTA_SLUG}`);
 // What the offer tells the phone to call: localhost for a simulator (or an
 // emulator behind adb reverse); an https tunnel for a real device.
 const ENROL_PUBLIC_URL = process.env.ENROL_PUBLIC_URL || ENROL_URL;
@@ -50,11 +54,12 @@ const IOS_UDID = process.env.IOS_UDID || "";
 const LINK_MODE = process.env.LINK_MODE || "qr";
 const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
 
-function aliceVtaDid() {
-  const env = execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$ALICE_VTA_DID"`], {
+function runnerVtaDid() {
+  const key = `${VTA_SLUG.toUpperCase()}_VTA_DID`;
+  const env = execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$${key}"`], {
     encoding: "utf8",
   });
-  if (!env.startsWith("did:")) throw new Error("ALICE_VTA_DID not found in ~/vti-stack/stack.env");
+  if (!env.startsWith("did:")) throw new Error(`${key} not found in ~/vti-stack/stack.env`);
   return env;
 }
 
@@ -93,7 +98,8 @@ async function ensurePage() {
     /* start one below */
   }
   const proc = spawn(process.execPath, [path.join(PAGE_DIR, "server.mjs")], {
-    env: { ...process.env, ENROL_PORT, ENROL_PUBLIC_URL, PNM_BIN: PNM, PNM_HOME, VTA_SLUG },
+    // Without ENROL_VTA_DID the page falls back to ALICE_VTA_DID.
+    env: { ...process.env, ENROL_PORT, ENROL_PUBLIC_URL, PNM_BIN: PNM, PNM_HOME, VTA_SLUG, ENROL_VTA_DID: process.env.ENROL_VTA_DID || runnerVtaDid() },
     stdio: ["ignore", "inherit", "inherit"],
   });
   for (let i = 0; i < 30; i++) {
@@ -182,7 +188,7 @@ try {
     await tapTestId(driver, "VtaLinkWithoutQr", 15000);
     const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
     // Return on the keyboard submits the address, as a person would.
-    await address.setValue(`${aliceVtaDid()}\n`);
+    await address.setValue(`${runnerVtaDid()}\n`);
     await waitForTestId(driver, "VtaLinkManualDid", 60000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);

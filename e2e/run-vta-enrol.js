@@ -25,7 +25,9 @@ const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ENROL = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
-const VTA_NAME = process.env.VTA_NAME || "alice";
+// alice is reserved for the TestFlight phone (2026-09-22); runners enrol on bob.
+const VTA_NAME = process.env.VTA_NAME || process.env.RUNNER_VTA || "bob";
+if (VTA_NAME === "alice") throw new Error("alice is reserved for the TestFlight phone — use a runner VTA");
 const ROLE = process.env.VTA_ROLE || "admin";
 
 const textOf = async (driver, key) =>

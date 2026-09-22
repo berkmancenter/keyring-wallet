@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The approver rung's policy, on the local `alice` VTA, through pnm — the same
+# The approver rung's policy, on the runner VTA (bob; alice is reserved for
+# Alberto's TestFlight phone since 2026-09-22), through pnm — the same
 # surface a person would use from the TUI. One phone is the manager (it asks
 # for keys), another is the approver (it must consent before a key leaves).
 #
@@ -10,9 +11,9 @@
 # borrowed, which is the most consequential thing the manager asks for.
 set -euo pipefail
 STACK_DIR="${STACK_DIR:-$HOME/vti-stack}"
-export PNM_HOME="${PNM_HOME:-$STACK_DIR/pnm-alice}"
+VTA_SLUG="${VTA_SLUG:-${RUNNER_VTA:-bob}}"
+export PNM_HOME="${PNM_HOME:-$STACK_DIR/pnm-$VTA_SLUG}"
 PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
-VTA_SLUG="${VTA_SLUG:-alice}"
 SET="${APPROVER_SET:-keyring-approvers}"
 TASK_DEFAULT="https://trusttasks.org/spec/keys/export-secret/0.1"
 strip() { sed -e 's/\x1b\[[0-9;]*m//g' | grep -v "█\|╗\|╝\|║\|^\s*$" || true; }
