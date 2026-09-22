@@ -1,5 +1,5 @@
 import { useNavigation } from '@react-navigation/native'
-import { render, act } from '@testing-library/react-native'
+import { render, act, fireEvent } from '@testing-library/react-native'
 import React from 'react'
 import { StoreContext } from '../../src'
 import Settings from '../../src/screens/Settings'
@@ -8,6 +8,8 @@ import { testDefaultState } from '../contexts/store'
 import { BasicAppContext } from '../helpers/app'
 import { AuthContext } from '../../src/contexts/auth'
 import authContext from '../contexts/auth'
+import { Screens } from '../../src/types/navigators'
+import { buildRCardTemplate } from '../../src/modules/vrc/types/rcard'
 
 describe('Settings Screen', () => {
   beforeEach(() => {
@@ -169,5 +171,51 @@ describe('Settings Screen', () => {
     // Contacts section was moved to bottom tab bar, should not be in Settings
     const contactsSection = tree.queryByTestId(testIdWithKey('Contacts'))
     expect(contactsSection).toBeNull()
+  })
+
+  test('Shows a profile card above the settings sections, and tapping it opens My Profiles', async () => {
+    const template = buildRCardTemplate({
+      firstName: 'Jane',
+      lastName: 'Doe',
+      email: 'jane@example.com',
+      organization: 'Example Org',
+    })
+    const customState = {
+      ...testDefaultState,
+      rCard: { profiles: [template], activeProfileId: template.id, lastSyncedAt: new Date().toISOString() },
+    }
+    const navigate = jest.fn()
+
+    const tree = render(
+      <StoreContext.Provider value={[customState, () => undefined]}>
+        <BasicAppContext>
+          <AuthContext.Provider value={authContext}>
+            <Settings navigation={{ ...useNavigation(), navigate } as any} route={{} as any} />
+          </AuthContext.Provider>
+        </BasicAppContext>
+      </StoreContext.Provider>
+    )
+    await act(async () => {})
+
+    const profileCard = tree.getByTestId(testIdWithKey('ProfileCard'))
+    expect(tree.getByText('Jane Doe')).toBeTruthy()
+
+    fireEvent.press(profileCard)
+    expect(navigate).toHaveBeenCalledWith(Screens.MyProfiles)
+  })
+
+  test('Shows no profile card when there is no profile yet', async () => {
+    const tree = render(
+      <StoreContext.Provider value={[testDefaultState, () => undefined]}>
+        <BasicAppContext>
+          <AuthContext.Provider value={authContext}>
+            <Settings navigation={useNavigation()} route={{} as any} />
+          </AuthContext.Provider>
+        </BasicAppContext>
+      </StoreContext.Provider>
+    )
+    await act(async () => {})
+
+    expect(tree.queryByTestId(testIdWithKey('ProfileCard'))).toBeNull()
   })
 })

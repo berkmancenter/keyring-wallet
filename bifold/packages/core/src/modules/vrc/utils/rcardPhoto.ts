@@ -1,23 +1,31 @@
+import { CropRect } from './rcardCropMath'
+
 /**
  * Resize/compress pipeline for R-Card profile photos.
  *
  * See docs/plans/rcard-profile-picture-plan.md §3.3/§3.4: the photo is
- * resized once to a bounding box, JPEG-compressed at successively lower
- * quality until it fits the byte budget, and returned as a
+ * cropped to a square (the crop rect the user chose in RCardPhotoCropModal),
+ * resized to a bounding box, JPEG-compressed at successively lower quality
+ * until it fits the byte budget, and returned as a
  * data:image/jpeg;base64,... URI. The manipulator (expo-image-manipulator's
  * manipulateAsync) is injected rather than imported directly so this module
- * stays unit-testable without a native runtime — RCardOnboarding.tsx supplies
- * the real implementation.
+ * stays unit-testable without a native runtime — RCardForm.tsx supplies the
+ * real implementation.
+ *
+ * The crop happens here, in-app, rather than via the OS picker's own
+ * `allowsEditing` crop UI — see docs/plans/rcard-profile-picture-plan/2026-09-18-bam.md:
+ * that native crop step was found to sometimes hand back a stale/unrelated
+ * previously-cropped image instead of the one just picked, a known
+ * expo-image-picker/Android issue. Cropping the picker's own fresh source URI
+ * ourselves removes that failure mode entirely.
  *
  * EXIF orientation and GPS/ICC metadata are handled by the manipulator: it
  * re-encodes the pixel buffer (after baking in orientation) rather than
- * copying source metadata, so a plain resize+compress pass already strips
- * them without extra work here.
+ * copying source metadata, so a plain crop+resize+compress pass already
+ * strips them without extra work here.
  */
 
-/** Bounding-box side length in pixels. The picker is expected to have already
- *  cropped the source to a square (see RCardOnboarding's pickRCardPhoto), so
- *  resizing to width===height here does not distort the image. */
+/** Bounding-box side length in pixels, after the caller-supplied crop. */
 export const RCARD_PHOTO_MAX_DIMENSION = 256
 
 /** Budget for the base64 payload itself (excludes the `data:...;base64,` prefix). */
@@ -34,6 +42,7 @@ export interface ManipulatedImageResult {
 }
 
 export interface ManipulateAction {
+  crop?: CropRect
   resize?: { width?: number; height?: number }
 }
 
@@ -61,22 +70,28 @@ export class RCardPhotoTooLargeError extends Error {
 }
 
 /**
- * Resize a captured/picked photo to the R-Card photo bounding box and
- * JPEG-compress it down to the byte budget, returning a base64 data URI.
+ * Crop a captured/picked photo (to the rect the user chose in
+ * RCardPhotoCropModal, when given), resize it to the R-Card photo bounding
+ * box, and JPEG-compress it down to the byte budget, returning a base64 data
+ * URI.
  *
  * Throws RCardPhotoTooLargeError if even the lowest compression quality
  * doesn't fit the budget (callers should surface this as a user-facing,
  * actionable error rather than silently truncating or failing).
  */
-export async function processRCardPhoto(sourceUri: string, manipulateAsync: ManipulateAsyncFn): Promise<string> {
+export async function processRCardPhoto(
+  sourceUri: string,
+  manipulateAsync: ManipulateAsyncFn,
+  crop?: CropRect
+): Promise<string> {
   let smallestAttemptBytes = Infinity
+  const actions: ManipulateAction[] = [
+    ...(crop ? [{ crop }] : []),
+    { resize: { width: RCARD_PHOTO_MAX_DIMENSION, height: RCARD_PHOTO_MAX_DIMENSION } },
+  ]
 
   for (const quality of COMPRESSION_QUALITIES) {
-    const result = await manipulateAsync(
-      sourceUri,
-      [{ resize: { width: RCARD_PHOTO_MAX_DIMENSION, height: RCARD_PHOTO_MAX_DIMENSION } }],
-      { compress: quality, format: 'jpeg', base64: true }
-    )
+    const result = await manipulateAsync(sourceUri, actions, { compress: quality, format: 'jpeg', base64: true })
 
     if (!result.base64) {
       throw new Error('Image manipulation did not return base64 data')

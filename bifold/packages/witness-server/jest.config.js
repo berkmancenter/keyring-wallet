@@ -25,6 +25,12 @@ module.exports = {
     )
       ? '<rootDir>/node_modules/@verifiables/request-converter/dist/index.js'
       : '<rootDir>/../../node_modules/@verifiables/request-converter/dist/index.js',
+    // Same reason: @openvtc/vti-tsp-js's exports map has only an `import`
+    // condition, which jest's CJS resolver cannot satisfy, so the transform
+    // allowlist below never got a chance — every suite importing
+    // @bifold/trust-tasks failed at "Cannot find module". Map to the dist
+    // entry (hoisted to the workspace root: only @bifold/trust-tasks depends on it).
+    '^@openvtc/vti-tsp-js$': '<rootDir>/../../node_modules/@openvtc/vti-tsp-js/dist/index.js',
   },
   transformIgnorePatterns: [
     'node_modules/(?!(@credo-ts|@openvtc|@openwallet-foundation|@noble|@scure|@owf|@verifiables|ky|cbor-x|@stablelib|@digitalcredentials|base58-universal|base64url-universal|@openid4vc|dcql|valibot|uuid|query-string|decode-uri-component|split-on-first|filter-obj)/)',

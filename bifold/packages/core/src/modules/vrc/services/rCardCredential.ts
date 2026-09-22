@@ -1,9 +1,23 @@
 import { Agent, JsonTransformer, W3cCredential, W3cCredentialRecord, W3cCredentialRepository } from '@credo-ts/core'
 
-import { RCardTemplate, JCard } from '../types/rcard'
+import {
+  RCardFormInput,
+  RCardTemplate,
+  JCard,
+  buildJCardFromFormInput,
+  LEGACY_SHARED_TEMPLATE_ID,
+  DEFAULT_LABEL,
+} from '../types/rcard'
 import { DTG_CONTEXT_URL, RCARD_CONTEXT_URL } from '../types/relationshipContext'
 import { selectCredentialContexts } from '../utils/selectCredentialContexts'
 import { createVrcLogger } from '../vrc-logging'
+
+/** The custom tags set on an RCardTemplate record (setTags in buildRCardTemplateW3cCredentialRecord). */
+interface RCardTemplateTags {
+  templateId?: string
+  active?: string
+}
+const rCardTags = (record: W3cCredentialRecord): RCardTemplateTags => record.getTags() as unknown as RCardTemplateTags
 
 /**
  * Build an exchanged RelationshipCard (RCard) credential from the local
@@ -74,7 +88,10 @@ export const buildRCardCredential = async (
  *
  * The jCard is stored in the credentialSubject following the Relationship Card Credential spec.
  */
-export const buildRCardTemplateW3cCredentialRecord = (rCardTemplate: RCardTemplate): W3cCredentialRecord => {
+export const buildRCardTemplateW3cCredentialRecord = (
+  rCardTemplate: RCardTemplate,
+  options?: { active?: boolean }
+): W3cCredentialRecord => {
   const w3cCredentialJson = {
     id: rCardTemplate.id,
     '@context': rCardTemplate['@context'],
@@ -104,11 +121,14 @@ export const buildRCardTemplateW3cCredentialRecord = (rCardTemplate: RCardTempla
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     credentialInstances: [{ credential: w3cCredential as any }],
   })
-  // Custom tags (credo 0.6 restricts the typed constructor tags to expandedTypes)
+  // Custom tags (credo 0.6 restricts the typed constructor tags to expandedTypes).
+  // `active` marks the one profile `loadRCardTemplate(agent)` (no profileId)
+  // resolves for an exchange — see §4.1/§4.3 of the editable-multi-profile plan.
   record.setTags({
     type: 'RCardTemplate',
     isSelfIssued: 'true',
     templateId: rCardTemplate.templateId,
+    active: String(options?.active ?? false),
   })
 
   return record
@@ -186,7 +206,7 @@ export const extractRCardTemplateFromW3cRecord = (record: W3cCredentialRecord): 
       ? (claims as any).label
       : subject && 'label' in subject
       ? (subject as any).label
-      : 'Default business card'
+      : DEFAULT_LABEL
 
   if (!jcard || !Array.isArray(jcard) || jcard[0] !== 'vcard') {
     const logger = createVrcLogger(null, { module: 'vrc', component: 'rCardCredential' })
@@ -214,9 +234,75 @@ export const extractRCardTemplateFromW3cRecord = (record: W3cCredentialRecord): 
 }
 
 /**
- * Loads R-card template from Credo/Askar
+ * Replaces the jCard of an existing R-card template record in place, keyed by
+ * `templateId`. Unlike storeRCardTemplate (create), this preserves the
+ * record's Credo id and tags via repository.update() rather than save(), so
+ * editing a profile never creates a second, duplicate record.
  */
-export const loadRCardTemplate = async (agent: Agent | null): Promise<RCardTemplate | undefined> => {
+export const updateRCardTemplate = async (
+  profileId: string,
+  input: RCardFormInput,
+  agent: Agent
+): Promise<boolean> => {
+  const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
+
+  try {
+    if (!agent.context) {
+      logger.error('updateRCardTemplate: Agent context is not available')
+      throw new Error('Agent context is not available - agent may not be initialized')
+    }
+
+    const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
+    const records = await repository.findByQuery(agent.context, {
+      type: 'RCardTemplate',
+      templateId: profileId,
+    })
+
+    const record = records[0]
+    if (!record) {
+      logger.warn('updateRCardTemplate: No existing R-card template found for profileId', { profileId })
+      return false
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const credential = record.encoded as any
+    const subject = Array.isArray(credential.credentialSubject)
+      ? credential.credentialSubject[0]
+      : credential.credentialSubject
+    subject.claims = {
+      ...subject.claims,
+      jcard: buildJCardFromFormInput(input),
+      label: input.label?.trim() || subject.claims?.label || DEFAULT_LABEL,
+    }
+
+    await repository.update(agent.context, record)
+
+    logger.info('R-card template updated in Credo', { profileId })
+    return true
+  } catch (error) {
+    logger.error('updateRCardTemplate: Update operation failed', {
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    })
+    return false
+  }
+}
+
+/**
+ * Loads an R-card template from Credo/Askar.
+ *
+ * With no `profileId`, resolves whichever profile is tagged `active` — the
+ * one an exchange should offer. This is what deep DIDComm event-handling code
+ * (buildRCardCredential, buildLegacyIssuerObject) calls, unchanged, since it
+ * only ever has `agent` in scope, never the app's Redux store where
+ * `activeProfileId` also lives. With a `profileId`, resolves that *specific*
+ * profile regardless of which is active — used by profile-management UI.
+ */
+export const loadRCardTemplate = async (
+  agent: Agent | null,
+  profileId?: string
+): Promise<RCardTemplate | undefined> => {
   const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
 
   if (!agent) {
@@ -226,9 +312,10 @@ export const loadRCardTemplate = async (agent: Agent | null): Promise<RCardTempl
 
   try {
     const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
-    const records = await repository.findByQuery(agent.context, {
-      type: 'RCardTemplate',
-    })
+    const records = await repository.findByQuery(
+      agent.context,
+      profileId ? { type: 'RCardTemplate', templateId: profileId } : { type: 'RCardTemplate', active: 'true' }
+    )
 
     if (records.length === 0) {
       return undefined
@@ -247,9 +334,131 @@ export const loadRCardTemplate = async (agent: Agent | null): Promise<RCardTempl
 }
 
 /**
- * Deletes R-card template from Credo/Askar
+ * Loads every profile a wallet holds, plus which one is active — the source
+ * for the "My Profiles" list and for populating RCardState.profiles on sync.
  */
-export const deleteRCardTemplate = async (agent: Agent): Promise<void> => {
+export const loadAllRCardTemplates = async (
+  agent: Agent | null
+): Promise<{ profiles: RCardTemplate[]; activeProfileId?: string }> => {
+  const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
+
+  if (!agent) {
+    logger.warn('loadAllRCardTemplates: Agent is null or undefined')
+    return { profiles: [] }
+  }
+
+  try {
+    const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
+    const records = await repository.findByQuery(agent.context, { type: 'RCardTemplate' })
+    const active = records.find((record) => rCardTags(record).active === 'true')
+
+    return {
+      profiles: records.map(extractRCardTemplateFromW3cRecord),
+      activeProfileId: active ? extractRCardTemplateFromW3cRecord(active).id : undefined,
+    }
+  } catch (error) {
+    logger.error('Failed to load R-card templates', {
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    })
+    return { profiles: [] }
+  }
+}
+
+/**
+ * Marks one profile active (the one an exchange offers) and every other
+ * RCardTemplate record inactive. Enforcing "at most one active" here, at the
+ * single point that writes the tag, is simpler than trying to keep it an
+ * invariant across every call site that could otherwise flip it.
+ */
+export const setActiveRCardProfile = async (agent: Agent, profileId: string): Promise<boolean> => {
+  const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
+
+  try {
+    const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
+    const records = await repository.findByQuery(agent.context, { type: 'RCardTemplate' })
+    const target = records.find((record) => rCardTags(record).templateId === profileId)
+    if (!target) {
+      logger.warn('setActiveRCardProfile: No profile found for profileId', { profileId })
+      return false
+    }
+
+    for (const record of records) {
+      const shouldBeActive = record.id === target.id
+      if (rCardTags(record).active === String(shouldBeActive)) {
+        continue
+      }
+      record.setTags({ active: String(shouldBeActive) })
+      await repository.update(agent.context, record)
+    }
+
+    logger.info('Active R-card profile set', { profileId })
+    return true
+  } catch (error) {
+    logger.error('Failed to set active R-card profile', {
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    })
+    return false
+  }
+}
+
+/**
+ * One-time fixup for a pre-multi-profile install: its single RCardTemplate
+ * record still carries the old shared templateId constant. Mints it a
+ * per-instance templateId (equal to its own id) and marks it active, so it
+ * becomes "the first profile" with no data migration mechanism beyond this.
+ * A no-op (returns undefined) once that record no longer exists — i.e. after
+ * the first successful adoption, or on an install that never had one.
+ */
+export const adoptLegacyRCardTemplate = async (agent: Agent): Promise<RCardTemplate | undefined> => {
+  const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
+
+  try {
+    const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
+    const records = await repository.findByQuery(agent.context, {
+      type: 'RCardTemplate',
+      templateId: LEGACY_SHARED_TEMPLATE_ID,
+    })
+    const record = records[0]
+    if (!record) {
+      return undefined
+    }
+
+    // The credential's own embedded id (RCardTemplate.id, e.g. "urn:uuid:...")
+    // — NOT record.id, which is Credo's own separate storage-record id.
+    const newTemplateId = extractRCardTemplateFromW3cRecord(record).id
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const credential = record.encoded as any
+    const subject = Array.isArray(credential.credentialSubject)
+      ? credential.credentialSubject[0]
+      : credential.credentialSubject
+    subject.claims = { ...subject.claims, templateId: newTemplateId }
+    record.setTags({ templateId: newTemplateId, active: 'true' })
+
+    await repository.update(agent.context, record)
+
+    logger.info('Adopted legacy R-card template as the first profile', { profileId: newTemplateId })
+    return extractRCardTemplateFromW3cRecord(record)
+  } catch (error) {
+    logger.error('Failed to adopt legacy R-card template', {
+      errorType: error instanceof Error ? error.constructor.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+    })
+    return undefined
+  }
+}
+
+/**
+ * Deletes one specific R-card profile from Credo/Askar. Guarding against
+ * deleting the last remaining profile, or the active one without picking a
+ * replacement first, is the caller's job (useRCardCredential) — this
+ * function does exactly what it's told.
+ */
+export const deleteRCardTemplate = async (agent: Agent, profileId: string): Promise<void> => {
   const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
 
   try {
@@ -261,12 +470,13 @@ export const deleteRCardTemplate = async (agent: Agent): Promise<void> => {
     const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
     const records = await repository.findByQuery(agent.context, {
       type: 'RCardTemplate',
+      templateId: profileId,
     })
 
     for (const record of records) {
       await agent.w3cCredentials.deleteById(record.id)
     }
-    logger.info('deleteRCardTemplate: Successfully completed deletion', { recordCount: records.length })
+    logger.info('deleteRCardTemplate: Successfully completed deletion', { profileId, recordCount: records.length })
   } catch (error) {
     logger.error('Failed to delete R-card template', {
       errorType: error instanceof Error ? error.constructor.name : typeof error,
@@ -280,8 +490,10 @@ export const deleteRCardTemplate = async (agent: Agent): Promise<void> => {
 /**
  * Stores R-card template using Credo/Askar
  *
- * NOTE: During onboarding on a fresh install, there should be NO existing R-card records.
- * We don't need to delete anything - we just save the template.
+ * NOTE: Assumes no OTHER record for this same profile (by templateId) already
+ * exists — creates a new record unconditionally. Editing an existing profile
+ * is updateRCardTemplate's job, not this function's. Multiple *different*
+ * profiles (Phase 2) are fine — each gets its own record.
  */
 export const storeRCardTemplate = async (template: RCardTemplate, agent: Agent): Promise<boolean> => {
   const logger = createVrcLogger(agent, { module: 'vrc', component: 'rCardCredential' })
@@ -293,8 +505,11 @@ export const storeRCardTemplate = async (template: RCardTemplate, agent: Agent):
       throw new Error('Agent context is not available - agent may not be initialized')
     }
 
-    w3cRecord = buildRCardTemplateW3cCredentialRecord(template)
     const repository = agent.dependencyManager.resolve(W3cCredentialRepository)
+    // The very first profile a wallet ever gets becomes active by default;
+    // a profile added later (Phase 2's "add profile") does not.
+    const existing = await repository.findByQuery(agent.context, { type: 'RCardTemplate' })
+    w3cRecord = buildRCardTemplateW3cCredentialRecord(template, { active: existing.length === 0 })
     await repository.save(agent.context, w3cRecord)
 
     logger.info('R-card template stored in Credo', {

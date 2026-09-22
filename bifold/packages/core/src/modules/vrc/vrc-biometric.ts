@@ -22,6 +22,7 @@ import { LocalStorageKeys } from '../../constants'
 import {
   requestBiometricConfirmationUI,
   BiometricConfirmationResponse,
+  type BiometricConfirmationCopy,
   type AuthMode,
 } from '../../contexts/biometric-confirmation'
 import { isBiometricsActive } from '../../services/keychain'
@@ -125,7 +126,8 @@ export async function sendBiometricStatusNotification(
 export async function requestBiometricConfirmationWithUI(
   agent: Agent,
   counterpartyName: string,
-  connectionId: string
+  connectionId: string,
+  copy?: BiometricConfirmationCopy
 ): Promise<BiometricConfirmationResult> {
   const logger = agent.config.logger
 
@@ -134,7 +136,13 @@ export async function requestBiometricConfirmationWithUI(
       return { success: true, reason: 'not_available', timestamp: new Date().toISOString() }
     }
 
-    const response: BiometricConfirmationResponse = await requestBiometricConfirmationUI(counterpartyName, connectionId)
+    const response: BiometricConfirmationResponse = await requestBiometricConfirmationUI(
+      counterpartyName,
+      connectionId,
+      false,
+      'biometric',
+      copy
+    )
 
     switch (response.status) {
       case 'confirmed':

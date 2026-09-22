@@ -1,0 +1,734 @@
+/**
+ * vtiAgent — the wallet's side of a VTI agent, held outside React.
+ *
+ * A VTA or a VTC is reached over one authenticated socket (see
+ * `VtiMediatorTransport`), and that socket has to outlive any one screen: the
+ * agent card, a community and an application all talk to the same session. So
+ * the session lives here, and screens subscribe.
+ *
+ * Two legs share the socket. The **community leg** (`ask`) is DIDComm v2:
+ * a VTC or a VTA reads the plaintext body as a Trust Task document. The
+ * **peer leg** (`send`, applicant ↔ vetter) is either DIDComm v2 or TSP
+ * Rev 3, decided at build time (`vtiTsp.setPeerLegCarriage`); a TSP frame
+ * that arrives is opened whenever the session holds a TSP identity, whatever
+ * the build sends, and is handed to the same inbox as a DIDComm plaintext
+ * would be, so nothing above this controller knows which carriage a document
+ * took.
+ *
+ * @module trust-tasks/module/vtiAgent
+ */
+
+import type { Agent } from '@credo-ts/core'
+import { utils } from '@credo-ts/core'
+import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { tsp } from '@bifold/trust-tasks'
+
+import type { VtiPersona } from './VtiIdentityStore'
+import {
+  createVtiClientDid,
+  resolveVtiMediator,
+  resolveDidDocumentRetrying,
+  vtiClientIdentityFromDid,
+  vtiClientIdentityFromPersona,
+  VtiMediatorSession,
+  type VtiClientIdentity,
+  type VtiMediatorEndpoints,
+} from './VtiMediatorTransport'
+import {
+  frameForm,
+  getPeerLegCarriage,
+  LOG_PREFIX as TSP_LOG_PREFIX,
+  greetPeerOverTsp,
+  packTrustTaskForPeer,
+  tspSessionForPersona,
+  unpackTrustTaskFromPeer,
+  type PeerLegCarriage,
+  type PeerRevisionRecord,
+  type TspPeerRevisionStore,
+  type TspSessionIdentity,
+} from './vtiTsp'
+import { chooseCarriage, type Carriage } from './tspCapability'
+
+const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
+const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
+const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
+const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
+
+/**
+ * A community refusing, in its own terms. `code` is the framework's — e.g.
+ * `taskFailed` for a business-rule conflict such as an application that is
+ * already open — and belongs behind a Details control rather than in the
+ * sentence a person reads.
+ */
+export class VtiRefusal extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    /** The framework's `details`, when the refusal carries any (a consent challenge does). */
+    readonly details?: unknown
+  ) {
+    super(message)
+    this.name = 'VtiRefusal'
+  }
+}
+
+/**
+ * What a join-request refusal means for the applicant, read from its code.
+ *
+ * The codes are declared per task (`vtc/join-requests/withdraw:notFound`,
+ * `…/supplement:alreadyDecided`, `…/supplement:notAwaitingEvidence`), so the
+ * meaning is the part after the colon — never the prose, which a community
+ * may word as it likes. `alreadyDecided` means an outcome stands and the
+ * applicant should be shown it; `notFound` means there is nothing open to act
+ * on; `notAwaitingEvidence` means the request is queued for a decision the
+ * community owes, so supplying more changes nothing.
+ */
+export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence'
+
+export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
+  if (!(refusal instanceof VtiRefusal)) return undefined
+  const reason = refusal.code.split(':').pop()
+  return reason === 'notFound' || reason === 'alreadyDecided' || reason === 'notAwaitingEvidence' ? reason : undefined
+}
+
+/** A refusal arrives as a document in its own right, not as a verdict. */
+const refusalOf = (plaintext: DidCommV2PlaintextMessage): VtiRefusal | undefined => {
+  if (!String(plaintext.type ?? '').startsWith(TASK_ERROR)) return undefined
+  const payload = (plaintext.body as { payload?: { code?: string; message?: string; details?: unknown } } | undefined)
+    ?.payload
+  return new VtiRefusal(
+    payload?.code ?? 'unknown',
+    payload?.message ?? 'The community refused the request.',
+    payload?.details
+  )
+}
+
+/** How far the connection has got, in the words the Connecting screen uses. */
+export type VtiAgentStatus = 'disconnected' | 'resolving' | 'authenticating' | 'connected' | 'failed'
+
+export interface VtiAgentState {
+  status: VtiAgentStatus
+  /** The DID this wallet presents to a community — its member identity. */
+  did?: string
+  /** The mediator's host, which is what a person can recognise. */
+  host?: string
+  error?: string
+  /** What this session sends on the peer leg, and whether it can open TSP. */
+  peerLeg?: PeerLegCarriage
+  tspReady?: boolean
+  /** What each peer was observed to speak (diagnostic; never fed back into packing). */
+  peerRevisions?: PeerRevisionRecord[]
+}
+
+/** A community's published join criteria, as a manifest states them. */
+export interface VtiCriterion {
+  id?: string
+  description?: string
+  /** Per-criterion digest — what an applicant is held to (manifest/0.2). */
+  requirementsDigest?: string
+  /** The vetting requirement object, when the criterion needs peer vetting. */
+  vetting?: {
+    version?: string
+    statementType?: string
+    minStatements?: number
+    acceptedMethods?: string[]
+    requiredClaims?: string[]
+    maxStatementAge?: string
+    eligibleVetters?: Record<string, unknown>
+    independence?: Record<string, unknown>
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export interface VtiManifest {
+  communityDid?: string
+  criteria: VtiCriterion[]
+  requirementsDigest?: string
+}
+
+/** What a community decided, and what it is still waiting for. */
+export interface VtiVerdict {
+  requestId?: string
+  effect: string
+  needs: string[]
+  /** Everything the verdict carried — an `allow` brings the membership card here. */
+  with?: Record<string, unknown>
+}
+
+type Listener = () => void
+
+const hostOf = (endpoint?: string) => {
+  if (!endpoint) return undefined
+  const match = /^[a-z]+:\/\/([^/]+)/i.exec(endpoint)
+  return match?.[1]
+}
+
+class VtiAgentController {
+  private state: VtiAgentState = { status: 'disconnected' }
+  private listeners = new Set<Listener>()
+  private session?: VtiMediatorSession
+  private mediator?: VtiMediatorEndpoints
+  private agent?: Agent
+  /**
+   * One request in flight. Its answer is the message whose type is the
+   * request's `#response` (or a trust-task-error); measured on the
+   * Eucalyptus train, a community also sends unsolicited messages right after
+   * a verdict — the credentials, over `credential-exchange/issue` — so
+   * "first message after send" is no longer a reply. Those go to the inbox.
+   */
+  private pending?: { type: string; resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
+  private inbox: ((plaintext: DidCommV2PlaintextMessage) => void)[] = []
+  private tsp?: TspSessionIdentity
+  /**
+   * §4.2: the envelope chosen for each peer, decided once per session and kept.
+   * Deciding per message would let one unreachable peer flap a session between
+   * two envelope formats; the plan asks for a session-scoped choice, logged.
+   */
+  private readonly carriageByPeer = new Map<string, Carriage>()
+
+  /**
+   * Can this session START a TSP conversation with a peer it has no
+   * relationship with?
+   *
+   * Holding a TSP identity is necessary and not sufficient. Rev 3 requires an
+   * introduction before any traffic, and a peer that does not get one drops
+   * what follows without answering — so choosing TSP without being able to
+   * form a relationship produces silence, which is strictly worse than the
+   * DIDComm we would otherwise have used. `tsp.CODEC_FORMS_RELATIONSHIPS`
+   * carries that fact from the codec that knows it.
+   */
+  private canInitiateTsp(): boolean {
+    return Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS
+  }
+
+  /**
+   * Peers this session has already greeted (§7.2.2). One invite per peer per
+   * session: the relationship is recorded on the peer's side on arrival, and a
+   * second invite would be a fresh relationship, not a repeat of this one.
+   */
+  private readonly greeted = new Set<string>()
+
+  /** The mediator this session rides, kept because an invite must be ROUTED
+   *  through it — a mediator refuses direct delivery unless configured for it. */
+  private mediatorDid?: string
+
+  /**
+   * Send the invite that makes a peer willing to accept our traffic, once.
+   *
+   * A failure here is logged and not thrown: the send that follows is what
+   * reports the outcome, and the peer may already know us from an earlier
+   * session, in which case the invite was never needed.
+   */
+  private async ensureGreeted(toDid: string): Promise<void> {
+    const session = this.session
+    const did = this.state.did
+    if (!session || !did || !this.tsp || !this.agent) return
+    if (this.greeted.has(toDid)) return
+    this.greeted.add(toDid)
+    try {
+      // §5.3.3: a hop list ends at the destination's OWN VID, not its
+      // intermediary's — so the path back to us is our mediator, then us.
+      // Advertising the mediator alone is the Rev 2 shape, and a Rev 3 peer
+      // cannot route an accept over it: the VTC logged "a routed message
+      // requires at least one onward hop" and never answered the invite.
+      // Upstream's own `form_relationship_routed` sends exactly this pair.
+      const route = this.mediatorDid ? [this.mediatorDid, did] : []
+      const invite = await greetPeerOverTsp(this.tsp, did, toDid, route)
+      await session.sendTspFrame(invite.bytes)
+      this.agent.config.logger.info(
+        `${TSP_LOG_PREFIX} greeted ${toDid} with an XRFI invite (${invite.bytes.length} bytes, route ${route.length})`
+      )
+    } catch (error) {
+      this.agent.config.logger.warn(`${TSP_LOG_PREFIX} could not greet ${toDid}: ${error}`)
+    }
+  }
+  private peerRevisionStore?: TspPeerRevisionStore
+
+  /** Receive what the community sends that is not an answer (credentials, statements). */
+  onInbound(handler: (plaintext: DidCommV2PlaintextMessage) => void): () => void {
+    this.inbox.push(handler)
+    return () => {
+      this.inbox = this.inbox.filter((h) => h !== handler)
+    }
+  }
+
+  private deliver(plaintext: DidCommV2PlaintextMessage): void {
+    const pending = this.pending
+    const type = String(plaintext.type ?? '')
+    // A reply older than the request is a re-delivery of a stale message (a
+    // poll draining the queue), never the answer — created_time is seconds.
+    const fresh =
+      !pending || typeof plaintext.created_time !== 'number' || plaintext.created_time * 1000 >= pending.sentAt - 5000
+    const answers = pending && fresh && (type === `${pending.type}#response` || type.startsWith(TASK_ERROR))
+    if (pending && answers) {
+      this.pending = undefined
+      pending.resolve(plaintext)
+      return
+    }
+    for (const handler of this.inbox) {
+      try {
+        handler(plaintext)
+      } catch {
+        // one handler's failure must not lose the message for the others
+      }
+    }
+  }
+
+  getState = (): VtiAgentState => this.state
+
+  subscribe = (listener: Listener): (() => void) => {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  private set(next: Partial<VtiAgentState>) {
+    this.state = { ...this.state, ...next }
+    this.listeners.forEach((listener) => listener())
+  }
+
+  /**
+   * Resolve the mediator a VTI agent advertises, mint this wallet's member DID,
+   * log in and hold the socket. Idempotent while the socket is open.
+   */
+  async connect(
+    agent: Agent,
+    mediatorDid: string,
+    options: {
+      identity?: VtiClientIdentity
+      /**
+       * Connect as a persona: the DIDComm identity is derived from its
+       * borrowed key-agreement key, and — so the peer leg can carry TSP —
+       * its TSP identity from both borrowed keys. Preferred over `identity`
+       * for anything that will talk to a vetter or an applicant.
+       */
+      persona?: VtiPersona
+      /** Where to record what each peer speaks; in memory when absent. */
+      peerRevisionStore?: TspPeerRevisionStore
+    } = {}
+  ): Promise<void> {
+    this.agent = agent
+    const wantedDid = options.persona?.did ?? options.identity?.did
+    if (this.session?.isOpen && (!wantedDid || wantedDid === this.state.did)) return
+    if (this.session) await this.disconnect()
+    try {
+      this.set({ status: 'resolving', error: undefined })
+      const mediator = await resolveVtiMediator(agent, mediatorDid)
+      this.mediator = mediator
+      this.mediatorDid = mediatorDid
+      this.set({ status: 'authenticating', host: hostOf(mediator.wsEndpoint) })
+
+      // Under §2.4 B the identity a community sees is a persona the VTA minted
+      // and whose key the phone borrowed; the phone-minted did:peer is what the
+      // proof-of-transport used, and stays as the fallback when no persona is given.
+      let identity = options.identity
+      let tspSession: TspSessionIdentity | undefined
+      if (options.persona) {
+        const kaKmsKeyId = options.persona.kmsKeyIds?.keyAgreement
+        if (!kaKmsKeyId) throw new Error('vtiAgent: the persona has no borrowed key-agreement key')
+        identity = await vtiClientIdentityFromPersona(agent, options.persona.did, kaKmsKeyId)
+        // A persona without a borrowed signing key can still ride DIDComm; it
+        // just cannot sign a TSP frame, and says so in the state.
+        if (options.persona.kmsKeyIds?.signing) {
+          tspSession = await tspSessionForPersona(agent, options.persona)
+        }
+      }
+      identity ??= await vtiClientIdentityFromDid(agent, await createVtiClientDid(agent, mediator))
+      const did = identity.did
+      this.tsp = tspSession
+      this.peerRevisionStore = options.peerRevisionStore ?? this.peerRevisionStore
+      const session = new VtiMediatorSession(agent, identity, mediator, {
+        onError: (error) => this.set({ error: error.message }),
+        onMessage: (plaintext) => this.deliver(plaintext),
+        ...(tspSession ? { onTspFrame: (bytes: Uint8Array) => this.receiveTspFrame(bytes, did) } : {}),
+      })
+      await session.start()
+      // Discard any stale backlog the mediator flushes on live delivery before
+      // a request could have a reply (see VtaClient.connect).
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      this.session = session
+      const peerLeg = getPeerLegCarriage()
+      if (peerLeg === 'tsp' && !tspSession) {
+        agent.config.logger.warn(
+          `${TSP_LOG_PREFIX} peer leg is wired for TSP but this session has no TSP identity; sending DIDComm`
+        )
+      }
+      this.set({
+        status: 'connected',
+        did,
+        peerLeg: peerLeg === 'tsp' && tspSession ? 'tsp' : 'didcomm',
+        tspReady: Boolean(tspSession),
+        peerRevisions: (await this.peerRevisionStore?.list().catch(() => undefined)) ?? this.state.peerRevisions ?? [],
+      })
+    } catch (error) {
+      this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    await this.session?.stop()
+    this.session = undefined
+    this.pending = undefined
+    this.tsp = undefined
+    this.set({ status: 'disconnected', did: undefined, error: undefined, peerLeg: undefined, tspReady: undefined })
+  }
+
+  /**
+   * A TSP frame from the socket: open it as the persona, record the revision
+   * the peer spoke, and deliver the Trust Task exactly as a DIDComm plaintext
+   * would be. Throwing here withholds the acknowledgement, so a frame this
+   * wallet could not open stays on the mediator rather than being lost.
+   */
+  private async receiveTspFrame(bytes: Uint8Array, myDid: string): Promise<void> {
+    const tspSession = this.tsp
+    const agent = this.agent
+    if (!tspSession || !agent) throw new Error(`${TSP_LOG_PREFIX} no TSP identity on this session`)
+    const result = await unpackTrustTaskFromPeer(tspSession, bytes, myDid)
+    if (!result) {
+      agent.config.logger.info(`${TSP_LOG_PREFIX} TSP frame opened but carried no Trust Task envelope; ignored`)
+      return
+    }
+    const { plaintext, unpacked } = result
+    const peeked = tsp.peekRevision(bytes)
+    const record = await this.peerRevisionStore
+      ?.observe(unpacked.sender, unpacked.revision, peeked.minor)
+      .catch(() => undefined)
+    agent.config.logger.info(
+      `${TSP_LOG_PREFIX} received ${unpacked.revision} ${frameForm(bytes)} frame from ${unpacked.sender} (${bytes.length} bytes, type ${plaintext.type})`
+    )
+    if (record) {
+      const others = (this.state.peerRevisions ?? []).filter((r) => r.vid !== record.vid)
+      this.set({ peerRevisions: [...others, record] })
+    }
+    this.deliver(plaintext)
+  }
+
+  get isConnected(): boolean {
+    return this.session?.isOpen === true
+  }
+
+  /** The DID this session presents. */
+  get did(): string | undefined {
+    return this.state.did
+  }
+
+  /** What this session will put on the wire for the next `send`. */
+  get peerLeg(): PeerLegCarriage {
+    return this.state.peerLeg ?? 'didcomm'
+  }
+
+  /**
+   * Send one Trust Task document to a peer without waiting — the reply, if
+   * any, reaches the inbox threaded on the document's id. For the peer path
+   * (applicant ↔ vetter) where a human answers minutes later. The document is
+   * signed by the caller when the spec requires it (every vetting task does).
+   *
+   * On a build wired for TSP the document travels as a TSP Rev 3 direct
+   * message in the Trust Tasks TSP binding envelope; otherwise as a DIDComm
+   * v2 plaintext. The reply comes back the way the peer's build sends.
+   */
+  async send(
+    toDid: string,
+    type: string,
+    document: Record<string, unknown>,
+    options: { thid?: string; expiresInSec?: number } = {}
+  ): Promise<void> {
+    const session = this.session
+    const did = this.state.did
+    if (!session || !did) throw new Error('vtiAgent: not connected')
+    // Two ways to end up on TSP for a peer leg, and they are not the same
+    // thing. `peerLeg` is OUR setting — the wallet-to-wallet carriage toggle,
+    // used where the peer is another wallet whose did:peer document advertises
+    // no transports at all, so there is nothing to read. §4.2's rule applies to
+    // a peer that publishes a document: if it advertises TSPTransport and we
+    // hold a TSP identity, we speak TSP whether or not the toggle is on.
+    const capable =
+      this.peerLeg === 'tsp' ||
+      (this.agent
+        ? (await chooseCarriage(this.agent, toDid, this.canInitiateTsp(), { decided: this.carriageByPeer })) === 'tsp'
+        : false)
+    if (capable && this.tsp && this.agent) {
+      await this.ensureGreeted(toDid)
+      const packed = await packTrustTaskForPeer(this.tsp, did, toDid, {
+        ...document,
+        type: String(document.type ?? type),
+      })
+      await session.sendTspFrame(packed.bytes)
+      this.agent.config.logger.info(
+        `${TSP_LOG_PREFIX} sent ${packed.revision} ${frameForm(packed.bytes)} frame to ${toDid} (${packed.bytes.length} bytes, type ${type})`
+      )
+      return
+    }
+    const now = Math.floor(Date.now() / 1000)
+    await session.sendTo(toDid, {
+      id: `urn:uuid:${utils.uuid()}`,
+      typ: 'application/didcomm-plain+json',
+      type,
+      from: did,
+      to: [toDid],
+      ...(options.thid ? { thid: options.thid } : {}),
+      created_time: now,
+      expires_time: now + (options.expiresInSec ?? 900),
+      body: document,
+    })
+  }
+
+  /**
+   * Send one Trust Task document and wait for the community's answer. The VTC
+   * reads the DIDComm body as a whole document where a VTA takes a bare
+   * payload — measured in `tsp-reference/ref-20`.
+   */
+  async ask(
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs = 30000
+  ): Promise<DidCommV2PlaintextMessage | undefined> {
+    const session = this.session
+    const did = this.state.did
+    if (!session || !did) throw new Error('vtiAgent: not connected')
+
+    const threadId = `urn:uuid:${utils.uuid()}`
+    const sentAt = Date.now()
+    const answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
+      this.pending = { type, resolve, sentAt }
+    })
+
+    // §4.2 on the ecosystem leg. Unlike `send()` there is no toggle here on
+    // purpose: a community publishes a resolvable document, so its own
+    // advertisement is the whole answer and a local flag could only contradict
+    // it. The reply arrives through `deliver()` either way — `receiveTspFrame`
+    // presents an opened TSP envelope as the same plaintext shape — so nothing
+    // downstream of `ask` needs to know which envelope carried it.
+    if (this.agent && this.tsp) {
+      const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), {
+        decided: this.carriageByPeer,
+      })
+      if (carriage === 'tsp') {
+        await this.ensureGreeted(communityDid)
+        const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, {
+          id: `urn:uuid:${utils.uuid()}`,
+          type,
+          threadId,
+          payload,
+        })
+        await session.sendTspFrame(packed.bytes)
+        this.agent.config.logger.info(
+          `${TSP_LOG_PREFIX} asked ${communityDid} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
+        )
+        const viaTsp = await Promise.race([
+          answer,
+          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+        ])
+        this.pending = undefined
+        return viaTsp
+      }
+    }
+
+    const now = Math.floor(Date.now() / 1000)
+    await session.sendTo(communityDid, {
+      id: `urn:uuid:${utils.uuid()}`,
+      typ: 'application/didcomm-plain+json',
+      type,
+      from: did,
+      to: [communityDid],
+      thid: threadId,
+      created_time: now,
+      expires_time: now + 300,
+      body: {
+        id: `urn:uuid:${utils.uuid()}`,
+        type,
+        threadId,
+        payload,
+        issuer: did,
+        recipient: communityDid,
+        issuedAt: new Date().toISOString(),
+      },
+    })
+    const result = await Promise.race([
+      answer,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
+    ])
+    this.pending = undefined
+    return result
+  }
+
+  /** What a community asks of an applicant, in its own words. */
+  async fetchManifest(communityDid: string): Promise<VtiManifest> {
+    // Packing to the community resolves its document; warm that resolution
+    // patiently so a tunnel's rate limit does not surface as a failed send.
+    if (this.agent) await resolveDidDocumentRetrying(this.agent, communityDid)
+    // A community answers the join manifest over REST with no session at all
+    // (`POST {VTCRest}/v1/trust-tasks`), which is how an applicant can read
+    // what is asked of them on a first join — before any channel exists — and
+    // the fast path when one does. A community may switch that off, and a
+    // wallet with a live session can always ask over DIDComm, so a failure
+    // here is not an error: it falls through.
+    const overRest = await this.manifestOverRest(communityDid)
+    if (overRest) return overRest
+    const answer = await this.ask(communityDid, MANIFEST, {})
+    if (!answer) throw new Error('vtiAgent: the community did not answer')
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
+    return {
+      communityDid: payload?.communityDid,
+      criteria: payload?.criteria ?? [],
+      requirementsDigest: payload?.requirementsDigest,
+    }
+  }
+
+  /**
+   * The manifest over the community's REST endpoint, which its DID document
+   * advertises as a `VTCRest` service. The published endpoint omits the API's
+   * version prefix (VTI-15), so `/v1` is added here. Returns undefined for
+   * anything that is not a usable manifest — a community that has turned the
+   * public read off, a network that is not there, an error document — so the
+   * caller can fall back to asking over DIDComm.
+   */
+  private async manifestOverRest(communityDid: string): Promise<VtiManifest | undefined> {
+    const agent = this.agent
+    if (!agent) return undefined
+    try {
+      const doc = await agent.dids.resolveDidDocument(communityDid)
+      const service = doc.service?.find((s) => s.type === 'VTCRest')
+      const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
+      if (!base) return undefined
+      const now = new Date().toISOString()
+      const response = await fetch(`${base.replace(/\/$/, '')}/v1/trust-tasks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: `urn:uuid:${utils.uuid()}`,
+          type: MANIFEST,
+          threadId: `urn:uuid:${utils.uuid()}`,
+          payload: {},
+          issuer: this.state.did ?? communityDid,
+          recipient: communityDid,
+          issuedAt: now,
+        }),
+      })
+      if (!response.ok) return undefined
+      const body = (await response.json()) as { type?: string; payload?: VtiManifest } | undefined
+      if (String(body?.type ?? '').startsWith(TASK_ERROR)) return undefined
+      const payload = body?.payload
+      if (!payload?.criteria) return undefined
+      return {
+        communityDid: payload.communityDid,
+        criteria: payload.criteria ?? [],
+        requirementsDigest: payload.requirementsDigest,
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  /** The verdict a submit or a supplement carries — deliberately the same shape. */
+  private verdictOf(answer: DidCommV2PlaintextMessage | undefined): VtiVerdict {
+    if (!answer) throw new Error('vtiAgent: the community did not answer')
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const payload = (
+      answer.body as
+        | {
+            payload?: {
+              requestId?: string
+              verdict?: { effect?: string; with?: { needs?: string[] } & Record<string, unknown> }
+            }
+          }
+        | undefined
+    )?.payload
+    return {
+      requestId: payload?.requestId,
+      effect: payload?.verdict?.effect ?? 'unstated',
+      needs: payload?.verdict?.with?.needs ?? [],
+      with: payload?.verdict?.with,
+    }
+  }
+
+  private presentation(credentials?: unknown[]) {
+    return {
+      '@context': ['https://www.w3.org/ns/credentials/v2'],
+      type: ['VerifiablePresentation'],
+      holder: this.state.did,
+      verifiableCredential: credentials ?? [],
+    }
+  }
+
+  /**
+   * Answer a deferral in place (`vtc/join-requests/supplement/0.1`) rather
+   * than submitting again, which a community refuses while a request is open
+   * (VTI-04). The presentation REPLACES the one on the request — the community
+   * evaluates this one alone — so it must carry every statement, not only the
+   * ones gathered since. Refusals surface as `VtiRefusal`; read them with
+   * `joinRequestRefusal`.
+   */
+  async supplement(
+    communityDid: string,
+    options: { credentials?: unknown[]; requestId?: string; requirementsDigest?: string } = {}
+  ): Promise<VtiVerdict> {
+    const answer = await this.ask(communityDid, SUPPLEMENT, {
+      vp: this.presentation(options.credentials),
+      ...(options.requestId ? { requestId: options.requestId } : {}),
+      ...(options.requirementsDigest ? { extensions: { requirementsDigest: options.requirementsDigest } } : {}),
+    })
+    return this.verdictOf(answer)
+  }
+
+  /**
+   * Close the applicant's own open request (`vtc/join-requests/withdraw/0.1`),
+   * which frees them to apply again. The id is optional by design: without it
+   * the community resolves the request from who is asking.
+   */
+  async withdraw(
+    communityDid: string,
+    options: { requestId?: string; reason?: string } = {}
+  ): Promise<{ requestId?: string; status: string }> {
+    const answer = await this.ask(communityDid, WITHDRAW, {
+      ...(options.requestId ? { requestId: options.requestId } : {}),
+      ...(options.reason ? { reason: options.reason } : {}),
+    })
+    if (!answer) throw new Error('vtiAgent: the community did not answer')
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const payload = (answer.body as { payload?: { requestId?: string; status?: string } } | undefined)?.payload
+    return { requestId: payload?.requestId, status: payload?.status ?? 'withdrawn' }
+  }
+
+  /**
+   * Apply. With no credentials in hand the honest presentation is an empty one:
+   * the community answers `requestMore` naming what it still needs, rather than
+   * the wallet guessing at requirements it cannot yet meet.
+   */
+  async apply(
+    communityDid: string,
+    manifest: VtiManifest,
+    options: { credentials?: unknown[]; requirementsDigest?: string } = {}
+  ): Promise<VtiVerdict> {
+    // The presentation is unsigned: the community takes the holder from the
+    // sealed envelope's sender (VTI-9), so what matters is that the
+    // credentials inside name that same DID as their subject.
+    const answer = await this.ask(communityDid, SUBMIT, {
+      vp: this.presentation(options.credentials),
+      registryConsent: false,
+      // The community's `select_criterion` reads this digest to decide WHICH
+      // criterion the applicant gathered against, and records
+      // `applicant_digest_matches: false` when it is absent — which its policy
+      // may weigh. With more than one vetting criterion an absent digest means
+      // gathering against one and being judged against another, so send the
+      // digest of the criterion this application was actually built for and
+      // fall back to the manifest's only when there is nothing better.
+      extensions: (() => {
+        const digest = options.requirementsDigest ?? manifest.requirementsDigest
+        return digest ? { requirementsDigest: digest } : {}
+      })(),
+    })
+    return this.verdictOf(answer)
+  }
+}
+
+export const vtiAgent = new VtiAgentController()

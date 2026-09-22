@@ -3,7 +3,7 @@ import { DidCommDidExchangeState } from '@credo-ts/didcomm'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { Image, Pressable, StyleSheet, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -11,6 +11,8 @@ import { hitSlop } from '../../constants'
 import { useStore } from '../../contexts/store'
 import { useTheme } from '../../contexts/theme'
 import { useConnectionByOutOfBandId } from '../../hooks/connections'
+import { useRCardCredential } from '../../modules/vrc/hooks/useRCardCredential'
+import { formInputFromTemplate } from '../../modules/vrc/types/rcard'
 import { QrCodeScanError } from '../../types/error'
 import { ConnectStackParams, Screens, Stacks } from '../../types/navigators'
 import { createConnectionInvitation, createRelationshipInvitation } from '../../utils/helpers'
@@ -61,6 +63,9 @@ const QRScanner: React.FC<Props> = ({
   const [showInfoBox, setShowInfoBox] = useState(false)
   const [showErrorDetailsModal, setShowErrorDetailsModal] = useState(false)
   const [showingQRCodeView, _setShowingQRCodeView] = useState(defaultToConnect && !showTabs)
+  const [showProfilePicker, setShowProfilePicker] = useState(false)
+  const { profiles, activeProfileId, setActive } = useRCardCredential()
+  const activeProfile = profiles.find((p) => p.id === activeProfileId)
 
   const qrSize = width - 40
 
@@ -117,6 +122,31 @@ const QRScanner: React.FC<Props> = ({
       color: ColorPalette.grayscale.mediumGrey,
       textAlign: 'center',
       marginTop: 16,
+    },
+    profileSwitcher: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    profileSwitcherAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: ColorPalette.brand.primaryBackground,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      marginRight: 8,
+    },
+    profileSwitcherAvatarImage: {
+      width: 32,
+      height: 32,
+    },
+    profileRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 20,
     },
   })
 
@@ -184,7 +214,9 @@ const QRScanner: React.FC<Props> = ({
     if ((showTabs && !firstTabActive) || (defaultToConnect && !showTabs)) {
       createInvitation()
     }
-  }, [showTabs, firstTabActive, defaultToConnect, createInvitation, store.preferences.walletName])
+    // store.rCard.activeProfileId: switching the active profile on this
+    // screen regenerates the invitation under the newly active one.
+  }, [showTabs, firstTabActive, defaultToConnect, createInvitation, store.preferences.walletName, store.rCard.activeProfileId])
 
   useEffect(() => {
     // Effect not required if tabs are not enabled
@@ -324,6 +356,33 @@ const QRScanner: React.FC<Props> = ({
           </>
         ) : (
           <View style={styles.qrCodeViewContainer}>
+            {offerRelationshipCredential && activeProfile && profiles.length > 1 && (
+              <TouchableOpacity
+                style={styles.profileSwitcher}
+                onPress={() => setShowProfilePicker(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('Scan.SwitchProfile')}
+                testID={testIdWithKey('SwitchProfile')}
+              >
+                <View style={styles.profileSwitcherAvatar}>
+                  {formInputFromTemplate(activeProfile).photo ? (
+                    <Image
+                      style={styles.profileSwitcherAvatarImage}
+                      source={{ uri: formInputFromTemplate(activeProfile).photo }}
+                    />
+                  ) : (
+                    <Icon name="account" size={20} color={ColorPalette.grayscale.mediumGrey} />
+                  )}
+                </View>
+                <ThemedText style={{ color: ColorPalette.brand.link }}>{activeProfile.label}</ThemedText>
+                <Icon
+                  name="chevron-down"
+                  size={20}
+                  color={ColorPalette.grayscale.mediumGrey}
+                  style={{ marginLeft: 4 }}
+                />
+              </TouchableOpacity>
+            )}
             <View style={styles.qrContainer}>
               {!invitation && <LoadingIndicator />}
               {invitation && <QRRenderer value={invitation} size={qrSize} />}
@@ -345,6 +404,53 @@ const QRScanner: React.FC<Props> = ({
             </ThemedText>
           </View>
         )}
+        <SafeAreaModal visible={showProfilePicker} animationType="slide" transparent>
+          <View
+            style={{
+              flex: 1,
+              justifyContent: 'flex-end',
+              backgroundColor: 'rgba(0,0,0,0.6)',
+            }}
+          >
+            <View style={{ backgroundColor: ColorPalette.brand.primaryBackground, paddingVertical: 12 }}>
+              {profiles.map((profile) => (
+                <TouchableOpacity
+                  key={profile.id}
+                  style={styles.profileRow}
+                  onPress={async () => {
+                    await setActive(profile.id)
+                    setShowProfilePicker(false)
+                  }}
+                  accessibilityRole="button"
+                  testID={testIdWithKey(`SwitchProfile-${profile.id}`)}
+                >
+                  <View style={styles.profileSwitcherAvatar}>
+                    {formInputFromTemplate(profile).photo ? (
+                      <Image
+                        testID={testIdWithKey(`SwitchProfileAvatar-${profile.id}`)}
+                        style={styles.profileSwitcherAvatarImage}
+                        source={{ uri: formInputFromTemplate(profile).photo }}
+                      />
+                    ) : (
+                      <Icon name="account" size={20} color={ColorPalette.grayscale.mediumGrey} />
+                    )}
+                  </View>
+                  <ThemedText style={[profile.id === activeProfileId && { fontWeight: '700' as const }]}>
+                    {profile.label}
+                  </ThemedText>
+                  {profile.id === activeProfileId && (
+                    <Icon
+                      name="check"
+                      size={20}
+                      color={ColorPalette.brand.primary}
+                      style={{ marginLeft: 'auto' }}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </SafeAreaModal>
         {showTabs ? (
           <View accessible={true} style={styles.tabContainer} accessibilityRole="tablist">
             <ScanTab

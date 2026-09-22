@@ -23,6 +23,8 @@ import {
 } from '../utils/witnessCredentialUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
+import { useRCardCredential } from '../hooks/useRCardCredential'
+import { formInputFromTemplate } from '../types/rcard'
 import { testIdWithKey } from '../../../utils/testable'
 
 const AVATAR_BG = '#E8E0E8'
@@ -46,8 +48,11 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   const { t } = useTranslation()
   const [ContactDetailsFooter] = useServices([TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER])
   const [connectionId, setConnectionId] = useState<string | null>(null)
+  const [sharedProfileId, setSharedProfileId] = useState<string | undefined>(undefined)
+  const [sharedProfileLabelSnapshot, setSharedProfileLabelSnapshot] = useState<string | undefined>(undefined)
   const [isRemoveModalDisplayed, setIsRemoveModalDisplayed] = useState<boolean>(false)
   const { deleteContact } = useDeleteContact()
+  const { profiles } = useRCardCredential()
   const {
     openIdState: { w3cCredentialRecords },
   } = useOpenIDCredentials()
@@ -62,6 +67,14 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
   const displayEmail = displayInfo.email || contact.issuer.email
   const displayOrganization = displayInfo.organization || contact.issuer.organization
   const displayPhoto = displayInfo.photo || contact.issuer.photo
+
+  // Live lookup by id so a later profile rename shows up here immediately;
+  // only falls back to the share-time label snapshot once the profile no
+  // longer exists (findByCounterpartyRelationshipDid useEffect below).
+  const liveSharedProfile = useMemo(
+    () => profiles.find((profile) => profile.id === sharedProfileId),
+    [profiles, sharedProfileId]
+  )
 
   const witnessCredentials = useMemo(() => {
     return getWitnessCredentialsForSubject(w3cCredentialRecords, contact.issuer.id)
@@ -127,6 +140,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
         if (record?.connectionId) {
           setConnectionId(record.connectionId)
         }
+        setSharedProfileId(record?.sharedProfileId)
+        setSharedProfileLabelSnapshot(record?.sharedProfileLabel)
       } catch (error) {
         // eslint-disable-next-line no-console
         console.warn(
@@ -249,6 +264,32 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
       ...TextTheme.normal,
       fontSize: 16,
       color: NAME_COLOR,
+    },
+    linkedProfileCard: {
+      backgroundColor: ColorPalette.grayscale.white,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      padding: 12,
+      marginBottom: 12,
+    },
+    linkedProfileRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    linkedProfileAvatar: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: AVATAR_BG,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      marginRight: 8,
+    },
+    linkedProfileAvatarImage: {
+      width: 24,
+      height: 24,
     },
     viewMessagesRow: {
       flexDirection: 'row',
@@ -495,6 +536,34 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
           </View>
           <ThemedText style={styles.viewMessagesText}>{t('ContactDetails.ViewMessages')}</ThemedText>
         </TouchableOpacity>
+
+        {sharedProfileId && (
+          <View style={styles.linkedProfileCard} testID="LinkedProfileCard">
+            <ThemedText style={styles.fieldLabel}>{t('ContactDetails.LinkedProfile')}</ThemedText>
+            {liveSharedProfile ? (
+              <View style={styles.linkedProfileRow}>
+                <View style={styles.linkedProfileAvatar}>
+                  {formInputFromTemplate(liveSharedProfile).photo ? (
+                    <Image
+                      testID={testIdWithKey('LinkedProfileAvatarImage')}
+                      style={styles.linkedProfileAvatarImage}
+                      source={{ uri: formInputFromTemplate(liveSharedProfile).photo }}
+                    />
+                  ) : (
+                    <Icon name="account-outline" size={16} color="#666666" />
+                  )}
+                </View>
+                <ThemedText style={styles.fieldValue} selectable={true}>
+                  {liveSharedProfile.label}
+                </ThemedText>
+              </View>
+            ) : (
+              <ThemedText style={styles.fieldValue} selectable={true}>
+                {t('ContactDetails.LinkedProfileDeleted', { label: sharedProfileLabelSnapshot ?? '' })}
+              </ThemedText>
+            )}
+          </View>
+        )}
 
         <ContactDetailsFooter contact={contact} connectionId={connectionId} />
 

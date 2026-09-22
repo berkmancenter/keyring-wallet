@@ -19,6 +19,7 @@ exports[`Settings Screen Renders correctly 1`] = `
 >
   <RCTScrollView
     ListFooterComponent={[Function]}
+    ListHeaderComponent={[Function]}
     data={
       Array [
         Object {
@@ -154,6 +155,10 @@ exports[`Settings Screen Renders correctly 1`] = `
     stickyHeaderIndices={Array []}
   >
     <View>
+      <View
+        collapsable={false}
+        onLayout={[Function]}
+      />
       <View
         onFocusCapture={[Function]}
         onLayout={[Function]}
@@ -1934,6 +1939,7 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
 >
   <RCTScrollView
     ListFooterComponent={[Function]}
+    ListHeaderComponent={[Function]}
     data={
       Array [
         Object {
@@ -2069,6 +2075,10 @@ exports[`Settings Screen Renders correctly with wallet naming capability enabled
     stickyHeaderIndices={Array []}
   >
     <View>
+      <View
+        collapsable={false}
+        onLayout={[Function]}
+      />
       <View
         onFocusCapture={[Function]}
         onLayout={[Function]}

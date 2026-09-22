@@ -64,4 +64,35 @@ describe('CommonRemoveModal Component', () => {
 
     expect(tree).toMatchSnapshot()
   })
+
+  test('Profile delete with contacts renders correctly and reports the contact count', async () => {
+    const tree = render(
+      <CommonRemoveModal visible={true} usage={ModalUsage.ProfileDeleteWithContacts} extraDetails="3" />
+    )
+
+    expect(tree.getByText('MyProfiles.DeleteWithContactsTitle')).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('ConfirmDeleteProfileButton'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('CancelDeleteProfileButton'))).toBeTruthy()
+    expect(tree).toMatchSnapshot()
+  })
+
+  test('Profile delete with contacts triggers callbacks', async () => {
+    const onSubmit = jest.fn()
+    const onCancel = jest.fn()
+    const tree = render(
+      <CommonRemoveModal
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+        visible={true}
+        usage={ModalUsage.ProfileDeleteWithContacts}
+        extraDetails="1"
+      />
+    )
+
+    fireEvent(tree.getByTestId(testIdWithKey('ConfirmDeleteProfileButton')), 'press')
+    fireEvent(tree.getByTestId(testIdWithKey('CancelDeleteProfileButton')), 'press')
+
+    expect(onSubmit).toBeCalledTimes(1)
+    expect(onCancel).toBeCalledTimes(1)
+  })
 })

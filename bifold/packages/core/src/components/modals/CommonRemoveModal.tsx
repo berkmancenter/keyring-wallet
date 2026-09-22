@@ -126,6 +126,8 @@ const CommonRemoveModal: React.FC<CommonRemoveModalProps> = ({ usage, visible, o
         return t('ContactDetails.GoToCredentials')
       case ModalUsage.CredentialRemove:
         return t('CredentialDetails.RemoveFromWallet')
+      case ModalUsage.ProfileDeleteWithContacts:
+        return t('MyProfiles.DeleteAnyway')
       default:
         return t('Global.Decline')
     }
@@ -139,6 +141,8 @@ const CommonRemoveModal: React.FC<CommonRemoveModalProps> = ({ usage, visible, o
         return t('ContactDetails.GoToCredentials')
       case ModalUsage.CredentialRemove:
         return t('CredentialDetails.RemoveCredential')
+      case ModalUsage.ProfileDeleteWithContacts:
+        return t('MyProfiles.DeleteAnyway')
       default:
         return t('Global.Decline')
     }
@@ -154,6 +158,8 @@ const CommonRemoveModal: React.FC<CommonRemoveModalProps> = ({ usage, visible, o
       case ModalUsage.CredentialOfferDecline:
       case ModalUsage.ProofRequestDecline:
         return testIdWithKey('ConfirmDeclineButton')
+      case ModalUsage.ProfileDeleteWithContacts:
+        return testIdWithKey('ConfirmDeleteProfileButton')
       default:
         return testIdWithKey('ConfirmButton')
     }
@@ -169,6 +175,8 @@ const CommonRemoveModal: React.FC<CommonRemoveModalProps> = ({ usage, visible, o
       case ModalUsage.CredentialOfferDecline:
       case ModalUsage.ProofRequestDecline:
         return testIdWithKey('CancelDeclineButton')
+      case ModalUsage.ProfileDeleteWithContacts:
+        return testIdWithKey('CancelDeleteProfileButton')
       default:
         return testIdWithKey('CancelButton')
     }
@@ -279,6 +287,19 @@ const CommonRemoveModal: React.FC<CommonRemoveModalProps> = ({ usage, visible, o
               {t('CredentialOffer.CustomOfferParagraph1')}
             </ThemedText>
             <ThemedText variant="modalNormal">{t('CredentialOffer.CustomOfferParagraph2')}</ThemedText>
+          </View>
+        )
+      case ModalUsage.ProfileDeleteWithContacts:
+        return (
+          <View style={{ marginBottom: 25 }}>
+            <View style={{ marginBottom: 25 }}>
+              <ThemedText variant="modalTitle">{t('MyProfiles.DeleteWithContactsTitle')}</ThemedText>
+            </View>
+            <View>
+              <ThemedText variant="modalNormal">
+                {t('MyProfiles.DeleteWithContactsMessage', { count: Number(extraDetails ?? 0) })}
+              </ThemedText>
+            </View>
           </View>
         )
       default:

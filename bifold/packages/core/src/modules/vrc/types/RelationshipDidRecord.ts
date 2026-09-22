@@ -8,6 +8,14 @@ export interface RelationshipDidRecordProps {
   connectionId?: string
   /** RCE protocol version announced by the counterparty (absent = 1, pre-VC-2.0 peer) */
   counterpartyRceVersion?: number
+  /** The id of the R-Card profile most recently shared with this counterparty. */
+  sharedProfileId?: string
+  /**
+   * Snapshot of the shared profile's label at share time — a fallback only,
+   * used when `sharedProfileId` no longer resolves to a live profile (it was
+   * deleted). The live profile's current label always takes precedence.
+   */
+  sharedProfileLabel?: string
   createdAt?: Date
   tags?: CustomTags
 }
@@ -19,6 +27,7 @@ export type CustomTags = TagsBase & {
 export type DefaultRelationshipDidRecordTags = {
   counterpartyConnectionDid: string
   counterpartyRelationshipDid?: string
+  sharedProfileId?: string
 }
 
 /**
@@ -40,6 +49,8 @@ export class RelationshipDidRecord extends BaseRecord<DefaultRelationshipDidReco
   public connectionId?: string
   /** RCE protocol version announced by the counterparty (absent = 1, pre-VC-2.0 peer) */
   public counterpartyRceVersion?: number
+  public sharedProfileId?: string
+  public sharedProfileLabel?: string
 
   public static readonly type = 'RelationshipDidRecord'
   public readonly type = RelationshipDidRecord.type
@@ -54,6 +65,8 @@ export class RelationshipDidRecord extends BaseRecord<DefaultRelationshipDidReco
       this.counterpartyRelationshipDid = props.counterpartyRelationshipDid
       this.connectionId = props.connectionId
       this.counterpartyRceVersion = props.counterpartyRceVersion
+      this.sharedProfileId = props.sharedProfileId
+      this.sharedProfileLabel = props.sharedProfileLabel
       this.createdAt = props.createdAt ?? new Date()
       this._tags = props.tags ?? ({} as CustomTags)
     }
@@ -64,6 +77,7 @@ export class RelationshipDidRecord extends BaseRecord<DefaultRelationshipDidReco
       ...this._tags,
       counterpartyConnectionDid: this.counterpartyConnectionDid,
       counterpartyRelationshipDid: this.counterpartyRelationshipDid,
+      sharedProfileId: this.sharedProfileId,
     }
   }
 }

@@ -34,6 +34,8 @@ describe('RelationshipDidRecord Types and Interface', () => {
     myRelationshipDid: props.myRelationshipDid,
     counterpartyRelationshipDid: props.counterpartyRelationshipDid,
     connectionId: props.connectionId,
+    sharedProfileId: props.sharedProfileId,
+    sharedProfileLabel: props.sharedProfileLabel,
     createdAt: props.createdAt ?? new Date(),
     type: 'RelationshipDidRecord' as const,
     _tags: props.tags ?? {},
@@ -42,6 +44,7 @@ describe('RelationshipDidRecord Types and Interface', () => {
         ...this._tags,
         counterpartyConnectionDid: this.counterpartyConnectionDid,
         counterpartyRelationshipDid: this.counterpartyRelationshipDid,
+        sharedProfileId: this.sharedProfileId,
       }
     },
   })
@@ -108,6 +111,20 @@ describe('RelationshipDidRecord Types and Interface', () => {
       expect(record.createdAt).toBe(customDate)
     })
 
+    it('should accept optional sharedProfileId and sharedProfileLabel props', () => {
+      const props: RelationshipDidRecordProps = {
+        counterpartyConnectionDid: testDids.counterpartyConnectionDid,
+        myRelationshipDid: testDids.myRelationshipDid,
+        sharedProfileId: 'profile-123',
+        sharedProfileLabel: 'Work',
+      }
+
+      const record = createMockRecord(props)
+
+      expect(record.sharedProfileId).toBe('profile-123')
+      expect(record.sharedProfileLabel).toBe('Work')
+    })
+
     it('should accept optional tags prop', () => {
       const customTags: CustomTags = {
         counterpartyConnectionDid: testDids.counterpartyConnectionDid,
@@ -157,6 +174,18 @@ describe('RelationshipDidRecord Types and Interface', () => {
       const tags: DefaultRelationshipDidRecordTags = record.getTags()
 
       expect(tags.counterpartyRelationshipDid).toBeUndefined()
+    })
+
+    it('should include sharedProfileId tag when set, for querying contacts by shared profile', () => {
+      const record = createMockRecord({
+        counterpartyConnectionDid: testDids.counterpartyConnectionDid,
+        myRelationshipDid: testDids.myRelationshipDid,
+        sharedProfileId: 'profile-123',
+      })
+
+      const tags: DefaultRelationshipDidRecordTags = record.getTags()
+
+      expect(tags.sharedProfileId).toBe('profile-123')
     })
   })
 

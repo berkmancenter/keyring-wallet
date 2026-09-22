@@ -119,7 +119,9 @@ export interface State {
 }
 
 export interface RCardState {
-  template?: RCardTemplate
+  profiles: RCardTemplate[]
+  /** RCardTemplate.id of the profile offered when connecting. */
+  activeProfileId?: string
   lastSyncedAt?: string
 }
 

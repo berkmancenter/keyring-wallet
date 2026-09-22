@@ -3,6 +3,8 @@ import {
   validateRCardForm,
   extractFormInputFromJCard,
   buildJCardFromFormInput,
+  formInputFromTemplate,
+  LEGACY_SHARED_TEMPLATE_ID,
 } from '../../src/modules/vrc/types/rcard'
 
 describe('R-card template helpers', () => {
@@ -49,6 +51,44 @@ describe('R-card template helpers', () => {
     expect(formInput.lastName).toEqual('Example')
     expect(template.id).toBeDefined()
     expect(template.id).toMatch(/^urn:uuid:/)
+  })
+
+  test('buildRCardTemplate mints templateId from id by default, not the old shared constant', () => {
+    // The whole multi-profile storage design (§4.1 of the editable-multi-profile
+    // plan) depends on every NEW profile getting a unique templateId equal to
+    // its own id — a per-profile Credo query key — rather than every profile
+    // colliding on the pre-Phase-2 shared constant. Regressing this silently
+    // breaks disambiguation between profiles without any type error.
+    const first = buildRCardTemplate({ firstName: 'A', lastName: 'B', email: '', organization: '' })
+    const second = buildRCardTemplate({ firstName: 'C', lastName: 'D', email: '', organization: '' })
+
+    expect(first.templateId).toBe(first.id)
+    expect(second.templateId).toBe(second.id)
+    expect(first.templateId).not.toBe(second.templateId)
+    expect(first.templateId).not.toBe(LEGACY_SHARED_TEMPLATE_ID)
+  })
+
+  test('buildRCardTemplate still honors an explicit templateId override', () => {
+    const template = buildRCardTemplate(
+      { firstName: 'A', lastName: 'B', email: '', organization: '' },
+      { id: 'urn:uuid:fixed-id', templateId: 'a-specific-templateId' }
+    )
+    expect(template.templateId).toBe('a-specific-templateId')
+  })
+
+  test('formInputFromTemplate fills every field, defaulting anything missing from the jcard to an empty string', () => {
+    const bareTemplate = buildRCardTemplate({ firstName: 'Alice', lastName: '', email: '', organization: '' })
+
+    const input = formInputFromTemplate(bareTemplate)
+
+    expect(input).toEqual({
+      firstName: 'Alice',
+      lastName: '',
+      email: '',
+      organization: '',
+      photo: undefined,
+      label: bareTemplate.label,
+    })
   })
 
   test('buildJCardFromFormInput omits photo property when no photo is provided', () => {

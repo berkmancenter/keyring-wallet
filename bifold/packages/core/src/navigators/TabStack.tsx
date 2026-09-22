@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Text, useWindowDimensions, View, StyleSheet, DeviceEventEmitter } from 'react-native'
+import { AppState, Text, useWindowDimensions, View, StyleSheet, DeviceEventEmitter } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -19,12 +19,16 @@ import { BifoldError } from '../types/error'
 import { TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
+import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
+import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
+import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import InAppMessageNotifier from '../components/InAppMessageNotifier'
 import ContactStack from './ContactStack'
 import CredentialStack from './CredentialStack'
 import MessageStack from './MessageStack'
+import MyAgentStack from './MyAgentStack'
 import SettingStack from './SettingStack'
 import { BaseTourID } from '../types/tour'
 import QRCodeExchangeSlider from '../modules/vrc/components/QRCodeExchangeSlider'
@@ -55,6 +59,28 @@ const TabStack: React.FC = () => {
   const handleDeepLink = useCallback(
     async (deepLink: string) => {
       logger.info(`Handling deeplink: ${deepLink}`)
+
+      // An agent enrolment offer (keyring://vta/enrol?o=…), a community
+      // invitation (keyring://vti/invitation?c=…) or a vetter's ticket
+      // (vetting-ticket:?…) — ours, not DIDComm OOB links.
+      // The same routing the scanner and the paste screen use.
+      if (keyringAgentLinkKind(deepLink)) {
+        try {
+          if (agent) {
+            await routeKeyringAgentLink(deepLink, agent, (destination) =>
+              (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
+                TabStacks.MyAgentStack,
+                { screen: MY_AGENT_SCREEN[destination] }
+              )
+            )
+          }
+        } catch (err: unknown) {
+          logger.error(`agent link rejected: ${(err as Error)?.message ?? err}`)
+        } finally {
+          dispatch({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [undefined] })
+        }
+        return
+      }
 
       // If it's just the general link with no params, set link inactive and do nothing
       if (deepLink.search(/oob=|c_i=|d_m=|url=/) < 0) {
@@ -103,6 +129,18 @@ const TabStack: React.FC = () => {
     ]
   )
 
+  // A linked phone reconnects to its agent from start-up, and again whenever
+  // the app returns to the foreground (plan §4.2) — not only when a screen
+  // that needs the agent happens to be open.
+  useEffect(() => {
+    if (!agent || !store.authentication.didAuthenticate) return
+    void vtaAgent.restore(agent)
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void vtaAgent.ensureOnline(agent)
+    })
+    return () => subscription.remove()
+  }, [agent, store.authentication.didAuthenticate])
+
   useEffect(() => {
     if (store.deepLink && agent && store.authentication.didAuthenticate) {
       handleDeepLink(store.deepLink)
@@ -117,6 +155,7 @@ const TabStack: React.FC = () => {
       edges={['left', 'right', 'top']}
     >
       {GradientBg && <GradientBg style={StyleSheet.absoluteFillObject} />}
+      <VtaOfflineBanner />
       <Tab.Navigator
         initialRouteName={TabStacks.ContactStack}
         screenOptions={{
@@ -274,17 +313,42 @@ const TabStack: React.FC = () => {
           }}
         />
         <Tab.Screen
+          name={TabStacks.MyAgentStack}
+          component={MyAgentStack}
+          options={{
+            tabBarIconStyle: styles.tabBarIcon,
+            tabBarIcon: ({ color, focused }) => (
+              <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
+                <Icon name={focused ? 'shield-account' : 'shield-account-outline'} size={24} color={color} />
+                {showLabels && (
+                  <Text
+                    style={{
+                      ...TabTheme.tabBarTextStyle,
+                      color: focused ? TabTheme.tabBarActiveTintColor : TabTheme.tabBarInactiveTintColor,
+                      fontWeight: focused ? TextTheme.bold.fontWeight : TextTheme.normal.fontWeight,
+                    }}
+                  >
+                    {t('TabStack.MyAgent')}
+                  </Text>
+                )}
+              </View>
+            ),
+            tabBarShowLabel: false,
+            tabBarAccessibilityLabel: t('TabStack.MyAgent'),
+            // A literal key, not the translated label: the tabs that pass a
+            // translated string into testIdWithKey have locale-dependent
+            // testIDs, which the e2e harness already works around.
+            tabBarTestID: testIdWithKey('MyAgent'),
+          }}
+        />
+        <Tab.Screen
           name={TabStacks.SettingStack}
           component={SettingStack}
           options={{
             tabBarIconStyle: styles.tabBarIcon,
             tabBarIcon: ({ color, focused }) => (
               <View style={{ ...TabTheme.tabBarContainerStyle, justifyContent: showLabels ? 'flex-end' : 'center' }}>
-                {Assets.svg.tabMenuIcon ? (
-                  <Assets.svg.tabMenuIcon height={26} width={26} fill={color} />
-                ) : (
-                  <Icon name="menu" size={26} color={color} />
-                )}
+                <Icon name={focused ? 'account-circle' : 'account-circle-outline'} size={26} color={color} />
                 {showLabels && (
                   <Text
                     style={{

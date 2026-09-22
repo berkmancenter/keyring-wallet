@@ -28,7 +28,13 @@
  */
 
 import type { Agent, VerificationMethod } from '@credo-ts/core'
-import { Kms, MultiBaseEncoder, MultiHashEncoder, TypedArrayEncoder, getPublicJwkFromVerificationMethod } from '@credo-ts/core'
+import {
+  Kms,
+  MultiBaseEncoder,
+  MultiHashEncoder,
+  TypedArrayEncoder,
+  getPublicJwkFromVerificationMethod,
+} from '@credo-ts/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import canonicalize from 'canonicalize'
@@ -109,26 +115,19 @@ function firstSigningVerificationMethod(didDocument: {
 export async function signDocumentProof(
   agent: Agent,
   document: Record<string, unknown>,
-  controllerDid: string
+  controllerDid: string,
+  options: {
+    /**
+     * The KMS key to sign with, when the controller is not a DID this wallet
+     * created — a VTA-minted persona whose signing key was borrowed into the
+     * KMS for the session. Without it the key is looked up on the DidRecord.
+     */
+    kmsKeyId?: string
+    /** The verification method to name in the proof; defaults to the first signing one. */
+    verificationMethodId?: string
+  } = {}
 ): Promise<Record<string, unknown>> {
-  const didDocument = await agent.dids.resolveDidDocument(controllerDid)
-  const verificationMethod = firstSigningVerificationMethod(didDocument as never)
-  if (!verificationMethod) {
-    throw new Error(`no verification method on ${controllerDid}`)
-  }
-
-  // The KMS key id is not derivable from the JWK alone: it lives in the
-  // DidRecord's key mapping, with the pre-0.6 fingerprint id as fallback —
-  // the same resolution credo's own W3cJsonLdCredentialService.signCredential
-  // performs (getPublicJwkFromVerificationMethod in that service).
-  const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
-  const relativeKeyId = verificationMethod.id.startsWith(controllerDid)
-    ? verificationMethod.id.slice(controllerDid.length)
-    : verificationMethod.id
-  const [didRecord] = await agent.dids.getCreatedDids({ did: controllerDid })
-  publicJwk.keyId =
-    didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ??
-    publicJwk.legacyKeyId
+  const { verificationMethod, publicJwk } = await resolveSigningKey(agent, controllerDid, options)
   const proofConfig: Record<string, unknown> = {
     type: 'DataIntegrityProof',
     cryptosuite: 'eddsa-jcs-2022',
@@ -157,6 +156,66 @@ export async function signDocumentProof(
 }
 
 /**
+ * The verification method a DID signs with here, and the KMS key behind it.
+ * The KMS key id is not derivable from the JWK alone: it lives in the
+ * DidRecord's key mapping, with the pre-0.6 fingerprint id as fallback — the
+ * same resolution credo's own W3cJsonLdCredentialService.signCredential
+ * performs (getPublicJwkFromVerificationMethod in that service).
+ */
+async function resolveSigningKey(
+  agent: Agent,
+  controllerDid: string,
+  options: { kmsKeyId?: string; verificationMethodId?: string }
+) {
+  const didDocument = await agent.dids.resolveDidDocument(controllerDid)
+  const verificationMethod = options.verificationMethodId
+    ? (didDocument.dereferenceKey(options.verificationMethodId, ['assertionMethod', 'authentication']) ??
+      firstSigningVerificationMethod(didDocument as never))
+    : firstSigningVerificationMethod(didDocument as never)
+  if (!verificationMethod) {
+    throw new Error(`no verification method on ${controllerDid}`)
+  }
+  const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
+  const relativeKeyId = verificationMethod.id.startsWith(controllerDid)
+    ? verificationMethod.id.slice(controllerDid.length)
+    : verificationMethod.id
+  if (options.kmsKeyId) {
+    publicJwk.keyId = options.kmsKeyId
+  } else {
+    const [didRecord] = await agent.dids.getCreatedDids({ did: controllerDid })
+    publicJwk.keyId =
+      didRecord?.keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === relativeKeyId)?.kmsKeyId ??
+      publicJwk.legacyKeyId
+  }
+  return { verificationMethod, publicJwk }
+}
+
+/**
+ * A compact EdDSA JWS signed by a DID this agent holds — the form a VTA takes
+ * a proof of possession in (the `linkProof` of `acl/swap-key/0.1`, a VP-JWT)
+ * and the form an enrolment page takes a device's key in. The header's `kid`
+ * is the verification method's full id, so a verifier resolves the same key.
+ */
+export async function signCompactJws(
+  agent: Agent,
+  controllerDid: string,
+  payload: Record<string, unknown>,
+  options: { kmsKeyId?: string; verificationMethodId?: string; typ?: string } = {}
+): Promise<string> {
+  const { verificationMethod, publicJwk } = await resolveSigningKey(agent, controllerDid, options)
+  const kid = verificationMethod.id.startsWith('#') ? `${controllerDid}${verificationMethod.id}` : verificationMethod.id
+  const encode = (value: unknown) => TypedArrayEncoder.toBase64Url(new TextEncoder().encode(JSON.stringify(value)))
+  const signingInput = `${encode({ alg: 'EdDSA', kid, typ: options.typ ?? 'JWT' })}.${encode(payload)}`
+  const kms = agent.dependencyManager.resolve(Kms.KeyManagementApi)
+  const { signature } = await kms.sign({
+    keyId: publicJwk.keyId,
+    data: new TextEncoder().encode(signingInput),
+    algorithm: 'EdDSA',
+  })
+  return `${signingInput}.${TypedArrayEncoder.toBase64Url(signature)}`
+}
+
+/**
  * Verify a document's eddsa-jcs-2022 proof against an EXPECTED controller —
  * for our profile, the sender's relationship DID as established by the
  * accepted proposal. The framework's ProofVerifier contract leaves the
@@ -173,10 +232,37 @@ export async function verifyDocumentProof(
   document: Record<string, unknown>,
   expectedController: string
 ): Promise<boolean> {
+  const { proof, ...unsecured } = document
+  if (!proof || typeof proof !== 'object') return false
+  if (!Array.isArray(proof))
+    return verifyOneProof(agent, proof as Record<string, unknown>, unsecured, expectedController)
+
+  // A PROOF SET (Data Integrity §2.1.2): several independent proofs, each over
+  // the document without any of them. vtc-service signs its status lists this
+  // way — eddsa-jcs-2022 beside a post-quantum mldsa44-jcs-2024 — and reading
+  // `proof` as one object found no proofValue and called a genuine list
+  // unsigned. Every proof in a suite we implement must verify, and at least one
+  // must be present: a failing one means the document was altered after it was
+  // signed, whatever its siblings say. A suite we do not implement is neither
+  // trusted nor held against the document; it is simply not ours to judge.
+  const ours = proof.filter(
+    (p): p is Record<string, unknown> =>
+      !!p && typeof p === 'object' && (p as Record<string, unknown>).cryptosuite === 'eddsa-jcs-2022'
+  )
+  if (ours.length === 0) return false
+  for (const p of ours) {
+    if (!(await verifyOneProof(agent, p, unsecured, expectedController))) return false
+  }
+  return true
+}
+
+async function verifyOneProof(
+  agent: Agent,
+  p: Record<string, unknown>,
+  unsecured: Record<string, unknown>,
+  expectedController: string
+): Promise<boolean> {
   try {
-    const { proof, ...unsecured } = document
-    if (!proof || typeof proof !== 'object') return false
-    const p = proof as Record<string, unknown>
     if (p.type !== 'DataIntegrityProof' || p.cryptosuite !== 'eddsa-jcs-2022') return false
     if (p.proofPurpose !== 'assertionMethod') return false
     const verificationMethodId = String(p.verificationMethod ?? '')
@@ -203,10 +289,13 @@ export async function verifyDocumentProof(
     signedInput.set(documentHash, configHash.length)
 
     const didDocument = await agent.dids.resolveDidDocument(expectedController)
-    const fragment = verificationMethodId.includes('#') ? verificationMethodId.slice(verificationMethodId.indexOf('#')) : ''
+    const fragment = verificationMethodId.includes('#')
+      ? verificationMethodId.slice(verificationMethodId.indexOf('#'))
+      : ''
     const verificationMethod =
-      didDocument.verificationMethod?.find((m) => m.id === verificationMethodId || (fragment && m.id.endsWith(fragment))) ??
-      firstSigningVerificationMethod(didDocument as never)
+      didDocument.verificationMethod?.find(
+        (m) => m.id === verificationMethodId || (fragment && m.id.endsWith(fragment))
+      ) ?? firstSigningVerificationMethod(didDocument as never)
     if (!verificationMethod) return false
     const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
     const publicKeyBytes = (publicJwk.publicKey as { publicKey: Uint8Array }).publicKey

@@ -144,6 +144,78 @@ exports[`RCardOnboarding Screen submits valid form with all fields and stores te
             <View
               style={
                 Object {
+                  "marginVertical": 10,
+                  "width": "100%",
+                }
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Object {
+                      "marginBottom": 5,
+                    },
+                  ]
+                }
+              >
+                RCardOnboarding.Fields.ProfileName
+              </Text>
+              <TextInput
+                accessibilityLabel="RCardOnboarding.Fields.ProfileName"
+                autoCapitalize="words"
+                maxFontSizeMultiplier={2}
+                maxLength={40}
+                onBlur={[Function]}
+                onChangeText={[Function]}
+                onFocus={[Function]}
+                returnKeyType="next"
+                selectionColor="#42803E"
+                style={
+                  Array [
+                    Object {
+                      "backgroundColor": "#000000",
+                      "borderColor": "#FFFFFFFF",
+                      "borderRadius": 4,
+                      "borderWidth": 2,
+                      "color": "#FFFFFF",
+                      "fontSize": 16,
+                      "padding": 10,
+                    },
+                    false,
+                  ]
+                }
+                testID="com.ariesbifold:id/RCardLabelInput"
+              />
+            </View>
+            <Text
+              maxFontSizeMultiplier={2}
+              style={
+                Array [
+                  Object {
+                    "color": "#FFFFFF",
+                    "fontSize": 18,
+                    "fontWeight": "normal",
+                  },
+                  Object {
+                    "color": "#888",
+                    "fontSize": 12,
+                    "marginBottom": 16,
+                    "marginTop": -12,
+                  },
+                ]
+              }
+            >
+              RCardOnboarding.Fields.ProfileNameHint
+            </Text>
+            <View
+              style={
+                Object {
                   "alignItems": "center",
                   "marginBottom": 16,
                 }

@@ -60,3 +60,82 @@ export type { PendingTrustTaskPrompt } from './trustTaskPromptStore'
 export { trustTaskDisplayRegistry } from './display/trustTaskDisplayRegistry'
 export { registerTrustTaskDisplay } from './display/register'
 export { findV2MediationRecord, getRoutingForV2, provisionV2Mediation, startV2MessagePickup } from './v2Routing'
+export {
+  VtiMediatorSession,
+  VtiMediatorOutboundTransport,
+  resolveVtiMediator,
+  vtiClientIdentityFromPersona,
+  vtiClientIdentityFromDid,
+  createVtiClientDid,
+} from './module/VtiMediatorTransport'
+export type { VtiMediatorEndpoints, VtiClientIdentity } from './module/VtiMediatorTransport'
+export { vtiAgent, VtiRefusal } from './module/vtiAgent'
+export { VtaClient, VTA_TASK, resolveVtaMediator } from './module/VtaClient'
+export type { VtaWhoAmI, VtaContext, VtaMintedDid } from './module/VtaClient'
+export { GenericRecordsIdentityStore } from './module/VtiIdentityStore'
+export type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './module/VtiIdentityStore'
+export { importVtaKey, decodeMultibaseKey } from './module/vtaKeys'
+export type { VtaExportedKey } from './module/vtaKeys'
+export type { VtiAgentState, VtiAgentStatus, VtiCriterion, VtiManifest, VtiVerdict } from './module/vtiAgent'
+export {
+  GenericRecordsCommunityStore,
+  type VtiCommunityStore,
+  type VtiInvitation,
+  type VtiMembership,
+} from './module/VtiCommunityStore'
+export {
+  isVtiInvitationLink,
+  buildVtiInvitationLink,
+  parseVtiInvitationLink,
+  describeInvitation,
+} from './module/vtiInvitation'
+export {
+  joinCommunity,
+  ensurePersonaFor,
+  membershipFromVerdict,
+  type VtiJoinStep,
+  type VtiJoinDeps,
+  type VtiJoinResult,
+} from './module/vtiJoin'
+
+export { vtaAgent, type VtaAgentState, type VtiApproval } from './module/vtaAgent'
+export type { VtaConsentRequest } from './module/VtaClient'
+export {
+  receiveIssue,
+  classifyCredential,
+  credentialsOfIssue,
+  CREDENTIAL_EXCHANGE_ISSUE,
+  type VtiReceivedCredential,
+  type VtiCredentialKind,
+} from './module/vtiInbox'
+export type { VtiHeldCredential } from './module/VtiCommunityStore'
+export {
+  VtiVetterDesk,
+  VtiApplicant,
+  GenericRecordsVettingStore,
+  VETTING,
+  identityCommitment,
+  type VtiVettingStore,
+  type VettingTicket,
+  type VettingDeskRequest,
+  type VettingVetterProfile,
+  type VettingApplication,
+  type VettingApplicationRequest,
+  type VettingMethod,
+} from './module/vtiVetting'
+export {
+  setPeerLegCarriage,
+  getPeerLegCarriage,
+  createVtiVidResolver,
+  tspIdentityFromPersona,
+  tspSessionForPersona,
+  packTrustTaskForPeer,
+  unpackTrustTaskFromPeer,
+  plaintextFromTrustTask,
+  GenericRecordsTspPeerRevisionStore,
+  MemoryTspPeerRevisionStore,
+  type PeerLegCarriage,
+  type PeerRevisionRecord,
+  type TspPeerRevisionStore,
+  type TspSessionIdentity,
+} from './module/vtiTsp'

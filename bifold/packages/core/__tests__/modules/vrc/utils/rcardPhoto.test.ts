@@ -12,7 +12,7 @@ import {
  *  native runtime. */
 function fakeManipulator(bytesByQuality: Record<number, number>): ManipulateAsyncFn {
   return jest.fn(async (_uri, actions, saveOptions) => {
-    const resize = actions[0]?.resize
+    const resize = actions[actions.length - 1]?.resize
     const quality = saveOptions.compress ?? 1
     const bytes = bytesByQuality[quality] ?? 20 * 1024
     return {
@@ -82,6 +82,33 @@ describe('processRCardPhoto', () => {
 
     await expect(processRCardPhoto('file:///source.jpg', manipulateAsync)).rejects.toThrow(
       'Image manipulation did not return base64 data'
+    )
+  })
+
+  test('adds the given crop rect as the first action, ahead of the resize', async () => {
+    const manipulateAsync = fakeManipulator({ 0.8: 8 * 1024 })
+
+    await processRCardPhoto('file:///source.jpg', manipulateAsync, { originX: 200, originY: 0, width: 800, height: 800 })
+
+    expect(manipulateAsync).toHaveBeenCalledWith(
+      'file:///source.jpg',
+      [
+        { crop: { originX: 200, originY: 0, width: 800, height: 800 } },
+        { resize: { width: RCARD_PHOTO_MAX_DIMENSION, height: RCARD_PHOTO_MAX_DIMENSION } },
+      ],
+      { compress: 0.8, format: 'jpeg', base64: true }
+    )
+  })
+
+  test('omits the crop action when no crop rect is given', async () => {
+    const manipulateAsync = fakeManipulator({ 0.8: 8 * 1024 })
+
+    await processRCardPhoto('file:///source.jpg', manipulateAsync)
+
+    expect(manipulateAsync).toHaveBeenCalledWith(
+      'file:///source.jpg',
+      [{ resize: { width: RCARD_PHOTO_MAX_DIMENSION, height: RCARD_PHOTO_MAX_DIMENSION } }],
+      { compress: 0.8, format: 'jpeg', base64: true }
     )
   })
 })

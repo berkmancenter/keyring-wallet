@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { LockoutReason, useAuth } from '../contexts/auth'
 import {
   Animated,
+  Image,
   SectionList,
   StyleSheet,
   TouchableOpacity,
@@ -25,6 +26,8 @@ import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { useDeveloperMode } from '../hooks/developer-mode'
 import { Locales, storeLanguage } from '../localization'
+import { useRCardCredential } from '../modules/vrc/hooks/useRCardCredential'
+import { formInputFromTemplate } from '../modules/vrc/types/rcard'
 import { GenericFn } from '../types/fn'
 import { Screens, SettingStackParams, Stacks } from '../types/navigators'
 import { SettingIcon, SettingSection } from '../types/settings'
@@ -41,6 +44,7 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     navigation.navigate(Screens.Developer)
   }
   const { incrementDeveloperMenuCounter } = useDeveloperMode(onDevModeTriggered)
+  const { template } = useRCardCredential()
   const { SettingsTheme, TextTheme, ColorPalette, Assets, maxFontSizeMultiplier } = useTheme()
   const [
     { settings, enableTours, /* enablePushNotifications, */ disableContactsInSettings, supportedLanguages },
@@ -85,6 +89,43 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     footer: {
       marginVertical: 25,
       alignItems: 'center',
+    },
+    profileCard: {
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderRadius: 14,
+      marginHorizontal: 16,
+      marginTop: 16,
+      marginBottom: 20,
+      paddingHorizontal: 20,
+      paddingVertical: 18,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    profileCardRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 10,
+    },
+    profileAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: ColorPalette.brand.primaryBackground,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    profileAvatarImage: {
+      width: 32,
+      height: 32,
+    },
+    profileTextWrap: {
+      marginLeft: 12,
+      flexShrink: 1,
+      minWidth: 0,
     },
   })
 
@@ -566,6 +607,42 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     </View>
   )
 
+  const ProfileCard = () => {
+    if (!template) {
+      return null
+    }
+    const { firstName, lastName, photo } = formInputFromTemplate(template)
+    const name = [firstName, lastName].filter(Boolean).join(' ')
+
+    return (
+      <TouchableOpacity
+        style={styles.profileCard}
+        onPress={() => navigation.navigate(Screens.MyProfiles)}
+        accessibilityRole="button"
+        accessibilityLabel={t('MyProfiles.Title')}
+        testID={testIdWithKey('ProfileCard')}
+      >
+        <ThemedText variant="headingTwo">{t('Settings.ProfileCardSubtitle')}</ThemedText>
+        <View style={styles.profileCardRow}>
+          <View style={styles.profileAvatar}>
+            {photo ? (
+              <Image style={styles.profileAvatarImage} source={{ uri: photo }} />
+            ) : (
+              <Icon name="account-circle" size={22} color={ColorPalette.grayscale.mediumGrey} />
+            )}
+          </View>
+          <View style={styles.profileTextWrap}>
+            <ThemedText numberOfLines={1} style={TextTheme.settingsText}>
+              {name}
+            </ThemedText>
+          </View>
+          <View style={{ flex: 1 }} />
+          <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+        </View>
+      </TouchableOpacity>
+    )
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       <SectionList
@@ -673,6 +750,7 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
             header: { title, icon, iconRight, titleTestID },
           },
         }) => <SectionHeader icon={icon} iconRight={iconRight} title={title} titleTestID={titleTestID} />}
+        ListHeaderComponent={ProfileCard}
         ItemSeparatorComponent={() => (
           <View style={{ backgroundColor: SettingsTheme.groupBackground }}>
             <View style={styles.itemSeparator}></View>

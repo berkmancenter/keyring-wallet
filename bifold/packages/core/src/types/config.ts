@@ -58,6 +58,27 @@ export interface Config {
     values: [AutoLockTimer, ...AutoLockTimer[]]
   }
   enableAttestation: boolean
+  /**
+   * The VTI agent this wallet connects to: the mediator a VTA or a VTC
+   * advertises, and a community to offer. Both are DIDs bound to whatever host
+   * the stack runs behind, so they are deployment configuration rather than
+   * anything the wallet can discover.
+   */
+  vti?: {
+    mediatorDid?: string
+    communityDid?: string
+    /** The personal VTA this phone manages (§2.4 B). Enrolment binds a phone to it. */
+    vtaDid?: string
+    /** Where a persona minted serverlessly is served from — the VTA's own host. */
+    personaBaseUrl?: string
+    /**
+     * What the peer leg (applicant ↔ vetter) puts on the mediator socket:
+     * DIDComm v2 plaintexts, or TSP Rev 3 frames. A build-time choice
+     * (`tsp_rev3_subtask.md` §2.3), never a user setting; a wallet reads
+     * both regardless. Defaults to DIDComm.
+     */
+    peerLeg?: 'didcomm' | 'tsp'
+  }
 }
 
 export interface AutoLockTimer {

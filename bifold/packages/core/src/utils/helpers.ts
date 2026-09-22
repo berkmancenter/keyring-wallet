@@ -39,7 +39,8 @@ import { i18n } from '../localization/index'
 import { BifoldLogger } from '../services/logger'
 import { Role } from '../types/chat'
 import { BifoldError } from '../types/error'
-import { Screens, Stacks } from '../types/navigators'
+import { Screens, Stacks, TabStacks } from '../types/navigators'
+import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
 import {
   CredentialDataForProof,
   ProofCredentialAttributes,
@@ -1301,6 +1302,18 @@ export const connectFromScanOrDeepLink = async (
   }
 
   logger.info(`Attempting to connect from ${isDeepLink ? 'deeplink' : 'qr scan'}`)
+
+  // An agent enrolment offer or a community invitation: ours, not DIDComm, and
+  // needing no mediator — routed before the transport wait below.
+  if (keyringAgentLinkKind(uri)) {
+    await routeKeyringAgentLink(uri, agent, (destination) =>
+      navigation.navigate(Stacks.TabStack as any, {
+        screen: TabStacks.MyAgentStack,
+        params: { screen: MY_AGENT_SCREEN[destination] },
+      })
+    )
+    return
+  }
 
   if (isDeepLink) {
     await waitForMediatorTransport(agent, logger)

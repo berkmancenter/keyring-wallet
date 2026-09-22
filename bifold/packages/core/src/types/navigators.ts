@@ -49,6 +49,8 @@ export enum Screens {
   ToggleBiometry = 'Toggle Biometry',
   PushNotifications = 'Push Notifications',
   RCardOnboarding = 'R-Card',
+  EditRCard = 'Edit Profile',
+  MyProfiles = 'My Profiles',
   TogglePushNotifications = 'Toggle Push Notifications',
   Developer = 'Developer',
   CustomNotification = 'Custom Notification',
@@ -74,6 +76,11 @@ export enum Screens {
   About = 'About',
   ExportWallet = 'Export Wallet',
   ImportWallet = 'Import Wallet',
+  MyAgent = 'My Agent',
+  VtiCommunity = 'Community',
+  VtiVetting = 'Vetting',
+  VtaLink = 'Link your agent',
+  VtaAgent = 'Your agent',
 }
 
 export enum Stacks {
@@ -97,6 +104,7 @@ export enum TabStacks {
   HomeStack = 'Tab Home Stack',
   ConnectStack = 'Tab Connect Stack',
   CredentialStack = 'Tab Credential Stack',
+  MyAgentStack = 'Tab My Agent Stack',
   SettingStack = 'Tab Setting Stack',
 }
 
@@ -123,7 +131,17 @@ export type TabStackParams = {
   [TabStacks.HomeStack]: NavigatorScreenParams<HomeStackParams>
   [TabStacks.ConnectStack]: NavigatorScreenParams<ConnectStackParams>
   [TabStacks.CredentialStack]: NavigatorScreenParams<CredentialStackParams>
+  [TabStacks.MyAgentStack]: NavigatorScreenParams<MyAgentStackParams>
   [TabStacks.SettingStack]: NavigatorScreenParams<SettingStackParams>
+}
+
+/** My Agent: the wallet's VTI agent, the communities it reaches, applications. */
+export type MyAgentStackParams = {
+  [Screens.MyAgent]: undefined
+  [Screens.VtiCommunity]: { communityDid: string }
+  [Screens.VtiVetting]: undefined
+  [Screens.VtaLink]: undefined
+  [Screens.VtaAgent]: undefined
 }
 
 export type OnboardingStackParams = {
@@ -237,6 +255,9 @@ export type SettingStackParams = {
   [Screens.About]: undefined
   [Screens.ExportWallet]: undefined
   [Screens.ImportWallet]: undefined
+  // profileId given: edit that profile. Omitted: create a new one.
+  [Screens.EditRCard]: { profileId: string } | undefined
+  [Screens.MyProfiles]: undefined
 }
 
 export type NotificationStackParams = {

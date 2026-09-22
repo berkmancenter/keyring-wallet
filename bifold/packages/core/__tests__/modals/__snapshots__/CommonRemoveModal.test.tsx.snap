@@ -923,6 +923,452 @@ exports[`CommonRemoveModal Component Custom notification decline renders correct
 </Modal>
 `;
 
+exports[`CommonRemoveModal Component Profile delete with contacts renders correctly and reports the contact count 1`] = `
+<Modal
+  animationType="slide"
+  transparent={true}
+  visible={true}
+>
+  <View
+    style={
+      Object {
+        "backgroundColor": "rgba(0,0,0,0.5)",
+        "flex": 1,
+        "paddingTop": 65,
+      }
+    }
+  >
+    <RNCSafeAreaView
+      edges={
+        Object {
+          "bottom": "additive",
+          "left": "additive",
+          "right": "additive",
+          "top": "off",
+        }
+      }
+      style={
+        Object {
+          "backgroundColor": "#000000",
+          "borderTopLeftRadius": 10,
+          "borderTopRightRadius": 10,
+          "flex": 1,
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "alignItems": "flex-end",
+            "height": 55,
+            "paddingRight": 20,
+            "paddingTop": 10,
+          }
+        }
+      >
+        <View
+          accessibilityLabel="Global.Close"
+          accessibilityRole="button"
+          accessibilityState={
+            Object {
+              "busy": undefined,
+              "checked": undefined,
+              "disabled": undefined,
+              "expanded": undefined,
+              "selected": undefined,
+            }
+          }
+          accessibilityValue={
+            Object {
+              "max": undefined,
+              "min": undefined,
+              "now": undefined,
+              "text": undefined,
+            }
+          }
+          accessible={true}
+          collapsable={false}
+          focusable={true}
+          hitSlop={
+            Object {
+              "bottom": 44,
+              "left": 44,
+              "right": 44,
+              "top": 44,
+            }
+          }
+          onClick={[Function]}
+          onResponderGrant={[Function]}
+          onResponderMove={[Function]}
+          onResponderRelease={[Function]}
+          onResponderTerminate={[Function]}
+          onResponderTerminationRequest={[Function]}
+          onStartShouldSetResponder={[Function]}
+          style={
+            Object {
+              "opacity": 1,
+            }
+          }
+          testID="com.ariesbifold:id/Close"
+        >
+          <Text
+            allowFontScaling={false}
+            selectable={false}
+            style={
+              Array [
+                Object {
+                  "color": "#FFFFFF",
+                  "fontSize": 42,
+                },
+                undefined,
+                Object {
+                  "fontFamily": "Material Icons",
+                  "fontStyle": "normal",
+                  "fontWeight": "normal",
+                },
+                Object {},
+              ]
+            }
+          >
+            
+          </Text>
+        </View>
+      </View>
+      <RCTScrollView
+        style={
+          Object {
+            "flex": 1,
+            "paddingHorizontal": 20,
+            "paddingTop": 10,
+          }
+        }
+      >
+        <View>
+          <View
+            style={
+              Object {
+                "flexDirection": "row",
+                "justifyContent": "center",
+              }
+            }
+          />
+          <View
+            style={
+              Object {
+                "marginBottom": 25,
+              }
+            }
+          >
+            <View
+              style={
+                Object {
+                  "marginBottom": 25,
+                }
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 24,
+                      "fontWeight": "bold",
+                    },
+                    undefined,
+                  ]
+                }
+              >
+                MyProfiles.DeleteWithContactsTitle
+              </Text>
+            </View>
+            <View>
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    undefined,
+                  ]
+                }
+              >
+                MyProfiles.DeleteWithContactsMessage
+              </Text>
+            </View>
+          </View>
+        </View>
+      </RCTScrollView>
+      <View
+        style={
+          Object {
+            "marginBottom": 10,
+            "marginHorizontal": 20,
+            "marginTop": "auto",
+            "position": "relative",
+          }
+        }
+      >
+        <View
+          style={
+            Object {
+              "height": 30,
+              "position": "absolute",
+              "top": -30,
+              "width": "100%",
+            }
+          }
+        >
+          <RNSVGSvgView
+            bbHeight="30"
+            bbWidth="100%"
+            focusable={false}
+            height="30"
+            style={
+              Array [
+                Object {
+                  "backgroundColor": "transparent",
+                  "borderWidth": 0,
+                },
+                Object {
+                  "bottom": 0,
+                  "left": 0,
+                  "position": "absolute",
+                  "right": 0,
+                  "top": 0,
+                },
+                Object {
+                  "flex": 0,
+                  "height": 30,
+                  "width": "100%",
+                },
+              ]
+            }
+            width="100%"
+          >
+            <RNSVGGroup
+              fill={
+                Object {
+                  "payload": 4278190080,
+                  "type": 0,
+                }
+              }
+            >
+              <RNSVGDefs>
+                <RNSVGLinearGradient
+                  gradient={
+                    Array [
+                      0,
+                      0,
+                      1,
+                      -16777216,
+                    ]
+                  }
+                  gradientTransform={null}
+                  gradientUnits={0}
+                  name="gradient"
+                  x1="0%"
+                  x2="0%"
+                  y1="0%"
+                  y2="100%"
+                />
+              </RNSVGDefs>
+              <RNSVGRect
+                fill={
+                  Object {
+                    "brushRef": "gradient",
+                    "type": 1,
+                  }
+                }
+                height="30"
+                propList={
+                  Array [
+                    "fill",
+                  ]
+                }
+                width="100%"
+                x={0}
+                y={0}
+              />
+            </RNSVGGroup>
+          </RNSVGSvgView>
+        </View>
+        <View
+          style={
+            Object {
+              "paddingTop": 10,
+            }
+          }
+        >
+          <View
+            accessibilityLabel="MyProfiles.DeleteAnyway"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": false,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={false}
+            onClick={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "backgroundColor": "#42803E",
+                "borderRadius": 4,
+                "opacity": 1,
+                "padding": 16,
+              }
+            }
+            testID="com.ariesbifold:id/ConfirmDeleteProfileButton"
+          >
+            <View
+              style={
+                Object {
+                  "alignItems": "center",
+                  "flexDirection": "row",
+                  "justifyContent": "center",
+                }
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Array [
+                      Object {
+                        "color": "#FFFFFF",
+                        "fontSize": 18,
+                        "fontWeight": "bold",
+                        "textAlign": "center",
+                      },
+                      false,
+                      false,
+                    ],
+                  ]
+                }
+              >
+                MyProfiles.DeleteAnyway
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View
+          style={
+            Object {
+              "paddingTop": 10,
+            }
+          }
+        >
+          <View
+            accessibilityLabel="Global.Cancel"
+            accessibilityRole="button"
+            accessibilityState={
+              Object {
+                "busy": undefined,
+                "checked": undefined,
+                "disabled": false,
+                "expanded": undefined,
+                "selected": undefined,
+              }
+            }
+            accessibilityValue={
+              Object {
+                "max": undefined,
+                "min": undefined,
+                "now": undefined,
+                "text": undefined,
+              }
+            }
+            accessible={true}
+            collapsable={false}
+            focusable={false}
+            onClick={[Function]}
+            onResponderGrant={[Function]}
+            onResponderMove={[Function]}
+            onResponderRelease={[Function]}
+            onResponderTerminate={[Function]}
+            onResponderTerminationRequest={[Function]}
+            onStartShouldSetResponder={[Function]}
+            style={
+              Object {
+                "borderColor": "#42803E",
+                "borderRadius": 4,
+                "borderWidth": 2,
+                "opacity": 1,
+                "padding": 16,
+              }
+            }
+            testID="com.ariesbifold:id/CancelDeleteProfileButton"
+          >
+            <View
+              style={
+                Object {
+                  "alignItems": "center",
+                  "flexDirection": "row",
+                  "justifyContent": "center",
+                }
+              }
+            >
+              <Text
+                maxFontSizeMultiplier={2}
+                style={
+                  Array [
+                    Object {
+                      "color": "#FFFFFF",
+                      "fontSize": 18,
+                      "fontWeight": "normal",
+                    },
+                    Array [
+                      Object {
+                        "color": "#42803E",
+                        "fontSize": 18,
+                        "fontWeight": "bold",
+                        "textAlign": "center",
+                      },
+                      false,
+                      false,
+                    ],
+                  ]
+                }
+              >
+                Global.Cancel
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </RNCSafeAreaView>
+  </View>
+</Modal>
+`;
+
 exports[`CommonRemoveModal Component Proof request decline renders correctly 1`] = `
 <Modal
   animationType="slide"
