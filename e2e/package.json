@@ -39,7 +39,11 @@
     "vrc-exchange:witnessed:tsp:android-only": "node run-vrc-exchange-witnessed-tsp-android-only-devices.js",
     "vrc-exchange:witnessed:android-only:mediator": "node run-vrc-exchange-witnessed-android-only-devices-mediator.js",
     "vrc-exchange:witnessed": "node run-vrc-exchange-witnessed.js",
-    "credential-exchange-query": "node run-credential-exchange-query.js"
+    "credential-exchange-query": "node run-credential-exchange-query.js",
+    "agent-connect": "node run-agent-connect.js",
+    "agent-connect:ios": "PLATFORM=ios node run-agent-connect.js",
+    "my-agent": "node run-my-agent.js",
+    "my-agent:ios": "PLATFORM=ios node run-my-agent.js"
   },
   "dependencies": {
     "webdriverio": "^9.12.0"

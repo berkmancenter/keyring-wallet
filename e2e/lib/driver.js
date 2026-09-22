@@ -7,7 +7,9 @@ import { mkdirSync, createWriteStream } from "node:fs";
 
 import { APPIUM_PORT, TEST_ID_PREFIX, androidCaps, iosCaps } from "./config.js";
 
-const METRO_PORT = 8081;
+// The host port this worktree's Metro serves on; a second worktree runs its
+// own on another port (Android reaches it via debug_http_host, see below).
+const METRO_PORT = Number(process.env.METRO_PORT || 8081);
 const THIS_APP_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -39,15 +41,20 @@ function portInUse(port) {
  */
 async function checkMetroIsThisWorktree() {
   if (!(await portInUse(METRO_PORT))) return; // nothing running yet — Metro's own absence is a separate, self-evident failure later
-  let ps;
+  // The process listening on THIS port — not the first Metro in `ps`, which on
+  // a shared machine can be another worktree's Metro on another port.
+  let metroAppDir;
   try {
-    ps = execSync("ps -eo pid,args", { encoding: "utf8" });
+    const pid = execSync(`lsof -nP -iTCP:${METRO_PORT} -sTCP:LISTEN -t`, { encoding: "utf8" }).trim().split("\n")[0];
+    if (!pid) return;
+    const cwd = execSync(`lsof -a -p ${pid} -d cwd -Fn`, { encoding: "utf8" })
+      .split("\n")
+      .find((line) => line.startsWith("n"));
+    if (!cwd) return;
+    metroAppDir = path.resolve(cwd.slice(1));
   } catch {
     return; // can't introspect processes on this platform — don't block the run over it
   }
-  const match = ps.match(/(\S+\/app)\/node_modules\/react-native\/cli\.js\s+start/);
-  if (!match) return; // something else owns the port, or we can't identify it — not our call to make
-  const metroAppDir = path.resolve(match[1]);
   if (metroAppDir !== THIS_APP_DIR) {
     throw new Error(
       `Metro on :${METRO_PORT} is serving ${metroAppDir}, not this worktree's ` +
@@ -342,18 +349,96 @@ export async function tapTestId(driver, key, timeout = 30000) {
  * log in the handler itself), while a coordinate gesture worked immediately.
  * Android only — iOS's XCUITest click doesn't have this failure mode.
  */
+/**
+ * Tap an element you already hold, at the centre of its bounds, using the
+ * same gesture `tapTestIdByCoordinates` uses. For elements found by a scoped
+ * lookup — a control inside the CURRENT desk request, say — where re-finding
+ * by testID would match a stale one somewhere else on the page.
+ */
+/**
+ * Tap a point on Android through `adb shell input tap`.
+ *
+ * Neither a W3C pointer sequence nor UiAutomator2's own `mobile: clickGesture`
+ * reliably reaches a React Native `Pressable`: measured on the vetter's
+ * publish-profile and new-ticket controls, where both report success, the
+ * element reports clickable and enabled, and `onPress` never runs — four
+ * verified retries in a row failed. `adb shell input tap` on the identical
+ * centre point fired the handler every time. So that is what Android taps use,
+ * with the WebDriver paths kept as fallbacks.
+ */
+function adbTap(driver, x, y) {
+  const udid = driver.capabilities?.deviceUDID || driver.capabilities?.udid || process.env.ANDROID_UDID;
+  const target = udid ? ["-s", udid] : [];
+  execSync(["adb", ...target, "shell", "input", "tap", String(x), String(y)].join(" "), { stdio: "ignore" });
+}
+
+export async function tapElement(driver, el) {
+  await el.waitForDisplayed({ timeout: 30000 });
+  const { x, y } = await el.getLocation();
+  const { width, height } = await el.getSize();
+  const cx = Math.floor(x + width / 2);
+  const cy = Math.floor(y + height / 2);
+  if (driver.e2ePlatform === "android") {
+    try {
+      adbTap(driver, cx, cy);
+      return el;
+    } catch {
+      try {
+        await driver.execute("mobile: clickGesture", { x: cx, y: cy });
+        return el;
+      } catch {
+        /* fall through to the pointer sequence */
+      }
+    }
+  }
+  await driver.action("pointer").move({ x: cx, y: cy }).down().pause(80).up().perform();
+  return el;
+}
+
 export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
   const { x, y } = await el.getLocation();
   const { width, height } = await el.getSize();
-  await driver
-    .action("pointer")
-    .move({ x: Math.floor(x + width / 2), y: Math.floor(y + height / 2) })
-    .down()
-    .pause(80)
-    .up()
-    .perform();
+  const cx = Math.floor(x + width / 2);
+  const cy = Math.floor(y + height / 2);
+  // A W3C pointer press is not always enough for a React Native `Pressable`:
+  // measured on the vetter's "publish my profile" control, which reports
+  // clickable and enabled, accepts the pointer sequence without error, and
+  // never fires `onPress` — while `adb shell input tap` on the same centre
+  // point fires it every time. UiAutomator2's own gesture is what `input tap`
+  // does, so prefer it on Android and keep the pointer sequence as the
+  // fallback for iOS and for anything the gesture refuses.
+  let tapped = false;
+  // On iOS, let XCUITest tap the element it resolved: a coordinate computed
+  // from the element's rect missed on a physical iPad whose app ran in a
+  // window inset from the screen's origin — the tap reported success and
+  // never reached the button (the vetter's Publish, 2026-09-21). The
+  // Pressable trouble that made coordinates necessary is Android's.
+  if (driver.e2ePlatform === "ios") {
+    try {
+      await el.click();
+      tapped = true;
+    } catch {
+      tapped = false;
+    }
+  }
+  if (!tapped && driver.e2ePlatform === "android") {
+    try {
+      adbTap(driver, cx, cy);
+      tapped = true;
+    } catch {
+      try {
+        await driver.execute("mobile: clickGesture", { x: cx, y: cy });
+        tapped = true;
+      } catch {
+        tapped = false;
+      }
+    }
+  }
+  if (!tapped) {
+    await driver.action("pointer").move({ x: cx, y: cy }).down().pause(80).up().perform();
+  }
   console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (by coordinates)`);
   return el;
 }
@@ -391,7 +476,13 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
   for (let attempt = 0; attempt < attempts; attempt++) {
     const el = byTestId(driver, key);
     if (await el.isExisting()) {
-      await el.click().catch(() => {});
+      // Prefer the same gesture `tapElement` uses: a plain `.click()` on a
+      // React Native Pressable can return success without the handler ever
+      // running — measured on the vetter's publish and new-ticket controls,
+      // where `adb shell input tap` on the identical point fired every time.
+      await tapElement(driver, el).catch(async () => {
+        await el.click().catch(() => {});
+      });
     }
     await sleep(settleMs);
     if (await verify()) {
@@ -405,19 +496,36 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
 }
 
 /** Swipe up until the element with the given testID is displayed (max 6 swipes). */
-export async function scrollToTestId(driver, key, maxSwipes = 6) {
+// `from` is where the drag starts (fraction of the screen height): a drag that
+// begins on a TextInput selects text instead of scrolling, so a screen with an
+// input mid-page needs a lower origin.
+export async function scrollToTestId(driver, key, maxSwipes = 6, { from = 0.7, direction = "down", both = true } = {}) {
+  try {
+    return await scrollOnce(driver, key, maxSwipes, from, direction);
+  } catch (err) {
+    // A long screen may already have scrolled past the element; look the other way.
+    if (!both) throw err;
+    return scrollOnce(driver, key, maxSwipes, from, direction === "up" ? "down" : "up");
+  }
+}
+
+async function scrollOnce(driver, key, maxSwipes, from, direction) {
+  // An upward swipe starts well below the top: on an iPad the app can run in a
+  // window inset from the screen's top edge, and a swipe starting at 15% lands
+  // in the app's own header, where it scrolls nothing (seen on a real iPad).
+  const [startY, endY] = direction === "up" ? [0.3, Math.max(from, 0.75)] : [from, 0.25];
   for (let i = 0; i < maxSwipes; i++) {
     const el = byTestId(driver, key);
     if ((await el.isExisting()) && (await el.isDisplayed())) return el;
     const { width, height } = await driver.getWindowRect();
     await driver
       .action("pointer")
-      .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.7) })
+      .move({ x: Math.floor(width / 2), y: Math.floor(height * startY) })
       .down()
       .pause(100)
       .move({
         x: Math.floor(width / 2),
-        y: Math.floor(height * 0.25),
+        y: Math.floor(height * endY),
         duration: 400,
       })
       .up()

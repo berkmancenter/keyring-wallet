@@ -1,0 +1,71 @@
+[ref-20] applicant did:key:z6LSrKtYVcqV4NJjsmkFaXrt5qA8eyf2BWk4jHyEFTJsyq8N
+[ref-20] (new holder — export APPLICANT_X25519_SECRET_KEY=<redacted — throwaway local test key> to reuse it)
+[ref-20] connecting to did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72… via the mediator …
+[ref-20] connected.
+{
+  "id": "67f10322-bd91-4ecd-88c7-2b40c4ed77e1",
+  "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.2#response",
+  "from": "did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72uZEDDiop:metals-psp-decorative-arbor.trycloudflare.com",
+  "to": [
+    "did:key:z6LSrKtYVcqV4NJjsmkFaXrt5qA8eyf2BWk4jHyEFTJsyq8N"
+  ],
+  "body": {
+    "id": "urn:uuid:6ce1cfe4-a1d5-4d90-9b83-a139a60fa181",
+    "issuedAt": "2026-09-16T01:39:32.335378Z",
+    "issuer": "did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72uZEDDiop:metals-psp-decorative-arbor.trycloudflare.com",
+    "payload": {
+      "communityDid": "did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72uZEDDiop:metals-psp-decorative-arbor.trycloudflare.com",
+      "criteria": [
+        {
+          "description": "One vetter must confirm who you are",
+          "id": "vetted-member",
+          "presentationDefinition": {
+            "credentials": [
+              {
+                "format": "ldp_vc",
+                "id": "vetting",
+                "meta": {
+                  "type_values": [
+                    "EndorsementCredential"
+                  ]
+                }
+              }
+            ]
+          },
+          "requirementsDigest": "zQmXe6M8GUW6VD6rHn8jfD9acc6H2vpNAWGf6ZdAQsJCUdw",
+          "vetting": {
+            "acceptedMethods": [
+              "inPerson",
+              "video"
+            ],
+            "eligibleVetters": {
+              "role": "vetter"
+            },
+            "independence": {
+              "requireConsistentIdentityCommitment": true
+            },
+            "maxStatementAge": "P120D",
+            "minStatements": 1,
+            "requiredClaims": [
+              "name.legal"
+            ],
+            "statementType": "https://firstperson.network/endorsements/identity-vetting/0.1",
+            "version": "0.1"
+          }
+        }
+      ]
+    },
+    "proof": {
+      "created": "2026-09-16T01:39:32Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z3mkHugzCHkVxqcnmVcSfLYZgqE5mug7jstaqr7icaUUSos3QjhPDv5TMXc64M4CsvNqJKE7szABGRBv7nocHpUY5",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72uZEDDiop:metals-psp-decorative-arbor.trycloudflare.com#key-0"
+    },
+    "recipient": "did:key:z6LSrKtYVcqV4NJjsmkFaXrt5qA8eyf2BWk4jHyEFTJsyq8N",
+    "threadId": "urn:uuid:29b2db30-215b-430a-afd4-fae660b9df2a",
+    "type": "https://trusttasks.org/spec/vtc/join-requests/manifest/0.2#response"
+  },
+  "thid": "urn:uuid:e7430bdb-04e5-42f5-9809-55baac694642"
+}

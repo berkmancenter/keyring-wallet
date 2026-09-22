@@ -1,0 +1,41 @@
+[ref-20] applicant did:key:z6MkkxszoLhuxPqdJcba81pfJRbxTN9PPjBf2SPfTFGKgUWu
+[ref-20] (new holder — export APPLICANT_X25519_SECRET_KEY=<redacted — throwaway local test key> to reuse it)
+[ref-20] connecting to did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72… via the mediator …
+[ref-20] connected.
+{
+  "id": "5ff92d96-3c82-4523-8a6c-b40f92724b05",
+  "type": "https://trusttasks.org/spec/vtc/join-requests/submit/0.2#response",
+  "from": "did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72uZEDDiop:metals-psp-decorative-arbor.trycloudflare.com",
+  "to": [
+    "did:key:z6MkkxszoLhuxPqdJcba81pfJRbxTN9PPjBf2SPfTFGKgUWu"
+  ],
+  "body": {
+    "id": "urn:uuid:94293771-ff76-4c6e-bafc-948e6263751d",
+    "issuedAt": "2026-09-16T01:48:16.160177Z",
+    "issuer": "did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72uZEDDiop:metals-psp-decorative-arbor.trycloudflare.com",
+    "payload": {
+      "requestId": "f82ddeab-c950-4053-86e9-5fa56c2c799e",
+      "verdict": {
+        "effect": "requestMore",
+        "with": {
+          "needs": [
+            "vetting:statements:1"
+          ],
+          "presentationDefinition": null
+        }
+      }
+    },
+    "proof": {
+      "created": "2026-09-16T01:48:16Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z4ueiuwM7nEH5ymeTCNdwGcib3ejMHKpLpfomVkw2ncJ5A6vrVAhbTJAvnCFVh7BasqYKmV24kRGeYXCUL99PWRZ1",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:webvh:QmaCPYSScd97JE2s4VAPqRTNT41MYApjubig72uZEDDiop:metals-psp-decorative-arbor.trycloudflare.com#key-0"
+    },
+    "recipient": "did:key:z6MkkxszoLhuxPqdJcba81pfJRbxTN9PPjBf2SPfTFGKgUWu",
+    "threadId": "urn:uuid:32199769-88ac-4541-bd2e-e7849481582e",
+    "type": "https://trusttasks.org/spec/vtc/join-requests/submit/0.2#response"
+  },
+  "thid": "urn:uuid:e448f666-cca9-44f4-8a0f-deb93c422890"
+}

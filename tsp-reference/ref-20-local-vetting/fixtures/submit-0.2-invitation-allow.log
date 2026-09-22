@@ -1,0 +1,100 @@
+[ref-20] applicant did:key:z6LShcqTr2z4DSdMcWR5ey9yRe85MTyr35XAihddwQZ4Cq96
+[ref-20] connecting to did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6… via the mediator …
+[ref-20] connected.
+{
+  "id": "c6acd832-12a1-46e5-a493-96d871477db7",
+  "type": "https://trusttasks.org/spec/vtc/join-requests/submit/0.2#response",
+  "from": "did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6gZkuH6iz:keyring-vti-vtc.ngrok.app",
+  "to": [
+    "did:key:z6LShcqTr2z4DSdMcWR5ey9yRe85MTyr35XAihddwQZ4Cq96"
+  ],
+  "body": {
+    "id": "urn:uuid:895c443f-0014-4d29-9203-9591ac95486b",
+    "issuedAt": "2026-09-16T16:26:32.487597Z",
+    "issuer": "did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6gZkuH6iz:keyring-vti-vtc.ngrok.app",
+    "payload": {
+      "requestId": "28ff85be-6ec7-4d6b-af9e-3f5c1feb30ae",
+      "verdict": {
+        "effect": "allow",
+        "with": {
+          "roleVec": {
+            "@context": [
+              "https://www.w3.org/ns/credentials/v2",
+              "https://firstperson.network/credentials/dtg/v1"
+            ],
+            "credentialSubject": {
+              "endorsement": {
+                "communityDid": "did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6gZkuH6iz:keyring-vti-vtc.ngrok.app",
+                "role": "member",
+                "type": "CommunityRole"
+              },
+              "id": "did:key:z6LShcqTr2z4DSdMcWR5ey9yRe85MTyr35XAihddwQZ4Cq96"
+            },
+            "id": "urn:uuid:1a67212e-bf8d-4247-8413-0d13e8f817e4",
+            "issuer": "did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6gZkuH6iz:keyring-vti-vtc.ngrok.app",
+            "proof": {
+              "created": "2026-09-16T16:26:32Z",
+              "cryptosuite": "eddsa-jcs-2022",
+              "proofPurpose": "assertionMethod",
+              "proofValue": "z5Y6TDiw7uZfhr43uFzgjqnwe9JMRCnb8ujoma6e5MQTumRNoKdtk3kSjmnJx3j1gCm5SAiuQBgtriL4HTH1rL9Nc",
+              "type": "DataIntegrityProof",
+              "verificationMethod": "did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6gZkuH6iz:keyring-vti-vtc.ngrok.app#key-0"
+            },
+            "type": [
+              "VerifiableCredential",
+              "DTGCredential",
+              "EndorsementCredential"
+            ],
+            "validFrom": "2026-09-16T16:26:32Z",
+            "validUntil": "2026-10-16T16:26:32Z"
+          },
+          "vmc": {
+            "@context": [
+              "https://www.w3.org/ns/credentials/v2",
+              "https://firstperson.network/credentials/dtg/v1"
+            ],
+            "credentialStatus": {
+              "id": "https://keyring-vti-vtc.ngrok.app/v1/status-lists/revocation#11665",
+              "statusListCredential": "https://keyring-vti-vtc.ngrok.app/v1/status-lists/revocation",
+              "statusListIndex": "11665",
+              "statusPurpose": "revocation",
+              "type": "BitstringStatusListEntry"
+            },
+            "credentialSubject": {
+              "id": "did:key:z6LShcqTr2z4DSdMcWR5ey9yRe85MTyr35XAihddwQZ4Cq96"
+            },
+            "id": "urn:uuid:b3210e0d-4c54-4e14-aca7-5f8f91afacdf",
+            "issuer": "did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6gZkuH6iz:keyring-vti-vtc.ngrok.app",
+            "proof": {
+              "created": "2026-09-16T16:26:32Z",
+              "cryptosuite": "eddsa-jcs-2022",
+              "proofPurpose": "assertionMethod",
+              "proofValue": "z3bHPFL2mF9ztB5WeWd8QUMScwu5n6KD3bjkEXqhxpY5G7hoyDJbSNepviCK98EqruSrunybXK2x31Zrv3CtFfaJK",
+              "type": "DataIntegrityProof",
+              "verificationMethod": "did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6gZkuH6iz:keyring-vti-vtc.ngrok.app#key-0"
+            },
+            "type": [
+              "VerifiableCredential",
+              "DTGCredential",
+              "MembershipCredential"
+            ],
+            "validFrom": "2026-09-16T16:26:32Z",
+            "validUntil": "2026-10-16T16:26:32Z"
+          }
+        }
+      }
+    },
+    "proof": {
+      "created": "2026-09-16T16:26:32Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z5dobUAjEj1mK7As9iEyU1JNabwP1jEEbQ7MskZ7uvWVP4aemLEpzDn3V6Kve1rFt7yxufdwaXYhzwHB9q6KbTHh5",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:webvh:QmQKFDqmdszFjQn5pUmMw5bg3dWkchExvLRFf6gZkuH6iz:keyring-vti-vtc.ngrok.app#key-0"
+    },
+    "recipient": "did:key:z6LShcqTr2z4DSdMcWR5ey9yRe85MTyr35XAihddwQZ4Cq96",
+    "threadId": "urn:uuid:db2fa4e4-2e59-45c8-8c4c-6f6923bfdfbb",
+    "type": "https://trusttasks.org/spec/vtc/join-requests/submit/0.2#response"
+  },
+  "thid": "urn:uuid:19c2eb4f-fa27-4699-896c-8b3a24e99afa"
+}

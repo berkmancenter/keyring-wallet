@@ -3,6 +3,8 @@
 **Status:** Proposal for review. Not a commitment to implement.
 **Scope:** making Keyring a first-class client of a **Farm-hosted** Personal VTA, at every level of the developer path the ecosystem documents — provisioning, everyday operation, community membership — and making the React Native runtime a supported target of the ecosystem's own TypeScript libraries along the way. No change to the VRC/witness stack except where §6 says so.
 **Siblings:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) owns the transport and operation layers this plan stands on; its [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client itself. [`reference-app-sdk-packaging.md`](./reference-app-sdk-packaging.md) owns what we hand a third-party developer. This plan owns only what changes when the VTA is **somebody else's managed service** rather than one we run.
+**Reviews:** [`2026-09-20-al.md`](./keyring-on-the-vta-farm/2026-09-20-al.md) — Alberto. F0's Farm measurement carried out: service enumeration, and versions per component rather than per stack. Supersedes a same-day conclusion that the Farm was "far behind", which was generalised from its mediator before the VTA and VTC were measured. Scopes the intermediate step.
+
 **Subtasks:** [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) — F2 and F4 for the ecosystem's peer identity vetting ceremony, developed against a local VTI stack until a Farm can host it. [`tsp_rev3_subtask.md`](./keyring-on-the-vta-farm/tsp_rev3_subtask.md) — the TSP Rev 2 → Rev 3 cutover: pack one revision, read two. Parented here because the Prague path forces the question; `openvtc-integration-plan.md` keeps ownership of TSP as a transport.
 **Dependency direction:** optional and additive, not core. No phase of `openvtc-integration-plan.md`, `pnm_cnm_subtask.md`, or `reference-app-sdk-packaging.md` is blocked on this plan, and none should become so. See §1.
 **Reasoning:** [`2026-09-03-al.md`](./keyring-on-the-vta-farm/2026-09-03-al.md) — the measurements behind §3 and §4, the positions adopted, and what they supersede. [`2026-09-04-bm.md`](./keyring-on-the-vta-farm/2026-09-04-bm.md) — why this plan's non-core status needs to be a stated constraint rather than an implicit reading of "sibling," and the one place (§3.4) the original text read otherwise. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
@@ -170,7 +172,31 @@ Advance `@openvtc/trust-tasks`, `pnm-core`, `vti-didcomm-js` and the `dtgwg-trus
 
 **Done when:** the ladder is green at the new pins with any breakage logged rung by rung; a Farm VTA's DID document is committed as a frozen fixture; §9 Q1 is answered with a service-type enumeration rather than an assumption; and the transport table in `ref-06x`'s findings ledger names, for a Farm VTA, which of REST / DIDComm / TSP is **advertised** and which is **reachable** — separately, because upstream's own client treats advertisement and availability as different claims.
 
-**Blocked on:** a Farm account (us). Nothing else.
+**Blocked on:** nothing. The account exists and the measurement is done — see
+[`2026-09-20-al.md`](./keyring-on-the-vta-farm/2026-09-20-al.md).
+
+**Measured, 2026-09-20.** A Farm VTA advertises `VTARest`
+(`https://vta-keyring-al.ic3.dev`, reachable — `/health` and `/openapi.json`
+both answer), and `DIDCommMessaging` and `TSPTransport` both pointing at **one**
+mediator, `https://mediator.ic3.dev/mediator/v1`. So §9 Q1 is answered by
+enumeration: all three transports are advertised, REST is independently
+reachable, and DIDComm and TSP share a single mediator rather than being
+separate routes in.
+
+**The stack is at parity except its mediator**, and the distinction decides what
+the Farm is for:
+
+| Component | Farm | Lab | |
+|---|---|---|---|
+| `vta-service` | 0.34.1 | 0.34.1 | identical, and the same 78 OpenAPI paths |
+| `vtc-service` | 0.11.58 (`vtc.ic3.dev`, shared) | 0.11.58 | identical |
+| mediator | older than 0.26.5 | 0.28.9 | behind |
+
+The protocol surface our client actually talks to — every Trust Task, the whole
+vetting family — is therefore the same on both. What differs is **delivery**:
+VTI-29, VTI-30 and VTI-31 can still appear on the Farm, because their fixes
+(#828, #830, #834) are newer than the mediator it runs, and a finding measured
+there says nothing about upstream's current main.
 
 ### F1 — `did:webvh` resolution on the phone
 
@@ -266,7 +292,10 @@ Keyring is about to become the ecosystem's first React Native client. Everything
 | [`2026-09-15-al.md`](./keyring-on-the-vta-farm/2026-09-15-al.md) | AL | Opens [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md). Farm images predate vetting, so a local four-service VTI stack is this path's offline twin; answers §9 Q3; restates L3 for vetting communities as Vetting Statements; F1 starts as a measurement because the `did:webvh` resolver is already registered; TSP Rev 3 is a hard cutover the vetting path does not depend on; `pnm-core` 0.9.1's widened Node-only reach; rung numbering moves to `ref-20` |
 | [`2026-09-16-al.md`](./keyring-on-the-vta-farm/2026-09-16-al.md) | AL | Two days of executing [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md): the phone reaches a community over DIDComm v2 with a Credo-only transport and no upstream JavaScript bundled (supersedes §2.1/§5's `pnm-core` package); membership completes by invitation (`allow`, card inline) and by manual approval, and the first vetter is appointable in a specific order — correcting the earlier "blocker"; Keyring holds no card yet, and whether the phone or a VTA is the member is an **open decision** (§2.4 A/B) gating P6; the stack is durable on reserved hostnames; a phone reads as a browser to the mediator; our Trust Tasks are behind upstream; the community ships an admin portal. Upstream-facing findings numbered VTI-01…16 in `docs/VTI_UPSTREAM_FINDINGS.md` |
 | [`2026-09-15-bm.md`](./keyring-on-the-vta-farm/2026-09-15-bm.md) | BM | Two parts. **Part 1** reviews [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) as proposed in #53: what its evidence base verifies, and twelve gaps — the DIDComm v2 carriage reversing a standing position in two siblings without a record, no gate for a Prague that precedes upstream's own V0, `requirementsGrace` unhandled, the PNM surface and VTA management scoped by silence, and the runbook §3.8 depends on not being vendored. **Part 2** opens [`tsp_rev3_subtask.md`](./keyring-on-the-vta-farm/tsp_rev3_subtask.md): upstream's JS package already settles the revision question — pack Rev 3, read both — so no negotiation is ours to invent; the measured finding that Rev 3's long framing breaks `vti-didcomm-js`'s mediator demux above 12,285 bytes, inside our attestation-payload range; relationship gating stops being optional; Rev 3 takes the static X25519 key off the send path, moving the hardware-custody choice out of the vetting subtask's P4 |
+| [`2026-09-18-al.md`](./keyring-on-the-vta-farm/2026-09-18-al.md) | AL | Executes [`tsp_rev3_subtask.md`](./keyring-on-the-vta-farm/tsp_rev3_subtask.md) R2–R4 and R6 and re-measures upstream: Rev 3 is merged on `vta-browser-plugin` main (0.3.0, unpublished), the §3.3 demux is fixed in `vti-didcomm-js` 0.10.0 and the mediator's crate, and the two §5 requests that asked for those are answered. Decides to build on the vendored upstream package for the wire and keep the custody-port orchestration ours (§2.5), with the reasons the package alone cannot serve a non-exporting KMS; lands TSP Rev 3 on the VTI peer leg as a build-time carriage choice; and records the My Agent rework — connect as the primary action, holdings behind a connected gate, vetting as the named-seat entry — with the UX position taken |
 | [`2026-09-16-bm.md`](./keyring-on-the-vta-farm/2026-09-16-bm.md) | BM | Reads upstream's own *"the agent is the state"* architecture against [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) and finds it is the written case for §2.4's option B, so the doctrine binds only where a VTA holds the state: §2.6 splits into a B-only no-mirror rule and an architecture-neutral half — the community owns membership, requirements and the verdict either way, and Keyring owns its credentials, a restart-surviving identity, inbound documents persisted before the ack, and the task-id ledger that makes a retry safe. §3.9 makes a preview the output of the code that will act (`persona/disclosure/preview/1.0` under B). Corrects a finding of its own — the article's examples are absent from `external/`'s VTI pin and present at the baseline, so the clone was stale, not the article — and F8 records which premises the two days of execution in `2026-09-16-al.md` moved under it |
+| [`2026-09-20-al.md`](./keyring-on-the-vta-farm/2026-09-20-al.md) | AL | F0 carried out: the Farm measured per component, the parity position (ask for the mediator advance, keep era labelling, do not downgrade), the cutover and its first result (credo-ts rejects an array `service.type`), and the night TSP Rev 3 reached the ecosystem legs. |
+| [`2026-09-21-al.md`](./keyring-on-the-vta-farm/2026-09-21-al.md) | AL | Moves [`tsp_rev3_subtask.md`](./keyring-on-the-vta-farm/tsp_rev3_subtask.md) R5 and R7 to their measured standing, and corrects the lab/Farm version record: equal version strings, different commits. |
 
 ## 11. Sources
 
