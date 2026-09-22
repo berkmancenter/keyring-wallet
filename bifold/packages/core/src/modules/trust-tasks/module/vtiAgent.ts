@@ -84,12 +84,39 @@ export class VtiRefusal extends Error {
  * on; `notAwaitingEvidence` means the request is queued for a decision the
  * community owes, so supplying more changes nothing.
  */
-export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence'
+export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence' | 'requestAlreadyOpen'
 
 export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
   if (!(refusal instanceof VtiRefusal)) return undefined
   const reason = refusal.code.split(':').pop()
-  return reason === 'notFound' || reason === 'alreadyDecided' || reason === 'notAwaitingEvidence' ? reason : undefined
+  return reason === 'notFound' ||
+    reason === 'alreadyDecided' ||
+    reason === 'notAwaitingEvidence' ||
+    reason === 'requestAlreadyOpen'
+    ? reason
+    : undefined
+}
+
+/**
+ * The applicant's request that is still open, when a submit is refused
+ * because one is (`vtc/join-requests/submit:requestAlreadyOpen`, vti #1592).
+ *
+ * The refusal's `details` names it: `requestId` is what withdraw and supplement
+ * take, and `status` says who the request is waiting on — `deferred` waits on
+ * the applicant (supply what was asked, or withdraw), `pending` on the
+ * community (it will move on its own). A status the client does not know is
+ * passed through as it came, so a screen can still offer withdraw.
+ */
+export interface OpenJoinRequest {
+  requestId: string
+  status: 'pending' | 'deferred' | (string & {})
+}
+
+export const openJoinRequestOf = (refusal: unknown): OpenJoinRequest | undefined => {
+  if (joinRequestRefusal(refusal) !== 'requestAlreadyOpen') return undefined
+  const details = (refusal as VtiRefusal).details as { requestId?: unknown; status?: unknown } | undefined
+  if (typeof details?.requestId !== 'string' || !details.requestId) return undefined
+  return { requestId: details.requestId, status: typeof details.status === 'string' ? details.status : 'pending' }
 }
 
 /** A refusal arrives as a document in its own right, not as a verdict. */
