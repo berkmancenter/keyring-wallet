@@ -1328,8 +1328,10 @@ a TSP relationship forms across two mediators, as DIDComm does.
 
 **(b) Reproduce.**
 - Rung: `tsp-reference/ref-04f-farm-cross-mediator/run.mjs` in this
-  repository. The client is upstream's own `@openvtc/vti-tsp-js` **0.3.0**
-  (`bfdb0dc`), with `@openvtc/vti-didcomm-js` 0.7.0. The identity is a fresh
+  repository. The client is upstream's own TSP library, `@openvtc/vti-tsp-js`
+  **0.3.0**, built from `OpenVTC/vta-browser-plugin` `packages/tsp-js` at
+  `bfdb0dc` (vendored in keyring-bifold `packages/trust-tasks/vendor/`), with
+  `@openvtc/vti-didcomm-js` 0.7.0. The identity is a fresh
   `did:peer:2` minted per run, whose DIDComm service names its own mediator.
 - Commands (from the rung's directory, after `npm install`):
   - across mediators, community on the Farm Full Stack:
