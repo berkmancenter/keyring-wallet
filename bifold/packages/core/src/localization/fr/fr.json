@@ -1176,6 +1176,8 @@
     "ImAdded": "J'ai été ajouté",
     "Checking": "Vérification…",
     "NotAddedYet": "Votre agent n'accepte pas encore ce téléphone. Vérifiez que l'administrateur a ajouté exactement ce code, puis réessayez.",
+    "NoAnswer": "{{label}} n'a pas répondu. Cet agent est peut-être hors ligne, ou sa réponse n'est pas parvenue à ce téléphone. Vérifiez que l'administrateur a bien ajouté ce code exact, puis réessayez.",
+    "TryAgain": "Réessayer",
     "IntroKeepsTitle": "Votre agent garde vos identités",
     "IntroKeepsBody": "Il détient l'identité que vous utilisez avec chaque communauté, et les cartes de membre qu'elles vous donnent — en sécurité, sur un serveur qui travaille pour vous.",
     "IntroAnswersTitle": "Il répond quand votre téléphone est éteint",

@@ -67,10 +67,54 @@ export interface VtaAgentDeps {
     waitForGrant: typeof waitForGrant
   }
   now?: () => number
+  /** How long "I've been added" waits for an answer; tests shorten it. */
+  grantCheckDeadlineMs?: number
 }
 
 /** A refusal that means the agent no longer accepts this phone at all. */
 const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
+
+/**
+ * How long "I've been added" waits for the agent before it says so.
+ *
+ * An agent that answers says everything it has to say quickly: a first task,
+ * the greeting that precedes it included, came back in 1.76 s, and later ones
+ * in under a second (measured against a VTA on 2026-09-22). Ten seconds is
+ * about five times that worst honest case — slow enough that a sluggish agent
+ * still wins the race, short enough that the person waits through a pause
+ * rather than a silence.
+ *
+ * It exists because an answer can be lost rather than late: a reply produced
+ * before the transport's relationship is ready never arrives, and then nothing
+ * ever settles this. Without a deadline the screen spins for as long as the
+ * person is willing to watch it.
+ */
+export const GRANT_CHECK_DEADLINE_MS = 10000
+
+const TIMED_OUT = Symbol('timedOut')
+
+/**
+ * Run `work` against a deadline: true if it finished in time, false if the
+ * deadline won. A failure still throws, so a refusal keeps its meaning.
+ */
+export async function withDeadline(work: Promise<unknown>, ms = GRANT_CHECK_DEADLINE_MS): Promise<boolean> {
+  // Work abandoned at the deadline may still fail later; that failure is
+  // nobody's news now, and without a handler it would surface as an unhandled
+  // rejection.
+  void work.catch(() => undefined)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const finished = Promise.race([
+      work.then(() => undefined),
+      new Promise<typeof TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(TIMED_OUT), ms)
+      }),
+    ])
+    return (await finished) !== TIMED_OUT
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 type Listener = () => void
 
@@ -331,7 +375,8 @@ export class VtaAgentController {
   /**
    * "I've been added": try to sign in as the shown key. A refusal because the
    * key is not in the agent's access list yet leaves the key showing, marked
-   * not yet; anything else ends the attempt.
+   * not yet; an agent that says nothing within the deadline leaves it showing
+   * too, marked unanswered; anything else ends the attempt.
    */
   async checkManualGrant(agent: Agent): Promise<void> {
     const link = this.state.link
@@ -343,9 +388,22 @@ export class VtaAgentController {
     try {
       await this.reset()
       const client = this.client(agent, link.vtaDid, identities)
-      await client.connect()
-      await client.whoAmI()
+      const answered = await withDeadline(
+        (async () => {
+          await client.connect()
+          await client.whoAmI()
+        })(),
+        this.deps.grantCheckDeadlineMs ?? GRANT_CHECK_DEADLINE_MS
+      )
       if (!live()) return
+      if (!answered) {
+        // Hand the attempt on, so an answer that arrives after we have given
+        // up on it cannot move the screen under the person later.
+        this.attemptToken++
+        await this.reset()
+        this.dispatch({ type: 'grantNoAnswer' })
+        return
+      }
       this.dispatch({ type: 'granted' })
       await this.finishLink(agent, link.vtaDid, link.label, identities, live, client)
     } catch (error) {

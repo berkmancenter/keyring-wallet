@@ -240,17 +240,29 @@ const VtaLink: React.FC = () => {
             }}
             testID={testIdWithKey('VtaLinkCopyKey')}
           />
+        </View>
+      )
+      actions = (
+        <>
+          {/* What the last check found, beside the button that ran it. The
+              card above ends with a ~350-character key, so anything appended
+              to it lands below the fold on a phone: the answer was under the
+              bottom of the screen while the question stayed pinned to it. */}
           {link.notYet ? (
             <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNotYet')}>
               {t('VtaLink.NotAddedYet')}
             </ThemedText>
           ) : null}
-        </View>
-      )
-      actions = (
-        <>
+          {/* Silence is not refusal: the agent may be offline, or its answer
+              may have been lost on the way back. Either way the person is told
+              rather than left watching a spinner. */}
+          {link.noAnswer ? (
+            <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNoAnswer')}>
+              {t('VtaLink.NoAnswer', { label: link.label, interpolation: { escapeValue: false } })}
+            </ThemedText>
+          ) : null}
           <Button
-            title={link.checking ? t('VtaLink.Checking') : t('VtaLink.ImAdded')}
+            title={link.checking ? t('VtaLink.Checking') : link.noAnswer ? t('VtaLink.TryAgain') : t('VtaLink.ImAdded')}
             buttonType={ButtonType.Primary}
             onPress={onCheckGrant}
             disabled={link.checking}

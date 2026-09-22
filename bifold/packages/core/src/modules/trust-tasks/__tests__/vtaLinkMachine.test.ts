@@ -122,6 +122,20 @@ describe('linking without a QR', () => {
     expect(linking).toMatchObject({ kind: 'linking', step: 'connecting' })
   })
 
+  it('marks a check the agent never answered, and a later check clears the mark', () => {
+    const checking = reduceLink(shown, { type: 'grantCheckStarted' })
+    const silent = reduceLink(checking, { type: 'grantNoAnswer' })
+    expect(silent).toMatchObject({ kind: 'showingKey', checking: false, noAnswer: true, notYet: false })
+    // Silence and refusal are different things and never show at once.
+    const refused = reduceLink(reduceLink(silent, { type: 'grantCheckStarted' }), { type: 'grantNotYet' })
+    expect(refused).toMatchObject({ checking: false, notYet: true, noAnswer: false })
+    expect(reduceLink(refused, { type: 'grantCheckStarted' })).toMatchObject({
+      checking: true,
+      notYet: false,
+      noAnswer: false,
+    })
+  })
+
   it('can be stopped, and a failure keeps its reason', () => {
     expect(reduceLink(shown, { type: 'cancelled' })).toEqual({ kind: 'notLinked' })
     expect(reduceLink(shown, { type: 'failed', failure: { reason: 'failed' } })).toMatchObject({

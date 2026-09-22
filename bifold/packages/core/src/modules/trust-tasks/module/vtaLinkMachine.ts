@@ -37,7 +37,7 @@ export type VtaLinkState =
   | ({ kind: 'confirming'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
   | ({ kind: 'submitting'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
   | ({ kind: 'awaitingGrant'; offerUrl: string; exp: number; code: string } & VtaIdentityOfAgent)
-  | ({ kind: 'showingKey'; did: string; checking: boolean; notYet?: boolean } & VtaIdentityOfAgent)
+  | ({ kind: 'showingKey'; did: string; checking: boolean; notYet?: boolean; noAnswer?: boolean } & VtaIdentityOfAgent)
   | ({ kind: 'linking'; step: 'connecting' | 'rotating' } & VtaIdentityOfAgent)
   | ({ kind: 'linked'; linkedAt: string; connection: VtaConnection } & VtaIdentityOfAgent)
   | ({ kind: 'revoked'; reason: string } & VtaIdentityOfAgent)
@@ -66,6 +66,7 @@ export type VtaLinkEvent =
   | ({ type: 'keyShown'; did: string } & VtaIdentityOfAgent)
   | { type: 'grantCheckStarted' }
   | { type: 'grantNotYet' }
+  | { type: 'grantNoAnswer' }
 
 export const initialLinkState: VtaLinkState = { kind: 'notLinked' }
 
@@ -107,10 +108,16 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
         : state
 
     case 'grantCheckStarted':
-      return state.kind === 'showingKey' ? { ...state, checking: true, notYet: false } : state
+      return state.kind === 'showingKey' ? { ...state, checking: true, notYet: false, noAnswer: false } : state
 
     case 'grantNotYet':
-      return state.kind === 'showingKey' ? { ...state, checking: false, notYet: true } : state
+      return state.kind === 'showingKey' ? { ...state, checking: false, notYet: true, noAnswer: false } : state
+
+    // The agent said nothing within the deadline. The key stays on screen and
+    // the person can try again — a silence is not a refusal, so it must not
+    // read like one, and it must not read like nothing at all either.
+    case 'grantNoAnswer':
+      return state.kind === 'showingKey' ? { ...state, checking: false, notYet: false, noAnswer: true } : state
 
     case 'submitted':
       return state.kind === 'submitting' ? { ...state, kind: 'awaitingGrant', code: event.code } : state
