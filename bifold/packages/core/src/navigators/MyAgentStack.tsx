@@ -7,6 +7,7 @@ import { TOKENS, useServices } from '../container-api'
 import { useTheme } from '../contexts/theme'
 import MyAgent from '../modules/trust-tasks/screens/MyAgent'
 import VtiCommunity from '../modules/trust-tasks/screens/VtiCommunity'
+import VtiInvited from '../modules/trust-tasks/screens/VtiInvited'
 import VtaAgentHome from '../modules/trust-tasks/screens/VtaAgentHome'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
@@ -56,6 +57,9 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         component={VtaLink}
         options={{ title: t('Screens.VtaLink'), ...ScreenOptionsDictionary[Screens.VtaLink] }}
       />
+      <Stack.Screen name={Screens.VtiInvited} options={{ title: t('Screens.Invited'), ...ScreenOptionsDictionary[Screens.VtiInvited] }}>
+        {() => <VtiInvited config={config.vti} />}
+      </Stack.Screen>
       <Stack.Screen
         name={Screens.VtaAgent}
         component={VtaAgentHome}

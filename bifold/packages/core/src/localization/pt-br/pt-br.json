@@ -847,7 +847,8 @@
     "Community": "Comunidade",
     "Vetting": "Verificação",
     "VtaLink": "Vincular seu agente",
-    "VtaAgent": "Seu agente"
+    "VtaAgent": "Seu agente",
+    "Invited": "Entrar por convite"
   },
   "Loading": {
     "TakingTooLong": "Isso esta demorando mais que o normal. Você pode voltar para a home ou continuar esperando.",
@@ -1110,7 +1111,40 @@
     "DetailsPhoneKey": "A chave deste telefone",
     "DetailsLinkedAt": "Vinculado",
     "BannerAway": "Seu agente está ausente — {{status}}",
-    "OpenYourAgent": "Seu agente"
+    "OpenYourAgent": "Seu agente",
+    "IWasInvited": "Fui convidado",
+    "IWasInvitedHint": "Envie sua identidade ao admin e depois entre.",
+    "ShareIdentity": "Compartilhar sua identidade para {{community}}",
+    "VetterRevoked": "Seu papel de verificador em {{community}} foi retirado pelo admin.",
+    "VetterExpired": "Seu papel de verificador em {{community}} terminou em {{date}}.",
+    "VetterNotYet": "Seu papel de verificador em {{community}} começa em {{date}}."
+  },
+  "Invited": {
+    "IntroTitle": "Diga ao admin quem convidar",
+    "IntroBody": "Para convidar você para {{community}}, o admin precisa da sua identidade para essa comunidade. Seu agente a cria agora — você confirma com o rosto ou a digital — e depois você a envia ao admin.",
+    "Continue": "Continuar",
+    "Preparing": "Preparando sua identidade…",
+    "ConfirmTitle": "Criar sua identidade",
+    "ConfirmBody": "Seu agente cria sua identidade para {{community}} — a que o admin vai convidar.",
+    "ShareStepTitle": "Envie isto ao admin da comunidade",
+    "ShareStepBody": "Envie como preferir: uma mensagem, um e-mail, AirDrop. O admin de {{community}} usa isso para convidar você.",
+    "ShareTitle": "Minha identidade Keyring para {{community}}",
+    "ShareText": "Minha identidade Keyring para {{community}}: {{did}}",
+    "Share": "Compartilhar",
+    "Copy": "Copiar",
+    "Copied": "Copiado",
+    "ShowQr": "Mostrar como QR",
+    "HideQr": "Ocultar QR",
+    "Sent": "Já enviei",
+    "WaitingTitle": "Aguardando seu convite",
+    "WaitingBody": "Quando o admin de {{community}} enviar um link de convite, abra-o neste telefone ou cole-o aqui. Ele aparecerá nesta tela.",
+    "Checking": "Procurando seu convite…",
+    "Paste": "Colar o convite",
+    "SendAgain": "Enviar minha identidade de novo",
+    "ArrivedTitle": "Seu convite chegou",
+    "ArrivedBody": "{{community}} convidou você. Entre para receber seu cartão de membro.",
+    "JoinedTitle": "Você é membro de {{community}}",
+    "JoinedBody": "Seu cartão de membro está na sua carteira."
   },
   "MyAgent": {
     "Title": "Seu agente",

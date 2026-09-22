@@ -998,7 +998,8 @@
     "Community": "Community",
     "Vetting": "Vetting",
     "VtaLink": "Link your agent",
-    "VtaAgent": "Your agent"
+    "VtaAgent": "Your agent",
+    "Invited": "Join by invitation"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -1265,7 +1266,40 @@
     "DetailsPhoneKey": "This phone's key",
     "DetailsLinkedAt": "Linked",
     "BannerAway": "Your agent is away — {{status}}",
-    "OpenYourAgent": "Your agent"
+    "OpenYourAgent": "Your agent",
+    "IWasInvited": "I was invited",
+    "IWasInvitedHint": "Send your identity to the admin, then join.",
+    "ShareIdentity": "Share your identity for {{community}}",
+    "VetterRevoked": "Your vetter role for {{community}} was withdrawn by its admin.",
+    "VetterExpired": "Your vetter role for {{community}} ended on {{date}}.",
+    "VetterNotYet": "Your vetter role for {{community}} starts on {{date}}."
+  },
+  "Invited": {
+    "IntroTitle": "Tell the admin who to invite",
+    "IntroBody": "To invite you to {{community}}, its admin needs your identity for that community. Your agent makes it now — you confirm with your face or fingerprint — and then you send it to the admin.",
+    "Continue": "Continue",
+    "Preparing": "Getting your identity ready…",
+    "ConfirmTitle": "Make your identity",
+    "ConfirmBody": "Your agent makes your identity for {{community}} — the one its admin will invite.",
+    "ShareStepTitle": "Send this to the community's admin",
+    "ShareStepBody": "Send it any way you like: a message, an email, AirDrop. The admin of {{community}} uses it to invite you.",
+    "ShareTitle": "My Keyring identity for {{community}}",
+    "ShareText": "My Keyring identity for {{community}}: {{did}}",
+    "Share": "Share",
+    "Copy": "Copy",
+    "Copied": "Copied",
+    "ShowQr": "Show as QR",
+    "HideQr": "Hide QR",
+    "Sent": "I've sent it",
+    "WaitingTitle": "Waiting for your invitation",
+    "WaitingBody": "When the admin of {{community}} sends you an invitation link, open it on this phone or paste it here. It will show up on this screen.",
+    "Checking": "Checking for your invitation…",
+    "Paste": "Paste the invitation",
+    "SendAgain": "Send my identity again",
+    "ArrivedTitle": "Your invitation arrived",
+    "ArrivedBody": "{{community}} invited you. Join to get your membership card.",
+    "JoinedTitle": "You're a member of {{community}}",
+    "JoinedBody": "Your membership card is in your wallet."
   },
   "MyAgent": {
     "Title": "Your agent",
