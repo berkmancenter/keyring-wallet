@@ -584,8 +584,9 @@ class VtiAgentController {
 
   /**
    * The manifest over the community's REST endpoint, which its DID document
-   * advertises as a `VTCRest` service. The published endpoint omits the API's
-   * version prefix (VTI-15), so `/v1` is added here. Returns undefined for
+   * advertises as a `VTCRest` service. Communities minted before vti #1615
+   * publish it without the API's version prefix (VTI-15) and later ones with
+   * it, so `/v1` is added only when it is missing. Returns undefined for
    * anything that is not a usable manifest — a community that has turned the
    * public read off, a network that is not there, an error document — so the
    * caller can fall back to asking over DIDComm.
@@ -599,7 +600,7 @@ class VtiAgentController {
       const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
       if (!base) return undefined
       const now = new Date().toISOString()
-      const response = await fetch(`${base.replace(/\/$/, '')}/v1/trust-tasks`, {
+      const response = await fetch(vtcRestUrl(base, 'trust-tasks'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -732,3 +733,13 @@ class VtiAgentController {
 }
 
 export const vtiAgent = new VtiAgentController()
+
+/**
+ * A path under a community's REST API, from the `VTCRest` endpoint its DID
+ * document advertises: with or without the `/v1` prefix (vti #1615 added it to
+ * newly minted communities; older ones omit it), never doubled.
+ */
+export function vtcRestUrl(base: string, path: string): string {
+  const root = base.replace(/\/+$/, '')
+  return `${/\/v1$/.test(root) ? root : `${root}/v1`}/${path.replace(/^\/+/, '')}`
+}
