@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.33 — 2026-09-22.** A living document: every finding here was measured
+**Version 1.34 — 2026-09-22.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -65,6 +65,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-39](#vti-39--a-tsp-reply-that-fails-to-send-once-is-lost) | A TSP reply that fails to send once is lost | Low | New — observed once | H |
 | [VTI-40](#vti-40--vta-browser-plugin-a-consent-approve-can-be-recorded-as-a-deny) | vta-browser-plugin: a consent Approve can be recorded as a Deny | Medium | New — fix drafted | F |
 | [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | New — cause located to the return leg, not proven | F′ |
+| [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A community names `withdraw/0.1` as the remedy, and its DIDComm router has never heard of it | **High** | New — reachable via the binding envelope; the plain-DIDComm arms are the gap | F′ |
 
 ## Stack under test
 
@@ -1403,6 +1404,88 @@ or its configuration, so that a TSP relationship forms across mediators.
 **Verification:** re-run the rung's cross-mediator legs; an XRFA naming the
 invite, then the manifest over TSP, is the pass.
 
+### VTI-42 — A community names `withdraw/0.1` as the remedy, and its DIDComm router has never heard of it
+
+(a) **What happens.** An applicant with an open request is told by the community
+itself to close it with `vtc/join-requests/withdraw/0.1`. Sent as a DIDComm
+message of that type, to the same community, over the same carriage, it is
+answered `unsupported message type`. Sent again with one field changed — the
+DIDComm `type` set to the binding envelope, the document inside untouched — the
+same community withdraws the request and answers, signed, in under a second.
+
+The verb is implemented. What is missing is an arm in the DIDComm router, and
+upstream has already written down that this router is a second list:
+
+> DIDComm had a hand-written router keyed on **task URIs**, so a verb was
+> reachable there only if somebody had also written it down in
+> `messaging::route`. … not because the service lacks them, but because the
+> router is a second list that nobody remembered to extend.
+> — `vtc-service/tests/didcomm_envelope_binding.rs`
+
+`vtc-service/src/messaging.rs` carries arms for `join-requests/submit`,
+`manifest` and `status`. There is none for `withdraw` or `supplement`, both of
+which the dispatcher serves and both of which `requestAlreadyOpen` names as the
+applicant's way out.
+
+The refusal that comes back is a DIDComm `problem-report`, not a
+`trust-task-error` — VTI-27's shape on a second route — so a client correlating
+answers by task type never matches it and waits out its whole timeout. On a
+phone that reads as *the community did not answer*: thirty seconds of silence
+and a wrong diagnosis, for a question the community refused in under a second.
+
+**Measured, 2026-09-22.** Community `keyring-test` (VTC 0.11.58 on
+`dids-keyring-stack.ic3.dev`) and our own lab community (VTC 0.11.58), both over
+each community's own mediator:
+
+| Wire type | Answer |
+| --- | --- |
+| `…/vtc/join-requests/withdraw/0.1` | problem-report `e.p.msg.bad-request`, "unsupported message type: …/withdraw/0.1" |
+| `…/vtc/join-requests/withdraw/0.2` | the same, so it is not a version-string mismatch |
+| `https://trusttasks.org/binding/didcomm/0.1/envelope` carrying the same document | `…/withdraw/0.1#response`, `status: "withdrawn"`, signed `eddsa-jcs-2022` + `mldsa44-jcs-2024` |
+
+Before that, the submit that named the remedy:
+
+```json
+{
+  "code": "vtc/join-requests/submit:requestAlreadyOpen",
+  "details": { "reason": "conflict",
+               "requestId": "3bd40964-47bb-4b67-b242-2f945aabef1c",
+               "status": "deferred" },
+  "message": "conflict: an open join request already exists (id 3bd40964-…,
+              status deferred); withdraw it with vtc/join-requests/withdraw/0.1,
+              or await its decision, before resubmitting"
+}
+```
+
+**Why it matters beyond the verb.** An applicant deferred by a community it
+cannot ask to withdraw can neither withdraw nor re-apply — `requestAlreadyOpen`
+refuses the second — so the only way out is an administrator. And the client
+that hits this learns nothing: the refusal is unmatchable, so it reads as
+silence.
+
+(b) **How to reproduce.** `tsp-reference/ref-20-local-vetting/join.mjs`, whose
+`withdraw` command and `ENVELOPE=1` mode exist for this measurement
+(`WITHDRAW_TASK_URI` overrides the version string):
+
+```sh
+node join.mjs <communityDid> <communityMediatorDid> submit            # → requestAlreadyOpen
+node join.mjs <communityDid> <communityMediatorDid> withdraw <id>     # → unsupported message type
+ENVELOPE=1 node join.mjs <communityDid> <communityMediatorDid> withdraw <id>   # → withdrawn
+```
+
+(c) **Where it lives.** `vtc-service/src/messaging.rs` (the router's arms);
+`vtc-service/src/join/orchestrate.rs:102` (the message naming the remedy);
+`vtc-service/tests/didcomm_envelope_binding.rs` (upstream's own statement of the
+class, and the envelope as its remedy).
+
+(d) **What we do meanwhile.** Keyring sends Trust Tasks over DIDComm inside the
+binding envelope, which reaches the dispatcher for every verb — including on the
+cross-mediator communities where [VTI-41](#vti-41) forces us onto DIDComm — and
+surfaces a problem-report that belongs to a pending ask as a typed refusal
+rather than waiting out the timeout. Related: [VTI-27](#vti-27) (refusals that
+arrive as problem-reports) and [VTI-Q17](#open-questions-and-requests)
+(idempotency, which is what a safe retry of a non-idempotent verb would need).
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -1761,6 +1844,7 @@ temp-then-rotate model Keyring uses when a phone links a VTA.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.34 | 2026-09-22 | **VTI-42**: a community names `vtc/join-requests/withdraw/0.1` as the way to close an open request, and answers that very task `unsupported message type` over DIDComm. The verb is implemented — sent inside the binding envelope (`https://trusttasks.org/binding/didcomm/0.1/envelope`), the same document withdraws the request and is answered, signed, in under a second. What is missing is an arm in `vtc-service/src/messaging.rs`, whose DIDComm router is a hand-written second list (upstream says so itself in `vtc-service/tests/didcomm_envelope_binding.rs`) carrying `submit`, `manifest` and `status` only. Measured on keyring-test and on our own lab community, both VTC 0.11.58, so it is not Farm-specific; `withdraw/0.2` is refused identically, so it is not a version-string mismatch. The refusal arrives as a DIDComm problem-report rather than a `trust-task-error` (VTI-27's shape again), so a client correlating by task type reads it as silence — which is how it first surfaced, as "the community did not answer" on a phone. |
 | 1.33 | 2026-09-22 | **The Farm, from a maintainer's side.** New section [Standing up on the Farm](#standing-up-on-the-farm-2026-09-22): a new VTA answers nothing until *Running*, the ACL's admin is the rotated key and not the pasted one, a phone's temporary key is a `did:peer:2` that the *Grant access* hint does not admit, and `keyring-stack`'s four components measured read-only. **VTI-Q9 answered in part** — Full Stack exists and is enabled per account; a VTA-Only account joins another stack by invite code. Two new questions: **VTI-Q17**, an idempotency key on `dids/create` or a `dids/list` that carries the label and key ids, after a mint whose answer was lost twice while the mint itself succeeded; **VTI-Q18**, an echo of the admin DID the Full Stack wizard imports. |
 | 1.32 | 2026-09-22 | **VTI-41**, promoted from VTI-Q15: TSP Rev 3 does not cross two mediators. Measured from the Farm's shared mediator to two communities on other mediators (a Farm Full Stack's, and storm's `first-vtc`): no accept in 30–90 s, whether routed via our mediator or stored straight into the community's mediator. The community's own mediator accepts in 1.15 s and answers the manifest over TSP in 0.33 s. The relay allowlist is ruled out under defaults. The cause is located to the return leg and not proven. Keyring asks such a community over DIDComm (keyring-bifold#66). |
 | 1.31 | 2026-09-22 | **Upstream's response mapped.** Their remediation plan (basis VTI `3dcbfe98`, TDK `1eeebba1`, webvh `88fc6464`, against our v1.27) numbers the findings `KR-NN` = `VTI-NN`. Every status now carries their answer: 23 shipped, 4 already fixed (VTI-08, -09, -27, -28), 3 answered in docs, 4 declined or re-scoped (VTI-02, -10, -13, and -12 pending), and reproductions owed by us for VTI-06, VTI-12 and VTI-25. Nothing is marked verified on our stack before the pin bump. **Era F′:** the Farm's VTAs now run `0.37.1-d9a5be02`, with #1619, #1622 and #1634 and without #1642, #1646 and #1648. Phones linked as admin are unaffected. New section [Upstream's response](#upstreams-response-2026-09-22) records the owed reproductions, the client-facing wire changes (vti #1646, #1642, #1615) and the answered questions. New question **VTI-Q16**: how a client can tell whether hidden-vetting anonymity holds (operator separation between a vetter's VTA, the mediator and the VTC). |
