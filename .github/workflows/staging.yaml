@@ -880,7 +880,10 @@ jobs:
           version_code: ${{ env.APP_BUILD_NUMBER }}
           version_name: ${{ steps.ios-version.outputs.version }}
           release_notes: ${{ steps.commit-msg-ios.outputs.release_notes }}
-          beta_groups: "KeyRing Internal Testers"
+          # Internal first, then the external maintainers' group. distribute.mjs
+          # submits an external group for Beta App Review automatically; only the
+          # first build of a version needs it.
+          beta_groups: "KeyRing Internal Testers,openvtc testers"
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
