@@ -141,6 +141,13 @@ This is the DTG pairwise construction ("disclose persona DIDs while hiding the R
 
 Two standing constraints are inherited and not re-decided here. Edge-binding verification and selective disclosure are mutually exclusive in one presentation, and edge-binding is what we keep ([`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) §4.6 item 3). Presenting outcome evidence forfeits unlinkability for that show ([`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6). The ZK constructions themselves are the ZKP task force's deliverable (DTG ZKP V1.0), so Z2 consumes them and does not design them.
 
+Four more inherited constraints decide what a ZK presentation of our credentials can hide, and each is already measured or tracked:
+
+- **The citation of a Trust Task is a durable correlator.** `taskContext` and `taskDigestMultibase` link every presentation that carries them. Upstream tracks carrying the citation in committed form, opened inside the proof ([cred-spec#58](https://github.com/trustoverip/dtgwg-cred-spec/issues/58), ZKP record 008), and blinding the unsalted, enumerable digest-valued members ([cred-spec#38](https://github.com/trustoverip/dtgwg-cred-spec/issues/38)). The identifier commitment profile ([dtgwg-zkp-spec#11](https://github.com/trustoverip/dtgwg-zkp-spec/pull/11)) covers both. Z2 presents what those settle and invents no blinding of its own.
+- **The ZK-openable commitment lives with the identifier, not in the signature.** `eddsa-jcs-2022` is the RECOMMENDED credential proof, so the commitment a proof opens is a member of the credential and not a property of the proof (the same record set). This fits §3.4: the device-signed JCS proof stays, and the VTA's ZK half opens members the credential already commits to.
+- **Anything unmapped by `@context` is invisible to `bbs-2023`.** A member with no term definition is absent from the signed RDF graph, so it can be neither signed nor disclosed. An unresolved CURIE is signed verbatim as an IRI with the wrong meaning (`tsp-reference/ref-07c-predicate-coverage`). An unbundled context means a network fetch at verification time (`ref-07d-vocabulary-trust-path`). Keyring's extension members must be termed before a `bbs-2023` half is issued over them.
+- **The VSC input shape.** After [`vsc-migration-plan.md`](./vsc-migration-plan.md) lands, a proof over a witness credential reads `credentialSubject.predicate`, `credentialSubject.object.digestMultibase` (computed without the VRC's top-level `proof`), a top-level `taskContext`, and Keyring's extension members beside `witnessContext`. ZK4 targets that shape, not WD02's `WitnessCredential`.
+
 ### 4.3 Z3 — Predicate proofs and uniqueness pseudonyms, watch only
 
 This covers Groth16 predicate proofs with scoped nullifiers (personhood, liveness attestations, "one human, one membership"), which [[VETTING-DESIGN]] §14.2 lists for V2 (*"Uniqueness pseudonyms"*; Sybil resistance across `joinDid`s, §13.4). Upstream has deferred the prover. The trusted-setup ceremony is unsolved for production. Keyring's share is the same consent and rendering as Z2. Z3 has no phases. It gets a phase when upstream ships a VTA task for it.
@@ -167,7 +174,7 @@ Each phase starts only on instruction. Every phase that touches upstream behavio
 ### ZK0 — Baseline and access
 
 - Get read access to `predicate-credential-system` and pin it in `external/` via `setup-external.mjs`, alongside `OpenVTC/openvtc`, which is cloned but unpinned today.
-- Advance the VTI pin from `187ad9cd` (vta-sdk 0.25) to at least the review's `6f26af19` (0.48), coordinated with the owner of the pins and the lab stack; the lab's own bump (to `3dcbfe98`) is queued behind the Farm work.
+- Advance the VTI pin from `187ad9cd` (vta-sdk 0.25) to at least the review's `6f26af19` (0.48), coordinated with the owner of the pins and the lab stack; the lab's own bump (to `3dcbfe98`) is queued behind the Farm work. The VTI advance is its own motion: it does not ride with the `dtgwg-cred-spec` advance that [`vsc-migration-plan.md`](./vsc-migration-plan.md) schedules at the start of its V0 (*"One pin, one reason, one entry in `SYNC_LOG.md`"*, §10). It shares the VTI clone repair and the `personhood.rego` re-read that plan's §7.1 needs, so do those once for both.
 - Re-read §2.2's upstream-status column against the new pins and correct this plan.
 
 **Done when:** both repositories are pinned with a `--why`; every upstream claim in §2.2 and §5 cites a file at a pinned commit rather than the review; §8 B1 is closed or its owner is named.
