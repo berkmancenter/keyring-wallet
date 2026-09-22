@@ -179,4 +179,44 @@ describe('mediator pickup strategy (app guard)', () => {
     expect(body).toContain('connectionsApi.deleteById(connection.id)')
     expect(body).toContain('oobApi.deleteById(outOfBandRecord.id)')
   })
+
+  it('a mediator invitation stored without a connection is discarded and received again', async () => {
+    // Guards the third hunk: when receiveInvitation fails after saving the
+    // out-of-band record, no connection exists, and receiving the same
+    // invitation again is refused ("has already been received") — every Retry
+    // failed on TestFlight 0.2.0 (204), 2026-09-21. The record has to go first.
+    const didcomm = require('@credo-ts/didcomm')
+    const calls: string[] = []
+    const oobApi = {
+      parseInvitation: async () => ({ id: 'mediator-invitation' }),
+      findByReceivedInvitationId: async () => ({ id: 'stranded-oob' }),
+      deleteById: async (id: string) => {
+        calls.push(`delete ${id}`)
+      },
+      receiveInvitation: async () => {
+        calls.push('receive')
+        return { connectionRecord: { id: 'new-connection' } }
+      },
+    }
+    const connectionsApi = {
+      findAllByOutOfBandId: async () => [],
+      returnWhenIsConnected: async (id: string) => ({ id, isReady: true }),
+    }
+    const mediationRecipientApi = { getRouting: async () => ({}) }
+    const services = new Map<unknown, unknown>([
+      [didcomm.DidCommOutOfBandApi, oobApi],
+      [didcomm.DidCommConnectionsApi, connectionsApi],
+      [didcomm.DidCommMediationRecipientApi, mediationRecipientApi],
+    ])
+    const agentContext = {
+      dependencyManager: { resolve: (token: unknown) => services.get(token) },
+      config: { logger: { debug: () => undefined, warn: () => undefined } },
+    }
+
+    const module = new didcomm.DidCommMediationRecipientModule()
+    const connection = await module.getMediationConnection(agentContext, 'https://mediator.example/invitation')
+
+    expect(calls).toEqual(['delete stranded-oob', 'receive'])
+    expect(connection).toEqual({ id: 'new-connection', isReady: true })
+  })
 })
