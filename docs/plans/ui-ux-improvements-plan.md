@@ -1,8 +1,8 @@
 # UI/UX improvements — roles, agent linking, membership and vetting, for a person rather than a test harness
 
-**Status:** In execution. U1–U8 and the "I was invited" door are built (keyring-bifold#58, keyring-wallet#74); the journey after linking (§4.1, §5.2, §5.3, §5.7) is built without §5.8 ("any VTA, any community"); §5.8, seed by copy, waits on the editable multi-profile plan's author and follows separately. Target: the live demo at OSS Summit Europe, Prague, 1 October 2026.
+**Status:** In execution. U1–U8, "I was invited", the journey after linking (§4.1, §5.2, §5.3, §5.7) and the application states (§9.1) are on main; Join as (§5.8) is built on `feat/join-as-profile`. Target: the live demo at OSS Summit Europe, Prague, 1 October 2026.
 **Upstream asks:** §9 is the running list of what this work needs changed upstream, each with the code it points at; it feeds the reports sent to the maintainers and the upstream findings document.
-**Reasoning:** [`2026-09-21-al.md`](./ui-ux-improvements-plan/2026-09-21-al.md) — the inventory of today's screens, what upstream supports for enrolment and sign-in (measured against the pinned clones), and the design research every principle in §3 cites. [`2026-09-22-al.md`](./ui-ux-improvements-plan/2026-09-22-al.md) — the TestFlight findings that reshaped the journey after linking, the three decisions taken that day (seed by copy, the Join as default, what Door 1 sends), and how each step maps to the OpenVTC TUI and the vetting dry run. [`2026-09-21-bm.md`](./ui-ux-improvements-plan/2026-09-21-bm.md) — why confirmations reuse the app's existing bottom-sheet modal convention (`CommonRemoveModal`/`ModalUsage`) rather than a new screen, and why the match-code checks are the one deliberate exception. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
+**Reasoning:** [`2026-09-21-al.md`](./ui-ux-improvements-plan/2026-09-21-al.md) — the inventory of today's screens, what upstream supports for enrolment and sign-in (measured against the pinned clones), and the design research every principle in §3 cites. [`2026-09-23-al.md`](./ui-ux-improvements-plan/2026-09-23-al.md) — seed by copy decided, superseding the live profile↔identity link for community identities. [`2026-09-22-al.md`](./ui-ux-improvements-plan/2026-09-22-al.md) — the TestFlight findings that reshaped the journey after linking, the three decisions taken that day (seed by copy, the Join as default, what Door 1 sends), and how each step maps to the OpenVTC TUI and the vetting dry run. [`2026-09-21-bm.md`](./ui-ux-improvements-plan/2026-09-21-bm.md) — why confirmations reuse the app's existing bottom-sheet modal convention (`CommonRemoveModal`/`ModalUsage`) rather than a new screen, and why the match-code checks are the one deliberate exception. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
 **Related plans:** [`keyring-on-the-vta-farm/community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the ceremony, the protocol and the tests; this plan owns how a person meets them. It refines that subtask's §7 (user experience) — §7's screen list and one-scanner rule stand, and the changes this plan makes to them are named in §5. Once adopted, §7 there points here.
 **Code under discussion:** the `feat/prague-farm-membership` branch of both repositories — screens in `bifold/packages/core/src/modules/trust-tasks/screens/` (`MyAgent.tsx`, `VtiCommunity.tsx`, `VtiVetting.tsx`), the developer surface in `app/src/screens/Developer.tsx`, lab scripts in `scripts/openvtc/local-vti-stack/`.
 
@@ -180,7 +180,7 @@ An invitation is issued to a DID named in advance: upstream requires `subject_di
 
 | Step | Person sees |
 |---|---|
-| 1 | **Join as** (§5.8): which profile the new identity starts from → Continue (Face ID). The community identity is made here — there is no separate "create identity" chore. *Conditional on §5.8: until it is agreed, this step makes the identity without a profile choice* |
+| 1 | **Join as** (§5.8): which profile the new identity starts from → Continue (Face ID). The community identity is made here — there is no separate "create identity" chore. |
 | 2 | **Send this to the community's admin**: Share (the system sheet) first, then Copy, then Show as QR. The DID travels inside what is sent and sits under Details |
 | 3 | **(off-app)** The admin pastes it into the console's Invitations (or `cnm`) |
 | 4 | **Waiting for your invitation** — picked up when the link is opened or pasted |
@@ -198,8 +198,8 @@ The same order as the OpenVTC TUI: the community, what it asks, the identity it 
 |---|---|---|
 | 1 | **Which community?** — the one a scanned or pasted link named (§5.7), else the build's suggestion beside "a different community" | The build's one community |
 | 2 | **Before *Community* admits you**: its requirements in words — from its criteria when a session is open, else what every vetting community asks. An invitation-only community points to §5.2 | Requirements text on the vetting screen |
-| 3 | **Join as** (§5.8) → Continue (Face ID) — the identity is made here, before the ticket, because the vetter's desk checks the ticket against it (`vetting/request/0.1` carries `joinDid`). *Conditional on §5.8: until it is agreed, "Your identity for *Community*" → Continue, with no profile choice* | "Create my identity" |
-| 4 | "Your legal name" — filled in from the profile chosen at Join as, and saying so; correctable. *Conditional on §5.8: typed until then* | The face field, typed |
+| 3 | **Join as** (§5.8) → Continue (Face ID) — the identity is made here, before the ticket, because the vetter's desk checks the ticket against it (`vetting/request/0.1` carries `joinDid`). | "Create my identity" |
+| 4 | "Your legal name" — filled in from the profile chosen at Join as, and saying so; correctable. | The face field, typed |
 | 5 | **Scan the vetter's ticket** | Pasting a `vetting-ticket:` link, then "Request vetting" |
 | 6 | Waiting for the vetter → **full-screen match code** → **Codes match** / **Codes differ** | Match code in a card |
 | 7 | "Send your name to *vetter*?" → Send (biometric) | "Send my card" |
@@ -243,7 +243,7 @@ The build's `VTI_COMMUNITY_DID` is only a suggestion when no link has named one,
 
 ### 5.8 Join as — a profile seeds the identity
 
-Every community gets a new identity, made by the agent (upstream mints a fresh persona per community by default). **Join as** lists the person's profiles with the active one chosen; the chosen profile fills in the new identity's name **once**, by copy, with no live link afterwards. The person never types their name twice, and editing a profile later changes nothing in a community.
+Every community gets a new identity, made by the agent (upstream mints a fresh persona per community by default). **Join as** lists the person's profiles with the active one chosen, and offers **Create a new profile**: that opens the app's profile editor, and on return the new profile is chosen — in effect, a card made for this community. The chosen profile fills in the new identity's name **once**, by copy, with no live link afterwards. The person never types their name twice, and editing a profile later changes nothing in a community. Both doors ask it, just before the identity is made.
 
 ## 6. Phases
 
@@ -339,7 +339,7 @@ What the runners need that no single phase owns:
 - **The asks in §9 go to upstream in the report we already send the maintainers**, each with its code references, when it is ready. No separate issue or pull request.
 - **The lab enrolment page has no login for now.** It runs only on our laptop, for tests and the demo; a login is revisited if it ever leaves the lab.
 
-- **A profile seeds a community's identity by copy** (§5.8). There is no live link between a profile and an identity. This changes the editable multi-profile plan's enforced 1:1 link, and needs that plan's author's agreement; nothing here depends on a live link.
+- **A profile seeds a community's identity by copy** (§5.8), and Join as can create a profile on the spot. There is no live link between a profile and a community identity; this supersedes the editable multi-profile plan's 1:1 live link for community identities (decided 2026-09-23, [`2026-09-23-al.md`](./ui-ux-improvements-plan/2026-09-23-al.md)).
 - **Join as defaults to a new identity that starts from the active profile** — the privacy default, with no typing.
 - **Door 1 sends the community identity made at Join as** (§5.2). No `subjectLinkage`; an open invitation stays upstream ask U-9.
 
