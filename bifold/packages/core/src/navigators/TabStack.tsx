@@ -24,7 +24,7 @@ import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
-import { useCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
+import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import InAppMessageNotifier from '../components/InAppMessageNotifier'
@@ -56,7 +56,7 @@ const TabStack: React.FC = () => {
     void communityTarget.restore()
   }, [])
   // The community a link chose (else the build's suggestion) gets the inbox.
-  const inboxCommunityDid = useCommunityDid(vti?.communityDid)
+  const inboxCommunityDid = useChosenCommunityDid(vti?.communityDid)
   useVtiPersonaInbox(agent, { mediatorDid: vti?.mediatorDid, communityDid: inboxCommunityDid, onError: onInboxError })
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()

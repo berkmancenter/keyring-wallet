@@ -99,7 +99,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const { ColorPalette } = useTheme()
   const vtaDid = useVtaDid(config?.vtaDid)
   const community = useCommunity(config?.communityDid)
-  const chosenByLink = useSyncExternalStore(communityTarget.subscribe, communityTarget.get)
+  const chosenByLink = useSyncExternalStore(communityTarget.subscribe, communityTarget.getViewing)
   const communityDid = community?.communityDid
   const name = community?.name ?? (communityDid ? didName(communityDid) : '')
 
@@ -152,6 +152,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     setBusy(true)
     try {
       await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+      // Making the identity is what makes this the phone's community.
+      communityTarget.choose(communityDid)
       // Seed by copy: the chosen profile fills the identity's name in once.
       if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
       const stack = navigation as unknown as { navigate: (name: string) => void }

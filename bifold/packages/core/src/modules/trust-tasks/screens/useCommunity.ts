@@ -18,3 +18,9 @@ export function useCommunity(configured?: string): CommunityLink | undefined {
 export function useCommunityDid(configured?: string): string | undefined {
   return useCommunity(configured)?.communityDid
 }
+
+/** The phone's community (chosen by making an identity), not the one a link is showing. */
+export function useChosenCommunityDid(configured?: string): string | undefined {
+  const chosen = useSyncExternalStore(communityTarget.subscribe, communityTarget.getChosen)
+  return chosen?.communityDid ?? configured
+}

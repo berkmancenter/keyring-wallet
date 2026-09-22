@@ -54,6 +54,7 @@ import { pendingVettingTicket } from '../module/vtiLinks'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
 import { openScanner } from './openScanner'
+import { communityTarget } from '../module/vtiCommunityLink'
 import { joinSeed } from '../module/vtiJoinSeed'
 
 import { useCommunityDid } from './useCommunity'
@@ -365,8 +366,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             disabled={!!busy}
             onPress={() =>
               run('identity', async () => {
-                if (agent && stores)
+                if (agent && stores) {
                   await ensurePersonaFor({ agent, identityStore: stores.identity, vtaDid, communityDid })
+                  communityTarget.choose(communityDid)
+                }
               })
             }
           >

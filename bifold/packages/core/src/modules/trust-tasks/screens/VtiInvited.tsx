@@ -32,6 +32,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 import { GenericRecordsCommunityStore, type VtiInvitation } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { communityTarget } from '../module/vtiCommunityLink'
 import { ensurePersonaFor, joinCommunity } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
@@ -125,6 +126,8 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     setBusy(true)
     try {
       await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+      // Making the identity is what makes this the phone's community.
+      communityTarget.choose(communityDid)
       // Seed by copy: the chosen profile fills the identity's name in once.
       if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
       await load()

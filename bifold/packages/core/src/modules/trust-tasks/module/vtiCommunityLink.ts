@@ -74,37 +74,63 @@ export function parseCommunityLink(text: string): CommunityLink {
 
 type Listener = () => void
 
-/** The community a join is about, chosen by the last link that named one. */
+/**
+ * Two things, kept apart:
+ * - **viewing** — the community a link just named. The join screens show it
+ *   (what it asks, Join as), but opening a link changes nothing else.
+ * - **chosen** — the phone's community: set when an identity is made for one
+ *   (`choose`), kept across launches, and what My Agent, the community screen
+ *   and the persona inbox follow.
+ */
 class CommunityTarget {
-  private current?: CommunityLink
+  private viewing?: CommunityLink
+  private chosen?: CommunityLink
   private readonly listeners = new Set<Listener>()
 
-  get = (): CommunityLink | undefined => this.current
+  /** For the join screens: the community being looked at, else the chosen one. */
+  get = (): CommunityLink | undefined => this.viewing ?? this.chosen
 
+  /** Only the community a link is showing, if any. */
+  getViewing = (): CommunityLink | undefined => this.viewing
+
+  /** The phone's community, whatever a link is showing. */
+  getChosen = (): CommunityLink | undefined => this.chosen
+
+  /** A link named this community: show it, change nothing else. */
   set(link: CommunityLink): void {
     if (!link.communityDid) return
-    if (this.current && this.current.communityDid === link.communityDid && this.current.name === link.name) return
-    this.current = link
-    this.listeners.forEach((l) => l())
+    if (this.viewing && this.viewing.communityDid === link.communityDid && this.viewing.name === link.name) return
+    this.viewing = link
+    this.notify()
+  }
+
+  /** An identity was made for this community: it is now the phone's, and kept. */
+  choose(communityDid: string): void {
+    if (!communityDid) return
+    const link = this.viewing?.communityDid === communityDid ? this.viewing : { communityDid }
+    if (this.chosen?.communityDid === link.communityDid && this.chosen.name === link.name) return
+    this.chosen = link
+    this.notify()
     keep(link)
   }
 
   clear(): void {
-    if (!this.current) return
-    this.current = undefined
-    this.listeners.forEach((l) => l())
+    if (!this.viewing && !this.chosen) return
+    this.viewing = undefined
+    this.chosen = undefined
+    this.notify()
     keep()
   }
 
-  /** The community chosen before this launch, if any. A link chosen since wins. */
+  /** The community chosen before this launch, if any. */
   async restore(): Promise<void> {
     try {
       const saved = await AsyncStorage.getItem(STORAGE_KEY)
-      if (!saved || this.current) return
+      if (!saved || this.chosen) return
       const link = JSON.parse(saved) as CommunityLink
       if (typeof link?.communityDid === 'string' && /^did:[a-z0-9]+:.+/.test(link.communityDid)) {
-        this.current = link
-        this.listeners.forEach((l) => l())
+        this.chosen = link
+        this.notify()
       }
     } catch {
       // nothing kept, or unreadable: the build's suggestion stands
@@ -117,11 +143,20 @@ class CommunityTarget {
       this.listeners.delete(listener)
     }
   }
+
+  private notify(): void {
+    this.listeners.forEach((l) => l())
+  }
 }
 
 export const communityTarget = new CommunityTarget()
 
-/** The community to work on: the one a link chose, else the build's suggestion. */
+/** For a join: the community a link is showing, else the chosen one, else the build's suggestion. */
 export function resolveCommunityDid(configured?: string): string | undefined {
   return communityTarget.get()?.communityDid ?? configured
+}
+
+/** The phone's community: the chosen one, else the build's suggestion. */
+export function resolveChosenCommunityDid(configured?: string): string | undefined {
+  return communityTarget.getChosen()?.communityDid ?? configured
 }

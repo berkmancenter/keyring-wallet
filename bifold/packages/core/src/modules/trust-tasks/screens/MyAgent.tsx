@@ -42,7 +42,7 @@ import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vti
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 
 import { openScanner } from './openScanner'
-import { useCommunityDid } from './useCommunity'
+import { useChosenCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
 /** Which seat this phone would take at a vetting: decided by what it holds. */
@@ -65,7 +65,8 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const vta = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
 
   const mediatorDid = config?.mediatorDid
-  const communityDid = useCommunityDid(config?.communityDid)
+  // The phone's community — not one a link is only showing.
+  const communityDid = useChosenCommunityDid(config?.communityDid)
   // The agent the person linked by QR (plan §5.1) wins over the one a build
   // bakes in; the baked one stays for builds and runners that predate linking.
   const vtaDid = useVtaDid(config?.vtaDid)

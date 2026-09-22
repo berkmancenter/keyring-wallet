@@ -4,6 +4,7 @@ import {
   buildCommunityLink,
   communityTarget,
   parseCommunityLink,
+  resolveChosenCommunityDid,
   resolveCommunityDid,
 } from '../module/vtiCommunityLink'
 import { keyringAgentLinkKind, routeKeyringAgentLink } from '../module/vtiLinks'
@@ -55,12 +56,18 @@ describe('the community link', () => {
     expect(communityTarget.get()?.communityDid).toBe(community)
   })
 
-  it('is kept across launches: a relaunch does not fall back to the build', async () => {
+  it('viewing a link changes nothing kept; making an identity chooses the community, kept across launches', async () => {
+    communityTarget.clear()
     communityTarget.set({ communityDid: community, name: 'Kept' })
+    expect(communityTarget.get()?.communityDid).toBe(community)
+    expect(resolveChosenCommunityDid('did:webvh:QmBuilt:built.example')).toBe('did:webvh:QmBuilt:built.example')
+    communityTarget.choose(community)
+    expect(resolveChosenCommunityDid('did:webvh:QmBuilt:built.example')).toBe(community)
     // A new launch: nothing in memory, only what was kept.
-    ;(communityTarget as unknown as { current?: unknown }).current = undefined
-    expect(resolveCommunityDid('did:webvh:QmBuilt:built.example')).toBe('did:webvh:QmBuilt:built.example')
+    const target = communityTarget as unknown as { viewing?: unknown; chosen?: unknown }
+    target.viewing = undefined
+    target.chosen = undefined
     await communityTarget.restore()
-    expect(communityTarget.get()).toEqual({ communityDid: community, name: 'Kept' })
+    expect(communityTarget.getChosen()).toEqual({ communityDid: community, name: 'Kept' })
   })
 })
