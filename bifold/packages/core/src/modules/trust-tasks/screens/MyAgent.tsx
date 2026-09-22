@@ -37,6 +37,7 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { ownVetterGrantState } from '../module/vtiGrantState'
+import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
 import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 
@@ -117,6 +118,8 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     const timer = setInterval(() => void refresh(), 4000)
     return () => clearInterval(timer)
   }, [refresh])
+  // A grant or a membership stored by the persona inbox shows without waiting for the timer.
+  useVtiPersonaDeliveries(refresh)
 
   // Be reachable by the VTA as soon as this phone has a manager identity for
   // it: a consent request can arrive at any time, and only an open session
