@@ -114,8 +114,12 @@ const VtaLink: React.FC = () => {
   }, [navigation])
 
   const onDone = useCallback(() => {
-    // The agent screen, where the first-link introduction plays once.
-    navigation.navigate(Screens.VtaAgent as never)
+    // The agent screen, where the first-link introduction plays once, over My
+    // Agent. The stack is set rather than pushed: pushed on top, "Linked ✓"
+    // stayed underneath and came back on every return to the tab; and a link
+    // begun from the scanner can open this screen as the stack's only route.
+    const stack = navigation as unknown as { reset: (state: { index: number; routes: { name: string }[] }) => void }
+    stack.reset({ index: 1, routes: [{ name: Screens.MyAgent }, { name: Screens.VtaAgent }] })
   }, [navigation])
 
   const failureText = (failure?: VtaLinkFailure) => {
