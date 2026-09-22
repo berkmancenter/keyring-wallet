@@ -132,7 +132,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   }, [agent, vtaDid, communityDid, load, t])
 
   const onJoin = useCallback(async () => {
-    if (!agent || !vtaDid || !mediatorDid || !invitation) return
+    if (!agent || !vtaDid || !invitation) return
     setError(undefined)
     setBusy(true)
     try {
@@ -157,7 +157,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
 
   const scan = () => openScanner(navigation)
 
-  if (!communityDid || !vtaDid || !mediatorDid) {
+  if (!communityDid || !vtaDid) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>

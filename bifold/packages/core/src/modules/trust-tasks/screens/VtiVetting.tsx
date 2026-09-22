@@ -234,7 +234,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
 
   // Load what the phone holds, and connect the persona's session with an inbox.
   useEffect(() => {
-    if (!agent || !stores || !communityDid || !mediatorDid) return
+    if (!agent || !stores || !communityDid) return
     let cancelled = false
     void (async () => {
       const p = await stores.identity.getPersona(communityDid)
@@ -332,7 +332,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     [bump]
   )
 
-  if (!communityDid || !mediatorDid || !vtaDid) {
+  if (!communityDid || !vtaDid) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>

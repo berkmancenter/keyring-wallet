@@ -192,7 +192,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
 
   const onJoin = useCallback(
     async (invitation: VtiInvitation) => {
-      if (!agent || !vtaDid || !mediatorDid) return
+      if (!agent || !vtaDid) return
       setBusy('join')
       setHoldingError(undefined)
       setActivity([])
@@ -275,7 +275,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   })
 
   const onConnect = useCallback(async () => {
-    if (!agent || !mediatorDid) return
+    if (!agent) return
     setConnectError(undefined)
     try {
       if (vtaDid) {
@@ -519,7 +519,8 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   )
 
 
-  if (!mediatorDid) {
+  // Nothing to reach without an agent or a mediator to fall back on.
+  if (!mediatorDid && !vtaDid) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>
@@ -602,7 +603,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 {state.peerLeg === 'tsp' ? t('MyAgent.PeerLegTsp') : t('MyAgent.PeerLegDidComm')}
               </Text>
             ) : null}
-            {!state.did && mediatorDid && communityDid ? (
+            {!state.did && communityDid ? (
               <Pressable style={styles.button} testID={testIdWithKey('ConnectCommunityButton')} accessibilityRole="button" onPress={onConnect}>
                 <Text style={styles.buttonText}>{t('MyAgent.ConnectCommunity')}</Text>
               </Pressable>

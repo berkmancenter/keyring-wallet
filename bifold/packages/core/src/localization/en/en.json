@@ -1285,7 +1285,8 @@
     "YourCommunities": "Your communities",
     "YouCanVet": "You can now vet people for {{community}}",
     "YouCanVetBody": "Its admin made you a vetter. Hand out a ticket when you meet someone.",
-    "OpenDesk": "Open the vetting desk"
+    "OpenDesk": "Open the vetting desk",
+    "ShareKeyHint": "It's long — share it to the admin's computer (AirDrop, a message, an email) rather than typing it."
   },
   "Invited": {
     "IntroTitle": "Tell the admin who to invite",

@@ -74,6 +74,7 @@ const VtaLink: React.FC = () => {
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     actions: { padding: 20, gap: 12 },
     error: { color: ColorPalette.semantic.error },
+    muted: { color: ColorPalette.grayscale.mediumGrey },
     input: {
       ...TextTheme.normal,
       borderWidth: 1,
@@ -218,27 +219,27 @@ const VtaLink: React.FC = () => {
           <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkManualDid')} selectable>
             {link.did}
           </ThemedText>
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Button
-                title={copied ? t('VtaLink.KeyCopied') : t('VtaLink.CopyKey')}
-                buttonType={ButtonType.Secondary}
-                onPress={() => {
-                  Clipboard.setString(link.did)
-                  setCopied(true)
-                }}
-                testID={testIdWithKey('VtaLinkCopyKey')}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                title={t('VtaLink.ShareKey')}
-                buttonType={ButtonType.Secondary}
-                onPress={() => void Share.share({ message: link.did })}
-                testID={testIdWithKey('VtaLinkShareKey')}
-              />
-            </View>
-          </View>
+          {/* The code is a long did:peer (~350 characters): nobody should type
+              it. Share first — to the admin's computer by AirDrop, a message
+              or an email — then Copy. */}
+          <ThemedText style={styles.muted} testID={testIdWithKey('VtaLinkShareKeyHint')}>
+            {t('VtaLink.ShareKeyHint')}
+          </ThemedText>
+          <Button
+            title={t('VtaLink.ShareKey')}
+            buttonType={ButtonType.Primary}
+            onPress={() => void Share.share({ message: link.did }).catch(() => undefined)}
+            testID={testIdWithKey('VtaLinkShareKey')}
+          />
+          <Button
+            title={copied ? t('VtaLink.KeyCopied') : t('VtaLink.CopyKey')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => {
+              Clipboard.setString(link.did)
+              setCopied(true)
+            }}
+            testID={testIdWithKey('VtaLinkCopyKey')}
+          />
           {link.notYet ? (
             <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNotYet')}>
               {t('VtaLink.NotAddedYet')}

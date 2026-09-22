@@ -1130,7 +1130,8 @@
     "YourCommunities": "Suas comunidades",
     "YouCanVet": "Agora você pode verificar pessoas para {{community}}",
     "YouCanVetBody": "O admin tornou você um verificador. Entregue um ticket quando encontrar alguém.",
-    "OpenDesk": "Abrir a mesa de verificação"
+    "OpenDesk": "Abrir a mesa de verificação",
+    "ShareKeyHint": "É longo — compartilhe com o computador do admin (AirDrop, uma mensagem, um e-mail) em vez de digitar."
   },
   "Invited": {
     "IntroTitle": "Diga ao admin quem convidar",
