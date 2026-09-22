@@ -36,6 +36,7 @@ import { DependencyContainer } from 'tsyringe'
 
 import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
 import useBCAgentSetup from '@/hooks/useBCAgentSetup'
+import { offerFeedbackReport } from '@/utils/problemReport'
 // DISABLED: Push notifications disabled — no server backend yet
 // import { activate, deactivate, setup, status } from '@utils/PushNotificationsHelper'
 import { expirationOverrideInMinutes } from '@utils/expiration'
@@ -157,7 +158,23 @@ export class AppContainer implements Container {
         peerLeg: vtiPeerLeg,
       },
       settings: [
-        /* Help section commented out — re-enable when help actions are wired up
+        {
+          header: {
+            title: this.t('Settings.Help'),
+            icon: { name: 'help' },
+          },
+          data: [
+            {
+              // Opens the same report as "Report this problem" (email or share,
+              // with the recent log), for problems that show no error screen.
+              title: this.t('Settings.GiveFeedback'),
+              accessibilityLabel: this.t('Settings.GiveFeedback'),
+              testID: testIdWithKey('GiveFeedback'),
+              onPress: () => offerFeedbackReport(),
+            },
+          ],
+        },
+        /* Rest of the Help section commented out — re-enable when help actions are wired up
         {
           header: {
             title: this.t('Settings.Help'),

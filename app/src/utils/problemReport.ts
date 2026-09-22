@@ -17,6 +17,7 @@ import {
 import { CachesDirectoryPath, writeFile } from 'react-native-fs'
 
 import { getRecentLogLines } from './logBuffer'
+import { generateReferenceCode } from './reference-code'
 
 export interface ProblemReportInput {
   referenceCode: string
@@ -126,4 +127,12 @@ export const offerProblemReport = (input: ProblemReportInput): void => {
       { text: 'Cancel', style: 'cancel' as const },
     ]
   )
+}
+
+/**
+ * Settings → Help → Give feedback: the same report and choice, for things that
+ * went wrong without an error screen (or ideas). The recent log rides along.
+ */
+export const offerFeedbackReport = (): void => {
+  offerProblemReport({ referenceCode: generateReferenceCode(), title: 'Feedback from Settings' })
 }
