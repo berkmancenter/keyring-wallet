@@ -5,7 +5,7 @@
  * 52232 is a live grant (bit clear), index 24 a revoked one (bit set).
  */
 import type { VtiHeldCredential } from '../module/VtiCommunityStore'
-import { ownVetterGrantState } from '../module/vtiGrantState'
+import { ownVetterGrantState, pickOwnVetterGrant } from '../module/vtiGrantState'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const fixture = require('./fixtures/vtc-status-list-proof-set.json') as {
@@ -92,5 +92,53 @@ describe("the phone's own vetter standing", () => {
     const oldExpired = grant(52232, { until: '2026-09-10T00:00:00Z' }, '2026-09-01T00:00:00Z')
     const newRevoked = grant(24, {}, '2026-09-21T00:00:00Z')
     expect(await ownVetterGrantState(agent, [oldExpired, newRevoked], opts)).toMatchObject({ state: 'revoked' })
+  })
+})
+
+/**
+ * Which grant the phone acts under — the choice that used to be "whichever the
+ * store returned first". A vetter re-granted after a revocation holds both, and
+ * signing under the dead one produced statements the community discounted while
+ * the vetter's own screens said nothing (keyring-test, 2026-09-22).
+ */
+describe('choosing the grant to act under', () => {
+  it('prefers the live grant over a revoked one, whichever arrived first', async () => {
+    const revoked = grant(24, {}, '2026-09-22T09:00:00Z')
+    const live = grant(52232, {}, '2026-09-22T08:00:00Z')
+    // The revoked one is NEWER here, so recency alone would pick it.
+    const picked = await pickOwnVetterGrant(agent, [revoked, live], opts)
+    expect(picked.state).toMatchObject({ state: 'active' })
+    expect(picked.held).toBe(live)
+  })
+
+  it('picks the newest of several live grants', async () => {
+    const older = grant(52232, {}, '2026-09-20T00:00:00Z')
+    const newer = grant(52232, {}, '2026-09-22T00:00:00Z')
+    const picked = await pickOwnVetterGrant(agent, [older, newer], opts)
+    expect(picked.held).toBe(newer)
+  })
+
+  it('refuses when only a revoked grant is held, and says why', async () => {
+    const picked = await pickOwnVetterGrant(agent, [grant(24)], opts)
+    expect(picked.state.state).toBe('revoked')
+    // `held` is still returned: a caller that will not act should be able to
+    // say WHICH grant it declined to use.
+    expect(picked.held).toBeDefined()
+  })
+
+  it('never chooses a grant that is not yet valid', async () => {
+    const future = grant(52232, { from: '2027-01-01T00:00:00Z' })
+    const picked = await pickOwnVetterGrant(agent, [future], opts)
+    expect(picked.state).toMatchObject({ state: 'notYetValid' })
+  })
+
+  it('reports none, with nothing held, when there are no grants', async () => {
+    expect(await pickOwnVetterGrant(agent, [], opts)).toEqual({ state: { state: 'none' } })
+  })
+
+  it('agrees with what the screens report — one chooser, two readers', async () => {
+    const grants = [grant(24, {}, '2026-09-22T09:00:00Z'), grant(52232, {}, '2026-09-22T08:00:00Z')]
+    const picked = await pickOwnVetterGrant(agent, grants, opts)
+    expect(await ownVetterGrantState(agent, grants, opts)).toEqual(picked.state)
   })
 })
