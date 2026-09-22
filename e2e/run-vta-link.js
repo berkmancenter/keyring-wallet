@@ -416,10 +416,18 @@ try {
       // did:peer, so on a phone screen it is off the bottom of the scroll view
       // — and Android's UiAutomator does not report off-screen children, so a
       // plain wait never sees it however long it waits. Scroll for it.
+      // Existence first, scrolling only if that fails: the two platforms hide
+      // it differently. Android's UiAutomator omits off-screen children, so
+      // only a scroll finds it; iOS reports the element but not as displayed,
+      // so a scroll-for-displayed misses what a plain existence check sees.
+      // Checking for existence alone failed on Android; scrolling alone then
+      // failed on iOS — both were measured, one after the other.
       const notYetBy = Date.now() + 60000;
-      let notYet;
+      let notYet = false;
       while (!notYet && Date.now() < notYetBy) {
-        notYet = await scrollToTestId(driver, "VtaLinkNotYet", 4).catch(() => undefined);
+        notYet =
+          (await existsTestId(driver, "VtaLinkNotYet", 2000)) ||
+          Boolean(await scrollToTestId(driver, "VtaLinkNotYet", 4).catch(() => undefined));
         if (!notYet) await sleep(2000);
       }
       if (!notYet) throw new Error(`${driver.e2ePlatform}: the phone never said the key was not added yet`);
