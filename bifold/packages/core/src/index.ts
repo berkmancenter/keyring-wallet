@@ -107,6 +107,7 @@ export { BifoldError } from './types/error'
 export { Screens, Stacks, TabStacks } from './types/navigators'
 export * from './types/version-check'
 export { createLinkSecretIfRequired, getAgentModules, useAppAgent } from './utils/agent'
+export { RetryingWebVhDidResolver } from './utils/RetryingWebVhDidResolver'
 export { getCredentialIdentifiers, isValidAnonCredsCredential } from './utils/credential'
 export {
   connectFromScanOrDeepLink,

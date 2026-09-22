@@ -22,6 +22,7 @@ import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
+import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
 import InAppMessageNotifier from '../components/InAppMessageNotifier'
@@ -34,7 +35,7 @@ import { BaseTourID } from '../types/tour'
 import QRCodeExchangeSlider from '../modules/vrc/components/QRCodeExchangeSlider'
 
 const TabStack: React.FC = () => {
-  const [{ enableImplicitInvitations, enableReuseConnections }, logger, GlobalListener] = useServices([
+  const [{ enableImplicitInvitations, enableReuseConnections, vti }, logger, GlobalListener] = useServices([
     TOKENS.CONFIG,
     TOKENS.UTIL_LOGGER,
     TOKENS.COMPONENT_APP_GLOBAL_LISTENER,
@@ -45,6 +46,10 @@ const TabStack: React.FC = () => {
   const { TabTheme, TextTheme, Assets, NavigationTheme, GradientTheme } = useTheme()
   const [store, dispatch] = useStore()
   const { agent } = useAgent()
+  // What a community sends this phone's persona — a vetter grant, a membership —
+  // is collected from unlock, not only while Vetting is open.
+  const onInboxError = useCallback((e: unknown) => logger.warn(`persona inbox: ${(e as Error)?.message ?? e}`), [logger])
+  useVtiPersonaInbox(agent, { mediatorDid: vti?.mediatorDid, communityDid: vti?.communityDid, onError: onInboxError })
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
