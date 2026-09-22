@@ -10,10 +10,12 @@
 const mockSessions: Array<{ did: string; mediator: string; onMessage: (m: unknown) => void; tsp: Uint8Array[]; didcomm: unknown[] }> = []
 const mockGreetings: Array<{ from: string; to: string }> = []
 const mockAdvertised: Record<string, string | undefined> = {}
+const mockTspVia: Record<string, string | undefined> = {}
 
 jest.mock('@bifold/trust-tasks', () => ({ tsp: { CODEC_FORMS_RELATIONSHIPS: true } }))
 jest.mock('../module/VtiMediatorTransport', () => ({
   advertisedMediatorDid: jest.fn(async (_a: unknown, did: string) => mockAdvertised[did]),
+  advertisedTspMediatorDid: jest.fn(async (_a: unknown, did: string) => mockTspVia[did]),
   createVtiClientDid: jest.fn(async () => 'did:peer:client'),
   resolveVtiMediator: jest.fn(async (_a: unknown, did: string) => ({ did, wsEndpoint: `wss://${did}` })),
   resolveDidDocumentRetrying: jest.fn(),
@@ -78,6 +80,7 @@ beforeEach(async () => {
   mockSessions.length = 0
   mockGreetings.length = 0
   for (const k of Object.keys(mockAdvertised)) delete mockAdvertised[k]
+  for (const k of Object.keys(mockTspVia)) delete mockTspVia[k]
 })
 
 describe('the community leg', () => {
@@ -149,5 +152,38 @@ describe('the community leg', () => {
     await vtiAgent.ask(COMMUNITY, 'https://t/submit/0.2', {}, 20)
     expect(session.tsp.length).toBe(tspBefore)
     expect(session.didcomm).toHaveLength(2)
+  })
+
+  it('asks a community behind another mediator over DIDComm from the start', async () => {
+    const community = 'did:webvh:c:other-mediator'
+    mockTspVia[community] = 'did:webvh:their-mediator'
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:y') })
+    const session = mockSessions.at(-1)!
+    const timer = setInterval(() => {
+      if (session.didcomm.length) {
+        clearInterval(timer)
+        session.onMessage({ type: 'https://t/manifest/0.2#response', body: {} })
+      }
+    }, 5)
+    const answer = await vtiAgent.ask(community, 'https://t/manifest/0.2', {}, 2000)
+    expect(answer).toMatchObject({ type: 'https://t/manifest/0.2#response' })
+    expect(session.tsp).toHaveLength(0)
+    expect(session.didcomm).toHaveLength(1)
+  })
+
+  it('keeps TSP for a community on our own mediator', async () => {
+    const community = 'did:webvh:c:same-mediator'
+    mockTspVia[community] = 'did:peer:lab'
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:z') })
+    const session = mockSessions.at(-1)!
+    const timer = setInterval(() => {
+      if (session.tsp.length >= 2) {
+        clearInterval(timer)
+        session.onMessage({ type: 'https://t/manifest/0.2#response', body: {} })
+      }
+    }, 5)
+    await vtiAgent.ask(community, 'https://t/manifest/0.2', {}, 2000)
+    expect(session.tsp.length).toBeGreaterThanOrEqual(2)
+    expect(session.didcomm).toHaveLength(0)
   })
 })

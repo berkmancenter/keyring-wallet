@@ -129,6 +129,21 @@ export async function resolveDidDocumentRetrying(agent: Agent, did: string, atte
  * by a VTA on the VTA Farm names the Farm's mediator, and a session opened on
  * any other mediator would never see what is sent to it.
  */
+/**
+ * The mediator a DID's `TSPTransport` service names, when it names one by DID.
+ * Two parties on different mediators have not been seen to complete a TSP
+ * relationship (VTI-Q15), which is why a caller wants to know.
+ */
+export async function advertisedTspMediatorDid(agent: Agent, did: string): Promise<string | undefined> {
+  const doc = await resolveDidDocumentRetrying(agent, did)
+  const services = (doc.service ?? []) as { type?: unknown; serviceEndpoint?: unknown }[]
+  return services
+    .filter((s) => [s.type].flat().map(String).includes('TSPTransport'))
+    .flatMap((s) => (Array.isArray(s.serviceEndpoint) ? s.serviceEndpoint : [s.serviceEndpoint]))
+    .map((e) => (typeof e === 'string' ? e : (e as { uri?: string } | undefined)?.uri))
+    .find((uri): uri is string => typeof uri === 'string' && uri.startsWith('did:'))
+}
+
 export async function advertisedMediatorDid(agent: Agent, did: string): Promise<string | undefined> {
   const doc = await resolveDidDocumentRetrying(agent, did)
   const services = (doc.service ?? []) as { type?: unknown; serviceEndpoint?: unknown }[]
