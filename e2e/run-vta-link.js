@@ -197,8 +197,17 @@ async function testerJourney(driver) {
     throw new Error("making the identity did not hand over to vetting");
   }
   console.log(`[e2e] journey: identity → vetting reached ${reached}`);
-  if (reached === "VettingLegalNameInput" && (await existsTestId(driver, "VettingNameFromProfile", 3000))) {
-    console.log("[e2e] journey: the vetting name came from the profile");
+  // The name input and the Start button are siblings in the same step, so
+  // which one the poll happens to see first says nothing about the screen —
+  // and it must not decide whether the prefill is checked at all. (An Android
+  // run saw the button first and silently skipped this, 2026-09-22.)
+  const onNameStep = ["VettingLegalNameInput", "VettingStartButton"].includes(reached);
+  if (onNameStep) {
+    if (await existsTestId(driver, "VettingNameFromProfile", 3000)) {
+      console.log("[e2e] journey: the vetting name came from the profile");
+    } else {
+      throw new Error("the vetting name did not come from the profile");
+    }
   }
   await screenshot(driver, "journey-join-vetting");
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
