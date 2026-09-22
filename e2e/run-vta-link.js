@@ -411,7 +411,7 @@ try {
     await tapTestId(driver, "LinkWithoutQrButton", 30000);
     await tapTestId(driver, "VtaLinkWithoutQr", 15000);
     const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
-    // Return on the keyboard submits the address, as a person would.
+    // Return on the keyboard submits the address, as a person would — on iOS.
     await address.setValue(`${runnerVtaDid()}\n`);
     // The key is revealed by "Show my code", which the screen enables once the
     // address looks like a DID — it does not appear on submit. Measured on
