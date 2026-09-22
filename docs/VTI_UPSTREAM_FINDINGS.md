@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.31 — 2026-09-22.** A living document: every finding here was measured
+**Version 1.32 — 2026-09-22.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -64,6 +64,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-38](#vti-38--a-cancelled-relationship-is-forgotten-before-the-vta-can-answer-the-cancel) | A cancelled relationship is forgotten before the VTA can answer the cancel | Low | New | H |
 | [VTI-39](#vti-39--a-tsp-reply-that-fails-to-send-once-is-lost) | A TSP reply that fails to send once is lost | Low | New — observed once | H |
 | [VTI-40](#vti-40--vta-browser-plugin-a-consent-approve-can-be-recorded-as-a-deny) | vta-browser-plugin: a consent Approve can be recorded as a Deny | Medium | New — fix drafted | F |
+| [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | New — cause located to the return leg, not proven | F′ |
 
 ## Stack under test
 
@@ -1314,6 +1315,92 @@ security controls, where "one silently lost prompt is a gated action that never
 got its human check". This is the inverse failure: an approval that was given,
 silently lost.
 
+### VTI-41 — TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does
+
+*Measured on the VTA Farm (era F′), 2026-09-22. Promoted from VTI-Q15.*
+
+**(a) What happens, and what should.** A client on one mediator introduces
+itself (XRFI) to a community on another mediator, and no accept (XRFA) ever
+comes back, whatever the route. The same client on the community's own
+mediator gets the accept in about a second, and the manifest over TSP after
+it. DIDComm between the same two mediators answers on every route. Expected:
+a TSP relationship forms across two mediators, as DIDComm does.
+
+**(b) Reproduce.**
+- Rung: `tsp-reference/ref-04f-farm-cross-mediator/run.mjs` in this
+  repository. The client is upstream's own `@openvtc/vti-tsp-js` **0.3.0**
+  (`bfdb0dc`), with `@openvtc/vti-didcomm-js` 0.7.0. The identity is a fresh
+  `did:peer:2` minted per run, whose DIDComm service names its own mediator.
+- Commands (from the rung's directory, after `npm install`):
+  - across mediators, community on the Farm Full Stack:
+    `FARM_MEDIATOR_DID=<shared Farm mediator> COMMUNITY_DID=<keyring-test VTC> SENDERS=peer ONLY=tsp TSP_ATTEMPTS=1,2 WAIT_MS=30000 node run.mjs`
+  - across mediators, `first-vtc`: the same with `COMMUNITY_DID=<first-vtc>`
+    (defaults) and `WAIT_MS=90000`;
+  - the same-mediator control:
+    `FARM_MEDIATOR_DID=<keyring-stack mediator> COMMUNITY_DID=<keyring-test VTC> SENDERS=peer ONLY=tsp TSP_ATTEMPTS=0 node run.mjs`
+- DIDs:
+  - shared Farm mediator `did:webvh:QmagBwJ5NMNVqSBAEcFs3WmTRu4kWNPXBM6a9Sav1VGEAV:dids.ic3.dev:firstperson-mediator` (0.28.23);
+  - keyring-stack mediator `did:webvh:QmdLqw6dy6x2cFhcuS2qJbqnToWhnz3CophCtGDTdVN9qi:dids-keyring-stack.ic3.dev:keyring-stack-mediator` (0.28.28-6394a03a);
+  - storm mediator `did:webvh:QmTS3a3H9Dk4ZMPAZ8jNWGeyPbuKrPbrPZcSbg8CJ6yynD:webvh.storm.ws:mediator` (0.28.26);
+  - keyring-test VTC `did:webvh:QmdervYcngPtJnKGuZSzH2tvDe8q274cty8324G4finFnV:dids-keyring-stack.ic3.dev:keyring-test-vtc` (vtc 0.11.58-d9a5be02);
+  - `first-vtc` `did:webvh:QmXi1PZD4NEvcvjfErAzVoCGtBFEv7dhXZQJHvcFY4U83F:webvh.storm.ws:first-vtc` (0.11.58).
+- Routes tried across mediators, each an XRFI whose route is
+  `[our mediator, us]` (§5.3.3):
+  1. **routed via our mediator** (`packRouted` to our mediator, onward hops
+     `[their mediator, the community]`): no XRFA in 30 s (keyring-test), and
+     none in 90 s (first-vtc);
+  2. **POSTed into the community's own mediator** (`POST …/mediator/v1/inbound`,
+     direct frame to the community): the mediator answers
+     `200 {"data":{"Stored":{"messages":[["<community DID>", …]]}}}`, then no
+     XRFA in 30 s (keyring-test) or 90 s (first-vtc).
+- Times (UTC, 2026-09-22): first-vtc 08:18:55 and 08:22:13; keyring-test
+  15:51:11; the same-mediator control 17:33:51.
+
+**(c) References.**
+- **Same-mediator control** (17:33:51Z): the XRFA names our invite's digest in
+  **1.15 s**; the join manifest over TSP (the Trust Task binding envelope) is
+  answered in **0.33 s** with 2 criteria; an XRFD then ends the relationship.
+  So the community serves TSP, and the client and its frames are sound.
+- **"Stored" proves** the invite reached the community's own mediator and was
+  queued for the community, as a local recipient
+  (`messages/inbound.rs:191-229` at tdk-rs `6394a03a`: a frame whose receiver
+  is not the mediator is stored for that local recipient). Route 2 takes our
+  mediator out of the outbound path. What remains is the **return leg**: the
+  community's accept must travel back across mediators to
+  `[our mediator, us]`.
+- **Not the relay allowlist, under defaults.** `relay_trusted_mediators`
+  defaults to `""` (`conf/mediator.toml:698` at `6394a03a`), and an empty list
+  admits any relaying peer (`messages/protocols/routing.rs:144-150`,
+  `relay_peer_trusted`: `allow.is_empty() || …`; upstream's own test
+  `relay_peer_trusted_empty_allowlist_accepts_any`). It is a cause only if a
+  Farm mediator sets a non-empty list without the other in it.
+- **Relay is implemented.** A routed TSP frame's onward hop is forwarded
+  (`inbound.rs`, the `TspMessageType::Routed` arm: `forward_to_next` for the
+  last hop, and `pack_routed` re-sealing an intermediate one).
+  `enable_inter_mediator_relay` defaults to `"false"`, with relay "also
+  permitted when global_acl_default grants SEND_FORWARDED"
+  (`conf/mediator.toml:281-287`). DIDComm relays between these same mediators
+  work, so general inter-mediator relay is permitted there.
+- **Cause: SUSPECTED, not proven.** The accept is lost on its way back across
+  mediators: in the community's mediator relaying it onward, or in the
+  receiving mediator admitting an anonymous routed relay. Settling it needs
+  the two mediators' logs around the times above, or their `[security]` and
+  `[processors.forwarding]` configuration. We have neither.
+
+**(d) What Keyring does.** keyring-bifold#66: a community whose `TSPTransport`
+names a different mediator than our session's is asked over DIDComm from the
+start, and that choice is remembered per community. On the Farm the first Join
+went from about 34 s to about 10.5 s. Communities on the phone's own mediator
+keep TSP, with #64's TSP→DIDComm fallback as the safety net. The rule reads the
+community's own document, so Keyring returns to TSP automatically once the
+relay works.
+
+**Ask.** Upstream or the Farm operator: find where the accept is lost across
+two mediators (the two mediators' logs at the times above), and fix the relay,
+or its configuration, so that a TSP relationship forms across mediators.
+**Verification:** re-run the rung's cross-mediator legs; an XRFA naming the
+invite, then the manifest over TSP, is the pass.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -1479,7 +1566,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q12 | Could a community issue an **open invitation** — one not bound to a subject DID in advance (a bearer or by-reference credential, redeemed by whichever persona presents it)? | A person invited to a community has no persona yet: the admin's `invitations` route needs a `subject_did` (`vtc-service/src/routes/invitations.rs:40-44`), so today the phone must mint a community identity first and show it to the admin before being invited. `subjectLinkage` (`invitation_verify.rs:198-236`) lets a different DID redeem, but links the two at the community. An open invitation — with VTI-32's by-reference delivery — would let "I was invited to X" start from the invitation itself. Keyring's decision for now (2026-09-22) is to send the community identity; this is the ask. **Also on the Farm (2026-09-22, [details](#question-details)):** the hosted admin console's *Invitations* needs an invitee DID too, so there is no open or bearer invitation from the console either. |
 | VTI-Q13 | Which sign-in should a community administrator use in the admin console, and could the console say so? | Plain *Sign in with VTA wallet* presents the browser client's holder `did:key`; only *VTA-proxied SIOP* presents the VTA DID that the community's access list names. Nothing on the page tells an administrator which one works. [Details](#question-details). |
 | VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). |
-| VTI-Q15 | Does `first-vtc` serve TSP Rev 3 today, and are the Farm and storm mediators on each other's relay allowlists? | Its DID advertises `TSPTransport` via the storm mediator, and storm stores an XRFI for it, but no XRFA came back within 90 s on either route. DIDComm to the same community answers in about 1 s. [Details](#farm-cross-mediator-round-trip-2026-09-22). |
+| ~~VTI-Q15~~ | ~~Does `first-vtc` serve TSP Rev 3 today, and are the Farm and storm mediators on each other's relay allowlists?~~ | **Promoted to [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) (2026-09-22).** The community serves TSP (same-mediator control: accept in 1.15 s); an accept is never returned across two mediators; the allowlist is not the cause under defaults. |
 | VTI-Q16 | Could a community's manifest, or the VTA and mediator documents, say whether the operator of a member's VTA and of the mediator differs from the VTC's operator, so a client can tell a vetter whether hidden-mode anonymity holds for them? | The hidden-vetter design makes it a deployment rule that the vetter's VTA and the mediator are not run by the VTC's operator: a vetter's VTA can compute every tag its user produces. Nothing a client can read says which operator runs what, so a Farm hosting both a member's VTA and the community's VTC would silently void anonymity. [Details](#question-details). |
 ### Question details
 
@@ -1598,6 +1685,7 @@ offer that a phone scans (`pnm acl create --expires 1h` behind a QR).
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.32 | 2026-09-22 | **VTI-41**, promoted from VTI-Q15: TSP Rev 3 does not cross two mediators. Measured from the Farm's shared mediator to two communities on other mediators (a Farm Full Stack's, and storm's `first-vtc`): no accept in 30–90 s, whether routed via our mediator or stored straight into the community's mediator. The community's own mediator accepts in 1.15 s and answers the manifest over TSP in 0.33 s. The relay allowlist is ruled out under defaults. The cause is located to the return leg and not proven. Keyring asks such a community over DIDComm (keyring-bifold#66). |
 | 1.31 | 2026-09-22 | **Upstream's response mapped.** Their remediation plan (basis VTI `3dcbfe98`, TDK `1eeebba1`, webvh `88fc6464`, against our v1.27) numbers the findings `KR-NN` = `VTI-NN`. Every status now carries their answer: 23 shipped, 4 already fixed (VTI-08, -09, -27, -28), 3 answered in docs, 4 declined or re-scoped (VTI-02, -10, -13, and -12 pending), and reproductions owed by us for VTI-06, VTI-12 and VTI-25. Nothing is marked verified on our stack before the pin bump. **Era F′:** the Farm's VTAs now run `0.37.1-d9a5be02`, with #1619, #1622 and #1634 and without #1642, #1646 and #1648. Phones linked as admin are unaffected. New section [Upstream's response](#upstreams-response-2026-09-22) records the owed reproductions, the client-facing wire changes (vti #1646, #1642, #1615) and the answered questions. New question **VTI-Q16**: how a client can tell whether hidden-vetting anonymity holds (operator separation between a vetter's VTA, the mediator and the VTC). |
 | 1.30 | 2026-09-22 | **The Farm, measured read-only from public endpoints (steps 1–2 of the Farm plan).** **VTI-Q8 answered**: the Farm mediator is 0.28.23, ahead of the lab. The storm mediator that `first-vtc` names reports `degraded` (stored functions restarting, as era E's lab did), and `first-vtc`'s own host serves a stale version-1 copy of its log (upstream's known mirror case). EXT-01 extends to the storm mediator. **The cross-mediator round trip works over DIDComm**: `first-vtc`'s manifest comes back storm → Farm, live, in about 1 s on all three sender routes, given a sender DID that names its mediator. Over TSP, storm stores the invite but no accept returns (**VTI-Q15**). The Farm mediator was down twice for a few minutes during the run. See [Farm cross-mediator round trip](#farm-cross-mediator-round-trip-2026-09-22). From the Phase 0 Farm run: **VTI-40**, the browser client's consent window can turn an Approve into a Deny. **VTI-Q13** asks which admin sign-in to use, **VTI-Q14** what `registryConsent` grants, and VTI-Q10 and VTI-Q12 gain Farm evidence. A [Question details](#question-details) section now carries the (a)–(d) record for questions. |
 | 1.29 | 2026-09-22 | **VTI-39** (a TSP reply that fails once is lost) added earlier; now **VTI-Q12**: an open invitation not bound to a subject DID in advance, the upstream half of Keyring's "I was invited" journey. |
