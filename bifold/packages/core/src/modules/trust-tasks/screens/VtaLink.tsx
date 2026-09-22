@@ -31,10 +31,12 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
-import { Screens, Stacks } from '../../../types/navigators'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import type { VtaLinkFailure } from '../module/vtaLinkMachine'
+
+import { openScanner } from './openScanner'
 
 /** The agent's host, for people: the domain inside a did:webvh, else the label alone. */
 export function agentHost(vtaDid: string): string | undefined {
@@ -107,10 +109,7 @@ const VtaLink: React.FC = () => {
 
   const onScanAgain = useCallback(() => {
     vtaAgent.relink()
-    const root = navigation as unknown as { navigate: (name: string, params?: object) => void }
-    // The scanner itself, with its paste-URL button — not `defaultToConnect`,
-    // which opens this wallet's own invitation QR instead.
-    root.navigate(Stacks.ConnectStack, { screen: Screens.Scan })
+    openScanner(navigation)
   }, [navigation])
 
   const onDone = useCallback(() => {

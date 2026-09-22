@@ -30,7 +30,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { useTheme } from '../../../contexts/theme'
-import { Screens, Stacks, type MyAgentStackParams } from '../../../types/navigators'
+import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
@@ -39,6 +39,7 @@ import { vtiAgent } from '../module/vtiAgent'
 import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 
+import { openScanner } from './openScanner'
 import { useVtaDid } from './VtaStatus'
 
 /** Which seat this phone would take at a vetting: decided by what it holds. */
@@ -610,10 +611,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       navigation.navigate(Screens.VtaLink)
       return
     }
-    const root = navigation as unknown as { navigate: (name: string, params?: object) => void }
-    // The scanner itself, with its paste-URL button — not `defaultToConnect`,
-    // which opens this wallet's own invitation QR instead.
-    root.navigate(Stacks.ConnectStack, { screen: Screens.Scan })
+    openScanner(navigation)
   }
 
   // S1 — not connected (and the failed state, which says why and offers a retry).

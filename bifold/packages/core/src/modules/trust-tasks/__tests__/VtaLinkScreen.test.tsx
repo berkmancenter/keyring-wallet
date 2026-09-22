@@ -10,9 +10,10 @@ import React from 'react'
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
-import { Screens } from '../../../types/navigators'
+import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { openScanner } from '../screens/openScanner'
 import VtaLink from '../screens/VtaLink'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -49,5 +50,16 @@ describe('Link your agent — done', () => {
       routes: [{ name: Screens.MyAgent }, { name: Screens.VtaAgent }],
     })
     expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtaAgent)
+  })
+})
+
+describe('the scanner these flows open', () => {
+  test('is the camera with its paste-link button, never a leftover "show my QR"', () => {
+    const navigate = jest.fn()
+    openScanner({ navigate })
+    expect(navigate).toHaveBeenCalledWith(Stacks.ConnectStack, {
+      screen: Screens.Scan,
+      params: { defaultToConnect: false },
+    })
   })
 })

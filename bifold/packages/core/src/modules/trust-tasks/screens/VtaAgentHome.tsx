@@ -25,12 +25,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
-import { Screens, Stacks } from '../../../types/navigators'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 
+import { openScanner } from './openScanner'
 import { agentHost } from './VtaLink'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
@@ -106,10 +107,7 @@ const VtaAgentHome: React.FC = () => {
   }, [agent, load])
 
   const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
-  const scan = () =>
-    (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(Stacks.ConnectStack, {
-      screen: Screens.Scan,
-    })
+  const scan = () => openScanner(navigation)
 
   if (link.kind !== 'linked') {
     return (
