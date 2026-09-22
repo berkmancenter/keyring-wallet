@@ -28,6 +28,14 @@ export interface BiometricConfirmationRequest {
   skipNativeBiometric?: boolean
   /** Whether the user will authenticate with biometric or device passcode */
   authMode?: AuthMode
+  /** What is being signed, when it is not a relationship credential (e.g. a vetting step). */
+  copy?: BiometricConfirmationCopy
+}
+
+/** The modal's title and description for a signing act other than a VRC. */
+export interface BiometricConfirmationCopy {
+  title: string
+  description: string
 }
 
 export interface BiometricConfirmationResponse {
@@ -87,7 +95,8 @@ let globalRequestConfirmation:
       counterpartyName: string,
       connectionId: string,
       skipNativeBiometric?: boolean,
-      authMode?: AuthMode
+      authMode?: AuthMode,
+      copy?: BiometricConfirmationCopy
     ) => Promise<BiometricConfirmationResponse>)
   | null = null
 
@@ -103,7 +112,8 @@ export async function requestBiometricConfirmationUI(
   counterpartyName: string,
   connectionId: string,
   skipNativeBiometric: boolean = false,
-  authMode: AuthMode = 'biometric'
+  authMode: AuthMode = 'biometric',
+  copy?: BiometricConfirmationCopy
 ): Promise<BiometricConfirmationResponse> {
   if (!globalRequestConfirmation) {
     // eslint-disable-next-line no-console
@@ -115,7 +125,7 @@ export async function requestBiometricConfirmationUI(
     }
   }
 
-  return globalRequestConfirmation(counterpartyName, connectionId, skipNativeBiometric, authMode)
+  return globalRequestConfirmation(counterpartyName, connectionId, skipNativeBiometric, authMode, copy)
 }
 
 export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -130,7 +140,8 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
       counterpartyName: string,
       connectionId: string,
       skipNativeBiometric: boolean = false,
-      authMode: AuthMode = 'biometric'
+      authMode: AuthMode = 'biometric',
+      copy?: BiometricConfirmationCopy
     ): Promise<BiometricConfirmationResponse> => {
       const timestamp = new Date().toISOString()
 
@@ -144,6 +155,7 @@ export const BiometricConfirmationProvider: React.FC<React.PropsWithChildren> = 
           timestamp,
           skipNativeBiometric,
           authMode,
+          copy,
         })
         setIsModalVisible(true)
       })

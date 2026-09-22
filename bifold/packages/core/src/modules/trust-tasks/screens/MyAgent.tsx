@@ -625,6 +625,11 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         {vta.link.kind !== 'linked' ? (
           <View style={styles.card} testID={testIdWithKey('MyAgentLinkCard')}>
             <Text style={styles.value}>{t('VtaLink.LinkYourAgentHint')}</Text>
+            {/* A tester with no agent page at hand should learn where a code
+                comes from, not meet a camera with nothing to scan. */}
+            <Text style={styles.label} testID={testIdWithKey('LinkYourAgentHelp')}>
+              {t('VtaLink.LinkYourAgentHelp')}
+            </Text>
             <Button
               title={t('VtaLink.LinkYourAgent')}
               buttonType={ButtonType.Primary}

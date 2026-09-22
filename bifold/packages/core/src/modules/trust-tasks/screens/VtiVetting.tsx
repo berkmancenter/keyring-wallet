@@ -425,9 +425,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   )
 
   /** Every signing act asks for the person's face or fingerprint (plan principle 9). */
-  const confirmWithBiometrics = async (counterparty: string) => {
+  const confirmWithBiometrics = async (counterparty: string, act: 'Send' | 'Attest' | 'Apply') => {
     if (!agent) return false
-    const result = await requestBiometricConfirmationWithUI(agent, counterparty, 'vetting')
+    // Say what is being signed: the shared modal otherwise speaks of a
+    // relationship credential, which none of these is.
+    const result = await requestBiometricConfirmationWithUI(agent, counterparty, 'vetting', {
+      title: t(`Vetting.Confirm${act}Title`),
+      description: t(`Vetting.Confirm${act}Body`),
+    })
     return result.success
   }
 
@@ -627,7 +632,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     disabled={!!busy}
                     onPress={() =>
                       run('attest', async () => {
-                        if (!(await confirmWithBiometrics(shortDid(request.applicantDid)))) return
+                        if (!(await confirmWithBiometrics(shortDid(request.applicantDid), 'Attest'))) return
                         await deskRef.current!.attest(request.requestId, {
                           documentClasses: ['passport'],
                           claimsVerified: ['name.legal'],
@@ -883,7 +888,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 disabled={!!busy}
                 onPress={() =>
                   run('card', async () => {
-                    if (!(await confirmWithBiometrics(shortDid(active.vetterDid)))) return
+                    if (!(await confirmWithBiometrics(shortDid(active.vetterDid), 'Send'))) return
                     await applicantRef.current!.sendCard(active.vetterDid)
                   })
                 }
@@ -981,7 +986,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   disabled={!!busy}
                   onPress={() =>
                     run('apply', async () => {
-                      if (!(await confirmWithBiometrics(shortDid(communityDid)))) return
+                      if (!(await confirmWithBiometrics(shortDid(communityDid), 'Apply'))) return
                       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
                       // Ask about the grants now, not when the statements were
                       // gathered: the community applies the status at intake,

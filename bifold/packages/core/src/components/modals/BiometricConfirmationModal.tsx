@@ -197,16 +197,17 @@ const BiometricConfirmationModal: React.FC = () => {
               </View>
 
               <ThemedText style={styles.title}>
-                {String(t('Biometry.ConfirmRelationship') || 'Confirm Relationship')}
+                {pendingRequest.copy?.title ?? String(t('Biometry.ConfirmRelationship') || 'Confirm Relationship')}
               </ThemedText>
 
               <ThemedText style={styles.counterpartyName}>{pendingRequest.counterpartyName}</ThemedText>
 
               <ThemedText style={styles.description}>
-                {String(
-                  t('Biometry.VrcConfirmationDescription') ||
-                    "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection."
-                )}
+                {pendingRequest.copy?.description ??
+                  String(
+                    t('Biometry.VrcConfirmationDescription') ||
+                      "You're about to sign a credential establishing a verified relationship with this contact. This proves you authorized this connection."
+                  )}
               </ThemedText>
 
               <View style={styles.securityNote}>
