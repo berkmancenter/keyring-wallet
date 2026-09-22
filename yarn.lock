@@ -3065,7 +3065,7 @@ __metadata:
 
 "@credo-ts/didcomm@patch:@credo-ts/didcomm@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-didcomm-npm-0.7.1-pr-2704-20260909134930-b4e8afd4d1.patch":
   version: 0.7.1-pr-2704-20260909134930
-  resolution: "@credo-ts/didcomm@patch:@credo-ts/didcomm@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-didcomm-npm-0.7.1-pr-2704-20260909134930-b4e8afd4d1.patch::version=0.7.1-pr-2704-20260909134930&hash=c2bd53"
+  resolution: "@credo-ts/didcomm@patch:@credo-ts/didcomm@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-didcomm-npm-0.7.1-pr-2704-20260909134930-b4e8afd4d1.patch::version=0.7.1-pr-2704-20260909134930&hash=a7b4f2"
   dependencies:
     "@credo-ts/core": "npm:0.7.1-pr-2704-20260909134930"
     "@stablelib/ed25519": "npm:^2.0.2"
@@ -3074,7 +3074,7 @@ __metadata:
     luxon: "npm:^3.7.2"
     query-string: "npm:^9.3.1"
     rxjs: "npm:^7.8.2"
-  checksum: 10c0/d5ec88e2f385a98c68bee2ded95b04fb4d3cc72347864b6ff810b874bf91d8956177d4c5838705fe49e2371bc01329b66fec5f138f73ecb8bd8b73f09aef6d09
+  checksum: 10c0/6a581947e6645e0ee59fa810c112479af99d1c07f59bef101ae9cd80f1452937c4434940327fd0ea6eaa9c3fc29a3210b56aebc6bf3d4bf0bf1f2676d2b0336a
   languageName: node
   linkType: hard
 
@@ -6492,10 +6492,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@scure/base@npm:^2.0.0":
+"@scure/base@npm:2.4.0":
   version: 2.4.0
   resolution: "@scure/base@npm:2.4.0"
   checksum: 10c0/985a4bdcafa4289e0cb8b6d53453347308d5ff6ffcbe84d8fac102374fb419b52db565e98fa3931b79a4be1cc3218583065bbca27dfaabca687aac0f3db3639d
+  languageName: node
+  linkType: hard
+
+"@scure/base@patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch":
+  version: 2.4.0
+  resolution: "@scure/base@patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch::version=2.4.0&hash=2bb30a"
+  checksum: 10c0/a447b38e90da408f90cd19dd1fe2596a81220ac3c1abab12673d8d703613c89619ee2536a26429138f6b383e2406123c6d321a100ecb8cf2684d5e4a0317ff05
   languageName: node
   linkType: hard
 
