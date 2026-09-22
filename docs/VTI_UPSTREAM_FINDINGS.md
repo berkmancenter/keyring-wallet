@@ -62,6 +62,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-36](#vti-36--vta-services-tsp-enable-tells-a-self-hosted-vta-to-redeploy-a-log-it-already-serves) | `vta services tsp enable` tells a self-hosted VTA to redeploy a log it already serves | Low | New — documentation | G |
 | [VTI-37](#vti-37--a-consent-refusal-loses-its-challenge-once-the-approver-set-grows) | A consent refusal loses its challenge once the approver set grows | Medium | New | H |
 | [VTI-38](#vti-38--a-cancelled-relationship-is-forgotten-before-the-vta-can-answer-the-cancel) | A cancelled relationship is forgotten before the VTA can answer the cancel | Low | New | H |
+| [VTI-39](#vti-39--a-tsp-reply-that-fails-to-send-once-is-lost) | A TSP reply that fails to send once is lost | Low | New — observed once | H |
 
 ## Stack under test
 
@@ -1189,6 +1190,31 @@ XRFD against the lab VTA). **Measured:** vti `a96fe02f`, linking
 `affinidi-messaging-sdk` 0.26.12, 2026-09-21. The fix is upstream's to place:
 send the answer before advancing the stored state, or let `cancel_relationship`
 answer from the state the inbound path saw.
+
+### VTI-39 — A TSP reply that fails to send once is lost
+
+*Observed on era **H** (see [Stack under test](#stack-under-test)) — once, not yet reproduced.*
+
+alice carried out a phone's `keys/export-secret/0.1` over TSP (*"key secret
+retrieved … outcome=success"*, *"TSP trust-task dispatched … status=200 OK"*)
+and then logged, 19 ms later:
+
+```
+WARN vta_service::messaging::service: failed to send TSP reply recipient=did:peer:…
+  error=Transport (HTTP(S)) error: Could not send TSP message: reqwest::Error { kind: Request,
+  url: "https://keyring-vti-mediator.ngrok.app/mediator/v1/inbound",
+  source: hyper_util::client::legacy::Error(SendRequest, hyper::Error(IncompleteMessage)) }
+```
+
+`IncompleteMessage` is a pooled connection closed under the request — the
+shape Keyring's own transport met and now retries (the stale keep-alive
+socket). The VTA does not retry, so the phone waited out its 30 s and reported
+*"the VTA did not answer"* for a task the VTA had completed, with a key
+already handed over. The DIDComm path queues through a durable outbox; the
+TSP reply path appears to be a single attempt. Once in the whole log, through
+an ngrok tunnel, so the fixture may be most of it; recorded because the
+consequence — a completed task the caller believes failed — is the kind that
+invites a blind retry. **Observed:** vti `a96fe02f`, 2026-09-22T01:22Z.
 
 ## Beyond VTI
 
