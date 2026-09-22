@@ -24,6 +24,10 @@ if (typeof global.self === 'undefined') {
   global.self = global
 }
 
+// Keep recent console output for "Report this problem" (app/src/utils/problemReport.ts).
+// First, so it sees everything that logs after it.
+require('./src/utils/logBuffer').installLogBuffer()
+
 // =============================================================================
 // Step 1: Set up crypto.getRandomValues using react-native-get-random-values
 // This MUST come before any other crypto setup

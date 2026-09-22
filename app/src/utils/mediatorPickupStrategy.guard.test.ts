@@ -185,6 +185,7 @@ describe('mediator pickup strategy (app guard)', () => {
     // out-of-band record, no connection exists, and receiving the same
     // invitation again is refused ("has already been received") — every Retry
     // failed on TestFlight 0.2.0 (204), 2026-09-21. The record has to go first.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- the file's other cases read the built module the same way
     const didcomm = require('@credo-ts/didcomm')
     const calls: string[] = []
     const oobApi = {

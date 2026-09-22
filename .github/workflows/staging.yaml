@@ -327,11 +327,14 @@ jobs:
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
           # Optional: the DIDComm v2 mediator, used only when the developer
           # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
           echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
+          # Optional: where "Report this problem" offers to email the report.
+          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
 
       - name: Create release keystore
         working-directory: app/android/app
@@ -750,11 +753,14 @@ jobs:
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
+          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
           # Optional: the DIDComm v2 mediator, used only when the developer
           # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
           echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
+          # Optional: where "Report this problem" offers to email the report.
+          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
 
       - name: Update APS environment
         run: |
