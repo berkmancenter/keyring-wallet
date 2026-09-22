@@ -85,6 +85,21 @@ particular none are the images a VTA Farm currently offers.
 | **H** | 2026-09-21 (evening) | `a96fe02f` — upstream main; carries #1579, #1581, #1591–#1593, #1601 and the persona/face work (#1594–#1606); `affinidi-messaging-sdk` 0.26.12 from upstream's own lockfile; `vta` built `--features tsp` | `ad36f0b1` — upstream main, mediator **0.28.11** (#843, #844), `--features tsp` | `5365da7` — upstream main (#205) |
 | **G** | 2026-09-21 | `6bd52cab` as era C, **plus `affinidi-messaging-sdk` 0.26.12** (carries tdk-rs #838) in the lockfile; `vta` built **`--features tsp`**; alice and the community VTA advertise `TSPTransport` (`vta services tsp enable`), the VTC by a DID-log edit (VTI-35) | `15499952` as era E — mediator 0.28.9, rebuilt **`--features tsp`** | `35244b7` — daemon 0.8.3 |
 
+**Era F′ — the Farm's VTAs upgraded, 2026-09-22.** The Farm moved its VTAs from
+`vta 0.36.0-d383d17e` to **`0.37.1-d9a5be02`** (upstream #1634), newer than the
+lab's 0.34.1. At that commit the Farm's VTAs carry #1591–#1593 (withdraw,
+`requestAlreadyOpen`, supplement), #1615 (`VTCRest` carries `/v1`), #1619
+(`KeyMint` for a DID mint; `key-export` its own capability, derived by `admin`
+alone), #1622 (TSP on by default, and setup checks that the mediator carries
+it), #1633 (the enforcement-off warning) and #1634 (`contexts/secrets` requires
+`KeyExport`). They do **not** yet carry #1632, #1642, #1646 or #1648, and #1652
+is not merged. For Keyring:
+- an un-narrowed admin derives both `KeyMint` and `KeyExport`
+  (`vta-service/src/operations/export.rs:69,140` at `d9a5be02`), so a phone
+  linked as admin still mints its persona and borrows its keys;
+- Keyring never calls `contexts/secrets`;
+- `requestAlreadyOpen` and supplement are live on the Farm as on the lab.
+
 **A correction to era F, measured 2026-09-21.** "Identical to the lab" holds
 for the version string only. The Farm's VTA image is `0.34.1-89ebd895` — the
 merge commit of `verifiable-trust-infrastructure` #1579 — while the lab's
@@ -1558,7 +1573,7 @@ offer that a phone scans (`pnm acl create --expires 1h` behind a QR).
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 1.31 | 2026-09-22 | **Upstream's response mapped.** Their remediation plan (basis VTI `3dcbfe98`, TDK `1eeebba1`, webvh `88fc6464`, against our v1.27) numbers the findings `KR-NN` = `VTI-NN`. Every status now carries their answer: 23 shipped, 4 already fixed (VTI-08, -09, -27, -28), 3 answered in docs, 4 declined or re-scoped (VTI-02, -10, -13, and -12 pending), and reproductions owed by us for VTI-06, VTI-12 and VTI-25. Nothing is marked verified on our stack before the pin bump. New section [Upstream's response](#upstreams-response-2026-09-22) records the owed reproductions, the client-facing wire changes (vti #1646, #1642, #1615) and the answered questions. |
+| 1.31 | 2026-09-22 | **Upstream's response mapped.** Their remediation plan (basis VTI `3dcbfe98`, TDK `1eeebba1`, webvh `88fc6464`, against our v1.27) numbers the findings `KR-NN` = `VTI-NN`. Every status now carries their answer: 23 shipped, 4 already fixed (VTI-08, -09, -27, -28), 3 answered in docs, 4 declined or re-scoped (VTI-02, -10, -13, and -12 pending), and reproductions owed by us for VTI-06, VTI-12 and VTI-25. Nothing is marked verified on our stack before the pin bump. **Era F′:** the Farm's VTAs now run `0.37.1-d9a5be02`, with #1619, #1622 and #1634 and without #1642, #1646 and #1648. Phones linked as admin are unaffected. New section [Upstream's response](#upstreams-response-2026-09-22) records the owed reproductions, the client-facing wire changes (vti #1646, #1642, #1615) and the answered questions. |
 | 1.30 | 2026-09-22 | **The Farm, measured read-only from public endpoints (steps 1–2 of the Farm plan).** **VTI-Q8 answered**: the Farm mediator is 0.28.23, ahead of the lab. The storm mediator that `first-vtc` names reports `degraded` (stored functions restarting, as era E's lab did), and `first-vtc`'s own host serves a stale version-1 copy of its log (upstream's known mirror case). EXT-01 extends to the storm mediator. **The cross-mediator round trip works over DIDComm**: `first-vtc`'s manifest comes back storm → Farm, live, in about 1 s on all three sender routes, given a sender DID that names its mediator. Over TSP, storm stores the invite but no accept returns (**VTI-Q15**). The Farm mediator was down twice for a few minutes during the run. See [Farm cross-mediator round trip](#farm-cross-mediator-round-trip-2026-09-22). From the Phase 0 Farm run: **VTI-40**, the browser client's consent window can turn an Approve into a Deny. **VTI-Q13** asks which admin sign-in to use, **VTI-Q14** what `registryConsent` grants, and VTI-Q10 and VTI-Q12 gain Farm evidence. A [Question details](#question-details) section now carries the (a)–(d) record for questions. |
 | 1.29 | 2026-09-22 | **VTI-39** (a TSP reply that fails once is lost) added earlier; now **VTI-Q12**: an open invitation not bound to a subject DID in advance, the upstream half of Keyring's "I was invited" journey. |
 | 1.28 | 2026-09-21 | **Era H, run on devices.** Enrol, invite, the two-phone approval and the full vetting ceremony pass on upstream main. **VTI-24 and VTI-26 validated live** with a phone approver: the VTA pushed the consent request through the approver's own mediator and it was approved in about three seconds — once Keyring minted its `did:peer` with a `DIDCommMessaging` service naming the mediator by DID, a client defect found on the way. New: **VTI-37**, a consent refusal whose `details` pass the 4 KB bound at three approvers loses its challenge, digest and relayable requests. VTI-22 re-met: the lab's `up.sh` now sets alice's enforcement. Also new: **VTI-38**, a mutual cancel whose §7.3 answer is refused because the transport forgets the relationship first — found by `ref-04s`, which with `ref-04r` also closes TSP Rev 3's remaining lab items (long-form frames through the mediator; XRFI → XRFA → XRFD against upstream's state machine). |
