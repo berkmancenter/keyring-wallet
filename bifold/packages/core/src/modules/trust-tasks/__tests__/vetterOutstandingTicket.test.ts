@@ -30,6 +30,7 @@ jest.mock('@bifold/trust-tasks', () => {
 })
 
 import { VtiVetterDesk, type VettingTicket } from '../module/vtiVetting'
+import { vetterNotEligibleReason } from '../module/vtiGrantState'
 
 const COMMUNITY = 'did:webvh:community'
 const APPLICANT = 'did:webvh:applicant'
@@ -114,7 +115,12 @@ describe('a ticket redeemed after the grant died', () => {
   it('carries the reason, so the applicant is told which kind of dead', async () => {
     const desk = new VtiVetterDesk(agent, persona, store, communityStore([deadGrant]))
     await (desk as unknown as { takeRequest: (m: unknown) => Promise<void> }).takeRequest(request)
-    expect((sent[0].body as { payload?: { code?: string } }).payload?.code).toContain('expired')
+    // Against the function that BUILDS the reason, not a copy of its format:
+    // a test that rebuilds the string would keep passing while the two layers
+    // that read it drifted apart, which is the failure it exists to catch.
+    expect((sent[0].body as { payload?: { code?: string } }).payload?.code).toBe(
+      vetterNotEligibleReason('expired')
+    )
   })
 
   it('holds no opinion when there is no grant at all — still refuses', async () => {

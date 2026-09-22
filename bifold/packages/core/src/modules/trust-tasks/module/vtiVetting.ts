@@ -39,7 +39,7 @@ import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
-import { pickOwnVetterGrant } from './vtiGrantState'
+import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
@@ -517,7 +517,7 @@ export class VtiVetterDesk {
     // hold still works.
     const standing = await this.grantWithState()
     if (standing.state.state !== 'active') {
-      await this.refuse(m, applicantDid, `vetting/request:vetterNotEligible:${standing.state.state}`)
+      await this.refuse(m, applicantDid, vetterNotEligibleReason(standing.state.state))
       return
     }
 

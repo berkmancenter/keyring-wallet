@@ -112,3 +112,17 @@ export async function pickOwnVetterGrant(
   const at = active >= 0 ? active : 0
   return { held: newestFirst[at], state: states[at] }
 }
+
+/**
+ * How a refusal names a vetter who cannot vet — one place, because two layers
+ * say it and a test that rebuilt the string would pass while they drifted.
+ *
+ * The applicant hears this when a ticket is redeemed against a grant that is no
+ * longer live; the vetter's own desk explains the same state in its own words.
+ * The state travels with it deliberately: revoked, expired and notYetValid want
+ * different things from the person who reads them — ask again, ask again, or
+ * simply wait.
+ */
+export function vetterNotEligibleReason(state: VetterGrantState['state']): string {
+  return `vetting/request:vetterNotEligible:${state}`
+}
