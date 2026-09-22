@@ -39,12 +39,18 @@ STACK_DIR="${STACK_DIR:-$HOME/vti-stack}"
 VTA_BIN="${VTA_BIN:-$HOME/Documents/vti-main/target/debug/vta}"
 export RUST_MIN_STACK="${RUST_MIN_STACK:-33554432}"
 
+# A lab VTA's port matters only offline (the daemon is stopped and restarted).
+# Online, any VTA pnm knows will do — a Farm VTA included (PNM_HOME names it).
 case "$NAME" in
   alice) PORT=8110 ;;
   community) PORT=8111 ;;
   bob) PORT=8112 ;;
-  *) echo "unknown vta: $NAME" >&2; exit 1 ;;
+  *) PORT="" ;;
 esac
+if [ "$MODE" != online ] && [ -z "$PORT" ]; then
+  echo "unknown lab vta: $NAME (offline mode needs a lab VTA; online works with any pnm VTA)" >&2
+  exit 1
+fi
 
 if [ "$MODE" = online ]; then
   PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"

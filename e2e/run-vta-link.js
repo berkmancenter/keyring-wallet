@@ -66,6 +66,9 @@ const JOURNEY = process.env.JOURNEY === "1";
 const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
 
 function runnerVtaDid() {
+  // A VTA outside the lab (the Farm's) is named outright: its slug need not be
+  // a shell variable name, and it is not in stack.env.
+  if (process.env.RUNNER_VTA_DID) return process.env.RUNNER_VTA_DID;
   const key = `${VTA_SLUG.toUpperCase()}_VTA_DID`;
   const env = execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$${key}"`], {
     encoding: "utf8",
@@ -206,12 +209,17 @@ async function testerJourney(driver) {
   }
 
   // A community link, pasted, opens Join on that community.
-  const vtcDid = execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$VTC_DID"`], { encoding: "utf8" });
+  // The run's own community when it names one (a Farm community): the link a
+  // phone opens becomes its community, so the lab's would move it off it.
+  const vtcDid =
+    process.env.KEYRING_COMMUNITY_DID ||
+    execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$VTC_DID"`], { encoding: "utf8" });
   if (vtcDid.startsWith("did:")) {
-    const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent("Runner lab")}`;
+    const communityName = process.env.KEYRING_COMMUNITY_NAME || (process.env.KEYRING_COMMUNITY_DID ? "keyring-test" : "Runner lab");
+    const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent(communityName)}`;
     await pasteLinkFromHome(driver, link);
     await waitForTestId(driver, "JoinAsks", 30000);
-    const asks = await driver.$(driver.e2ePlatform === "ios" ? '-ios predicate string:label CONTAINS "Runner lab"' : 'android=new UiSelector().textContains("Runner lab")');
+    const asks = await driver.$(driver.e2ePlatform === "ios" ? `-ios predicate string:label CONTAINS "${communityName}"` : `android=new UiSelector().textContains("${communityName}")`);
     if (!(await asks.isExisting())) throw new Error("the pasted community link did not open Join on that community");
     console.log("[e2e] journey: a pasted community link opened Join on it");
     for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
@@ -424,7 +432,7 @@ try {
     await screenshot(driver, "link-failure").catch(() => undefined);
     await dumpSource(driver, "link-failure").catch(() => undefined);
   }
-  printFailure(`VTA LINK BY QR failed: ${err.message}`);
+  printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
   process.exitCode = 1;
 } finally {
   if (driver) await driver.deleteSession().catch(() => undefined);

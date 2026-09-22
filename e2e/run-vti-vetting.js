@@ -19,7 +19,7 @@
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
-import { handleBiometricConfirmIfPresent, leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
+import { handleBiometricConfirmIfPresent, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
@@ -37,6 +37,8 @@ const platforms = (process.env.PLATFORMS || "android,ios").split(",");
 // `requestMore` ("vetting:statements:1") and the request stays open as
 // DEFERRED — so this is also the live run of the applicant's way out, which
 // withdraws it. The grant is re-issued afterwards, whatever happened.
+// E2E_REFUSAL=supplement: the same deferral, answered in place — the grant is
+// re-issued, and the applicant's second apply supplements the open request.
 const REFUSAL = process.env.E2E_REFUSAL || "";
 const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
 const STACK_ENV = path.join(process.env.STACK_DIR || path.join(process.env.HOME, "vti-stack"), "stack.env");
@@ -45,18 +47,38 @@ function admin(...args) {
   const env = Object.fromEntries(
     readFileSync(STACK_ENV, "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])
   );
-  const out = execFileSync("node", [ADMIN, `${env.VTC_URL}/v1`, env.VTC_DID, path.join(path.dirname(STACK_ENV), "vtc-admin-credential.json"), ...args], { encoding: "utf8" });
+  // Another community than the lab's (a Farm Full Stack's) is named outright.
+  const base = process.env.KEYRING_COMMUNITY_REST || `${env.VTC_URL}/v1`;
+  const did = process.env.KEYRING_COMMUNITY_DID || env.VTC_DID;
+  const cred = process.env.KEYRING_COMMUNITY_ADMIN_CRED || path.join(path.dirname(STACK_ENV), "vtc-admin-credential.json");
+  const out = execFileSync("node", [ADMIN, base, did, cred, ...args], { encoding: "utf8" });
   const json = out.slice(out.indexOf("{"));
   return json ? JSON.parse(json) : undefined;
 }
-/** The vetter this run's desk belongs to: the live grant whose profile was published last. */
+/**
+ * The vetter this run's desk belongs to. VETTER_DID names it outright (the
+ * suite knows its vetter phone's persona); otherwise the live grant whose
+ * profile was published last — which misleads once a revocation has deleted
+ * that vetter's profile, and then revokes someone else's grant.
+ */
 function currentVetter() {
   const { vetters = [] } = admin("vetters-list") ?? {};
   const live = vetters.filter((v) => v.live && !v.revoked);
+  if (process.env.VETTER_DID) {
+    const mine = live.find((v) => v.memberDid === process.env.VETTER_DID);
+    if (!mine) throw new Error(`no live vetter grant for ${process.env.VETTER_DID}`);
+    return mine;
+  }
   live.sort((a, b) => String(b.profile?.updatedAt ?? "").localeCompare(String(a.profile?.updatedAt ?? "")));
   if (!live[0]) throw new Error("no live vetter grant to revoke");
   return live[0];
 }
+/** Lines the lab community logged since `since` (ISO), colour codes removed. */
+const vtcLogSince = (since) =>
+  readFileSync(path.join(path.dirname(STACK_ENV), "logs", "vtc.log"), "utf8")
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .split("\n")
+    .filter((l) => l.slice(0, 27) >= since.slice(0, 27));
 const deferredCount = () => (admin("join-list", "deferred")?.items ?? []).length;
 let revokedVetterDid;
 const LEGAL_NAME = process.env.E2E_LEGAL_NAME || "Alice Example";
@@ -140,8 +162,12 @@ try {
             derivedDataPath: path.join(os.homedir(), `Library/Developer/Xcode/DerivedData/WDA-e2e-${udid.slice(-8)}`),
           })
         : iosCaps();
-  applicant = await createSession(platforms[0], keep(capsFor(platforms[0], process.env.APPLICANT_IOS_UDID, 8131, 9131)));
-  vetter = await createSession(platforms[1], keep(capsFor(platforms[1], process.env.VETTER_IOS_UDID, 8130, 9130)));
+  // Two simulators, one per role (APPLICANT_IOS_SIM / VETTER_IOS_SIM name them):
+  // each needs its own device and its own WebDriverAgent port.
+  const simCaps = (caps, name, wdaLocalPort, mjpegServerPort) =>
+    name ? { ...caps, "appium:deviceName": name, "appium:wdaLocalPort": wdaLocalPort, "appium:mjpegServerPort": mjpegServerPort } : caps;
+  applicant = await createSession(platforms[0], keep(simCaps(capsFor(platforms[0], process.env.APPLICANT_IOS_UDID, 8131, 9131), process.env.APPLICANT_IOS_SIM, 8133, 9133)));
+  vetter = await createSession(platforms[1], keep(simCaps(capsFor(platforms[1], process.env.VETTER_IOS_UDID, 8130, 9130), process.env.VETTER_IOS_SIM, 8134, 9134)));
   console.log(`[e2e] applicant = ${platforms[0]}, vetter = ${platforms[1]}`);
   keepalive = setInterval(() => { vetter.getWindowSize().catch(() => undefined); applicant.getWindowSize().catch(() => undefined); }, 20000);
   await Promise.all([unlockToHome(applicant), unlockToHome(vetter)]);
@@ -256,7 +282,24 @@ try {
   // so the harness no longer opens the Developer screen; it costs a persona
   // re-mint, which is cheap and reliable. Determinism is worth more than the minute.
   await leaveCommunityInApp(applicant);
-  await openVetting(applicant);
+  if (process.env.APPLICANT_DOOR === "link") {
+    // Door 2, as a person meets it: a community link → what it asks → make
+    // the identity (Face ID) → straight into Get vetted for that community.
+    const communityDid = process.env.KEYRING_COMMUNITY_DID;
+    if (!communityDid) throw new Error("APPLICANT_DOOR=link needs KEYRING_COMMUNITY_DID");
+    const name = process.env.KEYRING_COMMUNITY_NAME || "keyring-test";
+    await pasteLinkFromHome(applicant, `keyring://vti/community?d=${encodeURIComponent(communityDid)}&n=${encodeURIComponent(name)}`);
+    await waitForTestId(applicant, "JoinAsks", 60000);
+    const asks = await textOf(applicant, "JoinAsks").catch(() => "");
+    console.log(`[e2e] ${applicant.e2ePlatform}: the community asks — ${asks.replace(/\s+/g, " ").slice(0, 160)}`);
+    await (await waitForTestId(applicant, "JoinStart", 30000)).click();
+    await waitForTestId(applicant, "JoinMakeIdentity", 30000);
+    await tapTestIdByCoordinates(applicant, "JoinAsContinue");
+    await handleBiometricConfirmIfPresent(applicant);
+    console.log(`[e2e] ${applicant.e2ePlatform}: joining through the link — making the identity`);
+  } else {
+    await openVetting(applicant);
+  }
   // The reset must have taken: a fresh applicant has no persona (Create
   // identity) or at least no checklist that already meets the requirements.
   const stale = await byTestId(applicant, "VettingChecklist")
@@ -445,7 +488,7 @@ try {
   } else {
     console.log(`[e2e] ${applicant.e2ePlatform}: vetter grant checked against the status list`);
   }
-  if (REFUSAL === "revoked-grant") {
+  if (REFUSAL === "revoked-grant" || REFUSAL === "supplement") {
     const vetterGrant = currentVetter();
     revokedVetterDid = vetterGrant.memberDid;
     const deferredBefore = deferredCount();
@@ -460,6 +503,46 @@ try {
     console.log(`[e2e] ${applicant.e2ePlatform}: ${deferred}`);
     if (!/vetting:statements/.test(deferred)) throw new Error(`${applicant.e2ePlatform}: deferred without naming the missing statement: ${deferred}`);
     await screenshot(applicant, "vetting-refusal-01-deferred");
+    if (REFUSAL === "supplement") {
+      // E2E_REFUSAL=supplement: the community's reason goes away — the vetter
+      // is granted again, so the statement counts — and the applicant answers
+      // the deferral in place ("Add what they asked for" → supplement/0.1)
+      // instead of withdrawing and starting over.
+      admin("vetter-grant", revokedVetterDid);
+      for (let attempt = 1; ; attempt++) {
+        await sleep(3000);
+        try { admin("vetter-resend", revokedVetterDid); break; } catch (e) { if (attempt >= 3) throw e; }
+      }
+      revokedVetterDid = undefined; // re-granted here; the cleanup need not
+      console.log("[e2e] community: vetter granted again — the statement counts again");
+      await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
+      const label = await textOf(applicant, "VettingApplyButton").catch(() => "");
+      console.log(`[e2e] ${applicant.e2ePlatform}: the deferred apply button reads "${label}"`);
+      if (!/asked for/i.test(label)) throw new Error(`${applicant.e2ePlatform}: a deferred application's button reads "${label}", not "Add what they asked for"`);
+      const tappedAt = new Date().toISOString();
+      await tapTestIdByCoordinates(applicant, "VettingApplyButton");
+      await sleep(1500);
+      await handleBiometricConfirmIfPresent(applicant);
+      // The community must take it as a supplement to the open request — not a
+      // second application (which it would refuse as requestAlreadyOpen).
+      let supplemented = process.env.KEYRING_COMMUNITY_REST ? "(a remote community: its log is not ours to read)" : "";
+      for (let i = 0; i < 30 && !supplemented; i++) {
+        await sleep(2000);
+        supplemented = vtcLogSince(tappedAt).find((l) => /join request supplemented/.test(l)) ?? "";
+      }
+      if (!supplemented) throw new Error("the community logged no supplement for the open request");
+      console.log(`[e2e] community: ${supplemented.replace(/^\S+\s+INFO\s+/, "").slice(0, 160)}`);
+      // The statement was signed under the grant that was revoked; a new grant
+      // starts now and does not cover it, so the request rightly stays deferred
+      // (and the screen says those statements will not count). A supplement that
+      // ends in admission needs a fresh statement: a second ceremony.
+      const still = await waitText(applicant, "VettingSubmissionState", /asked for more/i, 60000);
+      console.log(`[e2e] ${applicant.e2ePlatform}: after the supplement — ${still.slice(0, 120)}`);
+      await screenshot(applicant, "vetting-refusal-03-supplemented");
+      printSuccess("vti-vetting (revoked grant → deferred → re-granted → supplemented in place → still deferred, rightly)");
+      process.exitCode = 0;
+      throw Object.assign(new Error("done"), { done: true });
+    }
     await scrollToTestId(applicant, "VettingWithdrawButton", 4, LOW);
     await tapTestIdByCoordinates(applicant, "VettingWithdrawButton");
     const withdrawn = await waitText(applicant, "VettingSubmissionState", /withdrew/i, 60000);
