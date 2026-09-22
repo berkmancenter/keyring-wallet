@@ -1,8 +1,8 @@
 # UI/UX improvements — roles, agent linking, membership and vetting, for a person rather than a test harness
 
-**Status:** Proposed. No code written. Target: the live demo at OSS Summit Europe, Prague, 1 October 2026.
+**Status:** In execution. U1–U8 and the "I was invited" door are built (keyring-bifold#58, keyring-wallet#74); the journey after linking (§4.1, §5.2, §5.3, §5.7) is built without §5.8 ("any VTA, any community"); §5.8, seed by copy, waits on the editable multi-profile plan's author and follows separately. Target: the live demo at OSS Summit Europe, Prague, 1 October 2026.
 **Upstream asks:** §9 is the running list of what this work needs changed upstream, each with the code it points at; it feeds the reports sent to the maintainers and the upstream findings document.
-**Reasoning:** [`2026-09-21-al.md`](./ui-ux-improvements-plan/2026-09-21-al.md) — the inventory of today's screens, what upstream supports for enrolment and sign-in (measured against the pinned clones), and the design research every principle in §3 cites. [`2026-09-21-bm.md`](./ui-ux-improvements-plan/2026-09-21-bm.md) — why confirmations reuse the app's existing bottom-sheet modal convention (`CommonRemoveModal`/`ModalUsage`) rather than a new screen, and why the match-code checks are the one deliberate exception. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
+**Reasoning:** [`2026-09-21-al.md`](./ui-ux-improvements-plan/2026-09-21-al.md) — the inventory of today's screens, what upstream supports for enrolment and sign-in (measured against the pinned clones), and the design research every principle in §3 cites. [`2026-09-22-al.md`](./ui-ux-improvements-plan/2026-09-22-al.md) — the TestFlight findings that reshaped the journey after linking, the three decisions taken that day (seed by copy, the Join as default, what Door 1 sends), and how each step maps to the OpenVTC TUI and the vetting dry run. [`2026-09-21-bm.md`](./ui-ux-improvements-plan/2026-09-21-bm.md) — why confirmations reuse the app's existing bottom-sheet modal convention (`CommonRemoveModal`/`ModalUsage`) rather than a new screen, and why the match-code checks are the one deliberate exception. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
 **Related plans:** [`keyring-on-the-vta-farm/community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the ceremony, the protocol and the tests; this plan owns how a person meets them. It refines that subtask's §7 (user experience) — §7's screen list and one-scanner rule stand, and the changes this plan makes to them are named in §5. Once adopted, §7 there points here.
 **Code under discussion:** the `feat/prague-farm-membership` branch of both repositories — screens in `bifold/packages/core/src/modules/trust-tasks/screens/` (`MyAgent.tsx`, `VtiCommunity.tsx`, `VtiVetting.tsx`), the developer surface in `app/src/screens/Developer.tsx`, lab scripts in `scripts/openvtc/local-vti-stack/`.
 
@@ -97,7 +97,9 @@ Upstream's own client shows the operator's view once connected: "Connected ✓",
 | **Status** | One line with a dot: **Online** · **Reconnecting…** · **Offline since 14:02**. Elsewhere in the app, a banner appears only when the agent is not online. | The mediator session and the last successful exchange |
 | **What your agent holds** | Your identities, one per community, by community name · your membership cards · later, the vault | The agent's replies (persona list, held cards) — nothing mirrored on the phone that the agent owns |
 | **What your agent did** | A short activity list in plain words: "Sent your application to *Community*", "Received a statement from *vetter*", "An invitation arrived" | The app's own record of exchanges |
-| **What you can do** | Capability cards: Join a community · Get vetted · Vet others (locked until a grant) | The person's stages (§2.2) |
+| **Where you are** | A journey strip under the status: **Linked ✓ → Join → Member**, so "done" is visible from the start | The person's stages (§2.2) |
+| **What brings you here?** | Two doors, both marked as the next step until the person is a member: **I was invited** (§5.2) and **I want to join a community** (§5.3). Vetting sits inside Join; there is no separate "Get vetted" button. A member sees **Your communities** first, and the doors become "join another" | The person's stages (§2.2) |
+| **The vetter role** | Nothing locked up front. When a grant stands (in its window, not revoked on the community's status list), a card says **"You can now vet people for *Community*"** with the desk. A revoked, expired or not-yet-valid grant says which, in plain words | `ownVetterGrantState` over the grants the phone holds |
 | **Details** (closed) | Agent host, agent DID, this phone's key, role, transport | As today |
 
 **The first-link introduction.** Right after linking, three short dismissible panels introduce the agent as the person's stand-in online: *it keeps your identities*, *it answers communities while your phone is off*, *you approve anything important with your face or fingerprint*. A "What is my agent?" link on the agent screen brings them back. Nothing else in the app repeats this.
@@ -172,26 +174,39 @@ Each journey lists its steps as the person sees them. Anything marked **(off-app
 
 **Demo:** linking is shown live, through the lab enrolment page on the presenter's laptop, and it is the first thing the audience sees. A second pair of phones, linked beforehand and kept off stage, covers a venue network that fails.
 
-### 5.2 Join by invitation (stage 1 → 3)
+### 5.2 I was invited (stage 1 → 3)
 
-1. **(off-app)** The admin creates an invitation for the person in the portal.
-2. The person scans it with the app's one scanner.
-3. Confirm sheet (the app's shared confirmation modal, §4.3): "Join *Community name* as a member?" → Join (biometric).
-4. "Member ✓" — the card appears on the community screen.
+An invitation is issued to a DID named in advance: upstream requires `subject_did` and binds the credential to it (`verifiable-trust-infrastructure` `187ad9cd`, `vtc-service/src/routes/invitations.rs:43-44`). There is no open invitation yet (§9 U-9), so the person first hands the admin the identity to invite.
 
-**Blocked on upstream:** an invitation is 6,331 bytes and a QR code carries at most 2,953 (VTI-32, High, open). Until invitations travel by reference, the lab hands the link over as a deep link (AirDrop or a message), and the demo does not scan one.
+| Step | Person sees |
+|---|---|
+| 1 | **Join as** (§5.8): which profile the new identity starts from → Continue (Face ID). The community identity is made here — there is no separate "create identity" chore. *Conditional on §5.8: until it is agreed, this step makes the identity without a profile choice* |
+| 2 | **Send this to the community's admin**: Share (the system sheet) first, then Copy, then Show as QR. The DID travels inside what is sent and sits under Details |
+| 3 | **(off-app)** The admin pastes it into the console's Invitations (or `cnm`) |
+| 4 | **Waiting for your invitation** — picked up when the link is opened or pasted |
+| 5 | **Your invitation arrived** → Join → "You're a member of *Community*" |
 
-### 5.3 Get vetted (applicant)
+Door 1 sends the community identity, not another DID linked at join time: upstream's `subjectLinkage` would allow that (`vtc-service/src/credentials/invitation_verify.rs:197-200`), but it tells the community the two DIDs are the same person, and Keyring does not send it.
+
+**Blocked on upstream:** an invitation is 6,331 bytes and a QR code carries at most 2,953 (VTI-32, High, open). The invitation travels as a link (a message, AirDrop) and is pasted into the scanner.
+
+### 5.3 I want to join a community (applicant)
+
+The same order as the OpenVTC TUI: the community, what it asks, the identity it will know you as, then the application.
 
 | Step | Person sees | Replaces today |
 |---|---|---|
-| 1 | Community screen → **Get vetted**: "This community needs 1 person to check your ID in person." | "Start my vetting", requirements text, identity creation button |
-| 2 | "Your legal name, as on your ID" → Continue | The face field and Save |
-| 3 | **Scan the vetter's ticket** | Pasting a `vetting-ticket:` link, then "Request vetting" |
-| 4 | Waiting for the vetter → **full-screen match code**, "Does the vetter's screen show the same code?" **Codes match** / **Codes differ** | Match code in a card; no explicit confirmation |
-| 5 | "Send your name to *vetter*?" → Send (biometric) | "Send my card" |
-| 6 | "Statement received ✓ — 1 of 1" → **Apply** (biometric) | Checklist and Apply button |
-| 7 | "Member ✓" | — |
+| 1 | **Which community?** — the one a scanned or pasted link named (§5.7), else the build's suggestion beside "a different community" | The build's one community |
+| 2 | **Before *Community* admits you**: its requirements in words — from its criteria when a session is open, else what every vetting community asks. An invitation-only community points to §5.2 | Requirements text on the vetting screen |
+| 3 | **Join as** (§5.8) → Continue (Face ID) — the identity is made here, before the ticket, because the vetter's desk checks the ticket against it (`vetting/request/0.1` carries `joinDid`). *Conditional on §5.8: until it is agreed, "Your identity for *Community*" → Continue, with no profile choice* | "Create my identity" |
+| 4 | "Your legal name" — filled in from the profile chosen at Join as, and saying so; correctable. *Conditional on §5.8: typed until then* | The face field, typed |
+| 5 | **Scan the vetter's ticket** | Pasting a `vetting-ticket:` link, then "Request vetting" |
+| 6 | Waiting for the vetter → **full-screen match code** → **Codes match** / **Codes differ** | Match code in a card |
+| 7 | "Send your name to *vetter*?" → Send (biometric) | "Send my card" |
+| 8 | "Statement received ✓ — 1 of 1" → **Apply** (biometric) | Checklist and Apply button |
+| 9 | "Member ✓" | — |
+
+The name reaches the vetter only; the community receives the vetter's statement that it was checked, never the name. The join request sends `registryConsent: false` and does not ask the person: nothing upstream acts on it yet (VTI-Q14).
 
 Refusals and a deferred application (add what is missing, or withdraw) stay on the community screen as its current state, in plain words.
 
@@ -215,6 +230,20 @@ The admin works in the community's web portal. Its first sign-in is an **install
 ### 5.6 What is out of scope by design
 
 **The identity document never enters Keyring.** The vetting session specification forbids it: the vetter "MUST NOT capture or store any detail of the documentation it inspects", and the applicant "MUST NOT put a document number, a document image, a portrait … on the card" (`specs/vetting/session/0.1`, Trust Tasks). The vetter looks at the physical document and checks it against the typed name the applicant sends. Reading an eMRTD chip or scanning a document is not planned.
+
+### 5.7 Which community — from a link, not the build
+
+A community is named by its DID, and everything else is resolved from there. The person reaches one by scanning or pasting:
+
+- a **community link**, `keyring://vti/community?d=<DID>[&n=<name>]`, which opens §5.3 on that community;
+- a **vetter's ticket**, which names its community (`community=`);
+- an **invitation**, whose issuer is the community.
+
+The build's `VTI_COMMUNITY_DID` is only a suggestion when no link has named one, so the same build joins any community, lab or hosted. Every screen of a join reads the same choice (`communityTarget`), so Join as, I was invited and vetting cannot disagree about which community it is.
+
+### 5.8 Join as — a profile seeds the identity
+
+Every community gets a new identity, made by the agent (upstream mints a fresh persona per community by default). **Join as** lists the person's profiles with the active one chosen; the chosen profile fills in the new identity's name **once**, by copy, with no live link afterwards. The person never types their name twice, and editing a profile later changes nothing in a community.
 
 ## 6. Phases
 
@@ -310,6 +339,10 @@ What the runners need that no single phase owns:
 - **The asks in §9 go to upstream in the report we already send the maintainers**, each with its code references, when it is ready. No separate issue or pull request.
 - **The lab enrolment page has no login for now.** It runs only on our laptop, for tests and the demo; a login is revisited if it ever leaves the lab.
 
+- **A profile seeds a community's identity by copy** (§5.8). There is no live link between a profile and an identity. This changes the editable multi-profile plan's enforced 1:1 link, and needs that plan's author's agreement; nothing here depends on a live link.
+- **Join as defaults to a new identity that starts from the active profile** — the privacy default, with no typing.
+- **Door 1 sends the community identity made at Join as** (§5.2). No `subjectLinkage`; an open invitation stays upstream ask U-9.
+
 **Open:** none.
 
 ## 9. What we ask upstream
@@ -318,13 +351,26 @@ This is the running list of what this work needs from upstream, kept here as it 
 
 | # | Ask | Code it points at (commit) | Why Keyring needs it | Status |
 |---|---|---|---|---|
-| U-1 | **"Add a device" by QR in the extension's Access pane:** show a one-time, short-lived enrolment link as a QR and a copyable link; accept the device's key submitted with proof it holds the key; show the key's fingerprint; grant with an expiry | `vta-browser-plugin` `d045a7a`: `packages/extension/src/manager/panes/access.tsx:380-500` (*Grant access* takes a pasted `did:key`, `:455`); `packages/extension/src/grant-command.ts:1-70` | A phone cannot paste into a laptop's form; linking should be a scan (§5.1) | To send after U8 proves it, with the lab page as the worked example |
-| U-2 | **The same at the Farm console's "admin DID" step** | `vtafarm` `04fde81`: `src/pages/portal/CreateVTAView.tsx:910` ("paste the admin DID"); `vtafarm-api` `a3b8e52`: `internal/handler/setup.go:1129-1174` | Linking a phone to a Farm-hosted agent without a paste | Asked as VTI-Q10; U8 adds the worked example |
+| U-1 | **"Add a device" by QR in the extension's Access pane:** show a one-time, short-lived enrolment link as a QR and a copyable link; accept the device's key submitted with proof it holds the key; show the key's fingerprint; grant with an expiry | `vta-browser-plugin` `d045a7a`: `packages/extension/src/manager/panes/access.tsx:380-500` (*Grant access* takes a pasted `did:key`, `:455`); `packages/extension/src/grant-command.ts:1-70` | A phone cannot paste into a laptop's form; linking should be a scan (§5.1) | Open. Upstream's response (Q10) names paste-free ways to admit a first admin — `vta setup --from`, `pnm setup --name` then `pnm setup continue`, `vta import-did --role admin` — but no QR in the extension. The no-QR link screen names the extension's Grant access and the role to choose (admin) |
+| U-2 | **The same at the Farm console's "admin DID" step** | `vtafarm` `04fde81`: `src/pages/portal/CreateVTAView.tsx:910` ("paste the admin DID"); `vtafarm-api` `a3b8e52`: `internal/handler/setup.go:1129-1174` | Linking a phone to a Farm-hosted agent without a paste | Open; the same Q10 paths apply to a Farm VTA's first admin |
 | U-3 | **Question: should the enrolment link live in the agent, so every console can offer it?** An admin-minted, single-use offer a device redeems with proof of possession | `verifiable-trust-infrastructure` `a96fe02f`: the removed token flow, `docs/05-design-notes/sealed-bootstrap.md:232-272`, and `vta-service/src/routes/bootstrap.rs:10-13` (why it was removed) | Otherwise the extension, the Farm and any other console each build their own | To send with U-1 |
 | U-4 | **Correct the design note's status:** `sealed-bootstrap.md` says "Implemented" for a flow the code says was removed | `verifiable-trust-infrastructure` `a96fe02f`: `docs/05-design-notes/sealed-bootstrap.md:3-11` vs `vta-service/src/routes/bootstrap.rs:10-13` | It sent us looking for a self-enrolment path that does not exist | Ready — a documentation defect |
 | U-5 | **One QR for the mobile agent:** its pairing QR says only where to connect, and enrolment is out of its scope; align it with the enrolment link so one scan both finds and enrols | `vta-mobile-agent-ios` `035dd65`: `README.md:75-77`, `Sources/VtaMobileAgent/PairingPayload.swift:3-16` | Two phone clients should link the same way | To send with U-1 |
-| U-6 | **Invitations small enough for a QR** — by reference instead of the whole credential | Recorded as VTI-32 (an invitation is 6,331 bytes; a QR holds at most 2,953) | Scanning an invitation (§5.2) | Already filed |
+| U-6 | **Invitations small enough for a QR** — by reference instead of the whole credential | Recorded as VTI-32 (an invitation is 6,331 bytes; a QR holds at most 2,953) | Scanning an invitation (§5.2) | **Answered:** `vtc/invitations/deliver/0.1` (Trust Tasks #581, VTI #1648) — an `offer` channel returns a QR-sized offer that names the credential instead of containing it. Keyring's client side is not built yet (see below) |
 | U-7 | **Native-app passkey sign-in:** publish app association on the agent's domain, or document how `/auth/portal` hands a session back to a native app | `verifiable-trust-infrastructure` `a96fe02f`: `vta-service/src/routes/auth_portal/mod.rs:1-37`; `docs/05-design-notes/mobile-agent-architecture.md:505-507` | The passkey sign-in target in §5.1 | **Conditional** on U7's measurement |
-| U-8 | **Where a client writes the typed legal name:** the persona model keeps faces on the agent but is still a proposal | `verifiable-trust-infrastructure` `a96fe02f`: `docs/05-design-notes/persona-context-first.md:3` ("Status: proposed"), `vta-persona/README.md:1-25` | Step 2 of Get vetted (§5.3) | **Conditional** on the profile–persona reconciliation |
-| U-9 | **Question: an invitation with no DID up front** — a one-time, short-lived invitation the admin can hand out as a link or QR, bound to whoever redeems it first, with proof of possession at redemption | `verifiable-trust-infrastructure` `187ad9cd`: `vtc-service/src/routes/invitations.rs:43-44` (`subject_did` required); `vtc-service/src/credentials/invitation_verify.rs:197-200` (`subjectLinkage` lets a *different* presenter redeem, but a DID is still named at issue) | Today the invited person must first send the admin a DID ("Send this to the community's admin"); a bearer invitation would remove that step, and pairs with U-6 so one scan both invites and joins | Recorded as VTI-Q12 (with VTI-32) in the findings doc; to send with U-6 |
+| U-8 | **Where a client writes the typed legal name:** the persona model keeps faces on the agent but is still a proposal | `verifiable-trust-infrastructure` `a96fe02f`: `docs/05-design-notes/persona-context-first.md:3` ("Status: proposed"), `vta-persona/README.md:1-25` | Step 2 of Get vetted (§5.3) | Partly answered: sign the Vetting Card through `keys/sign` rather than borrowing the persona's key (Q4, VTI #1619). Where faces live is still open |
+| U-9 | **Question: an invitation with no DID up front** — a one-time, short-lived invitation the admin can hand out as a link or QR, bound to whoever redeems it first, with proof of possession at redemption | `verifiable-trust-infrastructure` `187ad9cd`: `vtc-service/src/routes/invitations.rs:43-44` (`subject_did` required); `vtc-service/src/credentials/invitation_verify.rs:197-200` (`subjectLinkage` lets a *different* presenter redeem, but a DID is still named at issue) | Today the invited person must first send the admin a DID ("Send this to the community's admin"); a bearer invitation would remove that step, and pairs with U-6 so one scan both invites and joins | Still open. `deliver/0.1` delivers and shrinks an invitation, but it is still made out to a named DID and redeemed by proving its key — the "send who you are" step stays. Recorded as VTI-Q12 (with VTI-32) |
+
+### 9.1 What upstream's remediation plan (22 September) changes here
+
+Upstream answered the findings report with a remediation plan (VTI `3dcbfe98`, TDK `1eeebba1`, webvh `88fc6464`). The items that change a screen in this plan, and where each lands:
+
+| Upstream | What shipped or was decided | What it changes here | When |
+|---|---|---|---|
+| KR-21 · KR-32 — `vtc/invitations/deliver/0.1` (Trust Tasks #581, VTI #1648) | The inviter delivers an invitation on a `message` channel (an offer pushed to the invited DID) or an `offer` channel (a QR-sized offer); the invitee redeems it by proving a key of the invited DID | Door 1's last step becomes "your invitation arrives" (message) or "scan the admin's invitation QR" (offer), instead of pasting a 6 KB link. "Send this to the admin" stays: the invitation is still made out to a DID | After the lab moves to a VTI with #1648, and the client redeems `deliver/0.1` offers |
+| KR-03 · KR-04 — `vtc/join-requests/withdraw/0.1` (VTI #1591), `requestAlreadyOpen` (VTI #1592), `vtc/join-requests/supplement/0.1` (VTI #1593) | An applicant can withdraw; a duplicate submit gets a typed answer naming the open request; a deferred request can be supplemented, and vetting attestations must be re-presented in it | Door 2 and the community screen show "you already applied" instead of an error, offer **Withdraw my request**, and on `requestMore` offer **Add what they asked for** | With the same VTI move |
+| KR-23 · Q4 (VTI #1619) | Minting a persona needs `KeyMint` (initiator); exporting a key is admin-only; the VTA should sign for the persona through `keys/sign` | Today the phone borrows persona keys, so a linked phone must hold **admin** — the link screen tells an admin to choose it. Moving the vetting card and presentations to `keys/sign` would let a phone link as initiator | Protocol work, with the Prague session |
+| KR-13 | A community cannot yet publish "no requirements" | Door 2 describes what a community asks exactly — vetting, invitation, other credentials, or nothing — and never takes "not vetting" for invitation-only | Built (U3) |
+| Q3 (VTI #1651, planned) | A by-DID lookup of one vetter's grant status | The vetter card can ask it directly; until then the grant's status list stays authoritative | When it ships |
+| Q2 · Q11 (VTI #1652) | Peer vetting legs stay on DIDComm; personas will advertise TSP when their mediator does | No screen change; the demo keeps DIDComm for the applicant ↔ vetter leg | — |
 

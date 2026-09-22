@@ -24,8 +24,10 @@
  *   (run it on a store-config build — Release, no VTI_VTA_DID, no probe): back
  *   from the agent screen, a tab switch and a relaunch must never bring the
  *   "Linked" screen back; Get vetted must reach its first step, not "No agent
- *   is configured"; Join a community must open the scanner; Vet someone must
- *   say why it is locked; I was invited (when present) must open its flow.
+ *   is configured"; I want to join goes community → what it asks → identity
+ *   → vetting (not "No agent is configured"), and "a different community"
+ *   opens the scanner; nothing offers a locked "Vet someone"; I was invited
+ *   opens its flow; a pasted community link opens Join on that community.
  * Real iPhone/iPad: PLATFORM=ios IOS_UDID=<hardware udid> with IOS_DEVICE_APP
  *   pointing at a FORCE_BUNDLING device build, and ENROL_PUBLIC_URL an https
  *   URL the device can reach (ATS allows plain http to localhost only).
@@ -37,7 +39,7 @@ import os from "node:os";
 
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
-import { completeOnboarding, dismissTourIfPresent, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 
 const platform = process.env.PLATFORM || "android";
@@ -142,49 +144,61 @@ async function testerJourney(driver) {
   await sleep(2000);
   await assertNoLinkedScreen(driver, "after a tab switch");
 
-  // Get vetted: the first step, as the linked agent.
+  // I want to join a community (Door 2): the suggested community, what it
+  // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
-  await tapTestId(driver, "AgentGetVetted", 15000);
-  await sleep(3000);
-  if (await notConfiguredShown(driver)) {
-    await screenshot(driver, "journey-get-vetted-not-configured");
-    throw new Error('Get vetted says "No agent is configured" with a linked agent');
-  }
-  const firstStep = ["VettingCreateIdentityButton", "VettingStepIndicator", "VettingNewTicketButton"];
+  await tapTestId(driver, "AgentJoinCommunity", 15000);
+  if (await existsTestId(driver, "JoinThisCommunity", 10000)) await tapTestId(driver, "JoinThisCommunity", 5000);
+  await waitForTestId(driver, "JoinAsks", 15000);
+  console.log("[e2e] journey: Join a community shows what it asks for");
+  await tapTestId(driver, "JoinStart", 15000);
+  await waitForTestId(driver, "JoinMakeIdentity", 15000);
+  await screenshot(driver, "journey-join-identity");
+  await tapTestId(driver, "JoinAsContinue", 15000);
+  await handleBiometricConfirmIfPresent(driver);
+  if (await existsTestId(driver, "JoinError", 3000)) throw new Error(`making the identity failed: ${await textOf(driver, "JoinError")}`);
+  const firstStep = ["VettingLegalNameInput", "VettingStartButton", "VettingStepIndicator", "VettingCreateIdentityButton"];
   let reached;
-  for (let i = 0; i < 10 && !reached; i++) {
+  for (let i = 0; i < 40 && !reached; i++) {
+    if (await notConfiguredShown(driver)) {
+      await screenshot(driver, "journey-vetting-not-configured");
+      throw new Error('vetting says "No agent is configured" with a linked agent');
+    }
     for (const key of firstStep) if (!reached && (await existsTestId(driver, key, 1500))) reached = key;
   }
   if (!reached) {
-    await screenshot(driver, "journey-get-vetted");
-    throw new Error("Get vetted reached none of its first steps");
+    await screenshot(driver, "journey-join-vetting");
+    throw new Error("making the identity did not hand over to vetting");
   }
-  console.log(`[e2e] journey: Get vetted reached ${reached}`);
-  await screenshot(driver, "journey-get-vetted");
-  await goBack(driver);
-  await sleep(1500);
+  console.log(`[e2e] journey: identity → vetting reached ${reached}`);
+  await screenshot(driver, "journey-join-vetting");
+  for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
 
-  // Join a community: the scanner, with its paste-link button.
+  // "A different community": the scanner, with its paste-link button.
   await openAgentHome(driver);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
+  await tapTestId(driver, "JoinScanCommunity", 15000).catch(async () => {
+    // A community already chosen by a link opens on what it asks; go back one.
+    await goBack(driver);
+    await tapTestId(driver, "JoinScanCommunity", 15000);
+  });
   let scanner = false;
   for (let i = 0; i < 3 && !scanner; i++) {
     if (await existsTestId(driver, "PasteUrlButton", 5000)) scanner = true;
     else if (await existsTestId(driver, "Continue", 3000)) await tapTestId(driver, "Continue");
   }
-  if (!scanner) throw new Error("Join a community did not open the scanner");
-  console.log("[e2e] journey: Join a community opened the scanner");
+  if (!scanner) throw new Error('"A different community" did not open the scanner');
+  console.log('[e2e] journey: "A different community" opened the scanner');
   await goBack(driver);
   await sleep(1500);
 
-  // Vet someone: locked, and says why.
+  // Nothing locked up front: the vetter role appears only when granted.
   await openAgentHome(driver);
-  if (!(await scrollToTestId(driver, "AgentVetOthersLocked", 4).catch(() => undefined))) {
-    throw new Error("Vet someone does not say why it is locked");
-  }
-  console.log("[e2e] journey: Vet someone says why it is locked");
+  if (await existsTestId(driver, "AgentVetOthers", 2000)) throw new Error('an unlinked vetter sees "Vet someone"');
+  if (await existsTestId(driver, "AgentVetOthersLocked", 1000)) throw new Error('a locked "Vet someone" is still shown');
+  console.log("[e2e] journey: no locked \"Vet someone\" up front");
 
-  // I was invited, where the build has it.
+  // I was invited.
   if (await scrollToTestId(driver, "AgentInvited", 4).catch(() => undefined)) {
     await tapTestId(driver, "AgentInvited", 15000);
     const opened = (await existsTestId(driver, "InvitedContinue", 15000)) || (await existsTestId(driver, "InvitedShare", 3000));
@@ -192,6 +206,18 @@ async function testerJourney(driver) {
     console.log("[e2e] journey: I was invited opened its first step");
     await goBack(driver);
     await sleep(1500);
+  }
+
+  // A community link, pasted, opens Join on that community.
+  const vtcDid = execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$VTC_DID"`], { encoding: "utf8" });
+  if (vtcDid.startsWith("did:")) {
+    const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent("Runner lab")}`;
+    await pasteLinkFromHome(driver, link);
+    await waitForTestId(driver, "JoinAsks", 30000);
+    const asks = await driver.$(driver.e2ePlatform === "ios" ? '-ios predicate string:label CONTAINS "Runner lab"' : 'android=new UiSelector().textContains("Runner lab")');
+    if (!(await asks.isExisting())) throw new Error("the pasted community link did not open Join on that community");
+    console.log("[e2e] journey: a pasted community link opened Join on it");
+    for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
   }
 
   // A relaunch.
