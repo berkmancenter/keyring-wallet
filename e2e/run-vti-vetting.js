@@ -353,10 +353,18 @@ try {
   if (vetterCode !== applicantCode.trim()) throw new Error(`match codes differ: ${vetterCode} vs ${applicantCode}`);
   await screenshot(applicant, "vetting-04-match-code");
   // Both people say the codes match before anything is signed (UI/UX plan §5.3–5.4).
+  // Tap-and-verify: a coordinate tap on a control that moved or is disabled
+  // reports success and does nothing, and would surface later as "card never
+  // sent". Each tap must bring the next step.
   await scrollToTestId(applicant, "VettingCodesMatch", 4, LOW);
-  await tapTestIdByCoordinates(applicant, "VettingCodesMatch");
+  await tapTestIdReliable(applicant, "VettingCodesMatch", async () => {
+    await scrollToTestId(applicant, "VettingSendCardButton", 3, LOW).catch(() => undefined);
+    return byTestId(applicant, "VettingSendCardButton").isExisting().catch(() => false);
+  });
   await scrollToTestId(vetter, "VettingCodesMatch", 4);
-  await tapTestIdByCoordinates(vetter, "VettingCodesMatch");
+  await tapTestIdReliable(vetter, "VettingCodesMatch", async () =>
+    !(await byTestId(vetter, "VettingCodesMatch").isExisting().catch(() => true))
+  );
   console.log("[e2e] codes match — confirmed on both phones");
   await scrollToTestId(applicant, "VettingSendCardButton", 4, LOW);
   await tapTestIdByCoordinates(applicant, "VettingSendCardButton");
