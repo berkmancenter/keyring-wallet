@@ -1,5 +1,6 @@
-import { createStackNavigator } from '@react-navigation/stack'
-import React from 'react'
+import type { ParamListBase, RouteProp } from '@react-navigation/native'
+import { createStackNavigator, type StackNavigationProp } from '@react-navigation/stack'
+import React, { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TOKENS, useServices } from '../container-api'
@@ -13,8 +14,22 @@ import { MyAgentStackParams, Screens } from '../types/navigators'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
 
-const MyAgentStack: React.FC = () => {
+interface MyAgentStackProps {
+  route?: RouteProp<ParamListBase>
+  navigation?: StackNavigationProp<ParamListBase>
+}
+
+const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
   const Stack = createStackNavigator<MyAgentStackParams>()
+  // A link reaches this stack as the tab route's `{ screen: … }`. React
+  // Navigation keeps that param on the tab, and a later tab press (which
+  // navigates with merge) hands it to this stack again, so "Linked ✓", a
+  // ticket or an invitation reopened on every return to the tab. The stack
+  // has acted on it by the time this effect runs, so it is dropped here.
+  const routedScreen = (route?.params as { screen?: string } | undefined)?.screen
+  useEffect(() => {
+    if (routedScreen) navigation?.setParams({ screen: undefined, params: undefined })
+  }, [routedScreen, navigation])
   const theme = useTheme()
   const { t } = useTranslation()
   const defaultStackOptions = useDefaultStackOptions(theme)

@@ -34,7 +34,6 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import QRRenderer from '../../../components/misc/QRRenderer'
 import { useTheme } from '../../../contexts/theme'
-import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
@@ -54,6 +53,9 @@ import { ensurePersonaFor } from '../module/vtiJoin'
 import { pendingVettingTicket } from '../module/vtiLinks'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
+import { openScanner } from './openScanner'
+import { useVtaDid } from './VtaStatus'
+
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
 
 export interface VtiVettingProps {
@@ -72,7 +74,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const { agent } = useAgent()
   const communityDid = config?.communityDid
   const mediatorDid = config?.mediatorDid
-  const vtaDid = config?.vtaDid
+  const vtaDid = useVtaDid(config?.vtaDid)
 
   const [persona, setPersona] = useState<VtiPersona>()
   const [grant, setGrant] = useState<VtiHeldCredential>()
@@ -116,8 +118,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   }, [])
 
   const onScanTicket = useCallback(() => {
-    const root = navigation as unknown as { navigate: (name: string, params?: object) => void }
-    root.navigate(Stacks.ConnectStack, { screen: Screens.Scan })
+    openScanner(navigation)
   }, [navigation])
   const [checklist, setChecklist] = useState<{
     held: number

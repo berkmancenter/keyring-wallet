@@ -190,3 +190,13 @@ export function showsOfflineBanner(state: VtaLinkState, now: number, thresholdMs
   if (state.kind !== 'linked' || state.connection.kind === 'online') return false
   return now - state.connection.since >= thresholdMs
 }
+
+/**
+ * The VTA the phone works with: the one the person linked by QR, else the one
+ * a build names (`config.vti.vtaDid`). Store builds leave the latter unset so
+ * testers link their own, so a screen that reads only the build's value finds
+ * no agent at all — every screen resolves it here.
+ */
+export function resolveVtaDid(state: VtaLinkState, configured?: string): string | undefined {
+  return state.kind === 'linked' ? state.vtaDid : configured
+}
