@@ -9,11 +9,18 @@
  *   it as the persona → `allow` → the membership card is kept and shown.
  *
  * Usage: E2E_KEEP_STATE=1 PLATFORM=android node run-vti-invite.js  (or ios)
+ *
+ * INVITE_VIA=door: the person's own "I was invited" flow instead, on a phone
+ *   already LINKED to its agent (run run-vta-link.js first, then this with
+ *   E2E_KEEP_STATE=1): the agent screen → I was invited → Continue (makes the
+ *   identity) → the identity is read from Details, as an admin would receive
+ *   it → the runner invites it → the link is pasted → back in the flow the
+ *   invitation shows → Join → "You're a member".
  */
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";
-import { completeOnboarding, enableDidCommV2, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
@@ -33,6 +40,7 @@ const textOf = async (driver, key) =>
 // A real iPhone/iPad (IOS_UDID): no simctl, and a deep link truncates the
 // ~6 KB invitation (VTI-32) — it is pasted into the scanner instead.
 const IOS_UDID = process.env.IOS_UDID || "";
+const INVITE_VIA = process.env.INVITE_VIA || "my-agent";
 
 async function openLink(url) {
   if (platform === "ios" && IOS_UDID) return pasteLinkFromHome(driver, url);
@@ -65,9 +73,67 @@ async function openMyAgentConnected(d, timeout = 180000) {
   throw new Error(`${d.e2ePlatform}: My Agent never reached its connected state`);
 }
 
+/** My Agent → the agent screen → I was invited. */
+async function openInvitedFlow(d) {
+  await dismissTourIfPresent(d);
+  await (await waitForTestId(d, "MyAgent", 30000)).click();
+  await sleep(1500);
+  if (!(await existsTestId(d, "AgentHome", 2000))) {
+    const open = await scrollToTestId(d, "OpenYourAgentButton", 4).catch(() => undefined);
+    if (!open) throw new Error('My Agent offers no way to "Open your agent" — is the phone linked?');
+    await open.click();
+    await waitForTestId(d, "AgentHome", 30000);
+  }
+  const door = await scrollToTestId(d, "AgentInvited", 4).catch(() => undefined);
+  if (!door) throw new Error('the agent screen has no "I was invited"');
+  await door.click();
+}
+
+/** The person's own door (INVITE_VIA=door): send the identity, be invited, join. */
+async function inviteByDoor(d) {
+  await openInvitedFlow(d);
+  if (await existsTestId(d, "InvitedContinue", 10000)) {
+    await tapTestId(d, "InvitedContinue", 15000);
+    await handleBiometricConfirmIfPresent(d);
+    console.log(`[e2e] ${d.e2ePlatform}: I was invited → Continue (making the identity)`);
+  }
+  await waitForTestId(d, "InvitedShare", 180000);
+  await screenshot(d, "vti-invite-door-share");
+  await tapTestId(d, "InvitedDetailsToggle", 15000);
+  const personaDid = (await textOf(d, "InvitedPersonaDid")).trim();
+  if (!personaDid.startsWith("did:")) throw new Error(`no identity under Details: ${personaDid}`);
+  console.log(`[e2e] ${d.e2ePlatform}: identity to send the admin ${personaDid}`);
+
+  const out = execFileSync("bash", [INVITE, personaDid, "member"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+  const link = /INVITATION_LINK=(\S+)/.exec(out)?.[1];
+  if (!link) throw new Error(`no invitation link:\n${out}`);
+  console.log(`[e2e] invitation issued (${link.length} chars)`);
+  await openLink(link);
+
+  // The flow picks the invitation up wherever the person left it.
+  let card = false;
+  for (let i = 0; i < 20 && !card; i++) {
+    await sleep(3000);
+    if (!(await existsTestId(d, "InvitedInvitationCard", 1500))) await openInvitedFlow(d).catch(() => undefined);
+    card = await existsTestId(d, "InvitedInvitationCard", 5000);
+  }
+  if (!card) throw new Error('"Your invitation arrived" never showed in the flow');
+  await screenshot(d, "vti-invite-door-arrived");
+  await tapTestId(d, "InvitedJoin", 15000);
+  console.log(`[e2e] ${d.e2ePlatform}: joining from the flow`);
+  if (!(await existsTestId(d, "InvitedJoined", 240000))) {
+    const err = await textOf(d, "InvitedError").catch(() => "");
+    throw new Error(`join did not finish${err ? `: ${err}` : ""}`);
+  }
+  await screenshot(d, "vti-invite-door-joined");
+  console.log(`[e2e] ${d.e2ePlatform}: "You're a member" — joined through the door`);
+}
+
 let driver;
 try {
-  await holdCriteriaLock("invite " + (process.env.E2E_REFUSAL || "").trim());
+  // The community's criteria are shared by every session's runs: hold the
+  // lab's criteria lock for the whole run (released on exit or a signal).
+  await holdCriteriaLock(`invite ${INVITE_VIA}`);
   execFileSync("bash", [INVITE, "--invitation-only"], { stdio: "inherit" });
   await ensureAppium();
   const caps =
@@ -86,8 +152,15 @@ try {
   );
   if (keepState) {
     await waitForTestId(driver, "EnterPIN", 120000).catch(() => undefined);
-    await unlockIfLocked(driver);
-    await waitForTestId(driver, "Contacts", 300000);
+    // A kept app that sat idle opens on its lock screen, and on a slow phone
+    // that screen can appear late or swallow the first PIN: keep unlocking
+    // until the home screen shows, for the whole wait.
+    const until = Date.now() + 300000;
+    while (Date.now() < until && !(await existsTestId(driver, "Contacts", 3000))) {
+      await unlockIfLocked(driver);
+      await sleep(2000);
+    }
+    await waitForTestId(driver, "Contacts", 10000);
     await sleep(5000);
   } else {
     await completeOnboarding(driver, { firstName: "Invited", lastName: "Persona" });
@@ -101,6 +174,11 @@ try {
     await leaveCommunityInApp(driver);
   }
 
+  if (INVITE_VIA === "door") {
+    await inviteByDoor(driver);
+    printSuccess("vti-invite (door)");
+    process.exitCode = 0;
+  } else {
   // 1 — the identity to be invited.
   await openMyAgentConnected(driver);
   // The identity card sits below the agent card on the reworked screen.
@@ -117,7 +195,7 @@ try {
   await screenshot(driver, "vti-invite-identity");
 
   // 2 — the admin invites it and the link reaches the phone.
-  const out = execFileSync("bash", [INVITE, personaDid, "member"], { encoding: "utf8" });
+  const out = execFileSync("bash", [INVITE, personaDid, "member"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
   const link = /INVITATION_LINK=(\S+)/.exec(out)?.[1];
   if (!link) throw new Error(`no invitation link:\n${out}`);
   console.log(`[e2e] invitation issued (${link.length} chars)`);
@@ -161,6 +239,7 @@ try {
   if (!/member/i.test(role)) throw new Error(`unexpected role text: ${role}`);
   printSuccess("vti-invite");
   process.exitCode = 0;
+  }
 } catch (err) {
   printFailure("vti-invite", err);
   if (driver) {

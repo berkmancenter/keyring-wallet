@@ -20,6 +20,12 @@
  *   runner grants it with enrol-manager.sh (the online grant), then
  *   "I've been added"; the first check before the grant must say "not yet".
  * Both modes end on the agent screen: introduction, then status Online.
+ * JOURNEY=1: after linking, walk what a tester does next with the LINKED agent
+ *   (run it on a store-config build — Release, no VTI_VTA_DID, no probe): back
+ *   from the agent screen, a tab switch and a relaunch must never bring the
+ *   "Linked" screen back; Get vetted must reach its first step, not "No agent
+ *   is configured"; Join a community must open the scanner; Vet someone must
+ *   say why it is locked; I was invited (when present) must open its flow.
  * Real iPhone/iPad: PLATFORM=ios IOS_UDID=<hardware udid> with IOS_DEVICE_APP
  *   pointing at a FORCE_BUNDLING device build, and ENROL_PUBLIC_URL an https
  *   URL the device can reach (ATS allows plain http to localhost only).
@@ -29,29 +35,32 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
 
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
-import { completeOnboarding, dismissTourIfPresent, pasteLinkOnScanScreen, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 
 const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PAGE_DIR = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-page");
-// 8190 serves alice's page, which is the TestFlight phone's; runners take 8192.
-const ENROL_PORT = process.env.ENROL_PORT || "8192";
+// 8191: the runners' page (bob). 8190 is the page for a person's own agent.
+const ENROL_PORT = process.env.ENROL_PORT || "8191";
 const ENROL_URL = process.env.ENROL_URL || `http://localhost:${ENROL_PORT}`;
 const PNM = process.env.PNM_BIN || path.join(os.homedir(), "Documents/vti-main/target/debug/pnm");
-// The runner VTA. alice is Alberto's TestFlight agent since 2026-09-22 and no
-// runner links to, mints on or grants on it.
-const VTA_SLUG = process.env.VTA_SLUG || process.env.RUNNER_VTA || "bob";
-if (VTA_SLUG === "alice") throw new Error("alice is reserved for the TestFlight phone — use a runner VTA (RUNNER_VTA=bob)");
+// The runners' own lab agent. Never "alice": that is the agent a person's
+// TestFlight install is linked to, and runs against it show up on their phone.
+const VTA_SLUG = process.env.RUNNER_VTA || process.env.VTA_SLUG || "bob";
+if (VTA_SLUG === "alice" && process.env.ALLOW_ALICE !== "1") {
+  throw new Error('refusing to run against "alice" (a person\'s TestFlight agent); use the runner VTA, bob');
+}
 const PNM_HOME = process.env.PNM_HOME || path.join(os.homedir(), `vti-stack/pnm-${VTA_SLUG}`);
 // What the offer tells the phone to call: localhost for a simulator (or an
 // emulator behind adb reverse); an https tunnel for a real device.
 const ENROL_PUBLIC_URL = process.env.ENROL_PUBLIC_URL || ENROL_URL;
 const IOS_UDID = process.env.IOS_UDID || "";
 const LINK_MODE = process.env.LINK_MODE || "qr";
+const JOURNEY = process.env.JOURNEY === "1";
 const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
 
 function runnerVtaDid() {
@@ -78,6 +87,121 @@ async function checkAgentScreen(driver) {
 const textOf = async (driver, key) =>
   (await byTestId(driver, key).getAttribute(driver.e2ePlatform === "ios" ? "label" : "text")) || "";
 
+/** The dead end TestFlight 206 hit: a screen that found no agent to work with. */
+async function notConfiguredShown(driver) {
+  const sel =
+    driver.e2ePlatform === "ios"
+      ? '-ios predicate string:label CONTAINS "No agent is configured"'
+      : 'android=new UiSelector().textContains("No agent is configured")';
+  return driver.$(sel).isExisting().catch(() => false);
+}
+
+/** Leave a screen the way a person does: its header's Back, else the platform back. */
+async function goBack(driver) {
+  if (await existsTestId(driver, "Back", 2000)) await tapTestId(driver, "Back", 5000);
+  else await driver.back();
+}
+
+/** "Linked ✓" is shown once, right after linking — never again. */
+async function assertNoLinkedScreen(driver, when) {
+  if (await existsTestId(driver, "VtaLinkDone", 3000)) {
+    await screenshot(driver, `journey-linked-again-${when.replace(/\W+/g, "-")}`);
+    throw new Error(`the "Linked" screen came back ${when}`);
+  }
+  console.log(`[e2e] journey: no "Linked" screen ${when}`);
+}
+
+/** From wherever My Agent is, to the agent screen. */
+async function openAgentHome(driver) {
+  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  await sleep(1500);
+  if (await existsTestId(driver, "AgentHome", 2000)) return;
+  const open = await scrollToTestId(driver, "OpenYourAgentButton", 4).catch(() => undefined);
+  if (!open) throw new Error('My Agent offers no way to "Open your agent"');
+  await open.click();
+  await waitForTestId(driver, "AgentHome", 30000);
+}
+
+/**
+ * What a tester does after linking, as the linked agent (JOURNEY=1). Each
+ * entry on the agent screen is opened and left the way a person leaves it.
+ */
+async function testerJourney(driver) {
+  // Leaving the agent screen the way it was reached.
+  await goBack(driver);
+  await sleep(2000);
+  await assertNoLinkedScreen(driver, "after going back from the agent screen");
+
+  // Another tab and back.
+  await tapTestId(driver, "Contacts", 30000);
+  await sleep(1500);
+  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  await sleep(2000);
+  await assertNoLinkedScreen(driver, "after a tab switch");
+
+  // Get vetted: the first step, as the linked agent.
+  await openAgentHome(driver);
+  await tapTestId(driver, "AgentGetVetted", 15000);
+  await sleep(3000);
+  if (await notConfiguredShown(driver)) {
+    await screenshot(driver, "journey-get-vetted-not-configured");
+    throw new Error('Get vetted says "No agent is configured" with a linked agent');
+  }
+  const firstStep = ["VettingCreateIdentityButton", "VettingStepIndicator", "VettingNewTicketButton"];
+  let reached;
+  for (let i = 0; i < 10 && !reached; i++) {
+    for (const key of firstStep) if (!reached && (await existsTestId(driver, key, 1500))) reached = key;
+  }
+  if (!reached) {
+    await screenshot(driver, "journey-get-vetted");
+    throw new Error("Get vetted reached none of its first steps");
+  }
+  console.log(`[e2e] journey: Get vetted reached ${reached}`);
+  await screenshot(driver, "journey-get-vetted");
+  await goBack(driver);
+  await sleep(1500);
+
+  // Join a community: the scanner, with its paste-link button.
+  await openAgentHome(driver);
+  await tapTestId(driver, "AgentJoinCommunity", 15000);
+  let scanner = false;
+  for (let i = 0; i < 3 && !scanner; i++) {
+    if (await existsTestId(driver, "PasteUrlButton", 5000)) scanner = true;
+    else if (await existsTestId(driver, "Continue", 3000)) await tapTestId(driver, "Continue");
+  }
+  if (!scanner) throw new Error("Join a community did not open the scanner");
+  console.log("[e2e] journey: Join a community opened the scanner");
+  await goBack(driver);
+  await sleep(1500);
+
+  // Vet someone: locked, and says why.
+  await openAgentHome(driver);
+  if (!(await scrollToTestId(driver, "AgentVetOthersLocked", 4).catch(() => undefined))) {
+    throw new Error("Vet someone does not say why it is locked");
+  }
+  console.log("[e2e] journey: Vet someone says why it is locked");
+
+  // I was invited, where the build has it.
+  if (await scrollToTestId(driver, "AgentInvited", 4).catch(() => undefined)) {
+    await tapTestId(driver, "AgentInvited", 15000);
+    const opened = (await existsTestId(driver, "InvitedContinue", 15000)) || (await existsTestId(driver, "InvitedShare", 3000));
+    if (!opened) throw new Error("I was invited did not open its first step");
+    console.log("[e2e] journey: I was invited opened its first step");
+    await goBack(driver);
+    await sleep(1500);
+  }
+
+  // A relaunch.
+  await restartApp(driver);
+  await waitForTestId(driver, "Contacts", 120000);
+  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  await sleep(2500);
+  await assertNoLinkedScreen(driver, "after a relaunch");
+  await openAgentHome(driver);
+  console.log("[e2e] journey: the agent screen after a relaunch");
+  await screenshot(driver, "journey-after-relaunch");
+}
+
 async function api(method, route, body) {
   const res = await fetch(`${ENROL_URL}${route}`, {
     method,
@@ -98,8 +222,16 @@ async function ensurePage() {
     /* start one below */
   }
   const proc = spawn(process.execPath, [path.join(PAGE_DIR, "server.mjs")], {
-    // Without ENROL_VTA_DID the page falls back to ALICE_VTA_DID.
-    env: { ...process.env, ENROL_PORT, ENROL_PUBLIC_URL, PNM_BIN: PNM, PNM_HOME, VTA_SLUG, ENROL_VTA_DID: process.env.ENROL_VTA_DID || runnerVtaDid() },
+    env: {
+      ...process.env,
+      ENROL_PORT,
+      ENROL_PUBLIC_URL,
+      PNM_BIN: PNM,
+      PNM_HOME,
+      VTA_SLUG,
+      ENROL_VTA_DID: runnerVtaDid(),
+      ENROL_LABEL: `Keyring lab runner (${VTA_SLUG})`,
+    },
     stdio: ["ignore", "inherit", "inherit"],
   });
   for (let i = 0; i < 30; i++) {
@@ -113,6 +245,15 @@ async function ensurePage() {
     }
   }
   throw new Error("the enrolment page did not come up");
+}
+
+/** An offer from a page serving another agent would link the phone there — refuse it. */
+function assertOfferForRunner(link) {
+  const o = new URL(link.replace(/^keyring:\/\//, "https://x/")).searchParams.get("o") || "";
+  const offer = JSON.parse(Buffer.from(o, "base64url").toString("utf8"));
+  if (offer.vta !== runnerVtaDid()) {
+    throw new Error(`the enrolment page at ${ENROL_URL} offers ${offer.vta}, not the runner VTA ${VTA_SLUG}`);
+  }
 }
 
 async function waitForState(n, wanted, ms = 60000) {
@@ -204,11 +345,13 @@ try {
     console.log("[e2e] the temporary key is no longer in the ACL");
     await tapTestId(driver, "VtaLinkContinue", 15000);
     await checkAgentScreen(driver);
+    if (JOURNEY) await testerJourney(driver);
     printSuccess("VTA LINK WITHOUT QR — not yet, then granted by hand and rotated");
     process.exitCode = 0;
   } else {
   // 1 — the admin sees codes that differ and refuses: the phone must say so.
   const refused = await api("POST", "/api/offers");
+  assertOfferForRunner(refused.link);
   await openLinkFlow(driver, refused.link);
   await screenshot(driver, "link-01-confirm");
   await tapTestId(driver, "VtaLinkButton", 15000);
@@ -221,6 +364,7 @@ try {
 
   // 2 — the codes match and the admin grants.
   const offered = await api("POST", "/api/offers");
+  assertOfferForRunner(offered.link);
   await openLinkFlow(driver, offered.link);
   await tapTestId(driver, "VtaLinkButton", 15000);
   await waitForTestId(driver, "VtaLinkCode", 60000);
@@ -243,8 +387,9 @@ try {
 
   await tapTestId(driver, "VtaLinkContinue", 15000);
   await checkAgentScreen(driver);
+  if (JOURNEY) await testerJourney(driver);
 
-  printSuccess("VTA LINK BY QR — refused, then granted and rotated");
+  printSuccess(JOURNEY ? "VTA LINK BY QR + TESTER JOURNEY" : "VTA LINK BY QR — refused, then granted and rotated");
   process.exitCode = 0;
   }
 } catch (err) {
