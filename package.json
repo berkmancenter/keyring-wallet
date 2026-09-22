@@ -74,7 +74,9 @@
     "e2e:vrc:witnessed:locality:android-only:didcomm-v2": "cd e2e && npm run vrc-exchange:witnessed:locality:android-only:didcomm-v2",
     "e2e:vrc:witnessed:locality:devices": "cd e2e && npm run vrc-exchange:witnessed:locality:devices",
     "e2e:vrc:witnessed:tsp:android-only": "cd e2e && npm run vrc-exchange:witnessed:tsp:android-only",
-    "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator"
+    "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator",
+    "e2e:agent:connect": "cd e2e && npm run agent-connect",
+    "e2e:agent:connect:ios": "cd e2e && npm run agent-connect:ios"
   },
   "devDependencies": {
     "@commitlint/cli": "~19.8.1",
@@ -114,7 +116,6 @@
     "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
     "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks",
     "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter",
-    "@openvtc/vti-tsp-js@npm:0.1.0": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch",
     "json-canonicalize": "2.0.0",
     "rxjs": "7.8.2",
     "@scure/base@npm:^2.0.0": "patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch"

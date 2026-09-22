@@ -23,6 +23,7 @@ import {
   loadLoginAttempt,
   testIdWithKey,
   initializeVrcModule,
+  setPeerLegCarriage,
 } from '@bifold/core'
 import { BrandingOverlayType, RemoteOCABundleResolver } from '@bifold/oca/build/legacy'
 import { getProofRequestTemplates } from '@bifold/verifier'
@@ -137,9 +138,24 @@ export class AppContainer implements Container {
         },
       },
     ])
+    // The peer leg's carriage is baked into the build (tsp_rev3_subtask.md
+    // §2.3): `VTI_PEER_LEG=tsp` sends TSP Rev 3 frames between personas over
+    // the mediator socket; anything else keeps DIDComm v2. Read here, once.
+    const vtiPeerLeg = Config.VTI_PEER_LEG === 'tsp' ? 'tsp' : 'didcomm'
+    setPeerLegCarriage(vtiPeerLeg)
     this._container.registerInstance(TOKENS.CONFIG, {
       ...defaultConfig,
       PINSecurity: { rules: PINRules, displayHelper: false },
+      // The VTI agent this build talks to. Both DIDs are bound to the host the
+      // stack runs behind, so they are baked in per environment rather than
+      // discovered — see scripts/openvtc/local-vti-stack/README.md.
+      vti: {
+        mediatorDid: Config.VTI_MEDIATOR_DID,
+        communityDid: Config.VTI_COMMUNITY_DID,
+        vtaDid: Config.VTI_VTA_DID,
+        personaBaseUrl: Config.VTI_PERSONA_BASE_URL,
+        peerLeg: vtiPeerLeg,
+      },
       settings: [
         /* Help section commented out — re-enable when help actions are wired up
         {

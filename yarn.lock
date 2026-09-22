@@ -2142,6 +2142,7 @@ __metadata:
     "@types/base-64": "npm:^1.0.2"
     ajv: "npm:^8.17.1"
     canonicalize: "npm:^1.0.8"
+    pako: "npm:^2.1.0"
     unique-names-generator: "npm:^4.7.1"
   peerDependencies:
     "@animo-id/expo-secure-environment": 0.1.5
@@ -2205,6 +2206,7 @@ __metadata:
     react-native-orientation-locker: "*"
     react-native-permissions: ~5.4.1
     react-native-qrcode-svg: ~6.2.0
+    react-native-reanimated: ~3.19.5
     react-native-safe-area-context: ~5.6.2
     react-native-screenguard: "*"
     react-native-screens: ~4.16.0
@@ -2311,7 +2313,7 @@ __metadata:
     "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.0.1"
     "@noble/hashes": "npm:^2.0.1"
-    "@openvtc/vti-tsp-js": "patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch"
+    "@openvtc/vti-tsp-js": "file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz"
     ajv: "npm:^8.17.1"
     canonicalize: "npm:^1.0.8"
     class-transformer: "npm:0.5.1"
@@ -3001,7 +3003,7 @@ __metadata:
 
 "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch":
   version: 0.7.1-pr-2704-20260909134930
-  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch::version=0.7.1-pr-2704-20260909134930&hash=a788b7"
+  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch::version=0.7.1-pr-2704-20260909134930&hash=212cb5"
   dependencies:
     "@animo-id/pex": "npm:^6.1.1"
     "@astronautlabs/jsonpath": "npm:^1.1.2"
@@ -3044,7 +3046,7 @@ __metadata:
     web-did-resolver: "npm:^2.0.32"
     webcrypto-core: "npm:^1.8.1"
     zod: "npm:^4.3.6"
-  checksum: 10c0/b1d8f386950876566556e97e9a2a0fe637951ed5e325e6fc1772056c299fb14cd591d84f2c70a3adb0d6a79d498d098f8069de607af184f857aec43ed3bc4c5c
+  checksum: 10c0/4a0a904f7fc31b6e89c3542e425639d6e230ca771936ec25526aee5314c45c7b2d6fdbab474bd39ce92b7a7f9e400fc2956a1077d3b623f9b0f8f35afd9b8633
   languageName: node
   linkType: hard
 
@@ -4529,31 +4531,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hpke/chacha20poly1305@npm:^1.8.0":
-  version: 1.8.0
-  resolution: "@hpke/chacha20poly1305@npm:1.8.0"
-  dependencies:
-    "@hpke/common": "npm:^1.10.0"
-  checksum: 10c0/bf85857e64f5fbe4d84ade3b6140dac852f05096498e9055b7a85bb854f8c9142dfe8b93cd95934c1402267a40a50ab52311feb76d46457250292dfbe7f39a81
-  languageName: node
-  linkType: hard
-
-"@hpke/common@npm:^1.10.0":
-  version: 1.10.1
-  resolution: "@hpke/common@npm:1.10.1"
-  checksum: 10c0/9620587336341138d0b98c03f0bdf4fa6390350c378775d6aff6031c77dffed8315c672dd7c04abf1ec753994b047d7f7b87f4c1d706a19c412b2e1756ce986a
-  languageName: node
-  linkType: hard
-
-"@hpke/core@npm:^1.9.0":
-  version: 1.9.0
-  resolution: "@hpke/core@npm:1.9.0"
-  dependencies:
-    "@hpke/common": "npm:^1.10.0"
-  checksum: 10c0/184d8c6a0e72e25362a8e5d559349cacf20f161df12ff31cbcdaf32b1a5ad08ebf4e44c512c52212e22c634449b7689a716b1753a565003a70a7cb430c7a1c76
-  languageName: node
-  linkType: hard
-
 "@humanwhocodes/config-array@npm:^0.13.0":
   version: 0.13.0
   resolution: "@humanwhocodes/config-array@npm:0.13.0"
@@ -5449,27 +5426,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@openvtc/vti-tsp-js@npm:0.1.0":
-  version: 0.1.0
-  resolution: "@openvtc/vti-tsp-js@npm:0.1.0"
+"@openvtc/vti-tsp-js@file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz::locator=%40bifold%2Ftrust-tasks%40portal%3Abifold%2Fpackages%2Ftrust-tasks%3A%3Alocator%3Dkeyring-wallet%2540workspace%253A.":
+  version: 0.3.0
+  resolution: "@openvtc/vti-tsp-js@file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz#./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz::hash=84521e&locator=%40bifold%2Ftrust-tasks%40portal%3Abifold%2Fpackages%2Ftrust-tasks%3A%3Alocator%3Dkeyring-wallet%2540workspace%253A."
   dependencies:
-    "@hpke/chacha20poly1305": "npm:^1.8.0"
-    "@hpke/core": "npm:^1.9.0"
+    "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.2.0"
     "@noble/hashes": "npm:^2.0.0"
-  checksum: 10c0/36cd6aed45566e434a222695b30e11526285862ae442c7205f121889865cfd251571770e8f1771ea45b01a2cca4c6f89a4c41122c54dddd24bcb3c3e8ebdeef8
-  languageName: node
-  linkType: hard
-
-"@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch":
-  version: 0.1.0
-  resolution: "@openvtc/vti-tsp-js@patch:@openvtc/vti-tsp-js@npm%3A0.1.0#~/.yarn/patches/@openvtc-vti-tsp-js-npm-0.1.0-e571a35ca1.patch::version=0.1.0&hash=dbb2d4"
-  dependencies:
-    "@hpke/chacha20poly1305": "npm:^1.8.0"
-    "@hpke/core": "npm:^1.9.0"
-    "@noble/curves": "npm:^2.2.0"
-    "@noble/hashes": "npm:^2.0.0"
-  checksum: 10c0/11d6a80d8ecb0f0b8e567427720df610578c3d404625c974bdeb0f797840af45cd940921e278d3605fd5a90769ea7f39c1ff2d8616fa7bc0251d8d368b5dfe78
+  checksum: 10c0/f1b91b6f93c1d38bbe61c06aca1419d13f323f04ee8acd27bc5e0058c22c572e552093a9ffe1bef125ee02974ffa35ef7e0b0816aaf3bef2741e32a12ff55f41
   languageName: node
   linkType: hard
 
@@ -16918,6 +16882,13 @@ __metadata:
   version: 2.2.0
   resolution: "p-try@npm:2.2.0"
   checksum: 10c0/c36c19907734c904b16994e6535b02c36c2224d433e01a2f1ab777237f4d86e6289fd5fd464850491e940379d4606ed850c03e0f9ab600b0ebddb511312e177f
+  languageName: node
+  linkType: hard
+
+"pako@npm:^2.1.0":
+  version: 2.2.0
+  resolution: "pako@npm:2.2.0"
+  checksum: 10c0/e5d31de1940fdd13cc4014296b0026112483d0834bce4856ca29c8af8438d030c6416986a0f6df7d5372cae18d6dd6c57f48b24a49d6c207c0a4cc66af15c07d
   languageName: node
   linkType: hard
 
