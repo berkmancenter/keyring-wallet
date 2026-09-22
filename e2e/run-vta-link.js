@@ -148,6 +148,17 @@ async function testerJourney(driver) {
   // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
+  // What the build's suggestion is called. A community that has published no
+  // name must not be offered by its hostname dressed up as one — the default
+  // a maintainer meets on day one, since a fresh community publishes none.
+  if (await existsTestId(driver, "JoinSuggestedName", 10000)) {
+    await screenshot(driver, "journey-join-which");
+    const offered = (await textOf(driver, "JoinSuggestedName")).trim();
+    if (/\.(app|com|net|org|io|dev|local)\b/i.test(offered) || offered.startsWith("did:")) {
+      throw new Error(`the suggested community is offered as "${offered}" — a hostname or DID, not a name`);
+    }
+    console.log(`[e2e] journey: the suggested community is called "${offered}"`);
+  }
   if (await existsTestId(driver, "JoinThisCommunity", 10000)) await tapTestId(driver, "JoinThisCommunity", 5000);
   await waitForTestId(driver, "JoinAsks", 15000);
   console.log("[e2e] journey: Join a community shows what it asks for");
