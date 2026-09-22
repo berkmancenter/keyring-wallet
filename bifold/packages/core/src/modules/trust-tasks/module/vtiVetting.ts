@@ -510,6 +510,11 @@ export class VtiVetterDesk {
     // the stranger to this problem and the one whose time it wastes. The
     // vetter's own desk explains its standing and will not cut a new ticket, so
     // this refusal is not the only thing either party has to go on.
+    //
+    // Before the ticket is spent, deliberately: a single-use ticket burned here
+    // would make the applicant ask the vetter for another one to recover from
+    // the vetter's own problem. Restore the grant and the ticket they already
+    // hold still works.
     const standing = await this.grantWithState()
     if (standing.state.state !== 'active') {
       await this.refuse(m, applicantDid, `vetting/request:vetterNotEligible:${standing.state.state}`)

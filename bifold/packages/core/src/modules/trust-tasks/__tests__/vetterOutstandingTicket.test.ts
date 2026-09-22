@@ -102,8 +102,12 @@ describe('a ticket redeemed after the grant died', () => {
     // was bad — blaming the ticket would send them hunting for the wrong thing.
     expect(code).toContain('vetterNotEligible')
     expect(code).not.toContain('invalidTicket')
-    // The ticket is NOT spent: the applicant should be able to use it once the
-    // vetter's grant is restored.
+    // The ticket is NOT spent, and the order is deliberate: the refusal happens
+    // BEFORE `usesLeft -= 1`. The first draft of this fix refused after the
+    // decrement, which burned a stranger's single-use ticket on a failure that
+    // was not theirs — they would have had to ask the vetter for another one to
+    // recover from the vetter's own problem. Moving the refusal below the
+    // decrement looks tidier and is wrong; this assertion is what says so.
     expect(store.saveTicket).not.toHaveBeenCalled()
   })
 
