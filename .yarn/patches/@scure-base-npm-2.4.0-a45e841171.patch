@@ -1,0 +1,22 @@
+diff --git a/index.js b/index.js
+index 6b4645f22b8f115cd14ae3882899afa88fd8f6e7..57c23433d828849583166ed82ae5804c9c888f5c 100644
+--- a/index.js
++++ b/index.js
+@@ -1017,11 +1017,12 @@ const _isWellFormedShim = (str) => {
+         return false;
+     }
+ };
+-const _isWellFormed = /* @__PURE__ */ (() => 
+-// Pick the native check once so utf8.decode doesn't re-probe String.prototype on every call.
+-typeof ''.isWellFormed === 'function'
+-    ? (str) => str.isWellFormed()
+-    : _isWellFormedShim)();
++// keyring: always the shim. In the React Native bundle, core-js installs a
++// String.prototype.isWellFormed that throws "undefined is not a function" under
++// Hermes, so the native branch below broke every utf8.decode — credo's first
++// agent start failed on TestFlight 0.2.0 (204) and in a Release simulator build
++// (2026-09-21). Standalone Hermes has no isWellFormed and takes the shim.
++const _isWellFormed = _isWellFormedShim;
+ // This fallback stays small because strict UTF-8 only needs fatal decoding plus well-formed
+ // UTF-16 checks, not the replacement, streaming, or legacy-encoding behavior of full platform
+ // text codecs.

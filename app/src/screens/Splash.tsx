@@ -20,6 +20,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import KeyRingLogoWhite from '@assets/img/Keyring_Logo_White.svg'
 import { BCState } from '@/store'
+import { reportProblem } from '@/utils/logger'
 
 const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
   const { t } = useTranslation()
@@ -32,17 +33,17 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
   const [initError, setInitError] = useState<BifoldError | null>(null)
   const [reported, setReported] = useState(false)
   const initializing = useRef(false)
-  const [logger, ocaBundleResolver] = useServices([TOKENS.UTIL_LOGGER, TOKENS.UTIL_OCA_RESOLVER, TOKENS.CONFIG])
+  const [, ocaBundleResolver] = useServices([TOKENS.UTIL_LOGGER, TOKENS.UTIL_OCA_RESOLVER, TOKENS.CONFIG])
 
   const gradientColors = GradientTheme?.headerGradient?.colors ?? ['#2E4953', '#622C62', '#6E121D']
   const gradientLocations = GradientTheme?.headerGradient?.locations ?? [0.00962, 0.50962, 1]
 
   const report = useCallback(() => {
     if (initError) {
-      logger.report(initError)
+      reportProblem(initError)
     }
     setReported(true)
-  }, [logger, initError])
+  }, [initError])
 
   const steps: string[] = useMemo(
     () => [
@@ -88,7 +89,10 @@ const Splash: React.FC<SplashProps> = ({ initializeAgent }) => {
       } catch (e: unknown) {
         initializing.current = false
 
-        setInitError(new BifoldError(t('Error.Title2031'), t('Error.Message2031'), (e as Error)?.message, 2031))
+        const initFailure = new BifoldError(t('Error.Title2031'), t('Error.Message2031'), (e as Error)?.message, 2031)
+        // Keep the chain credo put on `cause` for the problem report.
+        initFailure.cause = e
+        setInitError(initFailure)
       }
     }
 

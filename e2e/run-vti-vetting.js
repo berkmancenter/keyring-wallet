@@ -340,6 +340,28 @@ try {
   await waitText(applicant, "VettingRequestStatus", /Accepted/i, 120000);
   console.log(`[e2e] ${applicant.e2ePlatform}: accepted`);
   await screenshot(applicant, "vetting-02-accepted");
+  // E2E_REFUSAL=declined: the vetter ends the session it just accepted
+  // ("End this session", vetting/decline/0.1). The applicant's request reads
+  // Declined and the screen returns to the ticket step, saying so.
+  if (REFUSAL === "declined") {
+    const end = await scrollToTestId(vetter, "VettingEndSession", 6);
+    await tapTestIdReliable(
+      vetter,
+      "VettingEndSession",
+      async () => !(await byTestId(vetter, "VettingEndSession").isExisting().catch(() => false)),
+      { attempts: 4, settleMs: 3000 }
+    ).catch(async () => { await tapElement(vetter, end); });
+    console.log(`[e2e] ${vetter.e2ePlatform}: ended the session`);
+    await scrollToTestId(applicant, "VettingRequestStatus", 6, LOW).catch(() => undefined);
+    const status = await waitText(applicant, "VettingRequestStatus", /Declined/i, 120000);
+    const ended = await byTestId(applicant, "VettingSessionEnded").isExisting().catch(() => false);
+    console.log(`[e2e] ${applicant.e2ePlatform}: ${status}${ended ? " — the screen says the session ended" : ""}`);
+    if (!ended) throw new Error(`${applicant.e2ePlatform}: declined, but the ticket step does not say the session ended`);
+    await screenshot(applicant, "vetting-refusal-declined");
+    printSuccess("vti-vetting (vetter ended the session → declined)");
+    process.exitCode = 0;
+    throw Object.assign(new Error("done"), { done: true });
+  }
 
   // — vetter: open the session
   const open = await scrollToTestId(vetter, "VettingOpenSessionButton", 6);
