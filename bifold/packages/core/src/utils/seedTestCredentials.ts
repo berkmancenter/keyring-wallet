@@ -1,12 +1,25 @@
 import { Agent, W3cCredentialRecord, W3cCredentialRepository } from '@credo-ts/core'
-import { TEST_CONTACTS, createDTGCredential, generateTestDid } from '../modules/vrc/fixtures/testContacts'
+import {
+  TEST_CONTACTS,
+  createDTGCredential,
+  createRCardCredential,
+  generateTestDid,
+} from '../modules/vrc/fixtures/testContacts'
 
 /**
  * Seed test relationship credentials into the wallet for QA testing
  * Creates credentials from preset test contacts (Alice, Bob, Charlie, Diana, Faber, BestBC)
  *
+ * Each contact gets TWO credentials, the same pair a real exchange leaves
+ * behind: the DTG relationship credential, which is what lists them in
+ * Contacts, and a received RelationshipCard, which is what carries their
+ * name, organisation and photo. Seeding only the first leaves every contact
+ * resolving through `resolveContactDisplayInfo`'s legacy branch, which has no
+ * photo — so the contact card renders its placeholder and a card design can't
+ * be judged.
+ *
  * @param agent - The Credo agent instance
- * @returns The number of credentials seeded
+ * @returns The number of contacts seeded
  */
 export async function seedTestContacts(agent: Agent): Promise<number> {
   if (!agent) {
@@ -36,16 +49,17 @@ export async function seedTestContacts(agent: Agent): Promise<number> {
     const date = new Date(baseDate)
     date.setDate(date.getDate() + i * 5) // 5 days apart
 
-    const credential = createDTGCredential({
+    const params = {
       issuer: contacts[i].issuer,
       credentialSubject: { id: holderDid },
       validFrom: date.toISOString(),
-    })
+    }
 
-    // Tag as test data for easy identification and cleanup
-    credential.setTags({ isTestData: true })
-
-    credentials.push(credential)
+    for (const credential of [createDTGCredential(params), createRCardCredential(params)]) {
+      // Tag as test data for easy identification and cleanup
+      credential.setTags({ isTestData: true })
+      credentials.push(credential)
+    }
   }
 
   // Save credentials to the wallet
@@ -55,14 +69,17 @@ export async function seedTestContacts(agent: Agent): Promise<number> {
     await w3cCredentialRepository.save(agent.context, credential)
   }
 
-  agent.config.logger.info(`[Test Data] Seeded ${credentials.length} test contacts`)
+  agent.config.logger.info(`[Test Data] Seeded ${contacts.length} test contacts (${credentials.length} credentials)`)
 
-  return credentials.length
+  return contacts.length
 }
 
 /**
  * Clear all test relationship credentials from the wallet
  * Only removes credentials tagged with isTestData=true
+ *
+ * Each seeded contact owns two of these (its DTG credential and its
+ * RelationshipCard), so the count returned is credentials, not contacts.
  *
  * @param agent - The Credo agent instance
  * @returns The number of credentials removed

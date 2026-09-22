@@ -8,6 +8,8 @@ export {
   generateTestDid,
   TEST_CONTACTS,
   createDTGCredential,
+  type CreateRCardCredentialParams,
+  createRCardCredential,
   createMultipleDTGCredentials,
   createTestCredentialsForHolder,
   createCredentialsFromSameIssuer,

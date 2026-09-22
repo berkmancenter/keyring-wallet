@@ -149,8 +149,10 @@ describe('ContactDetails Screen', () => {
   test('Falls back to the generic icon when there is no photo', async () => {
     mockRepository.findByCounterpartyRelationshipDid.mockResolvedValue(null)
 
+    // Stated explicitly rather than leaning on the fixture happening to have
+    // no photo — the seeded contacts all carry one.
     const contact: ContactCredentialDetails = {
-      issuer: TEST_CONTACTS.alice.issuer,
+      issuer: { ...TEST_CONTACTS.alice.issuer, photo: undefined },
     }
 
     const { findByText, queryByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, {
