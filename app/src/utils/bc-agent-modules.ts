@@ -32,7 +32,7 @@ import {
 } from '@credo-ts/didcomm'
 import { IndyVdrAnonCredsRegistry, IndyVdrModule, IndyVdrPoolConfig } from '@credo-ts/indy-vdr'
 import { SecureEnvironmentKeyManagementService } from '@credo-ts/react-native'
-import { WebVhAnonCredsRegistry, WebVhDidResolver } from '@credo-ts/webvh'
+import { WebVhAnonCredsRegistry } from '@credo-ts/webvh'
 import { anoncreds } from '@hyperledger/anoncreds-react-native'
 import { indyVdr } from '@hyperledger/indy-vdr-react-native'
 import { askar } from '@openwallet-foundation/askar-react-native'
@@ -192,7 +192,7 @@ export function getBCAgentModules({
     }),
     dids: new DidsModule({
       resolvers: [
-        new WebVhDidResolver(),
+        new BifoldCore.RetryingWebVhDidResolver(),
         new WebDidResolver(),
         new JwkDidResolver(),
         new KeyDidResolver(),

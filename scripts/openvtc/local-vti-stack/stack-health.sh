@@ -130,6 +130,19 @@ for n in alice community bob; do
   esac
 done
 
+log "every VTA can mint a served persona"
+# A VTA with no DID-hosting server registered mints personas "serverless":
+# created, keys held, served by nobody — the phone then fails at "community
+# session as persona" with a 404 naming the persona (VTI-20). The runner VTA,
+# bob, had none on 2026-09-22 and cost a run. Read-only: each VTA's own pnm
+# home lists its servers; a VTA with no pnm home here is skipped.
+for n in alice community bob; do
+  home="$STACK_DIR/pnm-$n"
+  [ -d "$home" ] || continue
+  servers=$(PNM_HOME="$home" "$VTI_SRC/target/debug/pnm" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c "did:webvh" || true)
+  if [ "${servers:-0}" -gt 0 ]; then ok "$n has a DID host registered"; else bad "$n has NO DID host registered — persona mints will not resolve (pnm did-mgmt servers add --id dids --did \$DIDS_DID)"; fi
+done
+
 log "the DID host's DIDComm ear"
 # The gap that cost a rebuild at 03:00 on 2026-09-21. Restarting the mediator
 # drops every client socket, and the DID-hosting daemon does not always get one

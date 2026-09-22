@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.28 — 2026-09-21.** A living document: every finding here was measured
+**Version 1.30 — 2026-09-22.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -63,6 +63,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-37](#vti-37--a-consent-refusal-loses-its-challenge-once-the-approver-set-grows) | A consent refusal loses its challenge once the approver set grows | Medium | New | H |
 | [VTI-38](#vti-38--a-cancelled-relationship-is-forgotten-before-the-vta-can-answer-the-cancel) | A cancelled relationship is forgotten before the VTA can answer the cancel | Low | New | H |
 | [VTI-39](#vti-39--a-tsp-reply-that-fails-to-send-once-is-lost) | A TSP reply that fails to send once is lost | Low | New — observed once | H |
+| [VTI-40](#vti-40--vta-browser-plugin-a-consent-approve-can-be-recorded-as-a-deny) | vta-browser-plugin: a consent Approve can be recorded as a Deny | Medium | New — fix drafted | F |
 
 ## Stack under test
 
@@ -78,7 +79,7 @@ particular none are the images a VTA Farm currently offers.
 | **A** | 2026-09-15 → 09-17 | `53a7cde4` — main tip, 2 commits past `vta-service-v0.28.0`; vta 0.28.0 · vtc 0.11.58 · sdk 0.38.2 · pnm 0.16.5 · cnm 0.15.2 | `dff68eb` — mediator 0.25.0 | `cb8a6f4` — daemon 0.8.3 |
 | **B** | 2026-09-18 | `460e0ebb` — tag `VTI-Eucalyptus-RC-0`; vta 0.33.0 · vtc 0.11.58 · sdk 0.42.1 · pnm 0.17.2 · cnm 0.16.3 | `144a3af0` — mediator 0.26.2 | `f579e42` — daemon 0.8.3 |
 | **C** | 2026-09-19 | `6bd52cab` — main, 20 commits past the tag; vta 0.34.1 · vtc 0.11.58 · sdk 0.43 · pnm 0.17.4 · cnm 0.16.3 | `c13a6352` — mediator 0.26.2 | `35244b7` — daemon 0.8.3 |
-| **F** (Farm) | 2026-09-20 | **vta 0.34.1 · vtc 0.11.58 — identical to the lab.** VTA REST `vta-keyring-al.ic3.dev` (78 OpenAPI paths, same count); community `vtc.ic3.dev`, shared, not ours to administer | `mediator.ic3.dev` — **0.26.4**, reported by its own `/readyz`. The only component behind | DID hosting `dids.ic3.dev` |
+| **F** (Farm) | 2026-09-20 | **vta 0.34.1 · vtc 0.11.58 — identical to the lab.** VTA REST `vta-keyring-al.ic3.dev` (78 OpenAPI paths, same count); community `vtc.ic3.dev`, shared, not ours to administer | `mediator.ic3.dev` — **0.26.4**, reported by its own `/readyz`. The only component behind. **0.28.23 on 2026-09-22** (see below) | DID hosting `dids.ic3.dev` |
 | **E** | 2026-09-20 | unchanged — vta 0.34.1 · vtc 0.11.58 | `15499952` — upstream main, mediator **0.28.9**, carrying #829–#842; published on crates.io despite the changelog heading each section "Unreleased" | `35244b7` — daemon 0.8.3 |
 | **D** | 2026-09-20 | unchanged from C — vta 0.34.1 · vtc 0.11.58 | `b544da04` — the **#829 branch tip**, mediator 0.28.0; this is *not* upstream main, which has since merged #829 and thirteen more (#830–#842) and stands at mediator 0.28.9 | `35244b7` — daemon 0.8.3 |
 | **H** | 2026-09-21 (evening) | `a96fe02f` — upstream main; carries #1579, #1581, #1591–#1593, #1601 and the persona/face work (#1594–#1606); `affinidi-messaging-sdk` 0.26.12 from upstream's own lockfile; `vta` built `--features tsp` | `ad36f0b1` — upstream main, mediator **0.28.11** (#843, #844), `--features tsp` | `5365da7` — upstream main (#205) |
@@ -93,6 +94,41 @@ already carries #1579 (VTI-24, VTI-26) and the lab does not; neither carries
 merges, which is how a per-component *version* comparison came out equal while
 the *commits* differ. `scripts/openvtc/PINS.json` names `c9bc3a69` (upstream
 main on 2026-09-20): that is the reference clone, not what the lab runs.
+
+**Era F re-measured, 2026-09-22 (read-only, from public endpoints).**
+
+- **The Farm mediator is 0.28.23.** `GET https://mediator.ic3.dev/mediator/v1/readyz`
+  at 07:50:57Z answered `status: ready`, `version: 0.28.23`,
+  `uptime_seconds: ~767`. That answers VTI-Q8: the Farm now runs a newer
+  mediator than the lab (0.28.11, era H), so VTI-29/30/31's fixes are there.
+  Its DID, `did:webvh:QmagBwJ5…:dids.ic3.dev:firstperson-mediator`
+  (log v1, 2026-08-29), advertises `TSPTransport`, `DIDCommMessaging` (an
+  array `type`, EXT-01's shape) and `Authentication`, all at
+  `https://mediator.ic3.dev/mediator/v1`.
+- **The mediator the ecosystem's first community names is degraded.**
+  `first-vtc`'s `DIDCommMessaging` and `TSPTransport` services both name
+  `did:webvh:QmTS3a3H…:webvh.storm.ws:mediator` (`mediator.vtc.storm.ws`). At
+  07:50:57Z its `/readyz` answered `version: 0.28.26`, `status: degraded`, with
+  `redis_stored_functions: restarting`. That is the signal era E's lab mediator
+  gave while it ran a stored-function library older than its binary (above):
+  the library is written by `mediator-setup` and nothing refreshes it on
+  upgrade. Probably the same cause; we cannot see the host.
+- **`first-vtc`'s canonical log** is `https://webvh.storm.ws/first-vtc/did.jsonl`:
+  4 versions, the latest `4-QmebQhmt…` at 2026-09-06T08:01:07Z, with
+  `VTCRest`, `VTCStatusList`, `TSPTransport` and `DIDCommMessaging`. The two
+  messaging services carry the mediator DID as a bare string.
+  `https://first.openvtc.net/.well-known/did.jsonl` (the VTC's own route)
+  still serves version 1 (2026-06-21: `VTCRest` and `VTCStatusList` only). Upstream
+  already treats this local copy as a mirror that can go stale
+  (`vtc-service/src/transport_capability.rs:470-500` and `:535-545` at
+  `a96fe02f`). Resolution is unaffected, because the DID's host is
+  `webvh.storm.ws`. It matters only to a reader who fetches the REST host's log
+  and concludes the community has no messaging.
+- **The Farm mediator went down during step 2.** From 08:02:34Z, both
+  `/authenticate/challenge` and `/readyz` answered
+  `503 no available server` (an edge with no backend). The uptime of about
+  767 s at 07:50:57Z suggests it had restarted shortly before. The outage
+  window is recorded under [Farm cross-mediator round trip](#farm-cross-mediator-round-trip-2026-09-22).
 
 Eras are listed as they were recorded, so the letters are not in date order:
 D, E and G are all later than F's first measurement.
@@ -1033,7 +1069,8 @@ handed over out of band — and out of band in a wallet means a QR. So the one
 mechanism available is the one the payload cannot use.
 
 It shows up on iOS first for an unrelated reason: `xcrun simctl openurl`
-truncates a URL this long, and the client then reports `invitation link
+truncates a URL this long (at 2048 characters, measured 2026-09-22: a
+1,930-character link arrives whole, a 2,063-character one does not), and the client then reports `invitation link
 rejected: JSON Parse error: Unexpected end of input`, which reads as a
 malformed credential rather than a truncated one. Android's `am start`
 tolerates the length, which is why the same rung passes there — a platform
@@ -1216,6 +1253,52 @@ an ngrok tunnel, so the fixture may be most of it; recorded because the
 consequence — a completed task the caller believes failed — is the kind that
 invites a blind retry. **Observed:** vti `a96fe02f`, 2026-09-22T01:22Z.
 
+### VTI-40 — vta-browser-plugin: a consent Approve can be recorded as a Deny
+
+*Observed against the Farm (era F) with upstream's browser client, 2026-09-22.
+`vta-browser-plugin` at `9643c57`; still present on `origin/main` `f568a59`.*
+
+**(a) What happens, and what should.** On a first sign-in at a relying party
+("Sign in via VTA-proxied SIOP"), the identity picker opens, the user selects
+the persona and clicks **Approve & remember identity**, and the page receives
+`identity selection denied by user`. The plain wallet login did the same
+(`login denied by user`) after Approve. Expected: an Approve is delivered as
+an approval.
+
+**(b) Reproduce.** Chrome on macOS, the extension loaded unpacked from
+`packages/extension` at `9643c57`. At a relying party that offers VTA-proxied
+SIOP, start a first sign-in, choose the persona, and click Approve. The race
+makes this intermittent. It is most visible on a first sign-in, when the
+service worker is cold.
+
+**(c) References.** `packages/extension/src/confirm.tsx:88-102` at
+`9643c57`: `decide()` calls `chrome.runtime.sendMessage({ type:
+RUNTIME_CONSENT_RESULT, … })` at line 94 and `window.close()` at line 102 in the
+same tick, without awaiting delivery.
+`packages/extension/src/background.ts:750` (`requestConsent`) registers a
+`chrome.windows.onRemoved` listener (line 868). Its handler settles the consent
+as a denial (`settle(false, false)`, line 865). When the removal reaches the
+service worker before the result message does, the denial wins, and the late
+approval is ignored because `settled` is already true. Every consent surface
+(login, proxy login, identity picker, task consent, disclosure) goes through
+`decide()`.
+
+**(d) Local workaround.** Close the window only after the message settles:
+
+```ts
+Promise.resolve(chrome.runtime.sendMessage({ type: RUNTIME_CONSENT_RESULT, … }))
+  .catch(() => undefined)
+  .finally(() => window.close());
+```
+
+With this change the same sign-in succeeded first time. It is applied
+uncommitted in our `external/` clone, and the diff is kept for an upstream PR.
+Keyring does not ship the plugin; we met this while using upstream's client as
+the Farm's admin surface. The plugin's own guidance treats consent prompts as
+security controls, where "one silently lost prompt is a gated action that never
+got its human check". This is the inverse failure: an approval that was given,
+silently lost.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -1241,7 +1324,70 @@ the fix belongs upstream in credo-ts. Upstream's own browser client resolves
 `did:webvh` through `@openvtc/vti-didcomm-js` with no DID-document class model,
 which is why nobody met this before a Credo-based wallet did.
 
+*2026-09-22:* the storm mediator that `first-vtc` names
+(`did:webvh:QmTS3a3H…:webvh.storm.ws:mediator`) publishes the same array
+`type`, so any Credo-based client that routes to that community meets this too, not
+only one on the Farm.
+
 ---
+
+## Farm cross-mediator round trip (2026-09-22)
+
+Step 2 of our Farm measurement, read-only, with no app involved. A fresh client
+on the Farm's mediator asks `first-vtc`, which lives on another operator's
+mediator, for its join manifest (`vtc/join-requests/manifest/0.2`), and times
+the answer. The rung is `tsp-reference/ref-04f-farm-cross-mediator/run.mjs`.
+
+**(a) What happens.**
+
+| Path | Result |
+| --- | --- |
+| DIDComm **A**: one forward to the Farm mediator, `next` = `first-vtc` | **Answered**: the manifest (1 criterion), live on the open socket, in **1.10 s** (2.79 s on the first, cold run). The Farm relays to storm; `first-vtc`'s answer comes back storm → Farm. |
+| DIDComm **B**: authcrypt forward POSTed to storm's `/inbound` | **Answered**, live, in **0.81 s**. Storm acknowledges with `200 … "data":"Forwarded"`. The same forward sent anoncrypt is refused: `400 w.m.message.anonymous` (storm sets `block_anonymous_outer_envelope`, a legitimate setting). The DID document's own URI (`…/mediator/v1`) answers `404`; senders must add `/inbound`. |
+| DIDComm **C**: forward to the Farm, `next` = storm, wrapping a forward to storm, `next` = `first-vtc` (upstream's `cross_mediator_forwarding` example) | **Answered**, live, in **0.36 s**. |
+| DIDComm, sender a bare `did:key` | **No answer** on any path, live or on a later pickup, as expected: a `did:key` has no service, so `first-vtc` has nowhere to send the reply. A client on another mediator needs a DID that names its mediator (we used `did:peer:2` with a `DIDCommMessaging` service naming the Farm mediator by DID). |
+| TSP Rev 3 XRFI (route `[Farm mediator, us]`), direct frame to the Farm | **No answer.** Expected: the Farm stores a frame addressed to someone else only for a *local* recipient, and `first-vtc` has no account there. |
+| TSP Rev 3 XRFI, routed via the Farm to storm | **No answer within 90 s.** Not observable further from outside. Storm must admit the Farm as a relaying peer (`relay_trusted_mediators`) for this to pass. |
+| TSP Rev 3 XRFI, direct frame POSTed to storm's `/inbound` | **Stored** for `first-vtc` (`200 {"Stored":…}`), then **no XRFA within 90 s**. See VTI-Q15. |
+
+A socket opened after an answer had already been delivered live receives that
+answer again. That is at-least-once redelivery: live delivery does not delete
+until acknowledged. It is not a defect. Separately, a second socket for the same DID
+terminates the first with `w.websocket.duplicate-channel`, so a client must close
+before it reconnects.
+
+The Farm mediator was unavailable twice during the measurement. Both
+`/authenticate/challenge` and `/readyz` answered `503 no available server`
+from between 07:59:50Z and 08:02:34Z until 08:07:50Z, and again from about
+08:10Z until 08:14:14Z. It returned with `uptime_seconds: 5`, so it was
+restarting, not recovering in place. It was stable from 08:14Z onward.
+
+**(b) Reproduce.** `cd tsp-reference/ref-04f-farm-cross-mediator && npm install &&
+SENDERS=peer node run.mjs`. Variables: `ROUTES=A,B,C`; `ONLY=didcomm|tsp`;
+`TSP_ATTEMPTS=0,1,2` (Farm direct, routed via Farm, POST to storm);
+`WAIT_MS`. It needs only public endpoints: the Farm mediator
+`did:webvh:QmagBwJ5NMNVqSBAEcFs3WmTRu4kWNPXBM6a9Sav1VGEAV:dids.ic3.dev:firstperson-mediator`
+(0.28.23), `first-vtc`
+`did:webvh:QmXi1PZD4NEvcvjfErAzVoCGtBFEv7dhXZQJHvcFY4U83F:webvh.storm.ws:first-vtc`
+(log `4-QmebQhmt…`), and the storm mediator (0.28.26, reporting
+`degraded`). The identity is minted fresh on every run.
+
+**(c) References.** At `affinidi-tdk-rs` `ad36f0b1`, in
+`crates/messaging/affinidi-messaging-mediator/src/messages/inbound.rs`:
+- the anonymous-envelope refusal is at :1065-1083;
+- the TSP pass-through ("receiver != this mediator → … store for the local
+  recipient") is at :186-224;
+- the routed-relay peer allowlist (`authorization.relay.untrusted_peer`) is at
+  :254-292.
+
+The double-forward pattern is from
+`crates/messaging/affinidi-messaging-helpers/examples/cross_mediator_forwarding.rs`.
+
+**(d) What Keyring does.** A phone on the Farm needs a `did:peer:2` naming its
+mediator by DID, which Keyring's VTI client DID already carries (bifold
+`VtiMediatorTransport.createVtiClientDid`). With that, DIDComm to a community on
+another mediator works on every sender route. TSP to `first-vtc` stays
+unproven, and Keyring falls back to DIDComm.
 
 ## Open questions and requests
 
@@ -1257,14 +1403,109 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q5 | Is a Trust Task that links an `openvtc` request to a Keyring device something you would like drafted? | Raised in conversation; we would write it if wanted. |
 | VTI-Q6 | Does a dry-run gate assume the applicant stores the vetter's statement in the VTA vault (`purpose: vetting`) rather than on the device? | We hold it on the device today. |
 | VTI-Q7 | Could our persona be admitted to the Farm community's (`vtc.ic3.dev`) access list — or is a Full Stack share code the intended route onto a community? | The wallet now connects to our Farm VTA; the community answers `DID not in ACL`, which is the only thing between us and a ceremony on Farm infrastructure. |
-| VTI-Q8 | Will the Farm's mediator be advanced (it reports 0.26.4; VTA and VTC are current)? | Every delivery fix answering our findings (#828, #830, #834) is newer, so a Farm result today is a protocol claim, not a delivery one. One deployment makes lab and Farm directly comparable. |
+| ~~VTI-Q8~~ | ~~Will the Farm's mediator be advanced (it reports 0.26.4; VTA and VTC are current)?~~ | **Answered 2026-09-22:** `mediator.ic3.dev` reports **0.28.23**, newer than the lab's 0.28.11, and its DID advertises `TSPTransport`. See [Era F re-measured](#stack-under-test). |
 | VTI-Q9 | Is Full Stack mode (a community of one's own) coming to the staging Farm, which offers VTA Only today? | The vetting ceremony needs a community we administer — publishing criteria, granting a vetter, provoking refusals. Until then those stay in our lab. |
-| VTI-Q10 | Could provisioning a VTA take its admin DID from a phone — a QR the phone scans, or a provisioning API — instead of a paste into the console? | A phone cannot paste into a browser it is not running; our own stack script labels the same step "the paste a QR would replace". Useful to any headless client, and to CI. |
+| VTI-Q10 | Could provisioning a VTA take its admin DID from a phone — a QR the phone scans, or a provisioning API — instead of a paste into the console? | A phone cannot paste into a browser it is not running; our own stack script labels the same step "the paste a QR would replace". Useful to any headless client, and to CI. **Measured on the Farm, 2026-09-22 ([details](#question-details)):** there is still no scannable "link a client" offer; the linking is `pnm acl create` or the browser client's paste-only *Grant access* form. |
 | VTI-Q11 | Should a persona minted by a TSP-capable VTA advertise `TSPTransport` in its own document? | Personas advertise only DIDComm today, so a Rev 3 client reading the document keeps the applicant ↔ vetter leg on DIDComm. |
+| VTI-Q12 | Could a community issue an **open invitation** — one not bound to a subject DID in advance (a bearer or by-reference credential, redeemed by whichever persona presents it)? | A person invited to a community has no persona yet: the admin's `invitations` route needs a `subject_did` (`vtc-service/src/routes/invitations.rs:40-44`), so today the phone must mint a community identity first and show it to the admin before being invited. `subjectLinkage` (`invitation_verify.rs:198-236`) lets a different DID redeem, but links the two at the community. An open invitation — with VTI-32's by-reference delivery — would let "I was invited to X" start from the invitation itself. Keyring's decision for now (2026-09-22) is to send the community identity; this is the ask. **Also on the Farm (2026-09-22, [details](#question-details)):** the hosted admin console's *Invitations* needs an invitee DID too, so there is no open or bearer invitation from the console either. |
+| VTI-Q13 | Which sign-in should a community administrator use in the admin console, and could the console say so? | Plain *Sign in with VTA wallet* presents the browser client's holder `did:key`; only *VTA-proxied SIOP* presents the VTA DID that the community's access list names. Nothing on the page tells an administrator which one works. [Details](#question-details). |
+| VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). |
+| VTI-Q15 | Does `first-vtc` serve TSP Rev 3 today, and are the Farm and storm mediators on each other's relay allowlists? | Its DID advertises `TSPTransport` via the storm mediator, and storm stores an XRFI for it, but no XRFA came back within 90 s on either route. DIDComm to the same community answers in about 1 s. [Details](#farm-cross-mediator-round-trip-2026-09-22). |
+### Question details
+
+Filled in to the same standard as the findings: (a) what happens and what
+we expected, (b) how to reproduce it, (c) references, (d) what we do meanwhile.
+
+**VTI-Q13 — the admin console's two sign-ins.**
+(a) The *VTC Admin* login card at `https://first.openvtc.net/admin` offers, in
+this order: *Sign in with passkey*, *Sign in with VTA wallet*, *Sign in via
+VTA-proxied SIOP*, and a link *Sign in as a different identity…*. The two wallet
+buttons present different identities, and the card doesn't say which:
+- *Sign in with VTA wallet* opens the browser client's "Sign-in request"
+  window, whose **SIGN IN AS** is the client's own holder `did:key`.
+- *Sign in via VTA-proxied SIOP* opens a "WORKER MODE — Your agent is sending a
+  request on your behalf" window, whose **SIGN IN AS** is the VTA's
+  `did:webvh` (context `vta`). That window notes: "The site has to allow this
+  identity before it will let you in."
+
+The community's access list names the VTA DID, so for an administrator whose
+entry is their VTA, only the third button can work. Expected: the card says
+which identity each button presents, or offers one path.
+
+(b) VTC dashboard build 0.11.58 ("mode: embedded"); browser client "VTA Wallet"
+0.2.0 at `vta-browser-plugin` `9643c57`, Chrome on macOS; an administrator whose
+access-list entry is their VTA DID. Press each wallet button and read the
+**SIGN IN AS** line. The proxied path, with VTI-40's fix applied, lands on the
+dashboard as the VTA DID. The plain path's refusal was **not observed**,
+because VTI-40 turned that Approve into `login denied by user` first. That it
+would be refused is inferred from the access list, which holds the VTA DID and
+not the holder `did:key`.
+
+(c) `vta-browser-plugin` `9643c57`, `packages/extension/src/background.ts`:
+- `handleLogin` (line 1278) calls `requestConsent` with `allowHolder: true`
+  (line 1395). That is the holder `did:key` path.
+- `handleWalletProfile` (line 2626) is the identity picker; its denial string
+  is at line 2655.
+- `handleVaultProxyLoginPage` (line 2535) is the VTA-proxied path.
+
+(d) We use *Sign in via VTA-proxied SIOP*.
+
+**VTI-Q14 — `registryConsent`.**
+(a) `registryConsent` (`registry_consent`) on `join-requests/submit` is stored
+on the join request and shown in the hosted console's "registry consent"
+column. Nothing acts on it, and the submit spec defines the field without
+saying what it grants. The struct's doc comment gives the intent: consent to
+being published in the community's trust-registry record, deferred to "Phase 3".
+Expected: that meaning stated in the spec, with a word on whether clients
+should ask the person.
+(b) Submit two join requests to `vtc-service` at `187ad9cd`, one with
+`registryConsent: true` and one with `false`. The verdicts and records are
+identical apart from the stored flag.
+(c) At `verifiable-trust-infrastructure` `187ad9cd`: the flag is declared at
+`vtc-service/src/join/mod.rs:106-111` and stored at
+`vtc-service/src/join/orchestrate.rs:277`;
+`trust-tasks/join-requests/submit/1.0/spec.md:18,40` names the field with no
+semantics. In `openvtc`, `openvtc-core/src/join.rs:248` hard-codes `false`, and
+so does Keyring (bifold `modules/trust-tasks/module/vtiAgent.ts:717`).
+(d) Keyring sends `false` and does not ask. Once upstream defines the effect,
+the "Get vetted" apply step gains a plain opt-in.
+
+**VTI-Q12 on the Farm.** (a) The hosted admin console's *Invitations* form
+requires the invitee's DID, as the route does, so a console user cannot issue
+an open or bearer invitation either. The page
+(`https://first.openvtc.net/admin/invitations`, "Issue a Verifiable Invitation
+Credential (VIC) for a prospective member…") has three fields: **INVITEE DID**
+(placeholder `did:key:… or did:webvh:…`), **VALIDITY (DAYS, OPTIONAL)** and
+**ROLE ON JOIN**. *Issue invitation* stays disabled while the DID is empty.
+This is a precondition, not a refusal, and no error is shown. (b) VTC 0.11.58
+("mode: embedded"), 2026-09-22: open the page and leave the DID empty. (c) At
+`verifiable-trust-infrastructure` `187ad9cd`:
+- `vtc-service/admin-ui/src/plugins/invitations.tsx:93` is the field and
+  `:125` the disabled rule (`disabled={!did.trim() || …}`);
+- `vtc-service/src/routes/invitations.rs:44` declares `subject_did: String`
+  (required), `:105` requires it to be a DID, and `:112-118` refuses a current
+  member (`409 … is already a current member`).
+(d) Keyring sends the community identity to the admin first.
+
+**VTI-Q10 on the Farm.** (a) The Farm has no scannable "link a client" offer.
+A person links a device with `pnm acl create`, or with the browser client's
+*Grant access* form, which takes a pasted DID and cannot be driven from a phone.
+(b) Browser client "VTA Wallet" 0.2.0 at `vta-browser-plugin` `9643c57`: open the
+console (`manager.html`) and go to the Access pane. The fields are subject DID
+(placeholder `did:key:z6Mk…`), role, label and expiry. The context comes from
+the selected tree node. Submit stays disabled until the subject and role are
+filled, and nothing produces a QR or offer. During onboarding the client
+prints the CLI equivalent, `pnm --vta <name> acl create --did <temp did:key>
+--role admin --expires 1h`. (c) `packages/extension/src/manager/panes/access.tsx:433`
+(the "Grant access" panel) and `:500` (its submit). (d) Our lab's enrolment page produces the link
+offer that a phone scans (`pnm acl create --expires 1h` behind a QR).
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.30 | 2026-09-22 | **The Farm, measured read-only from public endpoints (steps 1–2 of the Farm plan).** **VTI-Q8 answered**: the Farm mediator is 0.28.23, ahead of the lab. The storm mediator that `first-vtc` names reports `degraded` (stored functions restarting, as era E's lab did), and `first-vtc`'s own host serves a stale version-1 copy of its log (upstream's known mirror case). EXT-01 extends to the storm mediator. **The cross-mediator round trip works over DIDComm**: `first-vtc`'s manifest comes back storm → Farm, live, in about 1 s on all three sender routes, given a sender DID that names its mediator. Over TSP, storm stores the invite but no accept returns (**VTI-Q15**). The Farm mediator was down twice for a few minutes during the run. See [Farm cross-mediator round trip](#farm-cross-mediator-round-trip-2026-09-22). From the Phase 0 Farm run: **VTI-40**, the browser client's consent window can turn an Approve into a Deny. **VTI-Q13** asks which admin sign-in to use, **VTI-Q14** what `registryConsent` grants, and VTI-Q10 and VTI-Q12 gain Farm evidence. A [Question details](#question-details) section now carries the (a)–(d) record for questions. |
+| 1.29 | 2026-09-22 | **VTI-39** (a TSP reply that fails once is lost) added earlier; now **VTI-Q12**: an open invitation not bound to a subject DID in advance, the upstream half of Keyring's "I was invited" journey. |
 | 1.28 | 2026-09-21 | **Era H, run on devices.** Enrol, invite, the two-phone approval and the full vetting ceremony pass on upstream main. **VTI-24 and VTI-26 validated live** with a phone approver: the VTA pushed the consent request through the approver's own mediator and it was approved in about three seconds — once Keyring minted its `did:peer` with a `DIDCommMessaging` service naming the mediator by DID, a client defect found on the way. New: **VTI-37**, a consent refusal whose `details` pass the 4 KB bound at three approvers loses its challenge, digest and relayable requests. VTI-22 re-met: the lab's `up.sh` now sets alice's enforcement. Also new: **VTI-38**, a mutual cancel whose §7.3 answer is refused because the transport forgets the relationship first — found by `ref-04s`, which with `ref-04r` also closes TSP Rev 3's remaining lab items (long-form frames through the mediator; XRFI → XRFA → XRFD against upstream's state machine). |
 | 1.27 | 2026-09-21 | **Era H — the lab on upstream main** (vti `a96fe02f`, mediator 0.28.11, daemon `5365da7`). Four more resolved upstream since the report: **VTI-04** (vti #1592), **VTI-07** (tdk-rs #843, verified here), **VTI-14** (vti #1601), and **VTI-03**'s second half (vti #1593, `supplement/0.1`) — whose client half Keyring now implements. |
 | 1.26 | 2026-09-21 | VTI-Q1 withdrawn: we track upstream main, as the Farm does. Its number stays reserved. |
