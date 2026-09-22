@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.30 — 2026-09-22.** A living document: every finding here was measured
+**Version 1.31 — 2026-09-22.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -24,42 +24,42 @@ from a report or an issue always lands on the right entry.
 
 | # | Finding | Severity | Status | Era |
 | --- | --- | --- | --- | --- |
-| [VTI-01](#vti-01) | An administrator cannot become a vetter, and the first-vetter bootstrap is undocumented | Medium | Open — bootstrap path measured | A |
-| [VTI-02](#vti-02) | An ACL `member` role is not community membership | High | Open | A |
+| [VTI-01](#vti-01) | An administrator cannot become a vetter, and the first-vetter bootstrap is undocumented | Medium | Open — bootstrap path measured · **Upstream 09-22:** shipped — bootstrap runbook, vti #1627 | A |
+| [VTI-02](#vti-02) | An ACL `member` role is not community membership | High | Open · **Upstream 09-22:** declined as stated (ACL = control plane, membership = a DTG edge); the bootstrap fixed instead | A |
 | [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | **Resolved upstream** — vti #1591 (`withdraw/0.1`) and #1593 (`supplement/0.1`); **client half built** (bifold `877d26f`), not yet run against a live VTC | A |
 | [VTI-04](#vti-04) | A second application from one DID is refused, not answered | Medium | **Resolved upstream** — vti #1592 names the open request; with #1591/#1593 the applicant can now act on it | A |
-| [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | **Resolved upstream** — `affinidi-tdk-rs` #831 | A |
-| [VTI-06](#vti-06) | A misplaced configuration key is accepted in silence | Low | CORS half answered by #831; general case open | A, re-checked on **C** |
-| [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | **Resolved upstream** — tdk-rs #843; **verified on our stack** (era H) | A, re-measured on **H** |
-| [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | Open — workaround | A |
-| [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | Open | A |
-| [VTI-10](#vti-10) | A document's issuer must equal the DIDComm sender | Low | **Confirmed by upstream** — deliberate; specification gap stands | A |
-| [VTI-11](#vti-11) | A fresh VTC has an empty ACL and cannot authenticate its own admin | Low | Open | A |
-| [VTI-12](#vti-12) | A community's advertised transports are fixed at mint | Low | Open | A |
-| [VTI-13](#vti-13) | A criterion cannot express "no requirements" | Medium | **Corrected** — misattributed; the refusal is `affinidi-openid4vp`'s and spec-correct. Narrowed, and our answer on the shape is inside | A |
-| [VTI-14](#vti-14) | `cnm`'s vetting subcommands ignore `--url` / `VTA_URL` | Low | **Resolved upstream** — vti #1601 | A |
-| [VTI-15](#vti-15) | A VTC DID cannot be used as a `cnm` community | Low | Open | A |
-| [VTI-16](#vti-16) | Minting an admin portal sign-in needs the daemon stopped, then running | Low | Open | A |
-| [VTI-17](#vti-17) | A force re-provision keeps a DID bound to a hostname that no longer exists | Medium | Open | A |
-| [VTI-18](#vti-18) | A self-managed DID-hosting daemon without a mediator cannot be registered by a VTA | Medium | Open | A |
-| [VTI-19](#vti-19) | The DID resolver bursts a dozen fetches per operation and trips rate-limited hosts | Low | **Resolved upstream** — `verifiable-trust-infrastructure` #1581; not yet on our stack | A |
-| [VTI-20](#vti-20) | A serverless persona mint prints a log nobody serves | **Medium** (raised from Low) | Open — blocked a real run on 2026-09-19; the error names the persona, not the missing registration | A, re-met on **C** |
-| [VTI-21](#vti-21--no-channel-delivers-an-invitation-to-its-invitee) | No channel delivers an invitation to its invitee | Medium | **Confirmed by upstream** in source | A |
-| [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | Open | A |
-| [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open | A |
-| [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579 (with VTI-26); **validated live on era H** with a phone approver | A |
-| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open | B |
-| [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579; **validated live on era H** with a phone approver. Keyring's relay stays as the fallback #1579 itself keeps | B |
-| [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open | B |
-| [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 | B, re-measured on **C**: gone |
-| [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | **Fixed upstream** — `affinidi-tdk-rs` #828, and re-measured on era E at upstream's stock limits with the per-relationship gate actually live: the ceremony passes | B |
-| [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | **Fixed upstream** — `affinidi-tdk-rs` #830 (their KR-30); on our stack since era E. The client half — acting on an unsolicited `status` — is ours and still open | B |
-| [VTI-31](#vti-31--a-dropped-terminal-error-is-never-acknowledged-so-it-never-leaves-the-senders-queue) | A dropped terminal error is never acknowledged, so it never leaves the sender's queue | **High** | **Fixed upstream** — `affinidi-tdk-rs` #834, with our proposed cause corrected; on our stack since era E, residue not specifically re-measured | C |
-| [VTI-32](#vti-32--an-invitation-is-too-large-for-the-channel-it-is-meant-to-travel-on) | An invitation is too large for the channel it is meant to travel on | **High** | Open | C |
-| [VTI-33](#vti-33--a-mediator-built-without-its-tsp-feature-drops-every-tsp-frame-in-silence) | A mediator built without its `tsp` feature drops every TSP frame in silence | **High** | New | G |
-| [VTI-34](#vti-34--tsp--true-is-inert-on-a-vta-built-without-the-tsp-feature-and-nothing-says-so) | `tsp = true` is inert on a VTA built without the `tsp` feature, and nothing says so | Medium | New | G |
-| [VTI-35](#vti-35--a-vtc-cannot-advertise-the-tsp-service-it-is-able-to-serve) | A VTC cannot advertise the TSP service it is able to serve | Medium | New | G |
-| [VTI-36](#vti-36--vta-services-tsp-enable-tells-a-self-hosted-vta-to-redeploy-a-log-it-already-serves) | `vta services tsp enable` tells a self-hosted VTA to redeploy a log it already serves | Low | New — documentation | G |
+| [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | **Resolved upstream** — `affinidi-tdk-rs` #831 · **Upstream 09-22:** shipped (tdk-rs #831) — confirmed | A |
+| [VTI-06](#vti-06) | A misplaced configuration key is accepted in silence | Low | CORS half answered by #831; general case open · **Upstream 09-22:** needs **our** reproduction — they read it as the CORS half; ours is TOML scoping, repro supplied below | A, re-checked on **C** |
+| [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | **Resolved upstream** — tdk-rs #843; **verified on our stack** (era H) · **Upstream 09-22:** shipped (tdk-rs #843) — confirmed | A, re-measured on **H** |
+| [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | Open — workaround · **Upstream 09-22:** already fixed by vti #1526, an ancestor of our era-G build; **re-run without `RUST_MIN_STACK`** to verify | A |
+| [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | Open · **Upstream 09-22:** already fixed (vti #858, 29 Jul) — the VTA tightens to full documents after a deprecation window; Keyring already sends full, signed documents | A |
+| [VTI-10](#vti-10) | A document's issuer must equal the DIDComm sender | Low | **Confirmed by upstream** — deliberate; specification gap stands · **Upstream 09-22:** declined — design intent, to be documented | A |
+| [VTI-11](#vti-11) | A fresh VTC has an empty ACL and cannot authenticate its own admin | Low | Open · **Upstream 09-22:** shipped — bootstrap runbook, vti #1627 | A |
+| [VTI-12](#vti-12) | A community's advertised transports are fixed at mint | Low | Open · **Upstream 09-22:** needs our repro; vti #1632 (`dids edit` → `get-log` → `cnm did-log install`) may already answer it — test on the new pins | A |
+| [VTI-13](#vti-13) | A criterion cannot express "no requirements" | Medium | **Corrected** — misattributed; the refusal is `affinidi-openid4vp`'s and spec-correct. Narrowed, and our answer on the shape is inside · **Upstream 09-22:** re-scoped — DCQL stays; the VTC needs a criterion model that admits an empty requirement; their question back: auto-admit or admit-pending-review | A |
+| [VTI-14](#vti-14) | `cnm`'s vetting subcommands ignore `--url` / `VTA_URL` | Low | **Resolved upstream** — vti #1601 · **Upstream 09-22:** shipped (vti #1601) — confirmed | A |
+| [VTI-15](#vti-15) | A VTC DID cannot be used as a `cnm` community | Low | Open · **Upstream 09-22:** shipped (vti #1615) — VTCRest now carries `/v1` for communities minted from now on; **our client must stop appending a second `/v1`** | A |
+| [VTI-16](#vti-16) | Minting an admin portal sign-in needs the daemon stopped, then running | Low | Open · **Upstream 09-22:** shipped (vti #1618) — `POST /v1/admin/invites` through the running daemon | A |
+| [VTI-17](#vti-17) | A force re-provision keeps a DID bound to a hostname that no longer exists | Medium | Open · **Upstream 09-22:** shipped (webvh #206) | A |
+| [VTI-18](#vti-18) | A self-managed DID-hosting daemon without a mediator cannot be registered by a VTA | Medium | Open · **Upstream 09-22:** shipped (webvh #206) — a self-managed daemon always advertises `WebVHHosting` | A |
+| [VTI-19](#vti-19) | The DID resolver bursts a dozen fetches per operation and trips rate-limited hosts | Low | **Resolved upstream** — `verifiable-trust-infrastructure` #1581; not yet on our stack · **Upstream 09-22:** shipped (vti #1581) — confirmed | A |
+| [VTI-20](#vti-20) | A serverless persona mint prints a log nobody serves | **Medium** (raised from Low) | Open — blocked a real run on 2026-09-19; the error names the persona, not the missing registration · **Upstream 09-22:** shipped (vti #1616) | A, re-met on **C** |
+| [VTI-21](#vti-21--no-channel-delivers-an-invitation-to-its-invitee) | No channel delivers an invitation to its invitee | Medium | **Confirmed by upstream** in source · **Upstream 09-22:** shipped — `vtc/invitations/deliver/0.1` (Trust Tasks #581, vti #1648), `message` channel; **Keyring receive/redeem to build** | A |
+| [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | Open · **Upstream 09-22:** decided — default stays off; startup warning when policies exist with enforcement off (vti #1633) | A |
+| [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open · **Upstream 09-22:** shipped (vti #1619) — persona mint needs `KeyMint` (initiator holds it); key export is its own admin-only capability; sign via `keys/sign` (Q4) | A |
+| [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579 (with VTI-26); **validated live on era H** with a phone approver · **Upstream 09-22:** shipped (vti #1579) — confirmed | A |
+| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open · **Upstream 09-22:** needs **our** reproduction — they find the card still inline in `verdict.with` at both builds; a trace of one admission is asked for | B |
+| [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579; **validated live on era H** with a phone approver. Keyring's relay stays as the fallback #1579 itself keeps · **Upstream 09-22:** shipped (vti #1579) — confirmed | B |
+| [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open · **Upstream 09-22:** already fixed (vti #1567, 18 Sep) — typed trust-task-error | B |
+| [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 · **Upstream 09-22:** already fixed (vti #1567, webvh #203) — confirmed | B, re-measured on **C**: gone |
+| [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | **Fixed upstream** — `affinidi-tdk-rs` #828, and re-measured on era E at upstream's stock limits with the per-relationship gate actually live: the ceremony passes · **Upstream 09-22:** shipped (tdk-rs #828, plus #829 for the direct and TSP paths) | B |
+| [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | **Fixed upstream** — `affinidi-tdk-rs` #830 (their KR-30); on our stack since era E. The client half — acting on an unsolicited `status` — is ours and still open · **Upstream 09-22:** shipped (tdk-rs #830) — Keyring's transport already handles the resync signal | B |
+| [VTI-31](#vti-31--a-dropped-terminal-error-is-never-acknowledged-so-it-never-leaves-the-senders-queue) | A dropped terminal error is never acknowledged, so it never leaves the sender's queue | **High** | **Fixed upstream** — `affinidi-tdk-rs` #834, with our proposed cause corrected; on our stack since era E, residue not specifically re-measured · **Upstream 09-22:** shipped (tdk-rs #834) — re-run on a current build asked | C |
+| [VTI-32](#vti-32--an-invitation-is-too-large-for-the-channel-it-is-meant-to-travel-on) | An invitation is too large for the channel it is meant to travel on | **High** | Open · **Upstream 09-22:** shipped — `vtc/invitations/deliver/0.1` `offer` channel: a QR-sized offer redeemed by proving the invited DID's key (vti #1648); **Keyring redeem to build** | C |
+| [VTI-33](#vti-33--a-mediator-built-without-its-tsp-feature-drops-every-tsp-frame-in-silence) | A mediator built without its `tsp` feature drops every TSP frame in silence | **High** | New · **Upstream 09-22:** shipped — `tsp` a default feature (tdk-rs #854, mediator 0.28.21; vti #1622) | G |
+| [VTI-34](#vti-34--tsp--true-is-inert-on-a-vta-built-without-the-tsp-feature-and-nothing-says-so) | `tsp = true` is inert on a VTA built without the `tsp` feature, and nothing says so | Medium | New · **Upstream 09-22:** shipped (vti #1620) — the VTA refuses to start with `tsp = true` on a build without it | G |
+| [VTI-35](#vti-35--a-vtc-cannot-advertise-the-tsp-service-it-is-able-to-serve) | A VTC cannot advertise the TSP service it is able to serve | Medium | New · **Upstream 09-22:** shipped (vti #1632) — a self-hosted community answers `did-management/did/register`; `cnm did-log install` replaces our DID-log edit | G |
+| [VTI-36](#vti-36--vta-services-tsp-enable-tells-a-self-hosted-vta-to-redeploy-a-log-it-already-serves) | `vta services tsp enable` tells a self-hosted VTA to redeploy a log it already serves | Low | New — documentation · **Upstream 09-22:** shipped (vti #1624) | G |
 | [VTI-37](#vti-37--a-consent-refusal-loses-its-challenge-once-the-approver-set-grows) | A consent refusal loses its challenge once the approver set grows | Medium | New | H |
 | [VTI-38](#vti-38--a-cancelled-relationship-is-forgotten-before-the-vta-can-answer-the-cancel) | A cancelled relationship is forgotten before the VTA can answer the cancel | Low | New | H |
 | [VTI-39](#vti-39--a-tsp-reply-that-fails-to-send-once-is-lost) | A TSP reply that fails to send once is lost | Low | New — observed once | H |
@@ -84,6 +84,21 @@ particular none are the images a VTA Farm currently offers.
 | **D** | 2026-09-20 | unchanged from C — vta 0.34.1 · vtc 0.11.58 | `b544da04` — the **#829 branch tip**, mediator 0.28.0; this is *not* upstream main, which has since merged #829 and thirteen more (#830–#842) and stands at mediator 0.28.9 | `35244b7` — daemon 0.8.3 |
 | **H** | 2026-09-21 (evening) | `a96fe02f` — upstream main; carries #1579, #1581, #1591–#1593, #1601 and the persona/face work (#1594–#1606); `affinidi-messaging-sdk` 0.26.12 from upstream's own lockfile; `vta` built `--features tsp` | `ad36f0b1` — upstream main, mediator **0.28.11** (#843, #844), `--features tsp` | `5365da7` — upstream main (#205) |
 | **G** | 2026-09-21 | `6bd52cab` as era C, **plus `affinidi-messaging-sdk` 0.26.12** (carries tdk-rs #838) in the lockfile; `vta` built **`--features tsp`**; alice and the community VTA advertise `TSPTransport` (`vta services tsp enable`), the VTC by a DID-log edit (VTI-35) | `15499952` as era E — mediator 0.28.9, rebuilt **`--features tsp`** | `35244b7` — daemon 0.8.3 |
+
+**Era F′ — the Farm's VTAs upgraded, 2026-09-22.** The Farm moved its VTAs from
+`vta 0.36.0-d383d17e` to **`0.37.1-d9a5be02`** (upstream #1634), newer than the
+lab's 0.34.1. At that commit the Farm's VTAs carry #1591–#1593 (withdraw,
+`requestAlreadyOpen`, supplement), #1615 (`VTCRest` carries `/v1`), #1619
+(`KeyMint` for a DID mint; `key-export` its own capability, derived by `admin`
+alone), #1622 (TSP on by default, and setup checks that the mediator carries
+it), #1633 (the enforcement-off warning) and #1634 (`contexts/secrets` requires
+`KeyExport`). They do **not** yet carry #1632, #1642, #1646 or #1648, and #1652
+is not merged. For Keyring:
+- an un-narrowed admin derives both `KeyMint` and `KeyExport`
+  (`vta-service/src/operations/export.rs:69,140` at `d9a5be02`), so a phone
+  linked as admin still mints its persona and borrows its keys;
+- Keyring never calls `contexts/secrets`;
+- `requestAlreadyOpen` and supplement are live on the Farm as on the lab.
 
 **A correction to era F, measured 2026-09-21.** "Identical to the lab" holds
 for the version string only. The Farm's VTA image is `0.34.1-89ebd895` — the
@@ -1389,6 +1404,60 @@ mediator by DID, which Keyring's VTI client DID already carries (bifold
 another mediator works on every sender route. TSP to `first-vtc` stays
 unproven, and Keyring falls back to DIDComm.
 
+## Upstream's response (2026-09-22)
+
+Upstream published a remediation plan against **v1.27** (era H) of this document:
+<https://docs.fpp.storm.ws/keyring-remediation-plan.html>, basis **VTI `3dcbfe98`
+· TDK `1eeebba1` · webvh `88fc6464`**. It numbers the findings `KR-NN`, and
+**`KR-NN` is our `VTI-NN`** (the titles match one to one). Of the 36, upstream
+reports 23 shipped, 4 already fixed before they read them, 3 answered in docs,
+4 declined or re-scoped, and 2 waiting on a reproduction from us. Every
+status in the table above now carries their answer ("Upstream 09-22"). None
+is marked verified on our stack until the lab runs the new pins. VTI-37 to
+VTI-40 and VTI-Q12 to VTI-Q15 postdate v1.27 and are not covered.
+
+**Owed by us.**
+- **VTI-06 (their KR-06).** They grouped it with the CORS half (VTI-05) and
+  ask for our configuration. The reproduction is TOML scoping, not the CORS
+  default. Append `cors_allow_origin = ["*"]` at the end of a generated
+  `mediator.toml`, below its last table. TOML files the key under that table,
+  the mediator never reads it, and it says nothing. The ask is a
+  warning on unknown or misplaced keys (`deny_unknown_fields`, or a boot-time
+  list of keys ignored).
+- **VTI-25 (KR-25).** They find `verdict.with` still inline at both builds, and
+  suggest a lost reply (post-quantum proof sets grew it) or reply matching.
+  Owed: one admission traced on the new pins, from `ref-20-local-vetting` over
+  DIDComm (the raw reply's `verdict` keys and size) and from the app (what the
+  join flow received).
+- **VTI-12 (KR-12).** vti #1632's flow (`pnm did-mgmt dids edit` → `get-log` →
+  `cnm did-log install --file`) looks like the answer. Owed: run it on the new
+  pins to add a transport to an existing community. If it works, VTI-12 and
+  VTI-35 close together, and the lab community's hand-edited log goes away.
+
+**Wire changes that reach clients.**
+- **vti #1646:** a signed REST `auth/authenticate` must name the service as
+  `recipient` (a missing one is `malformedRequest`, another service's is
+  `wrongRecipient`). Keyring's app makes no signed REST Trust Task calls:
+  its VTA and community traffic is signed documents over TSP or DIDComm
+  that already name `recipient`. The lab's `vtc-admin.mjs` sets it
+  (line 140).
+- **vti #1642:** six capabilities move from `ext.org.openvtc.capabilities` to
+  `capabilities`. Keyring reads none of them.
+- **vti #1615:** `VTCRest` carries `/v1` for newly minted communities. Keyring
+  appends `/v1` itself (`vtiAgent.manifestOverRest`), which would double it.
+  It falls back to DIDComm rather than failing, but it has to be fixed before a
+  new community is used.
+
+**Their questions answered.** Q2: peer vetting legs stay DIDComm. Q3: a by-DID
+vetter status lookup (vti #1651); the grant's status list stays authoritative
+until then. Q4: sign the Vetting Card through `keys/sign`, not a borrowed
+key. Q5: extend `device/register`, `push/wake`, `task-consent/*` or
+`confirm/request` before drafting anything new. Q6: no. Q10: `vta setup --from`,
+`pnm setup --name`, `vta import-did --role admin`. Q11: yes, a persona
+advertises `#tsp` when its mediator carries TSP (vti #1652). Q7 and Q9 are routed
+to the Farm operators. Q8 we answered ourselves. EXT-01: agreed, it is
+credo-ts's.
+
 ## Open questions and requests
 
 Not defects — things we would like answered or changed, kept here so one link
@@ -1411,6 +1480,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q13 | Which sign-in should a community administrator use in the admin console, and could the console say so? | Plain *Sign in with VTA wallet* presents the browser client's holder `did:key`; only *VTA-proxied SIOP* presents the VTA DID that the community's access list names. Nothing on the page tells an administrator which one works. [Details](#question-details). |
 | VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). |
 | VTI-Q15 | Does `first-vtc` serve TSP Rev 3 today, and are the Farm and storm mediators on each other's relay allowlists? | Its DID advertises `TSPTransport` via the storm mediator, and storm stores an XRFI for it, but no XRFA came back within 90 s on either route. DIDComm to the same community answers in about 1 s. [Details](#farm-cross-mediator-round-trip-2026-09-22). |
+| VTI-Q16 | Could a community's manifest, or the VTA and mediator documents, say whether the operator of a member's VTA and of the mediator differs from the VTC's operator, so a client can tell a vetter whether hidden-mode anonymity holds for them? | The hidden-vetter design makes it a deployment rule that the vetter's VTA and the mediator are not run by the VTC's operator: a vetter's VTA can compute every tag its user produces. Nothing a client can read says which operator runs what, so a Farm hosting both a member's VTA and the community's VTC would silently void anonymity. [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -1470,6 +1540,30 @@ so does Keyring (bifold `modules/trust-tasks/module/vtiAgent.ts:717`).
 (d) Keyring sends `false` and does not ask. Once upstream defines the effect,
 the "Get vetted" apply step gains a plain opt-in.
 
+**VTI-Q16 — operator separation for hidden vetting.**
+(a) In the hidden-vetter design, anonymity holds against the VTC, other
+members, applicants and the mediator, but not against the vetter's own VTA.
+So hidden mode requires that the vetter's VTA is not operated by the VTC's
+operator (the rule the design already sets for the mediator). Expected: a
+machine-readable way for a client to check this before a vetter attests in
+hidden mode. For example, an operator identifier in the VTA's and mediator's
+DID documents or service metadata, compared with the VTC's, or a field in
+the community's manifest (such as `vetting.anonymity`) that the community
+asserts. Today the rule can only be stated in governance text.
+(b) Not a defect, and there is nothing to reproduce: hidden mode is not built
+upstream yet. What can be observed today is that neither a VTA's document, a
+mediator's, nor a VTC's manifest carries an operator identity. Checked at VTI
+`187ad9cd`; to be re-checked at `3dcbfe98`.
+(c) openvtc `docs/design/vetting-process.md` §14.2 (V2: "k-of-n proofs over
+hidden vetters"). A Keyring plan covering this is forthcoming.
+(d) Meanwhile: the Farm currently satisfies the rule (it hosts VTAs and a
+mediator, while `first-vtc` runs on another operator's stack). Our
+single-host lab never does, so no demo on it may call vetters anonymous
+from the community. Keyring will show a warning on the community screen
+once a source field exists. Related to VTI-Q6: in hidden mode an
+attestation is stored and verified in the applicant's VTA, so for that
+mode the answer to Q6 is "the VTA's vault, not the device".
+
 **VTI-Q12 on the Farm.** (a) The hosted admin console's *Invitations* form
 requires the invitee's DID, as the route does, so a console user cannot issue
 an open or bearer invitation either. The page
@@ -1504,6 +1598,7 @@ offer that a phone scans (`pnm acl create --expires 1h` behind a QR).
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.31 | 2026-09-22 | **Upstream's response mapped.** Their remediation plan (basis VTI `3dcbfe98`, TDK `1eeebba1`, webvh `88fc6464`, against our v1.27) numbers the findings `KR-NN` = `VTI-NN`. Every status now carries their answer: 23 shipped, 4 already fixed (VTI-08, -09, -27, -28), 3 answered in docs, 4 declined or re-scoped (VTI-02, -10, -13, and -12 pending), and reproductions owed by us for VTI-06, VTI-12 and VTI-25. Nothing is marked verified on our stack before the pin bump. **Era F′:** the Farm's VTAs now run `0.37.1-d9a5be02`, with #1619, #1622 and #1634 and without #1642, #1646 and #1648. Phones linked as admin are unaffected. New section [Upstream's response](#upstreams-response-2026-09-22) records the owed reproductions, the client-facing wire changes (vti #1646, #1642, #1615) and the answered questions. New question **VTI-Q16**: how a client can tell whether hidden-vetting anonymity holds (operator separation between a vetter's VTA, the mediator and the VTC). |
 | 1.30 | 2026-09-22 | **The Farm, measured read-only from public endpoints (steps 1–2 of the Farm plan).** **VTI-Q8 answered**: the Farm mediator is 0.28.23, ahead of the lab. The storm mediator that `first-vtc` names reports `degraded` (stored functions restarting, as era E's lab did), and `first-vtc`'s own host serves a stale version-1 copy of its log (upstream's known mirror case). EXT-01 extends to the storm mediator. **The cross-mediator round trip works over DIDComm**: `first-vtc`'s manifest comes back storm → Farm, live, in about 1 s on all three sender routes, given a sender DID that names its mediator. Over TSP, storm stores the invite but no accept returns (**VTI-Q15**). The Farm mediator was down twice for a few minutes during the run. See [Farm cross-mediator round trip](#farm-cross-mediator-round-trip-2026-09-22). From the Phase 0 Farm run: **VTI-40**, the browser client's consent window can turn an Approve into a Deny. **VTI-Q13** asks which admin sign-in to use, **VTI-Q14** what `registryConsent` grants, and VTI-Q10 and VTI-Q12 gain Farm evidence. A [Question details](#question-details) section now carries the (a)–(d) record for questions. |
 | 1.29 | 2026-09-22 | **VTI-39** (a TSP reply that fails once is lost) added earlier; now **VTI-Q12**: an open invitation not bound to a subject DID in advance, the upstream half of Keyring's "I was invited" journey. |
 | 1.28 | 2026-09-21 | **Era H, run on devices.** Enrol, invite, the two-phone approval and the full vetting ceremony pass on upstream main. **VTI-24 and VTI-26 validated live** with a phone approver: the VTA pushed the consent request through the approver's own mediator and it was approved in about three seconds — once Keyring minted its `did:peer` with a `DIDCommMessaging` service naming the mediator by DID, a client defect found on the way. New: **VTI-37**, a consent refusal whose `details` pass the 4 KB bound at three approvers loses its challenge, digest and relayable requests. VTI-22 re-met: the lab's `up.sh` now sets alice's enforcement. Also new: **VTI-38**, a mutual cancel whose §7.3 answer is refused because the transport forgets the relationship first — found by `ref-04s`, which with `ref-04r` also closes TSP Rev 3's remaining lab items (long-form frames through the mediator; XRFI → XRFA → XRFD against upstream's state machine). |
