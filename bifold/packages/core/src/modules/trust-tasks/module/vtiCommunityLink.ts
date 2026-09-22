@@ -37,8 +37,13 @@ export const VTI_COMMUNITY_PATH = 'vti/community'
 
 export interface CommunityLink {
   communityDid: string
-  /** What the link's author calls it; the DID's host is shown otherwise. */
+  /** What it is called: the community's own published name, else the link author's. */
   name?: string
+  /**
+   * The name came from the community's own join manifest rather than from a
+   * link. Anyone can write a link, so only a published name is shown plainly.
+   */
+  published?: boolean
 }
 
 export class CommunityLinkError extends Error {}
@@ -85,22 +90,62 @@ type Listener = () => void
 class CommunityTarget {
   private viewing?: CommunityLink
   private chosen?: CommunityLink
+  /**
+   * Names communities published about themselves, by DID. Kept apart from the
+   * links because a published name belongs to the community, not to the visit:
+   * the build's suggested community is named by no link at all, and a name
+   * learned once should still be the name next time it is offered.
+   */
+  private readonly published = new Map<string, string>()
   private readonly listeners = new Set<Listener>()
 
+  /** Whatever the community itself published, applied over a link's claim. */
+  private named = (link?: CommunityLink): CommunityLink | undefined => {
+    if (!link) return undefined
+    const name = this.published.get(link.communityDid)
+    return name ? { ...link, name, published: true } : link
+  }
+
   /** For the join screens: the community being looked at, else the chosen one. */
-  get = (): CommunityLink | undefined => this.viewing ?? this.chosen
+  get = (): CommunityLink | undefined => this.named(this.viewing ?? this.chosen)
 
   /** Only the community a link is showing, if any. */
-  getViewing = (): CommunityLink | undefined => this.viewing
+  getViewing = (): CommunityLink | undefined => this.named(this.viewing)
 
   /** The phone's community, whatever a link is showing. */
-  getChosen = (): CommunityLink | undefined => this.chosen
+  getChosen = (): CommunityLink | undefined => this.named(this.chosen)
+
+  /** What a community published about itself, for one it is not looking at. */
+  publishedNameOf = (communityDid: string): string | undefined => this.published.get(communityDid)
 
   /** A link named this community: show it, change nothing else. */
   set(link: CommunityLink): void {
     if (!link.communityDid) return
+    // A name the community published itself outranks a link's claim, which
+    // `named` applies on the way out: a second link to a community already
+    // known by name cannot rename it.
     if (this.viewing && this.viewing.communityDid === link.communityDid && this.viewing.name === link.name) return
     this.viewing = link
+    this.notify()
+  }
+
+  /**
+   * The community published its own name, in the manifest a join reads. It
+   * replaces whatever a link called it — a link's author is anyone, the
+   * community's service is the community — and it is remembered for the
+   * chosen one, so the name survives a relaunch and is not lost by leaving
+   * the join screens.
+   */
+  publishedName(communityDid: string, displayName?: string): void {
+    const named = displayName?.trim()
+    if (!communityDid || !named || this.published.get(communityDid) === named) return
+    this.published.set(communityDid, named)
+    // Remember it with the chosen community too, so the name survives a
+    // relaunch rather than waiting on the next manifest.
+    if (this.chosen?.communityDid === communityDid) {
+      this.chosen = { ...this.chosen, name: named, published: true }
+      keep(this.chosen)
+    }
     this.notify()
   }
 
@@ -115,9 +160,10 @@ class CommunityTarget {
   }
 
   clear(): void {
-    if (!this.viewing && !this.chosen) return
+    if (!this.viewing && !this.chosen && this.published.size === 0) return
     this.viewing = undefined
     this.chosen = undefined
+    this.published.clear()
     this.notify()
     keep()
   }

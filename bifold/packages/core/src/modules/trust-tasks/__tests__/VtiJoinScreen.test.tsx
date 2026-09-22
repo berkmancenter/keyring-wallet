@@ -94,6 +94,35 @@ describe('I want to join a community', () => {
     expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
   })
 
+  /**
+   * A tester was offered "Join keyring-vti-vtc.ngrok.app" by a community that
+   * had published no name (report #14). A hostname where a name belongs reads
+   * as a name, so the card says there is none and names the host as the host.
+   */
+  it('does not pass a hostname off as the suggested community\u2019s name', async () => {
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedName'))).toHaveTextContent('Join.Unnamed')
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedWhere'))).toHaveTextContent('vtc.suggested.example')
+    // and the button cannot be "Join <hostname>" either
+    expect(tree.getByTestId(testIdWithKey('JoinThisCommunity'))).toHaveTextContent('Join.JoinSuggested')
+    // nothing claimed a name, so there is nothing to caveat
+    expect(tree.queryByTestId(testIdWithKey('JoinNameClaimed'))).toBeNull()
+  })
+
+  /**
+   * A name the community published is remembered for the community, not for
+   * the visit, so the suggestion is offered by name from then on — the build's
+   * suggested community is named by no link at all. (A link's claimed name is
+   * rendered on the community screen; a link also takes this screen straight
+   * past the suggestion, which is why the caveat is tested there.)
+   */
+  it('offers the suggestion by the name the community published, with no caveat', async () => {
+    communityTarget.publishedName(suggested, 'Keyring Lab Community')
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedName'))).toHaveTextContent('Keyring Lab Community')
+    expect(tree.queryByTestId(testIdWithKey('JoinNameClaimed'))).toBeNull()
+  })
+
   it('a community chosen by a link goes straight to what it asks, and is the one joined', async () => {
     communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
     const tree = await renderJoin()

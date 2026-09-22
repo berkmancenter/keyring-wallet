@@ -49,6 +49,7 @@ import {
   type TspPeerRevisionStore,
   type TspSessionIdentity,
 } from './vtiTsp'
+import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
 
 const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
@@ -175,6 +176,17 @@ export interface VtiManifest {
   communityDid?: string
   criteria: VtiCriterion[]
   requirementsDigest?: string
+  /**
+   * What the community calls itself. Optional and often absent: a community
+   * publishes none until its admin sets one, so a screen must read well
+   * without it.
+   */
+  branding?: {
+    displayName?: string
+    accentColor?: string
+    logoUrl?: string
+    [key: string]: unknown
+  }
 }
 
 /** What a community decided, and what it is still waiting for. */
@@ -680,10 +692,15 @@ class VtiAgentController {
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
+    // Reading the manifest is how the app learns what a community calls
+    // itself. Teaching the target here rather than at each screen means a
+    // published name cannot be missed by whichever screen happened to fetch.
+    communityTarget.publishedName(communityDid, payload?.branding?.displayName)
     return {
       communityDid: payload?.communityDid,
       criteria: payload?.criteria ?? [],
       requirementsDigest: payload?.requirementsDigest,
+      branding: payload?.branding,
     }
   }
 
@@ -723,10 +740,12 @@ class VtiAgentController {
       if (String(body?.type ?? '').startsWith(TASK_ERROR)) return undefined
       const payload = body?.payload
       if (!payload?.criteria) return undefined
+      communityTarget.publishedName(communityDid, payload.branding?.displayName)
       return {
         communityDid: payload.communityDid,
         criteria: payload.criteria ?? [],
         requirementsDigest: payload.requirementsDigest,
+        branding: payload.branding,
       }
     } catch {
       return undefined
