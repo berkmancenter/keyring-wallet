@@ -64,6 +64,9 @@ const JOURNEY = process.env.JOURNEY === "1";
 const ENROL_MANAGER = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-manager.sh");
 
 function runnerVtaDid() {
+  // A VTA outside the lab (the Farm's) is named outright: its slug need not be
+  // a shell variable name, and it is not in stack.env.
+  if (process.env.RUNNER_VTA_DID) return process.env.RUNNER_VTA_DID;
   const key = `${VTA_SLUG.toUpperCase()}_VTA_DID`;
   const env = execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$${key}"`], {
     encoding: "utf8",
@@ -398,7 +401,7 @@ try {
     await screenshot(driver, "link-failure").catch(() => undefined);
     await dumpSource(driver, "link-failure").catch(() => undefined);
   }
-  printFailure(`VTA LINK BY QR failed: ${err.message}`);
+  printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
   process.exitCode = 1;
 } finally {
   if (driver) await driver.deleteSession().catch(() => undefined);
