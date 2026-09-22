@@ -146,6 +146,22 @@ try {
 
   // — vetter: the desk, a ticket
   await openVetting(vetter);
+  // A session left open by an earlier run holds the desk on its step: end it
+  // the way a vetter would ("Codes differ" on the match step, "End this
+  // session" on the others) — both decline it, which the applicant hears.
+  for (let i = 0; i < 3; i++) {
+    let ended = false;
+    for (const key of ["VettingCodesDiffer", "VettingEndSession"]) {
+      if (await byTestId(vetter, key).isExisting().catch(() => false)) {
+        await tapTestIdByCoordinates(vetter, key);
+        console.log(`[e2e] ${vetter.e2ePlatform}: ended a session left open by an earlier run (${key})`);
+        await sleep(3000);
+        ended = true;
+        break;
+      }
+    }
+    if (!ended) break;
+  }
   await waitForTestId(vetter, "VettingYouVetFor", 120000);
   // A desk left over from earlier runs makes every page-wide lookup ambiguous.
   // Publish the vetter's profile — a vetter with none is invisible to the

@@ -410,7 +410,20 @@ export async function tapTestIdByCoordinates(driver, key, timeout = 30000) {
   // does, so prefer it on Android and keep the pointer sequence as the
   // fallback for iOS and for anything the gesture refuses.
   let tapped = false;
-  if (driver.e2ePlatform === "android") {
+  // On iOS, let XCUITest tap the element it resolved: a coordinate computed
+  // from the element's rect missed on a physical iPad whose app ran in a
+  // window inset from the screen's origin — the tap reported success and
+  // never reached the button (the vetter's Publish, 2026-09-21). The
+  // Pressable trouble that made coordinates necessary is Android's.
+  if (driver.e2ePlatform === "ios") {
+    try {
+      await el.click();
+      tapped = true;
+    } catch {
+      tapped = false;
+    }
+  }
+  if (!tapped && driver.e2ePlatform === "android") {
     try {
       adbTap(driver, cx, cy);
       tapped = true;
