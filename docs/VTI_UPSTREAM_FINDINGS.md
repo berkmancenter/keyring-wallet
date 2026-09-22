@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.34 — 2026-09-22.** A living document: every finding here was measured
+**Version 1.36 — 2026-09-22.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -65,7 +65,8 @@ from a report or an issue always lands on the right entry.
 | [VTI-39](#vti-39--a-tsp-reply-that-fails-to-send-once-is-lost) | A TSP reply that fails to send once is lost | Low | New — observed once | H |
 | [VTI-40](#vti-40--vta-browser-plugin-a-consent-approve-can-be-recorded-as-a-deny) | vta-browser-plugin: a consent Approve can be recorded as a Deny | Medium | New — fix drafted | F |
 | [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | New — cause located to the return leg, not proven | F′ |
-| [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A community names `withdraw/0.1` as the remedy, and its DIDComm router has never heard of it | **High** | New — reachable via the binding envelope; the plain-DIDComm arms are the gap | F′ |
+| [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A DIDComm router that has never heard of verbs its own service dispatches (VTC and VTA) | **High** | New — reachable via the binding envelope; the plain-DIDComm arms are the gap | F′ |
+| [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | New — ordering established on both sides of the wire; the drop itself not localised | F′ |
 
 ## Stack under test
 
@@ -1404,7 +1405,87 @@ or its configuration, so that a TSP relationship forms across mediators.
 **Verification:** re-run the rung's cross-mediator legs; an XRFA naming the
 invite, then the manifest over TSP, is the pass.
 
-### VTI-42 — A community names `withdraw/0.1` as the remedy, and its DIDComm router has never heard of it
+### VTI-43 — A TSP reply sent before the relationship is accepted never arrives
+
+(a) **What happens.** A phone greets a VTA with an `XRFI` invite and asks its
+first Trust Task 16 ms later. The VTA answers correctly and quickly — and the
+answer is never received, because it is dispatched before the VTA has accepted
+the relationship that would carry it.
+
+From the VTA (`bob.log`, 2026-09-22, DIDs elided):
+
+```
+21:27:40.636  WARN vta_service::messaging::auth: refusing trust task:
+              DID not in ACL: did:peer:2… type_uri=…/auth/whoami/0.1
+21:27:40.638  INFO vta_service::messaging::tsp_inbound: TSP trust-task
+              dispatched sender=did:peer:2… status=403 Forbidden
+21:27:40.966  INFO vta_service::messaging::service: accepted an inbound TSP
+              relationship request sender=did:peer:2… request=Invite
+              state=Bidirectional
+```
+
+The refusal is dispatched at `.638`; the relationship reaches `Bidirectional`
+at `.966`, **328 ms later**. From the phone, over the same seconds:
+
+```
+15:27:40.022  [TrustTasks:VtaClient] greeted …bob… with an XRFI invite
+15:27:40.038  [TrustTasks:VtaClient] asked …bob… …/auth/whoami/0.1 over rev3
+```
+
+…and nothing further for the remaining 60 s of the run: no reply, no error.
+
+**The contrast is in the same log, eleven seconds later** — the same three
+events in the opposite order, 4 ms apart, and it works:
+
+```
+21:27:51.110  accepted an inbound TSP relationship request sender=did:key:z6MksJ44…
+21:27:51.114  trust-task received type_uri=…/vta/webvh/servers/list/1.0
+21:27:51.117  TSP trust-task dispatched sender=did:key:z6MksJ44… status=200 OK
+```
+
+Accept first, then the task, and the answer arrives. Dispatch first and it does
+not. Same VTA, same transport, eleven seconds apart.
+
+**What it costs a person.** Every flow whose first task is deliberately sent
+before authorisation. Keyring's no-QR link is exactly that: the phone shows its
+key and signs in *before* an administrator has granted it, so that the screen
+can say "not yet" — and that refusal is the one that is lost. The person is
+left on "I've been added" with nothing to read. Granting the key first and then
+signing in passes on the same build, VTA and device, which is how the ordering
+was isolated.
+
+(b) **How to reproduce.** `e2e/run-vta-link.js` with `LINK_MODE=manual` against
+a VTA that does not yet hold the phone's temporary key: the first "I've been
+added" hangs. The same run with `GRANT_FIRST=1` — the key granted before the
+first sign-in, which is what the QR flow does — passes. Measured on Android 16
+(emulator-5554, AVD API36_S25_A), store-config Release APK, heads wallet
+`69d8f58a` · bifold `03a882ae`, runner VTA `bob`. iOS does not usually hit the
+window: it fires its first ask later than 16 ms after the greeting.
+
+(c) **Where it lives.** `vta_service::messaging::auth` (the refusal),
+`vta_service::messaging::tsp_inbound` (the dispatch) and
+`vta_service::messaging::service` (the relationship accept).
+
+**The limit of this evidence, stated plainly.** These logs show that the reply
+was produced, that the relationship was not yet `Bidirectional` when it went
+out, and that nothing arrived at the phone. They do **not** show the reply being
+dropped at a named point: that needs a packet-level capture of the TSP wire, or
+a VTA-side trace at the send path, neither of which we have taken. The ordering
+is what the evidence establishes; the drop is inferred from it.
+
+(d) **What we do meanwhile.** Two client changes, for two different failures.
+The peer's accept already reaches us — our codec recognises `XRFI`/`XRFA`/`XRFD`
+and refuses them by name, and `unpackTrustTaskFromPeer` reports a control frame
+as "no Trust Task here" so that it is still acknowledged — so a first ask that
+is still unanswered when that accept lands is re-sent at once (about 330 ms on
+these timings). Separately, a VTA that never answers TSP at all is asked again
+over DIDComm, on a deadline measured rather than guessed: a healthy first task,
+including the greeting, answers in 1.76 s (then 0.68 s and 0.76 s), so the
+deadline sits at 10 s with roughly five times headroom. Related: [VTI-27](#vti-27)
+and [VTI-39](#vti-39), both about answers that are produced and never reach the
+client.
+
+### VTI-42 — A DIDComm router that has never heard of verbs its own service dispatches (a community's, and a VTA's)
 
 (a) **What happens.** An applicant with an open request is told by the community
 itself to close it with `vtc/join-requests/withdraw/0.1`. Sent as a DIDComm
@@ -1472,6 +1553,29 @@ node join.mjs <communityDid> <communityMediatorDid> submit            # → requ
 node join.mjs <communityDid> <communityMediatorDid> withdraw <id>     # → unsupported message type
 ENVELOPE=1 node join.mjs <communityDid> <communityMediatorDid> withdraw <id>   # → withdrawn
 ```
+
+**The same gap is in `vta-service`, measured 2026-09-22.** Asking a VTA
+(`keyring-vti-bob`) for `auth/whoami/0.1` as a plain task-typed DIDComm message
+is answered with the same problem-report:
+
+```json
+{ "code": "e.p.msg.bad-request",
+  "comment": "unsupported message type: https://trusttasks.org/spec/auth/whoami/0.1" }
+```
+
+The identical request inside the binding envelope is served properly, and
+returns the refusal the caller should get:
+
+```json
+{ "code": "permissionDenied",
+  "message": "permission denied: forbidden: DID not in ACL: did:key:z6Mkg4As…" }
+```
+
+So `whoami` — the verb every client calls first — is unreachable over
+task-typed DIDComm on a VTA, exactly as `withdraw` and `supplement` are on a
+VTC. Keyring never hit it because it sends the envelope. Recorded here rather
+than as its own number because it is one defect with one remedy: the envelope
+that upstream already intends, in both services.
 
 (c) **Where it lives.** `vtc-service/src/messaging.rs` (the router's arms);
 `vtc-service/src/join/orchestrate.rs:102` (the message naming the remedy);
@@ -1844,6 +1948,8 @@ temp-then-rotate model Keyring uses when a phone links a VTA.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.36 | 2026-09-22 | **VTI-42 extended to `vta-service`**: a VTA answers a task-typed `auth/whoami/0.1` with "unsupported message type" and serves the identical request inside the binding envelope, returning the proper `permissionDenied` refusal. Same defect, same remedy, second service — folded in rather than numbered separately, and the finding retitled so it does not read as VTC-only. |
+| 1.35 | 2026-09-22 | **VTI-43**: a VTA's reply to a first Trust Task is dispatched before it accepts the TSP relationship that would carry it, and is never received. Measured on both sides of the wire: the refusal dispatched at `.638`, the relationship `Bidirectional` at `.966`, nothing at the phone — against the same three events in the opposite order eleven seconds later in the same log, 4 ms apart, answering 200 OK. It costs every flow whose first task is deliberately sent before authorisation, which is exactly Keyring's no-QR link ("not yet" never appears). Granting first passes on the same build and device. The drop is not localised without a wire capture. Client side: re-send the first ask when the peer's accept lands (~330 ms), and fall back to DIDComm for a VTA that never answers TSP, on a 10 s deadline measured from a 1.76 s healthy first task. |
 | 1.34 | 2026-09-22 | **VTI-42**: a community names `vtc/join-requests/withdraw/0.1` as the way to close an open request, and answers that very task `unsupported message type` over DIDComm. The verb is implemented — sent inside the binding envelope (`https://trusttasks.org/binding/didcomm/0.1/envelope`), the same document withdraws the request and is answered, signed, in under a second. What is missing is an arm in `vtc-service/src/messaging.rs`, whose DIDComm router is a hand-written second list (upstream says so itself in `vtc-service/tests/didcomm_envelope_binding.rs`) carrying `submit`, `manifest` and `status` only. Measured on keyring-test and on our own lab community, both VTC 0.11.58, so it is not Farm-specific; `withdraw/0.2` is refused identically, so it is not a version-string mismatch. The refusal arrives as a DIDComm problem-report rather than a `trust-task-error` (VTI-27's shape again), so a client correlating by task type reads it as silence — which is how it first surfaced, as "the community did not answer" on a phone. |
 | 1.33 | 2026-09-22 | **The Farm, from a maintainer's side.** New section [Standing up on the Farm](#standing-up-on-the-farm-2026-09-22): a new VTA answers nothing until *Running*, the ACL's admin is the rotated key and not the pasted one, a phone's temporary key is a `did:peer:2` that the *Grant access* hint does not admit, and `keyring-stack`'s four components measured read-only. **VTI-Q9 answered in part** — Full Stack exists and is enabled per account; a VTA-Only account joins another stack by invite code. Two new questions: **VTI-Q17**, an idempotency key on `dids/create` or a `dids/list` that carries the label and key ids, after a mint whose answer was lost twice while the mint itself succeeded; **VTI-Q18**, an echo of the admin DID the Full Stack wizard imports. |
 | 1.32 | 2026-09-22 | **VTI-41**, promoted from VTI-Q15: TSP Rev 3 does not cross two mediators. Measured from the Farm's shared mediator to two communities on other mediators (a Farm Full Stack's, and storm's `first-vtc`): no accept in 30–90 s, whether routed via our mediator or stored straight into the community's mediator. The community's own mediator accepts in 1.15 s and answers the manifest over TSP in 0.33 s. The relay allowlist is ruled out under defaults. The cause is located to the return leg and not proven. Keyring asks such a community over DIDComm (keyring-bifold#66). |
