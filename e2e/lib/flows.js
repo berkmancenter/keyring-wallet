@@ -2214,6 +2214,22 @@ export async function leaveCommunityInApp(driver) {
     );
   }
   await row.click();
+  // A phone that is linked but has never joined still shows a row for the
+  // community its build names, and opening it lands on a screen that cannot
+  // load: "vtiAgent: not connected", because there is no persona for that
+  // community yet. There is nothing to leave, and saying so is not the silent
+  // skip this function exists to prevent — the screen states positively that no
+  // membership exists here, rather than us failing to find one.
+  if (!(await existsTestId(driver, "LeaveCommunityButton", 4000))) {
+    const unreachable = await existsTestId(driver, "CommunityError", 2000);
+    const notAMember = await existsTestId(driver, "ApplyToCommunityButton", 2000);
+    if (unreachable || notAMember) {
+      console.log(
+        `[e2e] ${driver.e2ePlatform}: the community screen offers no Leave (${unreachable ? "no session yet" : "not a member"}) — nothing to leave`
+      );
+      return false;
+    }
+  }
   // Leave and its confirmation are the same control toggling in place, and a
   // dropped tap here leaves the screen looking untouched — measured on the
   // iPad, 2026-09-22: the confirm card never rendered and the page source at
