@@ -37,7 +37,7 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
-import { vtiAgent, type VtiManifest } from '../module/vtiAgent'
+import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { receiveIssue } from '../module/vtiInbox'
 import {
@@ -81,6 +81,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [grant, setGrant] = useState<VtiHeldCredential>()
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string>()
+  // The community answered that an application is already open (and which).
+  const [alreadyOpen, setAlreadyOpen] = useState(false)
   const [busy, setBusy] = useState<string>()
   const [tick, setTick] = useState(0)
   const bump = useCallback(() => setTick((n) => n + 1), [])
@@ -1001,11 +1003,23 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                       try {
                         // Submits, or answers an open deferral in place — a
                         // second submit while one is open would be refused.
-                        const verdict = await applicantRef.current!.submit(
-                          m,
-                          statements,
-                          application?.requirementsDigest
-                        )
+                        let verdict
+                        try {
+                          verdict = await applicantRef.current!.submit(
+                            m,
+                            statements,
+                            application?.requirementsDigest
+                          )
+                        } catch (e) {
+                          // Already applied (requestAlreadyOpen): not an error. The
+                          // open request is now recorded on the application, and the
+                          // card below says where it stands and what can be done.
+                          if (openJoinRequestOf(e)) {
+                            setAlreadyOpen(true)
+                            return
+                          }
+                          throw e
+                        }
                         // A deferral or a referral leaves the request open;
                         // the submission card says where it stands and what
                         // the applicant can do. Only a verdict that closes it
@@ -1032,7 +1046,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 >
                   {busy === 'apply' ? <ActivityIndicator color="#FFFFFF" /> : null}
                   <Text style={styles.buttonText}>
-                    {application?.submission?.state === 'deferred' ? t('Vetting.SendAgain') : t('MyAgent.Apply')}
+                    {application?.submission?.state === 'deferred' ? t('Vetting.AddWhatTheyAsked') : t('MyAgent.Apply')}
                   </Text>
                 </Pressable>
               ) : null}
@@ -1043,6 +1057,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               */}
               {application?.submission ? (
                 <View testID={testIdWithKey('VettingSubmission')}>
+                  {alreadyOpen ? (
+                    <Text style={styles.value} testID={testIdWithKey('VettingAlreadyApplied')}>
+                      {t('Vetting.AlreadyApplied')}
+                    </Text>
+                  ) : null}
                   <Text style={styles.label} testID={testIdWithKey('VettingSubmissionState')}>
                     {application.submission.state === 'deferred'
                       ? tp('Vetting.SubmissionDeferred', {
