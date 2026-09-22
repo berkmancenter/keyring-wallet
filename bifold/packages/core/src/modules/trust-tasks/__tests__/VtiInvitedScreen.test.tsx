@@ -1,0 +1,161 @@
+/**
+ * "I was invited" — the person sends the community's admin who to invite,
+ * waits, and joins. The identity is made inside the flow (one confirmation),
+ * the step shown follows what the phone already holds, and what is copied or
+ * shared carries the identity for the admin.
+ */
+import Clipboard from '@react-native-clipboard/clipboard'
+import { act, fireEvent, render } from '@testing-library/react-native'
+import React from 'react'
+
+import { useAgent } from '@bifold/react-hooks'
+
+import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { testIdWithKey } from '../../../utils/testable'
+import { vtaAgent } from '../module/vtaAgent'
+import VtiInvited from '../screens/VtiInvited'
+
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+jest.mock('../../vrc/vrc-biometric', () => ({
+  requestBiometricConfirmationWithUI: jest.fn(async () => ({ success: true, reason: 'confirmed' })),
+}))
+const mockEnsurePersona = jest.fn()
+const mockJoin = jest.fn()
+jest.mock('../module/vtiJoin', () => ({
+  ensurePersonaFor: (...args: unknown[]) => mockEnsurePersona(...args),
+  joinCommunity: (...args: unknown[]) => mockJoin(...args),
+}))
+
+type Setter = { set(next: Record<string, unknown>): void }
+type Rec = { tags: Record<string, string>; content: Record<string, unknown> }
+
+const communityDid = 'did:webvh:QmCommunity:keyring-vti-vtc.example'
+const personaDid = 'did:webvh:QmPersona:keyring-vti-bob.example:personas:p1'
+// A store build: no VTA named, the linked one is used.
+const config = { mediatorDid: 'did:peer:2:mediator', communityDid }
+
+const personaRecord: Rec = {
+  tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: communityDid },
+  content: {
+    communityDid,
+    vtaDid: 'did:webvh:example:vta',
+    did: personaDid,
+    contextId: 'vta',
+    vtaKeyIds: { signing: 's', keyAgreement: 'k' },
+    kmsKeyIds: { signing: 'ks', keyAgreement: 'kk' },
+    createdAt: '2026-09-22T00:00:00Z',
+  },
+}
+const invitationRecord: Rec = {
+  tags: { recordType: 'keyring/vti-community', kind: 'invitation', key: 'i1' },
+  content: {
+    id: 'i1',
+    communityDid,
+    subjectDid: personaDid,
+    role: 'member',
+    status: 'pending',
+    credential: {},
+    receivedAt: '2026-09-22T00:00:00Z',
+  },
+}
+
+function fakeAgent(records: Rec[]) {
+  return {
+    agent: {
+      genericRecords: {
+        findAllByQuery: async (query: Record<string, string>) =>
+          records
+            .filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
+            .map((r) => ({ ...r, id: 'r' })),
+        save: async () => undefined,
+        update: async () => undefined,
+        delete: async () => undefined,
+      },
+      config: { logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } },
+    },
+  }
+}
+
+describe('I was invited', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    mockEnsurePersona.mockReset()
+    mockJoin.mockReset()
+    const setString = Clipboard.setString as jest.Mock
+    setString.mockClear()
+    const controller = vtaAgent as unknown as Setter
+    controller.set({
+      link: {
+        kind: 'linked',
+        vtaDid: 'did:webvh:example:vta',
+        label: 'bob',
+        linkedAt: '2026-09-22T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  const renderInvited = async (records: Rec[]) => {
+    const mockUseAgent = useAgent as jest.Mock
+    const agent = fakeAgent(records)
+    mockUseAgent.mockReturnValue(agent)
+    const tree = render(
+      <BasicAppContext>
+        <VtiInvited config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    return { tree, records }
+  }
+
+  test('no identity yet: Continue makes it, then the step is sending it to the admin', async () => {
+    const { tree, records } = await renderInvited([])
+    expect(tree.queryByText('MyAgent.NotConfigured')).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('InvitedStepIndicator'))).toBeTruthy()
+    mockEnsurePersona.mockImplementation(async () => {
+      records.push(personaRecord)
+      return personaRecord.content
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedContinue')))
+    })
+    expect(mockEnsurePersona).toHaveBeenCalledWith(
+      expect.objectContaining({ vtaDid: 'did:webvh:example:vta', communityDid })
+    )
+    expect(tree.getByTestId(testIdWithKey('InvitedShare'))).toBeTruthy()
+  })
+
+  test('an identity made earlier: straight to sending it, and Copy carries it', async () => {
+    const { tree } = await renderInvited([personaRecord])
+    expect(tree.queryByTestId(testIdWithKey('InvitedContinue'))).toBeNull()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedCopy')))
+    })
+    expect(Clipboard.setString).toHaveBeenCalledWith(expect.stringContaining('Invited.ShareText'))
+    // The DID itself is only under Details, not on the main path.
+    expect(tree.queryByTestId(testIdWithKey('InvitedPersonaDid'))).toBeNull()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedDetailsToggle')))
+    })
+    expect(tree.getByTestId(testIdWithKey('InvitedPersonaDid'))).toHaveTextContent(personaDid)
+  })
+
+  test('the invitation already arrived: Join', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    expect(tree.getByTestId(testIdWithKey('InvitedInvitationCard'))).toBeTruthy()
+    mockJoin.mockResolvedValue({ membership: {} })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    expect(mockJoin).toHaveBeenCalledWith(
+      expect.objectContaining({ communityDid, mediatorDid: config.mediatorDid }),
+      expect.objectContaining({ subjectDid: personaDid })
+    )
+    expect(tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+  })
+})

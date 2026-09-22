@@ -22,7 +22,7 @@
 import { useNavigation } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
 import { useAgent } from '@bifold/react-hooks'
-import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -30,14 +30,18 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { useTheme } from '../../../contexts/theme'
-import { Screens, Stacks, type MyAgentStackParams } from '../../../types/navigators'
+import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
+import { ownVetterGrantState } from '../module/vtiGrantState'
 import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
+
+import { openScanner } from './openScanner'
+import { useVtaDid } from './VtaStatus'
 
 /** Which seat this phone would take at a vetting: decided by what it holds. */
 type VettingSeat = 'vetter' | 'applicant'
@@ -62,8 +66,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const communityDid = config?.communityDid
   // The agent the person linked by QR (plan §5.1) wins over the one a build
   // bakes in; the baked one stays for builds and runners that predate linking.
-  const linkedVtaDid = vta.link.kind === 'linked' ? vta.link.vtaDid : undefined
-  const vtaDid = linkedVtaDid ?? config?.vtaDid
+  const vtaDid = useVtaDid(config?.vtaDid)
 
   // What the wallet holds towards communities (§2.4 B): the persona its VTA
   // minted for this community, the invitations it was handed, the memberships
@@ -72,6 +75,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const [invitations, setInvitations] = useState<VtiInvitation[]>([])
   const [memberships, setMemberships] = useState<VtiMembership[]>([])
   const [seat, setSeat] = useState<VettingSeat>('applicant')
+  const grantCheck = useRef<{ key: string; at: number; vetter: boolean } | undefined>(undefined)
   const [busy, setBusy] = useState<'identity' | 'join'>()
   const [activity, setActivity] = useState<string[]>([])
   const [holdingError, setHoldingError] = useState<string>()
@@ -94,8 +98,17 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     setPersona(p)
     setInvitations(i.filter((x) => x.status === 'pending'))
     setMemberships(m)
-    // A vetter grant issued to this persona makes this phone the desk.
-    setSeat(p && grants.some((g) => g.subjectDid === p.did) ? 'vetter' : 'applicant')
+    // A vetter grant that still stands makes this phone the desk — a revoked or
+    // expired one does not. The status list is a network read, so it is asked
+    // again only when the grants change or once a minute, not on every refresh.
+    const own = p ? grants.filter((g) => g.subjectDid === p.did) : []
+    const key = own.map((g) => g.receivedAt).join(',')
+    const cached = grantCheck.current
+    if (!cached || cached.key !== key || Date.now() - cached.at > 60_000) {
+      const standing = await ownVetterGrantState(agent, own, { allowInsecureLocal: __DEV__ })
+      grantCheck.current = { key, at: Date.now(), vetter: standing.state === 'active' }
+    }
+    setSeat(grantCheck.current?.vetter ? 'vetter' : 'applicant')
   }, [agent, communityDid])
 
   useEffect(() => {
@@ -609,10 +622,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       navigation.navigate(Screens.VtaLink)
       return
     }
-    const root = navigation as unknown as { navigate: (name: string, params?: object) => void }
-    // The scanner itself, with its paste-URL button — not `defaultToConnect`,
-    // which opens this wallet's own invitation QR instead.
-    root.navigate(Stacks.ConnectStack, { screen: Screens.Scan })
+    openScanner(navigation)
   }
 
   // S1 — not connected (and the failed state, which says why and offers a retry).

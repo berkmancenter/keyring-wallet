@@ -16,7 +16,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
-import { showsOfflineBanner, type VtaConnection } from '../module/vtaLinkMachine'
+import { resolveVtaDid, showsOfflineBanner, type VtaConnection } from '../module/vtaLinkMachine'
 
 /** The link state, plus a clock that ticks each second while the agent is away. */
 export function useVtaLinkWithClock() {
@@ -30,6 +30,12 @@ export function useVtaLinkWithClock() {
     return () => clearInterval(timer)
   }, [away])
   return { state, now }
+}
+
+/** The linked agent, else the one the build names (see `resolveVtaDid`). */
+export function useVtaDid(configured?: string): string | undefined {
+  const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  return resolveVtaDid(state.link, configured)
 }
 
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })

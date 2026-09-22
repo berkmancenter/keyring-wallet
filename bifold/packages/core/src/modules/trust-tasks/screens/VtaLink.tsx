@@ -31,10 +31,12 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
-import { Screens, Stacks } from '../../../types/navigators'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import type { VtaLinkFailure } from '../module/vtaLinkMachine'
+
+import { openScanner } from './openScanner'
 
 /** The agent's host, for people: the domain inside a did:webvh, else the label alone. */
 export function agentHost(vtaDid: string): string | undefined {
@@ -107,15 +109,16 @@ const VtaLink: React.FC = () => {
 
   const onScanAgain = useCallback(() => {
     vtaAgent.relink()
-    const root = navigation as unknown as { navigate: (name: string, params?: object) => void }
-    // The scanner itself, with its paste-URL button — not `defaultToConnect`,
-    // which opens this wallet's own invitation QR instead.
-    root.navigate(Stacks.ConnectStack, { screen: Screens.Scan })
+    openScanner(navigation)
   }, [navigation])
 
   const onDone = useCallback(() => {
-    // The agent screen, where the first-link introduction plays once.
-    navigation.navigate(Screens.VtaAgent as never)
+    // The agent screen, where the first-link introduction plays once, over My
+    // Agent. The stack is set rather than pushed: pushed on top, "Linked ✓"
+    // stayed underneath and came back on every return to the tab; and a link
+    // begun from the scanner can open this screen as the stack's only route.
+    const stack = navigation as unknown as { reset: (state: { index: number; routes: { name: string }[] }) => void }
+    stack.reset({ index: 1, routes: [{ name: Screens.MyAgent }, { name: Screens.VtaAgent }] })
   }, [navigation])
 
   const failureText = (failure?: VtaLinkFailure) => {
