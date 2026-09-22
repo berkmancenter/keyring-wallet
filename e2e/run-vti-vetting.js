@@ -439,17 +439,28 @@ try {
     // Restore the role, and resend it: delivery of a re-granted vetter role is
     // a separate defect, so without this the last step could fail for a reason
     // that has nothing to do with the ticket.
-    admin("vetter-grant", revokedVetterDid);
+    const regrantedVetterDid = revokedVetterDid;
+    admin("vetter-grant", regrantedVetterDid);
     for (let attempt = 1; ; attempt++) {
       await sleep(3000);
-      try { admin("vetter-resend", revokedVetterDid); break; } catch (e) { if (attempt >= 3) throw e; }
+      try { admin("vetter-resend", regrantedVetterDid); break; } catch (e) { if (attempt >= 3) throw e; }
     }
     console.log("[e2e] community: vetter granted again");
 
-    // The vetter's app must HOLD the restored grant before the ticket is worth
-    // re-presenting. Without this check a failure below would look like the
-    // ticket having been spent when it was really the grant never arriving —
-    // a rung that appears to catch one bug while catching another.
+    // Three states share one symptom here, and telling them apart is the
+    // difference between a rung that reports a bug and one that misnames it.
+    // The community is asked FIRST: if the grant was never re-issued, the app
+    // will never show it, and a wait would blame delivery for something that
+    // never left the community.
+    const listsLive = (who) =>
+      ((admin("vetters-list") ?? {}).vetters ?? []).some((v) => v.memberDid === who && v.live && !v.revoked);
+    if (!listsLive(regrantedVetterDid)) {
+      throw new Error(`the community lists no live grant for ${regrantedVetterDid} — it was never re-issued, so nothing below can mean anything`);
+    }
+    console.log("[e2e] community: the grant is listed live");
+
+    // Then the app's own view, which is what actually gates the ticket: it
+    // cannot mean anything until the phone can act again.
     await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
     const restored = Date.now() + 180000;
     let holdsAgain = false;
@@ -461,9 +472,20 @@ try {
     }
     if (!holdsAgain) {
       await screenshot(vetter, "vetting-dead-grant-03-not-restored");
-      throw new Error("the vetter's app never received the restored grant — the ticket check cannot mean anything");
+      throw new Error("the community lists the grant live but the vetter's app never received it — delivery, not the ticket");
     }
-    console.log(`[e2e] ${vetter.e2ePlatform}: the desk shows the role restored`);
+    // The mirror image, which after keyring-bifold#70 should be impossible:
+    // the app acting on a grant the community has withdrawn. Its chooser reads
+    // the status list, so a disagreement in THIS direction means that fix has
+    // stopped working, and whoever meets it later will not know that unless
+    // the message says so.
+    if (!listsLive(regrantedVetterDid)) {
+      await screenshot(vetter, "vetting-dead-grant-03-client-ahead");
+      throw new Error(
+        "the desk says the role is restored while the community lists no live grant — the client is trusting a grant the community has withdrawn (regression of keyring-bifold#70)"
+      );
+    }
+    console.log(`[e2e] ${vetter.e2ePlatform}: the desk shows the role restored, and the community agrees`);
     // Re-granted here, so the run's cleanup has nothing to put back.
     revokedVetterDid = undefined;
 
