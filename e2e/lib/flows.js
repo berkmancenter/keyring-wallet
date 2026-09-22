@@ -2151,7 +2151,12 @@ export async function leaveCommunityInApp(driver) {
     return el && (await el.isExisting().catch(() => false)) ? el : undefined;
   };
   while (Date.now() < until) {
-    row = await seen("MyAgentCommunityRow");
+    // Any way into the community screen, where Leave lives: the non-member
+    // row, the membership card, or the identity card's "Open this community".
+    row =
+      (await seen("MyAgentCommunityRow")) ||
+      (await seen("MyAgentMembershipCard", 4)) ||
+      (await seen("MyAgentOpenCommunity", 4));
     if (row) break;
     const connected = await seen("MyAgentCard", 3);
     if (connected) {
