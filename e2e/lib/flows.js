@@ -2120,3 +2120,35 @@ export async function pasteLinkOnScanScreen(driver, url) {
   }
   console.log(`[e2e] ${driver.e2ePlatform}: link pasted & submitted`);
 }
+
+/**
+ * A person leaving a community, in the app (UI/UX plan U1): My Agent → the
+ * community → Leave community → confirm. Replaces the Developer screen's
+ * "forget this community" as the harness's reset. Returns false when this
+ * phone has no community row to leave (nothing to reset).
+ */
+export async function leaveCommunityInApp(driver) {
+  await dismissTourIfPresent(driver);
+  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  await sleep(1500);
+  // My Agent lists its communities once the agent session is up; a cold
+  // start offers "Connect my agent" first (as openVetting in the runner does).
+  const connect = byTestId(driver, "ConnectMyAgentButton");
+  if (await connect.isExisting().catch(() => false)) await connect.click();
+  await waitForTestId(driver, "MyAgentCommunityRow", 180000).catch(() => undefined);
+  const row = await scrollToTestId(driver, "MyAgentCommunityRow", 6).catch(() => undefined);
+  if (!row || !(await row.isExisting().catch(() => false))) {
+    console.log(`[e2e] ${driver.e2ePlatform}: no community to leave`);
+    return false;
+  }
+  await row.click();
+  const leave = await scrollToTestId(driver, "LeaveCommunityButton", 8);
+  await leave.click();
+  const confirm = await scrollToTestId(driver, "LeaveCommunityConfirm", 4);
+  await confirm.click();
+  // Leaving returns to My Agent.
+  await waitForTestId(driver, "MyAgent", 30000);
+  await sleep(1500);
+  console.log(`[e2e] ${driver.e2ePlatform}: left the community (persona, membership, invitations, vetting)`);
+  return true;
+}

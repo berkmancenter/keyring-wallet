@@ -658,7 +658,8 @@ const Developer: React.FC = () => {
   // lap per iteration; the transport it exercises is the same either way.
   const autoProbed = useRef(false)
   useEffect(() => {
-    if (Config.VTI_PROBE_ON_START !== '1' || autoProbed.current || !agent) return
+    // Development builds only: a release build never probes on its own.
+    if (!__DEV__ || Config.VTI_PROBE_ON_START !== '1' || autoProbed.current || !agent) return
     autoProbed.current = true
     void handleProbeVtaMediator({ apply: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps

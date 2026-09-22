@@ -16,7 +16,7 @@
  */
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./lib/config.js";
-import { openDeveloperScreen, unlockIfLocked } from "./lib/flows.js";
+import { leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -213,54 +213,14 @@ try {
   await screenshot(vetter, "vetting-01-ticket");
 
   // — applicant: start over, identity, face, application, request
-  await openDeveloperScreen(applicant);
-  let probe = "";
-  for (let i = 0; i < 45; i++) {
-    probe = await textOf(applicant, "VtaProbeLog").catch(() => "");
-    if (/verdict|no verdict|manifest only|\[VTI-PROBE\] failed|no manifest/.test(probe)) break;
-    await sleep(2000);
-  }
-  for (let i = 0; i < 3; i++) if (!(await applicant.acceptAlert().then(() => true, () => false))) break;
-  // Only forget when this phone actually holds a membership. Forgetting wipes
-  // the persona too, and re-minting one goes alice -> the DID host over
-  // DIDComm through the tunnel, which times out often enough that roughly
-  // every other run died there with "the VTA did not answer" — a fixture
-  // latency problem that told us nothing about vetting. An applicant needs to
-  // be a non-member, not a new identity.
-  const alreadyMember = await byTestId(applicant, "MyAgentMembershipRole").isExisting().catch(() => false);
-  // A probe that failed means membership is UNKNOWN, not false. Read as false,
-  // the reset is skipped and the applicant carries the previous ceremony's
-  // vetting state into this one — which is how a run once reported that the
-  // vetter never accepted while the applicant's own screen still read
-  // "Statement received" from the run before. Measured 2026-09-20, when a 421
-  // on DID resolution broke the probe and cost a whole run downstream of it.
-  // Unknown therefore resets: the worst case is a persona re-mint we did not
-  // need, which is cheap and now reliable.
-  const membershipUnknown = /\[VTI-PROBE\] failed/.test(probe);
-  if (membershipUnknown) console.log(`[e2e] ${applicant.e2ePlatform}: the probe failed — membership unknown, resetting rather than assuming`);
-  // Reset UNCONDITIONALLY. Membership was the wrong thing to key this on: the
-  // state that breaks a ceremony is the VETTING state, and the two come apart.
-  // An applicant that finished a previous run holds "1 of 1 statements · meets
-  // the published requirements", so "Request vetting" has nothing to ask for,
-  // no request is sent, and the run reports that the vetter never accepted —
-  // which reads as a delivery failure and is a reset that never happened. That
-  // cost three runs on 2026-09-20 and very nearly a wrong bug report against a
-  // mediator upgrade that had nothing to do with it.
-  //
-  // The reset costs a persona re-mint, which is cheap and, since the
-  // cached-token fix, reliable. Determinism is worth more than the minute.
-  if (true) {
-    const forget = await scrollToTestId(applicant, "ForgetCommunityButton", 8).catch(() => undefined);
-    if (forget) {
-      await forget.click();
-      await sleep(1500);
-      await applicant.acceptAlert().catch(() => undefined);
-      console.log(`[e2e] ${applicant.e2ePlatform}: forgot the community (was a member)`);
-    }
-  } else {
-    console.log(`[e2e] ${applicant.e2ePlatform}: not a member — keeping the persona, skipping the re-mint`);
-  }
-  await applicant.back().catch(() => undefined); await sleep(800); await applicant.back().catch(() => undefined);
+  // Reset UNCONDITIONALLY — the vetting state, not membership, is what breaks
+  // a ceremony: an applicant that finished a previous run holds "1 of 1
+  // statements · meets the published requirements", so "Request vetting" has
+  // nothing to ask for and the run reads as a delivery failure (three runs on
+  // 2026-09-20). The reset is the person's own Leave community (UI/UX plan U1),
+  // so the harness no longer opens the Developer screen; it costs a persona
+  // re-mint, which is cheap and reliable. Determinism is worth more than the minute.
+  await leaveCommunityInApp(applicant);
   await openVetting(applicant);
   const create = await byTestId(applicant, "VettingCreateIdentityButton").isExisting();
   if (create) { await byTestId(applicant, "VettingCreateIdentityButton").click(); console.log(`[e2e] ${applicant.e2ePlatform}: creating an identity`); }

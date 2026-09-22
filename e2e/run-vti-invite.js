@@ -12,7 +12,7 @@
  */
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
-import { completeOnboarding, enableDidCommV2, openDeveloperScreen, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, enableDidCommV2, leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -80,23 +80,8 @@ try {
   // 0 — a person starting over: a community refuses to invite a current member
   // (VTI-6), so if this phone already holds a membership, forget it first.
   if (process.env.E2E_FRESH_COMMUNITY === "1" || keepState) {
-    await openDeveloperScreen(driver);
-    for (let i = 0; i < 45; i++) {
-      const community = await textOf(driver, "VtaProbeLog").catch(() => "");
-      if (/verdict|no verdict|manifest only|\[VTI-PROBE\] failed|no manifest/.test(community)) break;
-      await sleep(2000);
-    }
-    for (let i = 0; i < 3; i++) if (!(await driver.acceptAlert().then(() => true, () => false))) break;
-    const forget = await scrollToTestId(driver, "ForgetCommunityButton", 8).catch(() => undefined);
-    if (forget) {
-      await forget.click();
-      await sleep(1500);
-      await driver.acceptAlert().catch(() => undefined);
-      console.log(`[e2e] ${driver.e2ePlatform}: forgot the community (persona, membership, invitations)`);
-    }
-    await driver.back().catch(() => undefined);
-    await sleep(800);
-    await driver.back().catch(() => undefined);
+    // The person's own Leave community (UI/UX plan U1), not the Developer screen.
+    await leaveCommunityInApp(driver);
   }
 
   // 1 — the identity to be invited.
