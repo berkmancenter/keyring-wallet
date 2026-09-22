@@ -642,6 +642,22 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 </>
               ) : null}
 
+              {vetterStep === 'request' || vetterStep === 'waitCard' || vetterStep === 'check' ? (
+                // A session the vetter cannot finish — the person left, the wrong
+                // ticket, anything — ends here; the decline reaches the applicant.
+                <Pressable
+                  style={[styles.button, { backgroundColor: ColorPalette.grayscale.mediumGrey }]}
+                  testID={testIdWithKey('VettingEndSession')}
+                  accessibilityRole="button"
+                  disabled={!!busy}
+                  onPress={() =>
+                    run('decline', () => deskRef.current!.decline(request.requestId, 'session ended by the vetter'))
+                  }
+                >
+                  <Text style={styles.buttonText}>{t('Vetting.EndSession')}</Text>
+                </Pressable>
+              ) : null}
+
               {vetterStep === 'done' ? (
                 <>
                   {stepHeader(stepNumber, 5, t('Vetting.StatementIssued'))}

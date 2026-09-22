@@ -1389,6 +1389,7 @@
     "WaitingForCard": "Waiting for their name…",
     "CheckTheirId": "Check their ID — does it say this?",
     "VetSomeoneElse": "Vet someone else",
+    "EndSession": "End this session",
     "SomeoneWantsVetting": "Someone wants to be vetted",
     "SendNameTitle": "Send your name",
     "AskAnotherVetter": "Ask another vetter",

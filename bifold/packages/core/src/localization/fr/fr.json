@@ -1325,6 +1325,7 @@
     "WaitingForCard": "En attente de son nom…",
     "CheckTheirId": "Vérifiez sa pièce d'identité — indique-t-elle ceci ?",
     "VetSomeoneElse": "Vérifier quelqu'un d'autre",
+    "EndSession": "Mettre fin à cette session",
     "SomeoneWantsVetting": "Quelqu'un souhaite être vérifié",
     "SendNameTitle": "Envoyer votre nom",
     "AskAnotherVetter": "Demander à un autre vérificateur",
