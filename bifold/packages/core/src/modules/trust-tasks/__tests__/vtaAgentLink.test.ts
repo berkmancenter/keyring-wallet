@@ -35,7 +35,9 @@ const offer: EnrolmentOffer = {
   exp: 2_000_000_000,
 }
 
-function controller(overrides: { submit?: jest.Mock; waitForGrant?: jest.Mock; linked?: unknown } = {}) {
+function controller(
+  overrides: { submit?: jest.Mock; waitForGrant?: jest.Mock; linked?: unknown; grantCheckDeadlineMs?: number } = {}
+) {
   const saved: unknown[] = []
   let stored = overrides.linked as never
   const vta = new VtaAgentController()
@@ -53,6 +55,7 @@ function controller(overrides: { submit?: jest.Mock; waitForGrant?: jest.Mock; l
     }),
     identityStore: () => ({ setManager: async () => undefined }) as never,
     enrol: { submit: submit as never, waitForGrant: waitForGrant as never },
+    ...(overrides.grantCheckDeadlineMs ? { grantCheckDeadlineMs: overrides.grantCheckDeadlineMs } : {}),
   })
   return { vta, saved, submit, waitForGrant }
 }
@@ -186,6 +189,41 @@ describe('linking without a QR through the controller', () => {
     expect(mockClient.rotateManagerKey).toHaveBeenCalledTimes(1)
     expect(saved).toEqual([{ vtaDid: offer.vta, label: 'alice host', linkedAt: new Date(1_000).toISOString() }])
     expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  })
+
+  /**
+   * An agent can fail to answer at all rather than refuse: its reply is lost
+   * when it is produced before the transport's relationship can carry it (seen
+   * on a lab VTA, 2026-09-22). Nothing else ever settles the attempt, so the
+   * deadline has to, or the person watches a spinner for as long as they can
+   * bear it.
+   */
+  it('says so when the agent does not answer, and keeps the key on screen', async () => {
+    const { vta } = controller({ grantCheckDeadlineMs: 20 })
+    await vta.startManualLink({} as never, offer.vta, 'alice host')
+    let answer: (value: { roles: string[] }) => void = () => undefined
+    mockClient.whoAmI.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link).toMatchObject({
+      kind: 'showingKey',
+      did: 'did:peer:2.temporary',
+      checking: false,
+      noAnswer: true,
+      notYet: false,
+    })
+
+    // The answer we gave up on arrives late: it must not link the phone behind
+    // the person's back.
+    answer({ roles: ['admin'] })
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', noAnswer: true })
+    expect(mockClient.rotateManagerKey).not.toHaveBeenCalled()
+
+    // Trying again is a fresh attempt, and a healthy agent links as usual.
+    await vta.checkManualGrant({} as never)
+    expect(mockClient.rotateManagerKey).toHaveBeenCalledTimes(1)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked' })
   })
 
   it('an error other than "not added yet" ends the attempt', async () => {

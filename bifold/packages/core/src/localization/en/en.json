@@ -1230,6 +1230,8 @@
     "ImAdded": "I've been added",
     "Checking": "Checking…",
     "NotAddedYet": "Your agent doesn't accept this phone yet. Check that the admin added this exact code, then try again.",
+    "NoAnswer": "{{label}} didn't answer. It may be offline, or its answer may not have reached this phone. Check that the admin added this exact code, then try again.",
+    "TryAgain": "Try again",
     "IntroKeepsTitle": "Your agent keeps your identities",
     "IntroKeepsBody": "It holds the identity you use with each community, and the membership cards they give you — safely, on a server that works for you.",
     "IntroAnswersTitle": "It answers while your phone is off",
