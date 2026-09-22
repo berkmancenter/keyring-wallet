@@ -170,6 +170,12 @@ try {
     if (!published) throw new Error(`${vetter.e2ePlatform}: the profile was not published${err ? ` — ${err}` : ""}`);
     console.log(`[e2e] ${vetter.e2ePlatform}: vetter profile published`);
   }
+  // The desk shows one step at a time: a finished request from an earlier run
+  // sits on its "statement issued" step until the vetter moves on.
+  if (await byTestId(vetter, "VettingVetSomeoneElse").isExisting().catch(() => false)) {
+    await tapTestIdByCoordinates(vetter, "VettingVetSomeoneElse");
+    await sleep(1500);
+  }
   const clear = await scrollToTestId(vetter, "VettingDeskClearButton", 4).catch(() => undefined);
   if (clear) { await tapTestIdByCoordinates(vetter, "VettingDeskClearButton"); await sleep(2500); console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`); }
   await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
@@ -346,6 +352,12 @@ try {
   console.log(`[e2e] match code vetter=${vetterCode} applicant=${applicantCode.trim()}`);
   if (vetterCode !== applicantCode.trim()) throw new Error(`match codes differ: ${vetterCode} vs ${applicantCode}`);
   await screenshot(applicant, "vetting-04-match-code");
+  // Both people say the codes match before anything is signed (UI/UX plan §5.3–5.4).
+  await scrollToTestId(applicant, "VettingCodesMatch", 4, LOW);
+  await tapTestIdByCoordinates(applicant, "VettingCodesMatch");
+  await scrollToTestId(vetter, "VettingCodesMatch", 4);
+  await tapTestIdByCoordinates(vetter, "VettingCodesMatch");
+  console.log("[e2e] codes match — confirmed on both phones");
   await scrollToTestId(applicant, "VettingSendCardButton", 4, LOW);
   await tapTestIdByCoordinates(applicant, "VettingSendCardButton");
   console.log(`[e2e] ${applicant.e2ePlatform}: card sent`);
