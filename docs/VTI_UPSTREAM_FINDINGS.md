@@ -1555,8 +1555,7 @@ upstream yet. What can be observed today is that neither a VTA's document, a
 mediator's, nor a VTC's manifest carries an operator identity. Checked at VTI
 `187ad9cd`; to be re-checked at `3dcbfe98`.
 (c) openvtc `docs/design/vetting-process.md` §14.2 (V2: "k-of-n proofs over
-hidden vetters"); Keyring's zero-knowledge plan
-(`docs/plans/zero-knowledge-plan.md` §3.5).
+hidden vetters"). A Keyring plan covering this is forthcoming.
 (d) Meanwhile: the Farm currently satisfies the rule (it hosts VTAs and a
 mediator, while `first-vtc` runs on another operator's stack). Our
 single-host lab never does, so no demo on it may call vetters anonymous
