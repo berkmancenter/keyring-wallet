@@ -9,6 +9,7 @@ import MyAgent from '../modules/trust-tasks/screens/MyAgent'
 import VtiCommunity from '../modules/trust-tasks/screens/VtiCommunity'
 import VtiInvited from '../modules/trust-tasks/screens/VtiInvited'
 import VtiJoin from '../modules/trust-tasks/screens/VtiJoin'
+import EditRCard from '../modules/vrc/screens/EditRCard'
 import VtaAgentHome from '../modules/trust-tasks/screens/VtaAgentHome'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
@@ -57,6 +58,12 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.VtaLink}
         component={VtaLink}
         options={{ title: t('Screens.VtaLink'), ...ScreenOptionsDictionary[Screens.VtaLink] }}
+      />
+      {/* The real profile editor, so Join as can create a profile and come back to it. */}
+      <Stack.Screen
+        name={Screens.EditRCard}
+        component={EditRCard as unknown as React.FC}
+        options={{ title: t('EditRCard.CreateTitle'), ...ScreenOptionsDictionary[Screens.EditRCard] }}
       />
       <Stack.Screen name={Screens.VtiJoin} options={{ title: t('Screens.Join'), ...ScreenOptionsDictionary[Screens.VtiJoin] }}>
         {() => <VtiJoin config={config.vti} />}

@@ -20,6 +20,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
+import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
+import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { vtiAgent, VtiRefusal, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
 import { leaveCommunity } from '../module/vtiLeave'
 
@@ -42,6 +44,22 @@ const VtiCommunity: React.FC = () => {
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  // Leave is offered only where the phone holds something — an identity, a
+  // membership: a community only looked at through a link has nothing to leave.
+  const [holds, setHolds] = useState(false)
+  useEffect(() => {
+    if (!agent) return
+    let live = true
+    void Promise.all([
+      new GenericRecordsIdentityStore(agent).getPersona(communityDid),
+      new GenericRecordsCommunityStore(agent).getMembership(communityDid),
+    ])
+      .then(([p, m]) => live && setHolds(Boolean(p || m)))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [agent, communityDid])
 
   const onLeave = useCallback(async () => {
     if (!agent) return
@@ -179,7 +197,7 @@ const VtiCommunity: React.FC = () => {
           </Pressable>
         ) : null}
 
-        {confirmingLeave ? (
+        {!holds ? null : confirmingLeave ? (
           <View style={styles.card} testID={testIdWithKey('LeaveCommunityConfirmCard')}>
             <Text style={styles.value}>{t('Community.LeaveExplains')}</Text>
             <Pressable

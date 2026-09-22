@@ -54,6 +54,9 @@ import { pendingVettingTicket } from '../module/vtiLinks'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
 import { openScanner } from './openScanner'
+import { communityTarget } from '../module/vtiCommunityLink'
+import { joinSeed } from '../module/vtiJoinSeed'
+
 import { useCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
@@ -96,6 +99,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [application, setApplication] = useState<VettingApplication>()
   const [manifest, setManifest] = useState<VtiManifest>()
   const [legalName, setLegalName] = useState('')
+  // The profile chosen at Join as fills the name in, once (seed by copy).
+  const seed = communityDid ? joinSeed.get(communityDid) : undefined
+  useEffect(() => {
+    if (seed?.legalName) setLegalName((v) => v || seed.legalName)
+  }, [seed?.legalName])
   const [ticketLink, setTicketLink] = useState('')
   const navigation = useNavigation()
   const { width } = useWindowDimensions()
@@ -358,8 +366,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             disabled={!!busy}
             onPress={() =>
               run('identity', async () => {
-                if (agent && stores)
+                if (agent && stores) {
                   await ensurePersonaFor({ agent, identityStore: stores.identity, vtaDid, communityDid })
+                  communityTarget.choose(communityDid)
+                }
               })
             }
           >
@@ -809,6 +819,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 placeholderTextColor={ColorPalette.grayscale.mediumGrey}
                 autoCapitalize="words"
               />
+              {seed?.legalName && legalName.trim() === seed.legalName ? (
+                <Text style={styles.label} testID={testIdWithKey('VettingNameFromProfile')}>
+                  {seed.profileLabel
+                    ? tp('Join.FromProfile', { profile: seed.profileLabel })
+                    : t('Join.FromYourProfile')}
+                </Text>
+              ) : null}
               <Text style={styles.label}>{t('Vetting.FaceNote')}</Text>
               <Pressable
                 style={styles.button}

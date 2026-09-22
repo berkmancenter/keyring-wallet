@@ -73,6 +73,26 @@ export interface VtiHeldCredential {
 
 const RECORD_TYPE = 'keyring/vti-community'
 
+/**
+ * What names a held credential. Its own `id` when it has one; otherwise its
+ * content, so the same credential delivered twice — the vetting screen and the
+ * persona inbox both store what arrives — is one record, not two. Keying the
+ * fallback on the arrival time counted one statement as several ("2 of 1").
+ */
+export function heldCredentialKey(item: Pick<VtiHeldCredential, 'kind' | 'communityDid' | 'credential'>): string {
+  const id = (item.credential as { id?: unknown }).id
+  if (typeof id === 'string' && id) return id
+  // FNV-1a over the credential, stable across launches and cheap; a record key
+  // needs to be the same for the same content, not unguessable.
+  const text = JSON.stringify(item.credential)
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return `${item.kind}:${item.communityDid}:${hash.toString(16)}`
+}
+
 /** Credo generic records, one per invitation or membership, tagged for lookup. */
 export class GenericRecordsCommunityStore implements VtiCommunityStore {
   constructor(private readonly agent: Agent) {}
@@ -137,12 +157,20 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
   }
 
   saveHeldCredential(item: VtiHeldCredential) {
-    const id = String(item.credential.id ?? `${item.kind}:${item.communityDid}:${item.receivedAt}`)
-    return this.put('credential', id, { ...item })
+    return this.put('credential', heldCredentialKey(item), { ...item })
   }
 
   async listHeldCredentials(kind?: VtiHeldCredential['kind'], communityDid?: string) {
     const all = await this.list<VtiHeldCredential>('credential')
-    return all.filter((c) => (!kind || c.kind === kind) && (!communityDid || c.communityDid === communityDid))
+    const wanted = all.filter((c) => (!kind || c.kind === kind) && (!communityDid || c.communityDid === communityDid))
+    // One credential, once — however many times it arrived. Records written
+    // before the key was content-addressed can hold the same credential twice.
+    const byIdentity = new Map<string, VtiHeldCredential>()
+    for (const c of wanted) {
+      const key = heldCredentialKey(c)
+      const seen = byIdentity.get(key)
+      if (!seen || c.receivedAt < seen.receivedAt) byIdentity.set(key, c)
+    }
+    return [...byIdentity.values()]
   }
 }

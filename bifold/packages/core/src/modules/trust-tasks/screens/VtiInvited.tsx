@@ -32,9 +32,12 @@ import { testIdWithKey } from '../../../utils/testable'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 import { GenericRecordsCommunityStore, type VtiInvitation } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { communityTarget } from '../module/vtiCommunityLink'
 import { ensurePersonaFor, joinCommunity } from '../module/vtiJoin'
+import { joinSeed } from '../module/vtiJoinSeed'
 
 import { didName, identityShareText, shareIdentity } from './identityShare'
+import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { openScanner } from './openScanner'
 import { useCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
@@ -64,6 +67,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const [copied, setCopied] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const joinAs = useJoinAsChoice(navigation)
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -122,6 +126,10 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     setBusy(true)
     try {
       await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+      // Making the identity is what makes this the phone's community.
+      communityTarget.choose(communityDid)
+      // Seed by copy: the chosen profile fills the identity's name in once.
+      if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
       await load()
       setStep('share')
     } catch (e) {
@@ -129,7 +137,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     } finally {
       setBusy(false)
     }
-  }, [agent, vtaDid, communityDid, load, t])
+  }, [agent, vtaDid, communityDid, load, t, joinAs.selected])
 
   const onJoin = useCallback(async () => {
     if (!agent || !vtaDid || !invitation) return
@@ -206,6 +214,14 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
         <>
           {header(1, t('Invited.IntroTitle'))}
           <ThemedText>{t('Invited.IntroBody', { community, interpolation: { escapeValue: false } })}</ThemedText>
+          <ThemedText variant="bold">{t('Join.AsTitle')}</ThemedText>
+          <JoinAs
+            community={community}
+            options={joinAs.options}
+            selectedId={joinAs.selectedId}
+            onSelect={joinAs.setSelectedId}
+            onCreate={joinAs.createProfile}
+          />
           {errorLine}
         </>
       )

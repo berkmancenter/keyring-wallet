@@ -32,9 +32,11 @@ import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { ensurePersonaFor } from '../module/vtiJoin'
+import { joinSeed } from '../module/vtiJoinSeed'
 
 import { didName } from './identityShare'
 import { openScanner } from './openScanner'
+import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
@@ -97,7 +99,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const { ColorPalette } = useTheme()
   const vtaDid = useVtaDid(config?.vtaDid)
   const community = useCommunity(config?.communityDid)
-  const chosenByLink = useSyncExternalStore(communityTarget.subscribe, communityTarget.get)
+  const chosenByLink = useSyncExternalStore(communityTarget.subscribe, communityTarget.getViewing)
   const communityDid = community?.communityDid
   const name = community?.name ?? (communityDid ? didName(communityDid) : '')
 
@@ -107,6 +109,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const [asks, setAsks] = useState<Asks>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const joinAs = useJoinAsChoice(navigation)
 
   useEffect(() => {
     if (chosenByLink) setStep((s) => (s === 'which' ? 'asks' : s))
@@ -149,6 +152,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     setBusy(true)
     try {
       await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+      // Making the identity is what makes this the phone's community.
+      communityTarget.choose(communityDid)
+      // Seed by copy: the chosen profile fills the identity's name in once.
+      if (joinAs.selected) joinSeed.set(communityDid, joinAs.selected.seed)
       const stack = navigation as unknown as { navigate: (name: string) => void }
       stack.navigate(Screens.VtiVetting)
     } catch (e) {
@@ -156,7 +163,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     } finally {
       setBusy(false)
     }
-  }, [agent, vtaDid, communityDid, name, navigation, t])
+  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected])
 
   if (!vtaDid) {
     return (
@@ -173,6 +180,17 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       {error}
     </ThemedText>
   ) : null
+
+  // What the community asks, as one sentence: the card's accessibility label.
+  const asksSentence = (() => {
+    if (asks?.invitationOnly) return t('Join.AsksInvitationOnly')
+    if (asks?.kind === 'open') return t('Join.AsksNothing')
+    if (asks?.kind === 'other') return [t('Join.AsksOther'), ...asks.descriptions].join(' ')
+    const claims = (asks ? asks.claims : ['name.legal']).map((c) =>
+      c === 'name.legal' ? t('Join.AsksLegalName') : c
+    )
+    return [t('Join.AsksStatements', { count: asks?.statements ?? 1 }), ...claims].join('. ')
+  })()
 
   let body: React.ReactNode
   let actions: React.ReactNode
@@ -223,7 +241,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           <ThemedText variant="headingThree" accessibilityRole="header">
             {t('Join.AsksTitle', { community: name, interpolation: { escapeValue: false } })}
           </ThemedText>
-          <View style={styles.card} testID={testIdWithKey('JoinAsks')}>
+          {/* The lines below are separate nodes, so the card says the whole
+              sentence itself — for a screen reader, and for the harness. */}
+          <View
+            style={styles.card}
+            testID={testIdWithKey('JoinAsks')}
+            accessible
+            accessibilityLabel={asksSentence}
+          >
             {asks?.invitationOnly ? (
               <ThemedText>{t('Join.AsksInvitationOnly')}</ThemedText>
             ) : asks?.kind === 'open' ? (
@@ -277,10 +302,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       body = (
         <>
           <ThemedText variant="headingThree" accessibilityRole="header">
-            {t('Join.MakeIdentityTitle', { community: name, interpolation: { escapeValue: false } })}
+            {t('Join.AsTitle')}
           </ThemedText>
           <View testID={testIdWithKey('JoinMakeIdentity')}>
-            <ThemedText>{t('Join.MakeIdentityBody', { community: name, interpolation: { escapeValue: false } })}</ThemedText>
+            <JoinAs
+              community={name}
+              options={joinAs.options}
+              selectedId={joinAs.selectedId}
+              onSelect={joinAs.setSelectedId}
+              onCreate={joinAs.createProfile}
+            />
           </View>
           {errorLine}
         </>

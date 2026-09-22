@@ -1335,7 +1335,15 @@
     "AsksOther": "It asks for credentials it describes as:",
     "AsksNothing": "It doesn't ask for anything — you can apply straight away.",
     "MakeIdentityTitle": "Your identity for {{community}}",
-    "MakeIdentityBody": "{{community}} gets a new identity made just for it by your agent. You confirm with your face or fingerprint."
+    "MakeIdentityBody": "{{community}} gets a new identity made just for it by your agent. You confirm with your face or fingerprint.",
+    "AsTitle": "Who are you joining as?",
+    "AsBody": "{{community}} gets a new identity made just for it. Your profile fills in its name, once — nothing else is linked.",
+    "AsNoProfile": "You don't have a profile yet — create one below, or type your name when you meet the vetter.",
+    "ProfileLabel": "{{label}} profile",
+    "FromProfile": "From your {{profile}} profile — correct it here if your legal name differs.",
+    "FromYourProfile": "From your profile — correct it here if your legal name differs.",
+    "CreateProfile": "Create a new profile",
+    "CreateProfileHint": "A new profile just for this — its details go into the identity once."
   },
   "MyAgent": {
     "Title": "Your agent",

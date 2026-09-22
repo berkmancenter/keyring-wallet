@@ -1180,7 +1180,15 @@
     "AsksOther": "Ela pede credenciais que descreve assim:",
     "AsksNothing": "Ela não pede nada — você pode se candidatar agora mesmo.",
     "MakeIdentityTitle": "Sua identidade para {{community}}",
-    "MakeIdentityBody": "{{community}} recebe uma nova identidade feita só para ela pelo seu agente. Você confirma com o rosto ou a digital."
+    "MakeIdentityBody": "{{community}} recebe uma nova identidade feita só para ela pelo seu agente. Você confirma com o rosto ou a digital.",
+    "AsTitle": "Com qual perfil você entra?",
+    "AsBody": "{{community}} recebe uma nova identidade feita só para ela. Seu perfil preenche o nome dela, uma vez — nada mais fica ligado.",
+    "AsNoProfile": "Você ainda não tem um perfil — crie um abaixo, ou digite seu nome diante do verificador.",
+    "ProfileLabel": "Perfil {{label}}",
+    "FromProfile": "Do seu perfil {{profile}} — corrija aqui se seu nome legal for diferente.",
+    "FromYourProfile": "Do seu perfil — corrija aqui se seu nome legal for diferente.",
+    "CreateProfile": "Criar um novo perfil",
+    "CreateProfileHint": "Um perfil só para isto — os dados dele vão uma vez para a identidade."
   },
   "MyAgent": {
     "Title": "Seu agente",

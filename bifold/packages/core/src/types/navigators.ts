@@ -146,6 +146,7 @@ export type MyAgentStackParams = {
   [Screens.VtaAgent]: undefined
   [Screens.VtiInvited]: undefined
   [Screens.VtiJoin]: undefined
+  [Screens.EditRCard]: { profileId: string } | undefined
 }
 
 export type OnboardingStackParams = {
