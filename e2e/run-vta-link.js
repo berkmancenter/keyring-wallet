@@ -150,6 +150,27 @@ async function testerJourney(driver) {
   console.log("[e2e] journey: Join a community shows what it asks for");
   await tapTestId(driver, "JoinStart", 15000);
   await waitForTestId(driver, "JoinMakeIdentity", 15000);
+  // Join as: create a profile right there in the real profile editor, come
+  // back to Join as with it chosen, and see its name carried into vetting.
+  const PROFILE = { first: "Runner", last: "Community" };
+  if (await existsTestId(driver, "JoinAsCreateProfile", 5000)) {
+    await tapTestId(driver, "JoinAsCreateProfile", 15000);
+    const first = await waitForTestId(driver, "RCardFirstNameInput", 30000);
+    await first.setValue(PROFILE.first);
+    await byTestId(driver, "RCardLastNameInput").setValue(PROFILE.last);
+    const submit = await scrollToTestId(driver, "RCardSubmit", 4).catch(() => undefined);
+    if (!submit) throw new Error("the profile editor has no Save");
+    await submit.click();
+    await waitForTestId(driver, "JoinMakeIdentity", 30000);
+    const fullName = `${PROFILE.first} ${PROFILE.last}`;
+    const option = await driver.$(
+      driver.e2ePlatform === "ios"
+        ? `-ios predicate string:label CONTAINS "${fullName}"`
+        : `android=new UiSelector().textContains("${fullName}")`
+    );
+    if (!(await option.isExisting())) throw new Error("the new profile is not offered back on Join as");
+    console.log("[e2e] journey: Join as created a profile in the editor and came back with it");
+  }
   await screenshot(driver, "journey-join-identity");
   await tapTestId(driver, "JoinAsContinue", 15000);
   await handleBiometricConfirmIfPresent(driver);
@@ -168,6 +189,9 @@ async function testerJourney(driver) {
     throw new Error("making the identity did not hand over to vetting");
   }
   console.log(`[e2e] journey: identity → vetting reached ${reached}`);
+  if (reached === "VettingLegalNameInput" && (await existsTestId(driver, "VettingNameFromProfile", 3000))) {
+    console.log("[e2e] journey: the vetting name came from the profile");
+  }
   await screenshot(driver, "journey-join-vetting");
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
 
