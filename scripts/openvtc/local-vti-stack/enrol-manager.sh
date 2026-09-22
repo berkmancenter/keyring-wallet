@@ -12,11 +12,14 @@
 # ONLINE (default): grants on the RUNNING VTA with `pnm acl create`, as that
 # VTA's existing admin (PNM_HOME, default $STACK_DIR/pnm-<vta-name>). Upstream
 # supports granting on a live VTA, so nothing is stopped or restarted — other
-# sessions on the same stack are undisturbed. The entry expires after EXPIRES
-# (default 1h): the phone is expected to rotate to its own long-lived key. If
-# the DID already has an entry (409 / "already exists"), the role is moved with
-# `pnm acl change-role` (compare-and-swap, tried from each other role); the
-# existing entry's expiry is left as it is.
+# sessions on the same stack are undisturbed. The entry is permanent, as the
+# offline path's always was, unless EXPIRES is set (e.g. EXPIRES=1h for a phone
+# that rotates to its own long-lived key right after, as linking does). If the
+# DID already has an entry (409 / "already exists"), the role is moved with
+# `pnm acl change-role` (compare-and-swap, tried from each other role); if it
+# already holds the role, that is success — re-enrolling an enrolled phone is
+# idempotent, which kept-state runner chains rely on. An existing entry's
+# expiry is left as it is.
 #
 # --offline: the old path. The VTA's store is locked while it runs, so the
 # daemon is stopped, the ACL entry written with `vta import-did`, and the
@@ -44,9 +47,11 @@ if [ "$MODE" = online ]; then
   PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
   export PNM_HOME="${PNM_HOME:-$STACK_DIR/pnm-$NAME}"
   strip() { sed -e 's/\x1b\[[0-9;]*m//g'; }
-  if out=$("$PNM" --vta "$NAME" acl create --did "$DID" --role "$ROLE" --expires "${EXPIRES:-1h}" --label "keyring-$ROLE" 2>&1); then
+  expiry=()
+  [ -n "${EXPIRES:-}" ] && expiry=(--expires "$EXPIRES")
+  if out=$("$PNM" --vta "$NAME" acl create --did "$DID" --role "$ROLE" ${expiry[@]+"${expiry[@]}"} --label "keyring-$ROLE" 2>&1); then
     [ -n "$out" ] && echo "$out" | strip
-    echo "enrolled $DID on $NAME as $ROLE (expires in ${EXPIRES:-1h})"
+    echo "enrolled $DID on $NAME as $ROLE${EXPIRES:+ (expires in $EXPIRES)}"
     exit 0
   fi
   out=$(echo "$out" | strip)
@@ -65,9 +70,14 @@ if [ "$MODE" = online ]; then
       exit 0
     fi
   done
-  echo "$DID already has an ACL entry on $NAME and no change-role to $ROLE applied —" >&2
-  echo "it most likely already holds $ROLE. Check with: PNM_HOME=$PNM_HOME $PNM --vta $NAME acl get $DID" >&2
-  echo "(its expiry was NOT refreshed; delete it with 'pnm acl delete' and re-run to reset it)" >&2
+  # No other role moved to ROLE: the entry already holds it. Confirm, then
+  # report success — the phone is enrolled, which is what was asked.
+  if held=$("$PNM" --vta "$NAME" acl get "$DID" 2>&1) && echo "$held" | strip | grep -qiE "\b$ROLE\b"; then
+    echo "$DID is already enrolled on $NAME as $ROLE (existing entry and expiry unchanged)"
+    exit 0
+  fi
+  echo "$held" | strip >&2
+  echo "$DID already has an ACL entry on $NAME, but not as $ROLE, and change-role did not apply" >&2
   exit 1
 fi
 
