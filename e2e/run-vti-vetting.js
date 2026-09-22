@@ -166,8 +166,8 @@ try {
   // each needs its own device and its own WebDriverAgent port.
   const simCaps = (caps, name, wdaLocalPort, mjpegServerPort) =>
     name ? { ...caps, "appium:deviceName": name, "appium:wdaLocalPort": wdaLocalPort, "appium:mjpegServerPort": mjpegServerPort } : caps;
-  applicant = await createSession(platforms[0], keep(simCaps(capsFor(platforms[0], process.env.APPLICANT_IOS_UDID, 8131, 9131), process.env.APPLICANT_IOS_SIM, 8133, 9133)));
-  vetter = await createSession(platforms[1], keep(simCaps(capsFor(platforms[1], process.env.VETTER_IOS_UDID, 8130, 9130), process.env.VETTER_IOS_SIM, 8134, 9134)));
+  applicant = await createSession(platforms[0], keep(simCaps(capsFor(platforms[0], process.env.APPLICANT_IOS_UDID, Number(process.env.APPLICANT_WDA_PORT || 8131), Number(process.env.APPLICANT_MJPEG_PORT || 9131)), process.env.APPLICANT_IOS_SIM, 8133, 9133)));
+  vetter = await createSession(platforms[1], keep(simCaps(capsFor(platforms[1], process.env.VETTER_IOS_UDID, Number(process.env.VETTER_WDA_PORT || 8130), Number(process.env.VETTER_MJPEG_PORT || 9130)), process.env.VETTER_IOS_SIM, 8134, 9134)));
   console.log(`[e2e] applicant = ${platforms[0]}, vetter = ${platforms[1]}`);
   keepalive = setInterval(() => { vetter.getWindowSize().catch(() => undefined); applicant.getWindowSize().catch(() => undefined); }, 20000);
   await Promise.all([unlockToHome(applicant), unlockToHome(vetter)]);

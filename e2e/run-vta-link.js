@@ -393,13 +393,40 @@ try {
     const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
     // Return on the keyboard submits the address, as a person would.
     await address.setValue(`${runnerVtaDid()}\n`);
+    // The key is revealed by "Show my code", which the screen enables once the
+    // address looks like a DID — it does not appear on submit. Measured on
+    // Android, 2026-09-22: the run waited out 60s on a screen that was only
+    // waiting for the tap.
+    if (await existsTestId(driver, "VtaLinkShowMyCode", 5000)) {
+      await tapTestId(driver, "VtaLinkShowMyCode", 15000);
+    }
     await waitForTestId(driver, "VtaLinkManualDid", 60000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
     await screenshot(driver, "link-m1-key");
-    await tapTestId(driver, "VtaLinkCheckGrant", 15000);
-    await waitForTestId(driver, "VtaLinkNotYet", 60000);
-    console.log("[e2e] before the grant: not yet");
+    // GRANT_FIRST=1 skips the pre-grant check. It exists to isolate one
+    // variable: in the ordinary manual flow the phone signs in BEFORE its key
+    // is in the ACL, on purpose, so the screen can say "not yet" — and a VTA
+    // that answers an unknown peer with silence rather than a refusal leaves
+    // that sign-in hanging. Granting first makes the same flow sign in with a
+    // key the VTA already knows, which is what the QR journey does.
+    if (process.env.GRANT_FIRST !== "1") {
+      await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+      // "Not yet" renders at the BOTTOM of the key card, below a ~350-character
+      // did:peer, so on a phone screen it is off the bottom of the scroll view
+      // — and Android's UiAutomator does not report off-screen children, so a
+      // plain wait never sees it however long it waits. Scroll for it.
+      const notYetBy = Date.now() + 60000;
+      let notYet;
+      while (!notYet && Date.now() < notYetBy) {
+        notYet = await scrollToTestId(driver, "VtaLinkNotYet", 4).catch(() => undefined);
+        if (!notYet) await sleep(2000);
+      }
+      if (!notYet) throw new Error(`${driver.e2ePlatform}: the phone never said the key was not added yet`);
+      console.log("[e2e] before the grant: not yet");
+    } else {
+      console.log("[e2e] GRANT_FIRST=1: granting before the first sign-in");
+    }
     execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
     await tapTestId(driver, "VtaLinkCheckGrant", 15000);
     await waitForTestId(driver, "VtaLinkDone", 180000);
