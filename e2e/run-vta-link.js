@@ -209,12 +209,17 @@ async function testerJourney(driver) {
   }
 
   // A community link, pasted, opens Join on that community.
-  const vtcDid = execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$VTC_DID"`], { encoding: "utf8" });
+  // The run's own community when it names one (a Farm community): the link a
+  // phone opens becomes its community, so the lab's would move it off it.
+  const vtcDid =
+    process.env.KEYRING_COMMUNITY_DID ||
+    execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$VTC_DID"`], { encoding: "utf8" });
   if (vtcDid.startsWith("did:")) {
-    const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent("Runner lab")}`;
+    const communityName = process.env.KEYRING_COMMUNITY_NAME || (process.env.KEYRING_COMMUNITY_DID ? "keyring-test" : "Runner lab");
+    const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent(communityName)}`;
     await pasteLinkFromHome(driver, link);
     await waitForTestId(driver, "JoinAsks", 30000);
-    const asks = await driver.$(driver.e2ePlatform === "ios" ? '-ios predicate string:label CONTAINS "Runner lab"' : 'android=new UiSelector().textContains("Runner lab")');
+    const asks = await driver.$(driver.e2ePlatform === "ios" ? `-ios predicate string:label CONTAINS "${communityName}"` : `android=new UiSelector().textContains("${communityName}")`);
     if (!(await asks.isExisting())) throw new Error("the pasted community link did not open Join on that community");
     console.log("[e2e] journey: a pasted community link opened Join on it");
     for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
