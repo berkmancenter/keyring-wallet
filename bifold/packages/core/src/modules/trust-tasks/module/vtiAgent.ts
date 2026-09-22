@@ -26,6 +26,7 @@ import { tsp } from '@bifold/trust-tasks'
 import type { VtiPersona } from './VtiIdentityStore'
 import {
   advertisedMediatorDid,
+  advertisedTspMediatorDid,
   createVtiClientDid,
   resolveVtiMediator,
   resolveDidDocumentRetrying,
@@ -328,6 +329,26 @@ class VtiAgentController {
    * Resolve the mediator a VTI agent advertises, mint this wallet's member DID,
    * log in and hold the socket. Idempotent while the socket is open.
    */
+  /**
+   * A community whose TSP endpoint is behind another mediator than ours is
+   * asked over DIDComm from the start. Across two mediators a TSP
+   * relationship has not once completed (VTI-Q15: the Farm to storm's
+   * first-vtc, and the Farm to a Farm Full Stack's own mediator — the invite is
+   * stored for the community and nothing comes back), and waiting out a TSP
+   * timeout first made a first Join look like a hang. On one mediator (the lab)
+   * TSP is kept, and `ask`'s TSP→DIDComm fallback stays as the safety net.
+   */
+  private async preferDidcommAcrossMediators(communityDid: string): Promise<void> {
+    if (!this.agent || this.carriageByPeer.has(communityDid) || !this.mediatorDid) return
+    const theirs = await advertisedTspMediatorDid(this.agent, communityDid).catch(() => undefined)
+    if (theirs && theirs !== this.mediatorDid) {
+      this.carriageByPeer.set(communityDid, 'didcomm')
+      this.agent.config.logger.info(
+        `${TSP_LOG_PREFIX} ${communityDid} speaks TSP through ${theirs}, not our mediator — using DIDComm (VTI-Q15)`
+      )
+    }
+  }
+
   /** The connect in flight, so a second caller waits for it instead of racing it. */
   private connecting?: Promise<void>
 
@@ -577,6 +598,7 @@ class VtiAgentController {
     // presents an opened TSP envelope as the same plaintext shape — so nothing
     // downstream of `ask` needs to know which envelope carried it.
     if (this.agent && this.tsp) {
+      await this.preferDidcommAcrossMediators(communityDid)
       const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), {
         decided: this.carriageByPeer,
       })
