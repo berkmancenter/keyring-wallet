@@ -2150,8 +2150,23 @@ export async function leaveCommunityInApp(driver) {
     const connected = await byTestId(driver, "MyAgentCard").isExisting().catch(() => false);
     if (connected) {
       connectedSince ??= Date.now();
-      if (Date.now() - connectedSince > 20000) {
-        console.log(`[e2e] ${driver.e2ePlatform}: agent connected and no community row — nothing to leave`);
+      // Whether the phone HOLDS a community is read from what it shows, not
+      // from the row: the row appears only once the community session is up.
+      // An identity, a vetting entry or "Reach the community" means there is
+      // one — bring its session up so the row renders, then leave it.
+      const reach = byTestId(driver, "ConnectCommunityButton");
+      const holdsOne =
+        (await reach.isExisting().catch(() => false)) ||
+        (await byTestId(driver, "MyAgentVettingRow").isExisting().catch(() => false)) ||
+        (await byTestId(driver, "MyAgentIdentityCard").isExisting().catch(() => false)) ||
+        (await byTestId(driver, "MyAgentPersonaDid").isExisting().catch(() => false));
+      if (holdsOne) {
+        if (await reach.isExisting().catch(() => false)) {
+          await reach.click().catch(() => undefined);
+          console.log(`[e2e] ${driver.e2ePlatform}: reaching the community before leaving it`);
+        }
+      } else if (Date.now() - connectedSince > 20000) {
+        console.log(`[e2e] ${driver.e2ePlatform}: agent connected and holds no community — nothing to leave`);
         return false;
       }
     }
