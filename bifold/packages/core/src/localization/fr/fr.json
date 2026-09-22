@@ -935,7 +935,8 @@
     "Community": "Communauté",
     "Vetting": "Vérification",
     "VtaLink": "Relier votre agent",
-    "VtaAgent": "Votre agent"
+    "VtaAgent": "Votre agent",
+    "Invited": "Rejoindre sur invitation"
   },
   "Loading": {
     "TakingTooLong": "Cela prend plus de temps que d'habitude. Vous pouvez retourner à l'accueil ou continuer à attendre.",
@@ -1211,7 +1212,37 @@
     "DetailsPhoneKey": "La clé de ce téléphone",
     "DetailsLinkedAt": "Relié",
     "BannerAway": "Votre agent est absent — {{status}}",
-    "OpenYourAgent": "Votre agent"
+    "OpenYourAgent": "Votre agent",
+    "IWasInvited": "J'ai été invité",
+    "IWasInvitedHint": "Envoyez votre identité à l'admin, puis rejoignez.",
+    "ShareIdentity": "Partager votre identité pour {{community}}"
+  },
+  "Invited": {
+    "IntroTitle": "Dites à l'admin qui inviter",
+    "IntroBody": "Pour vous inviter dans {{community}}, son admin a besoin de votre identité pour cette communauté. Votre agent la crée maintenant — vous confirmez avec votre visage ou votre empreinte — puis vous l'envoyez à l'admin.",
+    "Continue": "Continuer",
+    "Preparing": "Préparation de votre identité…",
+    "ConfirmTitle": "Créer votre identité",
+    "ConfirmBody": "Votre agent crée votre identité pour {{community}} — celle que son admin invitera.",
+    "ShareStepTitle": "Envoyez ceci à l'admin de la communauté",
+    "ShareStepBody": "Envoyez-le comme vous voulez : un message, un e-mail, AirDrop. L'admin de {{community}} s'en sert pour vous inviter.",
+    "ShareTitle": "Mon identité Keyring pour {{community}}",
+    "ShareText": "Mon identité Keyring pour {{community}} : {{did}}",
+    "Share": "Partager",
+    "Copy": "Copier",
+    "Copied": "Copié",
+    "ShowQr": "Afficher en QR",
+    "HideQr": "Masquer le QR",
+    "Sent": "Je l'ai envoyé",
+    "WaitingTitle": "En attente de votre invitation",
+    "WaitingBody": "Quand l'admin de {{community}} vous envoie un lien d'invitation, ouvrez-le sur ce téléphone ou collez-le ici. Il apparaîtra sur cet écran.",
+    "Checking": "Recherche de votre invitation…",
+    "Paste": "Coller l'invitation",
+    "SendAgain": "Renvoyer mon identité",
+    "ArrivedTitle": "Votre invitation est arrivée",
+    "ArrivedBody": "{{community}} vous a invité. Rejoignez-la pour obtenir votre carte de membre.",
+    "JoinedTitle": "Vous êtes membre de {{community}}",
+    "JoinedBody": "Votre carte de membre est dans votre portefeuille."
   },
   "MyAgent": {
     "Title": "Votre agent",

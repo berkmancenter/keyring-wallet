@@ -81,6 +81,7 @@ export enum Screens {
   VtiVetting = 'Vetting',
   VtaLink = 'Link your agent',
   VtaAgent = 'Your agent',
+  VtiInvited = 'Invited',
 }
 
 export enum Stacks {
@@ -142,6 +143,7 @@ export type MyAgentStackParams = {
   [Screens.VtiVetting]: undefined
   [Screens.VtaLink]: undefined
   [Screens.VtaAgent]: undefined
+  [Screens.VtiInvited]: undefined
 }
 
 export type OnboardingStackParams = {

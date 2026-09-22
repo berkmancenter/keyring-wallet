@@ -31,8 +31,8 @@ import { GenericRecordsCommunityStore, type VtiMembership } from '../module/VtiC
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 
+import { didName, shareIdentity } from './identityShare'
 import { openScanner } from './openScanner'
-import { agentHost } from './VtaLink'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
 interface Holdings {
@@ -41,10 +41,6 @@ interface Holdings {
   vetterFor: string[]
 }
 
-/** A person-readable name for a community or persona DID: its host, else a short form. */
-export function didName(did: string): string {
-  return agentHost(did) ?? `${did.slice(0, 16)}…${did.slice(-6)}`
-}
 
 const INTRO_PANELS = ['IntroKeeps', 'IntroAnswers', 'IntroApprove'] as const
 
@@ -200,12 +196,25 @@ const VtaAgentHome: React.FC = () => {
               {holdings.personas.map((p) => (
                 <View key={p.did} style={styles.row}>
                   <Icon name="account-circle-outline" size={20} color={TextTheme.normal.color} />
-                  <ThemedText>
+                  <ThemedText style={{ flex: 1 }}>
                     {t('VtaLink.IdentityFor', {
                       community: didName(p.communityDid),
                       interpolation: { escapeValue: false },
                     })}
                   </ThemedText>
+                  {/* The admin needs this identity to invite it (TestFlight report #3). */}
+                  <Pressable
+                    onPress={() => void shareIdentity(t, p.communityDid, p.did)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('VtaLink.ShareIdentity', {
+                      community: didName(p.communityDid),
+                      interpolation: { escapeValue: false },
+                    })}
+                    hitSlop={12}
+                    testID={testIdWithKey('AgentShareIdentity')}
+                  >
+                    <Icon name="share-variant" size={22} color={ColorPalette.brand.link} />
+                  </Pressable>
                 </View>
               ))}
               {holdings.memberships.map((m) => (
@@ -245,6 +254,13 @@ const VtaAgentHome: React.FC = () => {
             onPress={scan}
             testID={testIdWithKey('AgentJoinCommunity')}
           />
+          <Button
+            title={t('VtaLink.IWasInvited')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => go(Screens.VtiInvited)}
+            testID={testIdWithKey('AgentInvited')}
+          />
+          <ThemedText style={styles.muted}>{t('VtaLink.IWasInvitedHint')}</ThemedText>
           <Button
             title={isMember ? t('VtaLink.OpenCommunities') : t('VtaLink.GetVetted')}
             buttonType={ButtonType.Secondary}
