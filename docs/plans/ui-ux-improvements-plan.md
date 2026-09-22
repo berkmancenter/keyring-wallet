@@ -1,8 +1,8 @@
 # UI/UX improvements — roles, agent linking, membership and vetting, for a person rather than a test harness
 
-**Status:** Proposed. No code written. Target: the live demo at OSS Summit Europe, Prague, 1 October 2026.
+**Status:** In execution. U1–U8 and the "I was invited" door are built (keyring-bifold#58, keyring-wallet#74); the journey after linking (§4.1, §5.2, §5.3, §5.7) is built on `feat/ui-ux-u3`. Target: the live demo at OSS Summit Europe, Prague, 1 October 2026.
 **Upstream asks:** §9 is the running list of what this work needs changed upstream, each with the code it points at; it feeds the reports sent to the maintainers and the upstream findings document.
-**Reasoning:** [`2026-09-21-al.md`](./ui-ux-improvements-plan/2026-09-21-al.md) — the inventory of today's screens, what upstream supports for enrolment and sign-in (measured against the pinned clones), and the design research every principle in §3 cites. [`2026-09-21-bm.md`](./ui-ux-improvements-plan/2026-09-21-bm.md) — why confirmations reuse the app's existing bottom-sheet modal convention (`CommonRemoveModal`/`ModalUsage`) rather than a new screen, and why the match-code checks are the one deliberate exception. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
+**Reasoning:** [`2026-09-21-al.md`](./ui-ux-improvements-plan/2026-09-21-al.md) — the inventory of today's screens, what upstream supports for enrolment and sign-in (measured against the pinned clones), and the design research every principle in §3 cites. [`2026-09-22-al.md`](./ui-ux-improvements-plan/2026-09-22-al.md) — the TestFlight findings that reshaped the journey after linking, the three decisions taken that day (seed by copy, the Join as default, what Door 1 sends), and how each step maps to the OpenVTC TUI and the vetting dry run. [`2026-09-21-bm.md`](./ui-ux-improvements-plan/2026-09-21-bm.md) — why confirmations reuse the app's existing bottom-sheet modal convention (`CommonRemoveModal`/`ModalUsage`) rather than a new screen, and why the match-code checks are the one deliberate exception. This document states current design only; see [`CLAUDE.md`](./CLAUDE.md).
 **Related plans:** [`keyring-on-the-vta-farm/community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the ceremony, the protocol and the tests; this plan owns how a person meets them. It refines that subtask's §7 (user experience) — §7's screen list and one-scanner rule stand, and the changes this plan makes to them are named in §5. Once adopted, §7 there points here.
 **Code under discussion:** the `feat/prague-farm-membership` branch of both repositories — screens in `bifold/packages/core/src/modules/trust-tasks/screens/` (`MyAgent.tsx`, `VtiCommunity.tsx`, `VtiVetting.tsx`), the developer surface in `app/src/screens/Developer.tsx`, lab scripts in `scripts/openvtc/local-vti-stack/`.
 
@@ -97,7 +97,9 @@ Upstream's own client shows the operator's view once connected: "Connected ✓",
 | **Status** | One line with a dot: **Online** · **Reconnecting…** · **Offline since 14:02**. Elsewhere in the app, a banner appears only when the agent is not online. | The mediator session and the last successful exchange |
 | **What your agent holds** | Your identities, one per community, by community name · your membership cards · later, the vault | The agent's replies (persona list, held cards) — nothing mirrored on the phone that the agent owns |
 | **What your agent did** | A short activity list in plain words: "Sent your application to *Community*", "Received a statement from *vetter*", "An invitation arrived" | The app's own record of exchanges |
-| **What you can do** | Capability cards: Join a community · Get vetted · Vet others (locked until a grant) | The person's stages (§2.2) |
+| **Where you are** | A journey strip under the status: **Linked ✓ → Join → Member**, so "done" is visible from the start | The person's stages (§2.2) |
+| **What brings you here?** | Two doors, both marked as the next step until the person is a member: **I was invited** (§5.2) and **I want to join a community** (§5.3). Vetting sits inside Join; there is no separate "Get vetted" button. A member sees **Your communities** first, and the doors become "join another" | The person's stages (§2.2) |
+| **The vetter role** | Nothing locked up front. When a grant stands (in its window, not revoked on the community's status list), a card says **"You can now vet people for *Community*"** with the desk. A revoked, expired or not-yet-valid grant says which, in plain words | `ownVetterGrantState` over the grants the phone holds |
 | **Details** (closed) | Agent host, agent DID, this phone's key, role, transport | As today |
 
 **The first-link introduction.** Right after linking, three short dismissible panels introduce the agent as the person's stand-in online: *it keeps your identities*, *it answers communities while your phone is off*, *you approve anything important with your face or fingerprint*. A "What is my agent?" link on the agent screen brings them back. Nothing else in the app repeats this.
@@ -172,26 +174,39 @@ Each journey lists its steps as the person sees them. Anything marked **(off-app
 
 **Demo:** linking is shown live, through the lab enrolment page on the presenter's laptop, and it is the first thing the audience sees. A second pair of phones, linked beforehand and kept off stage, covers a venue network that fails.
 
-### 5.2 Join by invitation (stage 1 → 3)
+### 5.2 I was invited (stage 1 → 3)
 
-1. **(off-app)** The admin creates an invitation for the person in the portal.
-2. The person scans it with the app's one scanner.
-3. Confirm sheet (the app's shared confirmation modal, §4.3): "Join *Community name* as a member?" → Join (biometric).
-4. "Member ✓" — the card appears on the community screen.
+An invitation is issued to a DID named in advance: upstream requires `subject_did` and binds the credential to it (`verifiable-trust-infrastructure` `187ad9cd`, `vtc-service/src/routes/invitations.rs:43-44`). There is no open invitation yet (§9 U-9), so the person first hands the admin the identity to invite.
 
-**Blocked on upstream:** an invitation is 6,331 bytes and a QR code carries at most 2,953 (VTI-32, High, open). Until invitations travel by reference, the lab hands the link over as a deep link (AirDrop or a message), and the demo does not scan one.
+| Step | Person sees |
+|---|---|
+| 1 | **Join as** (§5.8): which profile the new identity starts from → Continue (Face ID). The community identity is made here — there is no separate "create identity" chore |
+| 2 | **Send this to the community's admin**: Share (the system sheet) first, then Copy, then Show as QR. The DID travels inside what is sent and sits under Details |
+| 3 | **(off-app)** The admin pastes it into the console's Invitations (or `cnm`) |
+| 4 | **Waiting for your invitation** — picked up when the link is opened or pasted |
+| 5 | **Your invitation arrived** → Join → "You're a member of *Community*" |
 
-### 5.3 Get vetted (applicant)
+Door 1 sends the community identity, not another DID linked at join time: upstream's `subjectLinkage` would allow that (`vtc-service/src/credentials/invitation_verify.rs:197-200`), but it tells the community the two DIDs are the same person, and Keyring does not send it.
+
+**Blocked on upstream:** an invitation is 6,331 bytes and a QR code carries at most 2,953 (VTI-32, High, open). The invitation travels as a link (a message, AirDrop) and is pasted into the scanner.
+
+### 5.3 I want to join a community (applicant)
+
+The same order as the OpenVTC TUI: the community, what it asks, the identity it will know you as, then the application.
 
 | Step | Person sees | Replaces today |
 |---|---|---|
-| 1 | Community screen → **Get vetted**: "This community needs 1 person to check your ID in person." | "Start my vetting", requirements text, identity creation button |
-| 2 | "Your legal name, as on your ID" → Continue | The face field and Save |
-| 3 | **Scan the vetter's ticket** | Pasting a `vetting-ticket:` link, then "Request vetting" |
-| 4 | Waiting for the vetter → **full-screen match code**, "Does the vetter's screen show the same code?" **Codes match** / **Codes differ** | Match code in a card; no explicit confirmation |
-| 5 | "Send your name to *vetter*?" → Send (biometric) | "Send my card" |
-| 6 | "Statement received ✓ — 1 of 1" → **Apply** (biometric) | Checklist and Apply button |
-| 7 | "Member ✓" | — |
+| 1 | **Which community?** — the one a scanned or pasted link named (§5.7), else the build's suggestion beside "a different community" | The build's one community |
+| 2 | **Before *Community* admits you**: its requirements in words — from its criteria when a session is open, else what every vetting community asks. An invitation-only community points to §5.2 | Requirements text on the vetting screen |
+| 3 | **Join as** (§5.8) → Continue (Face ID) — the identity is made here, before the ticket, because the vetter's desk checks the ticket against it (`vetting/request/0.1` carries `joinDid`) | "Create my identity" |
+| 4 | "Your legal name" — filled in from the profile chosen at Join as, and saying so; correctable | The face field, typed |
+| 5 | **Scan the vetter's ticket** | Pasting a `vetting-ticket:` link, then "Request vetting" |
+| 6 | Waiting for the vetter → **full-screen match code** → **Codes match** / **Codes differ** | Match code in a card |
+| 7 | "Send your name to *vetter*?" → Send (biometric) | "Send my card" |
+| 8 | "Statement received ✓ — 1 of 1" → **Apply** (biometric) | Checklist and Apply button |
+| 9 | "Member ✓" | — |
+
+The name reaches the vetter only; the community receives the vetter's statement that it was checked, never the name. The join request sends `registryConsent: false` and does not ask the person: nothing upstream acts on it yet (VTI-Q14).
 
 Refusals and a deferred application (add what is missing, or withdraw) stay on the community screen as its current state, in plain words.
 
@@ -215,6 +230,20 @@ The admin works in the community's web portal. Its first sign-in is an **install
 ### 5.6 What is out of scope by design
 
 **The identity document never enters Keyring.** The vetting session specification forbids it: the vetter "MUST NOT capture or store any detail of the documentation it inspects", and the applicant "MUST NOT put a document number, a document image, a portrait … on the card" (`specs/vetting/session/0.1`, Trust Tasks). The vetter looks at the physical document and checks it against the typed name the applicant sends. Reading an eMRTD chip or scanning a document is not planned.
+
+### 5.7 Which community — from a link, not the build
+
+A community is named by its DID, and everything else is resolved from there. The person reaches one by scanning or pasting:
+
+- a **community link**, `keyring://vti/community?d=<DID>[&n=<name>]`, which opens §5.3 on that community;
+- a **vetter's ticket**, which names its community (`community=`);
+- an **invitation**, whose issuer is the community.
+
+The build's `VTI_COMMUNITY_DID` is only a suggestion when no link has named one, so the same build joins any community, lab or hosted. Every screen of a join reads the same choice (`communityTarget`), so Join as, I was invited and vetting cannot disagree about which community it is.
+
+### 5.8 Join as — a profile seeds the identity
+
+Every community gets a new identity, made by the agent (upstream mints a fresh persona per community by default). **Join as** lists the person's profiles with the active one chosen; the chosen profile fills in the new identity's name **once**, by copy, with no live link afterwards. The person never types their name twice, and editing a profile later changes nothing in a community.
 
 ## 6. Phases
 
@@ -309,6 +338,10 @@ What the runners need that no single phase owns:
 
 - **The asks in §9 go to upstream in the report we already send the maintainers**, each with its code references, when it is ready. No separate issue or pull request.
 - **The lab enrolment page has no login for now.** It runs only on our laptop, for tests and the demo; a login is revisited if it ever leaves the lab.
+
+- **A profile seeds a community's identity by copy** (§5.8). There is no live link between a profile and an identity. This changes the editable multi-profile plan's enforced 1:1 link, and needs that plan's author's agreement; nothing here depends on a live link.
+- **Join as defaults to a new identity that starts from the active profile** — the privacy default, with no typing.
+- **Door 1 sends the community identity made at Join as** (§5.2). No `subjectLinkage`; an open invitation stays upstream ask U-9.
 
 **Open:** none.
 
