@@ -82,3 +82,41 @@ describe('the vetter grant against that list', () => {
     expect(result.state).toBe('revoked')
   })
 })
+
+describe('a misdirected request', () => {
+  // HTTP/2 coalescing: several hosts behind one certificate and address share
+  // a connection, and the edge answers 421 for the host it was not opened for.
+  const answering = (statuses: number[], body: unknown) => {
+    const calls: number[] = []
+    const impl = (async () => {
+      const status = statuses[calls.length] ?? 200
+      calls.push(status)
+      return { ok: status === 200, status, text: async () => JSON.stringify(body) }
+    }) as unknown as typeof fetch
+    return { impl, calls }
+  }
+
+  it('is retried once, and the retry is what gets read', async () => {
+    const { impl, calls } = answering([421, 200], fixture.statusList)
+    const result = await checkStatusEntry(
+      agent,
+      { url: LIST_URL, index: 52232, purpose: 'revocation' },
+      fixture.issuer,
+      { fetchImpl: impl }
+    )
+    expect(calls).toEqual([421, 200])
+    expect(result.state).toBe('ok')
+  })
+
+  it('is retried only once', async () => {
+    const { impl, calls } = answering([421, 421], fixture.statusList)
+    const result = await checkStatusEntry(
+      agent,
+      { url: LIST_URL, index: 52232, purpose: 'revocation' },
+      fixture.issuer,
+      { fetchImpl: impl }
+    )
+    expect(calls).toEqual([421, 421])
+    expect(result.state).toBe('unknown')
+  })
+})

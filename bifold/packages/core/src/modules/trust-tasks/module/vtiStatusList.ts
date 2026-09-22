@@ -240,13 +240,21 @@ export async function checkStatusEntry(
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   let body: unknown
   try {
-    const response = await doFetch(entry.url, {
-      method: 'GET',
-      headers: { accept: 'application/json' },
-      // A 3xx to an internal host would walk straight past the guard above.
-      redirect: 'error',
-      signal: controller.signal,
-    })
+    const get = () =>
+      doFetch(entry.url, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        // A 3xx to an internal host would walk straight past the guard above.
+        redirect: 'error',
+        signal: controller.signal,
+      })
+    let response = await get()
+    // 421 Misdirected Request: the client reused a connection opened for
+    // another host behind the same certificate and address (HTTP/2
+    // coalescing), and the server wants this request on a fresh one — RFC 9110
+    // §15.5.20 allows retrying it. Measured on 2026-09-22: it was the whole of
+    // the intermittent "grant could not be checked" on the lab's ngrok hosts.
+    if (response.status === 421) response = await get()
     if (!response.ok) return unknown(`status list fetch returned ${response.status}`)
     const text = await response.text()
     if (text.length > MAX_STATUS_LIST_BODY) return unknown('status list body exceeds the cap')
