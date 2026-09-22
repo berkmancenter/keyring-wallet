@@ -16,6 +16,10 @@ api*.json
 *secret*
 *secrets*
 .env
+# Per-stack copies the lab/farm switcher keeps beside it — same content, same
+# reason to stay out of the repository.
+.env.lab
+.env.farm
 .idea/
 
 # Other
@@ -90,3 +94,6 @@ external/
 # local run output and IDE state
 artifacts/
 .cursor/
+
+# The hybrid profile the lab/farm switcher keeps beside the others.
+.env.hybrid

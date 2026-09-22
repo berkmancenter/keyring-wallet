@@ -2,6 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Imported for its side effect: it tees stdout and stderr into
+// artifacts/<runner>-<timestamp>.log. Every runner imports this module for its
+// capabilities, which makes it the one place that reaches all of them.
+import "./transcript.js";
+
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -97,6 +102,28 @@ export const IOS_DEVICE_APP =
 // second PIN input" symptom). 100ms keeps a tiny settle without the stall.
 const ANDROID_SETTINGS = { "appium:settings[waitForIdleTimeout]": 100 };
 
+/**
+ * `fullReset` uninstalls the app at the END of a session as well as the start,
+ * so a rung that uses it deletes its own result on the way out and the next
+ * rung opens a freshly installed app at the Welcome screen. That is right for
+ * a rung run on its own — the suite's standing requirement is that every run
+ * starts from an uninstall — and wrong for a chain, where a later rung needs
+ * the state an earlier one left.
+ *
+ * `E2E_KEEP_APP=1` is the opt-out, for the FIRST rung of a chain: it still
+ * installs and still onboards, it just does not take the app away afterwards.
+ * Later rungs then run with `E2E_KEEP_STATE=1`, which already asks for
+ * `noReset`. Clear the app yourself before the chain if you want it clean.
+ */
+const keepApp = () => process.env.E2E_KEEP_APP === '1'
+// E2E_KEEP_STATE=1 means "this session must not touch the installed app".
+// The comment above promised it; the capabilities did not honour it, so a
+// session opened from a helper script without the runners' own keep() wrapper
+// reinstalled the app and wiped its state (2026-09-21: the iPhone applicant).
+const keepState = () => process.env.E2E_KEEP_STATE === '1'
+const keepStateCaps = () =>
+  keepState() ? { "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false } : {}
+
 export function androidCaps(avd = ANDROID_AVD) {
   return {
     platformName: "Android",
@@ -106,7 +133,7 @@ export function androidCaps(avd = ANDROID_AVD) {
     "appium:appPackage": APP_ID,
     "appium:appWaitActivity": "*",
     // fullReset = uninstall before install → satisfies the "uninstall every run" requirement
-    "appium:fullReset": true,
+    "appium:fullReset": !keepApp(),
     // don't auto-launch: we need `adb reverse tcp:8081` in place first so the
     // debug build can reach metro on the host
     "appium:autoLaunch": false,
@@ -115,6 +142,7 @@ export function androidCaps(avd = ANDROID_AVD) {
     "appium:adbExecTimeout": 120000,
     "appium:uiautomator2ServerLaunchTimeout": 120000,
     ...ANDROID_SETTINGS,
+    ...keepStateCaps(),
   };
 }
 
@@ -154,8 +182,10 @@ export function iosDeviceCaps(udid, ports = {}) {
     "appium:udid": udid,
     "appium:app": IOS_DEVICE_APP,
     "appium:bundleId": APP_ID,
-    "appium:fullReset": true,
-    "appium:enforceAppInstall": true,
+    // A chain of real-device rungs keeps the app between them, as simulator
+    // rungs do: E2E_KEEP_APP on the first, E2E_KEEP_STATE on the rest.
+    "appium:fullReset": !keepApp(),
+    "appium:enforceAppInstall": !keepApp(),
     "appium:xcodeOrgId": IOS_TEAM_ID,
     "appium:xcodeSigningId": "Apple Development",
     // unique WDA bundle id so provisioning under the team doesn't collide
@@ -175,6 +205,7 @@ export function iosDeviceCaps(udid, ports = {}) {
     "appium:newCommandTimeout": 600,
     "appium:autoAcceptAlerts": true,
     "appium:wdaLaunchTimeout": 300000,
+    ...keepStateCaps(),
   };
 }
 
@@ -186,10 +217,10 @@ export function iosCaps() {
     "appium:platformVersion": IOS_PLATFORM_VERSION,
     "appium:app": IOS_APP,
     "appium:bundleId": APP_ID,
-    "appium:fullReset": true,
+    "appium:fullReset": !keepApp(),
     // bundle version rarely changes between local builds; force reinstall so a
     // freshly built .app always replaces whatever is on the simulator
-    "appium:enforceAppInstall": true,
+    "appium:enforceAppInstall": !keepApp(),
     "appium:newCommandTimeout": 300,
     "appium:autoAcceptAlerts": true,
     // WDA defaults to :8100, which collides with anything else on that port
@@ -197,5 +228,13 @@ export function iosCaps() {
     "appium:wdaLocalPort": Number(process.env.WDA_LOCAL_PORT || 8100),
     "appium:wdaLaunchTimeout": 180000,
     "appium:simulatorStartupTimeout": 300000,
+    // A second worktree's Metro on another host port: a simulator shares the
+    // host's localhost, so point the app at it with the NSUserDefaults key
+    // React Native's bundle URL provider reads (RCT_jsLocation), passed as a
+    // launch argument — no rebuild, and nothing left behind on the simulator.
+    ...(process.env.METRO_PORT && process.env.METRO_PORT !== "8081"
+      ? { "appium:processArguments": { args: ["-RCT_jsLocation", `localhost:${process.env.METRO_PORT}`] } }
+      : {}),
+    ...keepStateCaps(),
   };
 }

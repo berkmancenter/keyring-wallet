@@ -1,0 +1,19 @@
+{
+  "name": "ref-20-local-vetting",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 20 — the peer identity vetting ceremony against a local VTI stack (community_vetting_subtask.md P2). vtc-admin.mjs drives the community-admin REST surface the CLI cannot reach on this build: the /v1/auth/challenge -> eddsa-jcs-2022-signed /v1/auth/ handshake, then endorsement-type registration, the accepts criterion, and vetter grants.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node vtc-admin.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.0.1",
+    "@noble/hashes": "^2.0.1",
+    "@openvtc/vti-didcomm-js": "^0.7.0",
+    "canonicalize": "^1.0.8",
+    "ws": "^8.21.3"
+  }
+}
