@@ -391,8 +391,13 @@ try {
     await tapTestId(driver, "LinkWithoutQrButton", 30000);
     await tapTestId(driver, "VtaLinkWithoutQr", 15000);
     const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
-    // Return on the keyboard submits the address, as a person would.
+    // Return on the keyboard submits the address, as a person would — on iOS.
+    // Android's keyboard does not, so tap "Show my code", which the screen
+    // enables once the address looks like a DID.
     await address.setValue(`${runnerVtaDid()}\n`);
+    if (await existsTestId(driver, "VtaLinkShowMyCode", 5000)) {
+      await tapTestId(driver, "VtaLinkShowMyCode", 15000);
+    }
     await waitForTestId(driver, "VtaLinkManualDid", 60000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
