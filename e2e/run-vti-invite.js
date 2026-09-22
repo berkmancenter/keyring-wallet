@@ -15,6 +15,7 @@ import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";
 import { completeOnboarding, enableDidCommV2, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
+import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -66,6 +67,7 @@ async function openMyAgentConnected(d, timeout = 180000) {
 
 let driver;
 try {
+  await holdCriteriaLock("invite " + (process.env.E2E_REFUSAL || "").trim());
   execFileSync("bash", [INVITE, "--invitation-only"], { stdio: "inherit" });
   await ensureAppium();
   const caps =

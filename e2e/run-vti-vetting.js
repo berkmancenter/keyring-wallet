@@ -21,6 +21,7 @@ import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/confi
 import os from "node:os";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
+import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -124,6 +125,7 @@ async function waitText(d, key, re, ms = 120000) {
 
 let applicant, vetter, keepalive;
 try {
+  await holdCriteriaLock("vetting " + (process.env.E2E_REFUSAL || "").trim());
   execFileSync("bash", [INVITE, "--vetting-only"], { stdio: "inherit" });
   execFileSync("bash", [APPROVER, "clear"], { stdio: "ignore" });
   await ensureAppium();
