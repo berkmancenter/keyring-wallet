@@ -497,7 +497,10 @@ export async function scrollToTestId(driver, key, maxSwipes = 6, { from = 0.7, d
 }
 
 async function scrollOnce(driver, key, maxSwipes, from, direction) {
-  const [startY, endY] = direction === "up" ? [0.15, from] : [from, 0.25];
+  // An upward swipe starts well below the top: on an iPad the app can run in a
+  // window inset from the screen's top edge, and a swipe starting at 15% lands
+  // in the app's own header, where it scrolls nothing (seen on a real iPad).
+  const [startY, endY] = direction === "up" ? [0.3, Math.max(from, 0.75)] : [from, 0.25];
   for (let i = 0; i < maxSwipes; i++) {
     const el = byTestId(driver, key);
     if ((await el.isExisting()) && (await el.isDisplayed())) return el;
