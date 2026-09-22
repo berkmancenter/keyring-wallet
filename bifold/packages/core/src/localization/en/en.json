@@ -1511,11 +1511,13 @@
     "ApplicantStep2": "Step 2 · Ask a vetter",
     "ApplicantStep3": "Step 3 · Apply",
     "SubmissionDeferred": "The community asked for more: {{needs}}. Your application stays open — gather what is missing and send it again, or withdraw it.",
-    "SubmissionPending": "Your application is with the community, waiting on their decision.",
+    "SubmissionPending": "You've applied — it's with the community, waiting on their decision. You can still withdraw it.",
     "SubmissionWithdrawn": "You withdrew your application. You can apply again.",
     "SubmissionDecided": "The community has decided your application ({{effect}}).",
     "SendAgain": "Send my statements again",
     "Withdraw": "Withdraw my application",
-    "WithdrawNothingOpen": "There was no open application to withdraw — you can apply."
+    "WithdrawNothingOpen": "There was no open application to withdraw — you can apply.",
+    "AlreadyApplied": "You'd already applied to this community — here is where that application stands.",
+    "AddWhatTheyAsked": "Add what they asked for"
   }
 }

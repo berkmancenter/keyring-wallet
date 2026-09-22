@@ -1447,11 +1447,13 @@
     "ApplicantStep2": "Étape 2 · Solliciter un vérificateur",
     "ApplicantStep3": "Étape 3 · Candidater",
     "SubmissionDeferred": "La communauté demande davantage : {{needs}}. Votre demande reste ouverte — rassemblez ce qui manque et renvoyez-la, ou retirez-la.",
-    "SubmissionPending": "Votre demande est entre les mains de la communauté, en attente de sa décision.",
+    "SubmissionPending": "Vous avez postulé — la communauté doit maintenant décider. Vous pouvez encore retirer votre candidature.",
     "SubmissionWithdrawn": "Vous avez retiré votre demande. Vous pouvez postuler à nouveau.",
     "SubmissionDecided": "La communauté a statué sur votre demande ({{effect}}).",
     "SendAgain": "Renvoyer mes attestations",
     "Withdraw": "Retirer ma demande",
-    "WithdrawNothingOpen": "Aucune demande ouverte à retirer — vous pouvez postuler."
+    "WithdrawNothingOpen": "Aucune demande ouverte à retirer — vous pouvez postuler.",
+    "AlreadyApplied": "Vous aviez déjà postulé à cette communauté — voici où en est cette candidature.",
+    "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé"
   }
 }
