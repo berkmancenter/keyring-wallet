@@ -29,7 +29,8 @@ import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 export const VTI_PERSONA_DELIVERIES_EVENT = 'vti:persona-deliveries'
 
 export interface PersonaInboxOptions {
-  mediatorDid: string
+  /** Fallback only: a persona is reached through the mediator its own DID document names. */
+  mediatorDid?: string
   /** The community whose persona to listen as; the most recent persona when absent. */
   communityDid?: string
   /** How often to look again for a persona or a closed session. */
@@ -57,7 +58,10 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
   // backlog for good (the measurement in VtiVetting's inbox effect).
   const stopListening = vtiAgent.onInbound((message) => {
     const target = persona
-    if (!target) return
+    // Only for the persona the session is connected as: another flow may hold
+    // it as a different identity (a join as a new persona, a community
+    // connect), and what arrives then is not this persona's to store.
+    if (!target || vtiAgent.getState().did !== target.did) return
     void receiveIssue(community, target.did, message)
       .then((got: VtiReceivedCredential[]) => {
         if (got.length) {
@@ -101,7 +105,7 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
 export function useVtiPersonaInbox(agent: Agent | undefined, options: Partial<PersonaInboxOptions>): void {
   const { mediatorDid, communityDid, onError } = options
   useEffect(() => {
-    if (!agent || !mediatorDid) return
+    if (!agent) return
     return startPersonaInbox(agent, { mediatorDid, communityDid, onError })
   }, [agent, mediatorDid, communityDid, onError])
 }
