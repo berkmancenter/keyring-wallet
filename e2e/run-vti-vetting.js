@@ -37,6 +37,8 @@ const platforms = (process.env.PLATFORMS || "android,ios").split(",");
 // `requestMore` ("vetting:statements:1") and the request stays open as
 // DEFERRED — so this is also the live run of the applicant's way out, which
 // withdraws it. The grant is re-issued afterwards, whatever happened.
+// E2E_REFUSAL=supplement: the same deferral, answered in place — the grant is
+// re-issued, and the applicant's second apply supplements the open request.
 const REFUSAL = process.env.E2E_REFUSAL || "";
 const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
 const STACK_ENV = path.join(process.env.STACK_DIR || path.join(process.env.HOME, "vti-stack"), "stack.env");
@@ -49,14 +51,30 @@ function admin(...args) {
   const json = out.slice(out.indexOf("{"));
   return json ? JSON.parse(json) : undefined;
 }
-/** The vetter this run's desk belongs to: the live grant whose profile was published last. */
+/**
+ * The vetter this run's desk belongs to. VETTER_DID names it outright (the
+ * suite knows its vetter phone's persona); otherwise the live grant whose
+ * profile was published last — which misleads once a revocation has deleted
+ * that vetter's profile, and then revokes someone else's grant.
+ */
 function currentVetter() {
   const { vetters = [] } = admin("vetters-list") ?? {};
   const live = vetters.filter((v) => v.live && !v.revoked);
+  if (process.env.VETTER_DID) {
+    const mine = live.find((v) => v.memberDid === process.env.VETTER_DID);
+    if (!mine) throw new Error(`no live vetter grant for ${process.env.VETTER_DID}`);
+    return mine;
+  }
   live.sort((a, b) => String(b.profile?.updatedAt ?? "").localeCompare(String(a.profile?.updatedAt ?? "")));
   if (!live[0]) throw new Error("no live vetter grant to revoke");
   return live[0];
 }
+/** Lines the lab community logged since `since` (ISO), colour codes removed. */
+const vtcLogSince = (since) =>
+  readFileSync(path.join(path.dirname(STACK_ENV), "logs", "vtc.log"), "utf8")
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .split("\n")
+    .filter((l) => l.slice(0, 27) >= since.slice(0, 27));
 const deferredCount = () => (admin("join-list", "deferred")?.items ?? []).length;
 let revokedVetterDid;
 const LEGAL_NAME = process.env.E2E_LEGAL_NAME || "Alice Example";
@@ -445,7 +463,7 @@ try {
   } else {
     console.log(`[e2e] ${applicant.e2ePlatform}: vetter grant checked against the status list`);
   }
-  if (REFUSAL === "revoked-grant") {
+  if (REFUSAL === "revoked-grant" || REFUSAL === "supplement") {
     const vetterGrant = currentVetter();
     revokedVetterDid = vetterGrant.memberDid;
     const deferredBefore = deferredCount();
@@ -460,6 +478,46 @@ try {
     console.log(`[e2e] ${applicant.e2ePlatform}: ${deferred}`);
     if (!/vetting:statements/.test(deferred)) throw new Error(`${applicant.e2ePlatform}: deferred without naming the missing statement: ${deferred}`);
     await screenshot(applicant, "vetting-refusal-01-deferred");
+    if (REFUSAL === "supplement") {
+      // E2E_REFUSAL=supplement: the community's reason goes away — the vetter
+      // is granted again, so the statement counts — and the applicant answers
+      // the deferral in place ("Add what they asked for" → supplement/0.1)
+      // instead of withdrawing and starting over.
+      admin("vetter-grant", revokedVetterDid);
+      for (let attempt = 1; ; attempt++) {
+        await sleep(3000);
+        try { admin("vetter-resend", revokedVetterDid); break; } catch (e) { if (attempt >= 3) throw e; }
+      }
+      revokedVetterDid = undefined; // re-granted here; the cleanup need not
+      console.log("[e2e] community: vetter granted again — the statement counts again");
+      await scrollToTestId(applicant, "VettingApplyButton", 4, LOW);
+      const label = await textOf(applicant, "VettingApplyButton").catch(() => "");
+      console.log(`[e2e] ${applicant.e2ePlatform}: the deferred apply button reads "${label}"`);
+      if (!/asked for/i.test(label)) throw new Error(`${applicant.e2ePlatform}: a deferred application's button reads "${label}", not "Add what they asked for"`);
+      const tappedAt = new Date().toISOString();
+      await tapTestIdByCoordinates(applicant, "VettingApplyButton");
+      await sleep(1500);
+      await handleBiometricConfirmIfPresent(applicant);
+      // The community must take it as a supplement to the open request — not a
+      // second application (which it would refuse as requestAlreadyOpen).
+      let supplemented = "";
+      for (let i = 0; i < 30 && !supplemented; i++) {
+        await sleep(2000);
+        supplemented = vtcLogSince(tappedAt).find((l) => /join request supplemented/.test(l)) ?? "";
+      }
+      if (!supplemented) throw new Error("the community logged no supplement for the open request");
+      console.log(`[e2e] community: ${supplemented.replace(/^\S+\s+INFO\s+/, "").slice(0, 160)}`);
+      // The statement was signed under the grant that was revoked; a new grant
+      // starts now and does not cover it, so the request rightly stays deferred
+      // (and the screen says those statements will not count). A supplement that
+      // ends in admission needs a fresh statement: a second ceremony.
+      const still = await waitText(applicant, "VettingSubmissionState", /asked for more/i, 60000);
+      console.log(`[e2e] ${applicant.e2ePlatform}: after the supplement — ${still.slice(0, 120)}`);
+      await screenshot(applicant, "vetting-refusal-03-supplemented");
+      printSuccess("vti-vetting (revoked grant → deferred → re-granted → supplemented in place → still deferred, rightly)");
+      process.exitCode = 0;
+      throw Object.assign(new Error("done"), { done: true });
+    }
     await scrollToTestId(applicant, "VettingWithdrawButton", 4, LOW);
     await tapTestIdByCoordinates(applicant, "VettingWithdrawButton");
     const withdrawn = await waitText(applicant, "VettingSubmissionState", /withdrew/i, 60000);

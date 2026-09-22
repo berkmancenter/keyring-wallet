@@ -16,13 +16,22 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP="$ROOT/app"
-DD="$APP/ios/build/release-sim"
+DD="${TESTFLIGHT_BUILD_DIR:-$APP/ios/build/release-sim}"
 BACKUP="$(mktemp)"
 cp "$APP/.env" "$BACKUP"
 trap 'cp "$BACKUP" "$APP/.env"; rm -f "$BACKUP"' EXIT
 
 grep -vE '^(VTI_VTA_DID|VTI_PROBE_ON_START)=' "$BACKUP" > "$APP/.env"
-for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID VTI_PERSONA_BASE_URL; do
+# TESTFLIGHT_OVERRIDES=<file of KEY=VALUE>: replace those keys (a Farm build
+# bakes the Farm's community and mediator); an empty VALUE drops the key.
+if [ -n "${TESTFLIGHT_OVERRIDES:-}" ]; then
+  while IFS='=' read -r key value; do
+    [ -z "$key" ] || [ "${key#\#}" != "$key" ] && continue
+    grep -vE "^${key}=" "$APP/.env" > "$APP/.env.tmp" && mv "$APP/.env.tmp" "$APP/.env"
+    [ -n "$value" ] && printf '%s=%s\n' "$key" "$value" >> "$APP/.env"
+  done < "$TESTFLIGHT_OVERRIDES"
+fi
+for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID; do
   grep -qE "^${key}=.+" "$APP/.env" || { echo "build-testflight-sim: app/.env has no $key — TestFlight builds bake it" >&2; exit 1; }
 done
 
