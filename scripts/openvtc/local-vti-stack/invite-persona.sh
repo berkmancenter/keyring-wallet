@@ -16,8 +16,11 @@ ADMIN="$REPO/tsp-reference/ref-20-local-vetting/vtc-admin.mjs"
 STACK_DIR="${STACK_DIR:-$HOME/vti-stack}"
 # shellcheck disable=SC1091
 source "$STACK_DIR/stack.env"
-CRED="$STACK_DIR/vtc-admin-credential.json"
-BASE="$VTC_URL/v1"
+# Another community than the lab's (a Farm Full Stack's) is named outright:
+# its REST base (with /v1), its DID and its admin's credential.
+CRED="${KEYRING_COMMUNITY_ADMIN_CRED:-$STACK_DIR/vtc-admin-credential.json}"
+VTC_DID="${KEYRING_COMMUNITY_DID:-$VTC_DID}"
+BASE="${KEYRING_COMMUNITY_REST:-$VTC_URL/v1}"
 
 case "${1:-}" in
   --invitation-only)
