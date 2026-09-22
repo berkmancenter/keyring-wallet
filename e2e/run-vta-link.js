@@ -392,9 +392,11 @@ try {
     await tapTestId(driver, "VtaLinkWithoutQr", 15000);
     const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
     // Return on the keyboard submits the address, as a person would — on iOS.
-    // Android's keyboard does not, so tap "Show my code", which the screen
-    // enables once the address looks like a DID.
     await address.setValue(`${runnerVtaDid()}\n`);
+    // The key is revealed by "Show my code", which the screen enables once the
+    // address looks like a DID — it does not appear on submit. Measured on
+    // Android, 2026-09-22: the run waited out 60s on a screen that was only
+    // waiting for the tap.
     if (await existsTestId(driver, "VtaLinkShowMyCode", 5000)) {
       await tapTestId(driver, "VtaLinkShowMyCode", 15000);
     }
@@ -402,9 +404,37 @@ try {
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
     await screenshot(driver, "link-m1-key");
-    await tapTestId(driver, "VtaLinkCheckGrant", 15000);
-    await waitForTestId(driver, "VtaLinkNotYet", 60000);
-    console.log("[e2e] before the grant: not yet");
+    // GRANT_FIRST=1 skips the pre-grant check. It exists to isolate one
+    // variable: in the ordinary manual flow the phone signs in BEFORE its key
+    // is in the ACL, on purpose, so the screen can say "not yet" — and a VTA
+    // that answers an unknown peer with silence rather than a refusal leaves
+    // that sign-in hanging. Granting first makes the same flow sign in with a
+    // key the VTA already knows, which is what the QR journey does.
+    if (process.env.GRANT_FIRST !== "1") {
+      await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+      // "Not yet" renders at the BOTTOM of the key card, below a ~350-character
+      // did:peer, so on a phone screen it is off the bottom of the scroll view
+      // — and Android's UiAutomator does not report off-screen children, so a
+      // plain wait never sees it however long it waits. Scroll for it.
+      // Existence first, scrolling only if that fails: the two platforms hide
+      // it differently. Android's UiAutomator omits off-screen children, so
+      // only a scroll finds it; iOS reports the element but not as displayed,
+      // so a scroll-for-displayed misses what a plain existence check sees.
+      // Checking for existence alone failed on Android; scrolling alone then
+      // failed on iOS — both were measured, one after the other.
+      const notYetBy = Date.now() + 60000;
+      let notYet = false;
+      while (!notYet && Date.now() < notYetBy) {
+        notYet =
+          (await existsTestId(driver, "VtaLinkNotYet", 2000)) ||
+          Boolean(await scrollToTestId(driver, "VtaLinkNotYet", 4).catch(() => undefined));
+        if (!notYet) await sleep(2000);
+      }
+      if (!notYet) throw new Error(`${driver.e2ePlatform}: the phone never said the key was not added yet`);
+      console.log("[e2e] before the grant: not yet");
+    } else {
+      console.log("[e2e] GRANT_FIRST=1: granting before the first sign-in");
+    }
     execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
     await tapTestId(driver, "VtaLinkCheckGrant", 15000);
     await waitForTestId(driver, "VtaLinkDone", 180000);

@@ -12,6 +12,12 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP="$ROOT/app"
+
+# The heads this artefact is made from, checked before anything is built: a
+# build whose bifold is not the pinned commit is how an afternoon of Farm rungs
+# came to test screens that were two PRs old (2026-09-22). ALLOW_UNPINNED=1 is
+# the deliberate way past it, for testing a branch on purpose.
+"$ROOT/e2e/scripts/heads.sh" || exit 1
 BACKUP="$(mktemp)"
 cp "$APP/.env" "$BACKUP"
 trap 'cp "$BACKUP" "$APP/.env"; rm -f "$BACKUP"' EXIT

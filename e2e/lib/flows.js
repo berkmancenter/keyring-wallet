@@ -2214,10 +2214,17 @@ export async function leaveCommunityInApp(driver) {
     );
   }
   await row.click();
-  const leave = await scrollToTestId(driver, "LeaveCommunityButton", 8);
-  await leave.click();
-  const confirm = await scrollToTestId(driver, "LeaveCommunityConfirm", 4);
-  await confirm.click();
+  // Leave and its confirmation are the same control toggling in place, and a
+  // dropped tap here leaves the screen looking untouched — measured on the
+  // iPad, 2026-09-22: the confirm card never rendered and the page source at
+  // the failure still showed the plain Leave button. Verify each tap by what
+  // it should produce, and re-tap if it produced nothing.
+  await scrollToTestId(driver, "LeaveCommunityButton", 8);
+  await tapTestIdReliable(driver, "LeaveCommunityButton", () => existsTestId(driver, "LeaveCommunityConfirm", 2000));
+  await scrollToTestId(driver, "LeaveCommunityConfirm", 4);
+  await tapTestIdReliable(driver, "LeaveCommunityConfirm", async () =>
+    (await existsTestId(driver, "LeaveCommunityConfirm", 2000)) === false
+  );
   // Leaving returns to My Agent.
   await waitForTestId(driver, "MyAgent", 30000);
   await sleep(1500);

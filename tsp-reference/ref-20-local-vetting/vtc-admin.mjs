@@ -286,6 +286,28 @@ async function main() {
           token,
         })
       );
+    // What an applicant's client sees before it joins: the community's own
+    // name, published as `branding` on join-requests/manifest/0.2. A community
+    // that sets none publishes none, and every client then has nothing to show
+    // but the DID — which is how Keyring's join screen came to show one.
+    case "branding-show":
+      return void show(
+        "GET /community/branding",
+        await call(base, "https://trusttasks.org/spec/vtc/community/profile/show/0.1", "/community/branding", { token })
+      );
+    case "branding-set": {
+      const [displayName, logoUrl] = args;
+      if (!displayName) throw new Error("usage: branding-set <displayName> [logoUrl]");
+      return void show(
+        "PUT /community/branding",
+        await call(base, "https://trusttasks.org/spec/vtc/community/profile/update/0.1", "/community/branding", {
+          method: "PUT",
+          token,
+          body: { displayName, ...(logoUrl ? { logoUrl } : {}) },
+        })
+      );
+    }
+
     default:
       console.error(`unknown command ${command}`);
       process.exit(1);
