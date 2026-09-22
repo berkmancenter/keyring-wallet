@@ -328,6 +328,11 @@ jobs:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+          # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
+          VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
+          VTI_COMMUNITY_DID: ${{ vars.VTI_COMMUNITY_DID }}
+          VTI_VTA_DID: ${{ vars.VTI_VTA_DID }}
+          VTI_PERSONA_BASE_URL: ${{ vars.VTI_PERSONA_BASE_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
           # Optional: the DIDComm v2 mediator, used only when the developer
@@ -335,6 +340,16 @@ jobs:
           echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
           # Optional: where "Report this problem" offers to email the report.
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
+          # Where the app's VTI features point (repository variables). An unset
+          # variable is left out entirely: the app reads some with `??`, which
+          # would keep an empty string. VTI_VTA_DID stays unset for testers, so
+          # My Agent offers "Link your agent" rather than a manager-DID card.
+          # Never VTI_PROBE_ON_START: that is a dev-only probe.
+          for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID VTI_VTA_DID VTI_PERSONA_BASE_URL; do
+            if [ -n "${!key}" ]; then
+              echo "${key}=${!key}" >>.env
+            fi
+          done
 
       - name: Create release keystore
         working-directory: app/android/app
@@ -754,6 +769,11 @@ jobs:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
           MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
+          # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
+          VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
+          VTI_COMMUNITY_DID: ${{ vars.VTI_COMMUNITY_DID }}
+          VTI_VTA_DID: ${{ vars.VTI_VTA_DID }}
+          VTI_PERSONA_BASE_URL: ${{ vars.VTI_PERSONA_BASE_URL }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
           # Optional: the DIDComm v2 mediator, used only when the developer
@@ -761,6 +781,16 @@ jobs:
           echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
           # Optional: where "Report this problem" offers to email the report.
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
+          # Where the app's VTI features point (repository variables). An unset
+          # variable is left out entirely: the app reads some with `??`, which
+          # would keep an empty string. VTI_VTA_DID stays unset for testers, so
+          # My Agent offers "Link your agent" rather than a manager-DID card.
+          # Never VTI_PROBE_ON_START: that is a dev-only probe.
+          for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID VTI_VTA_DID VTI_PERSONA_BASE_URL; do
+            if [ -n "${!key}" ]; then
+              echo "${key}=${!key}" >>.env
+            fi
+          done
 
       - name: Update APS environment
         run: |
