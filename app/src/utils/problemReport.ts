@@ -119,7 +119,7 @@ export const offerProblemReport = (input: ProblemReportInput): void => {
   }
   Alert.alert(
     'Send this problem report?',
-    `Reference ${input.referenceCode}. The report includes what went wrong, your app version and device, and the app's recent activity log (connection details, no keys or passwords).`,
+    `Reference ${input.referenceCode}. The report includes what went wrong, your app version and device, and the app's recent activity log. The log can include the names and cards exchanged with your contacts, but never keys, passwords or your PIN. Only you decide where it goes.`,
     [
       ...(to ? [{ text: 'Email report', onPress: run(() => emailReport(to, input, env)) }] : []),
       { text: 'Share…', onPress: run(() => shareReport(input, env)) },
