@@ -2100,7 +2100,12 @@ export async function pasteLinkOnScanScreen(driver, url) {
   // one go (a ~6 KB invitation on the iPhone 11): clear the field and type it
   // again.
   for (let attempt = 1; driver.e2ePlatform === "ios" && typed && typed !== url && attempt <= 4; attempt++) {
-    console.log(`[e2e] ios: the link went in wrong (${typed.length}/${url.length}) — typing it again (${attempt}/4)`);
+    let at = 0;
+    while (at < url.length && typed[at] === url[at]) at++;
+    console.log(
+      `[e2e] ios: the link went in wrong (${typed.length}/${url.length}) at ${at}: ` +
+        `expected ${JSON.stringify(url.slice(Math.max(0, at - 6), at + 6))}, got ${JSON.stringify(typed.slice(Math.max(0, at - 6), at + 6))} — typing it again (${attempt}/4)`
+    );
     await input.clearValue().catch(() => undefined);
     await sleep(500);
     await input.setValue(url);
