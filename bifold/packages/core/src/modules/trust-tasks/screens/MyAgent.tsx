@@ -42,6 +42,7 @@ import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vti
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 
 import { openScanner } from './openScanner'
+import { useCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
 /** Which seat this phone would take at a vetting: decided by what it holds. */
@@ -64,7 +65,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const vta = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
 
   const mediatorDid = config?.mediatorDid
-  const communityDid = config?.communityDid
+  const communityDid = useCommunityDid(config?.communityDid)
   // The agent the person linked by QR (plan §5.1) wins over the one a build
   // bakes in; the baked one stays for builds and runners that predate linking.
   const vtaDid = useVtaDid(config?.vtaDid)
@@ -191,7 +192,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
 
   const onJoin = useCallback(
     async (invitation: VtiInvitation) => {
-      if (!agent || !vtaDid || !mediatorDid) return
+      if (!agent || !vtaDid) return
       setBusy('join')
       setHoldingError(undefined)
       setActivity([])
@@ -274,7 +275,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   })
 
   const onConnect = useCallback(async () => {
-    if (!agent || !mediatorDid) return
+    if (!agent) return
     setConnectError(undefined)
     try {
       if (vtaDid) {
@@ -518,7 +519,8 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   )
 
 
-  if (!mediatorDid) {
+  // Nothing to reach without an agent or a mediator to fall back on.
+  if (!mediatorDid && !vtaDid) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>
@@ -601,7 +603,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 {state.peerLeg === 'tsp' ? t('MyAgent.PeerLegTsp') : t('MyAgent.PeerLegDidComm')}
               </Text>
             ) : null}
-            {!state.did && mediatorDid && communityDid ? (
+            {!state.did && communityDid ? (
               <Pressable style={styles.button} testID={testIdWithKey('ConnectCommunityButton')} accessibilityRole="button" onPress={onConnect}>
                 <Text style={styles.buttonText}>{t('MyAgent.ConnectCommunity')}</Text>
               </Pressable>

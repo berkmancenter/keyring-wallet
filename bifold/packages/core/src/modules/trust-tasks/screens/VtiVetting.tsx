@@ -54,6 +54,7 @@ import { pendingVettingTicket } from '../module/vtiLinks'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
 import { openScanner } from './openScanner'
+import { useCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
@@ -72,7 +73,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     t(key, { ...values, interpolation: { escapeValue: false } }) as string
   const { ColorPalette, TextTheme } = useTheme()
   const { agent } = useAgent()
-  const communityDid = config?.communityDid
+  const communityDid = useCommunityDid(config?.communityDid)
   const mediatorDid = config?.mediatorDid
   const vtaDid = useVtaDid(config?.vtaDid)
 
@@ -233,7 +234,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
 
   // Load what the phone holds, and connect the persona's session with an inbox.
   useEffect(() => {
-    if (!agent || !stores || !communityDid || !mediatorDid) return
+    if (!agent || !stores || !communityDid) return
     let cancelled = false
     void (async () => {
       const p = await stores.identity.getPersona(communityDid)
@@ -331,7 +332,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     [bump]
   )
 
-  if (!communityDid || !mediatorDid || !vtaDid) {
+  if (!communityDid || !vtaDid) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>

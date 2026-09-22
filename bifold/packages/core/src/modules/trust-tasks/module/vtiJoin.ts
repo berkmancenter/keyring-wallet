@@ -33,9 +33,13 @@ export interface VtiJoinDeps {
   agent: Agent
   identityStore: VtiIdentityStore
   communityStore: VtiCommunityStore
-  /** The phone's VTA and the mediator the community is reached through. */
+  /**
+   * The phone's VTA, and a fallback mediator: the persona's own DID document
+   * names the mediator it is reached through, so this is only used when it
+   * names none.
+   */
   vtaDid: string
-  mediatorDid: string
+  mediatorDid?: string
   communityDid: string
   onStep?: (step: VtiJoinStep, detail?: string) => void
 }
