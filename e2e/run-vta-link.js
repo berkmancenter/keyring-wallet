@@ -223,6 +223,31 @@ async function testerJourney(driver) {
   await screenshot(driver, "journey-join-vetting");
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
 
+  // Report #11 — one agent screen. The phone is now an applicant: it holds an
+  // identity for the community and is not a member. The agent home must say
+  // so, offer the way back into vetting that the operator panel's card used to
+  // be, and offer no way to the panel at all. A build before the one-agent
+  // screen has no seat line; say so rather than pass it silently.
+  await openAgentHome(driver);
+  if (await existsTestId(driver, "AgentSeat", 15000)) {
+    console.log(`[e2e] journey: the seat line reads "${(await textOf(driver, "AgentSeat")).trim()}"`);
+    if (await existsTestId(driver, "AgentOpenCommunities", 2000)) throw new Error('the agent home still offers "Open your communities" (the old panel)');
+    const cont = await scrollToTestId(driver, "AgentContinueVetting", 4).catch(() => undefined);
+    if (!cont) {
+      await screenshot(driver, "journey-no-continue-vetting");
+      throw new Error('an applicant\'s agent home offers no "Continue your vetting"');
+    }
+    await screenshot(driver, "journey-agent-home-applicant");
+    await cont.click();
+    let back;
+    for (let i = 0; i < 20 && !back; i++) for (const key of firstStep) if (!back && (await existsTestId(driver, key, 1000))) back = key;
+    if (!back) throw new Error('"Continue your vetting" did not open vetting');
+    console.log(`[e2e] journey: "Continue your vetting" opened vetting at ${back}`);
+    for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
+  } else {
+    console.log("[e2e] journey: SKIPPED the one-agent-screen checks — this build has no AgentSeat (before keyring-bifold#75)");
+  }
+
   // "A different community": the scanner, with its paste-link button.
   await openAgentHome(driver);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
