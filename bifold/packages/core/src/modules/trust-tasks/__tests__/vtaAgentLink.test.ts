@@ -284,7 +284,7 @@ describe("the agent's own name", () => {
     expect(vta.getState().agentNames?.[offer.vta]).toBeUndefined()
     answer({ label: 'Alberto’s agent', source: 'agentName' })
     await settle()
-    expect(vta.getState().agentNames).toEqual({ [offer.vta]: 'Alberto’s agent' })
+    expect(vta.getState().agentNames).toEqual({ [offer.vta]: { label: 'Alberto’s agent', source: 'agentName' } })
   })
 
   it('is asked once per agent per app run, not on every reconnect', async () => {
@@ -295,7 +295,7 @@ describe("the agent's own name", () => {
     await vta.connect({} as never, offer.vta)
     await settle()
     expect(mockClient.agentLabel).toHaveBeenCalledTimes(1)
-    expect(vta.getState().agentNames).toEqual({ [offer.vta]: 'runner' })
+    expect(vta.getState().agentNames).toEqual({ [offer.vta]: { label: 'runner', source: 'vtaName' } })
   })
 
   it('no name is no name — and asked again next session, as "none" can mean unreachable', async () => {

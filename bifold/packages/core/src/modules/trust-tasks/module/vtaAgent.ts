@@ -15,6 +15,7 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
+import type { AgentLabel } from './agentLabel'
 import { VTA_TASK, VtaClient, resolveVtaMediator, type VtaConsentRequest } from './VtaClient'
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
@@ -51,9 +52,11 @@ export interface VtaAgentState {
   /**
    * What each agent is called, by VTA DID, once read: its verified agent name,
    * else its operator's `vta_name` (`VtaClient.agentLabel`). Absent until then,
-   * and a screen shows the host meanwhile — a name is never waited for.
+   * and a screen shows the host meanwhile — a name is never waited for. The
+   * source is kept because only an `agentName` is verified; a `vta_name` is
+   * whatever the operator typed.
    */
-  agentNames?: Readonly<Record<string, string>>
+  agentNames?: Readonly<Record<string, AgentLabel>>
 }
 
 export interface VtaActivity {
@@ -267,7 +270,7 @@ export class VtaAgentController {
       .then(() => client.agentLabel())
       .then((found) => {
         if (!found) this.namesAsked.delete(vtaDid)
-        else this.set({ agentNames: { ...this.state.agentNames, [vtaDid]: found.label } })
+        else this.set({ agentNames: { ...this.state.agentNames, [vtaDid]: found } })
       })
       .catch(() => this.namesAsked.delete(vtaDid))
   }

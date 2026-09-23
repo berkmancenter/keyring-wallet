@@ -76,7 +76,7 @@ describe('an agent', () => {
     expect(agentDisplayName({ vtaDid, label: vtaDid }, t)).toBe('dids.example.org')
   })
   it('by the name the agent gave, once read, for that agent only', () => {
-    const names = { [vtaDid]: 'runner' }
+    const names = { [vtaDid]: { label: 'runner', source: 'vtaName' as const } }
     expect(agentDisplayName(withAgentName({ vtaDid, label: 'Lab agent' }, names), t)).toBe('runner')
     expect(agentDisplayName(withAgentName({ vtaDid: 'did:webvh:QmB:b.example.org', label: 'B' }, names), t)).toBe('B')
     expect(agentDisplayName(withAgentName({ vtaDid, label: vtaDid }, undefined), t)).toBe('dids.example.org')

@@ -15,6 +15,8 @@
 
 import type { TFunction } from 'i18next'
 
+import type { AgentLabel } from '../module/agentLabel'
+
 import { agentHost } from './VtaLink'
 
 export interface NamedAgent {
@@ -43,8 +45,8 @@ export function agentDisplayNameStart(agent: NamedAgent | undefined, t: TFunctio
 }
 
 /** The agent as a screen names it: with the name it gave, once `vtaAgent` has read it. */
-export function withAgentName<T extends object>(agent: T, names: Readonly<Record<string, string>> | undefined): T {
+export function withAgentName<T extends object>(agent: T, names: Readonly<Record<string, AgentLabel>> | undefined): T {
   const vtaDid = (agent as NamedAgent).vtaDid
-  const name = vtaDid ? names?.[vtaDid] : undefined
+  const name = vtaDid ? names?.[vtaDid]?.label : undefined
   return name ? { ...agent, name } : agent
 }
