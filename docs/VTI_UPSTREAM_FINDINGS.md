@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.39 — 2026-09-23.** A living document: every finding here was measured
+**Version 1.40 — 2026-09-23.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1833,7 +1833,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q11 | Should a persona minted by a TSP-capable VTA advertise `TSPTransport` in its own document? | Personas advertise only DIDComm today, so a Rev 3 client reading the document keeps the applicant ↔ vetter leg on DIDComm. |
 | VTI-Q12 | Could a community issue an **open invitation** — one not bound to a subject DID in advance (a bearer or by-reference credential, redeemed by whichever persona presents it)? | A person invited to a community has no persona yet: the admin's `invitations` route needs a `subject_did` (`vtc-service/src/routes/invitations.rs:40-44`), so today the phone must mint a community identity first and show it to the admin before being invited. `subjectLinkage` (`invitation_verify.rs:198-236`) lets a different DID redeem, but links the two at the community. An open invitation — with VTI-32's by-reference delivery — would let "I was invited to X" start from the invitation itself. Keyring's decision for now (2026-09-22) is to send the community identity; this is the ask. **Also on the Farm (2026-09-22, [details](#question-details)):** the hosted admin console's *Invitations* needs an invitee DID too, so there is no open or bearer invitation from the console either. **Answered 2026-09-23:** yes, as a community **policy** decision rather than a wire change: bearer invitations off by default; the join policy sees the invitation kind and any second factor; spec-first. |
 | VTI-Q13 | Which sign-in should a community administrator use in the admin console, and could the console say so? | Plain *Sign in with VTA wallet* presents the browser client's holder `did:key`; only *VTA-proxied SIOP* presents the VTA DID that the community's access list names. Nothing on the page tells an administrator which one works. [Details](#question-details). **Answered 2026-09-23:** the console's buttons now say which identity each presents (VTI #1679). **Correction to our premise:** since vta-browser-plugin #146 the first button presents the identity bound to that site, or asks; the holder key is only the fallback for older wallets. |
-| VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). **Answered 2026-09-23 — a real defect, fixed:** `registryConsent` was stored and never read (VTI #1682), and the registry published every member regardless (VTI #1691). Publication now follows consent. **The client must ask the person.** |
+| VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). **Answered 2026-09-23 — a real defect, fixed:** `registryConsent` was stored and never read (VTI #1682), and the registry published every member regardless (VTI #1691). Publication now follows consent. **The client must ask the person.** On the Farm (2026-09-23, `keyring-test-vtc`, VTC 0.11.58, before #1691) this cannot be seen either way: no trust registry is configured (`GET /v1/registry/records` → 503 *no trust registry is configured for this community*; `/health/diagnostics` shows `syncerEnabled: false`), so nobody is published, consenting or not. All 8 members hold `publishConsent: false`. |
 | ~~VTI-Q15~~ | ~~Does `first-vtc` serve TSP Rev 3 today, and are the Farm and storm mediators on each other's relay allowlists?~~ | **Promoted to [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) (2026-09-22).** The community serves TSP (same-mediator control: accept in 1.15 s); an accept is never returned across two mediators; the allowlist is not the cause under defaults. |
 | VTI-Q16 | Could a community's manifest, or the VTA and mediator documents, say whether the operator of a member's VTA and of the mediator differs from the VTC's operator, so a client can tell a vetter whether hidden-mode anonymity holds for them? | The hidden-vetter design makes it a deployment rule that the vetter's VTA and the mediator are not run by the VTC's operator: a vetter's VTA can compute every tag its user produces. Nothing a client can read says which operator runs what, so a Farm hosting both a member's VTA and the community's VTC would silently void anonymity. [Details](#question-details). **09-23:** noted in upstream's hidden-vetting design; no change yet. |
 | VTI-Q17 | Could `vta/webvh/dids/create/1.0` take an idempotency key — a retry returning the first mint — or `vta/webvh/dids/list/1.0` carry the label the client sent and the minted keys' ids? | A mint whose answer is lost succeeds at the VTA and fails for the person (measured three times: on the Farm, in the lab, and on a real phone running a shipped build). The client cannot recover it: the list route's record (`vta-sdk/src/webvh.rs` `WebvhDidRecord`) carries neither the label nor the key ids it needs to borrow, so a retry is the only move and it leaves an orphan DID on the VTA and the DID host. [Details](#question-details). **Answered 2026-09-23:** the VTA already accepts a signed top-level `idempotencyKey` on `vta/webvh/dids/create/1.0` (same key within 24 h returns the first mint); to be specified. Keyring sends one per community, reused across retries (keyring-bifold#83). VTI-39's fix should make the lost answer rare. |
@@ -1841,6 +1841,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q19 | A VTA answered *not in ACL* for three minutes to a key its ACL already held. Is there a window in which a newly created ACL entry is not yet honoured, or can a refusal be kept for a session or relationship? | Seen once on the Farm, then gone on the retry. A person who has been added is told they have not been, and nothing tells them to wait. Details: [VTI-Q19](#vti-q19-detail). |
 | VTI-Q20 | Which name should a client show for an agent: a verified agent-name shortcut, or the operator's `vta_name`? | Raised in the round-3 report as *Q19* (a different question from this doc's VTI-Q19). **Answered 2026-09-23:** trust the verified agent-name shortcut (`example.com/@name`); `vta_name` (from `config/show`, authenticated) is an operator-set label — show it beside the DID, not instead of it. |
 | VTI-Q21 | How does a member ask what the community holds for it — its membership and role credentials — after a lost push? | Raised in the round-3 report as *Q20*. **Answered 2026-09-23:** a member-side task, `vtc/members/self/credentials/0.1` (no payload, returns the member's own credentials as held), is planned — spec first. |
+| VTI-Q22 | Now that publication follows consent, how does a member withdraw (or give) their own registry consent after admission? | Only the admin verb `vtc/members/update` can set `publishConsent`; there is no member-side task short of leaving (`members/self-remove`, which tombstones the row). [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2016,10 +2017,43 @@ This is **not** [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-ac
 (c) Unobserved: the Farm VTA's log. Without it we cannot say whether the refusal was computed afresh against an ACL that did not yet show the entry, or was served from state kept for the session or the TSP relationship opened before the grant. The failing run captured no app log.
 (d) The client's "I've been added" re-asks on every tap, so a person who tries again after a pause can get through. A mint of a new temporary key is not involved: the key was checked.
 
+**VTI-Q22 — a member cannot change their own registry consent.**
+(a) Since VTI #1682 and #1691 (VTI-Q14), a member's `registryConsent` on
+`join-requests/submit` becomes `Member.publishConsent`, and the registry
+publishes only members whose flag is `true`. The trust-registry guide's
+"Consent can change after admission" describes a withdrawal (`true → false`)
+removing the record on the next sync tick. But only an admin can make that
+change: `vtc/members/update` is the one task that writes `publishConsent`, and it
+is admin-gated. A member who consented at admission and later changes their mind
+has two options: ask an admin, or leave the community with
+`members/self-remove`, which tombstones the row and clears the flag with
+everything else. Expected: a member-side task that sets the member's own
+`publishConsent` (and possibly `departurePreference`, which has the same gate),
+consistent with #1691's position that consent is the applicant's to give.
+(b) Read from source, not yet measured against a running VTC: admit a member
+with `registryConsent: true`, then, authenticated as that member, look for a
+task that sets `publishConsent: false`. There is none, and `members/update`
+takes `AdminAuth`. The Farm's VTCs (0.11.58) predate #1691, and
+`keyring-test-vtc` has no registry configured, so the published effect cannot be
+observed there.
+(c) At `verifiable-trust-infrastructure` `e2a669ab`: the handler takes
+`auth: AdminAuth` (`vtc-service/src/routes/members/update.rs:93-99`) and writes
+the flag at `:159-168`; its Trust Task shares the `members/{did}` mount
+(`vtc-service/src/routes/mod.rs:294-298`); the spec states the admin gate
+(`trust-tasks/members/update/1.0/spec.md`, "`AdminAuth`. Phase 1 keeps a uniform
+admin gate"); `vtc-service/src/registry/mod.rs:10-18` names the only two
+sources of the flag (the applicant's submit, or an admin `members/update`);
+`docs/03-vtc/trust-registry.md` "Consent can change after admission". The only
+member-side exit is `trust-tasks/members/self-remove/1.0`.
+(d) Keyring is adding an opt-in to its apply step, off by default. Its copy has to
+say that only a community admin can remove the listing later, and a
+self-service switch in the member's settings waits on this.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.40 | 2026-09-23 | **VTI-Q22** (new): after #1691 publication follows a member's consent, but only the admin verb `vtc/members/update` can change it after admission; no member-side task exists short of `members/self-remove`. Read from source at `e2a669ab`. **VTI-Q14**: on the Farm's `keyring-test-vtc` (VTC 0.11.58, before #1691) no trust registry is configured, so nobody is published; all 8 members hold `publishConsent: false`. |
 | 1.39 | 2026-09-23 | **Upstream's round-3 response recorded.** Fixed upstream: VTI-37, -38, -39, -40, -41, -43 and VTI-06 (with their public changes); VTI-42 by design (envelope only). VTI-41 leaves a Farm-side mediator setting. VTI-12 answered (to confirm); VTI-25's trace still owed. Answers to VTI-Q10, Q12, Q13 (with a correction to our premise), Q14 (a real defect, fixed), Q16, Q17; Farm-portal questions Q7/Q9/Q18 passed to the Farm operators. **New VTI-Q20** (agent naming) and **VTI-Q21** (a member's own credentials), raised as Q19/Q20 in the round-3 report. New section on the pins and the Farm lag. |
 | 1.38 | 2026-09-23 | **VTI-42 resolved upstream** by verifiable-trust-infrastructure#1687: the binding envelope is now the only DIDComm carriage, and Keyring moves to it in keyring-bifold#76. **VTI-43 recurred on the Farm**: an Android first check got no answer and the retry linked; the VTA side is unobserved. **New VTI-Q19**: a Farm VTA answered *not in ACL* for three minutes to a key its ACL held, and the retry passed. |
 | 1.37 | 2026-09-23 | **VTI-Q17 gains its third occurrence, and its first outside testing**: a person joining a community on a shipped build saw "the VTA did not answer …/dids/create/1.0" at the "Who are you joining as?" step, on a real phone against their own Farm VTA. The retry worked, as it has every time. The question is no longer about something we hit while testing — the lost answer is on the ordinary first-run path, and an orphan DID is left behind each time. |
