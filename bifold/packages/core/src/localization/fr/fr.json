@@ -610,7 +610,6 @@
     "ScanQRCode": "Scanner le code QR",
     "MyQRCode": "Mon code QR",
     "SwitchProfile": "Changer de profil",
-    "YourQRCodeTitle": "Votre code QR",
     "WhatCanIScan": "Le code de votre agent, celui d'une communauté, un ticket de vérification ou le code de contact d'un autre utilisateur de Keyring.",
     "ContactCard": "Carte de contact",
     "IdentityFor": "Identité pour {{community}}",
