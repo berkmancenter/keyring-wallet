@@ -123,6 +123,26 @@ describe('I want to join a community', () => {
     expect(tree.queryByTestId(testIdWithKey('JoinNameClaimed'))).toBeNull()
   })
 
+  /**
+   * "Suggested for this app" for a community the person had joined on an
+   * earlier build told them their software has an opinion it does not have —
+   * and sent two sessions hunting a configuration leak that did not exist
+   * (report #23). The label has to say which of the two it is.
+   */
+  it('says the build suggests a community only when the build does', async () => {
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedSource'))).toHaveTextContent('Join.Suggested')
+  })
+
+  it('says a remembered community is remembered, not suggested', async () => {
+    // What a phone carries after joining on an earlier build: a CHOSEN
+    // community and no link being viewed — a link would take this screen
+    // straight past the card.
+    communityTarget.choose(suggested)
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedSource'))).toHaveTextContent('Join.Remembered')
+  })
+
   it('a community chosen by a link goes straight to what it asks, and is the one joined', async () => {
     communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
     const tree = await renderJoin()

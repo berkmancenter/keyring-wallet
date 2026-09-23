@@ -22,7 +22,7 @@
  * @module trust-tasks/screens/communityName
  */
 
-import type { CommunityLink } from '../module/vtiCommunityLink'
+import { communityTarget, type CommunityLink } from '../module/vtiCommunityLink'
 
 import { agentHost } from './VtaLink'
 
@@ -52,4 +52,18 @@ export function communityName(did: string, link?: CommunityLink): CommunityName 
     claimed: Boolean(named) && !link?.published,
     technical: didHost(did) ?? shortDid(did),
   }
+}
+
+/**
+ * What to call a community in passing — in a list row, a prompt, a share
+ * sheet — where there is no room to explain where the name came from.
+ *
+ * The community's own published name if it has one, else a short DID. Never
+ * the host: a hostname in the place of a name reads as the name, which is the
+ * whole of reports #13, #14 and #16. Not a hook, so it can be used inside a
+ * map; a screen that shows several of these subscribes to `communityTarget`
+ * once so a name learned later reaches all of them.
+ */
+export function communityLabelOf(did: string): string {
+  return communityTarget.publishedNameOf(did) ?? shortDid(did)
 }

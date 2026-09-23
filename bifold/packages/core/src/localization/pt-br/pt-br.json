@@ -1067,11 +1067,13 @@
     "AgentAddress": "O endereço do seu agente",
     "AgentAddressHint": "O provedor do seu agente o mostra — começa com did:. Cole aqui.",
     "ShowMyCode": "Mostrar meu código",
-    "GiveKeyTitle": "Entregue este código ao administrador do seu agente",
-    "GiveKeyBody": "Ele o adiciona à lista de acesso de {{label}}. Depois volte e toque em “Fui adicionado”.",
+    "GiveKeyTitle": "Envie este código ao administrador do seu agente",
+    "GiveKeyBody": "Ele adiciona o código a {{label}} e então você volta e toca em “Fui adicionado”.",
     "CopyKey": "Copiar",
     "KeyCopied": "Copiado",
     "ShareKey": "Compartilhar",
+    "ShareKeyTitle": "Código para {{label}}",
+    "ShareKeyMessage": "Adicione este código a {{label}} para que meu telefone possa usá-lo:",
     "ImAdded": "Fui adicionado",
     "Checking": "Verificando…",
     "NotAddedYet": "Seu agente ainda não aceita este telefone. Confira se o administrador adicionou exatamente este código e tente novamente.",
@@ -1122,6 +1124,8 @@
     "VetterExpired": "Seu papel de verificador em {{community}} terminou em {{date}}.",
     "VetterNotYet": "Seu papel de verificador em {{community}} começa em {{date}}.",
     "GiveKeyHow": "Admins que usam o VTA Wallet (a extensão de navegador): “Manage this agent” → “Access” → “Grant access”, cole e escolha o papel admin — o agente guarda as identidades deste telefone, o que hoje exige admin. Pelo terminal: pnm acl create --role admin.",
+    "ShowTheCode": "Mostrar o código e como adicioná-lo",
+    "HideTheCode": "Ocultar o código",
     "JourneyLinked": "Vinculado",
     "JourneyJoin": "Entrar",
     "JourneyMember": "Membro",
@@ -1133,7 +1137,7 @@
     "YouCanVet": "Agora você pode verificar pessoas para {{community}}",
     "YouCanVetBody": "O admin tornou você um verificador. Entregue um ticket quando encontrar alguém.",
     "OpenDesk": "Abrir a mesa de verificação",
-    "ShareKeyHint": "É longo — compartilhe com o computador do admin (AirDrop, uma mensagem, um e-mail) em vez de digitar."
+    "ShareKeyHint": "Longo e fácil de digitar errado — envie em vez de ditar."
   },
   "Invited": {
     "IntroTitle": "Diga ao admin quem convidar",
@@ -1166,6 +1170,7 @@
     "WhichTitle": "Qual comunidade?",
     "WhichBody": "Escaneie ou cole o link da comunidade — ou o ticket de um verificador, que também a nomeia.",
     "Suggested": "Sugerida para este app",
+    "Remembered": "Você já entrou nesta antes",
     "Unnamed": "Esta comunidade não publicou um nome",
     "NameFromLink": "Nome conforme fornecido pelo link que você usou",
     "JoinSuggested": "Entrar nesta comunidade",
@@ -1188,6 +1193,7 @@
     "MakeIdentityBody": "{{community}} recebe uma nova identidade feita só para ela pelo seu agente. Você confirma com o rosto ou a digital.",
     "AsTitle": "Com qual perfil você entra?",
     "AsBody": "{{community}} recebe uma nova identidade feita só para ela. Seu perfil preenche o nome dela, uma vez — nada mais fica ligado.",
+    "AsBodyUnnamed": "Esta comunidade recebe uma nova identidade feita só para ela. Seu perfil preenche o nome dela, uma vez — nada mais fica vinculado.",
     "AsNoProfile": "Você ainda não tem um perfil — crie um abaixo, ou digite seu nome diante do verificador.",
     "ProfileLabel": "Perfil {{label}}",
     "FromProfile": "Do seu perfil {{profile}} — corrija aqui se seu nome legal for diferente.",
@@ -1345,6 +1351,7 @@
     "StandingNotYet": "Seu papel de verificador ainda não começou.",
     "StandingAsk": "Peça a um administrador que conceda novamente o papel de verificador. Até lá, você não pode verificar ninguém aqui.",
     "StandingNoTicket": "Até lá você não pode iniciar uma verificação: um novo ticket começaria algo que não poderia ser concluído.",
+    "ReadingHeld": "Lendo o que este telefone já tem…",
     "SeatApplicantHint": "Um verificador confere quem você é. Você o solicita com o bilhete dele, lê o código de correspondência, envia seu cartão e recebe a declaração.",
     "HeroVetter": "Você tem uma autorização de verificador para esta comunidade. Abra a mesa para emitir um bilhete e verificar a pessoa à sua frente.",
     "HeroApplicant": "Seja verificado pessoalmente por um membro e depois candidate-se à comunidade com a declaração dele.",
@@ -1364,5 +1371,12 @@
     "WithdrawNothingOpen": "Não havia solicitação aberta para retirar — você pode se candidatar.",
     "AlreadyApplied": "Você já tinha se candidatado a esta comunidade — veja em que pé está essa candidatura.",
     "AddWhatTheyAsked": "Adicionar o que pediram"
+  },
+  "Errors": {
+    "NoAnswer": "Seu agente não respondeu. Toque em Continuar para tentar de novo — normalmente funciona na segunda vez.",
+    "NotAllowed": "Seu agente não permitiu isso. Pergunte ao administrador dele se este telefone ainda tem acesso.",
+    "Unreachable": "Nada respondeu nesse endereço. Verifique sua conexão e tente de novo.",
+    "Unknown": "Não funcionou, e o aplicativo não sabe por quê. Tente de novo; se continuar, envie os detalhes abaixo.",
+    "ShowDetails": "Detalhes"
   }
 }

@@ -1222,11 +1222,13 @@
     "AgentAddress": "Your agent's address",
     "AgentAddressHint": "Your agent's host shows it — it starts with did:. Paste it here.",
     "ShowMyCode": "Show my code",
-    "GiveKeyTitle": "Give this code to your agent's admin",
-    "GiveKeyBody": "They add it to {{label}}'s access list. Then come back and tap “I've been added”.",
+    "GiveKeyTitle": "Send this code to your agent’s admin",
+    "GiveKeyBody": "They add it to {{label}}, then come back and tap “I’ve been added”.",
     "CopyKey": "Copy",
     "KeyCopied": "Copied",
     "ShareKey": "Share",
+    "ShareKeyTitle": "Code for {{label}}",
+    "ShareKeyMessage": "Add this code to {{label}} so my phone can use it:",
     "ImAdded": "I've been added",
     "Checking": "Checking…",
     "NotAddedYet": "Your agent doesn't accept this phone yet. Check that the admin added this exact code, then try again.",
@@ -1277,6 +1279,8 @@
     "VetterExpired": "Your vetter role for {{community}} ended on {{date}}.",
     "VetterNotYet": "Your vetter role for {{community}} starts on {{date}}.",
     "GiveKeyHow": "Admins using VTA Wallet (the browser extension): Manage this agent → Access → Grant access, paste it, and choose the admin role — the agent keeps this phone's identities, which needs admin today. From a terminal: pnm acl create --role admin.",
+    "ShowTheCode": "Show the code and how to add it",
+    "HideTheCode": "Hide the code",
     "JourneyLinked": "Linked",
     "JourneyJoin": "Join",
     "JourneyMember": "Member",
@@ -1288,7 +1292,7 @@
     "YouCanVet": "You can now vet people for {{community}}",
     "YouCanVetBody": "Its admin made you a vetter. Hand out a ticket when you meet someone.",
     "OpenDesk": "Open the vetting desk",
-    "ShareKeyHint": "It's long — share it to the admin's computer (AirDrop, a message, an email) rather than typing it."
+    "ShareKeyHint": "Long and easy to mistype — send it rather than reading it out."
   },
   "Invited": {
     "IntroTitle": "Tell the admin who to invite",
@@ -1321,6 +1325,7 @@
     "WhichTitle": "Which community?",
     "WhichBody": "Scan or paste the community's link — or a vetter's ticket, which names the community too.",
     "Suggested": "Suggested for this app",
+    "Remembered": "You joined this one before",
     "Unnamed": "This community hasn't published a name",
     "NameFromLink": "Name as provided by the link you used",
     "JoinSuggested": "Join this community",
@@ -1343,6 +1348,7 @@
     "MakeIdentityBody": "{{community}} gets a new identity made just for it by your agent. You confirm with your face or fingerprint.",
     "AsTitle": "Who are you joining as?",
     "AsBody": "{{community}} gets a new identity made just for it. Your profile fills in its name, once — nothing else is linked.",
+    "AsBodyUnnamed": "This community gets a new identity made just for it. Your profile fills in its name, once — nothing else is linked.",
     "AsNoProfile": "You don't have a profile yet — create one below, or type your name when you meet the vetter.",
     "ProfileLabel": "{{label}} profile",
     "FromProfile": "From your {{profile}} profile — correct it here if your legal name differs.",
@@ -1510,6 +1516,7 @@
     "StandingNotYet": "Your vetter role hasn't started yet.",
     "StandingAsk": "Ask an admin to grant you the vetter role again. Until then you cannot vet anyone here.",
     "StandingNoTicket": "Until then you cannot start a vetting: a new ticket would begin something that cannot finish.",
+    "ReadingHeld": "Reading what this phone already holds…",
     "SeatApplicantHint": "A vetter checks who you are. You ask them with their ticket, read the match code, send your card, and receive their statement.",
     "HeroVetter": "You hold a vetter grant for this community. Open the desk to cut a ticket and vet the person in front of you.",
     "HeroApplicant": "Be vetted in person by a member, then apply to the community with their statement.",
@@ -1529,5 +1536,12 @@
     "WithdrawNothingOpen": "There was no open application to withdraw — you can apply.",
     "AlreadyApplied": "You'd already applied to this community — here is where that application stands.",
     "AddWhatTheyAsked": "Add what they asked for"
+  },
+  "Errors": {
+    "NoAnswer": "Your agent didn't answer. Tap Continue to try again — this usually works the second time.",
+    "NotAllowed": "Your agent wouldn't allow that. Ask its admin whether this phone still has access.",
+    "Unreachable": "Nothing answered at that address. Check your connection, then try again.",
+    "Unknown": "That didn't work, and the app doesn't know why. Try again; if it keeps happening, send us the details below.",
+    "ShowDetails": "Details"
   }
 }
