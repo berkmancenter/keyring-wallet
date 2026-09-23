@@ -8,6 +8,7 @@ import {
   resolveCommunityDid,
 } from '../module/vtiCommunityLink'
 import { keyringAgentLinkKind, routeKeyringAgentLink } from '../module/vtiLinks'
+import { communityLabelOf } from '../screens/communityName'
 
 // Which community a join is about comes from a link, not the build: a
 // community link, a vetter's ticket, or an invitation.
@@ -69,5 +70,32 @@ describe('the community link', () => {
     target.chosen = undefined
     await communityTarget.restore()
     expect(communityTarget.getChosen()).toEqual({ communityDid: community, name: 'Kept' })
+  })
+
+  it("the community's published name survives a launch, wherever the community is named by its DID", async () => {
+    communityTarget.clear()
+    communityTarget.set({ communityDid: community, name: 'keyring-test' })
+    communityTarget.publishedName(community, 'Keyring Lab Community')
+    communityTarget.choose(community)
+    // A new launch: nothing in memory — not even the published names — only what was kept.
+    const target = communityTarget as unknown as { viewing?: unknown; chosen?: unknown; published: Map<string, string> }
+    target.viewing = undefined
+    target.chosen = undefined
+    target.published.clear()
+    await communityTarget.restore()
+    expect(communityTarget.publishedNameOf(community)).toBe('Keyring Lab Community')
+    expect(communityLabelOf(community, ((key: string) => key) as never)).toBe('Keyring Lab Community')
+  })
+
+  it("a link's name, kept, is still only a claim after a launch", async () => {
+    communityTarget.clear()
+    communityTarget.set({ communityDid: community, name: 'Totally Official' })
+    communityTarget.choose(community)
+    const target = communityTarget as unknown as { viewing?: unknown; chosen?: unknown; published: Map<string, string> }
+    target.viewing = undefined
+    target.chosen = undefined
+    target.published.clear()
+    await communityTarget.restore()
+    expect(communityTarget.publishedNameOf(community)).toBeUndefined()
   })
 })
