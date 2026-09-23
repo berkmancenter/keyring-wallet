@@ -6,13 +6,12 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Nothing is built in any more: link your own agent, then join any community by pasting or scanning its code.
-• Scanning or pasting a community's code opens it by name, instead of "Invalid QR code".
-• "I was invited" starts by asking which community invited you.
-• You can pick a different community at any step while joining.
-• A community's name shows on your first visit.
-• Your agent is one screen once your phone is linked; the old second panel is gone.
-• Joining uses communities' newer request format, so Keyring keeps working when the Farm upgrades.
-• Fewer long identity codes on the joining screens and the fingerprint prompt.
-• Link errors now say what went wrong, such as "This link has expired".
-• If your phone joined a test community on an earlier build, it may still suggest it: choose "A different community".
+• Scan any agent's or community's QR code, from a community's web page, pnm or the browser plugin: an agent opens linking with its address filled in, a community opens joining by its name.
+• A code Keyring can't use now says why, such as "No agent or community has this code".
+• The QR Code tab says what you can scan, and "My QR code" can show your contact card or your identity for a community.
+• Long identity codes are hidden on every screen; tap "Details" to see them.
+• Your agent is shown by its name instead of its web address.
+• When you join, you choose whether to be listed in the community's public member directory. It's off unless you turn it on.
+• After you're admitted, the screen says "You're a member of …".
+• Retrying a failed identity creation no longer risks making a second, unused identity.
+• Known issue: on the current Farm, creating your identity may need a second tap on Continue.
