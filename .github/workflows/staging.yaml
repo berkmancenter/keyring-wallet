@@ -633,6 +633,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # The release-notes step reads the range since the previous staging tag.
+          fetch-depth: 0
 
       - name: Verify bifold submodule commit
         run: |
@@ -861,12 +863,14 @@ jobs:
           # in the bifold submodule, so summarise both: the wallet's own commits
           # since the previous staging tag, and the submodule commits the pointer
           # moved across. Fall back to the old behaviour if either range is unknown.
-          PREV_TAG=$(git tag --list 'staging-v*' --sort=-creatordate | sed -n '2p')
-          [ -n "${PREV_TAG:-}" ] || PREV_TAG=$(git tag --list 'staging-v*' --sort=-creatordate | sed -n '1p')
+          # This build's own tag is created after the build, so the previous
+          # release is the newest staging tag reachable from HEAD's parent.
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'staging-v*' HEAD^ 2>/dev/null || true)
 
           collect() { # $1 = repo dir, $2 = range
             git -C "$1" log --no-merges --pretty=%s "$2" 2>/dev/null \
               | grep -E '^(feat|fix)(\(|:)' \
+              | grep -vE '^(feat|fix)\((ci|e2e|test|tests|lab|harness|deps)\)' \
               | sed -E 's/^(feat|fix)(\([^)]*\))?!?: *//' \
               | sed -E 's/[[:space:]]+$//' \
               | awk 'NF && !seen[$0]++'
@@ -898,7 +902,7 @@ jobs:
             if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" = "null" ]; then
               COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
             fi
-            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           fi
 
           if [ -z "$NOTES" ] || [ ${#NOTES} -lt 5 ]; then
