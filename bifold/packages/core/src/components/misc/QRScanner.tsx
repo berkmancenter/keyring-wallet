@@ -479,9 +479,10 @@ const QRScanner: React.FC<Props> = ({
             )}
             <View style={styles.qrContainer}>
               {identityShown && persona ? (
-                <View testID={testIdWithKey('MyQRIdentityCode')}>
-                  <QRRenderer value={persona.did} size={qrSize} />
-                </View>
+                // No wrapper View: QRRenderer grows to fill its parent, and in
+                // an unstyled wrapper Android let it take the whole screen,
+                // pushing the choice and the title out of sight (217 gate).
+                <QRRenderer value={persona.did} size={qrSize} testID="MyQRIdentityCode" />
               ) : (
                 <>
                   {!invitation && <LoadingIndicator />}
