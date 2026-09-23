@@ -28,6 +28,9 @@
  *   → vetting (not "No agent is configured"), and "a different community"
  *   opens the scanner; nothing offers a locked "Vet someone"; I was invited
  *   opens its flow; a pasted community link opens Join on that community.
+ * Always (217's gate): no identity code outside Details on the Linked screen,
+ *   the agent screen and the join/vetting steps the journey opens; with
+ *   JOURNEY=1, the QR tab's scanner hint and My QR code titles (lib/gateChecks.js).
  * KEYRING_AGENT_SHOWS_AS=<name>: the runner agent's own name (its vta_name,
  *   e.g. "keyring-runner-uiux" on farm-runner-uiux). "Linked to …", the agent
  *   screen and the agent screen after a relaunch must come to say it, not the
@@ -48,6 +51,7 @@ import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { listAcl, ownedBy, removeRunKeys, snapshotAcl } from "./lib/aclCleanup.js";
+import { assertNoDidShown, assertQrTabSaysWhatItIs } from "./lib/gateChecks.js";
 
 const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
@@ -114,6 +118,7 @@ async function checkAgentScreen(driver) {
   for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
   await waitForTestId(driver, "AgentHome", 30000);
   await assertAgentNamed(driver, "AgentHomeName", "the agent screen");
+  await assertNoDidShown(driver, "the agent screen");
   const status = (await textOf(driver, "VtaStatusText")).trim();
   console.log(`[e2e] agent screen status: ${status}`);
   if (!/online/i.test(status)) throw new Error(`agent screen status is "${status}", not Online`);
@@ -224,8 +229,10 @@ async function testerJourney(driver) {
       }
     }
     console.log(`[e2e] journey: a pasted bare community DID opened Join${shows ? ` on "${shows}"` : ""}`);
+    await assertNoDidShown(driver, "Join on a pasted bare community DID");
   }
   await waitForTestId(driver, "JoinAsks", 15000);
+  await assertNoDidShown(driver, "Join: what the community asks");
   console.log("[e2e] journey: Join a community shows what it asks for");
   await tapTestId(driver, "JoinStart", 15000);
   await waitForTestId(driver, "JoinMakeIdentity", 15000);
@@ -273,6 +280,7 @@ async function testerJourney(driver) {
     throw new Error("making the identity did not hand over to vetting");
   }
   console.log(`[e2e] journey: identity → vetting reached ${reached}`);
+  await assertNoDidShown(driver, "vetting's first step");
   // The name input and the Start button are siblings in the same step, so
   // which one the poll happens to see first says nothing about the screen —
   // and it must not decide whether the prefill is checked at all. (An Android
@@ -302,6 +310,7 @@ async function testerJourney(driver) {
       await screenshot(driver, "journey-no-continue-vetting");
       throw new Error('an applicant\'s agent home offers no "Continue your vetting"');
     }
+    await assertNoDidShown(driver, "an applicant's agent screen");
     await screenshot(driver, "journey-agent-home-applicant");
     await cont.click();
     let back;
@@ -374,6 +383,7 @@ async function testerJourney(driver) {
       throw new Error(`the pasted community link did not open Join on that community (expected it to be shown as "${shownAs}")`);
     }
     console.log(`[e2e] journey: a pasted community link opened Join on it, shown as "${shownAs}"`);
+    await assertNoDidShown(driver, "Join on a pasted community link");
     for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
   }
 
@@ -388,6 +398,11 @@ async function testerJourney(driver) {
   await assertAgentNamed(driver, "AgentHomeName", "the agent screen after a relaunch");
   console.log("[e2e] journey: the agent screen after a relaunch");
   await screenshot(driver, "journey-after-relaunch");
+
+  // The QR tab (keyring-bifold#85), last: the phone now holds a community
+  // identity, so My QR code offers it beside the contact code.
+  for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
+  await assertQrTabSaysWhatItIs(driver);
 }
 
 async function api(method, route, body) {
@@ -623,6 +638,7 @@ try {
     await tapTestId(driver, "VtaLinkCheckGrant", 15000);
     await waitForTestId(driver, "VtaLinkDone", 180000);
     await assertAgentNamed(driver, "VtaLinkLinkedBody", "the Linked screen");
+    await assertNoDidShown(driver, "the Linked screen");
     await screenshot(driver, "link-m2-linked");
     if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
     console.log("[e2e] the temporary key is no longer in the ACL");
@@ -664,6 +680,7 @@ try {
 
   await waitForTestId(driver, "VtaLinkDone", 180000);
   await assertAgentNamed(driver, "VtaLinkLinkedBody", "the Linked screen");
+  await assertNoDidShown(driver, "the Linked screen");
   await screenshot(driver, "link-04-linked");
   const temporaryDid = view.did;
 
