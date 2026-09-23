@@ -65,7 +65,26 @@ Everything in our ecosystem is **non-interactive**. The verifier's random challe
 - **Privacy, not assurance.** The ZKP task force states the boundary: *"The cryptography carries the privacy. The accreditation framework carries the assurance."* A proof shows that a valid attestation is held, not that the determination behind it was correct.
 - **Distinctness, not independence.** A threshold proof shows the vetters are distinct people. Whether they are *independent* still comes from declared relationships, and the VTI specification forbids upgrading one into the other (VTI-CMP-070/071).
 - **Computational anonymity only.** These constructions rest on discrete-log-style assumptions that a quantum attacker breaks. An attacker who collects records today could later link one vetter's attestations to each other — and could name that vetter if the issuer also kept whatever identified them at enrolment. Deleting that enrolment record is therefore part of the design, not an operational nicety.
+- **A rate cap on anonymous actors binds a group, not a person.** If the rate-limiting tokens are not cryptographically tied to the individual vetter's own secret, a set of colluding vetters can pool them: the cap then limits the group's total, not each member's. Whether that matters is a governance question, but a client must not describe such a cap to a user as a per-person guarantee.
 - **Nothing about metadata outside the proof.** Timing, token-fetch patterns, mediator routing and small anonymity sets all leak around a mathematically perfect proof. Several of those leaks are closed or opened by *client* behaviour, which is why §4.1 is a list of what Keyring must not do.
+
+### 2.5 Why this needs its own construction, rather than a primitive off the shelf
+
+Threshold anonymity — *k distinct eligible parties attested, and nobody learns which k* — is an awkward fit for the standard toolbox, and it is worth knowing why before anyone proposes a shortcut. The properties below are textbook ones, not claims about any particular implementation:
+
+| Primitive | Why it does not simply do this |
+|---|---|
+| **BBS+ / PS signatures** | Built for one issuer's credential shown by its holder. It hides claims well; it says nothing about *how many different people* signed, so counting distinct attesters is out of scope |
+| **Ring signatures** | Prove "one of this ring signed" and, in the plain form, give no way to tell two signatures apart as two people. Proof size also grows with the ring, i.e. with the whole eligible set rather than with k |
+| **Linkable ring signatures** | Add exactly the distinctness we need, but the linkability tag is usually per-ring: every change to the eligible set reshapes the ring, and one signature per signer per ring is a strong constraint to carry across policy periods |
+| **Group signatures** | Anonymous, but by design a group manager can open a signature and name the signer. That reintroduces the party hidden vetting exists to remove |
+| **Threshold signatures (FROST and similar)** | Produce one signature from k co-signers, but the signers coordinate *in one session* and the k are known to each other and to the coordinator. Vetting sessions happen days apart, with vetters who must not learn of each other |
+| **zk-SNARKs (Groth16)** | Could express the statement, at the cost of a bespoke circuit and a per-circuit trusted-setup ceremony — a real operational burden for a community, and a trust assumption the other options avoid |
+| **zk-STARKs** | No trusted setup and post-quantum, but proofs are orders of magnitude larger, which a mobile submission budget feels |
+
+So a purpose-built construction is a reasonable answer rather than an indulgence. What it buys is threshold *distinctness* with no trusted setup, with vetters who never coordinate, and a proof that grows with k rather than with the size of the eligible set. What it costs is a young, unreviewed codebase (§8 B1), and a standard elliptic-curve security assumption, which is not post-quantum (§2.4).
+
+**Before repeating any novelty claim in public, check the prior art.** Anonymous credentials have a long literature on counting and limiting anonymous actors — *n*-times anonymous authentication, scoped nullifiers and pseudonym systems among it — and some of it reaches similar ends by other means. Our plan does not depend on the construction being first of its kind, only on its being fit for this job, and that is the claim we should make.
 
 ## 3. Positions
 
@@ -256,7 +275,7 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 **Not decided (ours):**
 
 - **D2** — §3.4: BBS issuer key custody (R-DID or VTA `did:webvh`) and post-issuance proof addition. Blocks ZK4.
-- **D4** — §3.1: does the **applicant's** proof run in the VTA (this plan's working assumption) or on the phone? What decides it: whether the published task family puts the applicant's engine behind the agent at all; whether an offline or poor-connectivity submission is a requirement we accept; and the cost of a second proving stack in the app measured against `ref-03d`'s numbers. Does not block ZK0–ZK3, and ZK1's client contract is the same either way; it must be settled before ZK2's scope is fixed.
+- **D4** — §3.1: does the **applicant's** proof run in the VTA (this plan's working assumption) or on the phone? What decides it: whether the published task family puts the applicant's engine behind the agent at all (note that the applicant is the party that *aggregates* the attestations into one proof at submission, so whoever holds that role holds the aggregation too); whether an offline or poor-connectivity submission is a requirement we accept; and the cost of a second proving stack in the app measured against `ref-03d`'s numbers. Does not block ZK0–ZK3, and ZK1's client contract is the same either way; it must be settled before ZK2's scope is fixed.
 - **D3** — whether Keyring pursues the vetter role at all, or stays applicant-only in hidden mode. The table in §4.1 assumes both. Blocks ZK3's scope.
 
 **Watch triggers** — the concrete artifacts whose appearance unblocks something, so a blocked item is noticed when it moves rather than rediscovered:
