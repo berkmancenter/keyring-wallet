@@ -99,6 +99,15 @@ export async function assertQrTabSaysWhatItIs(driver) {
     const idTitle = (await textOf(driver, "MyQRCodeTitle")).trim();
     const idInstruction = await textOf(driver, "MyQRCodeInstruction");
     if (!/^Your identity for /.test(idTitle) || DID.test(idTitle)) throw new Error(`the identity code is titled "${idTitle}"`);
+    // The named path: the journey's identity is for the run's community, and
+    // when that community publishes a name the title must say it. A prefix
+    // alone passed "an unnamed community (host)" after a relaunch (217 gate,
+    // 2026-09-23; keyring-bifold#90).
+    const shows = process.env.KEYRING_COMMUNITY_SHOWS_AS;
+    if (shows && !idTitle.includes(shows)) {
+      await screenshot(driver, "gate-identity-unnamed");
+      throw new Error(`the identity code is titled "${idTitle}", not for "${shows}"`);
+    }
     if (!/admin scans this to invite you/.test(idInstruction)) throw new Error(`the identity code's instruction reads "${idInstruction}"`);
     await assertNoDidShown(driver, "My QR code (identity)");
     console.log(`[e2e] gate: My QR code offers "${idTitle}"`);
