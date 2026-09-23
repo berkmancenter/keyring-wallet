@@ -144,10 +144,13 @@ const BiometricConfirmationModal: React.FC = () => {
     setIsAuthenticating(true)
 
     try {
+      // The system prompt says what the caller says is being signed, like the
+      // sheet above it; "Confirm Relationship" was wrong for a vetting or a join.
       const result = await loadWalletKey(
-        t('Biometry.ConfirmRelationship') || 'Confirm Relationship',
-        t('Biometry.SignCredentialWith', { name: pendingRequest.counterpartyName }) ||
-          `Sign credential with ${pendingRequest.counterpartyName}?`
+        pendingRequest.copy?.title ?? (t('Biometry.ConfirmRelationship') || 'Confirm Relationship'),
+        pendingRequest.copy?.description ??
+          (t('Biometry.SignCredentialWith', { name: pendingRequest.counterpartyName }) ||
+            `Sign credential with ${pendingRequest.counterpartyName}?`)
       )
 
       if (result) {

@@ -527,7 +527,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     </View>
   )
 
-  /** Every signing act asks for the person's face or fingerprint (plan principle 9). */
+  /**
+   * Every signing act asks for the person's face or fingerprint (plan
+   * principle 9). The counterparty is named in words — the sheet shows it
+   * large, and a DID there was a code where a person belongs (#12).
+   */
   const confirmWithBiometrics = async (counterparty: string, act: 'Send' | 'Attest' | 'Apply') => {
     if (!agent) return false
     // Say what is being signed: the shared modal otherwise speaks of a
@@ -742,7 +746,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     disabled={!!busy}
                     onPress={() =>
                       run('attest', async () => {
-                        if (!(await confirmWithBiometrics(shortDid(request.applicantDid), 'Attest'))) return
+                        if (!(await confirmWithBiometrics(t('Vetting.CounterpartyApplicant'), 'Attest'))) return
                         await deskRef.current!.attest(request.requestId, {
                           documentClasses: ['passport'],
                           claimsVerified: ['name.legal'],
@@ -1024,7 +1028,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 disabled={!!busy}
                 onPress={() =>
                   run('card', async () => {
-                    if (!(await confirmWithBiometrics(shortDid(active.vetterDid), 'Send'))) return
+                    if (!(await confirmWithBiometrics(t('Vetting.CounterpartyVetter'), 'Send'))) return
                     await applicantRef.current!.sendCard(active.vetterDid)
                   })
                 }
@@ -1122,7 +1126,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   disabled={!!busy}
                   onPress={() =>
                     run('apply', async () => {
-                      if (!(await confirmWithBiometrics(shortDid(communityDid), 'Apply'))) return
+                      if (!(await confirmWithBiometrics(communityLabelOf(communityDid), 'Apply'))) return
                       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
                       // Ask about the grants now, not when the statements were
                       // gathered: the community applies the status at intake,

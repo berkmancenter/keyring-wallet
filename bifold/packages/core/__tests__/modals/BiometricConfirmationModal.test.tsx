@@ -4,11 +4,12 @@
  * Verifies the modal renders different UI for biometric vs passcode auth modes.
  */
 
-import { render } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 import { Platform } from 'react-native'
 
 import { BasicAppContext } from '../helpers/app'
+import { testIdWithKey } from '../../src/utils/testable'
 
 const mockUseBiometricConfirmation = jest.fn()
 
@@ -22,6 +23,7 @@ jest.mock('../../src/services/keychain', () => ({
 }))
 
 import BiometricConfirmationModal from '../../src/components/modals/BiometricConfirmationModal'
+import { loadWalletKey } from '../../src/services/keychain'
 
 const baseContextValue = {
   isModalVisible: true,
@@ -33,6 +35,32 @@ const baseContextValue = {
 describe('BiometricConfirmationModal', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+  })
+
+  /**
+   * The system prompt says what the caller says is being signed, like the
+   * sheet does: "Confirm Relationship / Sign credential with <a DID>" was wrong
+   * for a vetting statement or a join (#12).
+   */
+  it('asks the system prompt in the caller’s own words when it gives them', async () => {
+    mockUseBiometricConfirmation.mockReturnValue({
+      ...baseContextValue,
+      pendingRequest: {
+        counterpartyName: 'Keyring Lab Community',
+        connectionId: 'vetting',
+        timestamp: '2026-09-23T12:00:00.000Z',
+        skipNativeBiometric: false,
+        authMode: 'biometric',
+        copy: { title: 'Vetting.ConfirmApplyTitle', description: 'Vetting.ConfirmApplyBody' },
+      },
+    })
+    const { getByTestId } = render(
+      <BasicAppContext>
+        <BiometricConfirmationModal />
+      </BasicAppContext>
+    )
+    await act(async () => fireEvent.press(getByTestId(testIdWithKey('ConfirmBiometric'))))
+    expect(loadWalletKey).toHaveBeenCalledWith('Vetting.ConfirmApplyTitle', 'Vetting.ConfirmApplyBody')
   })
 
   it('should not render when modal is not visible', () => {

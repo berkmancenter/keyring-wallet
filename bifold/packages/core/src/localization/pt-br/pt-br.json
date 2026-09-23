@@ -1328,6 +1328,8 @@
     "EndSession": "Encerrar esta sessão",
     "ConfirmSendTitle": "Enviar seu nome ao verificador",
     "ConfirmSendBody": "O verificador vê o nome legal que você digitou e o confere com seu documento. Nada mais é compartilhado.",
+    "CounterpartyApplicant": "a pessoa que você está verificando",
+    "CounterpartyVetter": "seu verificador",
     "ConfirmAttestTitle": "Assinar a declaração de verificação",
     "ConfirmAttestBody": "Você confirma que conferiu pessoalmente o documento desta pessoa e que ele mostra o nome do cartão dela.",
     "ConfirmApplyTitle": "Pedir para entrar na comunidade",

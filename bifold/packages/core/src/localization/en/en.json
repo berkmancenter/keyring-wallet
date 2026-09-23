@@ -1493,6 +1493,8 @@
     "EndSession": "End this session",
     "ConfirmSendTitle": "Send your name to the vetter",
     "ConfirmSendBody": "The vetter sees the legal name you entered and checks it against your ID. Nothing else is shared.",
+    "CounterpartyApplicant": "the person you're vetting",
+    "CounterpartyVetter": "your vetter",
     "ConfirmAttestTitle": "Sign the vetting statement",
     "ConfirmAttestBody": "You confirm you checked this person's ID yourself and that it shows the name on their card.",
     "ConfirmApplyTitle": "Apply to the community",

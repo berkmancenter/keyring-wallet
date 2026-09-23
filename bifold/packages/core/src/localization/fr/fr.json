@@ -1429,6 +1429,8 @@
     "EndSession": "Mettre fin à cette session",
     "ConfirmSendTitle": "Envoyer votre nom au vérificateur",
     "ConfirmSendBody": "Le vérificateur voit le nom légal que vous avez saisi et le compare à votre pièce d'identité. Rien d'autre n'est partagé.",
+    "CounterpartyApplicant": "la personne que vous vérifiez",
+    "CounterpartyVetter": "votre vérificateur",
     "ConfirmAttestTitle": "Signer l'attestation de vérification",
     "ConfirmAttestBody": "Vous confirmez avoir vérifié vous-même la pièce d'identité de cette personne et qu'elle indique le nom figurant sur sa carte.",
     "ConfirmApplyTitle": "Demander à rejoindre la communauté",
