@@ -22,7 +22,7 @@ import {
 
 import { Screens } from '../../../types/navigators'
 
-import { bareDid, classifyDidDocument } from './classifyDid'
+import { bareDid, classifyDid } from './classifyDid'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { vtaAgent } from './vtaAgent'
 import { communityTarget, isCommunityLink, parseCommunityLink } from './vtiCommunityLink'
@@ -50,9 +50,6 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   return undefined
 }
 
-/** How long a scanned DID may take to resolve before the scanner says so. */
-const DID_RESOLVE_TIMEOUT_MS = 15_000
-
 /** The host inside a did:webvh — what a person recognises — else the DID. */
 const didHost = (did: string) => did.split(':')[3] ?? did
 
@@ -67,22 +64,9 @@ async function routeBareDid(
   agent: Agent,
   navigate: (destination: MyAgentDestination) => void
 ): Promise<void> {
-  let doc
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    doc = await Promise.race([
-      agent.dids.resolveDidDocument(did),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('timeout')), DID_RESOLVE_TIMEOUT_MS)
-      }),
-    ])
-  } catch {
-    throw new KeyringLinkError("This code couldn't be read. Check your connection and try again.")
-  } finally {
-    // Whichever way it ended, the timer must not outlive the lookup.
-    if (timer) clearTimeout(timer)
-  }
-  const kind = classifyDidDocument(doc as never, did)
+  // Resolved and classified in one call, never longer than its 15 s cap, with
+  // why it could not be read when it could not (keyring-bifold#80).
+  const kind = await classifyDid(agent, did)
   switch (kind.kind) {
     case 'community':
       communityTarget.set({ communityDid: did })
@@ -102,6 +86,15 @@ async function routeBareDid(
     case 'relay':
       throw new KeyringLinkError(
         "This is a mediator's code. It relays messages; there is nothing here to link to or join."
+      )
+    case 'unresolvable':
+      // Why, in words: the network, a code no host knows, or not a code at all.
+      throw new KeyringLinkError(
+        kind.reason === 'notFound'
+          ? 'No agent or community has this code.'
+          : kind.reason === 'invalid'
+            ? "This isn't a code Keyring can read."
+            : "This code couldn't be read. Check your connection and try again."
       )
     default:
       throw new KeyringLinkError("This code isn't an agent or a community, so there's nothing to do with it here.")

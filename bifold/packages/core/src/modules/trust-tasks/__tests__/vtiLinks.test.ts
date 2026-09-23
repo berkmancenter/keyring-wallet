@@ -130,7 +130,7 @@ describe('a bare DID, scanned or pasted', () => {
   const agentDid = 'did:webvh:QmAgent:dids.example:alice'
   const communityDid = 'did:webvh:QmCommunity:dids.example:vtc'
   const doc = (types: string[]) => ({ id: 'x', service: types.map((type) => ({ type })) })
-  const withDoc = (d: unknown) => ({ dids: { resolveDidDocument: jest.fn(async () => d) } }) as never
+  const withDoc = (d: unknown) => ({ dids: { resolve: jest.fn(async () => ({ didDocument: d })) } }) as never
   const controller = vtaAgent as unknown as { set(next: Record<string, unknown>): void }
 
   beforeEach(() => {
@@ -198,9 +198,16 @@ describe('a bare DID, scanned or pasted', () => {
       /isn't an agent or a community/
     )
     const offline = {
-      dids: { resolveDidDocument: jest.fn(async () => Promise.reject(new Error('ENOTFOUND'))) },
+      dids: { resolve: jest.fn(async () => Promise.reject(new Error('ENOTFOUND'))) },
     } as never
     await expect(routeKeyringAgentLink(agentDid, offline, navigate)).rejects.toThrow(/couldn't be read/)
+    // A host that answered "no such DID": said as such, not blamed on the network.
+    const notFound = {
+      dids: { resolve: jest.fn(async () => ({ didDocument: null, didResolutionMetadata: { error: 'notFound' } })) },
+    } as never
+    await expect(routeKeyringAgentLink(agentDid, notFound, navigate)).rejects.toThrow(
+      'No agent or community has this code.'
+    )
     expect(navigate).not.toHaveBeenCalled()
   })
 
