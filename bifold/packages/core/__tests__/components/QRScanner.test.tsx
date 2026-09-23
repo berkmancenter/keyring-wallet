@@ -386,8 +386,9 @@ describe('QRScanner Component', () => {
       })
     })
 
-    test('shows each profile\'s photo in the picker, alongside its name, when it has one', async () => {
-      const photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+    test("shows each profile's photo in the picker, alongside its name, when it has one", async () => {
+      const photo =
+        'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
       const profileWithPhoto = buildRCardTemplate(
         { firstName: 'Jane', lastName: 'Doe', email: '', organization: 'Personal', photo },
         { label: 'Personal' }
@@ -460,5 +461,83 @@ describe('QRScanner Component', () => {
         expect(createRelationshipInvitationSpy).toHaveBeenCalledTimes(1)
       }
     })
+  })
+})
+
+/**
+ * The QR tab says what its codes are (215 feedback), and offers the one
+ * OpenVTC code a person shows: their identity for a community, which its admin
+ * scans to invite them.
+ */
+describe('QRScanner — what the codes are', () => {
+  const navigation = useNavigation()
+  const mockedUseAgent = useAgent as jest.Mock
+  const base = mockedUseAgent()
+  const communityDid = 'did:webvh:QmCommunity:vtc.example.org'
+  const personaDid = 'did:webvh:QmPersona:vta.example.org:p'
+  const personaRecord = {
+    id: 'p',
+    tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: communityDid },
+    content: { communityDid, vtaDid: 'did:webvh:example:vta', did: personaDid, createdAt: '2026-09-23T00:00:00Z' },
+  }
+  const withPersona = (records: unknown[]) => ({
+    ...base,
+    agent: {
+      ...base.agent,
+      genericRecords: {
+        findAllByQuery: async (query: Record<string, string>) =>
+          (records as { tags: Record<string, string> }[]).filter((r) =>
+            Object.entries(query).every(([k, v]) => r.tags[k] === v)
+          ),
+      },
+    },
+  })
+
+  beforeAll(() => jest.useFakeTimers())
+  afterAll(() => jest.useRealTimers())
+  beforeEach(() => {
+    base.agent?.modules.didcomm.oob.createInvitation.mockReturnValue({
+      outOfBandInvitation: { toUrl: () => 'https://example.com/invitation' },
+    })
+  })
+  afterEach(() => mockedUseAgent.mockReturnValue(base))
+
+  const renderQr = async (defaultToConnect: boolean) => {
+    const tree = render(
+      <BasicAppContext>
+        <QRScanner
+          showTabs={false}
+          defaultToConnect={defaultToConnect}
+          handleCodeScan={() => Promise.resolve()}
+          navigation={navigation as any}
+          route={{} as any}
+        />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.runAllTimers()
+    })
+    return tree
+  }
+
+  test('the scanner says what it can scan', async () => {
+    const tree = await renderQr(false)
+    expect(tree.getByTestId(testIdWithKey('ScanWhatCanI'))).toHaveTextContent('Scan.WhatCanIScan')
+  })
+
+  test('with no community identity, the code is the contact card, and says so', async () => {
+    mockedUseAgent.mockReturnValue(withPersona([]))
+    const tree = await renderQr(true)
+    expect(tree.getByTestId(testIdWithKey('MyQRCodeTitle'))).toHaveTextContent('Scan.YourQRCodeTitle')
+    expect(tree.queryByTestId(testIdWithKey('MyQRIdentity'))).toBeNull()
+  })
+
+  test('with a community identity, the person can show it instead', async () => {
+    mockedUseAgent.mockReturnValue(withPersona([personaRecord]))
+    const tree = await renderQr(true)
+    await act(async () => fireEvent.press(await tree.findByTestId(testIdWithKey('MyQRIdentity'))))
+    expect(tree.getByTestId(testIdWithKey('MyQRIdentityCode'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('MyQRCodeTitle'))).toHaveTextContent('Scan.YourIdentityTitle')
+    expect(tree.getByTestId(testIdWithKey('MyQRCodeInstruction'))).toHaveTextContent('Scan.YourIdentityInstruction')
   })
 })

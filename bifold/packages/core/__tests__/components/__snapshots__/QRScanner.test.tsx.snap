@@ -338,6 +338,33 @@ exports[`QRScanner Component Focus animation does not render before tapping 1`] 
         >
           Scan.WillScanAutomatically
         </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Array [
+                Object {
+                  "color": "white",
+                  "marginHorizontal": 10,
+                  "textAlign": "center",
+                },
+                Object {
+                  "marginTop": 8,
+                  "paddingHorizontal": 24,
+                  "textAlign": "center",
+                },
+              ],
+            ]
+          }
+          testID="com.ariesbifold:id/ScanWhatCanI"
+        >
+          Scan.WhatCanIScan
+        </Text>
       </View>
       <View
         style={Object {}}
@@ -799,6 +826,25 @@ exports[`QRScanner Component Renders QR code view when defaultToConnect is true 
             Object {
               "color": "#FFFFFF",
               "fontSize": 18,
+              "fontWeight": "bold",
+            },
+            Object {
+              "marginTop": 16,
+              "textAlign": "center",
+            },
+          ]
+        }
+        testID="com.ariesbifold:id/MyQRCodeTitle"
+      >
+        Scan.YourQRCodeTitle
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
               "fontWeight": "normal",
             },
             Object {
@@ -809,6 +855,7 @@ exports[`QRScanner Component Renders QR code view when defaultToConnect is true 
             },
           ]
         }
+        testID="com.ariesbifold:id/MyQRCodeInstruction"
       >
         Scan.YourQRCodeInstruction
       </Text>
@@ -913,6 +960,25 @@ exports[`QRScanner Component Renders correctly on first tab 1`] = `
             Object {
               "color": "#FFFFFF",
               "fontSize": 18,
+              "fontWeight": "bold",
+            },
+            Object {
+              "marginTop": 16,
+              "textAlign": "center",
+            },
+          ]
+        }
+        testID="com.ariesbifold:id/MyQRCodeTitle"
+      >
+        Scan.YourQRCodeTitle
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
               "fontWeight": "normal",
             },
             Object {
@@ -923,6 +989,7 @@ exports[`QRScanner Component Renders correctly on first tab 1`] = `
             },
           ]
         }
+        testID="com.ariesbifold:id/MyQRCodeInstruction"
       >
         Scan.YourQRCodeInstruction
       </Text>
@@ -1188,6 +1255,25 @@ exports[`QRScanner Component Renders correctly on second tab 1`] = `
             Object {
               "color": "#FFFFFF",
               "fontSize": 18,
+              "fontWeight": "bold",
+            },
+            Object {
+              "marginTop": 16,
+              "textAlign": "center",
+            },
+          ]
+        }
+        testID="com.ariesbifold:id/MyQRCodeTitle"
+      >
+        Scan.YourQRCodeTitle
+      </Text>
+      <Text
+        maxFontSizeMultiplier={2}
+        style={
+          Array [
+            Object {
+              "color": "#FFFFFF",
+              "fontSize": 18,
               "fontWeight": "normal",
             },
             Object {
@@ -1198,6 +1284,7 @@ exports[`QRScanner Component Renders correctly on second tab 1`] = `
             },
           ]
         }
+        testID="com.ariesbifold:id/MyQRCodeInstruction"
       >
         Scan.YourQRCodeInstruction
       </Text>
@@ -1704,6 +1791,33 @@ exports[`QRScanner Component Scanner with no tabs renders correctly 1`] = `
           }
         >
           Scan.WillScanAutomatically
+        </Text>
+        <Text
+          maxFontSizeMultiplier={2}
+          style={
+            Array [
+              Object {
+                "color": "#FFFFFF",
+                "fontSize": 18,
+                "fontWeight": "normal",
+              },
+              Array [
+                Object {
+                  "color": "white",
+                  "marginHorizontal": 10,
+                  "textAlign": "center",
+                },
+                Object {
+                  "marginTop": 8,
+                  "paddingHorizontal": 24,
+                  "textAlign": "center",
+                },
+              ],
+            ]
+          }
+          testID="com.ariesbifold:id/ScanWhatCanI"
+        >
+          Scan.WhatCanIScan
         </Text>
       </View>
       <View

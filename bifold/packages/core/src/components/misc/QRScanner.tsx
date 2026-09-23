@@ -11,6 +11,9 @@ import { hitSlop } from '../../constants'
 import { useStore } from '../../contexts/store'
 import { useTheme } from '../../contexts/theme'
 import { useConnectionByOutOfBandId } from '../../hooks/connections'
+import { GenericRecordsIdentityStore, type VtiPersona } from '../../modules/trust-tasks/module/VtiIdentityStore'
+import { communityTarget } from '../../modules/trust-tasks/module/vtiCommunityLink'
+import { communityLabelOf } from '../../modules/trust-tasks/screens/communityName'
 import { useRCardCredential } from '../../modules/vrc/hooks/useRCardCredential'
 import { formInputFromTemplate } from '../../modules/vrc/types/rcard'
 import { QrCodeScanError } from '../../types/error'
@@ -66,6 +69,28 @@ const QRScanner: React.FC<Props> = ({
   const [showProfilePicker, setShowProfilePicker] = useState(false)
   const { profiles, activeProfileId, setActive } = useRCardCredential()
   const activeProfile = profiles.find((p) => p.id === activeProfileId)
+  // The phone's identity for a community — the code a community's admin needs
+  // to invite it — offered beside the contact card when the phone holds one.
+  // The community it has chosen, else its newest identity.
+  const [persona, setPersona] = useState<VtiPersona>()
+  const [showing, setShowing] = useState<'contact' | 'identity'>('contact')
+  useEffect(() => {
+    if (!agent) return
+    let live = true
+    new GenericRecordsIdentityStore(agent)
+      .listPersonas()
+      .then((all) => {
+        if (!live) return
+        const chosen = communityTarget.getChosen()?.communityDid
+        const newest = [...all].sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
+        setPersona(newest.find((p) => p.communityDid === chosen) ?? newest[0])
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [agent])
+  const identityShown = showing === 'identity' && Boolean(persona)
 
   const qrSize = width - 40
 
@@ -122,6 +147,33 @@ const QRScanner: React.FC<Props> = ({
       color: ColorPalette.grayscale.mediumGrey,
       textAlign: 'center',
       marginTop: 16,
+    },
+    codeTitle: {
+      textAlign: 'center',
+      marginTop: 16,
+    },
+    choice: {
+      flexDirection: 'row',
+      alignSelf: 'stretch',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: ColorPalette.brand.primary,
+      marginBottom: 16,
+      overflow: 'hidden',
+    },
+    choiceOption: {
+      flex: 1,
+      paddingVertical: 10,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+    },
+    choiceOptionOn: {
+      backgroundColor: ColorPalette.brand.primary,
+    },
+    scanHint: {
+      textAlign: 'center',
+      marginTop: 8,
+      paddingHorizontal: 24,
     },
     profileSwitcher: {
       flexDirection: 'row',
@@ -216,7 +268,14 @@ const QRScanner: React.FC<Props> = ({
     }
     // store.rCard.activeProfileId: switching the active profile on this
     // screen regenerates the invitation under the newly active one.
-  }, [showTabs, firstTabActive, defaultToConnect, createInvitation, store.preferences.walletName, store.rCard.activeProfileId])
+  }, [
+    showTabs,
+    firstTabActive,
+    defaultToConnect,
+    createInvitation,
+    store.preferences.walletName,
+    store.rCard.activeProfileId,
+  ])
 
   useEffect(() => {
     // Effect not required if tabs are not enabled
@@ -287,6 +346,10 @@ const QRScanner: React.FC<Props> = ({
                     <ThemedText variant="title" style={styles.textStyle}>
                       {t('Scan.WillScanAutomatically')}
                     </ThemedText>
+                    {/* One entry point: say what it takes (217). */}
+                    <ThemedText style={[styles.textStyle, styles.scanHint]} testID={testIdWithKey('ScanWhatCanI')}>
+                      {t('Scan.WhatCanIScan')}
+                    </ThemedText>
                   </>
                 )}
               </View>
@@ -356,7 +419,38 @@ const QRScanner: React.FC<Props> = ({
           </>
         ) : (
           <View style={styles.qrCodeViewContainer}>
-            {offerRelationshipCredential && activeProfile && profiles.length > 1 && (
+            {/* Two codes a person may be asked to show, said as what they are:
+                a contact card for another Keyring user, or — once the phone
+                holds one — its identity for a community, which that
+                community's admin scans to invite it (215 feedback: nobody
+                could tell what this code was). */}
+            {persona ? (
+              <View style={styles.choice} accessibilityRole="tablist">
+                {(['contact', 'identity'] as const).map((which) => (
+                  <Pressable
+                    key={which}
+                    style={[styles.choiceOption, showing === which ? styles.choiceOptionOn : undefined]}
+                    onPress={() => setShowing(which)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: showing === which }}
+                    testID={testIdWithKey(which === 'contact' ? 'MyQRContact' : 'MyQRIdentity')}
+                  >
+                    <ThemedText
+                      variant="bold"
+                      style={{ color: showing === which ? ColorPalette.grayscale.white : ColorPalette.brand.primary }}
+                    >
+                      {which === 'contact'
+                        ? t('Scan.ContactCard')
+                        : t('Scan.IdentityFor', {
+                            community: communityLabelOf(persona.communityDid),
+                            interpolation: { escapeValue: false },
+                          })}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {!identityShown && offerRelationshipCredential && activeProfile && profiles.length > 1 && (
               <TouchableOpacity
                 style={styles.profileSwitcher}
                 onPress={() => setShowProfilePicker(true)}
@@ -384,8 +478,16 @@ const QRScanner: React.FC<Props> = ({
               </TouchableOpacity>
             )}
             <View style={styles.qrContainer}>
-              {!invitation && <LoadingIndicator />}
-              {invitation && <QRRenderer value={invitation} size={qrSize} />}
+              {identityShown && persona ? (
+                <View testID={testIdWithKey('MyQRIdentityCode')}>
+                  <QRRenderer value={persona.did} size={qrSize} />
+                </View>
+              ) : (
+                <>
+                  {!invitation && <LoadingIndicator />}
+                  {invitation && <QRRenderer value={invitation} size={qrSize} />}
+                </>
+              )}
             </View>
             {/* E2E-only: expose invitation URL to the accessibility tree so Appium can
                 read it and paste it into the peer wallet (avoids camera-based QR scan). */}
@@ -399,8 +501,16 @@ const QRScanner: React.FC<Props> = ({
                 {invitation}
               </ThemedText>
             )}
-            <ThemedText style={styles.instruction}>
-              {t('Scan.YourQRCodeInstruction')}
+            <ThemedText variant="bold" style={styles.codeTitle} testID={testIdWithKey('MyQRCodeTitle')}>
+              {identityShown && persona
+                ? t('Scan.YourIdentityTitle', {
+                    community: communityLabelOf(persona.communityDid),
+                    interpolation: { escapeValue: false },
+                  })
+                : t('Scan.YourQRCodeTitle')}
+            </ThemedText>
+            <ThemedText style={styles.instruction} testID={testIdWithKey('MyQRCodeInstruction')}>
+              {identityShown ? t('Scan.YourIdentityInstruction') : t('Scan.YourQRCodeInstruction')}
             </ThemedText>
           </View>
         )}
@@ -439,12 +549,7 @@ const QRScanner: React.FC<Props> = ({
                     {profile.label}
                   </ThemedText>
                   {profile.id === activeProfileId && (
-                    <Icon
-                      name="check"
-                      size={20}
-                      color={ColorPalette.brand.primary}
-                      style={{ marginLeft: 'auto' }}
-                    />
+                    <Icon name="check" size={20} color={ColorPalette.brand.primary} style={{ marginLeft: 'auto' }} />
                   )}
                 </TouchableOpacity>
               ))}
