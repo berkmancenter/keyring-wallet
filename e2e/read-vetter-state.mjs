@@ -28,15 +28,23 @@ try {
   });
   await sleep(2500);
   await unlockIfLocked(driver).catch(() => undefined);
-  await openMyAgentPanel(driver);
+  // A linked phone has no panel on the one-agent screen: it reads the agent home.
+  const surface = await openMyAgentPanel(driver).catch(() => "agent home");
   await sleep(4000);
+  console.log(`surface: ${surface}`);
 
-  for (const k of ["MyAgentVettingRow", "MyAgentMembershipRole", "MyAgentPersonaDid", "MyAgentCommunityRow"]) {
+  for (const k of [
+    "MyAgentVettingRow", "MyAgentMembershipRole", "MyAgentPersonaDid", "MyAgentCommunityRow",
+    "AgentSeat", "AgentVetterCard", "AgentVetterLapsed", "AgentContinueVetting", "AgentMembershipRow",
+  ]) {
     if (await existsTestId(driver, k, 1500)) console.log(`${k}: ${(await textOf(driver, k)).slice(0, 110)}`);
   }
 
   if (PARK === "vetting") {
-    const row = await byTestId(driver, "MyAgentVettingRow");
+    const into = ["MyAgentVettingRow", "AgentContinueVetting", "AgentVetOthers"];
+    let key;
+    for (const k of into) if (!key && (await byTestId(driver, k).isExisting().catch(() => false))) key = k;
+    const row = await byTestId(driver, key ?? "MyAgentVettingRow");
     if (await row.isExisting().catch(() => false)) {
       await row.click();
       await sleep(4000);

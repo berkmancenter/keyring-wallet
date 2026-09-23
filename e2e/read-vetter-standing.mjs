@@ -27,9 +27,16 @@ try {
   // The wallet may be locked, or sitting on whatever screen the last run left.
   await unlockIfLocked(driver).catch(() => undefined);
   await sleep(2000);
-  await openMyAgentPanel(driver);
+  // A linked phone has no panel on the one-agent screen: it reads the agent home.
+  const surface = await openMyAgentPanel(driver).catch(() => "agent home");
   await sleep(4000);
+  console.log(`surface: ${surface}`);
   const keys = [
+    "AgentSeat",
+    "AgentVetterCard",
+    "AgentVetterLapsed",
+    "AgentContinueVetting",
+    "AgentMembershipRow",
     "MyAgentSeatBadge",
     "MyAgentVettingRow",
     "MyAgentVetterRow",

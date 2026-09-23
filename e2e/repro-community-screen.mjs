@@ -51,16 +51,18 @@ try {
     }
     process.exit(0);
   }
-  // MyAgentCommunityRow is on the operator panel, one screen in for a linked
-  // phone (keyring-bifold#11).
-  await openMyAgentPanel(driver);
+  // The community row: MyAgentCommunityRow on the operator panel (a phone
+  // whose build names its agent), AgentMembershipRow on the agent home (a
+  // linked phone, which has no panel on the one-agent screen).
+  const surface = await openMyAgentPanel(driver).catch(() => "agent home");
   await sleep(4000);
+  const rowKey = surface === "agent home" ? "AgentMembershipRow" : "MyAgentCommunityRow";
 
-  const row = byTestId(driver, "MyAgentCommunityRow");
+  const row = byTestId(driver, rowKey);
   if (!(await row.isExisting().catch(() => false))) {
-    console.log("OK: no community row on My Agent — nothing to open");
+    console.log(`OK: no community row (${rowKey}) on My Agent — nothing to open`);
   } else {
-    console.log(`opening: ${(await textOf(driver, "MyAgentCommunityRow")).slice(0, 90)}`);
+    console.log(`opening: ${(await textOf(driver, rowKey)).slice(0, 90)}`);
     await row.click();
     await sleep(6000);
     if (await existsTestId(driver, "ShowDetails", 4000)) {

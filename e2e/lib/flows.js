@@ -2179,7 +2179,7 @@ export async function pasteLinkOnScanScreen(driver, url) {
  * "forget this community" as the harness's reset. Returns false when this
  * phone has no community row to leave (nothing to reset).
  */
-export async function leaveCommunityInApp(driver) {
+export async function leaveCommunityInApp(driver, { allowInProgress = false } = {}) {
   await dismissTourIfPresent(driver);
   // Everything below reads operator-panel ids (MyAgentCard, MyAgentCommunityRow,
   // MyAgentMembershipCard). keyring-bifold#11 means a LINKED phone lands on the
@@ -2187,37 +2187,44 @@ export async function leaveCommunityInApp(driver) {
   // connected" about a phone plainly showing "Online", and threw after 180s
   // rather than reporting the truth, which was that it holds no community and
   // there is nothing to leave (2026-09-23).
-  // A linked phone that is NOT a member has no route to the panel at all:
-  // "Open my communities" (AgentOpenCommunities) renders only inside the
-  // isMember branch of the agent home's AgentDoors card, and the other branch
-  // says "What brings you here?". So check that state FIRST and answer it
-  // directly — a non-member has nothing to leave, which is a positive reading
-  // of the screen rather than a failure to find a row. Without this the reset
-  // hunted panel ids on the agent home and reported "the agent never
-  // connected" about a phone showing "Online" (2026-09-23).
+  // A LINKED phone lands on the agent home (keyring-bifold's one-agent
+  // screen): it has no operator panel at all, so read the home directly.
+  // AgentSeat is always there on it, and says what the phone is.
   await (await waitForTestId(driver, "MyAgent", 30000)).click()
   await sleep(2000)
-  if (
-    (await byTestId(driver, "AgentDoors").isExisting().catch(() => false)) &&
-    !(await existsTestId(driver, "AgentOpenCommunities", 3000))
-  ) {
-    // LIMITATION, stated loudly because this function's whole doctrine is that
-    // a silent skip is worse than a failure. "Not a member" is NOT the same as
-    // "a fresh applicant": a phone can hold a community persona and an
-    // in-flight vetting request while still being a non-member, and on this
-    // build the agent home shows no marker for it (AgentJourney is the
-    // Linked/Join/Member strip, always rendered; AgentContinueVetting does not
-    // exist yet). So this cannot clear that state and cannot see it.
-    // 2026-09-23: skipping it here let a previous run's applicant identity
-    // survive, and the next run's join silently took the "you already have an
-    // identity" path and failed 4 minutes later on a missing name field.
-    console.log(`[e2e] ${deviceTag(driver)}: linked, member of nothing — nothing to LEAVE`)
-    console.log(
-      `[e2e] ${deviceTag(driver)}: WARNING — cannot verify this applicant is fresh. If it ran a vetting ` +
-        `flow before, its persona and request survive and the next join will take a different path. ` +
-        `Reinstall the app on this phone between runs until a marker exists for it.`
-    )
-    return false
+  const onHome =
+    (await existsTestId(driver, "AgentSeat", 3000)) ||
+    // Builds before the one-agent screen: the home without the seat line.
+    (await byTestId(driver, "AgentDoors").isExisting().catch(() => false))
+  if (onHome) {
+    // A member opens each community from its row; Leave is on that screen.
+    const member = await scrollToTestId(driver, "AgentMembershipRow", 6).catch(() => undefined)
+    if (member) return leaveFromCommunityRow(driver, member)
+    // Before the one-agent screen a member's only way in was "Open my
+    // communities": such a build falls through to the panel below.
+    if (!(await existsTestId(driver, "AgentOpenCommunities", 2000))) {
+      if (await existsTestId(driver, "AgentContinueVetting", 2000)) {
+        // An applicant: it holds an identity and maybe a vetting request, and
+        // the agent home offers no Leave for one. The harness can SEE this now,
+        // so carrying on would be the silent skip this function exists to
+        // prevent — it is what broke run ten (2026-09-23), when the next join
+        // took the "you already have an identity" path. A flow that means to
+        // continue a vetting in progress says so with allowInProgress.
+        const line = await byTestId(driver, "AgentSeat").getAttribute(driver.e2ePlatform === "ios" ? "label" : "text").catch(() => "")
+        const what = `this phone is an applicant (${line || "AgentContinueVetting shown"}): its identity and any vetting request survive`
+        if (allowInProgress) {
+          console.log(`[e2e] ${deviceTag(driver)}: ${what} — continuing, as the caller asked (allowInProgress)`)
+          return false
+        }
+        await screenshot(driver, "leave-community-applicant")
+        throw new Error(
+          `[${deviceTag(driver)}] NOT FRESH — ${what}, and the agent home offers no Leave for an applicant. ` +
+            `Reinstall the app on this phone, or pass allowInProgress if this flow continues that vetting.`
+        )
+      }
+      console.log(`[e2e] ${deviceTag(driver)}: linked, holds no community identity — nothing to leave`)
+      return false
+    }
   }
   await openMyAgentPanel(driver);
   await sleep(1500);
@@ -2281,6 +2288,11 @@ export async function leaveCommunityInApp(driver) {
         " within 180s; refusing to skip the reset"
     );
   }
+  return leaveFromCommunityRow(driver, row);
+}
+
+/** Open a community from a row that leads to it, and leave it from its screen. */
+async function leaveFromCommunityRow(driver, row) {
   await row.click();
   // A phone that is linked but has never joined still shows a row for the
   // community its build names, and opening it lands on a screen that cannot
@@ -2364,7 +2376,7 @@ export async function openMyAgentPanel(driver) {
     if (!onPanel) {
       throw new Error(
         `[${deviceTag(driver)}] the operator panel is not reachable from here: no "AgentOpenCommunities" to walk through and no MyAgent* id on screen. ` +
-          `On a build where a linked phone no longer has a panel, read the agent home instead (AgentVetterCard/AgentVetterLapsed/AgentMemberRow).`
+          `A linked phone has no panel on the one-agent screen: read the agent home instead (AgentSeat, AgentVetterCard/AgentVetterLapsed, AgentContinueVetting, AgentMembershipRow).`
       )
     }
     return "panel"
