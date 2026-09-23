@@ -422,7 +422,14 @@ try {
     await dismissTourIfPresent(driver);
     await (await waitForTestId(driver, "MyAgent", 30000)).click();
     await tapTestId(driver, "LinkWithoutQrButton", 30000);
-    await tapTestId(driver, "VtaLinkWithoutQr", 15000);
+    // "Link without QR" can land straight on the address screen, and then the
+    // intermediate control is never there to tap — the same shape as the
+    // "Show my code" race below: ask for the GOAL first, and treat the
+    // waypoint as optional. Measured on the candidate tree 2026-09-23, where
+    // the run died waiting 15s for a step the flow had already passed.
+    if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000))) {
+      await tapTestId(driver, "VtaLinkWithoutQr", 15000).catch(() => undefined);
+    }
     const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
     // Return on the keyboard submits the address, as a person would — on iOS.
     await address.setValue(`${runnerVtaDid()}\n`);
@@ -434,11 +441,17 @@ try {
     // reveal it directly, and then "Show my code" is gone before it can be
     // tapped — a check that the element EXISTS, followed by a tap, is a race
     // when the screen is moving. Ask for the goal first.
-    if (
-      !(await existsTestId(driver, "VtaLinkManualDid", 2000)) &&
-      (await existsTestId(driver, "VtaLinkShowMyCode", 5000))
-    ) {
-      await tapTestId(driver, "VtaLinkShowMyCode", 15000).catch(() => undefined);
+    // The disclosure that reveals the key is "VtaLinkShowTheCode" on current
+    // builds and "VtaLinkShowMyCode" on older ones. Note that grepping for the
+    // old id still finds it — it survives on a DIFFERENT screen in the same
+    // file — so "the testID is still there" was never the question; which
+    // screen carries it is. Try both, newest first.
+    if (!(await existsTestId(driver, "VtaLinkManualDid", 2000))) {
+      for (const key of ["VtaLinkShowTheCode", "VtaLinkShowMyCode"]) {
+        if (!(await existsTestId(driver, key, 3000))) continue;
+        await tapTestId(driver, key, 15000).catch(() => undefined);
+        break;
+      }
     }
     await waitForTestId(driver, "VtaLinkManualDid", 60000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
