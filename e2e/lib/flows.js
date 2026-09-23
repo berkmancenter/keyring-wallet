@@ -21,7 +21,7 @@ import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const TEST_PHOTO_PATH = path.join(
+export const TEST_PHOTO_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "fixtures",
@@ -278,7 +278,7 @@ export async function pickRCardPhoto(driver) {
 
 export async function completeOnboarding(
   driver,
-  { firstName, lastName, photo = false }
+  { firstName, lastName, photo = false, beforeRCardSubmit }
 ) {
   // Screen-dispatch loop: onboarding step order varies (tutorial, PIN explainer, PIN,
   // biometry, wallet naming, R-Card). Handle whichever known screen is visible until
@@ -327,6 +327,9 @@ export async function completeOnboarding(
       const last = byTestId(driver, "RCardLastNameInput");
       await last.setValue(lastName);
       await hideKeyboard(driver, last);
+      // A check that needs the profile form itself (#21's photo permission
+      // sheet) runs here, with the names filled in and nothing submitted.
+      if (beforeRCardSubmit) await beforeRCardSubmit(driver);
       if (photo) {
         await seedTestPhoto(driver);
         await pickRCardPhoto(driver);
