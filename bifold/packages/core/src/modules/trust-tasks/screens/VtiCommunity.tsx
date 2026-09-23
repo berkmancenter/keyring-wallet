@@ -93,7 +93,8 @@ const VtiCommunity: React.FC = () => {
     let cancelled = false
     const load = async () => {
       try {
-        const result = await vtiAgent.fetchManifest(communityDid)
+        // With this screen's agent: a phone with no session yet has none to lend.
+        const result = await vtiAgent.fetchManifest(communityDid, agent)
         if (!cancelled) setManifest(result)
       } catch (err) {
         if (!cancelled) {
@@ -108,7 +109,7 @@ const VtiCommunity: React.FC = () => {
     return () => {
       cancelled = true
     }
-  }, [communityDid])
+  }, [communityDid, agent])
 
   const onApply = useCallback(async () => {
     if (!manifest) return

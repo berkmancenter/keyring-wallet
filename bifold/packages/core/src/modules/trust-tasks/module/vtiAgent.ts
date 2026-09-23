@@ -419,7 +419,9 @@ class VtiAgentController {
       const mediatorDid = own ?? configuredMediatorDid
       if (!mediatorDid) throw new Error('vtiAgent: no mediator — the persona names none and none is configured')
       if (own && configuredMediatorDid && own !== configuredMediatorDid) {
-        agent.config.logger.info(`vtiAgent: ${options.persona?.did} is reached through its own mediator ${own}, not the configured one`)
+        agent.config.logger.info(
+          `vtiAgent: ${options.persona?.did} is reached through its own mediator ${own}, not the configured one`
+        )
       }
       const mediator = await resolveVtiMediator(agent, mediatorDid)
       this.mediator = mediator
@@ -674,18 +676,27 @@ class VtiAgentController {
     return result
   }
 
-  /** What a community asks of an applicant, in its own words. */
-  async fetchManifest(communityDid: string): Promise<VtiManifest> {
+  /**
+   * What a community asks of an applicant, in its own words.
+   *
+   * `agent` is the caller's: a phone that has opened no community session yet
+   * — a fresh one on its first Join — has given this controller none, and
+   * without one the REST read below was skipped, so the manifest (and the
+   * name the community publishes) could not be read before a session existed,
+   * the one moment the REST read is for (Farm gate, 2026-09-23).
+   */
+  async fetchManifest(communityDid: string, agent?: Agent): Promise<VtiManifest> {
+    const withAgent = agent ?? this.agent
     // Packing to the community resolves its document; warm that resolution
     // patiently so a tunnel's rate limit does not surface as a failed send.
-    if (this.agent) await resolveDidDocumentRetrying(this.agent, communityDid)
+    if (withAgent) await resolveDidDocumentRetrying(withAgent, communityDid)
     // A community answers the join manifest over REST with no session at all
     // (`POST {VTCRest}/v1/trust-tasks`), which is how an applicant can read
     // what is asked of them on a first join — before any channel exists — and
     // the fast path when one does. A community may switch that off, and a
     // wallet with a live session can always ask over DIDComm, so a failure
     // here is not an error: it falls through.
-    const overRest = await this.manifestOverRest(communityDid)
+    const overRest = await this.manifestOverRest(communityDid, withAgent)
     if (overRest) return overRest
     const answer = await this.ask(communityDid, MANIFEST, {})
     if (!answer) throw new Error('vtiAgent: the community did not answer')
@@ -713,8 +724,7 @@ class VtiAgentController {
    * public read off, a network that is not there, an error document — so the
    * caller can fall back to asking over DIDComm.
    */
-  private async manifestOverRest(communityDid: string): Promise<VtiManifest | undefined> {
-    const agent = this.agent
+  private async manifestOverRest(communityDid: string, agent: Agent | undefined): Promise<VtiManifest | undefined> {
     if (!agent) return undefined
     try {
       const doc = await agent.dids.resolveDidDocument(communityDid)

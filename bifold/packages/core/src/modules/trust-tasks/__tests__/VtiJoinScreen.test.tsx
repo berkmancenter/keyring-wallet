@@ -136,7 +136,11 @@ describe('I want to join a community', () => {
       return { criteria: [] } as never
     })
     const tree = await renderJoin()
-    expect(vtiAgent.fetchManifest).toHaveBeenCalledWith(suggested)
+    // With this screen's agent: a fresh phone has no session to lend the read one.
+    expect(vtiAgent.fetchManifest).toHaveBeenCalledWith(
+      suggested,
+      expect.objectContaining({ config: expect.anything() })
+    )
     expect(tree.getByTestId(testIdWithKey('JoinSuggestedName'))).toHaveTextContent('Keyring Lab Community')
   })
 

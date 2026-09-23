@@ -139,7 +139,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     // exists. Guarding this on `connected` is why a community's published name
     // never reached this screen while the community screen had it (report #16).
     vtiAgent
-      .fetchManifest(communityDid)
+      // With this screen's agent: a fresh phone has no session to lend one.
+      .fetchManifest(communityDid, agent)
       // Reading the manifest also teaches the app what the community calls
       // itself; vtiAgent does that for every fetch, so nothing is needed here.
       .then((m) => live && setAsks(asksFrom(m)))
@@ -148,7 +149,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     return () => {
       live = false
     }
-  }, [communityDid])
+  }, [communityDid, agent])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
