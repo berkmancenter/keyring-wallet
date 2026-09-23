@@ -12,13 +12,14 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   Share,
   StyleSheet,
@@ -37,6 +38,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import type { VtaLinkFailure } from '../module/vtaLinkMachine'
 
 import { openScanner } from './openScanner'
+import { shareableKey } from './shareableKey'
 
 /** The agent's host, for people: the domain inside a did:webvh, else the label alone. */
 export function agentHost(vtaDid: string): string | undefined {
@@ -48,12 +50,17 @@ const VtaLink: React.FC = () => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
+  const route = useRoute()
   const { ColorPalette, TextTheme } = useTheme()
   const { link } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   // Form state only — what the person is typing before they ask for a key.
-  const [manualEntry, setManualEntry] = useState(false)
+  // Opening straight into the address field when the previous screen already
+  // asked: being asked the same question twice reads as not having been heard.
+  const askedWithoutQr = Boolean((route?.params as { withoutQr?: boolean } | undefined)?.withoutQr)
+  const [manualEntry, setManualEntry] = useState(askedWithoutQr)
   const [agentAddress, setAgentAddress] = useState('')
   const [copied, setCopied] = useState(false)
+  const [keyShown, setKeyShown] = useState(false)
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -213,22 +220,18 @@ const VtaLink: React.FC = () => {
           <ThemedText>
             {t('VtaLink.GiveKeyBody', { label: link.label, interpolation: { escapeValue: false } })}
           </ThemedText>
-          {/* Where the admin puts it, with no upstream change: the VTA browser
-              extension's Grant access form, or pnm from a terminal. */}
-          <ThemedText testID={testIdWithKey('VtaLinkGiveKeyHow')}>{t('VtaLink.GiveKeyHow')}</ThemedText>
-          <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkManualDid')} selectable>
-            {link.did}
-          </ThemedText>
-          {/* The code is a long did:peer (~350 characters): nobody should type
-              it. Share first — to the admin's computer by AirDrop, a message
-              or an email — then Copy. */}
+          {/* The two things to DO come first and fit on the screen. The code
+              itself is a ~350-character did:peer, and putting it here pushed
+              Share, Copy and "I've been added" below the fold — a tester had
+              to scroll a wall of characters to find the buttons and reported
+              the screen as hidden controls and weird text (#25). */}
           <ThemedText style={styles.muted} testID={testIdWithKey('VtaLinkShareKeyHint')}>
             {t('VtaLink.ShareKeyHint')}
           </ThemedText>
           <Button
             title={t('VtaLink.ShareKey')}
             buttonType={ButtonType.Primary}
-            onPress={() => void Share.share({ message: link.did }).catch(() => undefined)}
+            onPress={() => void Share.share(shareableKey(t, link.label, link.did)).catch(() => undefined)}
             testID={testIdWithKey('VtaLinkShareKey')}
           />
           <Button
@@ -240,6 +243,28 @@ const VtaLink: React.FC = () => {
             }}
             testID={testIdWithKey('VtaLinkCopyKey')}
           />
+          {/* The code and where an admin pastes it: true, occasionally needed,
+              and not what the person on this screen has to read. */}
+          <Pressable
+            onPress={() => setKeyShown(!keyShown)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: keyShown }}
+            testID={testIdWithKey('VtaLinkShowTheCode')}
+          >
+            <ThemedText style={styles.muted}>
+              {keyShown ? t('VtaLink.HideTheCode') : t('VtaLink.ShowTheCode')}
+            </ThemedText>
+          </Pressable>
+          {keyShown ? (
+            <>
+              <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkManualDid')} selectable>
+                {link.did}
+              </ThemedText>
+              <ThemedText style={styles.muted} testID={testIdWithKey('VtaLinkGiveKeyHow')}>
+                {t('VtaLink.GiveKeyHow')}
+              </ThemedText>
+            </>
+          ) : null}
         </View>
       )
       actions = (

@@ -655,7 +655,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <Button
               title={t('VtaLink.WithoutQr')}
               buttonType={ButtonType.Tertiary}
-              onPress={() => navigation.navigate(Screens.VtaLink)}
+              onPress={() => navigation.navigate(Screens.VtaLink, { withoutQr: true })}
               testID={testIdWithKey('LinkWithoutQrButton')}
             />
           </View>
