@@ -55,9 +55,11 @@ import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
 import { openScanner } from './openScanner'
 import { communityTarget } from '../module/vtiCommunityLink'
+import { pickOwnVetterGrant, type VetterGrantState } from '../module/vtiGrantState'
 import { joinSeed } from '../module/vtiJoinSeed'
 
 import { useCommunityDid } from './useCommunity'
+import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
 
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
@@ -82,6 +84,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
 
   const [persona, setPersona] = useState<VtiPersona>()
   const [grant, setGrant] = useState<VtiHeldCredential>()
+  /**
+   * Whether this phone is a vetter *now*, not merely whether it holds a grant.
+   * The desk used to seat anyone with a grant and say nothing about its
+   * standing, so a vetter whose grant was revoked or re-granted (a re-grant is
+   * a new credential, and the new one may never have arrived) sat at a desk
+   * that would refuse to sign, with nothing on screen to explain it.
+   */
+  const [standing, setStanding] = useState<VetterGrantState>({ state: 'none' })
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string>()
   // The community answered that an application is already open (and which).
@@ -222,6 +232,40 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     },
   })
 
+  /**
+   * What the phone's vetter standing means for the person sitting at the desk.
+   * Revoked and expired lead to the same request of an admin but are not the
+   * same thing to read, and someone who believes they are a vetter must not be
+   * told they never were. Nothing is claimed about what happens next: a
+   * re-granted vetter's new grant may not have arrived at all, so "try again"
+   * would be a promise the app cannot keep.
+   */
+  /** Whether this phone can actually vet right now, not merely sit at the desk. */
+  const canVet = standing.state === 'active'
+
+  const standingNotice = (() => {
+    const said = vetterStandingLine(standing)
+    if (!said) return null
+    return (
+      <View style={styles.card} testID={testIdWithKey('VettingStanding')}>
+        <View style={styles.row}>
+          <Icon name="alert-circle-outline" size={24} color={ColorPalette.semantic.error} />
+          <Text style={styles.value} testID={testIdWithKey('VettingStandingLine')}>
+            {t(said.line)}
+          </Text>
+        </View>
+        {said.ask ? (
+          <Text style={styles.label} testID={testIdWithKey('VettingStandingAsk')}>
+            {t('Vetting.StandingAsk')}
+          </Text>
+        ) : null}
+        <Text style={styles.label} testID={testIdWithKey('VettingStandingNoTicket')}>
+          {t('Vetting.StandingNoTicket')}
+        </Text>
+      </View>
+    )
+  })()
+
   /** The seat banner: who this phone is at the vetting, in three lines. */
   const seatBanner = (which: 'vetter' | 'applicant') => (
     <View style={styles.seat} testID={testIdWithKey('VettingSeatBanner')} accessibilityRole="header">
@@ -292,11 +336,21 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     })
     const refreshSeat = async () => {
       const grants = await stores.community.listHeldCredentials('vetter-grant', persona.communityDid)
-      const g = grants.find((x) => x.subjectDid === persona.did)
-      setGrant(g)
+      const mine = grants.filter((x) => x.subjectDid === persona.did)
+      // One chooser for the desk and for signing: `pickOwnVetterGrant` picks
+      // the grant the app will actually sign under and says what it is, so the
+      // desk cannot seat someone under one grant while the signature is made
+      // under another — or refused.
+      const picked = await pickOwnVetterGrant(agent, mine, { allowInsecureLocal: __DEV__ })
+      setGrant(picked.held)
+      setStanding(picked.state)
       const m = await stores.community.getMembership(persona.communityDid)
       setMembershipRole(m?.role)
-      if (g) {
+      // Seated at the desk for any grant it holds, live or not — a vetter
+      // whose grant was revoked should find the desk and be told why it will
+      // not work, rather than be quietly returned to the applicant's chair as
+      // though they had never been a vetter.
+      if (picked.held) {
         if (!deskRef.current)
           deskRef.current = new VtiVetterDesk(agent, persona, stores.vetting, stores.community, bump)
         deskRef.current.listen()
@@ -474,6 +528,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <ScrollView contentContainerStyle={styles.content}>
           {seatBanner('vetter')}
+          {standingNotice}
           <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>
             {tp('Vetting.YouVetFor', { community: shortDid(persona.communityDid) })}
           </Text>
@@ -481,11 +536,17 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           {vetterStep === 'ticket' ? (
             <>
               {stepHeader(stepNumber, 5, t('Vetting.DeskStep1'))}
+              {/* A ticket is the invitation to begin: handing one out with no
+                  live grant starts a ceremony that cannot finish — codes
+                  matched, card sent, statement issued, and only then does the
+                  applicant learn none of it counted. The applicant is a
+                  stranger to this problem, so the desk does not start one. */}
               <Pressable
                 style={styles.button}
                 testID={testIdWithKey('VettingNewTicketButton')}
                 accessibilityRole="button"
-                disabled={!!busy}
+                disabled={!!busy || !canVet}
+                accessibilityState={{ disabled: !!busy || !canVet }}
                 onPress={() => run('ticket', () => deskRef.current!.issueTicket())}
               >
                 {busy === 'ticket' ? <ActivityIndicator color="#FFFFFF" /> : null}
