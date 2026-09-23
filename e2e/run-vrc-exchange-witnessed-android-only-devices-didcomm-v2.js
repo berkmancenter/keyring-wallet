@@ -33,6 +33,7 @@
  * two are found, set ANDROID_UDID and ANDROID_UDID2 to pick them explicitly
  * (`adb devices` lists connected serials).
  */
+import "./lib/cli-guard.js";
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 

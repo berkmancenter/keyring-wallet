@@ -28,6 +28,7 @@
  * appium with uiautomator2, built .apk (see lib/config.js), a cloudflared
  * tunnel for the verifier (same requirement e2e/lib/witness.js already has).
  */
+import "./lib/cli-guard.js";
 import {
   createSession,
   ensureAppium,

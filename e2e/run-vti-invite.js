@@ -17,6 +17,7 @@
  *   it → the runner invites it → the link is pasted → back in the flow the
  *   invitation shows → Join → "You're a member".
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";

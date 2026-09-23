@@ -13,6 +13,7 @@
  *
  * Usage: PLATFORM=android node run-vta-enrol.js   (or PLATFORM=ios)
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { completeOnboarding, openDeveloperScreen, enableDidCommV2, unlockIfLocked } from "./lib/flows.js";

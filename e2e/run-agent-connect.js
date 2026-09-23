@@ -11,6 +11,7 @@
  *
  * Usage: PLATFORM=android node run-agent-connect.js   (or PLATFORM=ios)
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, existsTestId, waitForTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { completeOnboarding, openDeveloperScreen, enableDidCommV2, unlockIfLocked } from "./lib/flows.js";

@@ -10,6 +10,7 @@
  *
  * Usage: PLATFORM=android node run-my-agent.js   (or PLATFORM=ios)
  */
+import "./lib/cli-guard.js";
 import {
   createSession,
   ensureAppium,

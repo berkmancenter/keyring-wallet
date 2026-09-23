@@ -7,6 +7,7 @@
  * and held, and the stale-grant signing is purely a selection defect. A revoked
  * or absent standing means delivery failed too, and there is a second fix.
  */
+import "./lib/cli-guard.js";
 import { unlockIfLocked, openMyAgentSurface } from "./lib/flows.js";
 import { createSession, ensureAppium, stopAppium, sleep, waitForTestId, byTestId, existsTestId, dumpSource } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";

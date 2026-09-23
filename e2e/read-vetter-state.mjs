@@ -9,6 +9,7 @@
  * Prints the seat and whether the desk offers a ticket, which is what changes
  * when a live grant arrives.
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, sleep, waitForTestId, byTestId, existsTestId } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
 import { unlockIfLocked, openMyAgentSurface } from "./lib/flows.js";

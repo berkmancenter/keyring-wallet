@@ -16,6 +16,7 @@
  * Two real iOS devices: PLATFORMS=ios,ios APPLICANT_IOS_UDID=… VETTER_IOS_UDID=…
  *   (each gets its own WebDriverAgent port: 8131 applicant, 8130 vetter)
  */
+import "./lib/cli-guard.js";
 import { createSession, deviceTag, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";

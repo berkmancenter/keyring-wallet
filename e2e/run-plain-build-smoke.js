@@ -75,6 +75,7 @@
  *   PLATFORMS=android,android ANDROID_AVD2=<second-avd> \
  *     node run-plain-build-smoke.js                # two android emulators (no macOS/Xcode)
  */
+import "./lib/cli-guard.js";
 import {
   createSession,
   ensureAppium,
