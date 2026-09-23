@@ -21,8 +21,9 @@
 import type { Agent } from '@credo-ts/core'
 import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
-import { tsp } from '@bifold/trust-tasks'
+import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
 
+import { signDocumentProof } from '../documentProof'
 import type { VtiPersona } from './VtiIdentityStore'
 import {
   advertisedMediatorDid,
@@ -57,6 +58,30 @@ const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
 const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
 const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
+const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
+const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
+/**
+ * The community tasks this controller asks whose specifications declare the
+ * document `proof` REQUIRED. A VTC refuses them unsigned (`proofRequired`)
+ * since vti #1672, over every carriage — an authenticated DIDComm sender no
+ * longer stands in for the proof. The manifest and the vetter profile declare
+ * none, and stay unsigned: a present proof is always verified, so signing what
+ * need not be signed only adds a way to be refused.
+ */
+const PROOF_REQUIRED = new Set([SUBMIT, STATUS, WITHDRAW, SUPPLEMENT])
+
+/**
+ * A DIDComm message carrying a Trust Task in the binding envelope, presented
+ * as the task itself: the envelope's `type` swapped for the document's own.
+ * Since vti #1687 a VTC takes Trust Tasks over DIDComm only in the envelope,
+ * and binding §5 has it reply in one too — which it does not yet (it replies
+ * typed as the document), so both shapes have to read the same downstream.
+ */
+export function unwrapBindingEnvelope(plaintext: DidCommV2PlaintextMessage): DidCommV2PlaintextMessage {
+  if (plaintext.type !== TRUST_TASK_V2_ENVELOPE_TYPE) return plaintext
+  const inner = (plaintext.body as { type?: unknown } | undefined)?.type
+  return typeof inner === 'string' && inner ? { ...plaintext, type: inner } : plaintext
+}
 
 /**
  * A community refusing, in its own terms. `code` is the framework's — e.g.
@@ -219,9 +244,17 @@ class VtiAgentController {
    * a verdict — the credentials, over `credential-exchange/issue` — so
    * "first message after send" is no longer a reply. Those go to the inbox.
    */
-  private pending?: { type: string; resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
+  private pending?: {
+    type: string
+    resolve: (plaintext: DidCommV2PlaintextMessage) => void
+    sentAt: number
+    /** What a DIDComm problem-report about this request threads on: the message's id, or the request's thread. */
+    threads?: string[]
+  }
   private inbox: ((plaintext: DidCommV2PlaintextMessage) => void)[] = []
   private tsp?: TspSessionIdentity
+  /** The persona this session speaks as, when it is one: its borrowed signing key signs what a spec requires. */
+  private persona?: VtiPersona
   /**
    * §4.2: the envelope chosen for each peer, decided once per session and kept.
    * Deciding per message would let one unreachable peer flap a session between
@@ -301,7 +334,8 @@ class VtiAgentController {
     }
   }
 
-  private deliver(plaintext: DidCommV2PlaintextMessage): void {
+  private deliver(received: DidCommV2PlaintextMessage): void {
+    const plaintext = unwrapBindingEnvelope(received)
     const pending = this.pending
     const type = String(plaintext.type ?? '')
     // A reply older than the request is a re-delivery of a stale message (a
@@ -312,6 +346,26 @@ class VtiAgentController {
     if (pending && answers) {
       this.pending = undefined
       pending.resolve(plaintext)
+      return
+    }
+    // A refusal at the DIDComm layer — a malformed or unsupported message —
+    // comes as a problem-report threaded on the request (vti #1687 threads
+    // it), never as a Trust Task. Unanswered, it read as "the community did
+    // not answer" and hid the community's own reason; present it as the
+    // refusal it is.
+    if (pending && type === PROBLEM_REPORT && pending.threads?.includes(String(plaintext.thid ?? plaintext.pthid ?? ''))) {
+      this.pending = undefined
+      const report = (plaintext.body ?? {}) as { code?: unknown; comment?: unknown }
+      pending.resolve({
+        ...plaintext,
+        type: `${TASK_ERROR}problem-report`,
+        body: {
+          payload: {
+            code: typeof report.code === 'string' ? report.code : 'problem-report',
+            message: typeof report.comment === 'string' ? report.comment : 'The community could not read the request.',
+          },
+        },
+      })
       return
     }
     for (const handler of this.inbox) {
@@ -446,6 +500,7 @@ class VtiAgentController {
       identity ??= await vtiClientIdentityFromDid(agent, await createVtiClientDid(agent, mediator))
       const did = identity.did
       this.tsp = tspSession
+      this.persona = options.persona
       this.peerRevisionStore = options.peerRevisionStore ?? this.peerRevisionStore
       const session = new VtiMediatorSession(agent, identity, mediator, {
         onError: (error) => this.set({ error: error.message }),
@@ -481,6 +536,7 @@ class VtiAgentController {
     this.session = undefined
     this.pending = undefined
     this.tsp = undefined
+    this.persona = undefined
     this.set({ status: 'disconnected', did: undefined, error: undefined, peerLeg: undefined, tspReady: undefined })
   }
 
@@ -600,6 +656,10 @@ class VtiAgentController {
     if (!session || !did) throw new Error('vtiAgent: not connected')
 
     const threadId = `urn:uuid:${utils.uuid()}`
+    // One document for either carriage, addressed and dated as the framework
+    // requires (`issuer`, `recipient`, `issuedAt`), and signed as the persona
+    // when the task's specification declares the proof REQUIRED.
+    const document = await this.taskDocument(communityDid, type, payload, threadId)
     const sentAt = Date.now()
     let answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
       this.pending = { type, resolve, sentAt }
@@ -618,12 +678,7 @@ class VtiAgentController {
       })
       if (carriage === 'tsp') {
         await this.ensureGreeted(communityDid)
-        const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, {
-          id: `urn:uuid:${utils.uuid()}`,
-          type,
-          threadId,
-          payload,
-        })
+        const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, document)
         await session.sendTspFrame(packed.bytes)
         this.agent.config.logger.info(
           `${TSP_LOG_PREFIX} asked ${communityDid} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
@@ -648,25 +703,22 @@ class VtiAgentController {
       }
     }
 
+    // Over DIDComm a Trust Task rides the binding envelope — its `type` is the
+    // envelope's, the document is the body. A VTC refuses the task typed as
+    // itself since vti #1687 (VTI-42), and served the envelope before it.
     const now = Math.floor(Date.now() / 1000)
+    const messageId = `urn:uuid:${utils.uuid()}`
+    if (this.pending) this.pending.threads = [messageId, threadId]
     await session.sendTo(communityDid, {
-      id: `urn:uuid:${utils.uuid()}`,
+      id: messageId,
       typ: 'application/didcomm-plain+json',
-      type,
+      type: TRUST_TASK_V2_ENVELOPE_TYPE,
       from: did,
       to: [communityDid],
       thid: threadId,
       created_time: now,
       expires_time: now + 300,
-      body: {
-        id: `urn:uuid:${utils.uuid()}`,
-        type,
-        threadId,
-        payload,
-        issuer: did,
-        recipient: communityDid,
-        issuedAt: new Date().toISOString(),
-      },
+      body: document,
     })
     const result = await Promise.race([
       answer,
@@ -674,6 +726,49 @@ class VtiAgentController {
     ])
     this.pending = undefined
     return result
+  }
+
+  /**
+   * The Trust Task document `ask` sends: from this session's DID to the
+   * community, dated, and — for a task whose specification declares the proof
+   * REQUIRED — signed with the persona's borrowed key under the verification
+   * method its DID document names, exactly as a vetting task is signed. A VTC
+   * checks that the proof's key belongs to the document's `issuer`, so the
+   * issuer is the persona and nothing else.
+   *
+   * A session that is not a persona (a phone-minted did:peer) has no key a
+   * community could resolve, and a persona without a borrowed signing key
+   * cannot sign: either sends the document unsigned and says so, because a
+   * community before vti #1672 still accepts it and one after refuses it with
+   * `proofRequired` — an answer the caller already surfaces — rather than
+   * the wallet failing silently before asking.
+   */
+  private async taskDocument(
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    threadId: string
+  ): Promise<Record<string, unknown>> {
+    const document: Record<string, unknown> = {
+      id: `urn:uuid:${utils.uuid()}`,
+      type,
+      threadId,
+      issuer: this.state.did,
+      recipient: communityDid,
+      issuedAt: new Date().toISOString(),
+      payload,
+    }
+    if (!PROOF_REQUIRED.has(type)) return document
+    const persona = this.persona
+    const agent = this.agent
+    if (!agent || !persona || persona.did !== this.state.did || !persona.kmsKeyIds?.signing) {
+      agent?.config.logger.warn(`vtiAgent: ${type} needs a proof and this session cannot sign one; sending it unsigned`)
+      return document
+    }
+    return signDocumentProof(agent, document, persona.did, {
+      kmsKeyId: persona.kmsKeyIds.signing,
+      verificationMethodId: persona.vtaKeyIds.signing,
+    })
   }
 
   /**
@@ -699,7 +794,9 @@ class VtiAgentController {
     const overRest = await this.manifestOverRest(communityDid, withAgent)
     if (overRest) return overRest
     const answer = await this.ask(communityDid, MANIFEST, {})
-    if (!answer) throw new Error('vtiAgent: the community did not answer')
+    // Each unanswered ask names its task: three callers used to share one
+    // sentence, and a failed join could not say which request went unanswered.
+    if (!answer) throw new Error('vtiAgent: the community did not answer (manifest)')
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
@@ -763,8 +860,8 @@ class VtiAgentController {
   }
 
   /** The verdict a submit or a supplement carries — deliberately the same shape. */
-  private verdictOf(answer: DidCommV2PlaintextMessage | undefined): VtiVerdict {
-    if (!answer) throw new Error('vtiAgent: the community did not answer')
+  private verdictOf(answer: DidCommV2PlaintextMessage | undefined, task: string): VtiVerdict {
+    if (!answer) throw new Error(`vtiAgent: the community did not answer (${task})`)
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (
@@ -811,7 +908,7 @@ class VtiAgentController {
       ...(options.requestId ? { requestId: options.requestId } : {}),
       ...(options.requirementsDigest ? { extensions: { requirementsDigest: options.requirementsDigest } } : {}),
     })
-    return this.verdictOf(answer)
+    return this.verdictOf(answer, 'supplement')
   }
 
   /**
@@ -827,7 +924,7 @@ class VtiAgentController {
       ...(options.requestId ? { requestId: options.requestId } : {}),
       ...(options.reason ? { reason: options.reason } : {}),
     })
-    if (!answer) throw new Error('vtiAgent: the community did not answer')
+    if (!answer) throw new Error('vtiAgent: the community did not answer (withdraw)')
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (answer.body as { payload?: { requestId?: string; status?: string } } | undefined)?.payload
@@ -862,7 +959,7 @@ class VtiAgentController {
         return digest ? { requirementsDigest: digest } : {}
       })(),
     })
-    return this.verdictOf(answer)
+    return this.verdictOf(answer, 'submit')
   }
 }
 
