@@ -10,6 +10,7 @@ import {
   NavContainer,
   NetworkProvider,
   StoreProvider,
+  Stacks,
   ThemeProvider,
   toastConfig,
   TourProvider,
@@ -17,7 +18,7 @@ import {
 } from '@bifold/core'
 import messaging from '@react-native-firebase/messaging'
 import { useNavigationContainerRef } from '@react-navigation/native'
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isTablet } from 'react-native-device-info'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
@@ -78,8 +79,22 @@ const App = () => {
     SplashScreen.hide()
   }, [])
 
+  /**
+   * Leaving a screen that failed. The boundary calls this before it renders
+   * the app again, so what comes back is not the thing that just threw — a
+   * tester was otherwise caught between the error card and the app lock, with
+   * force-quit the only way out (report #27).
+   *
+   * Resetting the root rather than going back: the route that failed may be
+   * anywhere in the stack, and its params are usually what it failed on.
+   */
+  const leaveFailedScreen = useCallback(() => {
+    if (!navigationRef.isReady()) return
+    navigationRef.resetRoot({ index: 0, routes: [{ name: Stacks.TabStack }] })
+  }, [navigationRef])
+
   return (
-    <ErrorBoundaryWrapper logger={BCLogger}>
+    <ErrorBoundaryWrapper logger={BCLogger} onEscape={leaveFailedScreen}>
       <ContainerProvider value={bcwContainer}>
         <StoreProvider initialState={initialState} reducer={reducer}>
           <ThemeProvider themes={themes} defaultThemeName={KeyRingThemeNames.KeyRing}>

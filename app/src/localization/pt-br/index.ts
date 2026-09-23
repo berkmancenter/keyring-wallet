@@ -33,6 +33,7 @@ const translation = {
     "CodeCopied": "Copiado",
     "ShareCodeWithSupport": "Compartilhe este código com o suporte ao entrar em contato.",
     "Problem": "Algo deu errado",
+    "GoHome": "Ir para a tela inicial",
     "ProblemDescription": "Ocorreu um erro inesperado. Reporte este erro e tente novamente.",
   },
   "Global": {
