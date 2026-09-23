@@ -264,13 +264,26 @@ async function testerJourney(driver) {
     process.env.KEYRING_COMMUNITY_DID ||
     execFileSync("bash", ["-c", `. "${os.homedir()}/vti-stack/stack.env"; printf %s "$VTC_DID"`], { encoding: "utf8" });
   if (vtcDid.startsWith("did:")) {
-    const communityName = process.env.KEYRING_COMMUNITY_NAME || (process.env.KEYRING_COMMUNITY_DID ? "keyring-test" : "Runner lab");
-    const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent(communityName)}`;
+    const linkName = process.env.KEYRING_COMMUNITY_NAME || (process.env.KEYRING_COMMUNITY_DID ? "keyring-test" : "Runner lab");
+    const link = `keyring://vti/community?d=${encodeURIComponent(vtcDid)}&n=${encodeURIComponent(linkName)}`;
     await pasteLinkFromHome(driver, link);
     await waitForTestId(driver, "JoinAsks", 30000);
-    const asks = await driver.$(driver.e2ePlatform === "ios" ? `-ios predicate string:label CONTAINS "${communityName}"` : `android=new UiSelector().textContains("${communityName}")`);
-    if (!(await asks.isExisting())) throw new Error("the pasted community link did not open Join on that community");
-    console.log("[e2e] journey: a pasted community link opened Join on it");
+    // What the screen shows is NOT necessarily the name in the link. A name a
+    // community publishes about itself outranks one a link claims, on purpose:
+    // anyone can write a link, and the community's own service is the
+    // community. So a community with branding shows its published name here,
+    // and the link's `&n=` is only what it is called until the manifest
+    // arrives. KEYRING_COMMUNITY_SHOWS_AS names the published one when the
+    // run's community has branding; otherwise the link's name stands.
+    //
+    // Do not "fix" this back to asserting the link's name: it was changed
+    // because the app changed, not because a run needed it to pass.
+    const shownAs = process.env.KEYRING_COMMUNITY_SHOWS_AS || linkName;
+    const asks = await driver.$(driver.e2ePlatform === "ios" ? `-ios predicate string:label CONTAINS "${shownAs}"` : `android=new UiSelector().textContains("${shownAs}")`);
+    if (!(await asks.isExisting())) {
+      throw new Error(`the pasted community link did not open Join on that community (expected it to be shown as "${shownAs}")`);
+    }
+    console.log(`[e2e] journey: a pasted community link opened Join on it, shown as "${shownAs}"`);
     for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
   }
 
