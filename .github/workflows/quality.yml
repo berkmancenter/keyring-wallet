@@ -6,6 +6,21 @@ on:
     types: [opened, synchronize, reopened, labeled, edited]
 
 jobs:
+  workflows:
+    runs-on: ubuntu-22.04
+    name: Workflow files
+    steps:
+      - uses: actions/checkout@v4
+
+      # No other check reads .github/workflows. #108 deleted a job that others
+      # still needed; GitHub rejected the file only once it was on main.
+      # Top-level files only: actions/ holds composite actions, not workflows.
+      # shellcheck is off until the existing run: blocks have been cleaned up.
+      - name: Lint workflows
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color -shellcheck= .github/workflows/*.yml .github/workflows/*.yaml
+
   lint:
     runs-on: ubuntu-22.04
     name: Lint+Format+Types
