@@ -332,7 +332,7 @@ const VtaLink: React.FC = () => {
               {t('VtaLink.Linked')}
             </ThemedText>
           </View>
-          <ThemedText>
+          <ThemedText testID={testIdWithKey('VtaLinkLinkedBody')}>
             {t('VtaLink.LinkedBody', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
         </View>

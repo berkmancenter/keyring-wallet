@@ -262,7 +262,7 @@ const VtaAgentHome: React.FC = () => {
         testID={testIdWithKey('AgentHome')}
       >
         <View style={styles.card}>
-          <ThemedText variant="headingThree" accessibilityRole="header">
+          <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey('AgentHomeName')}>
             {agentDisplayName(withAgentName(link, state.agentNames), t)}
           </ThemedText>
           <VtaStatusLine connection={link.connection} />
