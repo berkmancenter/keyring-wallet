@@ -35,6 +35,7 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 import { communityTarget } from '../module/vtiCommunityLink'
 import { ensurePersonaFor, joinCommunity } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
+import { communityLinkReturn } from '../module/vtiLinks'
 
 import { identityShareText, shareIdentity } from './identityShare'
 import { communityLabelOf } from './communityName'
@@ -121,7 +122,10 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     setError(undefined)
     const confirmed = await requestBiometricConfirmationWithUI(agent, communityLabelOf(communityDid), 'invited', {
       title: t('Invited.ConfirmTitle'),
-      description: t('Invited.ConfirmBody', { community: communityLabelOf(communityDid), interpolation: { escapeValue: false } }),
+      description: t('Invited.ConfirmBody', {
+        community: communityLabelOf(communityDid),
+        interpolation: { escapeValue: false },
+      }),
     })
     if (!confirmed.success) return
     setBusy(true)
@@ -166,11 +170,42 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
 
   const scan = () => openScanner(navigation)
 
-  if (!communityDid || !vtaDid) {
+  // Nothing is named by the build (a store build): say what is missing, and
+  // offer the way to it — never "No agent is configured for this build".
+  if (!vtaDid) {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>
-          <ThemedText testID={testIdWithKey('InvitedNotConfigured')}>{t('MyAgent.NotConfigured')}</ThemedText>
+          <ThemedText testID={testIdWithKey('InvitedNeedsAgent')}>{t('Join.NeedsAgent')}</ThemedText>
+          <Button
+            title={t('VtaLink.LinkYourAgent')}
+            buttonType={ButtonType.Primary}
+            onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtaLink)}
+            testID={testIdWithKey('InvitedLinkAgent')}
+          />
+        </View>
+      </SafeAreaView>
+    )
+  }
+  // The community first: the admin invites an identity made for it, so it has
+  // to be known before any invitation can exist.
+  if (!communityDid) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <View style={styles.content} testID={testIdWithKey('InvitedWhichCommunity')}>
+          <ThemedText variant="headingThree" accessibilityRole="header">
+            {t('Invited.WhichCommunityTitle')}
+          </ThemedText>
+          <ThemedText>{t('Invited.WhichCommunityBody')}</ThemedText>
+          <Button
+            title={t('Invited.ScanCommunity')}
+            buttonType={ButtonType.Primary}
+            onPress={() => {
+              communityLinkReturn.toInvited()
+              scan()
+            }}
+            testID={testIdWithKey('InvitedScanCommunity')}
+          />
         </View>
       </SafeAreaView>
     )
@@ -247,9 +282,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           <View style={styles.card} testID={testIdWithKey('InvitedIdentityCard')}>
             <View style={styles.row}>
               <Icon name="account-circle-outline" size={24} color={TextTheme.normal.color} />
-              <ThemedText>
-                {t('VtaLink.IdentityFor', { community, interpolation: { escapeValue: false } })}
-              </ThemedText>
+              <ThemedText>{t('VtaLink.IdentityFor', { community, interpolation: { escapeValue: false } })}</ThemedText>
             </View>
             {showQr && persona ? (
               <View style={{ alignItems: 'center', paddingVertical: 8 }} testID={testIdWithKey('InvitedQr')}>

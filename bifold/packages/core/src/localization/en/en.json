@@ -1299,6 +1299,9 @@
     "ShareKeyHint": "Long and easy to mistype — send it rather than reading it out."
   },
   "Invited": {
+    "WhichCommunityTitle": "Which community invited you?",
+    "WhichCommunityBody": "Scan or paste the community's link. Its admin, or its page, can give it to you.",
+    "ScanCommunity": "Scan or paste its link",
     "IntroTitle": "Tell the admin who to invite",
     "IntroBody": "To invite you to {{community}}, its admin needs your identity for that community. Your agent makes it now — you confirm with your face or fingerprint — and then you send it to the admin.",
     "Continue": "Continue",
@@ -1330,6 +1333,7 @@
     "WhichBody": "Scan or paste the community's link — or a vetter's ticket, which names the community too.",
     "Suggested": "Suggested for this app",
     "Remembered": "You joined this one before",
+    "RememberedUnreachable": "It isn't answering right now. If it's gone, choose a different community.",
     "Unnamed": "This community hasn't published a name",
     "CheckingName": "Checking what it calls itself…",
     "NameFromLink": "Name as provided by the link you used",
@@ -1425,6 +1429,8 @@
     "PeerLegDidComm": "Peer messages: DIDComm v2"
   },
   "Vetting": {
+    "NeedsCommunity": "Join a community first. Vetting happens inside one.",
+    "JoinCommunity": "Join a community",
     "Title": "Vetting",
     "RowHint": "Be vetted by a member, or vet someone if you are a vetter.",
     "NeedIdentity": "You need an identity for this community first — every card, statement and the final application name the same one.",
@@ -1487,6 +1493,8 @@
     "EndSession": "End this session",
     "ConfirmSendTitle": "Send your name to the vetter",
     "ConfirmSendBody": "The vetter sees the legal name you entered and checks it against your ID. Nothing else is shared.",
+    "CounterpartyApplicant": "the person you're vetting",
+    "CounterpartyVetter": "your vetter",
     "ConfirmAttestTitle": "Sign the vetting statement",
     "ConfirmAttestBody": "You confirm you checked this person's ID yourself and that it shows the name on their card.",
     "ConfirmApplyTitle": "Apply to the community",

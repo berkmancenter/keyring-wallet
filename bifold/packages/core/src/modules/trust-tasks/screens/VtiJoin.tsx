@@ -116,6 +116,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // Which community's manifest has been read (or failed to be): until then a
   // missing name means "not known yet", not "none published".
   const [nameRead, setNameRead] = useState<string>()
+  // Which community could not be read at all — for one the phone remembers, worth saying.
+  const [unreachable, setUnreachable] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<PlainError>()
   const [errorOpen, setErrorOpen] = useState(false)
@@ -144,7 +146,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       // Reading the manifest also teaches the app what the community calls
       // itself; vtiAgent does that for every fetch, so nothing is needed here.
       .then((m) => live && setAsks(asksFrom(m)))
-      .catch(() => undefined)
+      .catch(() => {
+        if (live) setUnreachable(communityDid)
+      })
       .finally(() => live && setNameRead(communityDid))
     return () => {
       live = false
@@ -269,6 +273,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedSource')}>
                 {remembered ? t('Join.Remembered') : t('Join.Suggested')}
               </ThemedText>
+              {/* A community the phone joined on an earlier build may be gone
+                  (a lab that was only ever on someone's Mac). Say so beside
+                  "a different community" rather than forget a real choice. */}
+              {remembered && unreachable === communityDid ? (
+                <ThemedText style={styles.muted} testID={testIdWithKey('JoinRememberedUnreachable')}>
+                  {t('Join.RememberedUnreachable')}
+                </ThemedText>
+              ) : null}
               {called.name && called.claimed ? (
                 <ThemedText style={styles.muted} testID={testIdWithKey('JoinNameClaimed')}>
                   {t('Join.NameFromLink')}
@@ -346,20 +358,36 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           {!asks || asks.kind === 'vetting' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
         </>
       )
-      actions = asks?.invitationOnly ? (
-        <Button
-          title={t('VtaLink.IWasInvited')}
-          buttonType={ButtonType.Primary}
-          onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)}
-          testID={testIdWithKey('JoinGoInvited')}
-        />
-      ) : (
-        <Button
-          title={t('Join.Start')}
-          buttonType={ButtonType.Primary}
-          onPress={() => setStep('as')}
-          testID={testIdWithKey('JoinStart')}
-        />
+      actions = (
+        <>
+          {asks?.invitationOnly ? (
+            <Button
+              title={t('VtaLink.IWasInvited')}
+              buttonType={ButtonType.Primary}
+              onPress={() =>
+                (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)
+              }
+              testID={testIdWithKey('JoinGoInvited')}
+            />
+          ) : (
+            <Button
+              title={t('Join.Start')}
+              buttonType={ButtonType.Primary}
+              onPress={() => setStep('as')}
+              testID={testIdWithKey('JoinStart')}
+            />
+          )}
+          {/* A community a link brought stays the one shown, so reopening Join
+              lands here, not on "which community?". Without this a person who
+              brought the wrong one had no way to another from Join (found on the
+              empty-config gate, 2026-09-23: a store build names none). */}
+          <Button
+            title={t('Join.Different')}
+            buttonType={ButtonType.Tertiary}
+            onPress={() => openScanner(navigation)}
+            testID={testIdWithKey('JoinScanCommunity')}
+          />
+        </>
       )
       break
 

@@ -34,6 +34,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import QRRenderer from '../../../components/misc/QRRenderer'
 import { useTheme } from '../../../contexts/theme'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiHeldCredential } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
@@ -418,11 +419,23 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     [bump]
   )
 
-  if (!communityDid || !vtaDid) {
+  // Say what is missing and offer the way to it — a store build names neither.
+  if (!vtaDid || !communityDid) {
+    const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>
-          <Text style={styles.value}>{t('MyAgent.NotConfigured')}</Text>
+          <Text style={styles.value} testID={testIdWithKey(!vtaDid ? 'VettingNeedsAgent' : 'VettingNeedsCommunity')}>
+            {!vtaDid ? t('Join.NeedsAgent') : t('Vetting.NeedsCommunity')}
+          </Text>
+          <Pressable
+            style={styles.button}
+            accessibilityRole="button"
+            onPress={() => go(!vtaDid ? Screens.VtaLink : Screens.VtiJoin)}
+            testID={testIdWithKey(!vtaDid ? 'VettingLinkAgent' : 'VettingJoinCommunity')}
+          >
+            <Text style={styles.buttonText}>{!vtaDid ? t('VtaLink.LinkYourAgent') : t('Vetting.JoinCommunity')}</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     )
@@ -514,7 +527,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     </View>
   )
 
-  /** Every signing act asks for the person's face or fingerprint (plan principle 9). */
+  /**
+   * Every signing act asks for the person's face or fingerprint (plan
+   * principle 9). The counterparty is named in words — the sheet shows it
+   * large, and a DID there was a code where a person belongs (#12).
+   */
   const confirmWithBiometrics = async (counterparty: string, act: 'Send' | 'Attest' | 'Apply') => {
     if (!agent) return false
     // Say what is being signed: the shared modal otherwise speaks of a
@@ -729,7 +746,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     disabled={!!busy}
                     onPress={() =>
                       run('attest', async () => {
-                        if (!(await confirmWithBiometrics(shortDid(request.applicantDid), 'Attest'))) return
+                        if (!(await confirmWithBiometrics(t('Vetting.CounterpartyApplicant'), 'Attest'))) return
                         await deskRef.current!.attest(request.requestId, {
                           documentClasses: ['passport'],
                           claimsVerified: ['name.legal'],
@@ -1011,7 +1028,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 disabled={!!busy}
                 onPress={() =>
                   run('card', async () => {
-                    if (!(await confirmWithBiometrics(shortDid(active.vetterDid), 'Send'))) return
+                    if (!(await confirmWithBiometrics(t('Vetting.CounterpartyVetter'), 'Send'))) return
                     await applicantRef.current!.sendCard(active.vetterDid)
                   })
                 }
@@ -1109,7 +1126,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   disabled={!!busy}
                   onPress={() =>
                     run('apply', async () => {
-                      if (!(await confirmWithBiometrics(shortDid(communityDid), 'Apply'))) return
+                      if (!(await confirmWithBiometrics(communityLabelOf(communityDid), 'Apply'))) return
                       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
                       // Ask about the grants now, not when the statements were
                       // gathered: the community applies the status at intake,
@@ -1124,11 +1141,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         // second submit while one is open would be refused.
                         let verdict
                         try {
-                          verdict = await applicantRef.current!.submit(
-                            m,
-                            statements,
-                            application?.requirementsDigest
-                          )
+                          verdict = await applicantRef.current!.submit(m, statements, application?.requirementsDigest)
                         } catch (e) {
                           // Already applied (requestAlreadyOpen): not an error. The
                           // open request is now recorded on the application, and the

@@ -1245,6 +1245,9 @@
     "ShareKeyHint": "Long et facile à mal saisir — envoyez-le plutôt que de le dicter."
   },
   "Invited": {
+    "WhichCommunityTitle": "Quelle communauté vous a invité ?",
+    "WhichCommunityBody": "Scannez ou collez le lien de la communauté. Son administrateur, ou sa page, peut vous le donner.",
+    "ScanCommunity": "Scanner ou coller son lien",
     "IntroTitle": "Dites à l'admin qui inviter",
     "IntroBody": "Pour vous inviter dans {{community}}, son admin a besoin de votre identité pour cette communauté. Votre agent la crée maintenant — vous confirmez avec votre visage ou votre empreinte — puis vous l'envoyez à l'admin.",
     "Continue": "Continuer",
@@ -1276,6 +1279,7 @@
     "WhichBody": "Scannez ou collez le lien de la communauté — ou le ticket d'un vérificateur, qui la nomme aussi.",
     "Suggested": "Suggérée pour cette app",
     "Remembered": "Vous avez déjà rejoint celle-ci",
+    "RememberedUnreachable": "Elle ne répond pas pour le moment. Si elle n'existe plus, choisissez une autre communauté.",
     "Unnamed": "Cette communauté n'a pas publié de nom",
     "CheckingName": "Vérification de son nom…",
     "NameFromLink": "Nom tel que fourni par le lien utilisé",
@@ -1371,6 +1375,8 @@
     "PeerLegDidComm": "Messages entre pairs : DIDComm v2"
   },
   "Vetting": {
+    "NeedsCommunity": "Rejoignez d'abord une communauté. La vérification se fait à l'intérieur de l'une d'elles.",
+    "JoinCommunity": "Rejoindre une communauté",
     "Title": "Vérification",
     "RowHint": "Faites-vous vérifier par un membre, ou vérifiez quelqu'un si vous êtes vérificateur.",
     "NeedIdentity": "Il vous faut d'abord une identité pour cette communauté — chaque carte, déclaration et la candidature finale nomment la même.",
@@ -1423,6 +1429,8 @@
     "EndSession": "Mettre fin à cette session",
     "ConfirmSendTitle": "Envoyer votre nom au vérificateur",
     "ConfirmSendBody": "Le vérificateur voit le nom légal que vous avez saisi et le compare à votre pièce d'identité. Rien d'autre n'est partagé.",
+    "CounterpartyApplicant": "la personne que vous vérifiez",
+    "CounterpartyVetter": "votre vérificateur",
     "ConfirmAttestTitle": "Signer l'attestation de vérification",
     "ConfirmAttestBody": "Vous confirmez avoir vérifié vous-même la pièce d'identité de cette personne et qu'elle indique le nom figurant sur sa carte.",
     "ConfirmApplyTitle": "Demander à rejoindre la communauté",

@@ -12,12 +12,24 @@ import { ToastType } from '../components/toast/BaseToast'
 import LoadingView from '../components/views/LoadingView'
 import { TOKENS, useServices } from '../container-api'
 import { useStore } from '../contexts/store'
+import { KeyringLinkError } from '../modules/trust-tasks/module/vtiLinks'
 import { BifoldError, QrCodeScanError } from '../types/error'
 import { ConnectStackParams } from '../types/navigators'
 import { PermissionContract } from '../types/permissions'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 
 export type ScanProps = StackScreenProps<ConnectStackParams>
+
+/**
+ * What the scanner shows for a code that failed. A Keyring link that cannot be
+ * used says why, in words, as the headline — "This link has expired", "This is
+ * a mediator's code" — instead of "Invalid QR code" with the reason nowhere a
+ * person could read it. Anything else keeps the generic headline.
+ */
+export function scanErrorOf(value: string, e: unknown, invalidQrCode: string): QrCodeScanError {
+  if (e instanceof KeyringLinkError) return new QrCodeScanError(e.message, value, e.message)
+  return new QrCodeScanError(invalidQrCode, value, (e as Error)?.message)
+}
 
 const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
   const { agent } = useAgent()
@@ -53,6 +65,8 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
           store.preferences.walletName
         )
       } catch (err: unknown) {
+        // Ours, and already in words: let it through to be shown as it is.
+        if (err instanceof KeyringLinkError) throw err
         const error = new BifoldError(
           t('Error.Title1031'),
           t('Error.Message1031'),
@@ -73,8 +87,7 @@ const Scan: React.FC<ScanProps> = ({ navigation, route }) => {
         const uri = value
         await handleInvitation(uri)
       } catch (e: unknown) {
-        const error = new QrCodeScanError(t('Scan.InvalidQrCode'), value, (e as Error)?.message)
-        setQrCodeScanError(error)
+        setQrCodeScanError(scanErrorOf(value, e, t('Scan.InvalidQrCode')))
       }
     },
     [handleInvitation, t]

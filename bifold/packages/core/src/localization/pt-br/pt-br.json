@@ -1144,6 +1144,9 @@
     "ShareKeyHint": "Longo e fácil de digitar errado — envie em vez de ditar."
   },
   "Invited": {
+    "WhichCommunityTitle": "Qual comunidade convidou você?",
+    "WhichCommunityBody": "Escaneie ou cole o link da comunidade. O administrador dela, ou a página dela, pode fornecê-lo.",
+    "ScanCommunity": "Escanear ou colar o link",
     "IntroTitle": "Diga ao admin quem convidar",
     "IntroBody": "Para convidar você para {{community}}, o admin precisa da sua identidade para essa comunidade. Seu agente a cria agora — você confirma com o rosto ou a digital — e depois você a envia ao admin.",
     "Continue": "Continuar",
@@ -1175,6 +1178,7 @@
     "WhichBody": "Escaneie ou cole o link da comunidade — ou o ticket de um verificador, que também a nomeia.",
     "Suggested": "Sugerida para este app",
     "Remembered": "Você já entrou nesta antes",
+    "RememberedUnreachable": "Ela não está respondendo agora. Se ela não existe mais, escolha outra comunidade.",
     "Unnamed": "Esta comunidade não publicou um nome",
     "CheckingName": "Verificando como ela se chama…",
     "NameFromLink": "Nome conforme fornecido pelo link que você usou",
@@ -1270,6 +1274,8 @@
     "PeerLegDidComm": "Mensagens entre pares: DIDComm v2"
   },
   "Vetting": {
+    "NeedsCommunity": "Entre em uma comunidade primeiro. A verificação acontece dentro de uma.",
+    "JoinCommunity": "Entrar em uma comunidade",
     "Title": "Verificação",
     "RowHint": "Seja verificado por um membro, ou verifique alguém se você for verificador.",
     "NeedIdentity": "Você precisa primeiro de uma identidade para esta comunidade — cada cartão, declaração e a candidatura final nomeiam a mesma.",
@@ -1322,6 +1328,8 @@
     "EndSession": "Encerrar esta sessão",
     "ConfirmSendTitle": "Enviar seu nome ao verificador",
     "ConfirmSendBody": "O verificador vê o nome legal que você digitou e o confere com seu documento. Nada mais é compartilhado.",
+    "CounterpartyApplicant": "a pessoa que você está verificando",
+    "CounterpartyVetter": "seu verificador",
     "ConfirmAttestTitle": "Assinar a declaração de verificação",
     "ConfirmAttestBody": "Você confirma que conferiu pessoalmente o documento desta pessoa e que ele mostra o nome do cartão dela.",
     "ConfirmApplyTitle": "Pedir para entrar na comunidade",
