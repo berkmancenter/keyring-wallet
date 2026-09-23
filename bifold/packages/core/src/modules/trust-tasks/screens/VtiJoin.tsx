@@ -358,20 +358,36 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           {!asks || asks.kind === 'vetting' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
         </>
       )
-      actions = asks?.invitationOnly ? (
-        <Button
-          title={t('VtaLink.IWasInvited')}
-          buttonType={ButtonType.Primary}
-          onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)}
-          testID={testIdWithKey('JoinGoInvited')}
-        />
-      ) : (
-        <Button
-          title={t('Join.Start')}
-          buttonType={ButtonType.Primary}
-          onPress={() => setStep('as')}
-          testID={testIdWithKey('JoinStart')}
-        />
+      actions = (
+        <>
+          {asks?.invitationOnly ? (
+            <Button
+              title={t('VtaLink.IWasInvited')}
+              buttonType={ButtonType.Primary}
+              onPress={() =>
+                (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiInvited)
+              }
+              testID={testIdWithKey('JoinGoInvited')}
+            />
+          ) : (
+            <Button
+              title={t('Join.Start')}
+              buttonType={ButtonType.Primary}
+              onPress={() => setStep('as')}
+              testID={testIdWithKey('JoinStart')}
+            />
+          )}
+          {/* A community a link brought stays the one shown, so reopening Join
+              lands here, not on "which community?". Without this a person who
+              brought the wrong one had no way to another from Join (found on the
+              empty-config gate, 2026-09-23: a store build names none). */}
+          <Button
+            title={t('Join.Different')}
+            buttonType={ButtonType.Tertiary}
+            onPress={() => openScanner(navigation)}
+            testID={testIdWithKey('JoinScanCommunity')}
+          />
+        </>
       )
       break
 

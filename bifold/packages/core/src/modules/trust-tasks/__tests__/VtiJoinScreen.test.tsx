@@ -191,6 +191,15 @@ describe('I want to join a community', () => {
     expect(tree.queryByTestId(testIdWithKey('JoinRememberedUnreachable'))).toBeNull()
   })
 
+  it('a community a link brought can still be swapped for a different one', async () => {
+    // On a build that names no community, every community arrives by a link,
+    // and reopening Join lands on what it asks. It must not be a dead end.
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('JoinScanCommunity'))).toHaveTextContent('Join.Different')
+  })
+
   it('a community chosen by a link goes straight to what it asks, and is the one joined', async () => {
     communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
     const tree = await renderJoin()
