@@ -47,8 +47,21 @@ const PHOTO_ITEMS =
 
 /** The date a picker label names, or NaN. Formats vary: "Photo, 23 September 2026, 14:02", "… at 2:02 PM". */
 function dateOfLabel(label) {
-  const text = String(label).replace(/^Photo,\s*/, "").replace(/\s+at\s+/i, " ").replace(/,(?=\s*\d{1,2}:\d{2})/, "");
-  return Date.parse(text);
+  const text = String(label).replace(/^Photo,\s*/, "").trim();
+  // iOS labels recent photos relatively — "Today, 3:05 PM", or a time alone —
+  // which Date.parse cannot read; a fresh photo taken for the run looks like
+  // that (iPhone 11, 2026-09-23: 15 of 16 labels parsed, the 16th was it).
+  const clock = /^(?:today[,\s]*)?(?:at\s+)?(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i.exec(text);
+  if (/^today\b/i.test(text) || clock) {
+    const now = new Date();
+    if (!clock) return now.getTime();
+    let hour = Number(clock[1]) % 12;
+    if (!clock[3] && Number(clock[1]) >= 12) hour = Number(clock[1]);
+    if (clock[3] && clock[3].toUpperCase() === "PM") hour += 12;
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, Number(clock[2])).getTime();
+  }
+  if (/^yesterday\b/i.test(text)) return Date.now() - 24 * 3600 * 1000;
+  return Date.parse(text.replace(/\s+at\s+/i, " ").replace(/,(?=\s*\d{1,2}:\d{2})/, ""));
 }
 
 async function todaysNewestPhoto(d, timeoutMs) {
