@@ -4,11 +4,11 @@
 **Reasoning:** [`2026-09-22-al.md`](./zero-knowledge-plan/2026-09-22-al.md) — the research behind §2–§4: the positions it supersedes (on-device proving), the evidence for each, and what was not verifiable.
 **Siblings consulted:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 owns the credential-format decisions this plan inherits (VRC/VWC proof sets, evidence commitments, canonical transcript); [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client architecture, consent card and approvals this plan's step-up rides on; [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the V0 vetting ceremony that hidden vetting keeps unchanged, and its §2.4 decision gates Track Z1; [`vsc-migration-plan.md`](./vsc-migration-plan.md) owns the witness-credential type Track Z2 would present; [`ui-ux-improvements-plan.md`](./ui-ux-improvements-plan.md) owns the vetting screens Track Z1 changes.
 **Dependency direction:** nothing in the sibling plans waits on this one. This plan waits on upstream (§8) and on two sibling decisions (§3.3, §3.4).
-**Baseline (read 2026-09-22):** our pins — VTI **187ad9cd** (vta-sdk 0.25.0), `vta-browser-plugin` **89d70c4** (advance to **9643c57** in flight on `chore/pin-vta-browser-plugin-9643c57`); `OpenVTC/openvtc` clone **177a218** (not in `PINS.json`). Upstream heads the design review was written against, both **descendants** of our pins — VTI **6f26af19** (vta-sdk 0.48.0) and openvtc **63d1fa1**. Re-checked 2026-09-22 against openvtc **b7c18ea** and VTI **4c440df3** (vta-sdk 0.49.0): no PCS or hidden-vetting code upstream yet, and `vetting-process.md` still lists it as V2. `trustoverip/dtgwg-zkp-tf` **a42bf8c0**, `mitchuski/dtgwg-zkp-mage` **1be94c80**, `affinidi/affinidi-zkp-crypto-rs` **c23a4b71** (public, not cloned). `predicate-credential-system` **not reachable** from this repo (§8 B1). The running stacks are not on the reference pins: the local lab runs VTI **a96fe02f**, with a bump to **3dcbfe98** queued; Farm VTAs run vta **0.37.1** (`d9a5be02`). ZK0 reconciles all three.
+**Sources:** this plan cites **only publicly available artifacts**. Where it states a design position with no citation, the position is **ours**, reasoned from those artifacts — not a report of someone else's unpublished design.
+**Baseline (read 2026-09-23):** our pins — VTI **187ad9cd** (vta-sdk 0.25.0), `vta-browser-plugin` **89d70c4** (advance to **9643c57** in flight); `OpenVTC/openvtc` clone **177a218** (not in `PINS.json`). Upstream heads re-checked 2026-09-23 — openvtc **5453239**, VTI **c595bcb9**: no hidden-vetting or predicate-credential code in either, and `vetting-process.md` still lists the work as V2. A predicate-credential library of the kind this construction needs is not publicly available to us (§8 B1). `trustoverip/dtgwg-zkp-tf` **a42bf8c0**, `mitchuski/dtgwg-zkp-mage` **1be94c80**, `affinidi/affinidi-zkp-crypto-rs` **c23a4b71** (public, not cloned). The running stacks are not on the reference pins: the local lab runs VTI **a96fe02f**, with a bump to **3dcbfe98** queued; Farm VTAs run vta **0.37.1** (`d9a5be02`). ZK0 reconciles all three.
 
 **References:**
 
-- **[[HIDDEN-VETTER]]** — *Hidden-vetter admission with PCS*, OpenVTC vetted-admission V2 design review, second pass, 2026-09-22, shared with the team (not vendored). Reviewed against `predicate-credential-system@aa57efd`, `openvtc@63d1fa1`, VTI `6f26af19`, `dtgwg-vti-spec@75391a2`. Its source, `design-docs/vetting-hidden-vetters-pcs.md` §1–§13, is not public.
 - **[[VETTING-DESIGN]]** — `docs/design/vetting-process.md` in `OpenVTC/openvtc` (DRAFT v3): §1 non-goals, §10.5 accountability, §14.2 V2 scope, D7/D14/D19.
 - **[[VTI-CRED-ARCH]]** — `docs/05-design-notes/vti-credential-architecture.md` in VTI, present at our pin `187ad9cd`: D4 and §4, proof formats.
 - **[[AGENT-STATE]]** — *The Agent Is the State: UIs That Keep Nothing*, `ic3.software/blog/the-agent-is-the-state`.
@@ -44,59 +44,58 @@ Everything in our ecosystem is **non-interactive**. The verifier's random challe
 
 ### 2.2 The three constructions our ecosystem uses
 
-| | BBS signatures (`bbs-2023`) | PCS: predicate credentials (Σ-protocols) | Circuit SNARKs (Groth16) |
+| | BBS signatures (`bbs-2023`) | Predicate credentials (Σ-protocols) | Circuit SNARKs (Groth16) |
 |---|---|---|---|
 | **Proves** | "An issuer signed a credential containing these claims," revealing only the chosen claims; two shows are unlinkable | "k pairwise-distinct credentialed users attested to this identifier," and nobody learns which | Any statement expressible as a circuit: "signature valid ∧ predicate true ∧ nullifier = H(secret, context)" |
-| **Math** | Pairing-based signature over BLS12-381; the holder derives a proof of knowledge of the signature | Σ-protocols made non-interactive by Fiat–Shamir, over BLS12-381 (DDH-hard); pseudorandom *tags* stand in for identities; blind issuance | R1CS circuit (circom), BN254 curve, Poseidon hashing; constant-size proof |
-| **Cost** | Proof derivation is a public operation on the issuer's signature; the holder needs **no** BLS key ([[VTI-CRED-ARCH]] §4) | ≈12 ms to prove and ≈12 ms to verify at k = 5 on Apple Silicon; 1 392 B proof ([[HIDDEN-VETTER]]) | ≈680 ms to prove, 721 B proof, on the lab's 11 523-constraint circuit ([[ZKP-TF]] lab) |
-| **Setup** | None | None beyond the issuer's ("helper's") keys | A **per-circuit trusted-setup ceremony**; the lab's is lab-only |
-| **Upstream status** | Adopted, not built: `affinidi-bbs` over `bls12_381_plus` and `bbs_2023` in the TDK, gated on an independent audit ([[VTI-CRED-ARCH]] D4) | Working prototype, 14 end-to-end tests; library change ready to offer upstream; seven specs unwritten ([[HIDDEN-VETTER]]) | A `CredentialFormat::Zkp` variant exists; "the Circom circuit + Groth16 prover/verifier (server-side VTA proving) live outside it and are deferred" ([[VTI-CRED-ARCH]] §4) |
+| **Math** | Pairing-based signature over BLS12-381; the holder derives a proof of knowledge of the signature | Σ-protocols made non-interactive by Fiat–Shamir over a pairing-friendly curve; pseudorandom *tags* stand in for identities; blind issuance | R1CS circuit (circom), BN254 curve, Poseidon hashing; constant-size proof |
+| **Cost** | Proof derivation is a public operation on the issuer's signature; the holder needs **no** BLS key ([[VTI-CRED-ARCH]] §4) | Constant-size proof; proving and verifying are both cheap on server hardware. No public benchmark we can cite | ≈680 ms to prove, 721 B proof, on the lab's 11 523-constraint circuit ([[ZKP-TF]] lab) |
+| **Setup** | None | None beyond the issuer's keys | A **per-circuit trusted-setup ceremony**; the lab's is lab-only |
+| **Upstream status** | Adopted, not built: `affinidi-bbs` over `bls12_381_plus` and `bbs_2023` in the TDK, gated on an independent audit ([[VTI-CRED-ARCH]] D4) | Listed as V2 scope — *"k-of-n proofs over hidden vetters"* ([[VETTING-DESIGN]] §14.2). No public specification yet | A `CredentialFormat::Zkp` variant exists; "the Circom circuit + Groth16 prover/verifier (server-side VTA proving) live outside it and are deferred" ([[VTI-CRED-ARCH]] §4) |
 | **Our track** | Z2 | Z1 | Z3 |
 
 ### 2.3 The building blocks, in the words the specs use
 
 - **Pairing / BLS12-381.** A bilinear map e(aP, bQ) = e(P, Q)^{ab} on a pairing-friendly curve. It lets you check relationships between hidden exponents, which is what BBS and PCS both rely on. Phone secure elements do **not** support this curve: the Secure Enclave is P-256 only, and StrongBox is P-256, RSA and (API 33+) Ed25519. This is a hardware fact, and it matters for §3.1.
 - **Tag / nullifier.** A deterministic, pseudorandom value derived from a secret and a context. The same secret in the same context always gives the same tag, which is how distinctness is counted and double-use is caught. A different context gives an unlinkable tag. PCS calls these tags; the DTG task force calls them scoped nullifiers.
-- **Blind signature.** The signer signs a value it cannot see and cannot later recognise. PCS uses it to issue vetter credentials and rate-limit tokens without the community learning which token belongs to whom.
-- **Helper.** PCS's name for the issuer of credentials and tokens, and the verifier of proofs. In our ecosystem that is **the VTC**. The VTA is never called a helper; it is the PCS *engine* ([[HIDDEN-VETTER]], "Terminology").
+- **Blind signature.** The signer signs a value it cannot see and cannot later recognise. A predicate-credential scheme uses it to issue vetter credentials, and to hand out rate-limiting tokens, without the issuer learning which token belongs to whom.
+- **Issuer, or *helper*.** The literature's name for the party that issues the credentials and tokens and verifies the proofs. In our ecosystem that role is **the VTC**; the party that proves is the member's **VTA**.
 
 ### 2.4 What a zero-knowledge proof does not give
 
 - **Privacy, not assurance.** The ZKP task force states the boundary: *"The cryptography carries the privacy. The accreditation framework carries the assurance."* A proof shows that a valid attestation is held, not that the determination behind it was correct.
-- **Distinctness, not independence.** PCS proves the vetters are distinct. Whether they are *independent* still comes from declared relationships. The VTI spec forbids upgrading one into the other (VTI-CMP-070/071, [[HIDDEN-VETTER]] F9).
-- **Computational anonymity only.** Anonymity under PCS rests on DDH over BLS12-381, which a quantum attacker breaks. An attacker who collects records today can later link one vetter's attestations. They can name the vetter only through the root-request identifier, which the VTC must delete after issuance ([[HIDDEN-VETTER]] F10).
-- **Nothing about metadata outside the proof.** Timing, token-fetch patterns, mediator routing and small anonymity sets all leak around a perfect proof. [[HIDDEN-VETTER]]'s "Leaks outside the proof" table is the checklist, and several rows are client behaviour (§4.1).
+- **Distinctness, not independence.** A threshold proof shows the vetters are distinct people. Whether they are *independent* still comes from declared relationships, and the VTI specification forbids upgrading one into the other (VTI-CMP-070/071).
+- **Computational anonymity only.** These constructions rest on discrete-log-style assumptions that a quantum attacker breaks. An attacker who collects records today could later link one vetter's attestations to each other — and could name that vetter if the issuer also kept whatever identified them at enrolment. Deleting that enrolment record is therefore part of the design, not an operational nicety.
+- **Nothing about metadata outside the proof.** Timing, token-fetch patterns, mediator routing and small anonymity sets all leak around a mathematically perfect proof. Several of those leaks are closed or opened by *client* behaviour, which is why §4.1 is a list of what Keyring must not do.
 
 ## 3. Positions
 
 ### 3.1 Proofs are made in the VTA and checked by the VTC; Keyring holds no ZK secret and runs no prover
 
-This is the answer to "device or VTA?". It is the ecosystem's stated design, not a preference of ours:
+This is the answer to "device or VTA?", and it is our position. Two public anchors say the ecosystem is built this way in general:
 
-- **Hidden vetting:** *"The VTA is the PCS engine. Every member-side PCS operation is a VTA Trust Task (`vta/pcs/attest`, `prove`, `verify-attestation`, `tokens/fetch`, `withdraw`, `root-request`), the PCS secret `usk` is a new VTA key kind (a BLS12-381 scalar) beside the persona keys, and openvtc is the UI and message carrier only. The VTC is the PCS helper"* ([[HIDDEN-VETTER]], "Where the cryptography runs").
 - **Credential formats:** the holder's VTA is *"store + wallet + signer"*, and the Groth16 path is *"server-side VTA proving"* ([[VTI-CRED-ARCH]] preamble and §4). The VTA's `credential-exchange/present` already assembles `Bbs2023` presentations from its vault (`vta-service/src/operations/credential_exchange.rs` at `187ad9cd`).
 - **Client architecture:** *"Do not build a second copy of anything the agent already is"* ([[AGENT-STATE]]).
 
 Three facts specific to a phone make this the right answer for Keyring too, not just for openvtc:
 
-1. **There is no hardware-custody gain to lose.** Every ZK secret in play (the PCS `usk`, a BBS link secret, a Groth16 witness) is a BLS12-381 or BN254 scalar, and neither phone secure element supports those curves (§2.3). A device-held ZK secret would be a software key either way. Keyring's hardware story continues where it actually applies: the Secure Enclave or StrongBox signature on the *approval* (§3.2).
-2. **Hidden vetting needs an always-on agent.** Tokens arrive on an unconditional drip that must be fetched every tick, at a random moment, even when unused. Otherwise the fetch pattern is the activity signal the design exists to hide ([[HIDDEN-VETTER]], "Tokens on a constant drip"; "missed ticks caught up by the always-on VTA"). A mobile OS suspends and kills apps as routine.
-3. **Anonymity does not survive two copies.** A vetter's attestations stored on the phone *and* in the VTA are two places to leak tags from, and two sources of truth for which tokens are reserved.
+1. **There is no hardware-custody gain to lose.** Every ZK secret in play (a predicate-credential secret, a BBS link secret, a Groth16 witness) is a scalar on a pairing-friendly curve, and neither phone secure element supports those curves (§2.3). A device-held ZK secret would be a software key either way. Keyring's hardware story continues where it actually applies: the Secure Enclave or StrongBox signature on the *approval* (§3.2).
+2. **Hidden vetting needs an always-on agent.** Capping how often an anonymous vetter may vouch means handing each of them rate-limiting tokens, and the collection of those tokens must not track their activity — otherwise the collection pattern is itself the signal the design exists to hide. That implies a component awake on a schedule of its own. A mobile OS suspends and kills apps as routine, so the phone cannot be that component.
+3. **Anonymity does not survive two copies.** A vetter's attestations held on the phone *and* in the VTA are two places to leak identifying tags from, and two sources of truth for what has already been spent.
 
-**Rejected: proving on the device.** It is feasible. BLS12-381 runs on the app's Hermes and gives byte-identical output to Node, at about 15× Node's cost (a pairing is 96.7 ms, a BLS verify 146 ms; `ref-03d`), and the DTG lab's Groth16 prover runs in about 680 ms. It is still ruled out by points 1–3: it gains no custody, cannot meet the drip, and creates a second copy of the agent. `ref-03d` remains the measurement to cite if an offline-only use case ever forces the question. No such case is in scope (§3.4).
+**Rejected: proving on the device.** It is feasible. BLS12-381 runs on the app's Hermes and gives byte-identical output to Node, at about 15× Node's cost (a pairing is 96.7 ms, a BLS verify 146 ms; `ref-03d`), and the DTG lab's Groth16 prover runs in about 680 ms. It is still ruled out by points 1–3: it gains no custody, cannot keep an unattended schedule, and creates a second copy of the agent. `ref-03d` remains the measurement to cite if an offline-only use case ever forces the question. No such case is in scope (§3.4).
 
 ### 3.2 What Keyring does
 
 Four duties, none of them cryptographic beyond the signature Keyring already makes:
 
-1. **Gate the consequential operation with a hardware-attested step-up.** An attestation is *"the most consequential signature a member ever makes, so step-up through the mobile authorizer belongs on it"* ([[HIDDEN-VETTER]]). [[VETTING-DESIGN]]'s target for signing a statement is *"step-up always (passkey / device)"*. Keyring approves `vta/pcs/attest` through the approvals path ([`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) P3) with a Secure Enclave or StrongBox signature and its attestation evidence. This is where Keyring is ahead of the reference clients, and it is Z1's one contribution beyond UI.
+1. **Gate the consequential operation with a hardware-attested step-up.** Vouching for a person is the most consequential thing a member does, and [[VETTING-DESIGN]]'s own target for signing a vetting statement is *"step-up always (passkey / device)"* — a gate its V0 cannot apply, because the client holds the key. Keyring approves the attest step (whatever task name the specification gives it) through the approvals path ([`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) P3) with a Secure Enclave or StrongBox signature and its attestation evidence. This is where Keyring is ahead of the reference clients, and it is Z1's one contribution beyond UI.
 2. **Render what the VTA says, as data.** Proof requests, disclosure previews, checklists and outcomes are the VTA's replies, rendered. A predicate claim is shown as the strongest outcome on the screen, not as a missing value ([[CONSENT-VIEW]]: *"A predicate claim discloses no value at all — that is the whole point"*). The preview comes from the code that will act ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §3.9).
-3. **Carry the ceremony.** The V0 vetting ceremony (ticket, request, session, signed Vetting Card, match code, human check) is unchanged in hidden mode. Only the artifact returned and what the VTC verifies change ([[HIDDEN-VETTER]], "The ceremony is untouched").
-4. **Keep no ZK state.** No `usk`, token, attestation, tag, serial or proof is persisted on the phone, and none is cached for display. The boundary [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.6 draws ("no local mirror of state a counterparty owns") covers all of it, because the VTA owns it. Idempotence ledger entries for in-flight tasks are the one exception, and they are ids, not ZK material.
+3. **Carry the ceremony.** The V0 vetting ceremony — ticket, request, session, signed Vetting Card, match code, human check ([[VETTING-DESIGN]] §3) — needs no change for hidden mode: what changes is the artifact the vetter returns and what the VTC checks, neither of which the client composes.
+4. **Keep no ZK state.** No ZK secret, rate-limiting token, attestation, tag or proof is persisted on the phone, and none is cached for display. The boundary [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.6 draws ("no local mirror of state a counterparty owns") covers all of it, because the VTA owns it. Idempotence ledger entries for in-flight tasks are the one exception, and they are ids, not ZK material.
 
 ### 3.3 Track Z1 rests on option B of the vetting subtask's §2.4
 
-Option B (Keyring drives its own VTA, the persona is the member, the VTA signs) was decided by Alberto on 2026-09-18. [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.4 on `origin/main` still reads **Open**, and that document needs updating by its owner; this is not a re-decision. Hidden vetting puts the PCS engine in the member's VTA, so it exists for a Keyring user only if a VTA is the member ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.4, option B). Under option A (the phone is the agent) the phone would have to carry the PCS engine, the key kind and the drip. That is exactly what §3.1 rules out, so **this plan designs no A path**. Under A, hidden-mode communities are closed to Keyring members, and the UI says so rather than degrading silently. Were B ever reversed, Z1 would be void, not redesigned.
+Option B (Keyring drives its own VTA, the persona is the member, the VTA signs) was decided by Alberto on 2026-09-18. [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.4 on `origin/main` still reads **Open**, and that document needs updating by its owner; this is not a re-decision. Hidden vetting puts the proof engine in the member's VTA, so it exists for a Keyring user only if a VTA is the member ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.4, option B). Under option A (the phone is the agent) the phone would have to carry the proof engine, its secret and its token schedule. That is exactly what §3.1 rules out, so **this plan designs no A path**. Under A, hidden-mode communities are closed to Keyring members, and the UI says so rather than degrading silently. Were B ever reversed, Z1 would be void, not redesigned.
 
 ### 3.4 Keyring's own credentials meet zero knowledge in the VTA, after the in-person exchange
 
@@ -109,7 +108,7 @@ This keeps §3.1 and resolves the tension with the vetting subtask's §2.6 witho
 
 ### 3.5 Hidden mode needs the VTA operator and mediator operator to differ from the VTC operator
 
-*"Hidden mode requires that the vetter's VTA is not operated by the VTC operator, the same rule the design already sets for the mediator"* ([[HIDDEN-VETTER]]). The vetter's own VTA can compute every tag its user produces. That is accepted trust, the same trust already placed in it for persona keys. Two consequences for sibling plans:
+**Our rule, and the reason for it.** Whichever component proves on a vetter's behalf can compute every tag that vetter produces. Anonymity therefore holds against the community, other members, applicants and the mediator — but never against the vetter's own agent. That is the same trust already placed in a VTA for persona keys, so it is acceptable; what is not acceptable is one operator holding both sides. Hidden mode requires that the operator of the vetter's VTA, and of the mediator, is not the operator of the VTC. Two consequences for sibling plans:
 
 - **The Farm.** [`keyring-on-the-vta-farm.md`](./keyring-on-the-vta-farm.md) targets a Farm-hosted VTA. If one operator hosts both a member's VTA and the community's VTC, hidden mode is void for that member, and Keyring should warn rather than let the vetter believe they are anonymous. Keyring cannot detect operator identity by itself, so this needs a manifest or Farm signal (§8 B5).
   Today the Farm hosts VTAs and the mediator, and the first community VTC runs on a separate operator's stack, so the rule currently holds there.
@@ -117,21 +116,21 @@ This keeps §3.1 and resolves the tension with the vetting subtask's §2.6 witho
 
 ## 4. Tracks
 
-### 4.1 Z1 — Hidden-vetter admission (PCS), upstream-led
+### 4.1 Z1 — Hidden-vetter admission, upstream-led
 
-Upstream's order of work is: prototype (done) → library context change → `vta-sdk` `vetting-pcs` → seven specs → `vtc-service` → `vta-service` → client UI and E2E ([[HIDDEN-VETTER]], "Order of work"). Keyring's slice is the last step, plus the step-up of §3.2. What changes on Keyring's screens, as the vetter and as the applicant:
+The protocol, the services and the message definitions are upstream's to build; Keyring's slice is the client and the step-up of §3.2. The table is what we propose the client must do, derived from §2.4's leak list — each row exists to close a leak that no proof can close:
 
 | Surface | Hidden-mode behaviour | Why (leak it closes) |
 |---|---|---|
-| Accepting a vetting request | The VTA reserves a token on accept. If none is free, decline with `atCapacity { availableFrom }` | No one sits through a session to find the vetter cannot attest |
+| Accepting a vetting request | The agent sets aside the vetter's rate-limiting allowance when the request is accepted, not at the end. With none free, decline with a capacity reason and a time it is next available | No one sits through a whole session only to find the vetter cannot vouch |
 | Vetter availability | **No "accepting requests" toggle** in hidden mode. Decline individually | The toggle is the busy-vetter signal hidden mode removes |
-| Personal vetting limit | A local preference passed to the VTA. The full drip is still fetched | The preference never shows to the VTC |
-| Attest | Hardware-attested step-up approval of `vta/pcs/attest` | D19's target gate (§3.2) |
-| Applicant checklist | Rendered from the VTA's stored, verified attestations (`verify_att` and the token check run on receipt, F7) | "No token" surfaces at the session, not at submit |
-| Anonymity set | Warn when the manifest's bucketed live-vetter count is below 2k (the review's floor) | Small anonymity sets name vetters |
-| Submit timing | The app may delay submit after the last session; day-granular validity is the VTA's | Timing correlation |
-| Withdrawal | The VTA sends from a fresh `did:key`; the UI never routes it through the member or session DID (F8) | The mediator would otherwise see the sender |
-| Mixed criteria | A criterion is `mode: named` or `mode: hidden`, never both (F4). The UI shows which mode the community uses | One person could count twice |
+| Personal vetting limit | A vetter wanting to do less than their allowance sets it as a local preference; the agent still collects on the normal schedule | The preference never becomes visible to the community |
+| Attest | Hardware-attested step-up approval of the attest step | [[VETTING-DESIGN]]'s stated target gate (§3.2) |
+| Applicant checklist | Rendered from the attestations the applicant's agent has already verified on receipt | A bad or unbacked attestation surfaces at the session, not at submit |
+| Anonymity set | Warn the user when the community's published live-vetter count is too small to hide anyone | A small anonymity set names vetters however good the proof is |
+| Submit timing | The app may delay submitting after the last session, and never shows or sends a finer timestamp than it must | Exact timings correlate a session with a submission |
+| Withdrawal | A vetter withdrawing an attestation is sent from a fresh identifier; the UI never routes it through the member or session DID | The mediator would otherwise see who sent it |
+| Mixed criteria | A community's criterion is either named or hidden, never both, and the UI says which is in force | Otherwise one person can be counted twice, once under each mode |
 
 Keyring as vetter is new scope. The vetting subtask makes Keyring the *applicant* (its P6) and tests against a headless openvtc vetter (its §2.5). Z1 needs both roles in Keyring, and both roles re-run against upstream's own clients.
 
@@ -156,11 +155,11 @@ This covers Groth16 predicate proofs with scoped nullifiers (personhood, livenes
 
 | # | Constraint | Source |
 |---|---|---|
-| C1 | *"openvtc is the UI and message carrier only"*; the VTA is the PCS engine; the VTC is the helper | [[HIDDEN-VETTER]], "Where the cryptography runs" |
-| C2 | Hidden mode: *"the vetter's VTA is not operated by the VTC operator"* (and likewise the mediator) | [[HIDDEN-VETTER]], "What it costs, said plainly"; "Deployment rules" |
-| C3 | *"The VTC learns … who fetched tokens each tick (everyone, unconditionally), and nothing about sessions."* A client that fetches or declines on demand breaks this | [[HIDDEN-VETTER]], vetter sequence |
-| C4 | Named and hidden vetting never mix in one criterion | [[HIDDEN-VETTER]] F4 |
-| C5 | *"'Anonymous channel' means a fresh did:key or anoncrypt, never the member DID or the pairwise session DID"* | [[HIDDEN-VETTER]] F8 |
+| C1 | The proof engine is the member's VTA and the verifier is the community's VTC; the client is UI and message carrier | Ours (§3.1), on [[VTI-CRED-ARCH]] §4 and [[AGENT-STATE]] |
+| C2 | Hidden mode requires the vetter's VTA operator, and the mediator operator, to differ from the VTC operator | Ours (§3.5); asked upstream as VTI-Q16 |
+| C3 | Rate-limiting material must be collected on a schedule that does not depend on use; a client that fetches on demand, or advertises availability, reintroduces the busy-vetter signal | Ours (§3.1, §4.1) |
+| C4 | Named and hidden vetting never mix in one criterion, or one vetter can be counted twice | Ours (§4.1) |
+| C5 | Anything a vetter sends anonymously goes from a fresh identifier, never the member DID or the session DID | Ours (§4.1) |
 | C6 | *"Implementations SHOULD make ZKP presentation the default behavior so that users obtain privacy preservation without having to opt in"* | DTG Core Credentials, as quoted in [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 |
 | C7 | Holders need no BLS key to derive a BBS disclosure; only durable `did:webvh` issuers mint BBS credentials; BBS is gated on an independent audit | [[VTI-CRED-ARCH]] D4, §4 |
 | C8 | *"Do not build a second copy of anything the agent already is"* | [[AGENT-STATE]] |
@@ -173,25 +172,25 @@ Each phase starts only on instruction. Every phase that touches upstream behavio
 
 ### ZK0 — Baseline and access
 
-- Get read access to `predicate-credential-system` and pin it in `external/` via `setup-external.mjs`, alongside `OpenVTC/openvtc`, which is cloned but unpinned today.
-- Advance the VTI pin from `187ad9cd` (vta-sdk 0.25) to at least the review's `6f26af19` (0.48), coordinated with the owner of the pins and the lab stack; the lab's own bump (to `3dcbfe98`) is queued behind the Farm work. The VTI advance is its own motion: it does not ride with the `dtgwg-cred-spec` advance that [`vsc-migration-plan.md`](./vsc-migration-plan.md) schedules at the start of its V0 (*"One pin, one reason, one entry in `SYNC_LOG.md`"*, §10). It shares the VTI clone repair and the `personhood.rego` re-read that plan's §7.1 needs, so do those once for both.
+- Obtain the predicate-credential library this construction needs — published, or otherwise readable — and pin it in `external/` via `setup-external.mjs`, alongside `OpenVTC/openvtc`, which is cloned but unpinned today.
+- Advance the VTI pin from `187ad9cd` (vta-sdk 0.25) to a release carrying the vetting-privacy work, coordinated with the owner of the pins and the lab stack; the lab's own bump (to `3dcbfe98`) is queued behind the Farm work. The VTI advance is its own motion: it does not ride with the `dtgwg-cred-spec` advance that [`vsc-migration-plan.md`](./vsc-migration-plan.md) schedules at the start of its V0 (*"One pin, one reason, one entry in `SYNC_LOG.md`"*, §10). It shares the VTI clone repair and the `personhood.rego` re-read that plan's §7.1 needs, so do those once for both.
 - Re-read §2.2's upstream-status column against the new pins and correct this plan.
 
-**Done when:** both repositories are pinned with a `--why`; every upstream claim in §2.2 and §5 cites a file at a pinned commit rather than the review; §8 B1 is closed or its owner is named.
+**Done when:** both repositories are pinned with a `--why`; every upstream claim in §2.2 and §5 cites a file at a pinned commit; §8 B1 is closed or its owner is named.
 
 ### ZK1 — The client contract rung (`ref-2x-pcs-client-contract`)
 
-Build a pure-TypeScript rung with frozen fixtures and no React Native imports. It takes the `vta/pcs/*` task and reply shapes and checks everything Keyring does with them: renders the vetter and applicant surfaces of §4.1 as data, binds the step-up approval's payload digest to the exact `vta/pcs/attest` document, and refuses a reply that would require the client to hold ZK state (§3.2 item 4).
+Build a pure-TypeScript rung with frozen fixtures and no React Native imports. It takes the hidden-vetting task and reply shapes, once they are specified, and checks everything Keyring does with them: renders the vetter and applicant surfaces of §4.1 as data, binds the step-up approval's payload digest to the exact attest document, and refuses a reply that would require the client to hold ZK state (§3.2 item 4).
 
-**Blocked on** upstream's specs (step 4 of their order). Until then, fixtures can only be guessed, and a rung built on guessed shapes proves nothing.
+**Blocked on** the message definitions being published. Until then, fixtures can only be guessed, and a rung built on guessed shapes proves nothing.
 
 **Done when:** fixtures come from upstream's published task definitions or their prototype's transcripts; `npm run -s check` is green under Node and Hermes; the README states what it does not prove (no cryptography, no real VTA).
 
-### ZK2 — Hardware-attested step-up on `vta/pcs/attest`
+### ZK2 — Hardware-attested step-up on the attest step
 
 Add the approval of an attest step-up to Keyring's approvals path, carrying Secure Enclave or StrongBox evidence.
 
-**Depends on** `vta-service` exposing the task with step-up (upstream step 6) and [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) P3.
+**Depends on** the VTA exposing that step with step-up, and [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) P3.
 
 **Done when:** on a local stack, an attest by a vetter's VTA is refused until the phone approves; the approval verifies with its attestation evidence; an approval replayed against a different attest document is refused. The e2e runs on simulators for mechanics and on one real-device pair for evidence (the only way to prove attestation, per the root `CLAUDE.md`).
 
@@ -203,13 +202,13 @@ Implement §4.1's table on the screens of [`ui-ux-improvements-plan.md`](./ui-ux
 
 **Rides the V0 refusal machinery rather than a second copy of it.** Two facts about the built ceremony decide how hidden mode attaches, and both are recent:
 
-- **One chooser, two refusal points.** `pickOwnVetterGrant` is the single place a vetter's own grant is chosen and its state read (keyring-bifold#70). The vetting desk refuses to *cut* a ticket while no grant is live, and the module refuses to *redeem* a ticket already in the wild, before it is spent. Hidden mode adds `atCapacity` as a third standing, and it attaches at the same two points: the desk withholds, the module declines. It must not introduce a parallel notion of "can I vouch right now".
-- **Grant standing is public; capacity is not.** Withholding on grant state is safe, because who holds the vetter role is already public. Withholding on *token* state is the thing hidden mode exists to hide, so capacity must surface only as a per-request `atCapacity` decline with its `availableFrom`, never as a change in what an applicant can observe before asking. The directory listing never toggles.
-- **The two sides must tell one story.** The existing gate asserts that the desk's wording and the applicant's refusal reason agree on one fact; hidden mode extends that assertion to `atCapacity` rather than relaxing it.
+- **One chooser, two refusal points.** `pickOwnVetterGrant` is the single place a vetter's own grant is chosen and its state read (keyring-bifold#70). The vetting desk refuses to *cut* a ticket while no grant is live, and the module refuses to *redeem* a ticket already in the wild, before it is spent. Hidden mode adds *at capacity* as a third standing, and it attaches at the same two points: the desk withholds, the module declines. It must not introduce a parallel notion of "can I vouch right now".
+- **Grant standing is public; capacity is not.** Withholding on grant state is safe, because who holds the vetter role is already public. Withholding on *token* state is the thing hidden mode exists to hide, so capacity must surface only as a per-request decline naming when the vetter is next free, never as a change in what an applicant can observe before asking. The directory listing never toggles.
+- **The two sides must tell one story.** The existing gate asserts that the desk's wording and the applicant's refusal reason agree on one fact; hidden mode extends that assertion to the capacity standing rather than relaxing it.
 
 The refusal matrix has a harness already: `E2E_REFUSAL=dead-grant` in `run-vti-vetting.js` and `run-vetter-grant-lifecycle.js` (keyring-wallet#94, keyring-bifold#71). ZK3 adds hidden-mode cases to those rather than writing a new runner.
 
-**Done when:** the vetting subtask's V0 e2e matrix re-runs green in hidden mode on the local stack in all four pairings (Keyring or headless openvtc as vetter × Keyring or openvtc as applicant). A test asserts the VTC's token-fetch log is identical for a vetter who attested and one who did not (C3). A test asserts that nothing of §3.2 item 4 exists in the app's store after a full admission. The demo script contains no anonymity claim on a single-operator stack (§3.5).
+**Done when:** the vetting subtask's V0 e2e matrix re-runs green in hidden mode on the local stack in all four pairings (Keyring or headless openvtc as vetter × Keyring or openvtc as applicant). A test asserts that what the community can observe of a vetter's rate-limiting collection is identical whether or not that vetter vouched (C3). A test asserts that nothing of §3.2 item 4 exists in the app's store after a full admission. The demo script contains no anonymity claim on a single-operator stack (§3.5).
 
 ### ZK4 — Private presentation (Z2)
 
@@ -249,18 +248,18 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 
 | Trigger | Unblocks |
 |---|---|
-| `predicate-credential-system` becomes readable, or a crate is published | ZK0 (B1) |
-| A `vta/pcs/*` task URI appears in any readable spec, even a draft | ZK1 (B2) |
-| A VTI release whose `vta-service` carries the PCS key kind | ZK2, ZK3 (B3) |
+| The predicate-credential library becomes readable or published | ZK0 (B1) |
+| A hidden-vetting task URI appears in any readable spec, even a draft | ZK1 (B2) |
+| A VTI release whose `vta-service` carries the vetter's proof key | ZK2, ZK3 (B3) |
 | A manifest field, or a Farm signal, naming the operator of a VTA or mediator | §3.5, VTI-Q16 (B5) |
 | The BBS audit completes, or DTG ZKP V1.0 publishes | ZK4 (B6) |
 
 **Decided upstream, waiting on someone else:**
 
-- **B1** — Access to `predicate-credential-system`. `gh` reports `etairi/predicate-credential-system` not found on 2026-09-22 (private, renamed or moved). The review also leaves open whether the context change goes upstream through us or through Berkeley, and who publishes to crates.io (*"OpenVTC's deny.toml forbids git dependencies"*). Blocks ZK0.
-- **B2** — The seven specs (manifest `vetting.anonymity`, `pcs-root`, tokens, event mode, attestation, refresh, `submit/0.3` `vettingProof`, `revoke-statement/0.2`, `atCapacity`, `vta/pcs/*`). Upstream. Blocks ZK1.
-- **B3** — `vtc-service` and `vta-service` PCS support. Upstream. Blocks ZK2 and ZK3.
-- **B4** — Governance acceptance of the trade hidden mode makes: cascade review and lineage are foreclosed, plus liability wording and the anonymity-set floor ([[HIDDEN-VETTER]], "Decisions needed before code"). Per community, upstream. Hidden mode may never be enabled anywhere Keyring runs.
+- **B1** — A readable predicate-credential library. We have found none published that implements this construction, and a service that publishes to crates.io cannot depend on a git-only crate in any case. Who publishes it, and under what licence, is not ours to decide. Blocks ZK0.
+- **B2** — The message and task definitions for hidden vetting: what a community publishes about the mode, how a vetter enrols and collects its allowance, what a vetter returns instead of a named statement, how an applicant submits the proof, and how a withdrawal is expressed. Upstream. Blocks ZK1.
+- **B3** — Hidden-vetting support in `vtc-service` and `vta-service`. Upstream. Blocks ZK2 and ZK3.
+- **B4** — Governance acceptance of the trade hidden mode makes. The accountability machinery [[VETTING-DESIGN]] §10.5 describes — lineage, and the cascade review that re-examines everyone a discredited vetter vouched for — cannot work against vetters nobody can name. A community must decide it accepts that, and that decision is not ours. Hidden mode may never be enabled anywhere Keyring runs.
 - **B5** — A signal a client can read that the VTA and VTC operators differ (§3.5). Not designed anywhere yet. Raised as **VTI-Q16** in `docs/VTI_UPSTREAM_FINDINGS.md` (on `main`, `a5f5cab`), which cites only published sources.
 - **B6** — DTG ZKP V1.0 and the BBS audit. Block ZK4.
 
@@ -268,12 +267,11 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 
 | Date | Companion | Driven by |
 |---|---|---|
-| 2026-09-22 | [`2026-09-22-al.md`](./zero-knowledge-plan/2026-09-22-al.md) | Initial research: the maintainer's hidden-vetter review, [[AGENT-STATE]], [[VTI-CRED-ARCH]], and the positions of 2026-08-05 it supersedes |
+| 2026-09-22 | [`2026-09-22-al.md`](./zero-knowledge-plan/2026-09-22-al.md) | Opening research: where proving belongs ([[VTI-CRED-ARCH]], [[AGENT-STATE]]), the 2026-08-05 position it supersedes, what the work in flight decides, and the public-sources pass of 09-23 |
 
 ## 10. Sources
 
-- [[HIDDEN-VETTER]] — see References.
-- `external/openvtc/docs/design/vetting-process.md` at `177a218` (§1 non-goals l. 66; §14.2 l. 1542; D19 l. 1595).
+- `external/openvtc/docs/design/vetting-process.md` at `177a218` (§1 non-goals l. 66; §10.5 accountability l. 1127; §14.2 l. 1542; D19 l. 1595).
 - `external/verifiable-trust-infrastructure/docs/05-design-notes/vti-credential-architecture.md` at `187ad9cd` (D4 l. 23; §4 ll. 125–215); `vta-service/src/operations/credential_exchange.rs` at `187ad9cd` (the `Bbs2023` and `Zkp` arms).
 - `external/vta-browser-plugin/packages/core/src/persona/consent-view.ts` at `9643c57`.
 - `tsp-reference/ref-03d-bls12-381-hermes/README.md`.
