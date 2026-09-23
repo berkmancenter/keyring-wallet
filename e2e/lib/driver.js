@@ -1,6 +1,6 @@
 import { execFileSync as execFileSyncForSim } from "node:child_process";
 import { remote } from "webdriverio";
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -124,8 +124,56 @@ export async function ensureAppium() {
   throw new Error("appium did not start within 60s");
 }
 
+/** Every process below `pid`, by PID (never by name). */
+function descendantPids(pid) {
+  let kids = [];
+  try {
+    kids = execFileSync("pgrep", ["-P", String(pid)], { encoding: "utf8" }).trim().split(/\s+/).filter(Boolean).map(Number);
+  } catch {
+    return []; // pgrep exits 1 when there are none
+  }
+  return kids.flatMap((k) => [k, ...descendantPids(k)]);
+}
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Stop the Appium this run started — and what it started. WebDriverAgent runs
+ * as an `xcodebuild … test-without-building` child of Appium; SIGTERM to Appium
+ * alone left it running, reparented to PID 1, holding the device's WDA port and
+ * counting as an xcodebuild to anyone checking the Mac (an iPhone 11 runner
+ * outlived its run by 40 minutes, 2026-09-23, and ignored SIGTERM). So note the
+ * whole tree first, stop Appium, then its descendants, escalating to SIGKILL
+ * for any still alive after a short grace. By PID only; an Appium this run did
+ * not start (appiumProc unset) is never touched.
+ */
 export function stopAppium() {
-  if (appiumProc) appiumProc.kill("SIGTERM");
+  if (!appiumProc) return;
+  const tree = descendantPids(appiumProc.pid);
+  appiumProc.kill("SIGTERM");
+  for (const pid of tree) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      /* already gone */
+    }
+  }
+  for (let i = 0; i < 6 && tree.some(alive); i++) execFileSync("sleep", ["0.5"]);
+  for (const pid of tree.filter(alive)) {
+    try {
+      process.kill(pid, "SIGKILL");
+      console.log(`[e2e] stopped a leftover Appium child by PID ${pid}`);
+    } catch {
+      /* already gone */
+    }
+  }
 }
 
 export async function createSession(platform, capsOverride) {

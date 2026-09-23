@@ -34,6 +34,7 @@
  */
 import "./lib/cli-guard.js";
 import { spawn, execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
@@ -42,6 +43,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
+import { listAcl, ownedBy, removeRunKeys, snapshotAcl } from "./lib/aclCleanup.js";
 
 const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
@@ -445,9 +447,37 @@ async function openLinkFlow(driver, link) {
   await waitForTestId(driver, "VtaLinkConfirm", 30000);
 }
 
+/**
+ * Leave this run's keys in place — the phone stays linked for the next step —
+ * and hand what the chain's last step needs to remove them.
+ */
+function keepForNextStep({ before, tempDid }) {
+  try {
+    const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "artifacts", "last-link.json");
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify({ slug: VTA_SLUG, pnmHome: PNM_HOME, tempDid, before: [...before], at: new Date().toISOString() }, null, 2));
+    const mine = ownedBy(listAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME }).filter((e) => !before.has(e.subject)), tempDid);
+    console.log(`[acl] keeping ${mine.length} entr${mine.length === 1 ? "y" : "ies"}: the phone stays linked for the next step (${file}). To remove them:`);
+    for (const e of mine) console.log(`  PNM_HOME=${PNM_HOME} ${PNM} --vta ${VTA_SLUG} acl delete '${e.subject}'`);
+  } catch (e) {
+    console.log(`[acl] could not record this run's keys: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+  }
+}
+
 let driver;
 let page;
+// The keys this run adds to the runner VTA, removed again in `finally`: the
+// ACL as it was, and the phone's temporary key, whose chain is ours.
+let aclBefore;
+let runTempDid;
+let runFailed = false;
 try {
+  // Cleanup must never decide a run's outcome: no snapshot, no cleanup.
+  try {
+    aclBefore = snapshotAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME });
+  } catch (e) {
+    console.log(`[acl] no snapshot, so no cleanup this run: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+  }
   page = await ensurePage();
   await ensureAppium();
   const caps =
@@ -525,6 +555,7 @@ try {
     }
     await waitForTestId(driver, "VtaLinkManualDid", 5000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
+    runTempDid = temporaryDid;
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
     await screenshot(driver, "link-m1-key");
     // GRANT_FIRST=1 skips the pre-grant check. It exists to isolate one
@@ -592,6 +623,9 @@ try {
   // iOS reads the accessibility label, which spells the code out for VoiceOver.
   const phoneCode = (await textOf(driver, "VtaLinkCode")).replace(/\s+/g, "");
   const view = await waitForState(offered.offer.n, "submitted");
+  // The phone's key, known once it submits — before any grant, so a run that
+  // fails after this still knows which ACL entries are its own.
+  runTempDid = view.did;
   console.log(`[e2e] phone code ${phoneCode} · page code ${view.code}`);
   await screenshot(driver, "link-03-code");
   if (phoneCode !== view.code) throw new Error(`codes differ: phone ${phoneCode}, page ${view.code}`);
@@ -614,6 +648,7 @@ try {
   process.exitCode = 0;
   }
 } catch (err) {
+  runFailed = true;
   console.error(err);
   if (driver) {
     await screenshot(driver, "link-failure").catch(() => undefined);
@@ -622,6 +657,20 @@ try {
   printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
   process.exitCode = 1;
 } finally {
+  // Only this run's keys. A link is usually the FIRST step of a chain (link →
+  // invite → vetting), and removing its keys after a success unlinks the phone
+  // the next step needs. So on success they go only when this run is the whole
+  // test (JOURNEY=1) or E2E_ACL_CLEANUP=always; otherwise they are handed on in
+  // artifacts/last-link.json for the step that ends the chain. On a failure
+  // they are kept as evidence either way.
+  if (aclBefore) {
+    const mode = process.env.E2E_ACL_CLEANUP || "";
+    if (runFailed || JOURNEY || mode === "always" || mode === "never") {
+      removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid: runTempDid, failed: runFailed });
+    } else if (runTempDid) {
+      keepForNextStep({ before: aclBefore, tempDid: runTempDid });
+    }
+  }
   if (driver) await driver.deleteSession().catch(() => undefined);
   stopAppium();
   // Only the page this run started, by its PID.
