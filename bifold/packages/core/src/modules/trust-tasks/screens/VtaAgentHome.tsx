@@ -264,17 +264,22 @@ const VtaAgentHome: React.FC = () => {
               which is how `run-vetter-grant-lifecycle` ended up waiting for an
               id that never existed. A seat is a fact the screen knows, so the
               screen says it: member, vetter, applicant, or none of those yet. */}
-          <ThemedText style={styles.muted} testID={testIdWithKey('AgentSeat')}>
-            {t(
-              holdings?.vetterFor?.length
-                ? 'VtaLink.SeatVetter'
-                : isMember
-                  ? 'VtaLink.SeatMember'
-                  : isApplicant
-                    ? 'VtaLink.SeatApplicant'
-                    : 'VtaLink.SeatNone'
-            )}
-          </ThemedText>
+          {/* Only once what the agent holds has been read: before that every
+              phone would briefly read "not joined yet", and a reader that sees
+              this line can trust the cards below it have settled too. */}
+          {holdings ? (
+            <ThemedText style={styles.muted} testID={testIdWithKey('AgentSeat')}>
+              {t(
+                holdings.vetterFor.length
+                  ? 'VtaLink.SeatVetter'
+                  : isMember
+                    ? 'VtaLink.SeatMember'
+                    : isApplicant
+                      ? 'VtaLink.SeatApplicant'
+                      : 'VtaLink.SeatNone'
+              )}
+            </ThemedText>
+          ) : null}
           {/* An applicant's way back to vetting. It used to be the operator
               panel's vetting card, the only way in once "I want to join" had
               been used; here it follows the line that says why it is needed. */}

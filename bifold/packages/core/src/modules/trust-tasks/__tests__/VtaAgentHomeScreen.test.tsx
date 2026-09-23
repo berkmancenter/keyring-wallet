@@ -158,6 +158,22 @@ describe('Your agent — after linking', () => {
    * seat from which cards happen to be on screen — that inference is how a
    * harness ended up waiting on an id that never existed.
    */
+  it('says nothing about the seat until what the agent holds has been read', async () => {
+    const mockUseAgent = useAgent as jest.Mock
+    mockUseAgent.mockReturnValue(fakeAgent([persona, membership]))
+    const tree = render(
+      <BasicAppContext>
+        <VtaAgentHome />
+      </BasicAppContext>
+    )
+    // Before the stores answer, no line — never a passing "not joined yet".
+    expect(tree.queryByTestId(testIdWithKey('AgentSeat'))).toBeNull()
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatMember')
+  })
+
   it('says the seat in one line, for each of the four cases', async () => {
     expect(await (await renderHome([])).findByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatNone')
     expect(await (await renderHome([persona])).findByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent(
