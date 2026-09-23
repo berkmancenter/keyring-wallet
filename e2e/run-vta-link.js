@@ -170,7 +170,31 @@ async function testerJourney(driver) {
       throw new Error(`the suggested community publishes "${shows}" but is offered as "${offered}"`);
     }
   }
-  if (await existsTestId(driver, "JoinThisCommunity", 10000)) await tapTestId(driver, "JoinThisCommunity", 5000);
+  if (await existsTestId(driver, "JoinThisCommunity", 10000)) {
+    await tapTestId(driver, "JoinThisCommunity", 5000);
+  } else if (await existsTestId(driver, "JoinScanCommunity", 3000)) {
+    // A build that names no community (the store build: testers bring their
+    // own). Bring the community's own code the way an upstream QR carries it —
+    // its bare DID — through the scanner's paste, and expect Join on it by
+    // its published name (the scan bridge, keyring-bifold feat/empty-config).
+    const bare = process.env.KEYRING_COMMUNITY_DID;
+    if (!bare) throw new Error("this build names no community: set KEYRING_COMMUNITY_DID to the one to bring");
+    await tapTestId(driver, "JoinScanCommunity", 15000);
+    for (let i = 0; i < 3 && !(await existsTestId(driver, "PasteUrlButton", 5000)); i++) {
+      if (await existsTestId(driver, "Continue", 3000)) await tapTestId(driver, "Continue");
+    }
+    await pasteLinkOnScanScreen(driver, bare);
+    const shows = process.env.KEYRING_COMMUNITY_SHOWS_AS;
+    if (shows) {
+      const named = await driver.$(driver.e2ePlatform === "ios" ? `-ios predicate string:label CONTAINS "${shows}"` : `android=new UiSelector().textContains("${shows}")`);
+      await named.waitForExist({ timeout: 45000 }).catch(() => undefined);
+      if (!(await named.isExisting())) {
+        await screenshot(driver, "journey-bare-did-join");
+        throw new Error(`a pasted bare community DID did not open Join on "${shows}"`);
+      }
+    }
+    console.log(`[e2e] journey: a pasted bare community DID opened Join${shows ? ` on "${shows}"` : ""}`);
+  }
   await waitForTestId(driver, "JoinAsks", 15000);
   console.log("[e2e] journey: Join a community shows what it asks for");
   await tapTestId(driver, "JoinStart", 15000);

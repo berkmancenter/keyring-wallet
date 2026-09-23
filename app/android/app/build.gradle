@@ -171,6 +171,13 @@ android {
             // from the react-android AAR. The contents are identical — keep one.
             pickFirsts += ['**/libreactnative.so', '**/libjsi.so', '**/libfbjni.so', '**/libc++_shared.so']
         }
+        resources {
+            // androidx.annotation 1.11.0 and its annotation-jvm split both ship
+            // this licence text; a transitive AndroidX resolution moved to them
+            // with no change in our trees, and the merge refused the duplicate
+            // (2026-09-23). The texts are identical — keep one, for this path only.
+            pickFirsts += ['META-INF/androidx/annotation/annotation/LICENSE.txt']
+        }
     }
 }
 
