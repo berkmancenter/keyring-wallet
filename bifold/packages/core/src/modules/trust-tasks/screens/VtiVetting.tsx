@@ -59,6 +59,7 @@ import { pickOwnVetterGrant, type VetterGrantState } from '../module/vtiGrantSta
 import { joinSeed } from '../module/vtiJoinSeed'
 
 import { useCommunityDid } from './useCommunity'
+import { communityLabelOf } from './communityName'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
 
@@ -109,6 +110,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [application, setApplication] = useState<VettingApplication>()
   const [manifest, setManifest] = useState<VtiManifest>()
   const [legalName, setLegalName] = useState('')
+  /**
+   * Whether what this phone already holds has been read once. The name is
+   * filled from a stored application, which arrives from the store rather
+   * than with the first render — so without this the field shows empty and
+   * then "suddenly" fills, which reads as something having gone wrong
+   * (report #18). The step waits instead, briefly and visibly.
+   */
+  const [heldRead, setHeldRead] = useState(false)
   // The profile chosen at Join as fills the name in, once (seed by copy).
   const seed = communityDid ? joinSeed.get(communityDid) : undefined
   useEffect(() => {
@@ -360,6 +369,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         const ts = await stores.vetting.listTickets(persona.communityDid)
         setTickets(ts.map((x) => ({ ...x, link: deskRef.current!.linkFor(x) })))
         setDesk(await stores.vetting.listDesk())
+        setHeldRead(true)
       } else {
         if (!applicantRef.current)
           applicantRef.current = new VtiApplicant(agent, persona, stores.vetting, stores.community, bump)
@@ -370,6 +380,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           setLegalName((v) => v || a.claims['name.legal'] || '')
           setChecklist(await applicantRef.current.checklist())
         }
+        setHeldRead(true)
       }
     }
     void refreshSeat()
@@ -530,7 +541,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           {seatBanner('vetter')}
           {standingNotice}
           <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>
-            {tp('Vetting.YouVetFor', { community: shortDid(persona.communityDid) })}
+            {tp('Vetting.YouVetFor', { community: communityLabelOf(persona.communityDid) })}
           </Text>
 
           {vetterStep === 'ticket' ? (
@@ -866,7 +877,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           </View>
         ) : null}
 
-        {applicantStep === 'name' ? (
+        {applicantStep === 'name' && !heldRead ? (
+          <View style={styles.row} testID={testIdWithKey('VettingReadingHeld')}>
+            <ActivityIndicator color={ColorPalette.brand.primary} />
+            <Text style={styles.value}>{t('Vetting.ReadingHeld')}</Text>
+          </View>
+        ) : null}
+
+        {applicantStep === 'name' && heldRead ? (
           <>
             {stepHeader(applicantNumber, 5, t('Vetting.YourFace'))}
             <View style={styles.card}>

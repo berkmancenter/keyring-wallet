@@ -33,7 +33,8 @@ import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
 
-import { didName, shareIdentity } from './identityShare'
+import { shareIdentity } from './identityShare'
+import { communityLabelOf } from './communityName'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
 interface Holdings {
@@ -199,7 +200,7 @@ const VtaAgentHome: React.FC = () => {
   const lapsed = holdings?.lapsed ?? []
   const day = (iso: string) => new Date(iso).toLocaleDateString()
   const lapsedText = (communityDid: string, grant: Holdings['lapsed'][number]['grant']) => {
-    const community = didName(communityDid)
+    const community = communityLabelOf(communityDid)
     const opts = { community, interpolation: { escapeValue: false } }
     switch (grant.state) {
       case 'revoked':
@@ -256,7 +257,7 @@ const VtaAgentHome: React.FC = () => {
         {holdings?.vetterFor.map((communityDid) => (
           <View key={communityDid} style={[styles.card, styles.tip]} testID={testIdWithKey('AgentVetterCard')}>
             <ThemedText variant="bold">
-              {t('VtaLink.YouCanVet', { community: didName(communityDid), interpolation: { escapeValue: false } })}
+              {t('VtaLink.YouCanVet', { community: communityLabelOf(communityDid), interpolation: { escapeValue: false } })}
             </ThemedText>
             <ThemedText style={styles.muted}>{t('VtaLink.YouCanVetBody')}</ThemedText>
             <Button
@@ -335,7 +336,7 @@ const VtaAgentHome: React.FC = () => {
                   <Icon name="account-circle-outline" size={20} color={TextTheme.normal.color} />
                   <ThemedText style={{ flex: 1 }}>
                     {t('VtaLink.IdentityFor', {
-                      community: didName(p.communityDid),
+                      community: communityLabelOf(p.communityDid),
                       interpolation: { escapeValue: false },
                     })}
                   </ThemedText>
@@ -344,7 +345,7 @@ const VtaAgentHome: React.FC = () => {
                     onPress={() => void shareIdentity(t, p.communityDid, p.did)}
                     accessibilityRole="button"
                     accessibilityLabel={t('VtaLink.ShareIdentity', {
-                      community: didName(p.communityDid),
+                      community: communityLabelOf(p.communityDid),
                       interpolation: { escapeValue: false },
                     })}
                     hitSlop={12}
@@ -359,7 +360,7 @@ const VtaAgentHome: React.FC = () => {
                   <Icon name="card-account-details-outline" size={20} color={TextTheme.normal.color} />
                   <ThemedText>
                     {t('VtaLink.MemberOf', {
-                      community: didName(m.communityDid),
+                      community: communityLabelOf(m.communityDid),
                       interpolation: { escapeValue: false },
                     })}
                   </ThemedText>

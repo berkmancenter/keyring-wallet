@@ -82,7 +82,8 @@ export function useJoinAsChoice(navigation: unknown) {
 }
 
 export const JoinAs: React.FC<{
-  community: string
+  /** The community's own published name, or undefined when nothing has named it. */
+  community?: string
   options: JoinAsOption[]
   selectedId?: string
   onSelect: (id: string) => void
@@ -109,7 +110,11 @@ export const JoinAs: React.FC<{
   return (
     <View style={{ gap: 12 }} testID={testIdWithKey('JoinAs')}>
       <ThemedText>
-        {t('Join.AsBody', { community, interpolation: { escapeValue: false } })}
+        {/* A community that has published no name is not named by its host
+            here either: the sentence simply stops naming it (report #16). */}
+        {community
+          ? t('Join.AsBody', { community, interpolation: { escapeValue: false } })
+          : t('Join.AsBodyUnnamed')}
       </ThemedText>
       {options.length === 0 ? (
         <ThemedText style={styles.muted} testID={testIdWithKey('JoinAsNoProfile')}>

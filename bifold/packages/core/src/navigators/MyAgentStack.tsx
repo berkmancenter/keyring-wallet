@@ -1,9 +1,10 @@
 import type { ParamListBase, RouteProp } from '@react-navigation/native'
 import { createStackNavigator, type StackNavigationProp } from '@react-navigation/stack'
-import React, { useEffect } from 'react'
+import React, { useEffect, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TOKENS, useServices } from '../container-api'
+import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { useTheme } from '../contexts/theme'
 import MyAgent from '../modules/trust-tasks/screens/MyAgent'
 import VtiCommunity from '../modules/trust-tasks/screens/VtiCommunity'
@@ -33,13 +34,27 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
   useEffect(() => {
     if (routedScreen) navigation?.setParams({ screen: undefined, params: undefined })
   }, [routedScreen, navigation])
+  /**
+   * Where the tab lands. Every tab unmounts when it loses focus
+   * (`TabStack.tsx`, `unmountOnBlur: true`), so coming back rebuilds this
+   * stack at its initial route — and a phone that had just linked was left on
+   * the agent home, while the same phone returning through the tab arrived at
+   * the operator panel. Two screens for one state, depending only on how you
+   * got there, which is what a tester reported (#11).
+   *
+   * A linked phone therefore starts at the agent home, always. The panel is
+   * still reachable from it; making the panel's content part of that screen is
+   * the redesign, and is deliberately not this.
+   */
+  const { link } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  const landsOn = link.kind === 'linked' ? Screens.VtaAgent : Screens.MyAgent
   const theme = useTheme()
   const { t } = useTranslation()
   const defaultStackOptions = useDefaultStackOptions(theme)
   const [ScreenOptionsDictionary, config] = useServices([TOKENS.OBJECT_SCREEN_CONFIG, TOKENS.CONFIG])
 
   return (
-    <Stack.Navigator screenOptions={{ ...defaultStackOptions }}>
+    <Stack.Navigator initialRouteName={landsOn} screenOptions={{ ...defaultStackOptions }}>
       <Stack.Screen
         name={Screens.MyAgent}
         options={{ title: t('Screens.MyAgent'), ...ScreenOptionsDictionary[Screens.MyAgent] }}

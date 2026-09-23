@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Image,
+  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -66,10 +67,29 @@ export interface PickedRCardPhoto {
  * instead in-app (RCardPhotoCropModal + processRCardPhoto), against this
  * freshly-returned asset URI, which removes that failure mode.
  */
+/**
+ * iOS is still dismissing its permission sheet when the request resolves, and
+ * a picker presented into that dismissal is closed along with it — which is
+ * why the first attempt did nothing and the second worked (report #21, on
+ * limited photo access, where the sheet is the one offering "Select Photos").
+ * Waiting for the interaction to finish costs a few hundred milliseconds on
+ * the one attempt that asked for permission, and nothing on any other.
+ */
+const afterPermissionSheetCloses = (): Promise<void> =>
+  new Promise((resolve) => {
+    InteractionManager.runAfterInteractions(() => setTimeout(resolve, 350))
+  })
+
 export const pickRCardPhoto = async (): Promise<PickedRCardPhoto | undefined> => {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+  // Asking again when it has already been answered re-presents nothing, but
+  // knowing whether we had to ask is what decides the wait below.
+  let permission = await ImagePicker.getMediaLibraryPermissionsAsync()
   if (!permission.granted) {
-    throw new RCardPhotoPermissionDeniedError()
+    permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permission.granted) {
+      throw new RCardPhotoPermissionDeniedError()
+    }
+    await afterPermissionSheetCloses()
   }
 
   const result = await ImagePicker.launchImageLibraryAsync({
@@ -351,7 +371,10 @@ const RCardForm: React.FC<RCardFormProps> = ({ initialValues, title, legend, sub
                 accessibilityLabel={t('RCardOnboarding.Fields.ProfileName')}
                 returnKeyType="next"
               />
-              <ThemedText style={{ fontSize: 12, color: '#888', marginTop: -12, marginBottom: 16 }}>
+              {/* The negative margin pulled this up against the field it
+                  explains, so it read as part of the input rather than as a
+                  note about it (report #20). */}
+              <ThemedText style={{ fontSize: 12, color: '#888', marginTop: 4, marginBottom: 16 }}>
                 {t('RCardOnboarding.Fields.ProfileNameHint')}
               </ThemedText>
               <View style={styles.photoSection}>

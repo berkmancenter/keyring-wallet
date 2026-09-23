@@ -16,6 +16,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { openScanner } from '../screens/openScanner'
 import VtaLink from '../screens/VtaLink'
+import { shareableKey } from '../screens/shareableKey'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -79,8 +80,10 @@ describe('the key the admin has to add', () => {
     expect(tree.getByTestId(testIdWithKey('VtaLinkNoAnswer'))).toHaveTextContent('VtaLink.NoAnswer')
     // A silence is not a refusal: only one of the two ever shows.
     expect(tree.queryByTestId(testIdWithKey('VtaLinkNotYet'))).toBeNull()
-    // The key stays put, so the admin can still be given it.
-    expect(tree.getByTestId(testIdWithKey('VtaLinkManualDid'))).toBeTruthy()
+    // The card with the code is still there to be given to an admin; the code
+    // itself now sits behind "Show the code" (#25).
+    expect(tree.getByTestId(testIdWithKey('VtaLinkShowingKey'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkShareKey'))).toBeTruthy()
     expect(tree.getByText('VtaLink.TryAgain')).toBeTruthy()
   })
 
@@ -115,6 +118,9 @@ describe('the key the admin has to add', () => {
         <VtaLink />
       </BasicAppContext>
     )
+    // Reveal the code, so this asserts the arrangement rather than the
+    // absence of something merely collapsed.
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShowTheCode')))
     const card = tree.getByTestId(testIdWithKey('VtaLinkShowingKey'))
     const inCard = (testID: string) =>
       Boolean(card.findAll((node) => node.props?.testID === testIdWithKey(testID)).length)
@@ -133,6 +139,56 @@ describe('the key the admin has to add', () => {
     )
     expect(tree.queryByTestId(testIdWithKey('VtaLinkNoAnswer'))).toBeNull()
     expect(tree.queryByTestId(testIdWithKey('VtaLinkNotYet'))).toBeNull()
+  })
+})
+
+/**
+ * Report #25: the link screen buried Share, Copy and "I've been added" under a
+ * ~350-character code and a paragraph about a browser extension, so a tester
+ * had to scroll a wall of characters to find the controls. Report #26: sharing
+ * the bare code sent a `did:peer:` URI, which AirDrop handed to Finder as a URL
+ * to open. Report #24: choosing "without a QR code" led to a screen offering
+ * the same choice again.
+ */
+describe('giving the code to an admin', () => {
+  const showKey = (extra: Record<string, unknown> = {}) =>
+    (vtaAgent as unknown as Setter).set({
+      link: {
+        kind: 'showingKey',
+        vtaDid: 'did:webvh:example:vta',
+        label: 'alice',
+        did: 'did:peer:2.Vz6Mk' + 'x'.repeat(340),
+        checking: false,
+        ...extra,
+      },
+    })
+
+  test('the two things to do come before the code, which starts hidden', () => {
+    const mockUseAgent = useAgent as jest.Mock
+    mockUseAgent.mockReturnValue({ agent: {} })
+    showKey()
+    const tree = render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(testIdWithKey('VtaLinkShareKey'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkCopyKey'))).toBeTruthy()
+    // The code and the admin instructions are behind the affordance…
+    expect(tree.queryByTestId(testIdWithKey('VtaLinkManualDid'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toBeNull()
+    // …and still reachable for anyone who wants them.
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShowTheCode')))
+    expect(tree.getByTestId(testIdWithKey('VtaLinkManualDid'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toBeTruthy()
+  })
+
+  test('what is shared is a message containing the code, not a bare URI', () => {
+    const shared = shareableKey(((k: string) => k) as never, 'alice', 'did:peer:2.abc')
+    expect(shared.message).not.toBe('did:peer:2.abc')
+    expect(shared.message.startsWith('did:')).toBe(false)
+    expect(shared.message).toContain('did:peer:2.abc')
+    expect(shared.title).toBeTruthy()
   })
 })
 

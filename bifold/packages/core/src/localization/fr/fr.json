@@ -1168,11 +1168,13 @@
     "AgentAddress": "L'adresse de votre agent",
     "AgentAddressHint": "L'hébergeur de votre agent l'affiche — elle commence par did:. Collez-la ici.",
     "ShowMyCode": "Afficher mon code",
-    "GiveKeyTitle": "Donnez ce code à l'administrateur de votre agent",
-    "GiveKeyBody": "Il l'ajoute à la liste d'accès de {{label}}. Revenez ensuite et touchez « J'ai été ajouté ».",
+    "GiveKeyTitle": "Envoyez ce code à l'administrateur de votre agent",
+    "GiveKeyBody": "Il l'ajoute à {{label}}, puis revenez et touchez « J'ai été ajouté ».",
     "CopyKey": "Copier",
     "KeyCopied": "Copié",
     "ShareKey": "Partager",
+    "ShareKeyTitle": "Code pour {{label}}",
+    "ShareKeyMessage": "Ajoutez ce code à {{label}} pour que mon téléphone puisse l'utiliser :",
     "ImAdded": "J'ai été ajouté",
     "Checking": "Vérification…",
     "NotAddedYet": "Votre agent n'accepte pas encore ce téléphone. Vérifiez que l'administrateur a ajouté exactement ce code, puis réessayez.",
@@ -1223,6 +1225,8 @@
     "VetterExpired": "Votre rôle de vérificateur pour {{community}} a pris fin le {{date}}.",
     "VetterNotYet": "Votre rôle de vérificateur pour {{community}} commence le {{date}}.",
     "GiveKeyHow": "Admins qui utilisent VTA Wallet (l'extension de navigateur) : « Manage this agent » → « Access » → « Grant access », collez-le et choisissez le rôle admin — l'agent garde les identités de ce téléphone, ce qui demande admin aujourd'hui. Depuis un terminal : pnm acl create --role admin.",
+    "ShowTheCode": "Afficher le code et comment l'ajouter",
+    "HideTheCode": "Masquer le code",
     "JourneyLinked": "Lié",
     "JourneyJoin": "Rejoindre",
     "JourneyMember": "Membre",
@@ -1234,7 +1238,7 @@
     "YouCanVet": "Vous pouvez maintenant vérifier des personnes pour {{community}}",
     "YouCanVetBody": "Son admin a fait de vous un vérificateur. Donnez un ticket quand vous rencontrez quelqu'un.",
     "OpenDesk": "Ouvrir le bureau de vérification",
-    "ShareKeyHint": "Il est long — envoyez-le sur l'ordinateur de l'admin (AirDrop, un message, un e-mail) plutôt que de le saisir."
+    "ShareKeyHint": "Long et facile à mal saisir — envoyez-le plutôt que de le dicter."
   },
   "Invited": {
     "IntroTitle": "Dites à l'admin qui inviter",
@@ -1267,6 +1271,7 @@
     "WhichTitle": "Quelle communauté ?",
     "WhichBody": "Scannez ou collez le lien de la communauté — ou le ticket d'un vérificateur, qui la nomme aussi.",
     "Suggested": "Suggérée pour cette app",
+    "Remembered": "Vous avez déjà rejoint celle-ci",
     "Unnamed": "Cette communauté n'a pas publié de nom",
     "NameFromLink": "Nom tel que fourni par le lien utilisé",
     "JoinSuggested": "Rejoindre cette communauté",
@@ -1289,6 +1294,7 @@
     "MakeIdentityBody": "{{community}} reçoit une nouvelle identité créée pour elle seule par votre agent. Vous confirmez avec votre visage ou votre empreinte.",
     "AsTitle": "Sous quel profil rejoignez-vous ?",
     "AsBody": "{{community}} reçoit une nouvelle identité créée pour elle seule. Votre profil en remplit le nom, une fois — rien d’autre n’est lié.",
+    "AsBodyUnnamed": "Cette communauté reçoit une nouvelle identité créée rien que pour elle. Votre profil en remplit le nom, une seule fois — rien d'autre n'est lié.",
     "AsNoProfile": "Vous n'avez pas encore de profil — créez-en un ci-dessous, ou saisissez votre nom devant le vérificateur.",
     "ProfileLabel": "Profil {{label}}",
     "FromProfile": "Depuis votre profil {{profile}} — corrigez ici si votre nom légal diffère.",
@@ -1446,6 +1452,7 @@
     "StandingNotYet": "Votre rôle de vérificateur n'a pas encore commencé.",
     "StandingAsk": "Demandez à un administrateur de vous accorder à nouveau le rôle de vérificateur. D'ici là, vous ne pouvez vérifier personne ici.",
     "StandingNoTicket": "D'ici là, vous ne pouvez pas commencer de vérification : un nouveau ticket lancerait quelque chose qui ne pourrait pas aboutir.",
+    "ReadingHeld": "Lecture de ce que ce téléphone détient déjà…",
     "SeatApplicantHint": "Un vérificateur contrôle qui vous êtes. Vous le sollicitez avec son ticket, lisez le code de correspondance, envoyez votre carte et recevez sa déclaration.",
     "HeroVetter": "Vous détenez une habilitation de vérificateur pour cette communauté. Ouvrez le bureau pour émettre un ticket et vérifier la personne devant vous.",
     "HeroApplicant": "Faites-vous vérifier en personne par un membre, puis candidatez à la communauté avec sa déclaration.",
@@ -1465,5 +1472,12 @@
     "WithdrawNothingOpen": "Aucune demande ouverte à retirer — vous pouvez postuler.",
     "AlreadyApplied": "Vous aviez déjà postulé à cette communauté — voici où en est cette candidature.",
     "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé"
+  },
+  "Errors": {
+    "NoAnswer": "Votre agent n'a pas répondu. Touchez Continuer pour réessayer — cela fonctionne généralement la deuxième fois.",
+    "NotAllowed": "Votre agent n'a pas autorisé cette action. Demandez à son administrateur si ce téléphone a toujours accès.",
+    "Unreachable": "Rien n'a répondu à cette adresse. Vérifiez votre connexion, puis réessayez.",
+    "Unknown": "Cela n'a pas fonctionné et l'application ne sait pas pourquoi. Réessayez ; si cela persiste, envoyez-nous les détails ci-dessous.",
+    "ShowDetails": "Détails"
   }
 }

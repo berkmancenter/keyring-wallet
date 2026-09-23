@@ -18,7 +18,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -36,6 +36,7 @@ import { joinSeed } from '../module/vtiJoinSeed'
 
 import { communityName } from './communityName'
 import { openScanner } from './openScanner'
+import { plainError, type PlainError } from './plainError'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
@@ -100,9 +101,12 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const vtaDid = useVtaDid(config?.vtaDid)
   const community = useCommunity(config?.communityDid)
   const chosenByLink = useSyncExternalStore(communityTarget.subscribe, communityTarget.getViewing)
+  const chosenBefore = useSyncExternalStore(communityTarget.subscribe, communityTarget.getChosen)
   const communityDid = community?.communityDid
   // What to call it, and how much to claim for that name (see communityName).
   const called = communityName(communityDid ?? '', community)
+  // The phone remembers a community it joined; the build merely suggests one.
+  const remembered = Boolean(communityDid && chosenBefore?.communityDid === communityDid)
   const name = called.name ?? called.technical
 
   // A community named by a link goes straight to what it asks; the build's
@@ -110,7 +114,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const [step, setStep] = useState<Step>(chosenByLink ? 'asks' : 'which')
   const [asks, setAsks] = useState<Asks>()
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<PlainError>()
+  const [errorOpen, setErrorOpen] = useState(false)
   const joinAs = useJoinAsChoice(navigation)
 
   useEffect(() => {
@@ -123,7 +128,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (step !== 'asks' || !communityDid) return
     let live = true
     setAsks(undefined)
-    if (vtiAgent.getState().status !== 'connected') return
+    // No session needed: a community answers the join manifest over REST, which
+    // is how an applicant reads what is asked of them before any channel
+    // exists. Guarding this on `connected` is why a community's published name
+    // never reached this screen while the community screen had it (report #16).
     vtiAgent
       .fetchManifest(communityDid)
       // Reading the manifest also teaches the app what the community calls
@@ -148,6 +156,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   const onJoinAs = useCallback(async () => {
     if (!agent || !vtaDid || !communityDid) return
     setError(undefined)
+    setErrorOpen(false)
     const confirmed = await requestBiometricConfirmationWithUI(agent, name, 'join', {
       title: t('Join.ConfirmTitle'),
       description: t('Join.ConfirmBody', { community: name, interpolation: { escapeValue: false } }),
@@ -163,7 +172,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       const stack = navigation as unknown as { navigate: (name: string) => void }
       stack.navigate(Screens.VtiVetting)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(plainError(e))
     } finally {
       setBusy(false)
     }
@@ -179,10 +188,28 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     )
   }
 
+  // A failure says what happened and what to do; the original text — module
+  // prefixes, task URIs and all — stays under Details, where it is worth
+  // something to whoever reads the report (report #17).
   const errorLine = error ? (
-    <ThemedText style={styles.error} testID={testIdWithKey('JoinError')}>
-      {error}
-    </ThemedText>
+    <View style={styles.card} testID={testIdWithKey('JoinErrorCard')}>
+      <ThemedText style={styles.error} testID={testIdWithKey('JoinError')}>
+        {t(error.line)}
+      </ThemedText>
+      <Pressable
+        onPress={() => setErrorOpen((open) => !open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: errorOpen }}
+        testID={testIdWithKey('JoinErrorDetailsToggle')}
+      >
+        <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
+      </Pressable>
+      {errorOpen ? (
+        <ThemedText style={styles.muted} selectable testID={testIdWithKey('JoinErrorDetail')}>
+          {error.detail}
+        </ThemedText>
+      ) : null}
+    </View>
   ) : null
 
   // What the community asks, as one sentence: the card's accessibility label.
@@ -221,7 +248,14 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                   {called.name ?? t('Join.Unnamed')}
                 </ThemedText>
               </View>
-              <ThemedText style={styles.muted}>{t('Join.Suggested')}</ThemedText>
+              {/* Where this community came from, truthfully. It said "Suggested
+                  for this app" for a community the person had joined on an
+                  earlier build — telling them their software has an opinion it
+                  does not have, and sending two of us hunting a configuration
+                  leak that did not exist (report #23). */}
+              <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedSource')}>
+                {remembered ? t('Join.Remembered') : t('Join.Suggested')}
+              </ThemedText>
               {called.name && called.claimed ? (
                 <ThemedText style={styles.muted} testID={testIdWithKey('JoinNameClaimed')}>
                   {t('Join.NameFromLink')}
@@ -329,7 +363,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           </ThemedText>
           <View testID={testIdWithKey('JoinMakeIdentity')}>
             <JoinAs
-              community={name}
+              community={called.name}
               options={joinAs.options}
               selectedId={joinAs.selectedId}
               onSelect={joinAs.setSelectedId}

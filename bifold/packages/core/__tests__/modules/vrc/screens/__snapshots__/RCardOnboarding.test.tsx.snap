@@ -206,7 +206,7 @@ exports[`RCardOnboarding Screen submits valid form with all fields and stores te
                     "color": "#888",
                     "fontSize": 12,
                     "marginBottom": 16,
-                    "marginTop": -12,
+                    "marginTop": 4,
                   },
                 ]
               }
