@@ -23,7 +23,7 @@ import {
   existsTestId,
 } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
-import { completeOnboarding, unlockIfLocked, dismissTourIfPresent } from "./lib/flows.js";
+import { completeOnboarding, unlockIfLocked, dismissTourIfPresent, openMyAgentPanel } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 
 const platform = process.env.PLATFORM || "android";
@@ -54,7 +54,10 @@ try {
   }
   await dismissTourIfPresent(driver);
 
-  await tapTestId(driver, "MyAgent", 30000);
+  // Everything below reads operator-panel ids (MyAgentCard, MyAgentHost,
+  // MyAgentCommunityRow); a linked phone lands on the agent home instead
+  // (keyring-bifold#11), so walk the extra screen first.
+  await openMyAgentPanel(driver);
   // The session outlives a screen but not the app process, so a run that
   // follows another one in the same process opens straight onto the agent card.
   if (await existsTestId(driver, "ConnectMyAgentButton", 15000)) {

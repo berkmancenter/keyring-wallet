@@ -12,7 +12,7 @@
  */
 import { createSession, ensureAppium, stopAppium, sleep, byTestId, existsTestId, tapTestId, waitForTestId } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
-import { unlockIfLocked, dismissTourIfPresent, pasteLinkFromHome } from "./lib/flows.js";
+import { unlockIfLocked, dismissTourIfPresent, openMyAgentPanel, pasteLinkFromHome } from "./lib/flows.js";
 
 const textOf = async (d, key) => (await byTestId(d, key).getAttribute("label").catch(() => "")) || "";
 
@@ -51,7 +51,9 @@ try {
     }
     process.exit(0);
   }
-  await (await waitForTestId(driver, "MyAgent", 60000)).click();
+  // MyAgentCommunityRow is on the operator panel, one screen in for a linked
+  // phone (keyring-bifold#11).
+  await openMyAgentPanel(driver);
   await sleep(4000);
 
   const row = byTestId(driver, "MyAgentCommunityRow");

@@ -142,6 +142,11 @@ export async function createSession(platform, capsOverride) {
     capabilities,
   });
   driver.e2ePlatform = platform;
+  // Two simulators of the same platform both logged as "ios", so a two-sim run
+  // could not say WHICH phone was stuck (2026-09-23: five minutes spent working
+  // out which of two iPhones was sitting on a PIN pad). Keep the simulator name
+  // so deviceTag can tell them apart.
+  driver.e2eDeviceName = capabilities["appium:deviceName"] || undefined;
   if (platform === "android") {
     // Debug builds load the JS bundle from metro on the host; map emulator port 8081 back
     // BEFORE the first app launch (autoLaunch is disabled in the caps).
@@ -218,7 +223,18 @@ export async function createSession(platform, capsOverride) {
     try {
       const { execSync } = await import("node:child_process");
       const { APP_ID } = await import("./config.js");
-      execSync(`xcrun simctl privacy booted grant camera ${APP_ID}`);
+      // Target THIS session's simulator, never "booted". With two simulators
+      // up, "booted" is ambiguous, simctl picks one WITHOUT erroring — and the
+      // grant kills the app it lands on, as the note below says. So the second
+      // session's camera grant can terminate the app on the FIRST session's
+      // phone, which is then never relaunched: that phone shows neither the
+      // home tabs nor the PIN screen, and the run blames whatever it was
+      // waiting for. Measured 2026-09-23 on a two-simulator vetting run.
+      const simUdid =
+        driver.capabilities.udid ||
+        driver.capabilities.deviceUDID ||
+        driver.capabilities["appium:udid"];
+      execSync(`xcrun simctl privacy ${simUdid ? simUdid : "booted"} grant camera ${APP_ID}`);
       // granting TCC permission kills the app; relaunch it cleanly (immediate
       // activate can race the teardown and leave a black screen)
       await driver.terminateApp(APP_ID).catch(() => {});
@@ -296,7 +312,10 @@ export function byTestId(driver, key) {
 
 export async function waitForTestId(driver, key, timeout = 30000) {
   const el = byTestId(driver, key);
-  const timeoutMsg = `element testID=${key} not found in ${timeout}ms`;
+  // Name the device in the message: a two-phone suite that says only "element
+  // not found" costs a page dump before anyone can even ask WHICH phone
+  // (2026-09-23, three runs in a row).
+  const timeoutMsg = `[${deviceTag(driver)}] element testID=${key} not found in ${timeout}ms`;
   try {
     await el.waitForExist({ timeout, timeoutMsg });
   } catch (err) {
@@ -334,7 +353,10 @@ export async function clearLocalityPreflightIfUp(driver) {
  *  is tracked) — prefixes every tap log so a two-device run's log is
  *  attributable to the device that acted, not just "android" twice. */
 export function deviceTag(driver) {
-  return driver.e2eUdid ? `${driver.e2ePlatform}:${driver.e2eUdid}` : driver.e2ePlatform;
+  if (driver.e2eUdid) return `${driver.e2ePlatform}:${driver.e2eUdid}`;
+  // A simulator has no udid here; its name is what distinguishes two of them.
+  if (driver.e2eDeviceName) return `${driver.e2ePlatform}:${driver.e2eDeviceName}`;
+  return driver.e2ePlatform;
 }
 
 export async function tapTestId(driver, key, timeout = 30000) {
