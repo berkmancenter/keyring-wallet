@@ -1381,6 +1381,7 @@
   "Errors": {
     "NoAnswer": "Seu agente não respondeu. Toque em Continuar para tentar de novo — normalmente funciona na segunda vez.",
     "NotAllowed": "Seu agente não permitiu isso. Pergunte ao administrador dele se este telefone ainda tem acesso.",
+    "NoDidHost": "Seu agente não tem onde publicar uma nova identidade. Peça ao administrador dele para registrar um host de DID, depois tente de novo.",
     "Unreachable": "Nada respondeu nesse endereço. Verifique sua conexão e tente de novo.",
     "Unknown": "Não funcionou, e o aplicativo não sabe por quê. Tente de novo; se continuar, envie os detalhes abaixo.",
     "ShowDetails": "Detalhes"

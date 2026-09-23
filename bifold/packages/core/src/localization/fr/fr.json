@@ -1482,6 +1482,7 @@
   "Errors": {
     "NoAnswer": "Votre agent n'a pas répondu. Touchez Continuer pour réessayer — cela fonctionne généralement la deuxième fois.",
     "NotAllowed": "Votre agent n'a pas autorisé cette action. Demandez à son administrateur si ce téléphone a toujours accès.",
+    "NoDidHost": "Votre agent n'a aucun endroit où publier une nouvelle identité. Demandez à son administrateur d'y enregistrer un hébergeur de DID, puis réessayez.",
     "Unreachable": "Rien n'a répondu à cette adresse. Vérifiez votre connexion, puis réessayez.",
     "Unknown": "Cela n'a pas fonctionné et l'application ne sait pas pourquoi. Réessayez ; si cela persiste, envoyez-nous les détails ci-dessous.",
     "ShowDetails": "Détails"
