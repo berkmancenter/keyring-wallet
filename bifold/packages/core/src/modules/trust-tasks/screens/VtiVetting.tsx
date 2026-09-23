@@ -911,8 +911,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         {applicantStep === 'member' ? (
           <View style={styles.row}>
             <Icon name="check-circle" size={28} color={ColorPalette.semantic.success} />
+            {/* The same line whether the person was admitted a moment ago or
+                long since: never "already", which read as an error to someone
+                just admitted (Farm vetting run, 2026-09-23). The role is named
+                only when it says more than "member". (The testID is kept for
+                the runners that read this line.) */}
             <Text style={styles.value} testID={testIdWithKey('VettingAlreadyMember')}>
-              {tp('Vetting.AlreadyMember', { role: membershipRole })}
+              {membershipRole && membershipRole !== 'member'
+                ? tp('Vetting.MemberAs', { community: communityLabelOf(communityDid ?? ''), role: membershipRole })
+                : tp('Vetting.Member', { community: communityLabelOf(communityDid ?? '') })}
             </Text>
           </View>
         ) : null}

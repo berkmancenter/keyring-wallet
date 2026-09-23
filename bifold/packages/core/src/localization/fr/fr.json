@@ -1446,7 +1446,8 @@
     "Checklist": "Votre liste",
     "ChecklistLine": "{{held}} déclaration(s) sur {{needed}}",
     "Meets": "répond aux exigences publiées",
-    "AlreadyMember": "Vous êtes déjà membre ({{role}}).",
+    "Member": "Vous êtes membre de {{community}}.",
+    "MemberAs": "Vous êtes membre de {{community}}, en tant que {{role}}.",
     "Status": {
       "sent": "Demande envoyée",
       "accepted": "Acceptée — en attente que le vérificateur ouvre la session",
