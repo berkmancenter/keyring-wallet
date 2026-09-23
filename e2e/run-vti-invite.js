@@ -20,7 +20,7 @@
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";
-import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
@@ -60,7 +60,9 @@ async function openLink(url) {
  * the agent card).
  */
 async function openMyAgentConnected(d, timeout = 180000) {
-  await (await waitForTestId(d, "MyAgent", 30000)).click();
+  // The cards below live on the operator panel, which a linked phone no longer
+  // lands on (keyring-bifold#11) — walk there before waiting for them.
+  await openMyAgentPanel(d);
   await sleep(1500);
   const connect = await byTestId(d, "ConnectMyAgentButton");
   if (await connect.isExisting().catch(() => false)) {
