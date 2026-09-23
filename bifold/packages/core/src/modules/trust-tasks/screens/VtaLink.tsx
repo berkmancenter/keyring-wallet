@@ -37,7 +37,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import type { VtaLinkFailure } from '../module/vtaLinkMachine'
 
-import { agentDisplayName, agentDisplayNameStart } from './agentName'
+import { agentDisplayName, agentDisplayNameStart, withAgentName } from './agentName'
 import { openScanner } from './openScanner'
 import { shareableKey } from './shareableKey'
 
@@ -53,7 +53,8 @@ const VtaLink: React.FC = () => {
   const navigation = useNavigation()
   const route = useRoute()
   const { ColorPalette, TextTheme } = useTheme()
-  const { link } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  const { link: current, agentNames } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  const link = withAgentName(current, agentNames)
   // Form state only — what the person is typing before they ask for a key.
   // Opening straight into the address field when the previous screen already
   // asked: being asked the same question twice reads as not having been heard.
@@ -331,7 +332,7 @@ const VtaLink: React.FC = () => {
               {t('VtaLink.Linked')}
             </ThemedText>
           </View>
-          <ThemedText>
+          <ThemedText testID={testIdWithKey('VtaLinkLinkedBody')}>
             {t('VtaLink.LinkedBody', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
         </View>

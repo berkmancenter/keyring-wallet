@@ -10,7 +10,7 @@ import React from 'react'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { communityTarget } from '../module/vtiCommunityLink'
-import { agentDisplayName, agentDisplayNameStart } from '../screens/agentName'
+import { agentDisplayName, agentDisplayNameStart, withAgentName } from '../screens/agentName'
 import { communityLabelOf, communityLabelStartOf, partyLabelStartOf } from '../screens/communityName'
 import { DidDetails } from '../screens/DidDetails'
 
@@ -74,6 +74,12 @@ describe('an agent', () => {
   })
   it("a manual link's DID-as-label is no label: the host instead", () => {
     expect(agentDisplayName({ vtaDid, label: vtaDid }, t)).toBe('dids.example.org')
+  })
+  it('by the name the agent gave, once read, for that agent only', () => {
+    const names = { [vtaDid]: { label: 'runner', source: 'vtaName' as const } }
+    expect(agentDisplayName(withAgentName({ vtaDid, label: 'Lab agent' }, names), t)).toBe('runner')
+    expect(agentDisplayName(withAgentName({ vtaDid: 'did:webvh:QmB:b.example.org', label: 'B' }, names), t)).toBe('B')
+    expect(agentDisplayName(withAgentName({ vtaDid, label: vtaDid }, undefined), t)).toBe('dids.example.org')
   })
   it('with neither a label nor a host: words, never the DID', () => {
     expect(agentDisplayName({ vtaDid: peer, label: peer }, t)).toBe('VtaLink.YourAgentFallback')
