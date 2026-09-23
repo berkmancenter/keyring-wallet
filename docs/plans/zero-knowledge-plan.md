@@ -69,20 +69,27 @@ Everything in our ecosystem is **non-interactive**. The verifier's random challe
 
 ## 3. Positions
 
-### 3.1 Proofs are made in the VTA and checked by the VTC; Keyring holds no ZK secret and runs no prover
+### 3.1 Proving belongs in the VTA for the vetter; for the applicant it is an open question
 
-This is the answer to "device or VTA?", and it is our position. Two public anchors say the ecosystem is built this way in general:
+**The two sides of hidden vetting are not symmetric, and the answer to "device or VTA?" differs between them.** The vetter is the party whose anonymity the whole construction exists to protect; the applicant is not anonymous to anyone and never was. Read the three arguments below with that split in mind — only the first applies to both.
+
+Two public anchors say the ecosystem proves server-side in general:
 
 - **Credential formats:** the holder's VTA is *"store + wallet + signer"*, and the Groth16 path is *"server-side VTA proving"* ([[VTI-CRED-ARCH]] preamble and §4). The VTA's `credential-exchange/present` already assembles `Bbs2023` presentations from its vault (`vta-service/src/operations/credential_exchange.rs` at `187ad9cd`).
 - **Client architecture:** *"Do not build a second copy of anything the agent already is"* ([[AGENT-STATE]]).
 
-Three facts specific to a phone make this the right answer for Keyring too, not just for openvtc:
+Three facts specific to a phone bear on it. The first is general; the second and third are about the **vetter**:
 
 1. **There is no hardware-custody gain to lose.** Every ZK secret in play (a predicate-credential secret, a BBS link secret, a Groth16 witness) is a scalar on a pairing-friendly curve, and neither phone secure element supports those curves (§2.3). A device-held ZK secret would be a software key either way. Keyring's hardware story continues where it actually applies: the Secure Enclave or StrongBox signature on the *approval* (§3.2).
 2. **Hidden vetting needs an always-on agent.** Capping how often an anonymous vetter may vouch means handing each of them rate-limiting tokens, and the collection of those tokens must not track their activity — otherwise the collection pattern is itself the signal the design exists to hide. That implies a component awake on a schedule of its own. A mobile OS suspends and kills apps as routine, so the phone cannot be that component.
 3. **Anonymity does not survive two copies.** A vetter's attestations held on the phone *and* in the VTA are two places to leak identifying tags from, and two sources of truth for what has already been spent.
 
-**Rejected: proving on the device.** It is feasible. BLS12-381 runs on the app's Hermes and gives byte-identical output to Node, at about 15× Node's cost (a pairing is 96.7 ms, a BLS verify 146 ms; `ref-03d`), and the DTG lab's Groth16 prover runs in about 680 ms. It is still ruled out by points 1–3: it gains no custody, cannot keep an unattended schedule, and creates a second copy of the agent. `ref-03d` remains the measurement to cite if an offline-only use case ever forces the question. No such case is in scope (§3.4).
+**So, split by role:**
+
+- **Vetter side — settled, the VTA proves.** Points 2 and 3 are decisive: an unattended collection schedule and a single source of truth for what has been spent are not things a phone can offer. A Keyring user who vouches does so through their agent.
+- **Applicant side — open (decision D4, §8).** None of that binds here. The applicant's secret is minted for one application and discarded with it, there is no schedule to keep, nothing is rate-limited, and the applicant is not hiding from anybody: the community learns their join DID at submit in either design. So the phone proving for itself is defensible, and it would work offline and keep the applicant's secret off any server. Against it: a second proving stack to ship and maintain in the app, for a party that gains no privacy from holding it, and a split architecture where the vetter's side lives in the agent and the applicant's does not. **This plan's working assumption stays "the VTA proves both sides", because it is the simpler client and matches §3.2 — but it is an assumption, not a finding, and D4 records what would decide it.**
+
+**Rejected for the vetter's side: proving on the device.** It is feasible. BLS12-381 runs on the app's Hermes and gives byte-identical output to Node, at about 15× Node's cost (a pairing is 96.7 ms, a BLS verify 146 ms; `ref-03d`), and the DTG lab's Groth16 prover runs in about 680 ms. For a vetter it is still ruled out by points 2 and 3: it cannot keep an unattended schedule, and it creates a second source of truth for what has been spent. For an applicant those objections do not apply, which is exactly why D4 is open rather than closed — and `ref-03d` is the measurement that says the phone could carry it if we chose to.
 
 ### 3.2 What Keyring does
 
@@ -91,7 +98,7 @@ Four duties, none of them cryptographic beyond the signature Keyring already mak
 1. **Gate the consequential operation with a hardware-attested step-up.** Vouching for a person is the most consequential thing a member does, and [[VETTING-DESIGN]]'s own target for signing a vetting statement is *"step-up always (passkey / device)"* — a gate its V0 cannot apply, because the client holds the key. Keyring approves the attest step (whatever task name the specification gives it) through the approvals path ([`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) P3) with a Secure Enclave or StrongBox signature and its attestation evidence. This is where Keyring is ahead of the reference clients, and it is Z1's one contribution beyond UI.
 2. **Render what the VTA says, as data.** Proof requests, disclosure previews, checklists and outcomes are the VTA's replies, rendered. A predicate claim is shown as the strongest outcome on the screen, not as a missing value ([[CONSENT-VIEW]]: *"A predicate claim discloses no value at all — that is the whole point"*). The preview comes from the code that will act ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §3.9).
 3. **Carry the ceremony.** The V0 vetting ceremony — ticket, request, session, signed Vetting Card, match code, human check ([[VETTING-DESIGN]] §3) — needs no change for hidden mode: what changes is the artifact the vetter returns and what the VTC checks, neither of which the client composes.
-4. **Keep no ZK state.** No ZK secret, rate-limiting token, attestation, tag or proof is persisted on the phone, and none is cached for display. The boundary [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.6 draws ("no local mirror of state a counterparty owns") covers all of it, because the VTA owns it. Idempotence ledger entries for in-flight tasks are the one exception, and they are ids, not ZK material.
+4. **Keep no ZK state** (under the working assumption of §3.1; D4 would narrow this to the vetter's side only). No ZK secret, rate-limiting token, attestation, tag or proof is persisted on the phone, and none is cached for display. The boundary [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.6 draws ("no local mirror of state a counterparty owns") covers all of it, because the VTA owns it. Idempotence ledger entries for in-flight tasks are the one exception, and they are ids, not ZK material.
 
 ### 3.3 Track Z1 rests on option B of the vetting subtask's §2.4
 
@@ -131,8 +138,15 @@ The protocol, the services and the message definitions are upstream's to build; 
 | Submit timing | The app may delay submitting after the last session, and never shows or sends a finer timestamp than it must | Exact timings correlate a session with a submission |
 | Withdrawal | A vetter withdrawing an attestation is sent from a fresh identifier; the UI never routes it through the member or session DID | The mediator would otherwise see who sent it |
 | Mixed criteria | A community's criterion is either named or hidden, never both, and the UI says which is in force | Otherwise one person can be counted twice, once under each mode |
+| A criterion the client cannot honour | **Fail closed.** If a community marks its hidden-vetting parameters as a criterion the client must understand, a Keyring that does not implement the mode refuses the criterion and says so — it never falls back to collecting named statements | Gathering named statements for a criterion whose purpose is that it never receives them would hand the community exactly what the mode withholds, and the user would not know |
+| Applicant checklist, again | In hidden mode there are **no statement credentials to hold**, so the checklist cannot be a list of held credentials. It renders what the agent has verified and counted | A UI that lists credentials shows an empty checklist to an applicant who has in fact been vetted three times |
+| Submitting, and re-submitting | The freshness challenge is minted by the community and spent when the proof is counted. Answering a "needs more" outcome means asking for a **fresh** challenge and building a fresh proof; the app never re-sends a stored proof | A proof verifies as often as it is submitted, so a challenge that survives its first use is not a freshness anchor |
 
 Keyring as vetter is new scope. The vetting subtask makes Keyring the *applicant* (its P6) and tests against a headless openvtc vetter (its §2.5). Z1 needs both roles in Keyring, and both roles re-run against upstream's own clients.
+
+### 4.1.1 What hidden vetting forbids a community to ask for, and why it touches us specifically
+
+**A community that required a relationship credential with its vetters could not run hidden vetting at all.** A VRC names both ends by construction, so requiring one would hand back precisely what the proof withholds. This matters to Keyring more than to any other client, because minting VRCs is what we do: the temptation to strengthen a vetting criterion with "and hold a VRC with your vetter" is real, and it is self-defeating in hidden mode. Membership does not require a VRC pair in any case ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §3.1), so nothing we ship today depends on it. Recorded here so the idea is refused with a reason rather than re-proposed.
 
 ### 4.2 Z2 — Private presentation of Keyring's credentials
 
@@ -242,6 +256,7 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 **Not decided (ours):**
 
 - **D2** — §3.4: BBS issuer key custody (R-DID or VTA `did:webvh`) and post-issuance proof addition. Blocks ZK4.
+- **D4** — §3.1: does the **applicant's** proof run in the VTA (this plan's working assumption) or on the phone? What decides it: whether the published task family puts the applicant's engine behind the agent at all; whether an offline or poor-connectivity submission is a requirement we accept; and the cost of a second proving stack in the app measured against `ref-03d`'s numbers. Does not block ZK0–ZK3, and ZK1's client contract is the same either way; it must be settled before ZK2's scope is fixed.
 - **D3** — whether Keyring pursues the vetter role at all, or stays applicant-only in hidden mode. The table in §4.1 assumes both. Blocks ZK3's scope.
 
 **Watch triggers** — the concrete artifacts whose appearance unblocks something, so a blocked item is noticed when it moves rather than rediscovered:
