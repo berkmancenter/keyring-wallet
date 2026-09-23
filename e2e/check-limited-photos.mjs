@@ -57,14 +57,17 @@ async function todaysNewestPhoto(d, timeoutMs) {
   while (Date.now() < until) {
     const items = await d.$$(PHOTO_ITEMS).catch(() => []);
     const dated = [];
+    let parsed = 0;
     for (const el of items) {
       const label = await el.getAttribute("label").catch(() => "");
       const at = dateOfLabel(label);
+      if (!Number.isNaN(at)) parsed++;
       if (!Number.isNaN(at) && new Date(at).toDateString() === today) dated.push({ el, at });
     }
     // Counts only: labels carry dates, and nothing of a photo's content.
+    // "parsed" tells an unreadable label format apart from no photo of today.
     if (items.length) {
-      console.log(`[e2e] #21: ${items.length} photo item(s) in view, ${dated.length} dated today`);
+      console.log(`[e2e] #21: ${items.length} photo item(s) in view, ${parsed} with a readable date, ${dated.length} dated today`);
       if (dated.length) return dated.sort((x, y) => y.at - x.at)[0].el;
     }
     await sleep(1000);
