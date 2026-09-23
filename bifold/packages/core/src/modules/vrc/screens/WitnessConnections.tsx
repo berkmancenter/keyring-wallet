@@ -11,18 +11,12 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react'
-import {
-  View,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  Animated,
-} from 'react-native'
+import { View, FlatList, TouchableOpacity, StyleSheet, Alert, Animated } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
+import { DidDetails } from '../../trust-tasks/screens/DidDetails'
 import { useWitnessConnection } from '../context/WitnessConnectionProvider'
 import type { ConnectedWitness } from '../context/WitnessConnectionProvider'
 
@@ -35,14 +29,6 @@ const formatDate = (date: Date): string => {
     month: 'short',
     day: 'numeric',
   })
-}
-
-/**
- * Shorten a DID for display
- */
-const shortenDid = (did: string): string => {
-  if (did.length <= 24) return did
-  return `${did.substring(0, 12)}...${did.substring(did.length - 8)}`
 }
 
 const WitnessConnections: React.FC = () => {
@@ -131,7 +117,7 @@ const WitnessConnections: React.FC = () => {
         clearTimeout(dismissTimerRef.current)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectedWitness, clearAutoActivatedNotification])
 
   const styles = StyleSheet.create({
@@ -316,15 +302,12 @@ const WitnessConnections: React.FC = () => {
               <ThemedText style={styles.activeBadgeText}>Active</ThemedText>
             </View>
           )}
-          <ThemedText style={[styles.witnessName, isActive && styles.activeWitnessName]}>
-            {item.name}
-          </ThemedText>
-          {item.eventName && (
-            <ThemedText style={styles.eventName}>📅 {item.eventName}</ThemedText>
-          )}
-          <ThemedText style={styles.witnessDid}>{shortenDid(item.issuerDid)}</ThemedText>
+          <ThemedText style={[styles.witnessName, isActive && styles.activeWitnessName]}>{item.name}</ThemedText>
+          {item.eventName && <ThemedText style={styles.eventName}>📅 {item.eventName}</ThemedText>}
+          <DidDetails did={item.issuerDid} testIdStem="WitnessDid" />
           <ThemedText style={styles.connectedDate}>
-            Connected {formatDate(item.connectedAt)}{isActive ? ' • Tap to deselect' : ''}
+            Connected {formatDate(item.connectedAt)}
+            {isActive ? ' • Tap to deselect' : ''}
           </ThemedText>
         </View>
 
@@ -344,16 +327,11 @@ const WitnessConnections: React.FC = () => {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Icon
-        name="shield-off-outline"
-        size={64}
-        color={ColorPalette.grayscale.mediumGrey}
-        style={styles.emptyIcon}
-      />
+      <Icon name="shield-off-outline" size={64} color={ColorPalette.grayscale.mediumGrey} style={styles.emptyIcon} />
       <ThemedText style={styles.emptyTitle}>No Witness Connections</ThemedText>
       <ThemedText style={styles.emptySubtext}>
-        To connect to a witness, scan their QR code or tap their invitation link. Witness connections work
-        just like regular contacts — you&apos;ll be added here automatically.
+        To connect to a witness, scan their QR code or tap their invitation link. Witness connections work just like
+        regular contacts — you&apos;ll be added here automatically.
       </ThemedText>
     </View>
   )
@@ -369,11 +347,7 @@ const WitnessConnections: React.FC = () => {
             { opacity: notificationOpacity },
           ]}
         >
-          <Icon
-            name={notificationType === 'success' ? 'check-circle' : 'information-outline'}
-            size={20}
-            color="#fff"
-          />
+          <Icon name={notificationType === 'success' ? 'check-circle' : 'information-outline'} size={20} color="#fff" />
           <ThemedText style={styles.notificationText}>
             {notificationType === 'success'
               ? `"${notificationName}" is now your active witness`
@@ -395,14 +369,12 @@ const WitnessConnections: React.FC = () => {
         data={allWitnessConnections}
         keyExtractor={(item) => item.connectionId}
         renderItem={renderWitnessItem}
-        contentContainerStyle={[
-          styles.listContent,
-          allWitnessConnections.length === 0 && { flex: 1 },
-        ]}
+        contentContainerStyle={[styles.listContent, allWitnessConnections.length === 0 && { flex: 1 }]}
         ListHeaderComponent={
           allWitnessConnections.length > 0 ? (
             <ThemedText style={styles.sectionHeader}>
-              {allWitnessConnections.length} witness{allWitnessConnections.length === 1 ? '' : 'es'} — tap to select or deselect
+              {allWitnessConnections.length} witness{allWitnessConnections.length === 1 ? '' : 'es'} — tap to select or
+              deselect
             </ThemedText>
           ) : null
         }

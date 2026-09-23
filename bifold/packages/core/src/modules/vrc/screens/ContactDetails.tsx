@@ -26,6 +26,7 @@ import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { useRCardCredential } from '../hooks/useRCardCredential'
 import { formInputFromTemplate } from '../types/rcard'
 import { testIdWithKey } from '../../../utils/testable'
+import { DidDetails } from '../../trust-tasks/screens/DidDetails'
 
 const AVATAR_BG = '#E8E0E8'
 const NAME_COLOR = '#010B13'
@@ -458,9 +459,8 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ route, navigation }) =>
 
           <View style={styles.fieldGroup}>
             <ThemedText style={styles.fieldLabel}>{t('ContactDetails.RelationshipDID')}</ThemedText>
-            <ThemedText style={styles.fieldValue} selectable={true}>
-              {contact.issuer.id}
-            </ThemedText>
+            {/* The identifier, for whoever needs to compare it — not shown by default (#12). */}
+            <DidDetails did={contact.issuer.id} testIdStem="ContactRelationship" />
           </View>
         </View>
 

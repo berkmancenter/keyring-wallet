@@ -528,6 +528,7 @@
     "AContact": "A Contact",
     "DateOfConnection": "Connected: {{ date }}",
     "RelationshipDID": "Relationship DID",
+    "UnnamedContact": "Unnamed contact",
     "LinkedProfile": "Your Linked Profile",
     "LinkedProfileDeleted": "{{label}} (deleted)",
     "ViewMessages": "View Messages",
@@ -716,6 +717,7 @@
     "PopupExit": "Got it"
   },
   "CredentialOffer": {
+    "AnIssuer": "An issuer",
     "CredentialOffer": "Credential Offer",
     "AcceptContact": "Accept Contact",
     "ThisIsTakingLongerThanExpected": "This is taking Longer than expected. Check back later for your new credential.",
@@ -1186,6 +1188,11 @@
     "AlertsLength": "You have {{ alerts }} alerts"
   },
   "Community": {
+    "ClaimedName": "{{name}} (not confirmed by the community)",
+    "UnnamedAt": "an unnamed community ({{host}})",
+    "Unnamed": "an unnamed community",
+    "SomeoneAt": "Someone at {{host}}",
+    "Someone": "Someone",
     "Open": "Open this community",
     "Leave": "Leave community",
     "LeaveExplains": "This phone forgets your identity, card and vetting for this community. To come back, you join again.",
@@ -1218,6 +1225,7 @@
     "FailedUnreachable": "The agent's page could not be reached. Check your connection and scan again.",
     "FailedOther": "Something went wrong while linking. Scan the code again.",
     "LinkYourAgent": "Link your agent",
+    "YourAgentFallback": "your agent",
     "LinkYourAgentHint": "Scan the code on your agent's page, or paste its link.",
     "LinkYourAgentHelp": "No code? Link without one — enter your agent’s address, and its admin adds this phone.",
     "StatusOnline": "Online",
@@ -1402,6 +1410,8 @@
     "Join": "Join",
     "Joining": "Joining…",
     "Member": "Member",
+    "YourVetter": "Your vetter",
+    "YourVetterN": "Your vetter {{n}}",
     "MemberSince": "Member since {{date}}",
     "ViaInvitation": "By invitation",
     "ViaVetting": "Vetted",

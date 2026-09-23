@@ -37,6 +37,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import type { VtaLinkFailure } from '../module/vtaLinkMachine'
 
+import { agentDisplayName, agentDisplayNameStart } from './agentName'
 import { openScanner } from './openScanner'
 import { shareableKey } from './shareableKey'
 
@@ -153,7 +154,7 @@ const VtaLink: React.FC = () => {
       body = (
         <View style={styles.card} testID={testIdWithKey('VtaLinkConfirm')}>
           <ThemedText variant="headingThree" accessibilityRole="header">
-            {t('VtaLink.ConfirmTitle', { label: link.label, interpolation: { escapeValue: false } })}
+            {t('VtaLink.ConfirmTitle', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
           {host ? <ThemedText testID={testIdWithKey('VtaLinkHost')}>{host}</ThemedText> : null}
           <ThemedText>{t('VtaLink.ConfirmBody')}</ThemedText>
@@ -219,7 +220,7 @@ const VtaLink: React.FC = () => {
             {t('VtaLink.GiveKeyTitle')}
           </ThemedText>
           <ThemedText>
-            {t('VtaLink.GiveKeyBody', { label: link.label, interpolation: { escapeValue: false } })}
+            {t('VtaLink.GiveKeyBody', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
           {/* The two things to DO come first and fit on the screen. The code
               itself is a ~350-character did:peer, and putting it here pushed
@@ -232,7 +233,9 @@ const VtaLink: React.FC = () => {
           <Button
             title={t('VtaLink.ShareKey')}
             buttonType={ButtonType.Primary}
-            onPress={() => void Share.share(shareableKey(t, link.label, link.did)).catch(() => undefined)}
+            onPress={() =>
+              void Share.share(shareableKey(t, agentDisplayName(link, t), link.did)).catch(() => undefined)
+            }
             testID={testIdWithKey('VtaLinkShareKey')}
           />
           <Button
@@ -284,7 +287,7 @@ const VtaLink: React.FC = () => {
               rather than left watching a spinner. */}
           {link.noAnswer ? (
             <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNoAnswer')}>
-              {t('VtaLink.NoAnswer', { label: link.label, interpolation: { escapeValue: false } })}
+              {t('VtaLink.NoAnswer', { label: agentDisplayNameStart(link, t), interpolation: { escapeValue: false } })}
             </ThemedText>
           ) : null}
           <Button
@@ -329,7 +332,7 @@ const VtaLink: React.FC = () => {
             </ThemedText>
           </View>
           <ThemedText>
-            {t('VtaLink.LinkedBody', { label: link.label, interpolation: { escapeValue: false } })}
+            {t('VtaLink.LinkedBody', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
         </View>
       )
@@ -350,7 +353,7 @@ const VtaLink: React.FC = () => {
             {t('VtaLink.RevokedTitle')}
           </ThemedText>
           <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkError')}>
-            {t('VtaLink.RevokedBody', { label: link.label, interpolation: { escapeValue: false } })}
+            {t('VtaLink.RevokedBody', { label: agentDisplayNameStart(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
         </View>
       )

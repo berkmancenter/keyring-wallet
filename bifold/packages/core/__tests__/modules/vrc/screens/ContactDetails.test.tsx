@@ -117,15 +117,18 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.alice.issuer,
     }
 
-    const { findByText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { findByText, queryByText, findByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
     await waitFor(async () => {
       // Should display issuer name
       expect(await findByText('Alice Smith')).toBeTruthy()
-
-      // Should display issuer DID
-      expect(await findByText(TEST_CONTACTS.alice.issuer.id)).toBeTruthy()
     })
+    // The relationship DID is kept behind Details (#12), and shown once opened.
+    expect(queryByText(TEST_CONTACTS.alice.issuer.id)).toBeNull()
+    fireEvent.press(await findByTestId(testIdWithKey('ContactRelationshipToggle')))
+    expect(await findByText(TEST_CONTACTS.alice.issuer.id)).toBeTruthy()
   })
 
   test('Displays the contact photo when provided', async () => {
@@ -284,8 +287,11 @@ describe('ContactDetails Screen', () => {
       issuer: TEST_CONTACTS.bob.issuer,
     }
 
-    const { getByText } = render(<ContactDetails {...createRouteParams(contact)} />, { wrapper: TestContainerWrapper })
+    const { getByText, findByTestId } = render(<ContactDetails {...createRouteParams(contact)} />, {
+      wrapper: TestContainerWrapper,
+    })
 
+    fireEvent.press(await findByTestId(testIdWithKey('ContactRelationshipToggle')))
     await waitFor(() => {
       const didElement = getByText(TEST_CONTACTS.bob.issuer.id)
       expect(didElement.props.selectable).toBe(true)
@@ -382,8 +388,8 @@ describe('ContactDetails Screen', () => {
     await waitFor(async () => {
       // Should display name
       expect(await findByText('Diana Martinez')).toBeTruthy()
-      // Should display DID
-      expect(await findByText(TEST_CONTACTS.diana.issuer.id)).toBeTruthy()
+      // The DID is behind Details (#12)
+      expect(queryByText(TEST_CONTACTS.diana.issuer.id)).toBeNull()
       // Should NOT display email or organization sections
       expect(queryByText('Email')).toBeNull()
       expect(queryByText('Organisation')).toBeNull()
@@ -406,7 +412,6 @@ describe('ContactDetails Screen', () => {
 
       await waitFor(async () => {
         expect(await findByText(testContact.issuer.name)).toBeTruthy()
-        expect(await findByText(testContact.issuer.id)).toBeTruthy()
       })
 
       unmount()
@@ -564,7 +569,8 @@ describe('ContactDetails Screen', () => {
 
   describe('linked profile display', () => {
     test('shows the live profile name and photo, in a card, when sharedProfileId still resolves to an existing profile', async () => {
-      const photo = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
+      const photo =
+        'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkI'
       const workProfile = buildRCardTemplate(
         { firstName: 'Jane', lastName: 'Doe', email: '', organization: '', photo },
         { label: 'Work' }

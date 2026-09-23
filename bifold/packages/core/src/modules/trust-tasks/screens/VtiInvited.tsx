@@ -38,7 +38,7 @@ import { joinSeed } from '../module/vtiJoinSeed'
 import { communityLinkReturn } from '../module/vtiLinks'
 
 import { identityShareText, shareIdentity } from './identityShare'
-import { communityLabelOf } from './communityName'
+import { communityLabelOf, communityLabelStartOf } from './communityName'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { openScanner } from './openScanner'
 import { useCommunityDid } from './useCommunity'
@@ -120,13 +120,18 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const onContinue = useCallback(async () => {
     if (!agent || !vtaDid || !communityDid) return
     setError(undefined)
-    const confirmed = await requestBiometricConfirmationWithUI(agent, communityLabelOf(communityDid), 'invited', {
-      title: t('Invited.ConfirmTitle'),
-      description: t('Invited.ConfirmBody', {
-        community: communityLabelOf(communityDid),
-        interpolation: { escapeValue: false },
-      }),
-    })
+    const confirmed = await requestBiometricConfirmationWithUI(
+      agent,
+      communityLabelStartOf(communityDid, t),
+      'invited',
+      {
+        title: t('Invited.ConfirmTitle'),
+        description: t('Invited.ConfirmBody', {
+          community: communityLabelOf(communityDid, t),
+          interpolation: { escapeValue: false },
+        }),
+      }
+    )
     if (!confirmed.success) return
     setBusy(true)
     try {
@@ -220,7 +225,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     )
   }
 
-  const community = communityLabelOf(communityDid)
+  const community = communityLabelOf(communityDid, t)
   const header = (n: number, title: string) => (
     <View style={{ gap: 4 }}>
       <ThemedText style={styles.muted} testID={testIdWithKey('InvitedStepIndicator')}>

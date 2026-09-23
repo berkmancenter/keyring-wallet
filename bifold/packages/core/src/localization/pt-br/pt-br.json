@@ -624,6 +624,7 @@
     "PopupExit": "Entendi"
   },
   "CredentialOffer": {
+    "AnIssuer": "Um emissor",
     "CredentialOffer": "Oferta de Credencial",
     "AcceptContact": "Aceitar Contato",
     "ThisIsTakingLongerThanExpected": "Isso está demorando mais que o normal. Verifique novamente mais tarde sua nova credencial.",
@@ -974,6 +975,7 @@
     "ContactReceivedTitle": "Contato recebido",
     "ContactOfferTitle": "Oferta de contato recebida",
     "RelationshipDID": "DID de relacionamento",
+    "UnnamedContact": "Contato sem nome",
     "CopyDID": "Copiar DID",
     "DIDCopied": "Copiado",
     "DIDCopiedMessage": "O DID foi copiado para sua área de transferência.",
@@ -1031,6 +1033,11 @@
     "AlertsLength": "You have {{ alerts }} alerts (PT-BR)"
   },
   "Community": {
+    "ClaimedName": "{{name}} (não confirmado pela comunidade)",
+    "UnnamedAt": "uma comunidade sem nome ({{host}})",
+    "Unnamed": "uma comunidade sem nome",
+    "SomeoneAt": "Alguém em {{host}}",
+    "Someone": "Alguém",
     "Open": "Abrir esta comunidade",
     "Leave": "Sair da comunidade",
     "LeaveExplains": "Este telefone esquece sua identidade, seu cartão e sua verificação nesta comunidade. Para voltar, você entra de novo.",
@@ -1063,6 +1070,7 @@
     "FailedUnreachable": "Não foi possível acessar a página do agente. Verifique sua conexão e escaneie novamente.",
     "FailedOther": "Algo deu errado ao vincular. Escaneie o código novamente.",
     "LinkYourAgent": "Vincular seu agente",
+    "YourAgentFallback": "seu agente",
     "LinkYourAgentHint": "Escaneie o código na página do seu agente ou cole o link.",
     "LinkYourAgentHelp": "Sem código? Vincule sem ele — informe o endereço do seu agente, e o admin dele adiciona este telefone.",
     "StatusOnline": "Online",
@@ -1247,6 +1255,8 @@
     "Join": "Entrar",
     "Joining": "Entrando…",
     "Member": "Membro",
+    "YourVetter": "Seu verificador",
+    "YourVetterN": "Seu verificador {{n}}",
     "MemberSince": "Membro desde {{date}}",
     "ViaInvitation": "Por convite",
     "ViaVetting": "Verificado",
