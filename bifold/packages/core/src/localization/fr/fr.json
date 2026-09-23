@@ -1427,6 +1427,7 @@
     "AskAnotherVetter": "Demander à un autre vérificateur",
     "Request": "Demander une vérification",
     "EligibleVetter": "vérificateur éligible",
+    "RequestRef": "Demande {{ref}}",
     "CardPreview": "Votre carte affichera : nom légal « {{name}} ». Rien ne part avant l'envoi.",
     "SendCard": "Envoyer ma carte",
     "Checklist": "Votre liste",

@@ -1326,6 +1326,7 @@
     "AskAnotherVetter": "Pedir a outro verificador",
     "Request": "Pedir verificação",
     "EligibleVetter": "verificador elegível",
+    "RequestRef": "Pedido {{ref}}",
     "CardPreview": "Seu cartão mostrará: nome legal “{{name}}”. Nada sai antes de você enviar.",
     "SendCard": "Enviar meu cartão",
     "Checklist": "Sua lista",

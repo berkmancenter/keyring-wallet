@@ -65,6 +65,13 @@ import { useVtaDid } from './VtaStatus'
 
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
 
+/**
+ * A short, stable name for one vetting request: the tail of its request
+ * document's id. A second request to the same vetter replaces the first with a
+ * new id, so this is what tells the two apart when their answers read the same.
+ */
+export const requestRef = (requestDocumentId: string) => requestDocumentId.replace(/[^A-Za-z0-9]/g, '').slice(-8)
+
 export interface VtiVettingProps {
   config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
 }
@@ -854,11 +861,16 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   )
 
   const requestCard = (r: (typeof requests)[number]) => (
-    <View key={r.vetterDid} style={styles.card} testID={testIdWithKey('VettingRequestCard')}>
+    // Keyed by the request, not the vetter: asking the same vetter again is a
+    // new request, and mounts a new card rather than relabelling the old one.
+    <View key={r.requestDocumentId} style={styles.card} testID={testIdWithKey('VettingRequestCard')}>
       <Text style={styles.value}>{shortDid(r.vetterDid)}</Text>
       <Text style={styles.label} testID={testIdWithKey('VettingRequestStatus')}>
         {t(`Vetting.Status.${r.status}`)}
         {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
+      </Text>
+      <Text style={styles.label} testID={testIdWithKey('VettingRequestId')}>
+        {t('Vetting.RequestRef', { ref: requestRef(r.requestDocumentId) })}
       </Text>
     </View>
   )

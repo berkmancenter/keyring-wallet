@@ -10,7 +10,7 @@ import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
-import VtiVetting from '../screens/VtiVetting'
+import VtiVetting, { requestRef } from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
 
@@ -46,6 +46,18 @@ function fakeAgent() {
     },
   }
 }
+
+describe('requestRef', () => {
+  test('names a request by the tail of its document id', () => {
+    expect(requestRef('urn:uuid:0f8e2a4c-9b1d-4e7a-8c3f-5d6b7a9e1c2f')).toBe('7a9e1c2f')
+  })
+  test('two requests to the same vetter get different names, and one request keeps its name', () => {
+    const first = 'urn:uuid:0f8e2a4c-9b1d-4e7a-8c3f-5d6b7a9e1c2f'
+    const second = 'urn:uuid:3c1d9e7f-2a4b-4c6d-9e8f-1a2b3c4d5e6f'
+    expect(requestRef(first)).not.toBe(requestRef(second))
+    expect(requestRef(first)).toBe(requestRef(first))
+  })
+})
 
 describe('resolveVtaDid', () => {
   test('the linked agent wins over the one a build names', () => {
