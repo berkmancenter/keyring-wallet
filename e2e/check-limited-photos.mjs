@@ -88,16 +88,39 @@ try {
       // The photo sits at the top of the form, which the name fields and the
       // keyboard have scrolled past: bring it on screen, then tap it.
       await (await scrollToTestId(d, "RCardPhotoInput", 4)).click();
-      // The system sheet: find its "Limit Access…" button by label.
+      // The system sheet. Read its buttons through the alert API, then choose
+      // "Limit Access…". On a real phone WDA can list the sheet's buttons and
+      // then refuse to accept it ("no modal dialog open", iPhone 11,
+      // 2026-09-23), so fall back to tapping the button as an element by its
+      // label — which works whether or not WDA treats the sheet as an alert.
       let buttons = [];
-      for (let i = 0; i < 10 && !buttons.length; i++) {
+      for (let i = 0; i < 20 && !buttons.length; i++) {
         buttons = await d.execute("mobile: alert", { action: "getButtons" }).catch(() => []);
         if (!buttons.length) await sleep(1000);
       }
       console.log(`[e2e] #21: permission sheet buttons: ${JSON.stringify(buttons)}`);
+      const limitByLabel = d.$('-ios predicate string:type == "XCUIElementTypeButton" AND (label BEGINSWITH "Limit Access" OR label BEGINSWITH "Select Photos")');
+      if (!buttons.length && !(await limitByLabel.isExisting().catch(() => false))) {
+        await screenshot(d, "limited-photos-no-sheet");
+        await dumpSource(d, "limited-photos-no-sheet");
+        throw new Error("the photo permission sheet did not appear within 20 s");
+      }
       const limit = buttons.find((b) => LIMIT.test(b));
-      if (!limit) throw new Error(`the permission sheet offers no limited access: ${JSON.stringify(buttons)}`);
-      await d.execute("mobile: alert", { action: "accept", buttonLabel: limit });
+      if (buttons.length && !limit) throw new Error(`the permission sheet offers no limited access: ${JSON.stringify(buttons)}`);
+      const accepted = limit
+        ? await d.execute("mobile: alert", { action: "accept", buttonLabel: limit }).then(() => true).catch(() => false)
+        : false;
+      if (!accepted) {
+        if (!(await limitByLabel.isExisting().catch(() => false))) {
+          await screenshot(d, "limited-photos-sheet-untappable");
+          await dumpSource(d, "limited-photos-sheet-untappable");
+          throw new Error("could not choose Limit Access: the alert API refused and no button by that label was found");
+        }
+        await limitByLabel.click();
+        console.log("[e2e] #21: chose Limit Access by tapping the button (the alert API refused)");
+      } else {
+        console.log("[e2e] #21: chose Limit Access through the alert API");
+      }
 
       // The limited-selection sheet: select the one photo, then Done.
       const cell = await firstPhoto(d, 20000);
