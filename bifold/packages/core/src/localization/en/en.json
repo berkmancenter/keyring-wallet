@@ -1331,6 +1331,7 @@
     "Suggested": "Suggested for this app",
     "Remembered": "You joined this one before",
     "Unnamed": "This community hasn't published a name",
+    "CheckingName": "Checking what it calls itself…",
     "NameFromLink": "Name as provided by the link you used",
     "JoinSuggested": "Join this community",
     "JoinThis": "Join {{community}}",

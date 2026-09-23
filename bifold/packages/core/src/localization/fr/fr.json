@@ -1277,6 +1277,7 @@
     "Suggested": "Suggérée pour cette app",
     "Remembered": "Vous avez déjà rejoint celle-ci",
     "Unnamed": "Cette communauté n'a pas publié de nom",
+    "CheckingName": "Vérification de son nom…",
     "NameFromLink": "Nom tel que fourni par le lien utilisé",
     "JoinSuggested": "Rejoindre cette communauté",
     "JoinThis": "Rejoindre {{community}}",
