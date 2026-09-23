@@ -75,3 +75,51 @@ describe('a name the community published itself', () => {
     expect(communityTarget.get()?.name).toBeUndefined()
   })
 })
+
+/**
+ * `communityTarget.get`, `getViewing` and `getChosen` are useSyncExternalStore
+ * snapshots: React calls them on every render and re-renders whenever the
+ * result is not `Object.is` to the previous one. Composing the published name
+ * on the way out returned a new object every call, so every screen reading a
+ * community that had published a name re-rendered forever — "Maximum update
+ * depth exceeded" on a shipped build, at the last step of a maintainer's first
+ * run (report #19, 2026-09-23).
+ *
+ * It escaped every gate because the lab community published no name at the
+ * time: the nameless path returns the stored object unchanged and is stable.
+ * These tests hold the invariant directly — reading twice without writing must
+ * return the very same object.
+ */
+describe("the store's snapshots are stable to read", () => {
+  beforeEach(() => communityTarget.clear())
+
+  it('returns the same object when nothing has changed, named or not', () => {
+    communityTarget.set({ communityDid: did })
+    expect(communityTarget.get()).toBe(communityTarget.get())
+    communityTarget.publishedName(did, 'Keyring Lab Community')
+    expect(communityTarget.get()).toBe(communityTarget.get())
+    expect(communityTarget.getViewing()).toBe(communityTarget.getViewing())
+  })
+
+  it('holds for the chosen community too, which outlives the join screens', () => {
+    communityTarget.set({ communityDid: did })
+    communityTarget.choose(did)
+    communityTarget.publishedName(did, 'Keyring Lab Community')
+    expect(communityTarget.getChosen()).toBe(communityTarget.getChosen())
+    expect(communityTarget.getChosen()?.name).toBe('Keyring Lab Community')
+  })
+
+  it('still changes identity when something actually changed', () => {
+    communityTarget.set({ communityDid: did })
+    const before = communityTarget.get()
+    communityTarget.publishedName(did, 'Keyring Lab Community')
+    expect(communityTarget.get()).not.toBe(before)
+  })
+
+  it('a name learned before the link is applied when the link arrives', () => {
+    communityTarget.publishedName(did, 'Keyring Lab Community')
+    communityTarget.set({ communityDid: did, name: 'What The Link Said' })
+    expect(communityTarget.get()).toMatchObject({ name: 'Keyring Lab Community', published: true })
+    expect(communityTarget.get()).toBe(communityTarget.get())
+  })
+})

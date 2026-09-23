@@ -99,21 +99,24 @@ class CommunityTarget {
   private readonly published = new Map<string, string>()
   private readonly listeners = new Set<Listener>()
 
-  /** Whatever the community itself published, applied over a link's claim. */
-  private named = (link?: CommunityLink): CommunityLink | undefined => {
-    if (!link) return undefined
-    const name = this.published.get(link.communityDid)
-    return name ? { ...link, name, published: true } : link
-  }
-
-  /** For the join screens: the community being looked at, else the chosen one. */
-  get = (): CommunityLink | undefined => this.named(this.viewing ?? this.chosen)
+  /**
+   * A published name is applied when it is LEARNED, not when it is read.
+   *
+   * These three are `useSyncExternalStore` snapshots: React calls them on
+   * every render and re-renders whenever the result is not `Object.is` to the
+   * last one. Composing `{ ...link, name }` here returned a new object every
+   * call, so any screen reading a community that had published a name
+   * re-rendered forever — "Maximum update depth exceeded", on a shipped build,
+   * at the last step of a maintainer's first run (report #19, 2026-09-23).
+   * Nothing below may build a value; they return what is stored.
+   */
+  get = (): CommunityLink | undefined => this.viewing ?? this.chosen
 
   /** Only the community a link is showing, if any. */
-  getViewing = (): CommunityLink | undefined => this.named(this.viewing)
+  getViewing = (): CommunityLink | undefined => this.viewing
 
   /** The phone's community, whatever a link is showing. */
-  getChosen = (): CommunityLink | undefined => this.named(this.chosen)
+  getChosen = (): CommunityLink | undefined => this.chosen
 
   /** What a community published about itself, for one it is not looking at. */
   publishedNameOf = (communityDid: string): string | undefined => this.published.get(communityDid)
@@ -121,11 +124,19 @@ class CommunityTarget {
   /** A link named this community: show it, change nothing else. */
   set(link: CommunityLink): void {
     if (!link.communityDid) return
-    // A name the community published itself outranks a link's claim, which
-    // `named` applies on the way out: a second link to a community already
-    // known by name cannot rename it.
-    if (this.viewing && this.viewing.communityDid === link.communityDid && this.viewing.name === link.name) return
-    this.viewing = link
+    // A name the community published itself outranks a link's claim: a second
+    // link to a community already known by name cannot rename it. Applied here,
+    // at write time, so the stored value is the one every reader sees.
+    const known = this.published.get(link.communityDid)
+    const next: CommunityLink = known ? { ...link, name: known, published: true } : link
+    if (
+      this.viewing &&
+      this.viewing.communityDid === next.communityDid &&
+      this.viewing.name === next.name &&
+      this.viewing.published === next.published
+    )
+      return
+    this.viewing = next
     this.notify()
   }
 
@@ -140,8 +151,11 @@ class CommunityTarget {
     const named = displayName?.trim()
     if (!communityDid || !named || this.published.get(communityDid) === named) return
     this.published.set(communityDid, named)
-    // Remember it with the chosen community too, so the name survives a
-    // relaunch rather than waiting on the next manifest.
+    // Write it into what is stored, so the snapshots stay stable and a reader
+    // sees the name without anything being composed on the way out.
+    if (this.viewing?.communityDid === communityDid) {
+      this.viewing = { ...this.viewing, name: named, published: true }
+    }
     if (this.chosen?.communityDid === communityDid) {
       this.chosen = { ...this.chosen, name: named, published: true }
       keep(this.chosen)
@@ -152,7 +166,9 @@ class CommunityTarget {
   /** An identity was made for this community: it is now the phone's, and kept. */
   choose(communityDid: string): void {
     if (!communityDid) return
-    const link = this.viewing?.communityDid === communityDid ? this.viewing : { communityDid }
+    const known = this.published.get(communityDid)
+    const base = this.viewing?.communityDid === communityDid ? this.viewing : { communityDid }
+    const link: CommunityLink = known && !base.published ? { ...base, name: known, published: true } : base
     if (this.chosen?.communityDid === link.communityDid && this.chosen.name === link.name) return
     this.chosen = link
     this.notify()
