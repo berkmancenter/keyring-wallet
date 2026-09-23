@@ -42,6 +42,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
+import { removeRunKeys, snapshotAcl } from "./lib/aclCleanup.js";
 
 const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
@@ -447,7 +448,13 @@ async function openLinkFlow(driver, link) {
 
 let driver;
 let page;
+// The keys this run adds to the runner VTA, removed again in `finally`: the
+// ACL as it was, and the phone's temporary key, whose chain is ours.
+let aclBefore;
+let runTempDid;
+let runFailed = false;
 try {
+  aclBefore = snapshotAcl({ slug: VTA_SLUG, pnmHome: PNM_HOME });
   page = await ensurePage();
   await ensureAppium();
   const caps =
@@ -525,6 +532,7 @@ try {
     }
     await waitForTestId(driver, "VtaLinkManualDid", 5000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
+    runTempDid = temporaryDid;
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
     await screenshot(driver, "link-m1-key");
     // GRANT_FIRST=1 skips the pre-grant check. It exists to isolate one
@@ -592,6 +600,9 @@ try {
   // iOS reads the accessibility label, which spells the code out for VoiceOver.
   const phoneCode = (await textOf(driver, "VtaLinkCode")).replace(/\s+/g, "");
   const view = await waitForState(offered.offer.n, "submitted");
+  // The phone's key, known once it submits — before any grant, so a run that
+  // fails after this still knows which ACL entries are its own.
+  runTempDid = view.did;
   console.log(`[e2e] phone code ${phoneCode} · page code ${view.code}`);
   await screenshot(driver, "link-03-code");
   if (phoneCode !== view.code) throw new Error(`codes differ: phone ${phoneCode}, page ${view.code}`);
@@ -614,6 +625,7 @@ try {
   process.exitCode = 0;
   }
 } catch (err) {
+  runFailed = true;
   console.error(err);
   if (driver) {
     await screenshot(driver, "link-failure").catch(() => undefined);
@@ -622,6 +634,8 @@ try {
   printFailure(LINK_MODE === "manual" ? "VTA LINK (manual)" : "VTA LINK BY QR", err);
   process.exitCode = 1;
 } finally {
+  // Only this run's keys; kept on a failure (evidence), with the delete commands printed.
+  if (aclBefore) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid: runTempDid, failed: runFailed });
   if (driver) await driver.deleteSession().catch(() => undefined);
   stopAppium();
   // Only the page this run started, by its PID.
