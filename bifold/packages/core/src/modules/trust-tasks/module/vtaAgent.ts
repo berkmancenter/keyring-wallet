@@ -48,6 +48,12 @@ export interface VtaAgentState {
   introSeen: boolean
   /** What the agent did, newest first, in this session — the agent screen's "What your agent did". */
   activity: VtaActivity[]
+  /**
+   * What each agent is called, by VTA DID, once read: its verified agent name,
+   * else its operator's `vta_name` (`VtaClient.agentLabel`). Absent until then,
+   * and a screen shows the host meanwhile — a name is never waited for.
+   */
+  agentNames?: Readonly<Record<string, string>>
 }
 
 export interface VtaActivity {
@@ -136,6 +142,8 @@ export class VtaAgentController {
   private reconnectAttempt = 0
   private retryTimer?: ReturnType<typeof setTimeout>
   private reconnecting = false
+  /** Agents whose name is being read, or was read, in this app run. */
+  private namesAsked = new Set<string>()
 
   /** Replace I/O for tests; production uses the defaults. */
   configure(deps: VtaAgentDeps) {
@@ -226,7 +234,8 @@ export class VtaAgentController {
       // Opened by a caller that used the client directly (the Developer
       // probe does): the state has to say so, or a screen gated on it
       // never sees the session that is already there.
-      if (this.state.status !== 'connected') this.set({ status: 'connected', managerDid: client.managerDid, error: undefined })
+      if (this.state.status !== 'connected')
+        this.set({ status: 'connected', managerDid: client.managerDid, error: undefined })
       return
     }
     this.set({ status: 'connecting', error: undefined })
@@ -238,10 +247,29 @@ export class VtaAgentController {
       // authenticated call and is what makes the approver reachable.
       await client.whoAmI().catch(() => undefined)
       this.set({ status: 'connected', managerDid: client.managerDid })
+      this.learnAgentName(client, vtaDid)
     } catch (error) {
       this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
       throw error
     }
+  }
+
+  /**
+   * Ask the agent what it is called, once per agent per app run, in the
+   * background: nothing waits on it, and a failure is simply no name. An agent
+   * that gave none is asked again on the next session, since "none" can also
+   * mean it could not be reached.
+   */
+  private learnAgentName(client: VtaClient, vtaDid: string) {
+    if (this.namesAsked.has(vtaDid)) return
+    this.namesAsked.add(vtaDid)
+    void Promise.resolve()
+      .then(() => client.agentLabel())
+      .then((found) => {
+        if (!found) this.namesAsked.delete(vtaDid)
+        else this.set({ agentNames: { ...this.state.agentNames, [vtaDid]: found.label } })
+      })
+      .catch(() => this.namesAsked.delete(vtaDid))
   }
 
   /**
@@ -343,6 +371,7 @@ export class VtaAgentController {
     this.reconnectAttempt = 0
     this.set({ status: 'connected', vtaDid, managerDid: client.managerDid })
     this.dispatch({ type: 'linked', linkedAt })
+    this.learnAgentName(client, vtaDid)
   }
 
   /**

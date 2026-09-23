@@ -12,6 +12,7 @@ const mockClient = {
   disconnect: jest.fn(async () => undefined),
   whoAmI: jest.fn(async () => ({ roles: ['admin'] })),
   rotateManagerKey: jest.fn(async () => 'did:peer:2.permanent'),
+  agentLabel: jest.fn(async (): Promise<{ label: string; source: string } | undefined> => undefined),
   managerDid: 'did:peer:2.permanent',
   isConnected: false,
 }
@@ -64,6 +65,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockClient.connect.mockImplementation(async () => undefined)
   mockClient.whoAmI.mockImplementation(async () => ({ roles: ['admin'] }))
+  mockClient.agentLabel.mockImplementation(async () => undefined)
 })
 
 describe('linking through the controller', () => {
@@ -264,5 +266,51 @@ describe("the agent screen's state", () => {
     expect(vta.getState().link).toMatchObject({ connection: { kind: 'online' } })
     // restored → online is the first connect of the session, noted as back online
     expect(vta.getState().activity.map((a) => a.kind)).toEqual(['reconnected'])
+  })
+})
+
+describe("the agent's own name", () => {
+  const linked = { vtaDid: offer.vta, label: offer.label, linkedAt: 't0', introSeenAt: 't1' }
+  const settle = () => new Promise((resolve) => setImmediate(resolve))
+
+  it('is read once linked, and arrives after the link: nothing waits for it', async () => {
+    let answer: (label: { label: string; source: string }) => void = () => undefined
+    mockClient.agentLabel.mockImplementation(() => new Promise((resolve) => (answer = resolve)))
+    const { vta } = controller()
+    vta.scanOffer(offer)
+    await vta.confirmOffer({} as never)
+    // Linked while the name is still on its way: the screen shows the host meanwhile.
+    expect(vta.getState().link).toMatchObject({ kind: 'linked' })
+    expect(vta.getState().agentNames?.[offer.vta]).toBeUndefined()
+    answer({ label: 'Alberto’s agent', source: 'agentName' })
+    await settle()
+    expect(vta.getState().agentNames).toEqual({ [offer.vta]: 'Alberto’s agent' })
+  })
+
+  it('is asked once per agent per app run, not on every reconnect', async () => {
+    mockClient.agentLabel.mockImplementation(async () => ({ label: 'runner', source: 'vtaName' }))
+    const { vta } = controller({ linked })
+    await vta.restore({} as never)
+    await settle()
+    await vta.connect({} as never, offer.vta)
+    await settle()
+    expect(mockClient.agentLabel).toHaveBeenCalledTimes(1)
+    expect(vta.getState().agentNames).toEqual({ [offer.vta]: 'runner' })
+  })
+
+  it('no name is no name — and asked again next session, as "none" can mean unreachable', async () => {
+    mockClient.agentLabel.mockImplementation(async () => {
+      throw new Error('never happens: agentLabel does not throw, but a bug must not break linking')
+    })
+    const { vta } = controller({ linked })
+    await vta.restore({} as never)
+    await settle()
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+    expect(vta.getState().agentNames).toBeUndefined()
+    mockClient.agentLabel.mockImplementation(async () => undefined)
+    await vta.connect({} as never, offer.vta)
+    await settle()
+    expect(mockClient.agentLabel).toHaveBeenCalledTimes(2)
+    expect(vta.getState().agentNames).toBeUndefined()
   })
 })

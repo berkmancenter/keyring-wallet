@@ -2,9 +2,10 @@
  * What to call a person's agent on screen — one place, so every "Linked to …"
  * says the same thing and a better name plugs in once.
  *
- * In order: the name the agent's operator set (`vta_name`, read from the VTA's
- * config — the maintainers' answer to Q19; not read yet, so `name` is empty
- * today), then the label the enrolment offer gave it, then the host its DID is
+ * In order: the name the agent gives itself (its verified agent name, else the
+ * operator's `vta_name` — the maintainers' answer to Q19), read once a session
+ * opens and merged in by `withAgentName`; then the label the enrolment offer
+ * gave it, then the host its DID is
  * served from, then plain words. Never the DID itself: a manual link stores the
  * DID as its label when the DID has no host, and that label is treated as
  * absent (#12).
@@ -39,4 +40,11 @@ export function agentDisplayName(agent: NamedAgent | undefined, t: TFunction): s
 export function agentDisplayNameStart(agent: NamedAgent | undefined, t: TFunction): string {
   const name = agentDisplayName(agent, t)
   return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
+/** The agent as a screen names it: with the name it gave, once `vtaAgent` has read it. */
+export function withAgentName<T extends object>(agent: T, names: Readonly<Record<string, string>> | undefined): T {
+  const vtaDid = (agent as NamedAgent).vtaDid
+  const name = vtaDid ? names?.[vtaDid] : undefined
+  return name ? { ...agent, name } : agent
 }

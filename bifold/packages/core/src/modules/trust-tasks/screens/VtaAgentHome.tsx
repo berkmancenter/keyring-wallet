@@ -33,7 +33,7 @@ import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
 
-import { agentDisplayName } from './agentName'
+import { agentDisplayName, withAgentName } from './agentName'
 import { shareIdentity } from './identityShare'
 import { communityLabelOf, partyLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
@@ -263,7 +263,7 @@ const VtaAgentHome: React.FC = () => {
       >
         <View style={styles.card}>
           <ThemedText variant="headingThree" accessibilityRole="header">
-            {agentDisplayName(link, t)}
+            {agentDisplayName(withAgentName(link, state.agentNames), t)}
           </ThemedText>
           <VtaStatusLine connection={link.connection} />
           {/* What this phone is here, in one line and one place.
