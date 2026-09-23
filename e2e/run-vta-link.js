@@ -158,6 +158,16 @@ async function testerJourney(driver) {
       throw new Error(`the suggested community is offered as "${offered}" — a hostname or DID, not a name`);
     }
     console.log(`[e2e] journey: the suggested community is called "${offered}"`);
+    // The named path: when the suggestion is the run's own community and that
+    // community publishes a name, the card must offer that name. A fresh phone
+    // was once told a named community had none, because nothing had read it yet.
+    const shows = process.env.KEYRING_COMMUNITY_SHOWS_AS;
+    const host = (process.env.KEYRING_COMMUNITY_DID || "").split(":")[3] || "";
+    const where = (await existsTestId(driver, "JoinSuggestedWhere", 2000)) ? await textOf(driver, "JoinSuggestedWhere") : "";
+    if (shows && host && where.includes(host) && offered !== shows) {
+      await screenshot(driver, "journey-suggestion-unnamed");
+      throw new Error(`the suggested community publishes "${shows}" but is offered as "${offered}"`);
+    }
   }
   if (await existsTestId(driver, "JoinThisCommunity", 10000)) await tapTestId(driver, "JoinThisCommunity", 5000);
   await waitForTestId(driver, "JoinAsks", 15000);
@@ -222,6 +232,31 @@ async function testerJourney(driver) {
   }
   await screenshot(driver, "journey-join-vetting");
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
+
+  // Report #11 — one agent screen. The phone is now an applicant: it holds an
+  // identity for the community and is not a member. The agent home must say
+  // so, offer the way back into vetting that the operator panel's card used to
+  // be, and offer no way to the panel at all. A build before the one-agent
+  // screen has no seat line; say so rather than pass it silently.
+  await openAgentHome(driver);
+  if (await existsTestId(driver, "AgentSeat", 15000)) {
+    console.log(`[e2e] journey: the seat line reads "${(await textOf(driver, "AgentSeat")).trim()}"`);
+    if (await existsTestId(driver, "AgentOpenCommunities", 2000)) throw new Error('the agent home still offers "Open your communities" (the old panel)');
+    const cont = await scrollToTestId(driver, "AgentContinueVetting", 4).catch(() => undefined);
+    if (!cont) {
+      await screenshot(driver, "journey-no-continue-vetting");
+      throw new Error('an applicant\'s agent home offers no "Continue your vetting"');
+    }
+    await screenshot(driver, "journey-agent-home-applicant");
+    await cont.click();
+    let back;
+    for (let i = 0; i < 20 && !back; i++) for (const key of firstStep) if (!back && (await existsTestId(driver, key, 1000))) back = key;
+    if (!back) throw new Error('"Continue your vetting" did not open vetting');
+    console.log(`[e2e] journey: "Continue your vetting" opened vetting at ${back}`);
+    for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
+  } else {
+    console.log("[e2e] journey: SKIPPED the one-agent-screen checks — this build has no AgentSeat (before keyring-bifold#75)");
+  }
 
   // "A different community": the scanner, with its paste-link button.
   await openAgentHome(driver);
@@ -446,14 +481,24 @@ try {
     // old id still finds it — it survives on a DIFFERENT screen in the same
     // file — so "the testID is still there" was never the question; which
     // screen carries it is. Try both, newest first.
-    if (!(await existsTestId(driver, "VtaLinkManualDid", 2000))) {
+    //
+    // They are not alternatives on current builds: "Show my code" submits the
+    // address, and the panel it opens keeps the key behind "Show the code"
+    // (TestFlight #25). Tapping whichever was found first and stopping waited
+    // out 60s on that panel (2026-09-23, iPhone 17 UIUX gate), so keep going
+    // until the key shows, tapping each step as it appears.
+    const keyBy = Date.now() + 60000;
+    const tapped = new Set();
+    while (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
+      if (Date.now() > keyBy) break;
       for (const key of ["VtaLinkShowTheCode", "VtaLinkShowMyCode"]) {
-        if (!(await existsTestId(driver, key, 3000))) continue;
+        if (tapped.has(key) || !(await byTestId(driver, key).isExisting().catch(() => false))) continue;
         await tapTestId(driver, key, 15000).catch(() => undefined);
+        tapped.add(key);
         break;
       }
     }
-    await waitForTestId(driver, "VtaLinkManualDid", 60000);
+    await waitForTestId(driver, "VtaLinkManualDid", 5000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
     await screenshot(driver, "link-m1-key");

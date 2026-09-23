@@ -7,7 +7,7 @@
  * and held, and the stale-grant signing is purely a selection defect. A revoked
  * or absent standing means delivery failed too, and there is a second fix.
  */
-import { unlockIfLocked, openMyAgentPanel } from "./lib/flows.js";
+import { unlockIfLocked, openMyAgentSurface } from "./lib/flows.js";
 import { createSession, ensureAppium, stopAppium, sleep, waitForTestId, byTestId, existsTestId, dumpSource } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
 
@@ -27,9 +27,16 @@ try {
   // The wallet may be locked, or sitting on whatever screen the last run left.
   await unlockIfLocked(driver).catch(() => undefined);
   await sleep(2000);
-  await openMyAgentPanel(driver);
+  // A linked phone has no panel on the one-agent screen: it reads the agent home.
+  const surface = await openMyAgentSurface(driver);
   await sleep(4000);
+  console.log(`surface: ${surface}`);
   const keys = [
+    "AgentSeat",
+    "AgentVetterCard",
+    "AgentVetterLapsed",
+    "AgentContinueVetting",
+    "AgentMembershipRow",
     "MyAgentSeatBadge",
     "MyAgentVettingRow",
     "MyAgentVetterRow",

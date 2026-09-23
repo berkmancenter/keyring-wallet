@@ -29,7 +29,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { createSession, ensureAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, scrollToTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, scrollToTestId, deviceTag } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { unlockIfLocked, dismissTourIfPresent } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
@@ -76,30 +76,56 @@ async function grant(memberDid, seconds) {
 }
 
 const textOf = async (d, key) => (await byTestId(d, key).getAttribute(PLATFORM === "ios" ? "label" : "text")) || "";
-// Two surfaces show the seat. A phone LINKED to its agent opens the agent home
-// from My Agent ("Your agent"): "Vet someone" is enabled or locked, and a
-// lapsed grant says why. A phone whose build names its agent (a debug build
-// with VTI_VTA_DID) shows My Agent's vetting card, whose badge reads "You are
-// the vetter" or "You are being vetted" and refreshes by itself.
+// Two surfaces show the seat. A phone LINKED to its agent lands on the agent
+// home, whose one line (AgentSeat) says what the phone is, with the vetter card
+// (AgentVetterCard) while a grant stands and AgentVetterLapsed once it has
+// lapsed. A phone whose build names its agent (a debug build with
+// VTI_VTA_DID) lands on My Agent's panel, whose vetting card's badge reads
+// "You are the vetter" or "You are being vetted" and refreshes by itself.
+// (Until keyring-bifold's one-agent-screen change this read `AgentGetVetted`,
+// an id that never existed, so the agent-home branch never ran.)
 async function toAgentHome(d) {
   await dismissTourIfPresent(d).catch(() => undefined);
   await (await waitForTestId(d, "MyAgent", 30000)).click();
-  const open = await waitForTestId(d, "OpenYourAgentButton", 20000).catch(() => undefined);
-  if (open) {
-    await open.click();
-    await waitForTestId(d, "AgentGetVetted", 120000);
-  } else {
-    await waitForTestId(d, "MyAgentVettingSeat", 180000);
+  // Builds before the one-agent screen: a linked phone could still be on the panel.
+  const open = await waitForTestId(d, "OpenYourAgentButton", 15000).catch(() => undefined);
+  if (open) await open.click();
+  // The agent home (AgentSeat on the one-agent screen, AgentDoors before it)
+  // or the panel's vetting card. Landing on none of them is a failure, never
+  // a seat: reading the panel's branch off a screen that is not the panel
+  // would report a seat for a screen the phone is not on.
+  const until = Date.now() + 180000;
+  let landed;
+  while (Date.now() < until && !landed) {
+    if (await byTestId(d, "AgentSeat").isExisting().catch(() => false)) landed = "AgentSeat";
+    else if (await byTestId(d, "MyAgentVettingSeat").isExisting().catch(() => false)) landed = "MyAgentVettingSeat";
+    else if (await byTestId(d, "AgentDoors").isExisting().catch(() => false)) {
+      // The home before the one-agent screen: its cards come after a store read.
+      await sleep(5000);
+      landed = "AgentDoors";
+    } else await sleep(2000);
+  }
+  if (!landed) {
+    await screenshot(d, "lifecycle-no-seat-surface");
+    throw new Error(`${deviceTag(d)}: My Agent showed neither the agent home (AgentSeat/AgentDoors) nor the panel's vetting card within 180s`);
   }
   await sleep(2500);
 }
-/** What the seat says: { surface, vetter, lapsed }. */
+/**
+ * What the seat says: { surface, vetter, lapsed }. One read of the screen as it
+ * is: poll it (as expectSeat does) rather than trust a single read taken while
+ * the screen may still be settling.
+ */
 async function seat(d) {
-  if (await byTestId(d, "AgentGetVetted").isExisting().catch(() => false)) {
-    await scrollToTestId(d, "AgentVetOthers", 4).catch(() => undefined);
-    const enabled = (await byTestId(d, "AgentVetOthers").getAttribute("enabled").catch(() => "false")) === "true";
+  const hasSeat = await byTestId(d, "AgentSeat").isExisting().catch(() => false);
+  if (hasSeat || (await byTestId(d, "AgentDoors").isExisting().catch(() => false))) {
+    // Read what the screen states; the line's words are translated, so the
+    // verdict comes from which cards are there, and the line is reported.
+    // Before the one-agent screen there is no line, but the cards are the same.
+    const line = hasSeat ? await textOf(d, "AgentSeat").catch(() => "") : "(no AgentSeat on this build)";
+    const card = Boolean(await scrollToTestId(d, "AgentVetterCard", 4).catch(() => undefined));
     const lapsed = (await byTestId(d, "AgentVetterLapsed").isExisting().catch(() => false)) ? await textOf(d, "AgentVetterLapsed") : "";
-    return { surface: "agent home", vetter: enabled && !lapsed, lapsed };
+    return { surface: "agent home", vetter: card && !lapsed, lapsed, line };
   }
   // The card's accessible name carries its seat ("Vetting. You are the
   // vetter"); the badge's own text is a flattened sibling on Android.
@@ -135,8 +161,15 @@ async function expectSeat(d, step, want, { waitMs = 90000 } = {}) {
   // this records whether a grant is collected without the person going there.
   // STRICT_ARRIVAL=1: a grant must show on its own; opening Vetting is not allowed to help.
   if (!want(live) && process.env.STRICT_ARRIVAL === "1") throw new Error(`${step}: the seat did not move on the open screen: ${JSON.stringify(live)}`);
-  if (!want(live) && (await byTestId(d, "MyAgentVettingRow").isExisting().catch(() => false))) {
-    await (await scrollToTestId(d, "MyAgentVettingRow", 4)).click();
+  // The way into Vetting on either surface: the panel's vetting card, the
+  // agent home's "Continue your vetting" (an applicant) or its desk (a vetter).
+  const intoVetting =
+    (await byTestId(d, "MyAgentVettingRow").isExisting().catch(() => false)) ? "MyAgentVettingRow"
+    : (await byTestId(d, "AgentContinueVetting").isExisting().catch(() => false)) ? "AgentContinueVetting"
+    : (await byTestId(d, "AgentVetOthers").isExisting().catch(() => false)) ? "AgentVetOthers"
+    : undefined;
+  if (!want(live) && intoVetting) {
+    await (await scrollToTestId(d, intoVetting, 4)).click();
     await sleep(15000);
     await d.back().catch(() => undefined);
     await sleep(3000);
