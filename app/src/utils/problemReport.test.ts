@@ -1,4 +1,13 @@
-import { clearLogBuffer, getRecentLogLines, installLogBuffer, LOG_BUFFER_CAPACITY, recordLogLine } from './logBuffer'
+import {
+  clearLogBuffer,
+  getRecentLogLines,
+  installLogBuffer,
+  LOG_BUFFER_CAPACITY,
+  LOG_LINE_MAX_LENGTH,
+  OPAQUE_TOKEN_MAX_LENGTH,
+  recordLogLine,
+  shortenOpaqueTokens,
+} from './logBuffer'
 import { buildProblemReport, errorChain, ReportEnvironment } from './problemReport'
 
 const env: ReportEnvironment = {
@@ -72,5 +81,78 @@ describe('problem report', () => {
     const report = buildProblemReport({ referenceCode: 'X' }, env, ['a', 'b', 'c', 'd'], 2)
     expect(report).toContain('Recent log (2 of 4 lines, oldest first):\nc\nd')
     expect(report).not.toContain('\na\n')
+  })
+})
+
+describe('opaque token shortening', () => {
+  const run = (n: number, from = 'a') => from.repeat(n)
+
+  beforeEach(() => {
+    clearLogBuffer()
+  })
+
+  it('shortens a long opaque run and records its original length', () => {
+    const token = run(1000)
+    const out = shortenOpaqueTokens(`ciphertext ${token} end`)
+
+    expect(out).toBe(`ciphertext ${run(OPAQUE_TOKEN_MAX_LENGTH)}[…of 1000] end`)
+    expect(out).not.toContain(token)
+  })
+
+  it('leaves a token alone when annotating it would make the line longer', () => {
+    // 81 characters is over the threshold, but the marker costs more than the
+    // 1 character it would save.
+    const token = run(81)
+    expect(shortenOpaqueTokens(token)).toBe(token)
+  })
+
+  it('never touches a message type or a message_count', () => {
+    const line =
+      '{"@type":"https://didcomm.org/messagepickup/2.0/status","message_count":0,"~thread":{"thid":"7c85bbfc-fea4-4eb2-880f-8de78f39d5fd"}}'
+
+    expect(shortenOpaqueTokens(line)).toBe(line)
+  })
+
+  it('keeps a did:peer:4 hash intact and shortens only the encoded document', () => {
+    const hash = '4zQmQ5EBC4uJeJq34gR6b96ptzyZpa7nKx9g8ydHyojSKuNU'
+    const document = run(900, 'z')
+    const out = shortenOpaqueTokens(`resolving didUrl did:peer:${hash}:${document}`)
+
+    // The hash is what tells two DIDs apart, so it must survive whole.
+    expect(out).toContain(`did:peer:${hash}:`)
+    expect(out).toContain('[…of 900]')
+    expect(out).not.toContain(document)
+  })
+
+  it('shortens before the length cap, so an oversized line keeps its structure', () => {
+    // A connection `_tags` dump: small readable fields wrapped around two long
+    // DIDs, arriving well over LOG_LINE_MAX_LENGTH. Capping first would discard
+    // the tail — including `mediatorId` — for good.
+    // `did:peer:` splits on the colon, so the run the pattern sees starts at the
+    // method's `4` — the marker reports that whole run, not just the tail.
+    const theirs = `4${run(2500, 'z')}`
+    const previous = `4${run(2500, 'y')}`
+    const text = `Retrieving services {"connectionId":"ee10e267","theirDid":"did:peer:${theirs}","previousTheirDids":["did:peer:${previous}"],"mediatorId":"m-42"}`
+    expect(text.length).toBeGreaterThan(LOG_LINE_MAX_LENGTH)
+
+    recordLogLine('debug', [text], new Date('2026-09-23T01:50:04.274Z'))
+    const [line] = getRecentLogLines()
+
+    expect(line).toContain('"mediatorId":"m-42"')
+    expect(line).toContain(`[…of ${theirs.length}]`)
+    expect(line).toContain(`[…of ${previous.length}]`)
+    expect(line).not.toContain('more chars')
+    expect(line.length).toBeLessThan(LOG_LINE_MAX_LENGTH)
+  })
+
+  it('still caps a long line that shortening cannot help', () => {
+    // No opaque runs at all — punctuation breaks it up — so the cap is the only
+    // thing standing between this and the buffer.
+    const text = 'ab. '.repeat(1000)
+    recordLogLine('debug', [text])
+    const [line] = getRecentLogLines()
+
+    expect(line).toContain('more chars')
+    expect(line.length).toBeLessThan(LOG_LINE_MAX_LENGTH + 100)
   })
 })
