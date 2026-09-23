@@ -45,6 +45,8 @@ function withoutOurJargon(detail: string): string {
 const NO_ANSWER = /did not answer|no answer|timed? ?out|timeout/i
 /** The phone is not allowed to do this; trying again cannot help. */
 const NOT_ALLOWED = /not in (the )?ACL|unauthori[sz]ed|forbidden|permission denied|revoked/i
+/** The agent cannot publish a new identity; only its operator can fix that. */
+const NO_DID_HOST = /no DID host/i
 /** Nothing to reach: a wrong address, a service that is down, no network. */
 const UNREACHABLE = /network|fetch failed|ECONN|ENOTFOUND|unreachable|could not resolve|did not resolve/i
 
@@ -52,6 +54,7 @@ export function plainError(error: unknown): PlainError {
   const detail = error instanceof Error ? error.message : String(error)
   const bare = withoutOurJargon(detail)
   if (NOT_ALLOWED.test(bare)) return { line: 'Errors.NotAllowed', detail, retry: false }
+  if (NO_DID_HOST.test(bare)) return { line: 'Errors.NoDidHost', detail, retry: false }
   if (NO_ANSWER.test(bare)) return { line: 'Errors.NoAnswer', detail, retry: true }
   if (UNREACHABLE.test(bare)) return { line: 'Errors.Unreachable', detail, retry: true }
   // Something we have not met. Say that honestly rather than showing the raw

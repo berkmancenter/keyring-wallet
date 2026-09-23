@@ -1546,6 +1546,7 @@
   "Errors": {
     "NoAnswer": "Your agent didn't answer. Tap Continue to try again — this usually works the second time.",
     "NotAllowed": "Your agent wouldn't allow that. Ask its admin whether this phone still has access.",
+    "NoDidHost": "Your agent has nowhere to publish a new identity. Ask its admin to register a DID host with it, then try again.",
     "Unreachable": "Nothing answered at that address. Check your connection, then try again.",
     "Unknown": "That didn't work, and the app doesn't know why. Try again; if it keeps happening, send us the details below.",
     "ShowDetails": "Details"

@@ -160,6 +160,18 @@ export async function resolveVtaMediator(agent: Agent, vtaDid: string): Promise<
   return resolveVtiMediator(agent, mediatorDid)
 }
 
+/**
+ * The agent has nowhere to publish a new identity: no DID-hosting server is
+ * registered with it, and the app names no serverless base URL. Only the
+ * agent's operator can fix this, so it is not worth retrying.
+ */
+export class PersonaHostMissing extends Error {
+  constructor(readonly vtaDid?: string) {
+    super(`${LOG_PREFIX} the agent has no DID host to publish a new identity on`)
+    this.name = 'PersonaHostMissing'
+  }
+}
+
 export class VtaClient {
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
@@ -573,6 +585,16 @@ export class VtaClient {
     const contextId = contexts[0]?.id ?? 'vta'
     const servers = await this.listServers()
     const label = options.label ?? `keyring-${Date.now().toString(36)}`
+    // A persona is a did:webvh, and one has to be served from somewhere: a
+    // DID-hosting server the VTA is registered with, or — serverlessly — a base
+    // URL the VTA itself serves. With neither, the serverless branch below
+    // would mint at "/<label>": a DID no one can resolve, which a community
+    // then fails to reach with no word of why. Refuse before minting instead,
+    // and say what the agent is missing. A store build bakes no base URL, so
+    // this is the case for any tester whose agent has no DID host.
+    if (!existing && !servers[0] && !options.personaBaseUrl) {
+      throw new PersonaHostMissing(this.vtaDid)
+    }
     const minted = existing
       ? ({
           did: existing.did,
