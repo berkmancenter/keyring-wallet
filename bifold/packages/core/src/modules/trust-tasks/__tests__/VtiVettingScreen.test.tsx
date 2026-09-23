@@ -128,3 +128,74 @@ describe('Vetting — the agent it works with', () => {
     expect(tree.getByTestId(testIdWithKey('VettingNeedsAgent'))).toHaveTextContent('Join.NeedsAgent')
   })
 })
+
+/**
+ * Admitted: the line says so, never "already" — which read as an error to an
+ * applicant admitted seconds before (Farm vetting run, 2026-09-23).
+ */
+describe('Vetting — a member', () => {
+  const communityDid = storeConfig.communityDid
+  const personaDid = 'did:webvh:example:persona'
+  type Rec = { tags: Record<string, string>; content: Record<string, unknown> }
+  const persona: Rec = {
+    tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: communityDid },
+    content: {
+      communityDid,
+      vtaDid: linkedVtaDid,
+      did: personaDid,
+      contextId: 'vta',
+      vtaKeyIds: { signing: 's', keyAgreement: 'k' },
+      kmsKeyIds: { signing: 'ks', keyAgreement: 'kk' },
+      createdAt: '2026-09-23T00:00:00Z',
+    },
+  }
+  const membership = (role: string): Rec => ({
+    tags: { recordType: 'keyring/vti-community', kind: 'membership', key: communityDid },
+    content: { communityDid, personaDid, role, vmc: {}, grantedAt: '2026-09-23T20:04:44Z', via: 'vetting' },
+  })
+  const withRecords = (records: Rec[]) => ({
+    agent: {
+      ...fakeAgent().agent,
+      genericRecords: {
+        findAllByQuery: async (query: Record<string, string>) =>
+          records
+            .filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
+            .map((r) => ({ ...r, id: 'r' })),
+        save: async () => undefined,
+        update: async () => undefined,
+        delete: async () => undefined,
+      },
+    },
+  })
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+  })
+  afterEach(() => jest.useRealTimers())
+
+  const renderAs = async (role: string) => {
+    mockUseAgent.mockReturnValue(withRecords([persona, membership(role)]))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+
+  test('a plain member: "You\'re a member of …", with no "already" and no "(member)"', async () => {
+    const tree = await renderAs('member')
+    const line = await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    expect(line).toHaveTextContent(/Vetting\.Member\b/)
+    expect(line).not.toHaveTextContent(/Already/i)
+  })
+
+  test('a role that says more than member is named', async () => {
+    const tree = await renderAs('vetter')
+    expect(await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))).toHaveTextContent('Vetting.MemberAs')
+  })
+})

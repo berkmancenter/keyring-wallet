@@ -1345,7 +1345,8 @@
     "Checklist": "Sua lista",
     "ChecklistLine": "{{held}} de {{needed}} declarações",
     "Meets": "atende aos requisitos publicados",
-    "AlreadyMember": "Você já é membro ({{role}}).",
+    "Member": "Você é membro de {{community}}.",
+    "MemberAs": "Você é membro de {{community}}, como {{role}}.",
     "Status": {
       "sent": "Pedido enviado",
       "accepted": "Aceito — aguardando o verificador abrir a sessão",
