@@ -22,12 +22,19 @@ import {
 
 import { Screens } from '../../../types/navigators'
 
+import { bareDid, classifyDidDocument } from './classifyDid'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { vtaAgent } from './vtaAgent'
 import { communityTarget, isCommunityLink, parseCommunityLink } from './vtiCommunityLink'
 import { isVtiInvitationLink, parseVtiInvitationLink } from './vtiInvitation'
 
-export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket' | 'community'
+/**
+ * A link of ours that cannot be used, said in words for the person: the
+ * scanner shows its message as the headline rather than "Invalid QR code".
+ */
+export class KeyringLinkError extends Error {}
+
+export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket' | 'community' | 'did'
 
 /** Which of our links this is, if any — cheap, no parsing beyond the prefix. */
 export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undefined {
@@ -36,7 +43,69 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   if (isVtiInvitationLink(trimmed)) return 'invitation'
   if (isTicketUri(trimmed)) return 'ticket'
   if (isCommunityLink(trimmed)) return 'community'
+  // A bare did:webvh — what upstream's QR codes carry for an agent or a
+  // community (the VTC page, `pnm vta qr`, the browser plugin). Other methods
+  // stay with the DIDComm handling, which takes a did:peer as an invitation.
+  if (bareDid(trimmed)?.startsWith('did:webvh:')) return 'did'
   return undefined
+}
+
+/** How long a scanned DID may take to resolve before the scanner says so. */
+const DID_RESOLVE_TIMEOUT_MS = 15_000
+
+/** The host inside a did:webvh — what a person recognises — else the DID. */
+const didHost = (did: string) => did.split(':')[3] ?? did
+
+/**
+ * A bare DID, classified by what its document advertises and routed: an agent
+ * to linking, a community to Join (or back to "I was invited", when that is
+ * where the person came from). Anything else says, in words, why there is
+ * nothing to do with it here — the scanner shows the message.
+ */
+async function routeBareDid(
+  did: string,
+  agent: Agent,
+  navigate: (destination: MyAgentDestination) => void
+): Promise<void> {
+  let doc
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    doc = await Promise.race([
+      agent.dids.resolveDidDocument(did),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), DID_RESOLVE_TIMEOUT_MS)
+      }),
+    ])
+  } catch {
+    throw new KeyringLinkError("This code couldn't be read. Check your connection and try again.")
+  } finally {
+    // Whichever way it ended, the timer must not outlive the lookup.
+    if (timer) clearTimeout(timer)
+  }
+  const kind = classifyDidDocument(doc as never, did)
+  switch (kind.kind) {
+    case 'community':
+      communityTarget.set({ communityDid: did })
+      navigate(communityLinkReturn.take() ? 'VtiInvited' : 'VtiJoin')
+      return
+    case 'agent':
+      if (vtaAgent.getState().link.kind === 'linked') {
+        throw new KeyringLinkError('This phone is already linked to an agent.')
+      }
+      await vtaAgent.startManualLink(agent, did, didHost(did))
+      navigate('VtaLink')
+      return
+    case 'ambiguous':
+      throw new KeyringLinkError(
+        'This code belongs to both an agent and a community. Ask whoever gave it to you which one it is.'
+      )
+    case 'relay':
+      throw new KeyringLinkError(
+        "This is a mediator's code. It relays messages; there is nothing here to link to or join."
+      )
+    default:
+      throw new KeyringLinkError("This code isn't an agent or a community, so there's nothing to do with it here.")
+  }
 }
 
 /** Where a link lands, inside the My Agent stack. */
@@ -109,9 +178,9 @@ export async function routeKeyringAgentLink(
         offer = parseEnrolmentLink(trimmed)
       } catch (error) {
         if (error instanceof EnrolmentOfferError && error.reason === 'expired') {
-          throw new Error('This link has expired. Ask for a new one.')
+          throw new KeyringLinkError('This link has expired. Ask for a new one.')
         }
-        throw new Error('This link could not be read.')
+        throw new KeyringLinkError('This link could not be read.')
       }
       vtaAgent.scanOffer(offer)
       navigate('VtaLink')
@@ -144,12 +213,14 @@ export async function routeKeyringAgentLink(
       try {
         link = parseCommunityLink(trimmed)
       } catch {
-        throw new Error('This community link could not be read.')
+        throw new KeyringLinkError('This community link could not be read.')
       }
       communityTarget.set(link)
       navigate(communityLinkReturn.take() ? 'VtiInvited' : 'VtiJoin')
       return
     }
+    case 'did':
+      return routeBareDid(bareDid(trimmed) as string, agent, navigate)
     default:
       throw new Error('not a Keyring agent link')
   }

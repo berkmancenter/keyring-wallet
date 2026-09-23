@@ -6,7 +6,8 @@ import { useAgent } from '@bifold/react-hooks'
 
 import { ContainerProvider } from '../../src/container-api'
 import { MainContainer } from '../../src/container-impl'
-import Scan from '../../src/screens/Scan'
+import Scan, { scanErrorOf } from '../../src/screens/Scan'
+import { KeyringLinkError } from '../../src/modules/trust-tasks/module/vtiLinks'
 import { StoreProvider, defaultState } from '../../src/contexts/store'
 import { BasicAppContext } from '../helpers/app'
 
@@ -73,9 +74,11 @@ describe('Scan Screen', () => {
           <ContainerProvider value={main}>
             <Scan
               navigation={useNavigation()}
-              route={{
-                params: { defaultToConnect: true },
-              } as any}
+              route={
+                {
+                  params: { defaultToConnect: true },
+                } as any
+              }
             />
           </ContainerProvider>
         </BasicAppContext>
@@ -134,9 +137,11 @@ describe('Scan Screen', () => {
           <ContainerProvider value={main}>
             <Scan
               navigation={useNavigation()}
-              route={{
-                params: { defaultToConnect: true },
-              } as any}
+              route={
+                {
+                  params: { defaultToConnect: true },
+                } as any
+              }
             />
           </ContainerProvider>
         </BasicAppContext>
@@ -149,5 +154,27 @@ describe('Scan Screen', () => {
       },
       { timeout: 10000 }
     )
+  })
+})
+
+/**
+ * A Keyring link that cannot be used says why as the headline. The reason was
+ * wrapped twice on its way here and never reached a person — not even "This
+ * link has expired".
+ */
+describe('what the scanner shows for a failed code', () => {
+  it('a Keyring link that cannot be used: its reason, in words, as the headline', () => {
+    const error = scanErrorOf(
+      'did:webvh:Q:host:x',
+      new KeyringLinkError("This is a mediator's code."),
+      'Scan.InvalidQrCode'
+    )
+    expect(error.message).toBe("This is a mediator's code.")
+    expect(error.data).toBe('did:webvh:Q:host:x')
+  })
+  it('anything else: the generic headline, the reason under details', () => {
+    const error = scanErrorOf('garbage', new Error('parse failed'), 'Scan.InvalidQrCode')
+    expect(error.message).toBe('Scan.InvalidQrCode')
+    expect(error.details).toBe('parse failed')
   })
 })

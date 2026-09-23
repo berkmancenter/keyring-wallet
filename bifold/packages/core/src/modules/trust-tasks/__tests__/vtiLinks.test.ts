@@ -1,7 +1,9 @@
 import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { vtaAgent } from '../module/vtaAgent'
+import { communityTarget } from '../module/vtiCommunityLink'
 import {
+  KeyringLinkError,
   communityLinkReturn,
   keyringAgentLinkKind,
   pendingVettingTicket,
@@ -117,5 +119,101 @@ describe('a community link brought for "I was invited"', () => {
     expect(navigate).toHaveBeenLastCalledWith('VtiInvited')
     await routeKeyringAgentLink(link, {} as never, navigate)
     expect(navigate).toHaveBeenLastCalledWith('VtiJoin')
+  })
+})
+
+/**
+ * A bare DID, as upstream's QR codes carry it (the VTC page, `pnm vta qr`, the
+ * browser plugin): classified by its document and routed, or explained.
+ */
+describe('a bare DID, scanned or pasted', () => {
+  const agentDid = 'did:webvh:QmAgent:dids.example:alice'
+  const communityDid = 'did:webvh:QmCommunity:dids.example:vtc'
+  const doc = (types: string[]) => ({ id: 'x', service: types.map((type) => ({ type })) })
+  const withDoc = (d: unknown) => ({ dids: { resolveDidDocument: jest.fn(async () => d) } }) as never
+  const controller = vtaAgent as unknown as { set(next: Record<string, unknown>): void }
+
+  beforeEach(() => {
+    communityTarget.clear()
+    communityLinkReturn.take()
+    controller.set({ link: { kind: 'notLinked' } })
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('claims a did:webvh, and leaves any other DID to the DIDComm handling', () => {
+    expect(keyringAgentLinkKind(`  ${communityDid}  `)).toBe('did')
+    expect(keyringAgentLinkKind(`${communityDid}#key-0`)).toBe('did')
+    expect(keyringAgentLinkKind('did:peer:2.Ez6LSabc')).toBeUndefined()
+  })
+
+  it('a community goes to Join on that community', async () => {
+    const navigate = jest.fn()
+    await routeKeyringAgentLink(communityDid, withDoc(doc(['VTCRest', 'VTCStatusList'])), navigate)
+    expect(navigate).toHaveBeenCalledWith('VtiJoin')
+    expect(communityTarget.getViewing()?.communityDid).toBe(communityDid)
+  })
+
+  it('a community brought for "I was invited" goes back there', async () => {
+    const navigate = jest.fn()
+    communityLinkReturn.toInvited()
+    await routeKeyringAgentLink(communityDid, withDoc(doc(['VTCRest'])), navigate)
+    expect(navigate).toHaveBeenCalledWith('VtiInvited')
+  })
+
+  it('an agent starts linking to it, named by its host', async () => {
+    const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
+    const navigate = jest.fn()
+    const agent = withDoc(doc(['VTARest', 'DIDCommMessaging']))
+    await routeKeyringAgentLink(agentDid, agent, navigate)
+    expect(start).toHaveBeenCalledWith(agent, agentDid, 'dids.example')
+    expect(navigate).toHaveBeenCalledWith('VtaLink')
+  })
+
+  it('an agent on a phone already linked says so, and starts nothing', async () => {
+    const start = jest.spyOn(vtaAgent, 'startManualLink').mockResolvedValue(undefined)
+    controller.set({
+      link: {
+        kind: 'linked',
+        vtaDid: 'did:webvh:Qm:other',
+        label: 'x',
+        linkedAt: '2026-09-23T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+    await expect(routeKeyringAgentLink(agentDid, withDoc(doc(['VTARest'])), jest.fn())).rejects.toThrow(
+      /already linked/
+    )
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it('anything else is explained in words, never routed', async () => {
+    const navigate = jest.fn()
+    await expect(routeKeyringAgentLink(agentDid, withDoc(doc(['VTARest', 'VTCRest'])), navigate)).rejects.toThrow(
+      /both an agent and a community/
+    )
+    await expect(
+      routeKeyringAgentLink(agentDid, withDoc(doc(['DIDCommMessaging', 'Authentication'])), navigate)
+    ).rejects.toThrow(/mediator/)
+    await expect(routeKeyringAgentLink(agentDid, withDoc(doc([])), navigate)).rejects.toThrow(
+      /isn't an agent or a community/
+    )
+    const offline = {
+      dids: { resolveDidDocument: jest.fn(async () => Promise.reject(new Error('ENOTFOUND'))) },
+    } as never
+    await expect(routeKeyringAgentLink(agentDid, offline, navigate)).rejects.toThrow(/couldn't be read/)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('its reasons are KeyringLinkErrors, which the scanner shows as the headline', async () => {
+    // The scanner tells "ours, in words" from anything else by instanceof, so
+    // the subclass has to survive the build's class transform.
+    let caught: unknown
+    try {
+      await routeKeyringAgentLink(agentDid, withDoc(doc(['DIDCommMessaging', 'Authentication'])), jest.fn())
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(KeyringLinkError)
+    expect(caught).toBeInstanceOf(Error)
   })
 })
