@@ -471,14 +471,24 @@ try {
     // old id still finds it — it survives on a DIFFERENT screen in the same
     // file — so "the testID is still there" was never the question; which
     // screen carries it is. Try both, newest first.
-    if (!(await existsTestId(driver, "VtaLinkManualDid", 2000))) {
+    //
+    // They are not alternatives on current builds: "Show my code" submits the
+    // address, and the panel it opens keeps the key behind "Show the code"
+    // (TestFlight #25). Tapping whichever was found first and stopping waited
+    // out 60s on that panel (2026-09-23, iPhone 17 UIUX gate), so keep going
+    // until the key shows, tapping each step as it appears.
+    const keyBy = Date.now() + 60000;
+    const tapped = new Set();
+    while (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
+      if (Date.now() > keyBy) break;
       for (const key of ["VtaLinkShowTheCode", "VtaLinkShowMyCode"]) {
-        if (!(await existsTestId(driver, key, 3000))) continue;
+        if (tapped.has(key) || !(await byTestId(driver, key).isExisting().catch(() => false))) continue;
         await tapTestId(driver, key, 15000).catch(() => undefined);
+        tapped.add(key);
         break;
       }
     }
-    await waitForTestId(driver, "VtaLinkManualDid", 60000);
+    await waitForTestId(driver, "VtaLinkManualDid", 5000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
     console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
     await screenshot(driver, "link-m1-key");
