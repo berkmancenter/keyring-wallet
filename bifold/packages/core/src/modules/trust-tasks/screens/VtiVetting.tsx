@@ -65,6 +65,17 @@ import { useVtaDid } from './VtaStatus'
 
 const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
 
+/**
+ * A short, stable name for one vetting request: the tail of its request
+ * document's id. A second request to the same vetter replaces the first with a
+ * new id, so this is what tells the two apart when their answers read the same.
+ * It is for tests, not people — it rides in the testID, never on screen.
+ */
+export const requestRef = (requestDocumentId: string) => requestDocumentId.replace(/[^A-Za-z0-9]/g, '').slice(-8)
+
+/** The testID of a request's "Sent" line: the fixed key, then which request it is. */
+export const requestTestKey = (requestDocumentId: string) => `VettingRequestId.${requestRef(requestDocumentId)}`
+
 export interface VtiVettingProps {
   config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
 }
@@ -854,12 +865,24 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   )
 
   const requestCard = (r: (typeof requests)[number]) => (
-    <View key={r.vetterDid} style={styles.card} testID={testIdWithKey('VettingRequestCard')}>
+    // Keyed by the request, not the vetter: asking the same vetter again is a
+    // new request, and mounts a new card rather than relabelling the old one.
+    <View key={r.requestDocumentId} style={styles.card} testID={testIdWithKey('VettingRequestCard')}>
       <Text style={styles.value}>{shortDid(r.vetterDid)}</Text>
       <Text style={styles.label} testID={testIdWithKey('VettingRequestStatus')}>
         {t(`Vetting.Status.${r.status}`)}
         {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
       </Text>
+      {/* When it was sent is what a person can use to tell two requests apart;
+          which request it is rides in the testID, for tests only. Requests
+          stored before sentAt existed show no line. */}
+      {r.sentAt ? (
+        <Text style={styles.label} testID={testIdWithKey(requestTestKey(r.requestDocumentId))}>
+          {t('Vetting.SentAt', {
+            time: new Date(r.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          })}
+        </Text>
+      ) : null}
     </View>
   )
 
