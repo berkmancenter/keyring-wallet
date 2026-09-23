@@ -417,8 +417,15 @@ try {
     // address looks like a DID — it does not appear on submit. Measured on
     // Android, 2026-09-22: the run waited out 60s on a screen that was only
     // waiting for the tap.
-    if (await existsTestId(driver, "VtaLinkShowMyCode", 5000)) {
-      await tapTestId(driver, "VtaLinkShowMyCode", 15000);
+    // Only when the key is not already showing: submitting the address can
+    // reveal it directly, and then "Show my code" is gone before it can be
+    // tapped — a check that the element EXISTS, followed by a tap, is a race
+    // when the screen is moving. Ask for the goal first.
+    if (
+      !(await existsTestId(driver, "VtaLinkManualDid", 2000)) &&
+      (await existsTestId(driver, "VtaLinkShowMyCode", 5000))
+    ) {
+      await tapTestId(driver, "VtaLinkShowMyCode", 15000).catch(() => undefined);
     }
     await waitForTestId(driver, "VtaLinkManualDid", 60000);
     const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
