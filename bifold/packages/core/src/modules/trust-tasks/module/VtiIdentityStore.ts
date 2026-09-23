@@ -60,6 +60,15 @@ export interface VtiIdentityStore {
   setPersona(persona: VtiPersona): Promise<void>
   /** Drop the persona record for a community (the VTA still holds the keys). */
   forgetPersona(communityDid: string): Promise<void>
+  /**
+   * The idempotency key of a persona mint that has not yet been recorded as a
+   * persona — kept so a retry (even after a restart) re-asks with the same key
+   * and the VTA returns the first mint instead of minting an orphan (VTI-Q17).
+   * Optional: a store without it mints with a fresh key each time, as before.
+   */
+  getMintKey?(communityDid: string): Promise<string | undefined>
+  setMintKey?(communityDid: string, key: string): Promise<void>
+  clearMintKey?(communityDid: string): Promise<void>
 }
 
 const RECORD_TYPE = 'keyring/vti-identity'
@@ -112,6 +121,23 @@ export class GenericRecordsIdentityStore implements VtiIdentityStore {
     const records = await this.agent.genericRecords.findAllByQuery({
       recordType: RECORD_TYPE,
       kind: 'persona',
+      key: communityDid,
+    })
+    for (const record of records) await this.agent.genericRecords.delete(record)
+  }
+
+  async getMintKey(communityDid: string) {
+    return (await this.find<{ key?: string }>('mint-key', communityDid))?.key
+  }
+
+  setMintKey(communityDid: string, key: string) {
+    return this.put('mint-key', communityDid, { key })
+  }
+
+  async clearMintKey(communityDid: string) {
+    const records = await this.agent.genericRecords.findAllByQuery({
+      recordType: RECORD_TYPE,
+      kind: 'mint-key',
       key: communityDid,
     })
     for (const record of records) await this.agent.genericRecords.delete(record)

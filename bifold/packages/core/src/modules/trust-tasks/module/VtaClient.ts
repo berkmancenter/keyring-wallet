@@ -127,14 +127,28 @@ const CONSENT_REQUIRED = 'auth:consent_required'
  */
 export function consentPendingOf(
   error: unknown
-): { payloadDigest?: string; requests: Record<string, unknown>[] } | undefined {
+): { payloadDigest?: string; requests: Record<string, unknown>[]; omitted?: number } | undefined {
   if (!(error instanceof VtiRefusal)) return undefined
   const details = error.details as
-    | { reason?: string; consentRequests?: (Record<string, unknown> & { payload?: { payloadDigest?: string } })[] }
+    | {
+        reason?: string
+        payloadDigest?: string
+        consentRequestsOmitted?: number
+        consentRequests?: (Record<string, unknown> & { payload?: { payloadDigest?: string } })[]
+      }
     | undefined
   if (details?.reason === CONSENT_REQUIRED) {
     const requests = details.consentRequests ?? []
-    return { payloadDigest: requests[0]?.payload?.payloadDigest, requests }
+    // Since vti #1680 the challenge's core members — `payloadDigest` among them
+    // — are always in `details`; only the signed requests are dropped when they
+    // do not fit, and `consentRequestsOmitted` counts them. Read the digest from
+    // `details` first, so the grant can still be waited on precisely.
+    const omitted = typeof details.consentRequestsOmitted === 'number' ? details.consentRequestsOmitted : undefined
+    return {
+      payloadDigest: details.payloadDigest ?? requests[0]?.payload?.payloadDigest,
+      requests,
+      ...(omitted !== undefined ? { omitted } : {}),
+    }
   }
   if (details === undefined && (error.code === CONSENT_REQUIRED || error.message.includes(CONSENT_REQUIRED))) {
     return { requests: [] }
@@ -308,8 +322,14 @@ export class VtaClient {
    * what the VTA routes on. Serialised: the VTA answers on the same socket and a
    * reply carries no correlation a client can rely on, so one at a time.
    */
-  async task<T = unknown>(type: string, payload: Record<string, unknown>, timeoutMs = 30000): Promise<T> {
-    const run = (): Promise<T> => this.sendTask<T>(type, payload, timeoutMs)
+  async task<T = unknown>(
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs = 30000,
+    /** Members beside `payload` on the signed document itself — e.g. `idempotencyKey`. */
+    documentExtras: Record<string, unknown> = {}
+  ): Promise<T> {
+    const run = (): Promise<T> => this.sendTask<T>(type, payload, timeoutMs, documentExtras)
     // Chain behind whatever is in flight, but do not let one failure poison the next.
     const next = this.queue.then(run, run)
     this.queue = next.catch(() => undefined)
@@ -322,6 +342,13 @@ export class VtaClient {
       const waitMs = this.options.consentWaitMs ?? 180000
       if (!pending || waitMs <= 0) throw error
       this.options.onConsentPending?.({ taskType: type, payloadDigest: pending.payloadDigest })
+      if (pending.omitted) {
+        // Those approvers are reached only by the VTA's own push (vti #1680);
+        // there is nothing of theirs for this phone to relay.
+        this.agent.config.logger.info(
+          `${LOG_PREFIX} ${type} is held for consent; ${pending.omitted} signed request(s) did not fit and were omitted`
+        )
+      }
       // The VTA can push a consent request only to a did:key approver
       // ("did:webvh … not wired yet → relay fallback", step_up.rs); for any
       // other approver it says "the approver learns of this request only if
@@ -338,7 +365,7 @@ export class VtaClient {
       while (Date.now() < deadline) {
         await this.awaitGrant(pending.payloadDigest, Math.min(8000, deadline - Date.now())).catch(() => undefined)
         try {
-          return await this.sendTask<T>(type, payload, timeoutMs)
+          return await this.sendTask<T>(type, payload, timeoutMs, documentExtras)
         } catch (retryError) {
           lastError = retryError
           if (!consentPendingOf(retryError)) throw retryError
@@ -349,7 +376,12 @@ export class VtaClient {
   }
 
   /** One send and its matched answer — no queue, no consent handling. */
-  private async sendTask<T>(type: string, payload: Record<string, unknown>, timeoutMs: number): Promise<T> {
+  private async sendTask<T>(
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs: number,
+    documentExtras: Record<string, unknown> = {}
+  ): Promise<T> {
     {
       const session = this.session
       const did = this.identity?.did
@@ -372,6 +404,8 @@ export class VtaClient {
           issuer: did,
           recipient: this.vtaDid,
           issuedAt: new Date().toISOString(),
+          // Covered by the proof like everything else on the document.
+          ...documentExtras,
         },
         did
       )
@@ -554,19 +588,33 @@ export class VtaClient {
    * with, advertising the VTA's mediator so a community can reach it. The keys
    * stay in the VTA; the answer carries their ids.
    */
-  mintPersona(options: { contextId: string; serverId?: string; didUrl?: string; label?: string }) {
+  mintPersona(options: {
+    contextId: string
+    serverId?: string
+    didUrl?: string
+    label?: string
+    idempotencyKey?: string
+  }) {
     if (!options.serverId && !options.didUrl) {
       throw new Error(`${LOG_PREFIX} mintPersona needs a registered server id or a serverless DID URL`)
     }
-    return this.task<VtaMintedDid>(VTA_TASK.didsCreate, {
-      contextId: options.contextId,
-      ...(options.serverId ? { serverId: options.serverId } : {}),
-      // Serverless: the VTA mints and serves the log itself at this URL.
-      ...(options.didUrl ? { url: options.didUrl } : {}),
-      label: options.label,
-      addMediatorService: true,
-      setPrimary: false,
-    })
+    return this.task<VtaMintedDid>(
+      VTA_TASK.didsCreate,
+      {
+        contextId: options.contextId,
+        ...(options.serverId ? { serverId: options.serverId } : {}),
+        // Serverless: the VTA mints and serves the log itself at this URL.
+        ...(options.didUrl ? { url: options.didUrl } : {}),
+        label: options.label,
+        addMediatorService: true,
+        setPrimary: false,
+      },
+      30000,
+      // A mint whose answer is lost still succeeds at the VTA; retried with the
+      // same key within 24 h the VTA returns that first mint instead of minting
+      // an orphan (VTI-Q17, answered by the maintainers 2026-09-23).
+      options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}
+    )
   }
 
   /**
@@ -595,6 +643,13 @@ export class VtaClient {
     if (!existing && !servers[0] && !options.personaBaseUrl) {
       throw new PersonaHostMissing(this.vtaDid)
     }
+    // One key per community until a persona is recorded for it, so every retry
+    // of this mint — a tap on Try again, or after a restart — is the same ask.
+    let mintKey: string | undefined
+    if (!existing) {
+      mintKey = (await this.store.getMintKey?.(options.communityDid)) ?? `urn:uuid:${utils.uuid()}`
+      await this.store.setMintKey?.(options.communityDid, mintKey)
+    }
     const minted = existing
       ? ({
           did: existing.did,
@@ -604,8 +659,8 @@ export class VtaClient {
         } as VtaMintedDid)
       : await this.mintPersona(
           servers[0]
-            ? { contextId, serverId: servers[0].id, label }
-            : { contextId, didUrl: `${options.personaBaseUrl ?? ''}/${label}`, label }
+            ? { contextId, serverId: servers[0].id, label, idempotencyKey: mintKey }
+            : { contextId, didUrl: `${options.personaBaseUrl ?? ''}/${label}`, label, idempotencyKey: mintKey }
         )
     const borrowed = await this.borrowKey(minted.kaKeyId)
     // The signing key too: a vetting card, an eligibility presentation and a
@@ -622,6 +677,7 @@ export class VtaClient {
       createdAt: existing?.createdAt ?? new Date().toISOString(),
     }
     await this.store.setPersona(persona)
+    await this.store.clearMintKey?.(options.communityDid)
     return persona
   }
 

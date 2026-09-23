@@ -36,4 +36,28 @@ describe('reading a refusal as consent pending', () => {
     ).toBeUndefined()
     expect(consentPendingOf(new Error('task failed: auth:consent_required'))).toBeUndefined()
   })
+
+  // vti #1680: the core members always come; the signed requests are omitted
+  // whole when they do not fit, with a count.
+  it('reads the digest from details when the signed requests were omitted', () => {
+    const refusal = new VtiRefusal('taskFailed', 'task failed: auth:consent_required', {
+      reason: 'auth:consent_required',
+      payloadDigest: 'digest-core',
+      correlator: 'c-1',
+      consentRequestsOmitted: 3,
+    })
+    expect(consentPendingOf(refusal)).toEqual({ payloadDigest: 'digest-core', requests: [], omitted: 3 })
+  })
+
+  it('prefers the core payloadDigest over the first request', () => {
+    const refusal = new VtiRefusal('taskFailed', 'task failed: auth:consent_required', {
+      reason: 'auth:consent_required',
+      payloadDigest: 'digest-core',
+      consentRequests: [request('did:peer:2.approver')],
+    })
+    expect(consentPendingOf(refusal)).toMatchObject({
+      payloadDigest: 'digest-core',
+      requests: [request('did:peer:2.approver')],
+    })
+  })
 })
