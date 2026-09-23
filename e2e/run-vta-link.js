@@ -260,15 +260,35 @@ async function testerJourney(driver) {
   await screenshot(driver, "journey-join-identity");
   await tapTestId(driver, "JoinAsContinue", 15000);
   await handleBiometricConfirmIfPresent(driver);
-  if (await existsTestId(driver, "JoinError", 3000)) throw new Error(`making the identity failed: ${await textOf(driver, "JoinError")}`);
+  // One retry, the app's own. On the current Farm the agent's answer to the
+  // first "make my identity" can be lost, and the app says "Tap Continue to
+  // try again" (fixed upstream in VTI-39; 217 known issue until the Farm
+  // updates). A person taps Continue once more, so the runner does too — once,
+  // loudly — and a second miss fails. The retry is also the live check of the
+  // persona request's idempotencyKey: afterwards the agent must hold one
+  // identity for this community, not two.
+  let identityRetried = false;
+  const identityMissed = async (waitMs) => {
+    if (!(await existsTestId(driver, "JoinError", waitMs))) return false;
+    const why = (await textOf(driver, "JoinError")).trim();
+    if (identityRetried) throw new Error(`making the identity failed twice: ${why}`);
+    identityRetried = true;
+    console.log(`[e2e] journey: ⚠️  FIRST-TRY MISS making the identity — "${why}" — tapping Continue once, as the app asks`);
+    await screenshot(driver, "journey-identity-first-miss");
+    await tapTestId(driver, "JoinAsContinue", 15000);
+    await handleBiometricConfirmIfPresent(driver);
+    // The failed attempt's message must clear, or the next look reads it as a second miss.
+    for (let i = 0; i < 10 && (await existsTestId(driver, "JoinError", 500)); i++) await sleep(500);
+    return true;
+  };
+  await identityMissed(3000);
   const firstStep = ["VettingLegalNameInput", "VettingStartButton", "VettingStepIndicator", "VettingCreateIdentityButton"];
   let reached;
   for (let i = 0; i < 40 && !reached; i++) {
-    // Making the identity can fail (the agent's DID host did not answer):
-    // the screen says so — stop there rather than wait out the timeout.
-    if (await existsTestId(driver, "JoinError", 500)) {
-      throw new Error(`making the identity failed: ${await textOf(driver, "JoinError")}`);
-    }
+    // Making the identity can fail (the agent did not answer): the screen
+    // says so — retry once as above, and stop at a second miss rather than
+    // wait out the timeout.
+    if (await identityMissed(500)) continue;
     if (await notConfiguredShown(driver)) {
       await screenshot(driver, "journey-vetting-not-configured");
       throw new Error('vetting says "No agent is configured" with a linked agent');
@@ -279,7 +299,7 @@ async function testerJourney(driver) {
     await screenshot(driver, "journey-join-vetting");
     throw new Error("making the identity did not hand over to vetting");
   }
-  console.log(`[e2e] journey: identity → vetting reached ${reached}`);
+  console.log(`[e2e] journey: identity → vetting reached ${reached}${identityRetried ? " (after ONE retry — check the agent holds one identity for this community)" : " (first try)"}`);
   await assertNoDidShown(driver, "vetting's first step");
   // The name input and the Start button are siblings in the same step, so
   // which one the poll happens to see first says nothing about the screen —
