@@ -11,8 +11,21 @@ const mockSessions: Array<{ did: string; mediator: string; onMessage: (m: unknow
 const mockGreetings: Array<{ from: string; to: string }> = []
 const mockAdvertised: Record<string, string | undefined> = {}
 const mockTspVia: Record<string, string | undefined> = {}
+const mockPacked: Record<string, unknown>[] = []
 
-jest.mock('@bifold/trust-tasks', () => ({ tsp: { CODEC_FORMS_RELATIONSHIPS: true } }))
+jest.mock('@bifold/trust-tasks', () => ({
+  tsp: { CODEC_FORMS_RELATIONSHIPS: true },
+  TRUST_TASK_V2_ENVELOPE_TYPE: 'https://trusttasks.org/binding/didcomm/0.1/envelope',
+}))
+// Stands in for eddsa-jcs-2022: records who signed, with which keys.
+jest.mock('../documentProof', () => ({
+  signDocumentProof: jest.fn(
+    async (_a: unknown, doc: Record<string, unknown>, did: string, o: { kmsKeyId?: string; verificationMethodId?: string }) => ({
+      ...doc,
+      proof: { signer: did, kmsKeyId: o.kmsKeyId, verificationMethod: o.verificationMethodId },
+    })
+  ),
+}))
 jest.mock('../module/VtiMediatorTransport', () => ({
   advertisedMediatorDid: jest.fn(async (_a: unknown, did: string) => mockAdvertised[did]),
   advertisedTspMediatorDid: jest.fn(async (_a: unknown, did: string) => mockTspVia[did]),
@@ -53,7 +66,10 @@ jest.mock('../module/vtiTsp', () => ({
     mockGreetings.push({ from, to })
     return { bytes: new Uint8Array([0xf8]) }
   }),
-  packTrustTaskForPeer: jest.fn(async () => ({ bytes: new Uint8Array([1]), revision: 'rev3' })),
+  packTrustTaskForPeer: jest.fn(async (_s: unknown, _from: string, _to: string, doc: Record<string, unknown>) => {
+    mockPacked.push(doc)
+    return { bytes: new Uint8Array([1]), revision: 'rev3' }
+  }),
   tspSessionForPersona: jest.fn(async () => ({ identity: {}, resolver: {} })),
   unpackTrustTaskFromPeer: jest.fn(),
 }))
@@ -71,7 +87,12 @@ import { vtiAgent } from '../module/vtiAgent'
 const logger = { info: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() }
 const agent = { config: { logger } } as never
 const persona = (did: string) =>
-  ({ did, communityDid: 'did:webvh:c:host', kmsKeyIds: { keyAgreement: 'ka', signing: 'sig' } }) as never
+  ({
+    did,
+    communityDid: 'did:webvh:c:host',
+    kmsKeyIds: { keyAgreement: 'ka', signing: 'sig' },
+    vtaKeyIds: { signing: `${did}#key-0`, keyAgreement: `${did}#key-1` },
+  }) as never
 
 jest.setTimeout(30000)
 
@@ -79,6 +100,7 @@ beforeEach(async () => {
   await vtiAgent.disconnect()
   mockSessions.length = 0
   mockGreetings.length = 0
+  mockPacked.length = 0
   for (const k of Object.keys(mockAdvertised)) delete mockAdvertised[k]
   for (const k of Object.keys(mockTspVia)) delete mockTspVia[k]
 })
@@ -185,5 +207,123 @@ describe('the community leg', () => {
     await vtiAgent.ask(community, 'https://t/manifest/0.2', {}, 2000)
     expect(session.tsp.length).toBeGreaterThanOrEqual(2)
     expect(session.didcomm).toHaveLength(0)
+  })
+})
+
+/**
+ * vti #1687 (VTI-42): a VTC takes a Trust Task over DIDComm only in the
+ * binding envelope. vti #1672: it refuses a task whose spec declares the proof
+ * REQUIRED without one, whatever the carriage.
+ */
+describe('what a community is asked, and how', () => {
+  const ENVELOPE = 'https://trusttasks.org/binding/didcomm/0.1/envelope'
+  const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
+  const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
+  const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
+  const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
+  const community = 'did:webvh:c:enveloped'
+
+  /** Connect as a persona on DIDComm (community behind another mediator) and answer the first DIDComm send. */
+  async function askOverDidcomm(type: string, reply: (sent: { thid?: string }) => unknown, personaDid = 'did:webvh:p:env') {
+    mockTspVia[community] = 'did:webvh:their-mediator'
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(personaDid) })
+    const session = mockSessions.at(-1)!
+    const timer = setInterval(() => {
+      if (session.didcomm.length) {
+        clearInterval(timer)
+        session.onMessage(reply(session.didcomm[0] as { thid?: string }))
+      }
+    }, 5)
+    const answer = await vtiAgent.ask(community, type, { hello: 'world' }, 2000)
+    return { answer, sent: session.didcomm[0] as Record<string, unknown> }
+  }
+
+  it('sends the task in the binding envelope, with the document as its body', async () => {
+    const { sent } = await askOverDidcomm(MANIFEST, () => ({ type: `${MANIFEST}#response`, body: {} }))
+    expect(sent.type).toBe(ENVELOPE)
+    expect(sent.body).toMatchObject({
+      type: MANIFEST,
+      issuer: 'did:webvh:p:env',
+      recipient: community,
+      payload: { hello: 'world' },
+    })
+    expect(typeof (sent.body as Record<string, unknown>).issuedAt).toBe('string')
+    expect((sent.body as Record<string, unknown>).threadId).toBe(sent.thid)
+  })
+
+  it('signs a task whose spec requires a proof, as the persona under its own key', async () => {
+    // A fresh persona per task: a reconnect as the same one reuses the session, whose first send is the one read.
+    for (const [i, type] of [SUBMIT, WITHDRAW, SUPPLEMENT].entries()) {
+      const who = `did:webvh:p:signs-${i}`
+      const { sent } = await askOverDidcomm(type, () => ({ type: `${type}#response`, body: {} }), who)
+      expect((sent.body as Record<string, unknown>).type).toBe(type)
+      expect((sent.body as Record<string, unknown>).proof).toEqual({
+        signer: who,
+        kmsKeyId: 'sig',
+        verificationMethod: `${who}#key-0`,
+      })
+    }
+  })
+
+  it('leaves a task unsigned when its spec declares no proof', async () => {
+    const { sent } = await askOverDidcomm(MANIFEST, () => ({ type: `${MANIFEST}#response`, body: {} }))
+    expect((sent.body as Record<string, unknown>).proof).toBeUndefined()
+  })
+
+  it('reads a reply typed as the document, as a VTC sends today', async () => {
+    const { answer } = await askOverDidcomm(SUBMIT, () => ({
+      type: `${SUBMIT}#response`,
+      body: { type: `${SUBMIT}#response`, payload: { status: 'pending' } },
+    }))
+    expect(answer).toMatchObject({ type: `${SUBMIT}#response`, body: { payload: { status: 'pending' } } })
+  })
+
+  it('reads a reply in the envelope, as binding §5 has a VTC send it', async () => {
+    const { answer } = await askOverDidcomm(SUBMIT, () => ({
+      type: ENVELOPE,
+      body: { type: `${SUBMIT}#response`, payload: { status: 'pending' } },
+    }))
+    expect(answer).toMatchObject({ type: `${SUBMIT}#response`, body: { payload: { status: 'pending' } } })
+  })
+
+  it('reads a refusal in the envelope as a refusal', async () => {
+    const ERROR = 'https://trusttasks.org/spec/trust-task-error/0.1'
+    const { answer } = await askOverDidcomm(SUBMIT, () => ({
+      type: ENVELOPE,
+      body: { type: ERROR, payload: { code: 'proofRequired' } },
+    }))
+    expect(answer).toMatchObject({ type: ERROR })
+  })
+
+  it('carries the same signed document over TSP', async () => {
+    const same = 'did:webvh:c:tsp-signed'
+    mockTspVia[same] = 'did:peer:lab'
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:tsp') })
+    const session = mockSessions.at(-1)!
+    const timer = setInterval(() => {
+      if (session.tsp.length >= 2) {
+        clearInterval(timer)
+        session.onMessage({ type: `${SUBMIT}#response`, body: {} })
+      }
+    }, 5)
+    await vtiAgent.ask(same, SUBMIT, { vp: {} }, 2000)
+    expect(mockPacked.at(-1)).toMatchObject({
+      type: SUBMIT,
+      issuer: 'did:webvh:p:tsp',
+      recipient: same,
+      proof: { signer: 'did:webvh:p:tsp' },
+    })
+  })
+
+  it('sends unsigned, and says so, when the session is not a persona', async () => {
+    mockTspVia[community] = 'did:webvh:their-mediator'
+    await vtiAgent.connect(agent, 'did:peer:lab')
+    const session = mockSessions.at(-1)!
+    logger.warn.mockClear()
+    await vtiAgent.ask(community, SUBMIT, {}, 20)
+    const sent = session.didcomm[0] as Record<string, unknown>
+    expect(sent.type).toBe(ENVELOPE)
+    expect((sent.body as Record<string, unknown>).proof).toBeUndefined()
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/needs a proof/))
   })
 })
