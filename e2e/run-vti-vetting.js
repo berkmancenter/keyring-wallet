@@ -19,7 +19,7 @@
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
-import { handleBiometricConfirmIfPresent, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
+import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
@@ -130,7 +130,11 @@ async function unlockToHome(d) {
   await sleep(4000);
 }
 async function openVetting(d) {
-  await (await waitForTestId(d, "MyAgent", 30000)).click();
+  // keyring-bifold#11 moved where the My Agent tab lands: a linked phone opens
+  // the agent home, and the MyAgent* ids live one screen further in. Waiting
+  // for MyAgentVettingRow from the tab alone burns the full 180s on a screen
+  // that never shows it, and reads exactly like a wallet that lost its data.
+  await openMyAgentPanel(d);
   await sleep(1500);
   // My Agent shows its holdings — the vetting entry among them — only once the
   // phone's VTA session is up. A phone that was enrolled before reconnects on

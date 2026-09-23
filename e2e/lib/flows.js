@@ -2262,3 +2262,31 @@ export async function pasteLinkFromHome(driver, link) {
   await tapTestId(driver, "ScanQRCode", 15000);
   await pasteLinkOnScanScreen(driver, link);
 }
+
+/**
+ * Tap the My Agent tab and land on the OPERATOR PANEL — the screen that
+ * carries the `MyAgent*` ids.
+ *
+ * keyring-bifold#11 changed where the tab lands: a phone with a linked agent
+ * now opens the agent home (`Screens.VtaAgent`), and the panel is one door
+ * further in. The ids did not move — the landing screen did — so a reader that
+ * taps the tab and waits for `MyAgentVettingRow` waits out its whole timeout
+ * on a screen that was never going to show it. That failure presents exactly
+ * like a wallet that lost its data (2026-09-23: it took a screen dump to tell
+ * the two apart), which is why this walks the extra screen for every caller
+ * instead of each one rediscovering it.
+ *
+ * Returns "agent-home" when it had to walk, "panel" when the tab landed there
+ * already — an unlinked phone still goes straight to the panel.
+ */
+export async function openMyAgentPanel(driver) {
+  await (await waitForTestId(driver, "MyAgent", 30000)).click()
+  await sleep(2500)
+  if (!(await existsTestId(driver, "AgentOpenCommunities", 3000))) return "panel"
+  await tapTestIdReliable(driver, "AgentOpenCommunities", () => existsTestId(driver, "AgentOpenCommunities", 1500).then((v) => !v), {
+    attempts: 3,
+    settleMs: 2500,
+  }).catch(() => undefined)
+  await sleep(2500)
+  return "agent-home"
+}

@@ -7,7 +7,7 @@
  * and held, and the stale-grant signing is purely a selection defect. A revoked
  * or absent standing means delivery failed too, and there is a second fix.
  */
-import { unlockIfLocked } from "./lib/flows.js";
+import { unlockIfLocked, openMyAgentPanel } from "./lib/flows.js";
 import { createSession, ensureAppium, stopAppium, sleep, waitForTestId, byTestId, existsTestId, dumpSource } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
 
@@ -27,7 +27,7 @@ try {
   // The wallet may be locked, or sitting on whatever screen the last run left.
   await unlockIfLocked(driver).catch(() => undefined);
   await sleep(2000);
-  await (await waitForTestId(driver, "MyAgent", 60000)).click();
+  await openMyAgentPanel(driver);
   await sleep(4000);
   const keys = [
     "MyAgentSeatBadge",

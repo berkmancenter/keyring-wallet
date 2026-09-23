@@ -11,7 +11,7 @@
  */
 import { createSession, ensureAppium, stopAppium, sleep, waitForTestId, byTestId, existsTestId } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
-import { unlockIfLocked } from "./lib/flows.js";
+import { unlockIfLocked, openMyAgentPanel } from "./lib/flows.js";
 
 const PARK = process.env.PARK || "myagent";
 const textOf = async (d, key) => (await byTestId(d, key).getAttribute("label").catch(() => "")) || "";
@@ -28,7 +28,7 @@ try {
   });
   await sleep(2500);
   await unlockIfLocked(driver).catch(() => undefined);
-  await (await waitForTestId(driver, "MyAgent", 60000)).click();
+  await openMyAgentPanel(driver);
   await sleep(4000);
 
   for (const k of ["MyAgentVettingRow", "MyAgentMembershipRole", "MyAgentPersonaDid", "MyAgentCommunityRow"]) {
