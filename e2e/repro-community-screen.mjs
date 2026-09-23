@@ -12,7 +12,7 @@
  */
 import { createSession, ensureAppium, stopAppium, sleep, byTestId, existsTestId, tapTestId, waitForTestId } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
-import { unlockIfLocked, dismissTourIfPresent, openMyAgentPanel, pasteLinkFromHome } from "./lib/flows.js";
+import { unlockIfLocked, dismissTourIfPresent, openMyAgentSurface, pasteLinkFromHome } from "./lib/flows.js";
 
 const textOf = async (d, key) => (await byTestId(d, key).getAttribute("label").catch(() => "")) || "";
 
@@ -54,7 +54,7 @@ try {
   // The community row: MyAgentCommunityRow on the operator panel (a phone
   // whose build names its agent), AgentMembershipRow on the agent home (a
   // linked phone, which has no panel on the one-agent screen).
-  const surface = await openMyAgentPanel(driver).catch(() => "agent home");
+  const surface = await openMyAgentSurface(driver);
   await sleep(4000);
   const rowKey = surface === "agent home" ? "AgentMembershipRow" : "MyAgentCommunityRow";
 

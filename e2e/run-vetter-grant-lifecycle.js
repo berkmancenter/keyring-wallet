@@ -29,7 +29,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { createSession, ensureAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, scrollToTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, scrollToTestId, deviceTag } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { unlockIfLocked, dismissTourIfPresent } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
@@ -88,22 +88,41 @@ async function toAgentHome(d) {
   await dismissTourIfPresent(d).catch(() => undefined);
   await (await waitForTestId(d, "MyAgent", 30000)).click();
   // Builds before the one-agent screen: a linked phone could still be on the panel.
-  const open = await waitForTestId(d, "OpenYourAgentButton", 5000).catch(() => undefined);
+  const open = await waitForTestId(d, "OpenYourAgentButton", 15000).catch(() => undefined);
   if (open) await open.click();
+  // The agent home (AgentSeat on the one-agent screen, AgentDoors before it)
+  // or the panel's vetting card. Landing on none of them is a failure, never
+  // a seat: reading the panel's branch off a screen that is not the panel
+  // would report a seat for a screen the phone is not on.
   const until = Date.now() + 180000;
-  while (Date.now() < until) {
-    if (await byTestId(d, "AgentSeat").isExisting().catch(() => false)) break;
-    if (await byTestId(d, "MyAgentVettingSeat").isExisting().catch(() => false)) break;
-    await sleep(2000);
+  let landed;
+  while (Date.now() < until && !landed) {
+    if (await byTestId(d, "AgentSeat").isExisting().catch(() => false)) landed = "AgentSeat";
+    else if (await byTestId(d, "MyAgentVettingSeat").isExisting().catch(() => false)) landed = "MyAgentVettingSeat";
+    else if (await byTestId(d, "AgentDoors").isExisting().catch(() => false)) {
+      // The home before the one-agent screen: its cards come after a store read.
+      await sleep(5000);
+      landed = "AgentDoors";
+    } else await sleep(2000);
+  }
+  if (!landed) {
+    await screenshot(d, "lifecycle-no-seat-surface");
+    throw new Error(`${deviceTag(d)}: My Agent showed neither the agent home (AgentSeat/AgentDoors) nor the panel's vetting card within 180s`);
   }
   await sleep(2500);
 }
-/** What the seat says: { surface, vetter, lapsed }. */
+/**
+ * What the seat says: { surface, vetter, lapsed }. One read of the screen as it
+ * is: poll it (as expectSeat does) rather than trust a single read taken while
+ * the screen may still be settling.
+ */
 async function seat(d) {
-  if (await byTestId(d, "AgentSeat").isExisting().catch(() => false)) {
+  const hasSeat = await byTestId(d, "AgentSeat").isExisting().catch(() => false);
+  if (hasSeat || (await byTestId(d, "AgentDoors").isExisting().catch(() => false))) {
     // Read what the screen states; the line's words are translated, so the
     // verdict comes from which cards are there, and the line is reported.
-    const line = await textOf(d, "AgentSeat").catch(() => "");
+    // Before the one-agent screen there is no line, but the cards are the same.
+    const line = hasSeat ? await textOf(d, "AgentSeat").catch(() => "") : "(no AgentSeat on this build)";
     const card = Boolean(await scrollToTestId(d, "AgentVetterCard", 4).catch(() => undefined));
     const lapsed = (await byTestId(d, "AgentVetterLapsed").isExisting().catch(() => false)) ? await textOf(d, "AgentVetterLapsed") : "";
     return { surface: "agent home", vetter: card && !lapsed, lapsed, line };

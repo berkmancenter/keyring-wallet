@@ -2192,10 +2192,10 @@ export async function leaveCommunityInApp(driver, { allowInProgress = false } = 
   // AgentSeat is always there on it, and says what the phone is.
   await (await waitForTestId(driver, "MyAgent", 30000)).click()
   await sleep(2000)
-  const onHome =
-    (await existsTestId(driver, "AgentSeat", 3000)) ||
-    // Builds before the one-agent screen: the home without the seat line.
-    (await byTestId(driver, "AgentDoors").isExisting().catch(() => false))
+  // AgentSeat is the one-agent screen's line; a build before it shows the
+  // agent home without it, and cannot show AgentContinueVetting either.
+  const hasSeat = await existsTestId(driver, "AgentSeat", 8000)
+  const onHome = hasSeat || (await byTestId(driver, "AgentDoors").isExisting().catch(() => false))
   if (onHome) {
     // A member opens each community from its row; Leave is on that screen.
     const member = await scrollToTestId(driver, "AgentMembershipRow", 6).catch(() => undefined)
@@ -2221,6 +2221,17 @@ export async function leaveCommunityInApp(driver, { allowInProgress = false } = 
           `[${deviceTag(driver)}] NOT FRESH — ${what}, and the agent home offers no Leave for an applicant. ` +
             `Reinstall the app on this phone, or pass allowInProgress if this flow continues that vetting.`
         )
+      }
+      if (!hasSeat) {
+        // A build before the one-agent screen cannot show an applicant, so
+        // "nothing here" is not "fresh" — say so as loudly as it always has.
+        console.log(`[e2e] ${deviceTag(driver)}: linked, member of nothing — nothing to LEAVE`)
+        console.log(
+          `[e2e] ${deviceTag(driver)}: WARNING — cannot verify this applicant is fresh on this build (no AgentSeat). If it ran a vetting ` +
+            `flow before, its persona and request survive and the next join will take a different path. ` +
+            `Reinstall the app on this phone between runs.`
+        )
+        return false
       }
       console.log(`[e2e] ${deviceTag(driver)}: linked, holds no community identity — nothing to leave`)
       return false
@@ -2359,6 +2370,25 @@ export async function pasteLinkFromHome(driver, link) {
  * Returns "agent-home" when it had to walk, "panel" when the tab landed there
  * already — an unlinked phone still goes straight to the panel.
  */
+/**
+ * Open My Agent and say which surface it is: "panel" (a phone whose build
+ * names its agent, or a build before the one-agent screen) or "agent home" (a
+ * linked phone on the one-agent screen). Only the "no panel from here" answer
+ * becomes "agent home", and only when the home is really on screen; anything
+ * else (a locked wallet, no tab) still throws.
+ */
+export async function openMyAgentSurface(driver) {
+  try {
+    return await openMyAgentPanel(driver)
+  } catch (error) {
+    if (!/operator panel is not reachable/.test(String(error?.message))) throw error
+    if ((await existsTestId(driver, "AgentSeat", 5000)) || (await byTestId(driver, "AgentDoors").isExisting().catch(() => false))) {
+      return "agent home"
+    }
+    throw error
+  }
+}
+
 export async function openMyAgentPanel(driver) {
   await (await waitForTestId(driver, "MyAgent", 30000)).click()
   await sleep(2500)

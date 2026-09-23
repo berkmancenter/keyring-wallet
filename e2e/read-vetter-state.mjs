@@ -11,7 +11,7 @@
  */
 import { createSession, ensureAppium, stopAppium, sleep, waitForTestId, byTestId, existsTestId } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
-import { unlockIfLocked, openMyAgentPanel } from "./lib/flows.js";
+import { unlockIfLocked, openMyAgentSurface } from "./lib/flows.js";
 
 const PARK = process.env.PARK || "myagent";
 const textOf = async (d, key) => (await byTestId(d, key).getAttribute("label").catch(() => "")) || "";
@@ -29,7 +29,7 @@ try {
   await sleep(2500);
   await unlockIfLocked(driver).catch(() => undefined);
   // A linked phone has no panel on the one-agent screen: it reads the agent home.
-  const surface = await openMyAgentPanel(driver).catch(() => "agent home");
+  const surface = await openMyAgentSurface(driver);
   await sleep(4000);
   console.log(`surface: ${surface}`);
 
