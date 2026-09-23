@@ -1,6 +1,6 @@
 # Zero-knowledge in Keyring — where the proofs live, and what the wallet does about them
 
-**Status:** Proposed. No code written. Execution starts only on instruction; until then this plan tracks upstream and keeps its dependencies current.
+**Status:** Proposed. No code written. **Held at ZK0 by decision, not by drift:** the client half of hidden vetting cannot be designed against guessed message shapes, so this plan waits for upstream's specifications and services rather than starting early and rewriting later. Until then it tracks upstream and keeps its dependencies current.
 **Reasoning:** [`2026-09-22-al.md`](./zero-knowledge-plan/2026-09-22-al.md) — the research behind §2–§4: the positions it supersedes (on-device proving), the evidence for each, and what was not verifiable.
 **Siblings consulted:** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 owns the credential-format decisions this plan inherits (VRC/VWC proof sets, evidence commitments, canonical transcript); [`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client architecture, consent card and approvals this plan's step-up rides on; [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) owns the V0 vetting ceremony that hidden vetting keeps unchanged, and its §2.4 decision gates Track Z1; [`vsc-migration-plan.md`](./vsc-migration-plan.md) owns the witness-credential type Track Z2 would present; [`ui-ux-improvements-plan.md`](./ui-ux-improvements-plan.md) owns the vetting screens Track Z1 changes.
 **Dependency direction:** nothing in the sibling plans waits on this one. This plan waits on upstream (§8) and on two sibling decisions (§3.3, §3.4).
@@ -201,6 +201,14 @@ Implement §4.1's table on the screens of [`ui-ux-improvements-plan.md`](./ui-ux
 
 **Depends on** ZK1, ZK2, and upstream's `vtc-service` and `vta-service` steps.
 
+**Rides the V0 refusal machinery rather than a second copy of it.** Two facts about the built ceremony decide how hidden mode attaches, and both are recent:
+
+- **One chooser, two refusal points.** `pickOwnVetterGrant` is the single place a vetter's own grant is chosen and its state read (keyring-bifold#70). The vetting desk refuses to *cut* a ticket while no grant is live, and the module refuses to *redeem* a ticket already in the wild, before it is spent. Hidden mode adds `atCapacity` as a third standing, and it attaches at the same two points: the desk withholds, the module declines. It must not introduce a parallel notion of "can I vouch right now".
+- **Grant standing is public; capacity is not.** Withholding on grant state is safe, because who holds the vetter role is already public. Withholding on *token* state is the thing hidden mode exists to hide, so capacity must surface only as a per-request `atCapacity` decline with its `availableFrom`, never as a change in what an applicant can observe before asking. The directory listing never toggles.
+- **The two sides must tell one story.** The existing gate asserts that the desk's wording and the applicant's refusal reason agree on one fact; hidden mode extends that assertion to `atCapacity` rather than relaxing it.
+
+The refusal matrix has a harness already: `E2E_REFUSAL=dead-grant` in `run-vti-vetting.js` and `run-vetter-grant-lifecycle.js` (keyring-wallet#94, keyring-bifold#71). ZK3 adds hidden-mode cases to those rather than writing a new runner.
+
 **Done when:** the vetting subtask's V0 e2e matrix re-runs green in hidden mode on the local stack in all four pairings (Keyring or headless openvtc as vetter × Keyring or openvtc as applicant). A test asserts the VTC's token-fetch log is identical for a vetter who attested and one who did not (C3). A test asserts that nothing of §3.2 item 4 exists in the app's store after a full admission. The demo script contains no anonymity claim on a single-operator stack (§3.5).
 
 ### ZK4 — Private presentation (Z2)
@@ -213,6 +221,14 @@ Implement §4.1's table on the screens of [`ui-ux-improvements-plan.md`](./ui-ux
 **Done when:** a verifier receives a presentation that verifies and discloses no R-DID; two presentations of the same credential are not linkable by any member the verifier sees; the phone's copy of the credential is unchanged by the deposit.
 
 ## 7. Interfaces with sibling plans
+
+### 7.0 What the work in flight already gives this plan
+
+None of this was built for zero knowledge, and three pieces of it are load-bearing anyway. Naming them here is what stops Z1 from re-deriving them later:
+
+- **A build that can point at any VTA and any community.** Hidden mode's deployment rule (§3.5) is unsatisfiable on a build with a baked-in lab: one operator holds everything. The "any VTA, any community by link" work, and the dynamic persona and community legs behind it — a persona session rides the mediator its **own** DID document names — are what let a Keyring member sit on one operator's VTA while the community runs on another's. That is the mediator half of the same rule. So the Farm track is not a neighbour of Z1; it is the only configuration in which Z1 can be honestly tested.
+- **A vetter's own grant lifecycle, already modelled.** §4.1's table is a delta on `pickOwnVetterGrant` and the desk's standing, not a new subsystem.
+- **A findings discipline that upstream reads.** `docs/VTI_UPSTREAM_FINDINGS.md` is where this plan's one upstream ask already lives (VTI-Q16), in a format whose entries carry a workaround and a reference set. Every further ZK ask goes there rather than into this document.
 
 | Sibling | What this plan needs from it | What it gets back |
 |---|---|---|
@@ -228,6 +244,16 @@ Implement §4.1's table on the screens of [`ui-ux-improvements-plan.md`](./ui-ux
 
 - **D2** — §3.4: BBS issuer key custody (R-DID or VTA `did:webvh`) and post-issuance proof addition. Blocks ZK4.
 - **D3** — whether Keyring pursues the vetter role at all, or stays applicant-only in hidden mode. The table in §4.1 assumes both. Blocks ZK3's scope.
+
+**Watch triggers** — the concrete artifacts whose appearance unblocks something, so a blocked item is noticed when it moves rather than rediscovered:
+
+| Trigger | Unblocks |
+|---|---|
+| `predicate-credential-system` becomes readable, or a crate is published | ZK0 (B1) |
+| A `vta/pcs/*` task URI appears in any readable spec, even a draft | ZK1 (B2) |
+| A VTI release whose `vta-service` carries the PCS key kind | ZK2, ZK3 (B3) |
+| A manifest field, or a Farm signal, naming the operator of a VTA or mediator | §3.5, VTI-Q16 (B5) |
+| The BBS audit completes, or DTG ZKP V1.0 publishes | ZK4 (B6) |
 
 **Decided upstream, waiting on someone else:**
 
