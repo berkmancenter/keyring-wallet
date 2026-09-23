@@ -158,6 +158,16 @@ async function testerJourney(driver) {
       throw new Error(`the suggested community is offered as "${offered}" — a hostname or DID, not a name`);
     }
     console.log(`[e2e] journey: the suggested community is called "${offered}"`);
+    // The named path: when the suggestion is the run's own community and that
+    // community publishes a name, the card must offer that name. A fresh phone
+    // was once told a named community had none, because nothing had read it yet.
+    const shows = process.env.KEYRING_COMMUNITY_SHOWS_AS;
+    const host = (process.env.KEYRING_COMMUNITY_DID || "").split(":")[3] || "";
+    const where = (await existsTestId(driver, "JoinSuggestedWhere", 2000)) ? await textOf(driver, "JoinSuggestedWhere") : "";
+    if (shows && host && where.includes(host) && offered !== shows) {
+      await screenshot(driver, "journey-suggestion-unnamed");
+      throw new Error(`the suggested community publishes "${shows}" but is offered as "${offered}"`);
+    }
   }
   if (await existsTestId(driver, "JoinThisCommunity", 10000)) await tapTestId(driver, "JoinThisCommunity", 5000);
   await waitForTestId(driver, "JoinAsks", 15000);
