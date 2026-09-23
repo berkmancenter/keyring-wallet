@@ -18,6 +18,7 @@
  */
 import "./lib/cli-guard.js";
 import { createSession, deviceTag, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
+import { MAY_FLIP_CRITERIA, criteriaNote } from "./lib/criteria.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
@@ -210,7 +211,8 @@ async function waitText(d, key, re, ms = 120000) {
 let applicant, vetter, keepalive;
 try {
   await holdCriteriaLock("vetting " + (process.env.E2E_REFUSAL || "").trim());
-  execFileSync("bash", [INVITE, "--vetting-only"], { stdio: "inherit" });
+  if (MAY_FLIP_CRITERIA) execFileSync("bash", [INVITE, "--vetting-only"], { stdio: "inherit" });
+  else criteriaNote("making it vetting-only");
   execFileSync("bash", [APPROVER, "clear"], { stdio: "ignore" });
   await ensureAppium();
   // A real iPhone/iPad per role when its UDID is given; otherwise a simulator.
@@ -787,7 +789,7 @@ try {
   }
 } finally {
   if (keepalive) clearInterval(keepalive);
-  try { execFileSync("bash", [INVITE, "--restore-invited"], { stdio: "ignore" }); } catch { /* best effort */ }
+  if (MAY_FLIP_CRITERIA) try { execFileSync("bash", [INVITE, "--restore-invited"], { stdio: "ignore" }); } catch { /* best effort */ }
   if (revokedVetterDid) {
     // A revoked grant cannot be un-revoked; issue a new one and hand it over.
     try {
