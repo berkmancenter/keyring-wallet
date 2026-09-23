@@ -3,7 +3,7 @@
  * doors and where they are on the journey — and the vetter role appears only
  * when a grant stands, never as a locked button up front.
  */
-import { useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 import { DeviceEventEmitter } from 'react-native'
@@ -18,6 +18,11 @@ import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import VtaAgentHome from '../screens/VtaAgentHome'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+// The shared navigation mock, with focus under the test's control.
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
+  useIsFocused: jest.fn(() => true),
+}))
 const mockGrantState = jest.fn()
 jest.mock('../module/vtiGrantState', () => ({
   ownVetterGrantState: (...args: unknown[]) => mockGrantState(...args),
@@ -219,6 +224,33 @@ describe('Your agent — after linking', () => {
       jest.advanceTimersByTime(10)
     })
     expect(tree.getByTestId(testIdWithKey('AgentVetterCard'))).toBeTruthy()
+  })
+
+  it('reads what the agent holds again when the screen comes back into view', async () => {
+    // It stays mounted under Join and Vetting: an identity made there must show on return.
+    const focused = useIsFocused as unknown as jest.Mock
+    const records: Rec[] = []
+    const tree = await renderHome(records)
+    expect(tree.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatNone')
+    focused.mockReturnValue(false)
+    tree.rerender(
+      <BasicAppContext>
+        <VtaAgentHome />
+      </BasicAppContext>
+    )
+    records.push(persona)
+    focused.mockReturnValue(true)
+    tree.rerender(
+      <BasicAppContext>
+        <VtaAgentHome />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatApplicant')
+    expect(tree.getByTestId(testIdWithKey('AgentContinueVetting'))).toBeTruthy()
+    focused.mockReturnValue(true)
   })
 
   /**

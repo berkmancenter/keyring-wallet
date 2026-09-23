@@ -15,7 +15,7 @@
  */
 
 import { useAgent } from '@bifold/react-hooks'
-import { useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
@@ -150,9 +150,14 @@ const VtaAgentHome: React.FC = () => {
     }
   }, [agent])
 
+  // Read again whenever the screen comes back into view. It stays mounted
+  // under Join and Vetting, so without this a phone that had just made its
+  // identity came back to "You have not joined a community yet" and no way
+  // back into vetting, until a pull to refresh (Farm gate, 2026-09-23).
+  const isFocused = useIsFocused()
   useEffect(() => {
-    void load()
-  }, [load])
+    if (isFocused) void load()
+  }, [load, isFocused])
   // A grant, a card or an invitation that arrives while this screen is open
   // shows without a visit to Vetting: the persona inbox says when it stored one.
   useVtiPersonaDeliveries(() => void load())
