@@ -404,6 +404,36 @@ export async function unlockIfLocked(driver) {
     for (let i = 0; i < 10 && (await pinInput.isExisting()); i++) await sleep(500);
   }
   await sleep(3000);
+  // Postcondition, because the tap helper can believe it is done when it is
+  // not: its verify() is a single 1500ms existence check, and a transient miss
+  // under load makes it report "already satisfied, no tap needed" and skip the
+  // tap — leaving the wallet locked. Measured 2026-09-23 with two iOS
+  // simulators on one Appium: the run then waited out 300s on the next
+  // element, on a phone still showing the PIN pad. Confirm the goal rather
+  // than trusting the mechanism.
+  // Be CONSERVATIVE about what "unlocked" means. The first version of this
+  // postcondition asked existsTestId(..., 4000) and treated "not seen" as
+  // "gone" — which is the very mistake it was written to catch, one layer up:
+  // with two simulators sharing one Appium, commands serialise and a lookup
+  // can miss a control that is plainly on screen. So on any doubt, including a
+  // lookup that throws, assume STILL LOCKED and try again; a redundant retry
+  // costs seconds, while a false "unlocked" costs the run 300s and a red that
+  // names the wrong thing.
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const stillLocked = await byTestId(driver, "EnterPIN")
+      .isExisting()
+      .catch(() => true);
+    if (!stillLocked) break;
+    console.log(`[e2e] ${deviceTag(driver)}: still on the PIN screen — entering it again (${attempt}/4)`);
+    const again = byTestId(driver, "EnterPIN");
+    await again.click().catch(() => undefined);
+    await again.setValue(PIN).catch(() => undefined);
+    if (await byTestId(driver, "Enter").isExisting().catch(() => false)) {
+      await hideKeyboard(driver).catch(() => undefined);
+      await tapTestId(driver, "Enter", 30000).catch(() => undefined);
+    }
+    await sleep(5000);
+  }
   return true;
 }
 
@@ -2151,7 +2181,45 @@ export async function pasteLinkOnScanScreen(driver, url) {
  */
 export async function leaveCommunityInApp(driver) {
   await dismissTourIfPresent(driver);
-  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  // Everything below reads operator-panel ids (MyAgentCard, MyAgentCommunityRow,
+  // MyAgentMembershipCard). keyring-bifold#11 means a LINKED phone lands on the
+  // agent home instead, where none of them exist — so this read "the agent never
+  // connected" about a phone plainly showing "Online", and threw after 180s
+  // rather than reporting the truth, which was that it holds no community and
+  // there is nothing to leave (2026-09-23).
+  // A linked phone that is NOT a member has no route to the panel at all:
+  // "Open my communities" (AgentOpenCommunities) renders only inside the
+  // isMember branch of the agent home's AgentDoors card, and the other branch
+  // says "What brings you here?". So check that state FIRST and answer it
+  // directly — a non-member has nothing to leave, which is a positive reading
+  // of the screen rather than a failure to find a row. Without this the reset
+  // hunted panel ids on the agent home and reported "the agent never
+  // connected" about a phone showing "Online" (2026-09-23).
+  await (await waitForTestId(driver, "MyAgent", 30000)).click()
+  await sleep(2000)
+  if (
+    (await byTestId(driver, "AgentDoors").isExisting().catch(() => false)) &&
+    !(await existsTestId(driver, "AgentOpenCommunities", 3000))
+  ) {
+    // LIMITATION, stated loudly because this function's whole doctrine is that
+    // a silent skip is worse than a failure. "Not a member" is NOT the same as
+    // "a fresh applicant": a phone can hold a community persona and an
+    // in-flight vetting request while still being a non-member, and on this
+    // build the agent home shows no marker for it (AgentJourney is the
+    // Linked/Join/Member strip, always rendered; AgentContinueVetting does not
+    // exist yet). So this cannot clear that state and cannot see it.
+    // 2026-09-23: skipping it here let a previous run's applicant identity
+    // survive, and the next run's join silently took the "you already have an
+    // identity" path and failed 4 minutes later on a missing name field.
+    console.log(`[e2e] ${deviceTag(driver)}: linked, member of nothing — nothing to LEAVE`)
+    console.log(
+      `[e2e] ${deviceTag(driver)}: WARNING — cannot verify this applicant is fresh. If it ran a vetting ` +
+        `flow before, its persona and request survive and the next join will take a different path. ` +
+        `Reinstall the app on this phone between runs until a marker exists for it.`
+    )
+    return false
+  }
+  await openMyAgentPanel(driver);
   await sleep(1500);
   // My Agent lists its communities once the agent session is up; a cold
   // start offers "Connect my agent" first (as openVetting in the runner does).
@@ -2282,7 +2350,25 @@ export async function pasteLinkFromHome(driver, link) {
 export async function openMyAgentPanel(driver) {
   await (await waitForTestId(driver, "MyAgent", 30000)).click()
   await sleep(2500)
-  if (!(await existsTestId(driver, "AgentOpenCommunities", 3000))) return "panel"
+  // "No AgentOpenCommunities" is NOT proof of being on the panel — it is also
+  // what a linked phone looks like once that button goes away (keyring-bifold
+  // #11's redesign removes it). Left as an inference, this reports success and
+  // then nothing is found, which presents identically to a wallet that lost its
+  // data. So confirm a panel id is actually present, and say so plainly if not.
+  if (!(await existsTestId(driver, "AgentOpenCommunities", 3000))) {
+    const onPanel =
+      (await byTestId(driver, "MyAgentCard").isExisting().catch(() => false)) ||
+      (await byTestId(driver, "MyAgentCommunityRow").isExisting().catch(() => false)) ||
+      (await byTestId(driver, "MyAgentVettingRow").isExisting().catch(() => false)) ||
+      (await byTestId(driver, "MyAgentIdentityCard").isExisting().catch(() => false))
+    if (!onPanel) {
+      throw new Error(
+        `[${deviceTag(driver)}] the operator panel is not reachable from here: no "AgentOpenCommunities" to walk through and no MyAgent* id on screen. ` +
+          `On a build where a linked phone no longer has a panel, read the agent home instead (AgentVetterCard/AgentVetterLapsed/AgentMemberRow).`
+      )
+    }
+    return "panel"
+  }
   await tapTestIdReliable(driver, "AgentOpenCommunities", () => existsTestId(driver, "AgentOpenCommunities", 1500).then((v) => !v), {
     attempts: 3,
     settleMs: 2500,

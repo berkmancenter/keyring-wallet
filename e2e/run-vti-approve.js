@@ -12,7 +12,7 @@
  */
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
-import { openDeveloperScreen, unlockIfLocked } from "./lib/flows.js";
+import { openDeveloperScreen, openMyAgentPanel, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -66,7 +66,11 @@ async function managerDidOf(driver) {
 
 /** My Agent gates on the VTA session now: connect first, then wait for it. */
 async function openMyAgentConnected(d, timeout = 180000) {
-  await (await waitForTestId(d, "MyAgent", 30000)).click();
+  // Both ids this waits for below (MyAgentIdentityCard, MyAgentCard) live on
+  // the operator panel, which a linked phone no longer lands on
+  // (keyring-bifold#11). Accepting either one does not help when the screen
+  // itself is wrong — walk to the panel first.
+  await openMyAgentPanel(d);
   await sleep(1500);
   const connect = await byTestId(d, "ConnectMyAgentButton");
   if (await connect.isExisting().catch(() => false)) {

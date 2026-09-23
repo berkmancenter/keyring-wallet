@@ -16,7 +16,7 @@
  * Two real iOS devices: PLATFORMS=ios,ios APPLICANT_IOS_UDID=… VETTER_IOS_UDID=…
  *   (each gets its own WebDriverAgent port: 8131 applicant, 8130 vetter)
  */
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
+import { createSession, deviceTag, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
@@ -126,7 +126,24 @@ async function unlockToHome(d) {
   // probe reports with an alert as the Developer screen mounts — which hides
   // every testID behind it until it is dismissed.
   for (let i = 0; i < 4; i++) if (!(await d.acceptAlert().then(() => true, () => false))) break;
-  await waitForTestId(d, "Contacts", 300000);
+  // The wallet auto-locks on inactivity, and a two-phone run leaves one phone
+  // idle for minutes while the other is driven — so the PIN screen can arrive
+  // DURING this wait, not only before it. Checking for it once up front (as
+  // this did) leaves the run staring at a PIN pad for the full 300s and then
+  // blaming the element it was waiting for. Poll for the goal, and unlock
+  // again whenever the lock screen is what turned up instead.
+  const untilHome = Date.now() + 300000;
+  for (;;) {
+    if (await byTestId(d, "Contacts").isExisting().catch(() => false)) break;
+    if (Date.now() > untilHome) {
+      throw new Error(`[${deviceTag(d)}] never reached the home tabs — last seen ${(await byTestId(d, "EnterPIN").isExisting().catch(() => false)) ? "the PIN screen" : "neither Contacts nor the PIN screen"}`);
+    }
+    if (await byTestId(d, "EnterPIN").isExisting().catch(() => false)) {
+      console.log(`[e2e] ${deviceTag(d)}: locked again while waiting for the home tabs — unlocking`);
+      await unlockIfLocked(d);
+    }
+    await sleep(3000);
+  }
   await sleep(4000);
 }
 async function openVetting(d) {
