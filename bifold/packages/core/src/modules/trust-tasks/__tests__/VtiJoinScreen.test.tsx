@@ -178,6 +178,19 @@ describe('I want to join a community', () => {
     expect(tree.getByTestId(testIdWithKey('JoinSuggestedSource'))).toHaveTextContent('Join.Remembered')
   })
 
+  it('a remembered community that does not answer says so, beside a different one', async () => {
+    // An upgrader from a build that named the lab: the lab may be gone.
+    communityTarget.choose(suggested)
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinRememberedUnreachable'))).toHaveTextContent('Join.RememberedUnreachable')
+    expect(tree.getByTestId(testIdWithKey('JoinScanCommunity'))).toBeTruthy()
+  })
+
+  it('a suggested community that does not answer is not called gone', async () => {
+    const tree = await renderJoin()
+    expect(tree.queryByTestId(testIdWithKey('JoinRememberedUnreachable'))).toBeNull()
+  })
+
   it('a community chosen by a link goes straight to what it asks, and is the one joined', async () => {
     communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
     const tree = await renderJoin()

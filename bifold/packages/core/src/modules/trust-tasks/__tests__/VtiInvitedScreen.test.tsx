@@ -5,14 +5,18 @@
  * shared carries the identity for the admin.
  */
 import Clipboard from '@react-native-clipboard/clipboard'
+import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { communityTarget } from '../module/vtiCommunityLink'
+import { communityLinkReturn } from '../module/vtiLinks'
 import VtiInvited from '../screens/VtiInvited'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -157,5 +161,61 @@ describe('I was invited', () => {
       expect.objectContaining({ subjectDid: personaDid })
     )
     expect(tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+  })
+})
+
+/**
+ * A store build names no community: testers bring their own. The admin
+ * invites an identity made for a community, so "I was invited" asks which
+ * community first — it used to say "No agent is configured for this build".
+ */
+describe('I was invited, on a build that names no community', () => {
+  const linked = {
+    kind: 'linked',
+    vtaDid: 'did:webvh:example:vta',
+    label: 'bob',
+    linkedAt: '2026-09-22T00:00:00Z',
+    connection: { kind: 'online', since: 0 },
+  }
+  beforeEach(() => {
+    jest.useFakeTimers()
+    communityTarget.clear()
+    communityLinkReturn.take()
+  })
+  afterEach(() => jest.useRealTimers())
+
+  const controller = vtaAgent as unknown as Setter
+  const mockUseAgent = useAgent as jest.Mock
+  const renderEmpty = async () => {
+    mockUseAgent.mockReturnValue(fakeAgent([]))
+    const tree = render(
+      <BasicAppContext>
+        <VtiInvited config={{}} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    return tree
+  }
+
+  it('asks which community invited you, and brings its link back here', async () => {
+    controller.set({ link: linked })
+    const tree = await renderEmpty()
+    expect(tree.getByTestId(testIdWithKey('InvitedWhichCommunity'))).toBeTruthy()
+    expect(tree.queryByText('MyAgent.NotConfigured')).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('InvitedScanCommunity'))))
+    // The community link the person brings back lands on this screen, not on Join.
+    expect(communityLinkReturn.take()).toBe(true)
+  })
+
+  it('with no agent linked, says so and offers linking', async () => {
+    controller.set({ link: { kind: 'notLinked' } })
+    const navigate = useNavigation().navigate as jest.Mock
+    navigate.mockClear()
+    const tree = await renderEmpty()
+    expect(tree.getByTestId(testIdWithKey('InvitedNeedsAgent'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('InvitedLinkAgent'))))
+    expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
   })
 })

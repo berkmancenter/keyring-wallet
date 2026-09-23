@@ -3,12 +3,14 @@
  * testers link their own; the screen must take the linked one, or it stops at
  * "No agent is configured for this build" before a person can do anything.
  */
-import { render, act } from '@testing-library/react-native'
+import { useNavigation } from '@react-navigation/native'
+import { render, act, fireEvent } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import VtiVetting, { requestRef, requestTestKey } from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
@@ -103,8 +105,26 @@ describe('Vetting — the agent it works with', () => {
     expect(tree.queryByTestId(testIdWithKey('VettingCreateIdentityButton'))).toBeTruthy()
   })
 
+  test('a linked agent and no community: says to join one, and offers Join', async () => {
+    setVta({ link: linked })
+    const navigate = useNavigation().navigate as jest.Mock
+    navigate.mockClear()
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={{}} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('VettingNeedsCommunity'))).toBeTruthy()
+    expect(tree.queryByText('MyAgent.NotConfigured')).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('VettingJoinCommunity'))))
+    expect(navigate).toHaveBeenCalledWith(Screens.VtiJoin)
+  })
+
   test('no linked agent and no build VTA: says so', async () => {
     const tree = await renderVetting()
-    expect(tree.queryByText('MyAgent.NotConfigured')).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VettingNeedsAgent'))).toHaveTextContent('Join.NeedsAgent')
   })
 })

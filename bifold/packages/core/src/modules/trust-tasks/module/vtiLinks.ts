@@ -51,6 +51,25 @@ export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
 }
 
 /**
+ * "I was invited" asks which community first — the admin invites an identity
+ * made for a community, so the community has to be known before any
+ * invitation exists. When it sends the person to the scanner for that, the
+ * community link they bring should land back on "I was invited", not on Join.
+ * One-shot: taken by the next community link, whoever brings it.
+ */
+let communityLinkForInvited = false
+export const communityLinkReturn = {
+  toInvited(): void {
+    communityLinkForInvited = true
+  },
+  take(): boolean {
+    const back = communityLinkForInvited
+    communityLinkForInvited = false
+    return back
+  },
+}
+
+/**
  * A vetter's ticket scanned or pasted outside the vetting screen, held until
  * that screen takes it. The applicant still asks — taking the ticket only
  * fills in what they would otherwise paste.
@@ -128,7 +147,7 @@ export async function routeKeyringAgentLink(
         throw new Error('This community link could not be read.')
       }
       communityTarget.set(link)
-      navigate('VtiJoin')
+      navigate(communityLinkReturn.take() ? 'VtiInvited' : 'VtiJoin')
       return
     }
     default:

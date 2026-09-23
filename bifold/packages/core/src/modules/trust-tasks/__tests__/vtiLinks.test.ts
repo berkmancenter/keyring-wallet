@@ -1,7 +1,12 @@
 import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifold/trust-tasks'
 
 import { vtaAgent } from '../module/vtaAgent'
-import { keyringAgentLinkKind, pendingVettingTicket, routeKeyringAgentLink } from '../module/vtiLinks'
+import {
+  communityLinkReturn,
+  keyringAgentLinkKind,
+  pendingVettingTicket,
+  routeKeyringAgentLink,
+} from '../module/vtiLinks'
 
 // Scanning, pasting and opening a deep link are one act (plan §5, U4): the
 // same routing lands an enrolment offer on the link screen and a community
@@ -100,5 +105,17 @@ describe("a vetter's ticket", () => {
     expect(heard).toHaveBeenCalledTimes(1)
     expect(pendingVettingTicket.take()).toBe(ticket)
     expect(pendingVettingTicket.take()).toBeUndefined()
+  })
+})
+
+describe('a community link brought for "I was invited"', () => {
+  const link = `keyring://vti/community?d=${encodeURIComponent('did:webvh:QmC:vtc.example')}&n=Lab`
+  it('lands back on "I was invited" once, and on Join after that', async () => {
+    const navigate = jest.fn()
+    communityLinkReturn.toInvited()
+    await routeKeyringAgentLink(link, {} as never, navigate)
+    expect(navigate).toHaveBeenLastCalledWith('VtiInvited')
+    await routeKeyringAgentLink(link, {} as never, navigate)
+    expect(navigate).toHaveBeenLastCalledWith('VtiJoin')
   })
 })

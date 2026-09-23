@@ -125,6 +125,29 @@ describe('My Agent — the connected gate', () => {
     expect(tree.queryByTestId(testIdWithKey('MyAgentNoInvitations'))).toBeNull()
   })
 
+  /**
+   * A store build names no agent, community or mediator: testers bring their
+   * own. It used to stop at "No agent is configured for this build", with the
+   * link doors behind that wall, so a fresh tester could not link at all.
+   */
+  test('a build that names nothing: the way to link, never "not configured"', async () => {
+    mockUseAgent.mockReturnValue(fakeAgent([]))
+    setVta({ link: { kind: 'notLinked' } })
+    const tree = render(
+      <BasicAppContext>
+        <MyAgent config={{}} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.queryByTestId(testIdWithKey('MyAgentNotConfigured'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('LinkYourAgentButton'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('LinkWithoutQrButton'))).toBeTruthy()
+    // With no agent there is nothing to connect to, so no button that could only fail.
+    expect(tree.queryByTestId(testIdWithKey('ConnectMyAgentButton'))).toBeNull()
+  })
+
   /** The one client for the VTA exists before the state is set, so mounting does not reset it. */
   const connectedTo = (agent: ReturnType<typeof fakeAgent>) => {
     vtaAgent.client(agent.agent as never, config.vtaDid)

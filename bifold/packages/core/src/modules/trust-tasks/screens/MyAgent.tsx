@@ -221,7 +221,6 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     [agent, vtaDid, mediatorDid, refresh, stepText, t]
   )
 
-
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 24, gap: 24 },
@@ -284,15 +283,22 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         await vtaAgent.connect(agent, vtaDid)
         if (communityDid) {
           setConnecting({ step: t('MyAgent.StepPersona') })
-          const p = await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+          const p = await ensurePersonaFor({
+            agent,
+            identityStore: new GenericRecordsIdentityStore(agent),
+            vtaDid,
+            communityDid,
+          })
           setConnecting({ step: t('MyAgent.StepConnecting', { did: shortDid(p.did) }) })
-          await vtiAgent.connect(agent, mediatorDid, { persona: p, peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent) })
+          await vtiAgent.connect(agent, mediatorDid, {
+            persona: p,
+            peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+          })
         }
-      } else {
-        // A build with no VTA: the community session with a phone-minted DID.
-        setConnecting({ step: t('MyAgent.Resolving') })
-        await vtiAgent.connect(agent, mediatorDid)
       }
+      // No agent, no connect: a phone reaches a community through its agent.
+      // (A build-named mediator once let a phone mint its own did:peer here; a
+      // store build names none, and that path could only fail.)
       await refresh()
     } catch (error) {
       setConnectError(error instanceof Error ? error.message : String(error))
@@ -306,7 +312,11 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const agentConnected = vtaDid ? vta.status === 'connected' : state.status === 'connected'
 
   const viaText = (via: VtiMembership['via']) =>
-    via === 'invitation' ? t('MyAgent.ViaInvitation') : via === 'vetting' ? t('MyAgent.ViaVetting') : t('MyAgent.ViaApproval')
+    via === 'invitation'
+      ? t('MyAgent.ViaInvitation')
+      : via === 'vetting'
+        ? t('MyAgent.ViaVetting')
+        : t('MyAgent.ViaApproval')
 
   // The star of the connected screen: one entry, and the seat named before it
   // is opened. A vetter grant makes this phone the desk; otherwise it is the
@@ -325,11 +335,15 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           <Text style={styles.heroTitle}>{t('Vetting.Title')}</Text>
         </View>
         <View style={styles.badge} testID={testIdWithKey('MyAgentVettingSeat')}>
-          <Text style={styles.badgeText}>{seat === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}</Text>
+          <Text style={styles.badgeText}>
+            {seat === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}
+          </Text>
         </View>
         <Text style={styles.heroText}>{seat === 'vetter' ? t('Vetting.HeroVetter') : t('Vetting.HeroApplicant')}</Text>
         <View style={styles.heroButton} testID={testIdWithKey('MyAgentVettingOpen')}>
-          <Text style={styles.heroButtonText}>{seat === 'vetter' ? t('Vetting.OpenDesk') : t('Vetting.GetVetted')}</Text>
+          <Text style={styles.heroButtonText}>
+            {seat === 'vetter' ? t('Vetting.OpenDesk') : t('Vetting.GetVetted')}
+          </Text>
           <Icon name="chevron-right" size={20} color={ColorPalette.brand.primary} />
         </View>
       </Pressable>
@@ -388,21 +402,32 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <View style={styles.row}>
               <ActivityIndicator color={ColorPalette.brand.primary} />
               <Text style={styles.value} testID={testIdWithKey('MyAgentAwaitingConsent')}>
-                {t('MyAgent.AwaitingConsent', { task: shortTask(vta.awaitingConsentFor), interpolation: { escapeValue: false } })}
+                {t('MyAgent.AwaitingConsent', {
+                  task: shortTask(vta.awaitingConsentFor),
+                  interpolation: { escapeValue: false },
+                })}
               </Text>
             </View>
           ) : null}
           {vta.approvals.length === 0 ? (
             <Text style={styles.value} testID={testIdWithKey('MyAgentNoApprovals')}>
-              {vta.status === 'connected' ? `${t('MyAgent.NoApprovals')} ${t('MyAgent.AgentListening')}` : t('MyAgent.NoApprovals')}
+              {vta.status === 'connected'
+                ? `${t('MyAgent.NoApprovals')} ${t('MyAgent.AgentListening')}`
+                : t('MyAgent.NoApprovals')}
             </Text>
           ) : (
             vta.approvals.map((approval) => (
               <View key={approval.id} style={styles.card} testID={testIdWithKey('MyAgentApprovalCard')}>
                 <Text style={styles.value}>
-                  {t('MyAgent.ApprovalAsks', { requester: shortDid(approval.requester), task: shortTask(approval.taskType), interpolation: { escapeValue: false } })}
+                  {t('MyAgent.ApprovalAsks', {
+                    requester: shortDid(approval.requester),
+                    task: shortTask(approval.taskType),
+                    interpolation: { escapeValue: false },
+                  })}
                 </Text>
-                <Text style={styles.label}>{t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}</Text>
+                <Text style={styles.label}>
+                  {t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}
+                </Text>
                 {approval.status === 'pending' ? (
                   <View style={styles.row}>
                     <Pressable
@@ -429,7 +454,11 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                     style={approval.status === 'failed' ? styles.error : styles.value}
                     testID={testIdWithKey('MyAgentApprovalDecided')}
                   >
-                    {approval.status === 'approved' ? t('MyAgent.Approved') : approval.status === 'denied' ? t('MyAgent.Denied') : approval.error ?? approval.status}
+                    {approval.status === 'approved'
+                      ? t('MyAgent.Approved')
+                      : approval.status === 'denied'
+                        ? t('MyAgent.Denied')
+                        : (approval.error ?? approval.status)}
                   </Text>
                 )}
               </View>
@@ -497,7 +526,9 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           <Text style={styles.label}>{t('MyAgent.NotAMember')}</Text>
         </Pressable>
       ) : null}
-      {!communityDid && memberships.length === 0 ? <Text style={styles.value}>{t('MyAgent.NoCommunities')}</Text> : null}
+      {!communityDid && memberships.length === 0 ? (
+        <Text style={styles.value}>{t('MyAgent.NoCommunities')}</Text>
+      ) : null}
 
       {activity.length > 0 || holdingError ? (
         <>
@@ -519,19 +550,10 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     </>
   )
 
-
-  // Nothing to reach without an agent or a mediator to fall back on.
-  if (!mediatorDid && !vtaDid) {
-    return (
-      <SafeAreaView style={styles.container} edges={['left', 'right']}>
-        <View style={styles.content}>
-          <Text style={styles.value} testID={testIdWithKey('MyAgentNotConfigured')}>
-            {t('MyAgent.NotConfigured')}
-          </Text>
-        </View>
-      </SafeAreaView>
-    )
-  }
+  // A build that names nothing (a store build: testers bring their own agent
+  // and community) falls through to "Link your agent" below. It used to stop
+  // here at "No agent is configured for this build", with the link doors
+  // behind it, so a fresh tester could not link at all.
 
   // S3 — connecting. Each step is named, because "please wait" tells a person
   // nothing about which leg is slow when one is.
@@ -557,7 +579,10 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           </View>
           {vta.awaitingConsentFor ? (
             <Text style={styles.label} testID={testIdWithKey('MyAgentAwaitingConsent')}>
-              {t('MyAgent.AwaitingConsent', { task: shortTask(vta.awaitingConsentFor), interpolation: { escapeValue: false } })}
+              {t('MyAgent.AwaitingConsent', {
+                task: shortTask(vta.awaitingConsentFor),
+                interpolation: { escapeValue: false },
+              })}
             </Text>
           ) : null}
         </View>
@@ -605,7 +630,12 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               </Text>
             ) : null}
             {!state.did && communityDid ? (
-              <Pressable style={styles.button} testID={testIdWithKey('ConnectCommunityButton')} accessibilityRole="button" onPress={onConnect}>
+              <Pressable
+                style={styles.button}
+                testID={testIdWithKey('ConnectCommunityButton')}
+                accessibilityRole="button"
+                onPress={onConnect}
+              >
                 <Text style={styles.buttonText}>{t('MyAgent.ConnectCommunity')}</Text>
               </Pressable>
             ) : null}
