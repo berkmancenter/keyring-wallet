@@ -16,7 +16,7 @@
  * Two real iOS devices: PLATFORMS=ios,ios APPLICANT_IOS_UDID=… VETTER_IOS_UDID=…
  *   (each gets its own WebDriverAgent port: 8131 applicant, 8130 vetter)
  */
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
+import { createSession, deviceTag, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestIdByCoordinates, tapElement, tapTestIdReliable } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/config.js";
 import os from "node:os";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
@@ -419,12 +419,47 @@ try {
     // Confirm the tap did something: a request card appears once the request is
     // saved. Without this the run announces "request sent" on a tap it never
     // verified, and the failure surfaces much later as the vetter not accepting.
+    //
+    // But "a card exists" is only evidence on the FIRST use. This function is
+    // called twice by design (dead-grant re-presents the same ticket), and the
+    // second time the refused request's card and status are still on screen —
+    // so the check passes BEFORE any tap, tapTestIdReliable reports "already
+    // satisfied, no tap needed", and the run announces a request it never sent.
+    // The stale "Refused" then fails the final assertion, which reads as the
+    // product having spent the ticket. Measured 2026-09-23.
+    //
+    // So verify a CHANGE from what was on screen before the tap, not a state
+    // that a previous attempt already satisfies.
+    const statusBefore = await textOf(applicant, "VettingRequestStatus").catch(() => "");
+    const cardBefore = await byTestId(applicant, "VettingRequestCard").isExisting().catch(() => false);
     await tapTestIdReliable(
       applicant,
       "VettingRequestButton",
-      () => byTestId(applicant, "VettingRequestCard").isExisting().catch(() => false),
+      async () => {
+        const card = await byTestId(applicant, "VettingRequestCard").isExisting().catch(() => false);
+        if (!cardBefore) return card;
+        const now = await textOf(applicant, "VettingRequestStatus").catch(() => "");
+        return now !== statusBefore;
+      },
       { attempts: 4, settleMs: 3000 }
-    );
+    ).catch((err) => {
+      // On a re-presentation the screen gives us nothing that changes whether
+      // the answer is Accepted or Refused: the card is keyed by vetter, it
+      // carries no request id or timestamp, and the only submit-time signal is
+      // a transient busy indicator with no testID. So if the status never
+      // moved, "the tap did not land" and "it landed and was refused again"
+      // are INDISTINGUISHABLE from here — and the second of those is the very
+      // bug this rung exists to catch. Say that, rather than reporting a tap
+      // failure and burying a product finding as a harness one.
+      if (!cardBefore) throw err;
+      throw new Error(
+        `[${deviceTag(applicant)}] re-presented the ticket and the status stayed "${statusBefore}". ` +
+          `This run CANNOT tell whether the request was never sent or was sent and refused again — ` +
+          `the screen exposes no per-request id, timestamp or pending state. Treat as INCONCLUSIVE, ` +
+          `not as a refusal that spent the ticket. Needs a testID on the request card (id or timestamp) ` +
+          `or on the submit's busy state. Original: ${err.message}`
+      );
+    });
     console.log(`[e2e] ${applicant.e2ePlatform}: request sent`);
   };
 
