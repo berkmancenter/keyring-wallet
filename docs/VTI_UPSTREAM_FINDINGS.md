@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.36 — 2026-09-22.** A living document: every finding here was measured
+**Version 1.37 — 2026-09-23.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1791,7 +1791,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). |
 | ~~VTI-Q15~~ | ~~Does `first-vtc` serve TSP Rev 3 today, and are the Farm and storm mediators on each other's relay allowlists?~~ | **Promoted to [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) (2026-09-22).** The community serves TSP (same-mediator control: accept in 1.15 s); an accept is never returned across two mediators; the allowlist is not the cause under defaults. |
 | VTI-Q16 | Could a community's manifest, or the VTA and mediator documents, say whether the operator of a member's VTA and of the mediator differs from the VTC's operator, so a client can tell a vetter whether hidden-mode anonymity holds for them? | The hidden-vetter design makes it a deployment rule that the vetter's VTA and the mediator are not run by the VTC's operator: a vetter's VTA can compute every tag its user produces. Nothing a client can read says which operator runs what, so a Farm hosting both a member's VTA and the community's VTC would silently void anonymity. [Details](#question-details). |
-| VTI-Q17 | Could `vta/webvh/dids/create/1.0` take an idempotency key — a retry returning the first mint — or `vta/webvh/dids/list/1.0` carry the label the client sent and the minted keys' ids? | A mint whose answer is lost succeeds at the VTA and fails for the person (measured twice: once on the Farm, once in the lab). The client cannot recover it: the list route's record (`vta-sdk/src/webvh.rs` `WebvhDidRecord`) carries neither the label nor the key ids it needs to borrow, so a retry is the only move and it leaves an orphan DID on the VTA and the DID host. [Details](#question-details). |
+| VTI-Q17 | Could `vta/webvh/dids/create/1.0` take an idempotency key — a retry returning the first mint — or `vta/webvh/dids/list/1.0` carry the label the client sent and the minted keys' ids? | A mint whose answer is lost succeeds at the VTA and fails for the person (measured three times: on the Farm, in the lab, and on a real phone running a shipped build). The client cannot recover it: the list route's record (`vta-sdk/src/webvh.rs` `WebvhDidRecord`) carries neither the label nor the key ids it needs to borrow, so a retry is the only move and it leaves an orphan DID on the VTA and the DID host. [Details](#question-details). |
 | VTI-Q18 | Could the Full Stack wizard echo the admin DID it imported, and label which component each admin key is for? | The Admin DID step accepts any `did:key` and shows nothing back. A key meant for the VTC was pasted there and became the stack VTA's admin; the mistake surfaced only when the first `pnm` call was refused ("DID not in ACL … has your admin run `vta import-did …`?"). An echo on the session page, and in the Collected DIDs card, would make the step checkable. [Details](#question-details). |
 ### Question details
 
@@ -1910,9 +1910,24 @@ offer that a phone scans (`pnm acl create --expires 1h` behind a QR).
 (a) The phone's `vta/webvh/dids/create/1.0` reached the VTA and minted — the DID
 appears in `pnm did-mgmt dids list` and is served by the DID host — but no answer
 came back within the client's 30 s window, so the person is told "the VTA did not
-answer". Observed twice: on the Farm runner VTA (`0.37.1-d9a5be02`, shared Farm
-mediator, over TSP) and once in the lab on the request side. The retry succeeded
-both times. Expected: either the answer is retried (VTI-39's class), or a client
+answer". Observed three times: on the Farm runner VTA (`0.37.1-d9a5be02`, shared
+Farm mediator, over TSP); once in the lab on the request side; and — the one
+that matters most — **on a real phone running a shipped TestFlight build**
+(0.2.0, iPhone 16, linked to its own Farm VTA, joining a Farm community through
+its link). There the person saw, verbatim:
+
+    [TrustTasks:VtaClient] the VTA did not answer
+    https://trusttasks.org/spec/vta/webvh/dids/create/1.0
+
+at the "Who are you joining as?" step. The retry succeeded every time, including
+that one, and each first attempt leaves an orphan DID on the VTA and the DID
+host.
+
+The third occurrence changes what this question is about. The first two were
+ours, on simulators, while testing. This one is a person using a released build
+to join a community — the failure is reachable by anyone following the ordinary
+path on their first attempt, and the only reason it is not a defect report is
+that tapping the button again works. Expected: either the answer is retried (VTI-39's class), or a client
 can ask the VTA what it already minted. Today it cannot: `dids/list` returns
 records without the `label` the client sent and without the minted keys' ids,
 and the client needs the key ids to borrow the persona's signing key
@@ -1948,6 +1963,7 @@ temp-then-rotate model Keyring uses when a phone links a VTA.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.37 | 2026-09-23 | **VTI-Q17 gains its third occurrence, and its first outside testing**: a person joining a community on a shipped build saw "the VTA did not answer …/dids/create/1.0" at the "Who are you joining as?" step, on a real phone against their own Farm VTA. The retry worked, as it has every time. The question is no longer about something we hit while testing — the lost answer is on the ordinary first-run path, and an orphan DID is left behind each time. |
 | 1.36 | 2026-09-22 | **VTI-42 extended to `vta-service`**: a VTA answers a task-typed `auth/whoami/0.1` with "unsupported message type" and serves the identical request inside the binding envelope, returning the proper `permissionDenied` refusal. Same defect, same remedy, second service — folded in rather than numbered separately, and the finding retitled so it does not read as VTC-only. |
 | 1.35 | 2026-09-22 | **VTI-43**: a VTA's reply to a first Trust Task is dispatched before it accepts the TSP relationship that would carry it, and is never received. Measured on both sides of the wire: the refusal dispatched at `.638`, the relationship `Bidirectional` at `.966`, nothing at the phone — against the same three events in the opposite order eleven seconds later in the same log, 4 ms apart, answering 200 OK. It costs every flow whose first task is deliberately sent before authorisation, which is exactly Keyring's no-QR link ("not yet" never appears). Granting first passes on the same build and device. The drop is not localised without a wire capture. Client side: re-send the first ask when the peer's accept lands (~330 ms), and fall back to DIDComm for a VTA that never answers TSP, on a 10 s deadline measured from a 1.76 s healthy first task. |
 | 1.34 | 2026-09-22 | **VTI-42**: a community names `vtc/join-requests/withdraw/0.1` as the way to close an open request, and answers that very task `unsupported message type` over DIDComm. The verb is implemented — sent inside the binding envelope (`https://trusttasks.org/binding/didcomm/0.1/envelope`), the same document withdraws the request and is answered, signed, in under a second. What is missing is an arm in `vtc-service/src/messaging.rs`, whose DIDComm router is a hand-written second list (upstream says so itself in `vtc-service/tests/didcomm_envelope_binding.rs`) carrying `submit`, `manifest` and `status` only. Measured on keyring-test and on our own lab community, both VTC 0.11.58, so it is not Farm-specific; `withdraw/0.2` is refused identically, so it is not a version-string mismatch. The refusal arrives as a DIDComm problem-report rather than a `trust-task-error` (VTI-27's shape again), so a client correlating by task type reads it as silence — which is how it first surfaced, as "the community did not answer" on a phone. |
