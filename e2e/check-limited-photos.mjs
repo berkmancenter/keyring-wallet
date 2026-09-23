@@ -35,21 +35,37 @@ const LIMIT = /limit access|select photos/i;
  * version and by device versus simulator. Try the shapes they are known to
  * take, by label first ("Photo, <date>"), never a bare Cell[1] alone.
  */
-const PHOTO_SELECTORS = [
-  // "Photo, <date>" — the comma matters: a bare "Photo" prefix also matches the
-  // picker's "Photos" tab and the Photos icon in its "Private Access" banner,
-  // which is what a real iPhone 11 run tapped instead of a photo (2026-09-23).
-  '-ios predicate string:(type == "XCUIElementTypeImage" OR type == "XCUIElementTypeCell" OR type == "XCUIElementTypeButton" OR type == "XCUIElementTypeOther") AND label BEGINSWITH "Photo, "',
-  "-ios class chain:**/XCUIElementTypeCollectionView/**/XCUIElementTypeCell[1]",
-]
+/**
+ * The test photo, and only it. A phone's library holds real, sometimes
+ * private, pictures, so this never takes "the first photo": it lists every item
+ * Apple's picker labels "Photo, <date>", keeps those dated TODAY (the neutral
+ * test image was added on the day of the run), and takes the newest of them.
+ * No match → undefined, and the caller aborts; nothing else is ever tapped.
+ */
+const PHOTO_ITEMS =
+  '-ios predicate string:(type == "XCUIElementTypeImage" OR type == "XCUIElementTypeCell" OR type == "XCUIElementTypeButton" OR type == "XCUIElementTypeOther") AND label BEGINSWITH "Photo, "';
 
-/** The first photo any picker shows, or undefined within `timeoutMs`. */
-async function firstPhoto(d, timeoutMs) {
+/** The date a picker label names, or NaN. Formats vary: "Photo, 23 September 2026, 14:02", "… at 2:02 PM". */
+function dateOfLabel(label) {
+  const text = String(label).replace(/^Photo,\s*/, "").replace(/\s+at\s+/i, " ").replace(/,(?=\s*\d{1,2}:\d{2})/, "");
+  return Date.parse(text);
+}
+
+async function todaysNewestPhoto(d, timeoutMs) {
+  const today = new Date().toDateString();
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
-    for (const sel of PHOTO_SELECTORS) {
-      const el = d.$(sel);
-      if (await el.isExisting().catch(() => false)) return el;
+    const items = await d.$$(PHOTO_ITEMS).catch(() => []);
+    const dated = [];
+    for (const el of items) {
+      const label = await el.getAttribute("label").catch(() => "");
+      const at = dateOfLabel(label);
+      if (!Number.isNaN(at) && new Date(at).toDateString() === today) dated.push({ el, at });
+    }
+    // Counts only: labels carry dates, and nothing of a photo's content.
+    if (items.length) {
+      console.log(`[e2e] #21: ${items.length} photo item(s) in view, ${dated.length} dated today`);
+      if (dated.length) return dated.sort((x, y) => y.at - x.at)[0].el;
     }
     await sleep(1000);
   }
@@ -129,14 +145,11 @@ try {
       }
 
       // The limited-selection sheet: select the one photo, then Done.
-      const cell = await firstPhoto(d, 20000);
-      if (!cell) {
-        await screenshot(d, "limited-photos-no-selection-grid");
-        await dumpSource(d, "limited-photos-no-selection-grid");
-        throw new Error("the limited-selection sheet showed no photo this check could find (see the source dump)");
-      }
+      // No screenshots or source dumps from here until the photo is on the
+      // profile: Apple's grid shows the rest of the library.
+      const cell = await todaysNewestPhoto(d, 20000);
+      if (!cell) throw new Error("ABORTED: the selection sheet shows no photo dated today — the neutral test image is not there, and nothing else will be picked");
       await cell.click();
-      await screenshot(d, "limited-photos-selected");
       const done = d.$('-ios predicate string:type == "XCUIElementTypeButton" AND (label == "Done" OR label == "Continue")');
       await done.waitForExist({ timeout: 10000 });
       await done.click();
@@ -144,11 +157,10 @@ try {
 
       // The fix: Keyring's own picker opens by itself. The bug: back on the
       // form, having to tap the photo again.
-      const pickerPhoto = await firstPhoto(d, 15000);
+      const pickerPhoto = await todaysNewestPhoto(d, 15000);
       const picker = Boolean(pickerPhoto);
       if (!picker) {
-        await screenshot(d, "limited-photos-no-picker");
-        await dumpSource(d, "limited-photos-no-picker");
+        // Text only: the picker, if it is up at all, shows the library.
         const backOnForm = await existsTestId(d, "RCardPhotoInput", 2000);
         throw new Error(
           backOnForm
@@ -166,10 +178,10 @@ try {
         }
       }
       if (!(await existsTestId(d, "RCardPhotoPreview", 20000))) {
-        await screenshot(d, "limited-photos-no-preview");
-        throw new Error("the photo was picked but the profile shows no preview");
+        // Text only: Apple's picker may still be open over the library.
+        throw new Error("the test photo was tapped but the profile shows no preview");
       }
-      await screenshot(d, "limited-photos-preview");
+      // No screenshot even now: the photo on the profile came from a real library.
       console.log("[e2e] #21: the profile shows the photo, on the first attempt");
     },
   });
