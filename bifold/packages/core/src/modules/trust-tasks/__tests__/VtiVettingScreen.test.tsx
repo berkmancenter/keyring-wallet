@@ -10,7 +10,7 @@ import { useAgent } from '@bifold/react-hooks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
-import VtiVetting, { requestRef } from '../screens/VtiVetting'
+import VtiVetting, { requestRef, requestTestKey } from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
 
@@ -56,6 +56,9 @@ describe('requestRef', () => {
     const second = 'urn:uuid:3c1d9e7f-2a4b-4c6d-9e8f-1a2b3c4d5e6f'
     expect(requestRef(first)).not.toBe(requestRef(second))
     expect(requestRef(first)).toBe(requestRef(first))
+  })
+  test('the reference rides in the testID, after a fixed key a reader can match by prefix', () => {
+    expect(requestTestKey('urn:uuid:0f8e2a4c-9b1d-4e7a-8c3f-5d6b7a9e1c2f')).toBe('VettingRequestId.7a9e1c2f')
   })
 })
 

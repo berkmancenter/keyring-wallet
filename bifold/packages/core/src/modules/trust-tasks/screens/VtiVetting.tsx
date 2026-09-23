@@ -69,8 +69,12 @@ const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)
  * A short, stable name for one vetting request: the tail of its request
  * document's id. A second request to the same vetter replaces the first with a
  * new id, so this is what tells the two apart when their answers read the same.
+ * It is for tests, not people — it rides in the testID, never on screen.
  */
 export const requestRef = (requestDocumentId: string) => requestDocumentId.replace(/[^A-Za-z0-9]/g, '').slice(-8)
+
+/** The testID of a request's "Sent" line: the fixed key, then which request it is. */
+export const requestTestKey = (requestDocumentId: string) => `VettingRequestId.${requestRef(requestDocumentId)}`
 
 export interface VtiVettingProps {
   config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
@@ -869,9 +873,16 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         {t(`Vetting.Status.${r.status}`)}
         {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
       </Text>
-      <Text style={styles.label} testID={testIdWithKey('VettingRequestId')}>
-        {t('Vetting.RequestRef', { ref: requestRef(r.requestDocumentId) })}
-      </Text>
+      {/* When it was sent is what a person can use to tell two requests apart;
+          which request it is rides in the testID, for tests only. Requests
+          stored before sentAt existed show no line. */}
+      {r.sentAt ? (
+        <Text style={styles.label} testID={testIdWithKey(requestTestKey(r.requestDocumentId))}>
+          {t('Vetting.SentAt', {
+            time: new Date(r.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          })}
+        </Text>
+      ) : null}
     </View>
   )
 

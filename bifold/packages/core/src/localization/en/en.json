@@ -1491,7 +1491,7 @@
     "AskAnotherVetter": "Ask another vetter",
     "Request": "Request vetting",
     "EligibleVetter": "eligible vetter",
-    "RequestRef": "Request {{ref}}",
+    "SentAt": "Sent {{time}}",
     "CardPreview": "Your card will show: legal name “{{name}}”. Nothing leaves until you send it.",
     "SendCard": "Send my card",
     "Checklist": "Your checklist",

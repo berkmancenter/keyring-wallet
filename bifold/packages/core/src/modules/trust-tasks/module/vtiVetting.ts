@@ -100,6 +100,8 @@ export interface VettingApplicationRequest {
   vetterDid: string
   requestDocumentId: string
   requestId?: string
+  /** When this phone sent the request; unlike `updatedAt`, a later answer does not move it. */
+  sentAt?: string
   status: 'sent' | 'accepted' | 'refused' | 'session' | 'cardSent' | 'attested' | 'declined'
   refusalCode?: string
   eligibilityOk?: boolean
@@ -844,6 +846,7 @@ export class VtiApplicant {
       vetterDid,
       requestDocumentId: String(doc.id),
       status: 'sent',
+      sentAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
     application.requests = [...application.requests.filter((r) => r.vetterDid !== vetterDid), request]
