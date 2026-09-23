@@ -905,6 +905,21 @@ jobs:
             NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
           fi
 
+          # A release's own notes win: the same plain-words bullets as the build's
+          # card on the command center. Used only when this release changed the
+          # file, so one release's notes are never shipped with the next.
+          NOTES_FILE=.github/testflight/whats-new.md
+          if [ -s "$NOTES_FILE" ] && [ -n "${PREV_TAG:-}" ] \
+            && [ -n "$(git log -1 --format=%H "$PREV_TAG..HEAD" -- "$NOTES_FILE" 2>/dev/null)" ]; then
+            # Lines starting with # are the file's own instructions, not notes.
+            # App Store Connect's "What to Test" holds at most 4000 characters.
+            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$NOTES_FILE" | sed '/./,$!d' | head -c 3900)
+            if [ -n "$(printf '%s' "$FROM_FILE" | tr -d '[:space:]')" ]; then
+              NOTES="$FROM_FILE"
+              echo "using $NOTES_FILE"
+            fi
+          fi
+
           if [ -z "$NOTES" ] || [ ${#NOTES} -lt 5 ]; then
             NOTES="Build ${{ env.APP_BUILD_NUMBER }} of ${{ env.APP_VERSION }}."
           fi
