@@ -582,291 +582,68 @@ jobs:
           path: app/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30
 
-      - name: Extract commit message for release notes
-        id: commit-msg
-        run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
-
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
-          CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-          if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
-            CLEAN_MSG="Release ${{ env.APP_VERSION }}-staging (Build ${{ env.APP_BUILD_NUMBER }})"
-          fi
-
-          {
-            echo "release_notes<<EOF"
-            echo "$CLEAN_MSG"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
-
-      - name: Ship to Google Play Internal Testing
-        working-directory: app
-        env:
-          GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
-          GOOGLE_API_CREDENTIALS: "${{ github.workspace }}/app/api_keys.json"
-          ANDROID_BUNDLE_PATH: "${{ github.workspace }}/app/android/app/build/outputs/bundle/release/app-release.aab"
-          ANDROID_PACKAGE_NAME: ${{ env.ANDROID_PACKAGE_NAME }}
-          VERSION_CODE: ${{ env.APP_BUILD_NUMBER }}
-          VERSION_NAME: ${{ env.APP_VERSION }}-staging
-          GITHUB_RUN_NUMBER: ${{ env.APP_BUILD_NUMBER }}
-          GITHUB_COMMIT_MESSAGE: ${{ steps.commit-msg.outputs.release_notes }}
-        run: |
-          echo "${GOOGLE_API_CREDENTIALS_BASE64}" | base64 -d >${GOOGLE_API_CREDENTIALS} && \
-          cd ${{ github.workspace }}/scripts/gpublish && \
-          npm install && \
-          node index.js
-
-  build-ios-staging:
-    needs: [calculate-build-number, extract-version, check-secrets, test]
-    # Repository variable DEPLOY_IOS=false switches the platform off.
-    if: vars.DEPLOY_IOS != 'false'
-    # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
-    # since 2026-04-28; macos-26 carries every Xcode 26 release.
-    runs-on: macos-26
-    environment: internal
-    timeout-minutes: 120
-    env:
-      APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
-      APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Verify bifold submodule commit
-        run: |
-          echo "Bifold submodule status:"
-          git submodule status
-          echo ""
-          echo "Bifold commit details:"
-          cd bifold
-          git log -1 --oneline
-          git branch -a
-          cd ..
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Setup NodeJS
-        uses: ./.github/workflows/actions/setup-node
-
-      - name: Configure ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          working-directory: ./app
-
-      # Pinned to the Xcode used for local builds. Xcode 26.4+ (clang) rejects
-      # fmt 11.0.2's consteval format strings, which React Native 0.81 bundles.
-      - name: Select Xcode 26.3
-        run: |
-          sudo xcode-select --switch /Applications/Xcode_26.3.app
-          xcode-select -p
-          xcodebuild -version
-
-      - name: Cache pod dependencies
-        id: pod-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            app/ios/Pods
-            ~/Library/Caches/CocoaPods
-            ~/.cocoapods
-          key: ${{ runner.os }}-pods-${{ hashFiles('app/ios/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
-
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          echo "Building bifold packages..."
-          yarn install --immutable
-          yarn build
-          echo "✅ Bifold packages built successfully"
-
-      - name: Verify react-native-attestation build
-        run: |
-          echo "🔍 Verifying react-native-attestation package..."
-
-          # Check TypeScript build output exists
-          if [ -f "bifold/packages/react-native-attestation/build/commonjs/index.js" ]; then
-            echo "✅ TypeScript build: OK (build/commonjs/index.js exists)"
-          else
-            echo "❌ TypeScript build FAILED: build/commonjs/index.js not found"
-            exit 1
-          fi
-
-          # Check native Android files exist
-          if [ -f "bifold/packages/react-native-attestation/android/src/main/java/com/attestation/AttestationModule.kt" ]; then
-            echo "✅ Android native: OK (AttestationModule.kt exists)"
-          else
-            echo "❌ Android native MISSING: AttestationModule.kt not found"
-            exit 1
-          fi
-
-          # Check native iOS files exist
-          if [ -f "bifold/packages/react-native-attestation/ios/Attestation.mm" ]; then
-            echo "✅ iOS native: OK (Attestation.mm exists)"
-          else
-            echo "❌ iOS native MISSING: Attestation.mm not found"
-            exit 1
-          fi
-
-          # Check podspec exists (needed for iOS CocoaPods)
-          if [ -f "bifold/packages/react-native-attestation/react-native-attestation.podspec" ]; then
-            echo "✅ CocoaPods spec: OK (podspec exists)"
-          else
-            echo "❌ CocoaPods spec MISSING: podspec not found"
-            exit 1
-          fi
-
-          echo ""
-          echo "🎉 react-native-attestation verification complete!"
-
-      - name: Install dependencies
-        working-directory: ./
-        run: |
-          yarn install --immutable
-
-      - name: Verify bifold linking
-        run: |
-          node scripts/verify-bifold-linking.js
-
-      - name: Create .xcode.env.local file
-        working-directory: app/ios
-        run: |
-          NODE_PATH=$(which node)
-          echo "export NODE_BINARY=$NODE_PATH" > .xcode.env.local
-          echo "Node path: $NODE_PATH"
-          echo "Created .xcode.env.local with content:"
-          cat .xcode.env.local
-
-      - name: Install iOS dependencies
-        working-directory: app
-        run: |
-          # '1', not 'true': ExpoModulesCore.podspec only treats '1' (or unset) as
-          # Hermes, and otherwise depends on React-jsc, which RN 0.81 does not ship.
-          export USE_HERMES=1
-          yarn run ios:setup
-
-      - name: Bump Build No.
-        id: ios-version
-        working-directory: app/ios
-        env:
-          CURRENT_PROJECT_VERSION: ${{ env.APP_BUILD_NUMBER }}
-          MARKETING_VERSION: ${{ env.APP_VERSION }}
-        run: |
-          # App Store Connect rejects a pre-release suffix (ITMS-90060), so iOS
-          # gets MAJOR.MINOR.PATCH only; Android and the tag keep the full version.
-          agvtool new-version ${CURRENT_PROJECT_VERSION}
-          agvtool new-marketing-version ${MARKETING_VERSION%%-*}
-          echo "version=${MARKETING_VERSION%%-*}" >> $GITHUB_OUTPUT
-
-      - name: Create environment settings
-        working-directory: app
-        env:
-          MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
-          MEDIATOR_V2_URL: ${{ secrets.MEDIATOR_V2_URL }}
-          FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
-          # VTI endpoints (public DIDs/URLs): the lab stack for now, the Farm later.
-          VTI_MEDIATOR_DID: ${{ vars.VTI_MEDIATOR_DID }}
-          VTI_COMMUNITY_DID: ${{ vars.VTI_COMMUNITY_DID }}
-          VTI_VTA_DID: ${{ vars.VTI_VTA_DID }}
-          VTI_PERSONA_BASE_URL: ${{ vars.VTI_PERSONA_BASE_URL }}
-        run: |
-          echo "MEDIATOR_URL=${MEDIATOR_URL}" >.env
-          # Optional: the DIDComm v2 mediator, used only when the developer
-          # setting enables DIDComm v2. Empty leaves v2 mediation unprovisioned.
-          echo "MEDIATOR_V2_URL=${MEDIATOR_V2_URL}" >>.env
-          # Optional: where "Report this problem" offers to email the report.
-          echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >>.env
-          # Where the app's VTI features point (repository variables). An unset
-          # variable is left out entirely: the app reads some with `??`, which
-          # would keep an empty string. VTI_VTA_DID stays unset for testers, so
-          # My Agent offers "Link your agent" rather than a manager-DID card.
-          # Never VTI_PROBE_ON_START: that is a dev-only probe.
-          for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID VTI_VTA_DID VTI_PERSONA_BASE_URL; do
-            if [ -n "${!key}" ]; then
-              echo "${key}=${!key}" >>.env
-            fi
-          done
-
-      - name: Update APS environment
-        run: |
-          sed -i '' 's/development/production/g' app/ios/AriesBifold/AriesBifold.entitlements
-
-      - name: Create prod signing credentials
-        uses: ./.github/workflows/actions/create-ios-sig-creds
-        with:
-          certificate: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_BASE64 }}
-          certificate_password: ${{ secrets.APPLE_APP_STORE_BUILD_CERTIFICATE_PASSWD }}
-          provisioning_profile: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-
-      - name: Clear Metro bundler cache
-        working-directory: app
-        run: |
-          echo "Clearing Metro bundler cache..."
-          rm -rf node_modules/.cache/metro-* 2>/dev/null || true
-          rm -rf /tmp/metro-* 2>/dev/null || true
-          rm -rf $TMPDIR/metro-* 2>/dev/null || true
-          rm -rf ~/.metro 2>/dev/null || true
-          rm -rf $HOME/.metro 2>/dev/null || true
-          rm -rf $HOME/.cache/metro-* 2>/dev/null || true
-          rm -rf ~/.cache/metro-* 2>/dev/null || true
-          # Also clear React Native cache
-          rm -rf $TMPDIR/react-* 2>/dev/null || true
-          rm -rf /tmp/react-* 2>/dev/null || true
-          # Not ios/build: React Native 0.81's codegen writes its sources to
-          # ios/build/generated during pod install, and the archive compiles them.
-          # The archive's own derived data lives in ios/xbuild.
-          echo "✅ Metro cache cleared"
-
-      # Signing is manual (certificate + profile from the secrets), so the archive
-      # needs no API key and no provisioning updates.
-      - name: Archive build
-        working-directory: app/ios
-        run: |
-          xcodebuild \
-          -workspace AriesBifold.xcworkspace \
-          -scheme AriesBifold \
-          -configuration Release \
-          -xcconfig ../../release.xcconfig \
-          -derivedDataPath xbuild \
-          -archivePath ../../AriesBifold.xcarchive \
-          -sdk iphoneos \
-          archive
-
-      - name: Export production archive
-        uses: ./.github/workflows/actions/export-ios-archive
-        with:
-          export_options: "export-options-keyring.plist"
-          ouput_artifact_ref: "ios-staging-artifact"
-
-      - name: Upload iOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-staging-${{ env.APP_BUILD_NUMBER }}
-          path: export/KeyRing.ipa
-          retention-days: 30
-
-      - name: Extract commit message for release notes
+      - name: Summarise what this build adds
+        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'staging')
         id: commit-msg-ios
+        shell: bash
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+          set -u
+          # What a tester wants in "What to Test" is what CHANGED, not the subject
+          # line of whichever merge happened to be last. Most user-facing work lands
+          # in the bifold submodule, so summarise both: the wallet's own commits
+          # since the previous staging tag, and the submodule commits the pointer
+          # moved across. Fall back to the old behaviour if either range is unknown.
+          PREV_TAG=$(git tag --list 'staging-v*' --sort=-creatordate | sed -n '2p')
+          [ -n "${PREV_TAG:-}" ] || PREV_TAG=$(git tag --list 'staging-v*' --sort=-creatordate | sed -n '1p')
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
-          CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          collect() { # $1 = repo dir, $2 = range
+            git -C "$1" log --no-merges --pretty=%s "$2" 2>/dev/null \
+              | grep -E '^(feat|fix)(\(|:)' \
+              | sed -E 's/^(feat|fix)(\([^)]*\))?!?: *//' \
+              | sed -E 's/[[:space:]]+$//' \
+              | awk 'NF && !seen[$0]++'
+          }
 
-          if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
-            CLEAN_MSG="Release ${{ env.APP_VERSION }}-staging (Build ${{ env.APP_BUILD_NUMBER }})"
+          LINES=""
+          if [ -n "${PREV_TAG:-}" ] && git rev-parse -q --verify "$PREV_TAG^{commit}" >/dev/null; then
+            LINES=$(collect . "$PREV_TAG..HEAD")
+            OLD_PIN=$(git ls-tree "$PREV_TAG" bifold 2>/dev/null | awk '{print $3}')
+            NEW_PIN=$(git ls-tree HEAD bifold 2>/dev/null | awk '{print $3}')
+            if [ -n "${OLD_PIN:-}" ] && [ -n "${NEW_PIN:-}" ] && [ "$OLD_PIN" != "$NEW_PIN" ]; then
+              git -C bifold fetch -q --no-tags origin "$OLD_PIN" "$NEW_PIN" 2>/dev/null || true
+              if git -C bifold merge-base --is-ancestor "$OLD_PIN" "$NEW_PIN" 2>/dev/null; then
+                LINES=$(printf '%s\n%s\n' "$(collect bifold "$OLD_PIN..$NEW_PIN")" "$LINES" | awk 'NF && !seen[$0]++')
+              fi
+            fi
           fi
 
+          if [ -n "$LINES" ]; then
+            KEPT=$(printf '%s\n' "$LINES" | head -8 | sed 's/^/• /')
+            REST=$(printf '%s\n' "$LINES" | tail -n +9 | grep -c . || true)
+            NOTES="$KEPT"
+            if [ "${REST:-0}" -gt 0 ]; then
+              NOTES=$(printf '%s\n• and %s more change(s)\n' "$NOTES" "$REST")
+            fi
+          else
+            # Nothing conventional in the range: keep the previous behaviour.
+            COMMIT_MSG="${GITHUB_HEAD_COMMIT_MESSAGE:-}"
+            if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" = "null" ]; then
+              COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+            fi
+            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          fi
+
+          if [ -z "$NOTES" ] || [ ${#NOTES} -lt 5 ]; then
+            NOTES="Build ${{ env.APP_BUILD_NUMBER }} of ${{ env.APP_VERSION }}."
+          fi
+
+          echo "--- release notes ---"
+          printf '%s\n' "$NOTES"
           {
-            echo "release_notes<<EOF"
-            echo "$CLEAN_MSG"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+            echo "release_notes<<RELEOF"
+            printf '%s\n' "$NOTES"
+            echo "RELEOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Ship to TestFlight Internal Testing
         uses: ./.github/workflows/actions/ship-to-itunes
