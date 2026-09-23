@@ -192,6 +192,12 @@ class CommunityTarget {
       const link = JSON.parse(saved) as CommunityLink
       if (typeof link?.communityDid === 'string' && /^did:[a-z0-9]+:.+/.test(link.communityDid)) {
         this.chosen = link
+        // The name the community published was kept with the choice. Teach it
+        // back: every screen that names a community by its DID reads the
+        // published names, and without this the phone's own community is
+        // "unnamed" after each launch until a manifest is read again.
+        const published = link.published ? link.name?.trim() : undefined
+        if (published) this.published.set(link.communityDid, published)
         this.notify()
       }
     } catch {
