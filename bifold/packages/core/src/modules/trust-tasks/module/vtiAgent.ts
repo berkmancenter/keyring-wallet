@@ -59,6 +59,7 @@ const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
 const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
 const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
 const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
+const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 /**
  * The community tasks this controller asks whose specifications declare the
  * document `proof` REQUIRED. A VTC refuses them unsigned (`proofRequired`)
@@ -243,7 +244,13 @@ class VtiAgentController {
    * a verdict — the credentials, over `credential-exchange/issue` — so
    * "first message after send" is no longer a reply. Those go to the inbox.
    */
-  private pending?: { type: string; resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
+  private pending?: {
+    type: string
+    resolve: (plaintext: DidCommV2PlaintextMessage) => void
+    sentAt: number
+    /** What a DIDComm problem-report about this request threads on: the message's id, or the request's thread. */
+    threads?: string[]
+  }
   private inbox: ((plaintext: DidCommV2PlaintextMessage) => void)[] = []
   private tsp?: TspSessionIdentity
   /** The persona this session speaks as, when it is one: its borrowed signing key signs what a spec requires. */
@@ -339,6 +346,26 @@ class VtiAgentController {
     if (pending && answers) {
       this.pending = undefined
       pending.resolve(plaintext)
+      return
+    }
+    // A refusal at the DIDComm layer — a malformed or unsupported message —
+    // comes as a problem-report threaded on the request (vti #1687 threads
+    // it), never as a Trust Task. Unanswered, it read as "the community did
+    // not answer" and hid the community's own reason; present it as the
+    // refusal it is.
+    if (pending && type === PROBLEM_REPORT && pending.threads?.includes(String(plaintext.thid ?? plaintext.pthid ?? ''))) {
+      this.pending = undefined
+      const report = (plaintext.body ?? {}) as { code?: unknown; comment?: unknown }
+      pending.resolve({
+        ...plaintext,
+        type: `${TASK_ERROR}problem-report`,
+        body: {
+          payload: {
+            code: typeof report.code === 'string' ? report.code : 'problem-report',
+            message: typeof report.comment === 'string' ? report.comment : 'The community could not read the request.',
+          },
+        },
+      })
       return
     }
     for (const handler of this.inbox) {
@@ -680,8 +707,10 @@ class VtiAgentController {
     // envelope's, the document is the body. A VTC refuses the task typed as
     // itself since vti #1687 (VTI-42), and served the envelope before it.
     const now = Math.floor(Date.now() / 1000)
+    const messageId = `urn:uuid:${utils.uuid()}`
+    if (this.pending) this.pending.threads = [messageId, threadId]
     await session.sendTo(communityDid, {
-      id: `urn:uuid:${utils.uuid()}`,
+      id: messageId,
       typ: 'application/didcomm-plain+json',
       type: TRUST_TASK_V2_ENVELOPE_TYPE,
       from: did,

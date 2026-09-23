@@ -295,6 +295,35 @@ describe('what a community is asked, and how', () => {
     expect(answer).toMatchObject({ type: ERROR })
   })
 
+  it("reads a DIDComm problem-report threaded on the request as the community's refusal", async () => {
+    const { answer } = await askOverDidcomm(SUBMIT, (sent) => ({
+      type: 'https://didcomm.org/report-problem/2.0/problem-report',
+      thid: (sent as { id?: string }).id,
+      body: { code: 'e.p.msg.bad-request', comment: 'unsupported message type' },
+    }))
+    expect(answer).toMatchObject({
+      type: 'https://trusttasks.org/spec/trust-task-error/problem-report',
+      body: { payload: { code: 'e.p.msg.bad-request', message: 'unsupported message type' } },
+    })
+  })
+
+  it('does not take a problem-report about some other message as the answer', async () => {
+    mockTspVia[community] = 'did:webvh:their-mediator'
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:other-report') })
+    const session = mockSessions.at(-1)!
+    const timer = setInterval(() => {
+      if (session.didcomm.length) {
+        clearInterval(timer)
+        session.onMessage({
+          type: 'https://didcomm.org/report-problem/2.0/problem-report',
+          thid: 'urn:uuid:not-this-request',
+          body: { code: 'e.p.msg.bad-request' },
+        })
+      }
+    }, 5)
+    expect(await vtiAgent.ask(community, SUBMIT, {}, 200)).toBeUndefined()
+  })
+
   it('carries the same signed document over TSP', async () => {
     const same = 'did:webvh:c:tsp-signed'
     mockTspVia[same] = 'did:peer:lab'
