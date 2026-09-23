@@ -22,7 +22,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { MAY_FLIP_CRITERIA, criteriaNote } from "./lib/criteria.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";
-import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, pasteLinkOnScanScreen, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { assertDirectoryConsentOff, assertNoDidShown } from "./lib/gateChecks.js";
@@ -101,6 +101,22 @@ async function openInvitedFlow(d) {
 /** The person's own door (INVITE_VIA=door): send the identity, be invited, join. */
 async function inviteByDoor(d) {
   await openInvitedFlow(d);
+  // A build that names no community (the store build: testers bring their
+  // own) first asks which community invited them. Bring it the way a person
+  // does — its code through the scanner's paste — as the community's bare DID.
+  if (await existsTestId(d, "InvitedWhichCommunity", 8000)) {
+    const bare = process.env.KEYRING_COMMUNITY_DID;
+    if (!bare) throw new Error("this build names no community: set KEYRING_COMMUNITY_DID to the one that invites");
+    await tapTestId(d, "InvitedScanCommunity", 15000);
+    for (let i = 0; i < 3 && !(await existsTestId(d, "PasteUrlButton", 5000)); i++) {
+      if (await existsTestId(d, "Continue", 3000)) await tapTestId(d, "Continue");
+    }
+    await pasteLinkOnScanScreen(d, bare);
+    console.log(`[e2e] ${d.e2ePlatform}: I was invited → which community: brought its code by paste`);
+    if (!(await existsTestId(d, "InvitedContinue", 30000)) && !(await existsTestId(d, "InvitedShare", 3000))) {
+      await openInvitedFlow(d).catch(() => undefined);
+    }
+  }
   if (await existsTestId(d, "InvitedContinue", 10000)) {
     await tapTestId(d, "InvitedContinue", 15000);
     await handleBiometricConfirmIfPresent(d);
