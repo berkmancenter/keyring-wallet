@@ -1,4 +1,4 @@
-import { bareDid, classifyDidDocument } from '../module/classifyDid'
+import { bareDid, classifyDid, classifyDidDocument } from '../module/classifyDid'
 
 /** The services the VTA Farm publishes, as read on 2026-09-23. */
 const RUNNER_VTA = {
@@ -78,5 +78,67 @@ describe('bareDid', () => {
     expect(bareDid('https://example.com')).toBeUndefined()
     expect(bareDid('keyring://vti/community?d=did:x:y')).toBeUndefined()
     expect(bareDid('did:')).toBeUndefined()
+  })
+})
+
+describe('classifyDid', () => {
+  const agentWith = (resolve: jest.Mock) => ({ dids: { resolve } })
+  const quick = { attempts: 2, timeoutMs: 5000 }
+
+  it('resolves and classifies, using the bare DID', async () => {
+    const resolve = jest.fn(async () => ({ didDocument: TEST_COMMUNITY }))
+    const kind = await classifyDid(agentWith(resolve), `  ${TEST_COMMUNITY.id}#key-0 `, quick)
+    expect(kind).toEqual({ kind: 'community', did: TEST_COMMUNITY.id })
+    expect(resolve).toHaveBeenCalledWith(TEST_COMMUNITY.id)
+  })
+
+  it('calls text that is not a DID invalid, without resolving anything', async () => {
+    const resolve = jest.fn()
+    expect(await classifyDid(agentWith(resolve), 'https://example.com', quick)).toEqual({
+      kind: 'unresolvable',
+      did: 'https://example.com',
+      reason: 'invalid',
+    })
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('calls a method this wallet cannot resolve invalid, and does not retry it', async () => {
+    const resolve = jest.fn(async () => ({ didDocument: null, didResolutionMetadata: { error: 'unsupportedDidMethod' } }))
+    expect(await classifyDid(agentWith(resolve), 'did:nope:x', quick)).toMatchObject({ reason: 'invalid' })
+    expect(resolve).toHaveBeenCalledTimes(1)
+  })
+
+  it('says not found when the host says so, as notFound or as an HTTP 404', async () => {
+    const byCode = jest.fn(async () => ({ didDocument: null, didResolutionMetadata: { error: 'notFound' } }))
+    expect(await classifyDid(agentWith(byCode), 'did:webvh:Qm:host:gone', quick)).toMatchObject({ reason: 'notFound' })
+    const by404 = jest.fn(async () => ({
+      didDocument: null,
+      didResolutionMetadata: { error: 'unknownError', message: 'HTTP 404 fetching did.jsonl' },
+    }))
+    expect(await classifyDid(agentWith(by404), 'did:webvh:Qm:host:gone', quick)).toMatchObject({ reason: 'notFound' })
+  })
+
+  it('retries a failure that may pass, and classifies once it does', async () => {
+    const resolve = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('JSON Parse error: Unexpected character: R'))
+      .mockResolvedValueOnce({ didDocument: RUNNER_VTA })
+    expect(await classifyDid(agentWith(resolve), RUNNER_VTA.id, quick)).toMatchObject({ kind: 'agent' })
+    expect(resolve).toHaveBeenCalledTimes(2)
+  })
+
+  it('calls a host that never answers offline, after its attempts', async () => {
+    const resolve = jest.fn(async () => {
+      throw new Error('Network request failed')
+    })
+    expect(await classifyDid(agentWith(resolve), RUNNER_VTA.id, quick)).toMatchObject({ reason: 'offline' })
+    expect(resolve).toHaveBeenCalledTimes(2)
+  })
+
+  it('never takes longer than its deadline', async () => {
+    const resolve = jest.fn(() => new Promise(() => undefined))
+    const started = Date.now()
+    expect(await classifyDid(agentWith(resolve), RUNNER_VTA.id, { timeoutMs: 50 })).toMatchObject({ reason: 'offline' })
+    expect(Date.now() - started).toBeLessThan(2000)
   })
 })

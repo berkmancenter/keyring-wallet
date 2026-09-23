@@ -78,3 +78,62 @@ export function bareDid(input: string): string | undefined {
   const match = /^did:[a-z0-9]+:[^\s?#/]+/.exec(text)
   return match ? match[0] : undefined
 }
+
+/** What `classifyDid` needs from an agent: Credo's resolver, with its metadata. */
+export interface DidResolverAgent {
+  dids: {
+    resolve(did: string): Promise<{
+      didDocument?: unknown | null
+      didResolutionMetadata?: { error?: string; message?: string }
+    }>
+  }
+}
+
+type Resolved = { doc: ClassifiableDidDocument } | { reason: 'offline' | 'notFound' | 'invalid' }
+
+/** Resolution errors that no retry can fix: the input is not a DID this wallet can read. */
+const INVALID = new Set(['invalidDid', 'unsupportedDidMethod', 'methodNotSupported', 'representationNotSupported'])
+
+async function resolveWithReason(agent: DidResolverAgent, did: string, attempts: number): Promise<Resolved> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const result = await agent.dids.resolve(did)
+      if (result.didDocument) return { doc: result.didDocument as ClassifiableDidDocument }
+      const error = result.didResolutionMetadata?.error ?? ''
+      const message = result.didResolutionMetadata?.message ?? ''
+      if (INVALID.has(error)) return { reason: 'invalid' }
+      // A host that answered, and said there is no such DID. A did:webvh host
+      // reports it as an HTTP 404 in the message rather than as `notFound`.
+      if (error === 'notFound' || /\b404\b|not ?found/i.test(message)) return { reason: 'notFound' }
+    } catch {
+      // Thrown rather than reported: the network, a tunnel's rate limit (VTI-19).
+    }
+    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)))
+  }
+  return { reason: 'offline' }
+}
+
+/**
+ * What a scanned or pasted DID is: resolve it (retrying transient failures, and
+ * never longer than `timeoutMs` in all, so a screen never hangs on it) and
+ * classify its document. One network call's worth of work — a community's name
+ * is not fetched here (see `DidKind`).
+ */
+export async function classifyDid(
+  agent: DidResolverAgent,
+  input: string,
+  options: { timeoutMs?: number; attempts?: number } = {}
+): Promise<DidKind> {
+  const did = bareDid(input)
+  if (!did) return { kind: 'unresolvable', did: input.trim(), reason: 'invalid' }
+  const timeoutMs = options.timeoutMs ?? 15000
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const outcome = await Promise.race<Resolved>([
+    resolveWithReason(agent, did, options.attempts ?? 3),
+    new Promise<Resolved>((resolve) => {
+      timer = setTimeout(() => resolve({ reason: 'offline' }), timeoutMs)
+    }),
+  ])
+  if (timer) clearTimeout(timer)
+  return 'doc' in outcome ? classifyDidDocument(outcome.doc, did) : { kind: 'unresolvable', did, reason: outcome.reason }
+}
