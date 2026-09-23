@@ -610,7 +610,6 @@
     "ScanQRCode": "Scanner le code QR",
     "MyQRCode": "Mon code QR",
     "SwitchProfile": "Changer de profil",
-    "YourQRCodeTitle": "Votre code QR",
     "WhatCanIScan": "Le code de votre agent, celui d'une communauté, un ticket de vérification ou le code de contact d'un autre utilisateur de Keyring.",
     "ContactCard": "Carte de contact",
     "IdentityFor": "Identité pour {{community}}",
@@ -1287,6 +1286,10 @@
     "ArrivedBody": "{{community}} vous a invité. Rejoignez-la pour obtenir votre carte de membre.",
     "JoinedTitle": "Vous êtes membre de {{community}}",
     "JoinedBody": "Votre carte de membre est dans votre portefeuille."
+  },
+  "Registry": {
+    "ListMe": "M'inscrire dans l'annuaire public des membres de {{community}}",
+    "Note": "Tout le monde peut voir qui y figure. Vous ne pourrez pas modifier ce choix dans Keyring plus tard. Pour être retiré de l'annuaire, demandez à l'administrateur de la communauté."
   },
   "Join": {
     "WhichTitle": "Quelle communauté ?",

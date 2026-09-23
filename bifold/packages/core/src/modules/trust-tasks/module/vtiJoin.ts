@@ -35,6 +35,8 @@ export interface VtiJoinDeps {
   vtaDid: string
   mediatorDid?: string
   communityDid: string
+  /** Whether the person asked to be listed in the community's public member directory. */
+  registryConsent?: boolean
   onStep?: (step: VtiJoinStep, detail?: string) => void
 }
 
@@ -87,6 +89,7 @@ export async function joinCommunity(deps: VtiJoinDeps, invitation?: VtiInvitatio
   step('submitting', invitation ? 'with invitation' : 'empty')
   const verdict = await vtiAgent.apply(deps.communityDid, manifest, {
     credentials: invitation ? [invitation.credential] : [],
+    registryConsent: deps.registryConsent,
   })
   step('verdict', verdict.effect)
 

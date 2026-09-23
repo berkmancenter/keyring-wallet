@@ -353,7 +353,11 @@ class VtiAgentController {
     // it), never as a Trust Task. Unanswered, it read as "the community did
     // not answer" and hid the community's own reason; present it as the
     // refusal it is.
-    if (pending && type === PROBLEM_REPORT && pending.threads?.includes(String(plaintext.thid ?? plaintext.pthid ?? ''))) {
+    if (
+      pending &&
+      type === PROBLEM_REPORT &&
+      pending.threads?.includes(String(plaintext.thid ?? plaintext.pthid ?? ''))
+    ) {
       this.pending = undefined
       const report = (plaintext.body ?? {}) as { code?: unknown; comment?: unknown }
       pending.resolve({
@@ -935,18 +939,22 @@ class VtiAgentController {
    * Apply. With no credentials in hand the honest presentation is an empty one:
    * the community answers `requestMore` naming what it still needs, rather than
    * the wallet guessing at requirements it cannot yet meet.
+   *
+   * `registryConsent` is the person's answer to "list me in the community's
+   * public member directory" (VTI-Q14): the community publishes a member only
+   * while it is true (vti #1682, #1691). Off unless the person turned it on.
    */
   async apply(
     communityDid: string,
     manifest: VtiManifest,
-    options: { credentials?: unknown[]; requirementsDigest?: string } = {}
+    options: { credentials?: unknown[]; requirementsDigest?: string; registryConsent?: boolean } = {}
   ): Promise<VtiVerdict> {
     // The presentation is unsigned: the community takes the holder from the
     // sealed envelope's sender (VTI-9), so what matters is that the
     // credentials inside name that same DID as their subject.
     const answer = await this.ask(communityDid, SUBMIT, {
       vp: this.presentation(options.credentials),
-      registryConsent: false,
+      registryConsent: options.registryConsent === true,
       // The community's `select_criterion` reads this digest to decide WHICH
       // criterion the applicant gathered against, and records
       // `applicant_digest_matches: false` when it is absent — which its policy

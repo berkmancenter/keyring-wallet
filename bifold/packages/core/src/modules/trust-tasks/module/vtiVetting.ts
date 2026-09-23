@@ -1080,7 +1080,14 @@ export class VtiApplicant {
    * to it. What the community says is recorded, so the next call knows which
    * of the two to make.
    */
-  async submit(manifest: VtiManifest, statements: unknown[], requirementsDigest?: string): Promise<VtiVerdict> {
+  async submit(
+    manifest: VtiManifest,
+    statements: unknown[],
+    requirementsDigest?: string,
+    // Sent with a fresh application only: a supplement answers the open one,
+    // whose consent was given when it was sent.
+    registryConsent?: boolean
+  ): Promise<VtiVerdict> {
     const application = await this.app()
     const communityDid = this.persona.communityDid
     const open = application.submission?.state === 'deferred' ? application.submission : undefined
@@ -1097,7 +1104,11 @@ export class VtiApplicant {
         if (reason === 'notFound') {
           // Nothing open after all — withdrawn elsewhere or swept by retention.
           // A fresh submission is the honest next step, not an error.
-          verdict = await vtiAgent.apply(communityDid, manifest, { credentials: statements, requirementsDigest })
+          verdict = await vtiAgent.apply(communityDid, manifest, {
+            credentials: statements,
+            requirementsDigest,
+            registryConsent,
+          })
         } else {
           if (reason === 'alreadyDecided') await this.recordSubmission({ ...open, state: 'decided' })
           throw e
@@ -1105,7 +1116,11 @@ export class VtiApplicant {
       }
     } else {
       try {
-        verdict = await vtiAgent.apply(communityDid, manifest, { credentials: statements, requirementsDigest })
+        verdict = await vtiAgent.apply(communityDid, manifest, {
+          credentials: statements,
+          requirementsDigest,
+          registryConsent,
+        })
       } catch (e) {
         // The community already holds an open request from this applicant that
         // the phone lost track of (a reinstall, another device). Its refusal

@@ -7,7 +7,13 @@
  *  - a community that advertises TSP and does not answer it is asked again
  *    over DIDComm (the VTA Farm's first-vtc, VTI-Q15).
  */
-const mockSessions: Array<{ did: string; mediator: string; onMessage: (m: unknown) => void; tsp: Uint8Array[]; didcomm: unknown[] }> = []
+const mockSessions: Array<{
+  did: string
+  mediator: string
+  onMessage: (m: unknown) => void
+  tsp: Uint8Array[]
+  didcomm: unknown[]
+}> = []
 const mockGreetings: Array<{ from: string; to: string }> = []
 const mockAdvertised: Record<string, string | undefined> = {}
 const mockTspVia: Record<string, string | undefined> = {}
@@ -20,7 +26,12 @@ jest.mock('@bifold/trust-tasks', () => ({
 // Stands in for eddsa-jcs-2022: records who signed, with which keys.
 jest.mock('../documentProof', () => ({
   signDocumentProof: jest.fn(
-    async (_a: unknown, doc: Record<string, unknown>, did: string, o: { kmsKeyId?: string; verificationMethodId?: string }) => ({
+    async (
+      _a: unknown,
+      doc: Record<string, unknown>,
+      did: string,
+      o: { kmsKeyId?: string; verificationMethodId?: string }
+    ) => ({
       ...doc,
       proof: { signer: did, kmsKeyId: o.kmsKeyId, verificationMethod: o.verificationMethodId },
     })
@@ -37,7 +48,12 @@ jest.mock('../module/VtiMediatorTransport', () => ({
   VtiMediatorSession: class {
     private open = false
     readonly record: (typeof mockSessions)[number]
-    constructor(_agent: unknown, identity: { did: string }, mediator: { did: string }, opts: { onMessage: (m: unknown) => void }) {
+    constructor(
+      _agent: unknown,
+      identity: { did: string },
+      mediator: { did: string },
+      opts: { onMessage: (m: unknown) => void }
+    ) {
       this.record = { did: identity.did, mediator: mediator.did, onMessage: opts.onMessage, tsp: [], didcomm: [] }
       mockSessions.push(this.record)
     }
@@ -224,7 +240,11 @@ describe('what a community is asked, and how', () => {
   const community = 'did:webvh:c:enveloped'
 
   /** Connect as a persona on DIDComm (community behind another mediator) and answer the first DIDComm send. */
-  async function askOverDidcomm(type: string, reply: (sent: { thid?: string }) => unknown, personaDid = 'did:webvh:p:env') {
+  async function askOverDidcomm(
+    type: string,
+    reply: (sent: { thid?: string }) => unknown,
+    personaDid = 'did:webvh:p:env'
+  ) {
     mockTspVia[community] = 'did:webvh:their-mediator'
     await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona(personaDid) })
     const session = mockSessions.at(-1)!
@@ -354,5 +374,33 @@ describe('what a community is asked, and how', () => {
     expect(sent.type).toBe(ENVELOPE)
     expect((sent.body as Record<string, unknown>).proof).toBeUndefined()
     expect(logger.warn).toHaveBeenCalledWith(expect.stringMatching(/needs a proof/))
+  })
+})
+
+// VTI-Q14: the community lists a member in its public directory only while
+// this consent stands (vti #1682, #1691), so it goes out only when asked for.
+describe('directory consent on an application', () => {
+  const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
+  const manifest = { criteria: [], requirementsDigest: 'd' } as never
+  const sentConsent = async (options: { registryConsent?: boolean }) => {
+    const ask = jest
+      .spyOn(vtiAgent, 'ask')
+      .mockResolvedValue({ type: `${SUBMIT}#response`, body: { payload: { status: 'pending' } } } as never)
+    try {
+      await vtiAgent.apply('did:webvh:c:consent', manifest, options).catch(() => undefined)
+      expect(ask).toHaveBeenCalledWith('did:webvh:c:consent', SUBMIT, expect.anything())
+      return (ask.mock.calls[0][2] as { registryConsent?: unknown }).registryConsent
+    } finally {
+      ask.mockRestore()
+    }
+  }
+
+  it('is off unless the person turned it on', async () => {
+    expect(await sentConsent({})).toBe(false)
+    expect(await sentConsent({ registryConsent: false })).toBe(false)
+  })
+
+  it('goes out when the person asked to be listed', async () => {
+    expect(await sentConsent({ registryConsent: true })).toBe(true)
   })
 })
