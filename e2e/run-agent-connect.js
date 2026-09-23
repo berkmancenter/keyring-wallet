@@ -12,7 +12,7 @@
  * Usage: PLATFORM=android node run-agent-connect.js   (or PLATFORM=ios)
  */
 import "./lib/cli-guard.js";
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, existsTestId, waitForTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, existsTestId, waitForTestId, simTarget } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { completeOnboarding, openDeveloperScreen, enableDidCommV2, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
@@ -39,7 +39,7 @@ function readMarkers(driver) {
     // alongside the run.
     return execFileSync(
       "xcrun",
-      ["simctl", "spawn", "booted", "log", "show", "--style", "compact", "--last", "10m", "--predicate", 'process == "KeyRing"'],
+      ["simctl", "spawn", simTarget(driver), "log", "show", "--style", "compact", "--last", "10m", "--predicate", 'process == "KeyRing"'],
       { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
     );
   } catch {

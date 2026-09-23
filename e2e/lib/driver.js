@@ -1,3 +1,4 @@
+import { execFileSync as execFileSyncForSim } from "node:child_process";
 import { remote } from "webdriverio";
 import { execSync, spawn } from "node:child_process";
 import net from "node:net";
@@ -230,11 +231,7 @@ export async function createSession(platform, capsOverride) {
       // phone, which is then never relaunched: that phone shows neither the
       // home tabs nor the PIN screen, and the run blames whatever it was
       // waiting for. Measured 2026-09-23 on a two-simulator vetting run.
-      const simUdid =
-        driver.capabilities.udid ||
-        driver.capabilities.deviceUDID ||
-        driver.capabilities["appium:udid"];
-      execSync(`xcrun simctl privacy ${simUdid ? simUdid : "booted"} grant camera ${APP_ID}`);
+      execSync(`xcrun simctl privacy ${simTarget(driver)} grant camera ${APP_ID}`);
       // granting TCC permission kills the app; relaunch it cleanly (immediate
       // activate can race the teardown and leave a black screen)
       await driver.terminateApp(APP_ID).catch(() => {});
@@ -302,6 +299,23 @@ export async function collapseNotificationShadeIfOpen(driver) {
  * Find an element by bifold testID (testIdWithKey key).
  * RN maps testID → resource-id on Android and → accessibility identifier on iOS.
  */
+/**
+ * The simulator a simctl command should target: this session's own udid, or —
+ * when the session does not know it — the only booted simulator. Never
+ * "booted" with two up: simctl then picks one WITHOUT erroring, and a grant
+ * kills the app it lands on, so one session silently broke the other's phone
+ * (2026-09-23). With several booted and no udid known, refuse rather than guess.
+ */
+export function simTarget(driver) {
+  const caps = driver?.capabilities ?? {};
+  const udid = caps.udid || caps.deviceUDID || caps["appium:udid"] || process.env.IOS_UDID;
+  if (udid) return udid;
+  const out = execFileSyncForSim("xcrun", ["simctl", "list", "devices", "booted", "-j"], { encoding: "utf8" });
+  const booted = Object.values(JSON.parse(out).devices ?? {}).flat().filter((d) => d.state === "Booted");
+  if (booted.length === 1) return booted[0].udid;
+  throw new Error(`simTarget: ${booted.length} simulators are booted and this session's udid is unknown — refusing to guess which one`);
+}
+
 export function byTestId(driver, key) {
   const full = `${TEST_ID_PREFIX}${key}`;
   if (driver.e2ePlatform === "android") {
