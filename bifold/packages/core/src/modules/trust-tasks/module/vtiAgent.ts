@@ -794,7 +794,9 @@ class VtiAgentController {
     const overRest = await this.manifestOverRest(communityDid, withAgent)
     if (overRest) return overRest
     const answer = await this.ask(communityDid, MANIFEST, {})
-    if (!answer) throw new Error('vtiAgent: the community did not answer')
+    // Each unanswered ask names its task: three callers used to share one
+    // sentence, and a failed join could not say which request went unanswered.
+    if (!answer) throw new Error('vtiAgent: the community did not answer (manifest)')
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
@@ -858,8 +860,8 @@ class VtiAgentController {
   }
 
   /** The verdict a submit or a supplement carries — deliberately the same shape. */
-  private verdictOf(answer: DidCommV2PlaintextMessage | undefined): VtiVerdict {
-    if (!answer) throw new Error('vtiAgent: the community did not answer')
+  private verdictOf(answer: DidCommV2PlaintextMessage | undefined, task: string): VtiVerdict {
+    if (!answer) throw new Error(`vtiAgent: the community did not answer (${task})`)
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (
@@ -906,7 +908,7 @@ class VtiAgentController {
       ...(options.requestId ? { requestId: options.requestId } : {}),
       ...(options.requirementsDigest ? { extensions: { requirementsDigest: options.requirementsDigest } } : {}),
     })
-    return this.verdictOf(answer)
+    return this.verdictOf(answer, 'supplement')
   }
 
   /**
@@ -922,7 +924,7 @@ class VtiAgentController {
       ...(options.requestId ? { requestId: options.requestId } : {}),
       ...(options.reason ? { reason: options.reason } : {}),
     })
-    if (!answer) throw new Error('vtiAgent: the community did not answer')
+    if (!answer) throw new Error('vtiAgent: the community did not answer (withdraw)')
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (answer.body as { payload?: { requestId?: string; status?: string } } | undefined)?.payload
@@ -957,7 +959,7 @@ class VtiAgentController {
         return digest ? { requirementsDigest: digest } : {}
       })(),
     })
-    return this.verdictOf(answer)
+    return this.verdictOf(answer, 'submit')
   }
 }
 
