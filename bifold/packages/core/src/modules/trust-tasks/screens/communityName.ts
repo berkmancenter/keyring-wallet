@@ -22,6 +22,8 @@
  * @module trust-tasks/screens/communityName
  */
 
+import type { TFunction } from 'i18next'
+
 import { communityTarget, type CommunityLink } from '../module/vtiCommunityLink'
 
 import { agentHost } from './VtaLink'
@@ -58,12 +60,47 @@ export function communityName(did: string, link?: CommunityLink): CommunityName 
  * What to call a community in passing — in a list row, a prompt, a share
  * sheet — where there is no room to explain where the name came from.
  *
- * The community's own published name if it has one, else a short DID. Never
- * the host: a hostname in the place of a name reads as the name, which is the
- * whole of reports #13, #14 and #16. Not a hook, so it can be used inside a
- * map; a screen that shows several of these subscribes to `communityTarget`
- * once so a name learned later reaches all of them.
+ * In order: the community's own published name; else the name a link claimed
+ * for it, said in words to be a claim ("… (not confirmed by the community)"),
+ * because anyone can write any name into a link; else "an unnamed community
+ * (<host>)". Never a bare host and never a DID (#12). The host still never
+ * poses as a name — the reasoning of reports #13, #14 and #16 — because it
+ * appears only inside words that say the community is unnamed. The full DID
+ * stays behind the community screen's Details.
+ *
+ * Not a hook, so it can be used inside a map; a screen that shows several of
+ * these subscribes to `communityTarget` once so a name learned later reaches
+ * all of them.
  */
-export function communityLabelOf(did: string): string {
-  return communityTarget.publishedNameOf(did) ?? shortDid(did)
+export function communityLabelOf(did: string, t: TFunction): string {
+  const published = communityTarget.publishedNameOf(did)
+  if (published) return published
+  const claimed = [communityTarget.getViewing(), communityTarget.getChosen()].find(
+    (l) => l?.communityDid === did && l.name && !l.published
+  )?.name
+  if (claimed) return t('Community.ClaimedName', { name: claimed, interpolation: { escapeValue: false } }) as string
+  const host = didHost(did)
+  return (
+    host ? t('Community.UnnamedAt', { host, interpolation: { escapeValue: false } }) : t('Community.Unnamed')
+  ) as string
+}
+
+/** The same, for where it starts a sentence or stands alone: "An unnamed community (…)". */
+export function communityLabelStartOf(did: string, t: TFunction): string {
+  const label = communityLabelOf(did, t)
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+/**
+ * Whoever a DID is, at the start of a sentence, when it may not be a community
+ * — the one asking an agent for an approval, say: its published name if one is
+ * known, else "Someone at <host>", else "Someone". Never the DID (#12).
+ */
+export function partyLabelStartOf(did: string, t: TFunction): string {
+  const published = communityTarget.publishedNameOf(did)
+  if (published) return published
+  const host = didHost(did)
+  return (
+    host ? t('Community.SomeoneAt', { host, interpolation: { escapeValue: false } }) : t('Community.Someone')
+  ) as string
 }

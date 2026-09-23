@@ -26,7 +26,7 @@ import { resolveContactDisplayInfo } from '../utils/rcardDisplayUtils'
 import { verifyVrcHardwareEvidence } from '../services/BiometricSignatureVerifier'
 
 const ListContacts: React.FC = () => {
-  const { t: _t } = useTranslation()
+  const { t } = useTranslation()
   const [store, dispatch] = useStore()
   const [{ enableTours: enableToursConfig }, ContactCard] = useServices([TOKENS.CONFIG, TOKENS.COMPONENT_CONTACT_CARD])
   const navigation = useNavigation<StackNavigationProp<ContactStackParams>>()
@@ -122,13 +122,12 @@ const ListContacts: React.FC = () => {
   }
 
   // Helper function to format issuer name with fallback
-  const formatIssuerName = (issuerId: string, issuerName?: string): string => {
-    if (issuerName) {
-      return issuerName
-    }
-    const last8 = issuerId.slice(-8)
-    return `Unknown ...${last8}`
-  }
+  const formatIssuerName = useCallback(
+    (_issuerId: string, issuerName?: string): string =>
+      // Not a piece of the DID in the name's place (#12).
+      issuerName || t('ContactDetails.UnnamedContact'),
+    [t]
+  )
 
   // Helper function to check if credential type contains "DTGCredential" but NOT "WitnessCredential"
   const hasDTGCredentialType = (credential: W3cCredentialRecord): boolean => {
@@ -235,7 +234,13 @@ const ListContacts: React.FC = () => {
     })
 
     return contactDetails.sort((a, b) => a.issuer.name.localeCompare(b.issuer.name))
-  }, [w3cCredentialRecords, hasWitnessCredential, hasHardwareAttestationCredential, hasLocalityConfirmed])
+  }, [
+    w3cCredentialRecords,
+    hasWitnessCredential,
+    hasHardwareAttestationCredential,
+    hasLocalityConfirmed,
+    formatIssuerName,
+  ])
 
   // Run cryptographic verification for contacts that claim HW attestation
   useEffect(() => {

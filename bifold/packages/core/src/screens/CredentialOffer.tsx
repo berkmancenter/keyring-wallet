@@ -48,6 +48,7 @@ import type { HardwareAttestationEvidence } from '../modules/vrc/types/evidence'
 import WitnessVerifiedBanner from '../modules/vrc/components/WitnessVerifiedBanner'
 import { useOpenIDCredentials } from '../modules/openid/context/OpenIDCredentialRecordProvider'
 import { isDTGCredential, isRelationshipCredential } from '../modules/vrc/credentialTypes'
+import { didHost } from '../modules/trust-tasks/screens/communityName'
 
 type CredentialOfferProps = {
   navigation: any
@@ -394,7 +395,9 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
           }
 
           if (offerAttributes) {
-            credential.credentialAttributes = [...offerAttributes.map((item) => new DidCommCredentialPreviewAttribute(item))]
+            credential.credentialAttributes = [
+              ...offerAttributes.map((item) => new DidCommCredentialPreviewAttribute(item)),
+            ]
           }
 
           // Resolve presentation fields for AnonCreds
@@ -444,8 +447,7 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
           return
         }
         const ids = getCredentialIdentifiers(credential)
-        const name =
-          overlay.metaOverlay?.name ?? (await getCredentialName(ids.credentialDefinitionId, ids.schemaId))
+        const name = overlay.metaOverlay?.name ?? (await getCredentialName(ids.credentialDefinitionId, ids.schemaId))
 
         /** Save history record for card accepted */
         const recordData: HistoryRecord = {
@@ -533,7 +535,11 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
       credentialDisplayRegistry?.getDisplayInfo(jsonLdCredentialData, { relatedRecords: w3cCredentialRecords })
         .subject) ||
     {}
-  const jsonLdIssuerName = rcardDisplayInfo.name || jsonLdCredentialData?.issuer?.name || jsonLdIssuerDid || null
+  // Never the issuer's DID as its name (#12): its host if it has one, else words.
+  const jsonLdIssuerName =
+    rcardDisplayInfo.name ||
+    jsonLdCredentialData?.issuer?.name ||
+    (jsonLdIssuerDid ? (didHost(jsonLdIssuerDid) ?? t('CredentialOffer.AnIssuer')) : null)
 
   // Display fields - use custom fields for DTG credentials, overlay fields for AnonCreds
   const displayFields = customDisplayFields.length > 0 ? customDisplayFields : overlay.presentationFields || []
@@ -637,8 +643,8 @@ const CredentialOffer: React.FC<CredentialOfferProps> = ({ navigation, credentia
                 {attestationValidation.platform === 'ios'
                   ? 'Apple Secure Enclave'
                   : attestationValidation.platform === 'android'
-                  ? 'Android TEE'
-                  : 'Secure Hardware'}
+                    ? 'Android TEE'
+                    : 'Secure Hardware'}
                 {(() => {
                   const evidence = jsonLdCredentialData?.evidence?.[0]
                   const authType = evidence?.authenticationMethod?.type || evidence?.biometricMethod?.type

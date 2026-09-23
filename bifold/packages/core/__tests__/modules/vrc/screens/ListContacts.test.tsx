@@ -343,16 +343,16 @@ describe('ListContacts Screen', () => {
       resolveBundleForCredential: jest.fn(),
     } as any)
 
-    const { findByText } = render(
+    const { findByText, queryByText } = render(
       <BasicAppContext>
         <ListContacts />
       </BasicAppContext>
     )
 
     await waitFor(async () => {
-      // Should show "Unknown" with last 8 characters of DID
-      const last8 = unknownIssuerDid.slice(-8)
-      expect(await findByText(`Unknown ...${last8}`)).toBeTruthy()
+      // An unnamed contact is said to be one — never a piece of its DID (#12).
+      expect(await findByText('ContactDetails.UnnamedContact')).toBeTruthy()
+      expect(queryByText(new RegExp(unknownIssuerDid.slice(-8)))).toBeNull()
     })
   })
 

@@ -689,6 +689,7 @@
     "PopupExit": "J'ai compris"
   },
   "CredentialOffer": {
+    "AnIssuer": "Un émetteur",
     "CredentialOffer": "Offre d'attestation",
     "AcceptContact": "Accepter le contact",
     "ThisIsTakingLongerThanExpected": "Cela prend plus de temps que prévu. Revenez plus tard pour votre nouvelle attestation.",
@@ -1062,6 +1063,7 @@
     "ContactReceivedTitle": "Contact reçu",
     "ContactOfferTitle": "Offre de contact reçue",
     "RelationshipDID": "DID de relation",
+    "UnnamedContact": "Contact sans nom",
     "CopyDID": "Copier le DID",
     "DIDCopied": "Copié",
     "DIDCopiedMessage": "Le DID a été copié dans votre presse-papiers.",
@@ -1132,6 +1134,11 @@
     }
   },
   "Community": {
+    "ClaimedName": "{{name}} (non confirmé par la communauté)",
+    "UnnamedAt": "une communauté sans nom ({{host}})",
+    "Unnamed": "une communauté sans nom",
+    "SomeoneAt": "Quelqu’un chez {{host}}",
+    "Someone": "Quelqu’un",
     "Open": "Ouvrir cette communauté",
     "Leave": "Quitter la communauté",
     "LeaveExplains": "Ce téléphone oublie votre identité, votre carte et votre vérification pour cette communauté. Pour revenir, vous la rejoignez à nouveau.",
@@ -1164,6 +1171,7 @@
     "FailedUnreachable": "La page de l'agent est injoignable. Vérifiez votre connexion et scannez à nouveau.",
     "FailedOther": "Un problème est survenu pendant la liaison. Scannez le code à nouveau.",
     "LinkYourAgent": "Relier votre agent",
+    "YourAgentFallback": "votre agent",
     "LinkYourAgentHint": "Scannez le code affiché sur la page de votre agent, ou collez son lien.",
     "LinkYourAgentHelp": "Pas de code ? Liez sans — saisissez l’adresse de votre agent, et son admin ajoute ce téléphone.",
     "StatusOnline": "En ligne",
@@ -1348,6 +1356,8 @@
     "Join": "Rejoindre",
     "Joining": "Adhésion…",
     "Member": "Membre",
+    "YourVetter": "Votre vérificateur",
+    "YourVetterN": "Votre vérificateur {{n}}",
     "MemberSince": "Membre depuis le {{date}}",
     "ViaInvitation": "Sur invitation",
     "ViaVetting": "Vérifié",

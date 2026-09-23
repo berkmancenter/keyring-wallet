@@ -42,14 +42,12 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
   } = useOpenIDCredentials()
 
   // Helper function to format issuer name with fallback
-  const formatIssuerName = (issuerId: string, issuerName?: string): string => {
-    if (issuerName) {
-      return issuerName
-    }
-    // Fallback: "Unknown" + last 8 characters of DID
-    const last8 = issuerId.slice(-8)
-    return `Unknown ...${last8}`
-  }
+  const formatIssuerName = useCallback(
+    (_issuerId: string, issuerName?: string): string =>
+      // Not a piece of the DID in the name's place (#12).
+      issuerName || t('ContactDetails.UnnamedContact'),
+    [t]
+  )
 
   // Look up the counterparty's relationship DID for this connection
   // This is the DID used as issuer.id in VRC credentials, needed for navigation consistency
@@ -76,12 +74,12 @@ const InfoIcon: React.FC<InfoIconProps> = ({ connectionId }) => {
           setIssuerOrganization(displayInfo.organization)
         }
       } catch (_error) {
-      /* ignore lookup failure */
-    }
+        /* ignore lookup failure */
+      }
     }
 
     lookupIssuer()
-  }, [agent, connectionId, w3cCredentialRecords])
+  }, [agent, connectionId, w3cCredentialRecords, formatIssuerName])
 
   const handleMenuOpen = useCallback(() => {
     if (buttonRef.current) {

@@ -60,11 +60,10 @@ import { pickOwnVetterGrant, type VetterGrantState } from '../module/vtiGrantSta
 import { joinSeed } from '../module/vtiJoinSeed'
 
 import { useCommunityDid } from './useCommunity'
-import { communityLabelOf } from './communityName'
+import { communityLabelOf, communityLabelStartOf } from './communityName'
+import { DidDetails } from './DidDetails'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
-
-const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-10)}` : (did ?? ''))
 
 /**
  * A short, stable name for one vetting request: the tail of its request
@@ -569,7 +568,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           {seatBanner('vetter')}
           {standingNotice}
           <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>
-            {tp('Vetting.YouVetFor', { community: communityLabelOf(persona.communityDid) })}
+            {tp('Vetting.YouVetFor', { community: communityLabelOf(persona.communityDid, t) })}
           </Text>
 
           {vetterStep === 'ticket' ? (
@@ -680,7 +679,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               {vetterStep === 'request' ? (
                 <>
                   {stepHeader(stepNumber, 5, t('Vetting.SomeoneWantsVetting'))}
-                  <Text style={styles.value}>{shortDid(request.applicantDid)}</Text>
+                  {/* Who, as an identifier, for whoever needs it — not as the line (#12). */}
+                  <DidDetails did={request.applicantDid} testIdStem="VettingDeskApplicant" />
                   <Pressable
                     style={styles.button}
                     testID={testIdWithKey('VettingOpenSessionButton')}
@@ -881,11 +881,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     </View>
   )
 
+  // Numbered by its place among all requests, so the same vetter keeps the same
+  // number whichever list (ended, active, all) shows the card.
   const requestCard = (r: (typeof requests)[number]) => (
     // Keyed by the request, not the vetter: asking the same vetter again is a
     // new request, and mounts a new card rather than relabelling the old one.
     <View key={r.requestDocumentId} style={styles.card} testID={testIdWithKey('VettingRequestCard')}>
-      <Text style={styles.value}>{shortDid(r.vetterDid)}</Text>
+      <Text style={styles.value} testID={testIdWithKey('VettingRequestVetter')}>
+        {requests.length > 1 ? t('Vetting.YourVetterN', { n: requests.indexOf(r) + 1 }) : t('Vetting.YourVetter')}
+      </Text>
       <Text style={styles.label} testID={testIdWithKey('VettingRequestStatus')}>
         {t(`Vetting.Status.${r.status}`)}
         {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
@@ -900,6 +904,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           })}
         </Text>
       ) : null}
+      <DidDetails did={r.vetterDid} testIdStem="VettingRequestVetter" />
     </View>
   )
 
@@ -918,8 +923,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 the runners that read this line.) */}
             <Text style={styles.value} testID={testIdWithKey('VettingAlreadyMember')}>
               {membershipRole && membershipRole !== 'member'
-                ? tp('Vetting.MemberAs', { community: communityLabelOf(communityDid ?? ''), role: membershipRole })
-                : tp('Vetting.Member', { community: communityLabelOf(communityDid ?? '') })}
+                ? tp('Vetting.MemberAs', { community: communityLabelOf(communityDid ?? '', t), role: membershipRole })
+                : tp('Vetting.Member', { community: communityLabelOf(communityDid ?? '', t) })}
             </Text>
           </View>
         ) : null}
@@ -993,7 +998,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               </Text>
             ) : null}
             {ticketInputs}
-            {ended.map(requestCard)}
+            {ended.map((r) => requestCard(r))}
           </>
         ) : null}
 
@@ -1133,7 +1138,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   disabled={!!busy}
                   onPress={() =>
                     run('apply', async () => {
-                      if (!(await confirmWithBiometrics(communityLabelOf(communityDid), 'Apply'))) return
+                      if (!(await confirmWithBiometrics(communityLabelStartOf(communityDid, t), 'Apply'))) return
                       const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
                       // Ask about the grants now, not when the statements were
                       // gathered: the community applies the status at intake,
@@ -1239,7 +1244,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 {ticketInputs}
               </>
             ) : null}
-            {requests.map(requestCard)}
+            {requests.map((r) => requestCard(r))}
           </>
         ) : null}
 
