@@ -28,6 +28,10 @@
  *   → vetting (not "No agent is configured"), and "a different community"
  *   opens the scanner; nothing offers a locked "Vet someone"; I was invited
  *   opens its flow; a pasted community link opens Join on that community.
+ * KEYRING_AGENT_SHOWS_AS=<name>: the runner agent's own name (its vta_name,
+ *   e.g. "keyring-runner-uiux" on farm-runner-uiux). "Linked to …", the agent
+ *   screen and the agent screen after a relaunch must come to say it, not the
+ *   host — the named path, which a host-only agent never exercises.
  * Real iPhone/iPad: PLATFORM=ios IOS_UDID=<hardware udid> with IOS_DEVICE_APP
  *   pointing at a FORCE_BUNDLING device build, and ENROL_PUBLIC_URL an https
  *   URL the device can reach (ATS allows plain http to localhost only).
@@ -80,12 +84,36 @@ function runnerVtaDid() {
   return env;
 }
 
+/**
+ * The named path for the agent (KEYRING_AGENT_SHOWS_AS): the screen must come
+ * to say the agent's own name. The phone asks for it once a session opens, so
+ * it can land a moment after the screen does — wait for it, and fail with
+ * what the screen said instead.
+ */
+async function assertAgentNamed(driver, key, where) {
+  const name = process.env.KEYRING_AGENT_SHOWS_AS;
+  if (!name) return;
+  const until = Date.now() + 20000;
+  let shown = "";
+  while (Date.now() < until) {
+    shown = (await textOf(driver, key).catch(() => "")).trim();
+    if (shown.includes(name)) {
+      console.log(`[e2e] ${where} names the agent "${name}"`);
+      return;
+    }
+    await sleep(1000);
+  }
+  await screenshot(driver, `agent-unnamed-${where.replace(/\W+/g, "-")}`);
+  throw new Error(`${where} says "${shown}", not the agent's own name "${name}"`);
+}
+
 /** The agent screen after linking: the introduction once, then the status. */
 async function checkAgentScreen(driver) {
   await waitForTestId(driver, "AgentIntro", 30000);
   await screenshot(driver, "link-06-intro");
   for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
   await waitForTestId(driver, "AgentHome", 30000);
+  await assertAgentNamed(driver, "AgentHomeName", "the agent screen");
   const status = (await textOf(driver, "VtaStatusText")).trim();
   console.log(`[e2e] agent screen status: ${status}`);
   if (!/online/i.test(status)) throw new Error(`agent screen status is "${status}", not Online`);
@@ -356,6 +384,8 @@ async function testerJourney(driver) {
   await sleep(2500);
   await assertNoLinkedScreen(driver, "after a relaunch");
   await openAgentHome(driver);
+  // The name is kept for the app run only: after a relaunch it is asked again.
+  await assertAgentNamed(driver, "AgentHomeName", "the agent screen after a relaunch");
   console.log("[e2e] journey: the agent screen after a relaunch");
   await screenshot(driver, "journey-after-relaunch");
 }
@@ -592,6 +622,7 @@ try {
     execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
     await tapTestId(driver, "VtaLinkCheckGrant", 15000);
     await waitForTestId(driver, "VtaLinkDone", 180000);
+    await assertAgentNamed(driver, "VtaLinkLinkedBody", "the Linked screen");
     await screenshot(driver, "link-m2-linked");
     if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
     console.log("[e2e] the temporary key is no longer in the ACL");
@@ -632,6 +663,7 @@ try {
   await api("POST", `/api/offers/${offered.offer.n}/grant`);
 
   await waitForTestId(driver, "VtaLinkDone", 180000);
+  await assertAgentNamed(driver, "VtaLinkLinkedBody", "the Linked screen");
   await screenshot(driver, "link-04-linked");
   const temporaryDid = view.did;
 
