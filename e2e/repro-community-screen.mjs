@@ -10,6 +10,7 @@
  * a Release build on a simulator emits no JS console to the system log, so that
  * control is the only place the reason appears.
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, sleep, byTestId, existsTestId, tapTestId, waitForTestId } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
 import { unlockIfLocked, dismissTourIfPresent, openMyAgentSurface, pasteLinkFromHome } from "./lib/flows.js";

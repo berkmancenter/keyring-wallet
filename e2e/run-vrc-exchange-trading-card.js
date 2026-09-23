@@ -24,6 +24,7 @@
  *   PLATFORMS=android,android ANDROID_AVD2=<second-avd> \
  *     node run-vrc-exchange-trading-card.js                # two android emulators (no macOS/Xcode)
  */
+import "./lib/cli-guard.js";
 import {
   createSession,
   ensureAppium,

@@ -25,6 +25,7 @@
  * (preserves hardware-attestation coverage; two-emulator variants can't,
  * since emulators can't do hardware attestation).
  */
+import "./lib/cli-guard.js";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 

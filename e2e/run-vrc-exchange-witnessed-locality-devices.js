@@ -34,6 +34,7 @@
  * Usage: npm run vrc-exchange:witnessed:locality:devices
  *        (or: yarn e2e:vrc:witnessed:locality:devices from repo root)
  */
+import "./lib/cli-guard.js";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { createSession } from "./lib/driver.js";

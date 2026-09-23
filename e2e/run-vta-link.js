@@ -32,6 +32,7 @@
  *   pointing at a FORCE_BUNDLING device build, and ENROL_PUBLIC_URL an https
  *   URL the device can reach (ATS allows plain http to localhost only).
  */
+import "./lib/cli-guard.js";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";

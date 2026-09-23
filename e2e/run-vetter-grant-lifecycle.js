@@ -25,6 +25,7 @@
  * Needs a phone that is already the lab community's vetter (the vetting
  * suite's `invite` + grant steps). Runner VTA only; never alice.
  */
+import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

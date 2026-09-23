@@ -28,6 +28,7 @@
  * No macOS/Xcode? See run-store-migration-android-only.js — same flow, a
  * second Android emulator stands in for the iOS peer.
  */
+import "./lib/cli-guard.js";
 import { execSync } from "node:child_process";
 import { remote } from "webdriverio";
 

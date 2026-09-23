@@ -10,6 +10,7 @@
  *
  * Usage: E2E_KEEP_STATE=1 node run-vti-approve.js      (PLATFORMS=android,ios)
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { openDeveloperScreen, openMyAgentPanel, unlockIfLocked } from "./lib/flows.js";

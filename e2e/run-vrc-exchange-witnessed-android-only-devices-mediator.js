@@ -23,6 +23,7 @@
  * (`adb devices` lists connected serials). The mediator invitation defaults
  * to app/.env's own MEDIATOR_URL; override with WITNESS_MEDIATOR_INVITATION_URL.
  */
+import "./lib/cli-guard.js";
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 

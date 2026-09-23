@@ -23,6 +23,7 @@
  * Env overrides: ANDROID_UDID, IOS_UDID, IOS_TEAM_ID, IOS_DEVICE_APP, ANDROID_APK.
  * Prerequisites + build commands: see e2e/README.md ("Real devices").
  */
+import "./lib/cli-guard.js";
 import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
