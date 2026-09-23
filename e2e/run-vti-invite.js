@@ -25,6 +25,7 @@ import os from "node:os";
 import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
+import { assertDirectoryConsentOff, assertNoDidShown } from "./lib/gateChecks.js";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -127,6 +128,11 @@ async function inviteByDoor(d) {
   }
   if (!card) throw new Error('"Your invitation arrived" never showed in the flow');
   await screenshot(d, "vti-invite-door-arrived");
+  // 217's gate: the invitation names its community in words, and asks about
+  // the public directory with the switch off (keyring-bifold#87, #89). Left
+  // off: the join then sends registryConsent false.
+  await assertNoDidShown(d, "the arrived invitation");
+  await assertDirectoryConsentOff(d, "the arrived invitation");
   await tapTestId(d, "InvitedJoin", 15000);
   console.log(`[e2e] ${d.e2ePlatform}: joining from the flow`);
   if (!(await existsTestId(d, "InvitedJoined", 240000))) {

@@ -818,7 +818,7 @@ async function qrSheetIsOpen(driver, timeout = 4000) {
  * IMPORTANT: never tap the opener while the sheet is already up — the tap
  * lands on the sheet's dark overlay and CLOSES it (open/close toggle loop).
  */
-async function openQrSheet(driver) {
+export async function openQrSheet(driver) {
   // A process-level watchdog kill can relock the wallet at any moment,
   // independent of the in-app inactivity timer (autoLockTime doesn't
   // prevent this — a fresh process always needs the PIN again) — check
