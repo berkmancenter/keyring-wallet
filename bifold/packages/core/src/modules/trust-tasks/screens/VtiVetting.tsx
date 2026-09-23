@@ -881,12 +881,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     </View>
   )
 
-  const requestCard = (r: (typeof requests)[number], i: number) => (
+  // Numbered by its place among all requests, so the same vetter keeps the same
+  // number whichever list (ended, active, all) shows the card.
+  const requestCard = (r: (typeof requests)[number]) => (
     // Keyed by the request, not the vetter: asking the same vetter again is a
     // new request, and mounts a new card rather than relabelling the old one.
     <View key={r.requestDocumentId} style={styles.card} testID={testIdWithKey('VettingRequestCard')}>
       <Text style={styles.value} testID={testIdWithKey('VettingRequestVetter')}>
-        {requests.length > 1 ? t('Vetting.YourVetterN', { n: i + 1 }) : t('Vetting.YourVetter')}
+        {requests.length > 1 ? t('Vetting.YourVetterN', { n: requests.indexOf(r) + 1 }) : t('Vetting.YourVetter')}
       </Text>
       <Text style={styles.label} testID={testIdWithKey('VettingRequestStatus')}>
         {t(`Vetting.Status.${r.status}`)}
@@ -996,7 +998,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               </Text>
             ) : null}
             {ticketInputs}
-            {ended.map(requestCard)}
+            {ended.map((r) => requestCard(r))}
           </>
         ) : null}
 
@@ -1242,7 +1244,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 {ticketInputs}
               </>
             ) : null}
-            {requests.map(requestCard)}
+            {requests.map((r) => requestCard(r))}
           </>
         ) : null}
 

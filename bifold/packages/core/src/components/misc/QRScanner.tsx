@@ -442,7 +442,7 @@ const QRScanner: React.FC<Props> = ({
                       {which === 'contact'
                         ? t('Scan.ContactCard')
                         : t('Scan.IdentityFor', {
-                            community: communityLabelOf(persona.communityDid),
+                            community: communityLabelOf(persona.communityDid, t),
                             interpolation: { escapeValue: false },
                           })}
                     </ThemedText>
@@ -504,7 +504,7 @@ const QRScanner: React.FC<Props> = ({
             <ThemedText variant="bold" style={styles.codeTitle} testID={testIdWithKey('MyQRCodeTitle')}>
               {identityShown && persona
                 ? t('Scan.YourIdentityTitle', {
-                    community: communityLabelOf(persona.communityDid),
+                    community: communityLabelOf(persona.communityDid, t),
                     interpolation: { escapeValue: false },
                   })
                 : t('Scan.YourQRCodeTitle')}
