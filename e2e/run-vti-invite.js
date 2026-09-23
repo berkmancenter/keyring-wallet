@@ -18,7 +18,7 @@
  *   invitation shows → Join → "You're a member".
  */
 import "./lib/cli-guard.js";
-import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestId, simTarget } from "./lib/driver.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";
 import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
@@ -49,7 +49,7 @@ async function openLink(url) {
   if (platform === "ios" && (IOS_UDID || url.length > 2000)) return pasteLinkFromHome(driver, url);
   // "booted" is the first booted simulator, which is not this session's when
   // another is up (the debug suite's beside a Release build's): address ours.
-  if (platform === "ios") execFileSync("xcrun", ["simctl", "openurl", driver?.capabilities?.udid || "booted", url], { stdio: "inherit" });
+  if (platform === "ios") execFileSync("xcrun", ["simctl", "openurl", simTarget(driver), url], { stdio: "inherit" });
   else execFileSync("adb", ["-s", ANDROID_SERIAL, "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", `'${url}'`, ANDROID_PKG], { stdio: "inherit" });
 }
 

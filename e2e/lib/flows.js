@@ -14,6 +14,7 @@ import {
   tapTestIdReliable,
   waitForTestId,
   screenshot,
+  simTarget
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
@@ -154,8 +155,9 @@ export async function seedTestPhoto(driver) {
       );
       console.log(`[e2e] android: seeded test photo + granted media permission`);
     } else {
-      execSync(`xcrun simctl addmedia booted "${TEST_PHOTO_PATH}"`);
-      execSync(`xcrun simctl privacy booted grant photos ${APP_ID}`);
+      const sim = simTarget(driver);
+      execSync(`xcrun simctl addmedia ${sim} "${TEST_PHOTO_PATH}"`);
+      execSync(`xcrun simctl privacy ${sim} grant photos ${APP_ID}`);
       console.log(`[e2e] ios: seeded test photo + granted photos permission`);
     }
   } catch (err) {
@@ -1738,7 +1740,7 @@ export async function startIosLogCapture(driver, deviceUdid) {
   mkdirSync("artifacts", { recursive: true });
   const file = `artifacts/ios-js-${Date.now()}.log`;
   const fd = openSync(file, "a");
-  const sim = process.env.IOS_UDID || "booted";
+  const sim = simTarget(undefined);
   const proc = spawn(
     "xcrun",
     [
