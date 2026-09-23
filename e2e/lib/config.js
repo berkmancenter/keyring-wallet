@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -175,6 +176,58 @@ export function androidDeviceCaps(udid) {
  * each needs its own WDA port, MJPEG port and WDA derived-data folder
  * (concurrent WDA builds into one folder collide).
  */
+/**
+ * Where WebDriverAgent is built, and whether it is rebuilt.
+ *
+ * Appium's XCUITest driver compiles WDA when a session starts, so every device
+ * or simulator session adds an Xcode build to the machine that nobody chose —
+ * three sessions, three builds. One night this Mac carried four `xcodebuild`
+ * processes at once and a twenty-minute estimate became forty-five.
+ *
+ * Pinning the derived-data folder makes that build reusable. `usePrebuiltWDA`
+ * then reuses it — but it is not a hint: with it set, the driver runs
+ * `test-without-building` and does NOT build (appium-webdriveragent's
+ * `xcodebuild.ts`: `usePrebuiltWDA || useXctestrunFile` pushes the test command
+ * alone). Nothing checks that a product exists first, so setting it against an
+ * empty folder does not "build once and reuse" — it fails inside WDA, before
+ * any test runs.
+ *
+ * So this asks the filesystem rather than assuming: reuse only when this
+ * platform's `WebDriverAgentRunner-Runner.app` is actually there. A cold
+ * machine builds once, every run after that starts in seconds, and a folder
+ * someone deleted heals itself.
+ *
+ * Device and simulator products are different builds (`Debug-iphoneos` versus
+ * `Debug-iphonesimulator`) and they get separate folders, so one platform's
+ * first run can never be handed the other's build.
+ *
+ * `E2E_REBUILD_WDA=1` forces a build even when a product exists: a stale
+ * prebuilt WDA after an Appium or Xcode upgrade shows up as a session dying
+ * inside WDA rather than in a test, and that is the first thing to try.
+ * Concurrent sessions still cannot share one folder — simultaneous builds into
+ * the same derived data collide — so a caller running devices in parallel
+ * passes its own path, as the two-device runners do.
+ */
+const WDA_DERIVED_DATA_BASE =
+  process.env.WDA_DERIVED_DATA || path.join(os.homedir(), "Library/Developer/Xcode/DerivedData/keyring-wda");
+const REBUILD_WDA = process.env.E2E_REBUILD_WDA === "1";
+
+/** Is this platform's WDA already built in `derivedDataPath`? */
+function wdaProductExists(derivedDataPath, platform) {
+  const built = platform === "device" ? "Debug-iphoneos" : "Debug-iphonesimulator";
+  return existsSync(path.join(derivedDataPath, "Build", "Products", built, "WebDriverAgentRunner-Runner.app"));
+}
+
+/**
+ * @param platform "device" | "sim"
+ * @param ownPath a caller's own folder, for runs that drive two devices at once
+ */
+function prebuiltWdaCaps(platform, ownPath) {
+  const derivedDataPath = ownPath ?? `${WDA_DERIVED_DATA_BASE}-${platform}`;
+  const prebuilt = !REBUILD_WDA && wdaProductExists(derivedDataPath, platform);
+  return { "appium:derivedDataPath": derivedDataPath, "appium:usePrebuiltWDA": prebuilt };
+}
+
 export function iosDeviceCaps(udid, ports = {}) {
   return {
     platformName: "iOS",
@@ -201,7 +254,7 @@ export function iosDeviceCaps(udid, ports = {}) {
     // default 8100 can be taken by other tooling on the host
     "appium:wdaLocalPort": ports.wdaLocalPort ?? 8123,
     ...(ports.mjpegServerPort ? { "appium:mjpegServerPort": ports.mjpegServerPort } : {}),
-    ...(ports.derivedDataPath ? { "appium:derivedDataPath": ports.derivedDataPath } : {}),
+    ...prebuiltWdaCaps("device", ports.derivedDataPath),
     "appium:newCommandTimeout": 600,
     "appium:autoAcceptAlerts": true,
     "appium:wdaLaunchTimeout": 300000,
@@ -227,6 +280,7 @@ export function iosCaps() {
     // (e.g. a local VTA); override with WDA_LOCAL_PORT
     "appium:wdaLocalPort": Number(process.env.WDA_LOCAL_PORT || 8100),
     "appium:wdaLaunchTimeout": 180000,
+    ...prebuiltWdaCaps("sim"),
     "appium:simulatorStartupTimeout": 300000,
     // A second worktree's Metro on another host port: a simulator shares the
     // host's localhost, so point the app at it with the NSUserDefaults key
