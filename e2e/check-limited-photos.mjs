@@ -24,7 +24,7 @@ import { execFileSync } from "node:child_process";
 
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { completeOnboarding, TEST_PHOTO_PATH } from "./lib/flows.js";
-import { iosDeviceCaps } from "./lib/config.js";
+import { iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
 
 const LIMIT = /limit access|select photos/i;
@@ -36,11 +36,12 @@ const LIMIT = /limit access|select photos/i;
  * take, by label first ("Photo, <date>"), never a bare Cell[1] alone.
  */
 const PHOTO_SELECTORS = [
-  '-ios predicate string:(type == "XCUIElementTypeImage" OR type == "XCUIElementTypeCell" OR type == "XCUIElementTypeButton" OR type == "XCUIElementTypeOther") AND label BEGINSWITH "Photo"',
-  '-ios predicate string:type == "XCUIElementTypeImage" AND label CONTAINS[c] "photo"',
+  // "Photo, <date>" — the comma matters: a bare "Photo" prefix also matches the
+  // picker's "Photos" tab and the Photos icon in its "Private Access" banner,
+  // which is what a real iPhone 11 run tapped instead of a photo (2026-09-23).
+  '-ios predicate string:(type == "XCUIElementTypeImage" OR type == "XCUIElementTypeCell" OR type == "XCUIElementTypeButton" OR type == "XCUIElementTypeOther") AND label BEGINSWITH "Photo, "',
   "-ios class chain:**/XCUIElementTypeCollectionView/**/XCUIElementTypeCell[1]",
-  "-ios class chain:**/XCUIElementTypeCell[1]",
-];
+]
 
 /** The first photo any picker shows, or undefined within `timeoutMs`. */
 async function firstPhoto(d, timeoutMs) {
@@ -61,15 +62,20 @@ try {
   // A real phone when IOS_UDID names one (IOS_DEVICE_APP is the signed Release
   // .app): #21 is only "fixed" once hardware says so. Otherwise a simulator.
   const deviceUdid = process.env.IOS_UDID;
+  // The harness answers system alerts by itself (autoAcceptAlerts), and on the
+  // iPhone 11 it answered this very sheet — "Don't Allow" — before the check
+  // could choose (2026-09-23). This check is about choosing, so for its own
+  // session it answers nothing on its own.
+  const noAutoAnswer = { "appium:autoAcceptAlerts": false };
   driver = deviceUdid
-    ? await createSession(
-        "ios",
-        iosDeviceCaps(deviceUdid, {
+    ? await createSession("ios", {
+        ...iosDeviceCaps(deviceUdid, {
           wdaLocalPort: Number(process.env.WDA_LOCAL_PORT) || undefined,
           mjpegServerPort: Number(process.env.MJPEG_PORT) || undefined,
-        })
-      )
-    : await createSession("ios");
+        }),
+        ...noAutoAnswer,
+      })
+    : await createSession("ios", { ...iosCaps(), ...noAutoAnswer });
   const udid = driver.capabilities?.udid;
   if (!udid) throw new Error("no udid on the session");
   if (deviceUdid) {
