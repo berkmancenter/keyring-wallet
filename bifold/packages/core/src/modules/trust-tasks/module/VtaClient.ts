@@ -25,6 +25,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import { chooseAgentLabel, verifiedAgentName, vtaNameFrom, type AgentLabel, type AgentNameDocument } from './agentLabel'
 import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
@@ -52,6 +53,7 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 /** The tasks this client speaks, by the URIs `vta-sdk` registers. */
 export const VTA_TASK = {
   whoAmI: 'https://trusttasks.org/spec/auth/whoami/0.1',
+  configShow: 'https://trusttasks.org/spec/config/show/0.1',
   contextsList: 'https://trusttasks.org/spec/vta/contexts/list/1.0',
   contextsCreate: 'https://trusttasks.org/spec/vta/contexts/create/1.0',
   didsList: 'https://trusttasks.org/spec/vta/webvh/dids/list/1.0',
@@ -567,6 +569,27 @@ export class VtaClient {
 
   createContext(id: string, name: string) {
     return this.task<VtaContext>(VTA_TASK.contextsCreate, { id, name })
+  }
+
+  /**
+   * What to call this agent beside its DID (VTI-Q20): its verified agent name,
+   * else the operator's `vta_name` from `config/show/0.1`, else undefined — a
+   * caller then shows the host. Never throws: a label is a nicety, and an agent
+   * that cannot be asked, or a name that does not check out, is simply no label.
+   */
+  async agentLabel(
+    options: { fetchImpl?: Parameters<typeof verifiedAgentName>[2] } = {}
+  ): Promise<AgentLabel | undefined> {
+    const [verifiedName, vtaName] = await Promise.all([
+      this.agent.dids
+        .resolveDidDocument(this.vtaDid)
+        .then((doc) => verifiedAgentName(this.vtaDid, doc as AgentNameDocument, options.fetchImpl))
+        .catch(() => undefined),
+      this.task(VTA_TASK.configShow, { keys: ['vta_name'] })
+        .then(vtaNameFrom)
+        .catch(() => undefined),
+    ])
+    return chooseAgentLabel(verifiedName, vtaName)
   }
 
   /** The DID-hosting servers this VTA is registered with — where a persona can be minted. */
