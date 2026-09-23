@@ -19,6 +19,7 @@
  */
 import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestId, simTarget } from "./lib/driver.js";
+import { MAY_FLIP_CRITERIA, criteriaNote } from "./lib/criteria.js";
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import os from "node:os";
 import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
@@ -141,7 +142,8 @@ try {
   // The community's criteria are shared by every session's runs: hold the
   // lab's criteria lock for the whole run (released on exit or a signal).
   await holdCriteriaLock(`invite ${INVITE_VIA}`);
-  execFileSync("bash", [INVITE, "--invitation-only"], { stdio: "inherit" });
+  if (MAY_FLIP_CRITERIA) execFileSync("bash", [INVITE, "--invitation-only"], { stdio: "inherit" });
+  else criteriaNote("making it invitation-only");
   await ensureAppium();
   const caps =
     platform === "android"
@@ -254,7 +256,7 @@ try {
   }
   process.exitCode = 1;
 } finally {
-  try { execFileSync("bash", [INVITE, "--restore-criteria"], { stdio: "inherit" }); } catch { /* best effort */ }
+  if (MAY_FLIP_CRITERIA) try { execFileSync("bash", [INVITE, "--restore-criteria"], { stdio: "inherit" }); } catch { /* best effort */ }
   if (driver) { try { await driver.deleteSession(); } catch { /* ignore */ } }
   stopAppium();
 }
