@@ -62,6 +62,7 @@ import { joinSeed } from '../module/vtiJoinSeed'
 import { useCommunityDid } from './useCommunity'
 import { communityLabelOf, communityLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
+import { DirectoryConsent } from './DirectoryConsent'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
 
@@ -108,6 +109,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const [error, setError] = useState<string>()
   // The community answered that an application is already open (and which).
   const [alreadyOpen, setAlreadyOpen] = useState(false)
+  // Off unless the person turns it on (VTI-Q14).
+  const [listMe, setListMe] = useState(false)
   const [busy, setBusy] = useState<string>()
   const [tick, setTick] = useState(0)
   const bump = useCallback(() => setTick((n) => n + 1), [])
@@ -1130,6 +1133,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   {tp('Vetting.UnreadableMaxAge', { value: checklist.unreadableMaxAge })}
                 </Text>
               ) : null}
+              {/* Asked with a fresh application; a supplement keeps the consent given when it was sent. */}
+              {checklist?.meets && application?.submission?.state !== 'deferred' ? (
+                <DirectoryConsent communityDid={communityDid} value={listMe} onChange={setListMe} disabled={!!busy} />
+              ) : null}
               {checklist?.meets ? (
                 <Pressable
                   style={styles.button}
@@ -1153,7 +1160,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         // second submit while one is open would be refused.
                         let verdict
                         try {
-                          verdict = await applicantRef.current!.submit(m, statements, application?.requirementsDigest)
+                          verdict = await applicantRef.current!.submit(
+                            m,
+                            statements,
+                            application?.requirementsDigest,
+                            listMe
+                          )
                         } catch (e) {
                           // Already applied (requestAlreadyOpen): not an error. The
                           // open request is now recorded on the application, and the

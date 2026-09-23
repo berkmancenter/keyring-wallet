@@ -1288,6 +1288,10 @@
     "JoinedTitle": "Vous êtes membre de {{community}}",
     "JoinedBody": "Votre carte de membre est dans votre portefeuille."
   },
+  "Registry": {
+    "ListMe": "M'inscrire dans l'annuaire public des membres de {{community}}",
+    "Note": "Tout le monde peut voir qui y figure. Vous ne pourrez pas modifier ce choix dans Keyring plus tard. Pour être retiré de l'annuaire, demandez à l'administrateur de la communauté."
+  },
   "Join": {
     "WhichTitle": "Quelle communauté ?",
     "WhichBody": "Scannez ou collez le lien de la communauté — ou le ticket d'un vérificateur, qui la nomme aussi.",

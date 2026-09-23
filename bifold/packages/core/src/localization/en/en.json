@@ -1342,6 +1342,10 @@
     "JoinedTitle": "You're a member of {{community}}",
     "JoinedBody": "Your membership card is in your wallet."
   },
+  "Registry": {
+    "ListMe": "List me in the public member directory of {{community}}",
+    "Note": "Anyone can see who is listed. You can't change this in Keyring later. To be removed from the directory, ask the community's admin."
+  },
   "Join": {
     "WhichTitle": "Which community?",
     "WhichBody": "Scan or paste the community's link — or a vetter's ticket, which names the community too.",

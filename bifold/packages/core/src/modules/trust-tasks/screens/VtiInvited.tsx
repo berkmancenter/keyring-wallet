@@ -39,6 +39,7 @@ import { communityLinkReturn } from '../module/vtiLinks'
 
 import { identityShareText, shareIdentity } from './identityShare'
 import { communityLabelOf, communityLabelStartOf } from './communityName'
+import { DirectoryConsent } from './DirectoryConsent'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { openScanner } from './openScanner'
 import { useCommunityDid } from './useCommunity'
@@ -65,6 +66,8 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState<Step>('intro')
   const [busy, setBusy] = useState(false)
+  // Off unless the person turns it on (VTI-Q14).
+  const [listMe, setListMe] = useState(false)
   const [error, setError] = useState<string>()
   const [copied, setCopied] = useState(false)
   const [showQr, setShowQr] = useState(false)
@@ -162,6 +165,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           vtaDid,
           mediatorDid,
           communityDid: invitation.communityDid,
+          registryConsent: listMe,
         },
         invitation
       )
@@ -171,7 +175,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     } finally {
       setBusy(false)
     }
-  }, [agent, vtaDid, mediatorDid, invitation])
+  }, [agent, vtaDid, mediatorDid, invitation, listMe])
 
   const scan = () => openScanner(navigation)
 
@@ -356,6 +360,12 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
               <ThemedText>{t('Invited.ArrivedBody', { community, interpolation: { escapeValue: false } })}</ThemedText>
             </View>
           </View>
+          <DirectoryConsent
+            communityDid={invitation.communityDid}
+            value={listMe}
+            onChange={setListMe}
+            disabled={busy}
+          />
           {errorLine}
         </>
       ) : (

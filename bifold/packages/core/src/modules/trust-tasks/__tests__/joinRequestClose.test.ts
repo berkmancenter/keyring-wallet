@@ -115,7 +115,9 @@ describe('an application already open at the community (vti #1592)', () => {
   })
 
   it('reads nothing from another refusal, or one with no request named', () => {
-    expect(openJoinRequestOf(new VtiRefusal('vtc/join-requests/withdraw:notFound', 'x', { requestId: 'r9' }))).toBeUndefined()
+    expect(
+      openJoinRequestOf(new VtiRefusal('vtc/join-requests/withdraw:notFound', 'x', { requestId: 'r9' }))
+    ).toBeUndefined()
     expect(openJoinRequestOf(already(undefined))).toBeUndefined()
     expect(openJoinRequestOf(new Error('requestAlreadyOpen'))).toBeUndefined()
   })
@@ -142,6 +144,21 @@ describe('an application already open at the community (vti #1592)', () => {
 })
 
 describe('sending an application', () => {
+  it("carries the person's directory consent with a fresh application, and not with a supplement", async () => {
+    const { applicant } = applicantWith(baseApplication())
+    mockApply.mockResolvedValue({ requestId: 'r1', effect: 'requestMore', needs: ['vetting:statements:1'] })
+    await applicant.submit(manifest, ['s1'], 'digest-1', true)
+    expect(mockApply).toHaveBeenCalledWith(COMMUNITY, manifest, expect.objectContaining({ registryConsent: true }))
+
+    // The deferral is answered in place: its consent was given when it was sent.
+    mockSupplement.mockResolvedValue({ requestId: 'r1', effect: 'allow', needs: [] })
+    await applicant.submit(manifest, ['s1', 's2'], 'digest-1', false)
+    expect(mockSupplement).toHaveBeenCalledWith(
+      COMMUNITY,
+      expect.not.objectContaining({ registryConsent: expect.anything() })
+    )
+  })
+
   it('submits the first time, and records a deferral as open and waiting on the applicant', async () => {
     const { applicant, store } = applicantWith(baseApplication())
     mockApply.mockResolvedValue({ requestId: 'r1', effect: 'requestMore', needs: ['vetting:statements:1'] })
