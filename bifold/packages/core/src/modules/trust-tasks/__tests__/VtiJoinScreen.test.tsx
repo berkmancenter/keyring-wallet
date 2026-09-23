@@ -13,6 +13,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { vtiAgent } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiJoin, { asksFrom } from '../screens/VtiJoin'
 
@@ -40,7 +41,9 @@ describe('what a community asks for', () => {
     expect(asksFrom({ criteria: [{ id: 'invited-member' }] } as never).invitationOnly).toBe(true)
   })
   it('another kind of criterion is described, not taken for invitation-only', () => {
-    const asks = asksFrom({ criteria: [{ id: 'invited-member' }, { id: 'staff', description: 'A staff credential' }] } as never)
+    const asks = asksFrom({
+      criteria: [{ id: 'invited-member' }, { id: 'staff', description: 'A staff credential' }],
+    } as never)
     expect(asks).toMatchObject({ kind: 'other', invitationOnly: false, descriptions: ['A staff credential'] })
   })
   it('no criteria: nothing to ask (upstream cannot publish this yet, KR-13)', () => {
@@ -53,6 +56,8 @@ describe('I want to join a community', () => {
     jest.useFakeTimers()
     communityTarget.clear()
     mockEnsurePersona.mockClear()
+    // No network in tests: a community that cannot be read, unless a test says otherwise.
+    jest.spyOn(vtiAgent, 'fetchManifest').mockRejectedValue(new Error('offline'))
     const mockUseAgent = useAgent as jest.Mock
     mockUseAgent.mockReturnValue({ agent: { config: { logger: { info: jest.fn(), error: jest.fn() } } } })
     const controller = vtaAgent as unknown as Setter
@@ -66,7 +71,10 @@ describe('I want to join a community', () => {
       },
     })
   })
-  afterEach(() => jest.useRealTimers())
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
 
   const renderJoin = async () => {
     const tree = render(
@@ -116,6 +124,33 @@ describe('I want to join a community', () => {
    * rendered on the community screen; a link also takes this screen straight
    * past the suggestion, which is why the caveat is tested there.)
    */
+  /**
+   * A fresh phone has read nothing about the community yet. The card must ask
+   * the community on its own first step, and show its published name — not
+   * "hasn't published a name" (Farm gate, 2026-09-23: keyring-test-vtc
+   * publishes "Keyring Lab Community" and a fresh phone was told it had none).
+   */
+  it('on a fresh phone, learns the published name on the first step and offers it', async () => {
+    jest.spyOn(vtiAgent, 'fetchManifest').mockImplementation(async (did: string) => {
+      communityTarget.publishedName(did, 'Keyring Lab Community')
+      return { criteria: [] } as never
+    })
+    const tree = await renderJoin()
+    // With this screen's agent: a fresh phone has no session to lend the read one.
+    expect(vtiAgent.fetchManifest).toHaveBeenCalledWith(
+      suggested,
+      expect.objectContaining({ config: expect.anything() })
+    )
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedName'))).toHaveTextContent('Keyring Lab Community')
+  })
+
+  it('says it is checking, not "unnamed", while the community has not answered', async () => {
+    jest.spyOn(vtiAgent, 'fetchManifest').mockImplementation(() => new Promise(() => undefined))
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedChecking'))).toHaveTextContent('Join.CheckingName')
+    expect(tree.queryByTestId(testIdWithKey('JoinSuggestedName'))).toBeNull()
+  })
+
   it('offers the suggestion by the name the community published, with no caveat', async () => {
     communityTarget.publishedName(suggested, 'Keyring Lab Community')
     const tree = await renderJoin()

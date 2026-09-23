@@ -47,9 +47,10 @@ describe('Link your agent — done', () => {
     await act(async () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkContinue')))
     })
+    // The agent screen alone: a linked phone has no operator panel under it to go back to.
     expect(navigation.reset).toHaveBeenCalledWith({
-      index: 1,
-      routes: [{ name: Screens.MyAgent }, { name: Screens.VtaAgent }],
+      index: 0,
+      routes: [{ name: Screens.VtaAgent }],
     })
     expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtaAgent)
   })

@@ -21,13 +21,7 @@ import { vtiAgent, type VtiVerdict } from './vtiAgent'
 import { receiveIssue } from './vtiInbox'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 
-export type VtiJoinStep =
-  | 'persona'
-  | 'connecting'
-  | 'manifest'
-  | 'submitting'
-  | 'verdict'
-  | 'stored'
+export type VtiJoinStep = 'persona' | 'connecting' | 'manifest' | 'submitting' | 'verdict' | 'stored'
 
 export interface VtiJoinDeps {
   agent: Agent
@@ -55,7 +49,9 @@ export interface VtiJoinResult {
  * minted on the VTA (and its key-agreement key borrowed) when not. One
  * identity per community, kept: a person is recognised by it afterwards.
  */
-export async function ensurePersonaFor(deps: Pick<VtiJoinDeps, 'agent' | 'identityStore' | 'vtaDid' | 'communityDid'>): Promise<VtiPersona> {
+export async function ensurePersonaFor(
+  deps: Pick<VtiJoinDeps, 'agent' | 'identityStore' | 'vtaDid' | 'communityDid'>
+): Promise<VtiPersona> {
   // The app's one session with its VTA: a granted notice must reach the
   // client that waits for it, and a second socket for the same DID would not.
   const client = vtaAgent.client(deps.agent, deps.vtaDid, deps.identityStore)
@@ -73,7 +69,10 @@ export async function joinCommunity(deps: VtiJoinDeps, invitation?: VtiInvitatio
   }
 
   step('connecting', persona.did)
-  await vtiAgent.connect(deps.agent, deps.mediatorDid, { persona, peerRevisionStore: new GenericRecordsTspPeerRevisionStore(deps.agent) })
+  await vtiAgent.connect(deps.agent, deps.mediatorDid, {
+    persona,
+    peerRevisionStore: new GenericRecordsTspPeerRevisionStore(deps.agent),
+  })
 
   // Whatever the community delivers during the join — on the Eucalyptus
   // train the card and the role arrive as separate messages after the verdict.
@@ -83,7 +82,7 @@ export async function joinCommunity(deps: VtiJoinDeps, invitation?: VtiInvitatio
   })
 
   step('manifest')
-  const manifest = await vtiAgent.fetchManifest(deps.communityDid)
+  const manifest = await vtiAgent.fetchManifest(deps.communityDid, deps.agent)
 
   step('submitting', invitation ? 'with invitation' : 'empty')
   const verdict = await vtiAgent.apply(deps.communityDid, manifest, {

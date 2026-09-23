@@ -113,6 +113,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // suggestion is offered first, beside "a different community".
   const [step, setStep] = useState<Step>(chosenByLink ? 'asks' : 'which')
   const [asks, setAsks] = useState<Asks>()
+  // Which community's manifest has been read (or failed to be): until then a
+  // missing name means "not known yet", not "none published".
+  const [nameRead, setNameRead] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<PlainError>()
   const [errorOpen, setErrorOpen] = useState(false)
@@ -122,10 +125,13 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (chosenByLink) setStep((s) => (s === 'which' ? 'asks' : s))
   }, [chosenByLink])
 
-  // The community's own words, when a session is already open to read them;
-  // otherwise what every vetting community asks.
+  // The community's own words: what it asks, and what it calls itself. Read as
+  // soon as there is a community, not only on "what it asks" — the suggestion
+  // card comes first, and a fresh phone showed a community that publishes a
+  // name as having none, because nothing had read it yet (Farm gate,
+  // 2026-09-23; the same shape as report #16).
   useEffect(() => {
-    if (step !== 'asks' || !communityDid) return
+    if (!communityDid) return
     let live = true
     setAsks(undefined)
     // No session needed: a community answers the join manifest over REST, which
@@ -133,15 +139,17 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     // exists. Guarding this on `connected` is why a community's published name
     // never reached this screen while the community screen had it (report #16).
     vtiAgent
-      .fetchManifest(communityDid)
+      // With this screen's agent: a fresh phone has no session to lend one.
+      .fetchManifest(communityDid, agent)
       // Reading the manifest also teaches the app what the community calls
       // itself; vtiAgent does that for every fetch, so nothing is needed here.
       .then((m) => live && setAsks(asksFrom(m)))
       .catch(() => undefined)
+      .finally(() => live && setNameRead(communityDid))
     return () => {
       live = false
     }
-  }, [step, communityDid])
+  }, [communityDid, agent])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -217,9 +225,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (asks?.invitationOnly) return t('Join.AsksInvitationOnly')
     if (asks?.kind === 'open') return t('Join.AsksNothing')
     if (asks?.kind === 'other') return [t('Join.AsksOther'), ...asks.descriptions].join(' ')
-    const claims = (asks ? asks.claims : ['name.legal']).map((c) =>
-      c === 'name.legal' ? t('Join.AsksLegalName') : c
-    )
+    const claims = (asks ? asks.claims : ['name.legal']).map((c) => (c === 'name.legal' ? t('Join.AsksLegalName') : c))
     return [t('Join.AsksStatements', { count: asks?.statements ?? 1 }), ...claims].join('. ')
   })()
 
@@ -244,9 +250,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
             <View style={styles.card} testID={testIdWithKey('JoinSuggested')}>
               <View style={styles.row}>
                 <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
-                <ThemedText variant="bold" testID={testIdWithKey('JoinSuggestedName')}>
-                  {called.name ?? t('Join.Unnamed')}
-                </ThemedText>
+                {called.name || nameRead === communityDid ? (
+                  <ThemedText variant="bold" testID={testIdWithKey('JoinSuggestedName')}>
+                    {called.name ?? t('Join.Unnamed')}
+                  </ThemedText>
+                ) : (
+                  // Not "unnamed" before the community has been asked: say it is being asked.
+                  <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedChecking')}>
+                    {t('Join.CheckingName')}
+                  </ThemedText>
+                )}
               </View>
               {/* Where this community came from, truthfully. It said "Suggested
                   for this app" for a community the person had joined on an
@@ -300,12 +313,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
           </ThemedText>
           {/* The lines below are separate nodes, so the card says the whole
               sentence itself — for a screen reader, and for the harness. */}
-          <View
-            style={styles.card}
-            testID={testIdWithKey('JoinAsks')}
-            accessible
-            accessibilityLabel={asksSentence}
-          >
+          <View style={styles.card} testID={testIdWithKey('JoinAsks')} accessible accessibilityLabel={asksSentence}>
             {asks?.invitationOnly ? (
               <ThemedText>{t('Join.AsksInvitationOnly')}</ThemedText>
             ) : asks?.kind === 'open' ? (
