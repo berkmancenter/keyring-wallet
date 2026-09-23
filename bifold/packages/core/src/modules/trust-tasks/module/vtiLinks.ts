@@ -12,7 +12,13 @@
 
 import type { Agent } from '@credo-ts/core'
 
-import { EnrolmentOfferError, isEnrolmentLink, isTicketUri, parseEnrolmentLink, parseTicketUri } from '@bifold/trust-tasks'
+import {
+  EnrolmentOfferError,
+  isEnrolmentLink,
+  isTicketUri,
+  parseEnrolmentLink,
+  parseTicketUri,
+} from '@bifold/trust-tasks'
 
 import { Screens } from '../../../types/navigators'
 
@@ -34,13 +40,14 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
 }
 
 /** Where a link lands, inside the My Agent stack. */
-export type MyAgentDestination = 'VtaLink' | 'MyAgent' | 'VtiVetting' | 'VtiJoin'
+export type MyAgentDestination = 'VtaLink' | 'MyAgent' | 'VtiVetting' | 'VtiJoin' | 'VtiInvited'
 
 export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtaLink: Screens.VtaLink,
   MyAgent: Screens.MyAgent,
   VtiVetting: Screens.VtiVetting,
   VtiJoin: Screens.VtiJoin,
+  VtiInvited: Screens.VtiInvited,
 }
 
 /**
@@ -108,7 +115,9 @@ export async function routeKeyringAgentLink(
       const invitation = parseVtiInvitationLink(trimmed)
       if (invitation.communityDid) communityTarget.set({ communityDid: invitation.communityDid })
       await new GenericRecordsCommunityStore(agent).saveInvitation(invitation)
-      navigate('MyAgent')
+      // A linked phone accepts it on "I was invited"; the operator panel,
+      // where it used to land, is only for a phone with a build-named agent.
+      navigate(vtaAgent.getState().link.kind === 'linked' ? 'VtiInvited' : 'MyAgent')
       return
     }
     case 'community': {

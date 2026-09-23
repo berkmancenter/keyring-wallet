@@ -54,15 +54,35 @@ describe('routing them', () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('an invitation is kept and shown on My Agent', async () => {
+  it('an invitation is kept and, with no linked agent, shown on My Agent', async () => {
+    const controller = vtaAgent as unknown as { set(next: Record<string, unknown>): void }
+    controller.set({ link: { kind: 'notLinked' } })
     const navigate = jest.fn()
     await routeKeyringAgentLink('keyring://vti/invitation?c=abc', {} as never, navigate)
     expect(mockSaveInvitation).toHaveBeenCalledWith({ id: 'keyring://vti/invitation?c=abc' })
     expect(navigate).toHaveBeenCalledWith('MyAgent')
   })
+
+  it('on a linked phone, an invitation opens "I was invited", never the operator panel', async () => {
+    const controller = vtaAgent as unknown as { set(next: Record<string, unknown>): void }
+    controller.set({
+      link: {
+        kind: 'linked',
+        vtaDid: 'did:webvh:example:vta',
+        label: 'bob',
+        linkedAt: '2026-09-23T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+    const navigate = jest.fn()
+    await routeKeyringAgentLink('keyring://vti/invitation?c=abc', {} as never, navigate)
+    expect(navigate).toHaveBeenCalledWith('VtiInvited')
+    expect(navigate).not.toHaveBeenCalledWith('MyAgent')
+    controller.set({ link: { kind: 'notLinked' } })
+  })
 })
 
-describe('a vetter\'s ticket', () => {
+describe("a vetter's ticket", () => {
   const ticket = encodeTicketUri({
     community: 'did:webvh:Qm:community',
     vetter: 'did:webvh:Qm:vetter',
