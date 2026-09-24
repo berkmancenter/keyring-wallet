@@ -88,6 +88,19 @@ describe('I want to join a community', () => {
     return tree
   }
 
+  // A community's code can arrive before any agent is linked — the phone's
+  // camera opens Keyring on it. Join says what is missing and offers the way.
+  it('with no agent linked: says so and offers to link one, as "I was invited" does', async () => {
+    const controller = vtaAgent as unknown as Setter
+    controller.set({ link: { kind: 'notLinked' } })
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinNeedsAgent'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinLinkAgent'))))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaLink)
+  })
+
   it('offers the suggested community, then what it asks, then the identity → vetting', async () => {
     const navigation = useNavigation() as unknown as { navigate: jest.Mock }
     navigation.navigate.mockClear()
