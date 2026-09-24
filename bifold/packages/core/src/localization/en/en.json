@@ -642,7 +642,6 @@
     "ReadingCode": "Reading this code…",
     "CodeNotUsable": "Keyring can't use this code",
     "CodeNotRead": "This code couldn't be read.",
-    "WhatCanIScan": "Your agent's code, a community's code, a vetting ticket, or another Keyring user's contact code.",
     "ContactCard": "Contact card",
     "IdentityFor": "Identity for {{community}}",
     "YourQRCodeTitle": "Your contact code",
