@@ -4,6 +4,12 @@ on:
   push:
     branches: [staging]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Which store builds to run (a rerun of one failed platform need not rebuild the other)
+        type: choice
+        options: [both, android, ios]
+        default: both
 
 permissions:
   contents: read
@@ -140,7 +146,8 @@ jobs:
   build-android-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
     # Repository variable DEPLOY_ANDROID=false switches the platform off.
-    if: vars.DEPLOY_ANDROID != 'false'
+    # A manual run can build one platform only (inputs.platform is empty on push).
+    if: vars.DEPLOY_ANDROID != 'false' && inputs.platform != 'ios'
     runs-on: ubuntu-22.04
     environment: internal
     timeout-minutes: 60
@@ -389,21 +396,10 @@ jobs:
           find bifold/packages -type f -name "*.map" -delete 2>/dev/null || true
           find bifold/packages -type f -name "*.d.ts.map" -delete 2>/dev/null || true
 
-          # Clean up large node_modules that aren't needed for Android build
-          # Keep only what's needed for Metro bundling and native builds
-          # CRITICAL: Do NOT delete android/ or ios/ directories - Gradle needs them for native modules!
-          # Remove test directories and files (not needed for runtime/bundling, but exclude native dirs)
-          find . -path "*/node_modules/*" -type d -name "__tests__" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type d -name "test" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type d -name "tests" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.test.js" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.spec.js" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          # Remove documentation files (not needed for runtime/bundling, but preserve CMakeLists.txt and native dirs)
-          find . -path "*/node_modules/*" -type f -name "*.md" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.txt" ! -name "CMakeLists.txt" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "LICENSE*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "CHANGELOG*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "README*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
+          # Never delete files inside node_modules by name: a folder called
+          # "test" can be runtime code (@openvtc/trust-tasks exports
+          # dist/vtc/policies/test/, and deleting it broke build 220's bundle).
+          # There is ~96 GB free at this point; those deletions saved nothing.
 
           # Clean up yarn cache (if not already cleaned)
           yarn cache clean 2>/dev/null || true
@@ -489,12 +485,24 @@ jobs:
 
             export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
 
-            echo "Accepting Android SDK licenses..."
-            yes | sdkmanager --licenses > /dev/null 2>&1 || true
+            echo "Accepting licenses and installing below."
 
-            echo "Installing Android SDK components..."
-            sdkmanager "platform-tools" "platforms;android-35" "build-tools;33.0.2" "ndk;25.1.8937393" > /dev/null 2>&1 || true
           fi
+
+          # Install exactly what the app declares (android/build.gradle), and
+          # fail here if it can't, instead of letting Gradle find out later.
+          NDK=$(sed -n 's/.*ndkVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          SDK=$(sed -n 's/.*compileSdkVersion *= *\([0-9]*\).*/\1/p' build.gradle)
+          BT=$(sed -n 's/.*buildToolsVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          if [ -z "$NDK" ] || [ -z "$SDK" ] || [ -z "$BT" ]; then
+            echo "❌ Could not read ndk/compileSdk/buildTools from android/build.gradle"; exit 1
+          fi
+          echo "Installing platform-tools, android-$SDK, build-tools $BT, NDK $NDK"
+          (yes || true) | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-$SDK" "build-tools;$BT" "ndk;$NDK" > /tmp/sdkmanager.log 2>&1 || { tail -30 /tmp/sdkmanager.log; exit 1; }
+          test -d "$ANDROID_HOME/ndk/$NDK" || { echo "❌ NDK $NDK is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/platforms/android-$SDK" || { echo "❌ android-$SDK is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/build-tools/$BT" || { echo "❌ build-tools $BT is not installed"; exit 1; }
 
           # Set ANDROID_HOME and PATH for subsequent steps
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
@@ -620,7 +628,7 @@ jobs:
   build-ios-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
     # Repository variable DEPLOY_IOS=false switches the platform off.
-    if: vars.DEPLOY_IOS != 'false'
+    if: vars.DEPLOY_IOS != 'false' && inputs.platform != 'android'
     # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
     # since 2026-04-28; macos-26 carries every Xcode 26 release.
     runs-on: macos-26
