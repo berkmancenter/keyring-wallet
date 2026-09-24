@@ -49,6 +49,11 @@ interface Holdings {
   lapsed: { communityDid: string; grant: Exclude<VetterGrantState, { state: 'active' } | { state: 'none' }> }[]
 }
 
+/**
+ * How often an open agent home re-reads a live vetter grant's status, so a
+ * revoke shows within this long. One small no-store fetch per grant.
+ */
+export const VETTER_RECHECK_MS = 15_000
 const INTRO_PANELS = ['IntroKeeps', 'IntroAnswers', 'IntroApprove'] as const
 
 const VtaAgentHome: React.FC = () => {
@@ -163,6 +168,18 @@ const VtaAgentHome: React.FC = () => {
   // A grant, a card or an invitation that arrives while this screen is open
   // shows without a visit to Vetting: the persona inbox says when it stored one.
   useVtiPersonaDeliveries(() => void load())
+
+  // A revoke sends the phone nothing: the community only flips a bit on its
+  // status list. So while this screen shows a vetter's seat, the grants are read
+  // again on a timer. Without it the seat stood until the app locked and came
+  // back — about five minutes after a revoke on the Farm (2026-09-23), while a
+  // re-grant, which arrives as a delivery, showed in seconds.
+  const seatedAsVetter = (holdings?.vetterFor.length ?? 0) > 0
+  useEffect(() => {
+    if (!isFocused || !seatedAsVetter) return
+    const timer = setInterval(() => void load(), VETTER_RECHECK_MS)
+    return () => clearInterval(timer)
+  }, [isFocused, seatedAsVetter, load])
 
   const onRefresh = useCallback(async () => {
     if (!agent) return

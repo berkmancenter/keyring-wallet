@@ -15,7 +15,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
-import VtaAgentHome from '../screens/VtaAgentHome'
+import VtaAgentHome, { VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The shared navigation mock, with focus under the test's control.
@@ -224,6 +224,47 @@ describe('Your agent — after linking', () => {
       jest.advanceTimersByTime(10)
     })
     expect(tree.getByTestId(testIdWithKey('AgentVetterCard'))).toBeTruthy()
+  })
+
+  it('a revoke shows within one re-check while the screen stays open', async () => {
+    // A revoke sends the phone nothing; only the status list changes.
+    mockGrantState.mockResolvedValue({ state: 'active', statusChecked: true })
+    const tree = await renderHome([persona, grant])
+    expect(tree.getByTestId(testIdWithKey('AgentVetterCard'))).toBeTruthy()
+    mockGrantState.mockResolvedValue({ state: 'revoked', checkedAt: '2026-09-24T00:00:00Z' })
+    await act(async () => {
+      jest.advanceTimersByTime(VETTER_RECHECK_MS)
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentVetterLapsed'))).toHaveTextContent('VtaLink.VetterRevoked')
+    expect(tree.queryByTestId(testIdWithKey('AgentVetOthers'))).toBeNull()
+  })
+
+  it('re-checks nothing on a timer for a phone that is not a vetter', async () => {
+    const tree = await renderHome([persona])
+    expect(tree.queryByTestId(testIdWithKey('AgentVetterCard'))).toBeNull()
+    const reads = mockGrantState.mock.calls.length
+    await act(async () => {
+      jest.advanceTimersByTime(VETTER_RECHECK_MS * 4)
+    })
+    expect(mockGrantState.mock.calls).toHaveLength(reads)
+  })
+
+  it('stops re-checking once the screen is out of view', async () => {
+    mockGrantState.mockResolvedValue({ state: 'active', statusChecked: true })
+    const focused = useIsFocused as unknown as jest.Mock
+    const tree = await renderHome([persona, grant])
+    focused.mockReturnValue(false)
+    tree.rerender(
+      <BasicAppContext>
+        <VtaAgentHome />
+      </BasicAppContext>
+    )
+    const reads = mockGrantState.mock.calls.length
+    await act(async () => {
+      jest.advanceTimersByTime(VETTER_RECHECK_MS * 4)
+    })
+    expect(mockGrantState.mock.calls).toHaveLength(reads)
+    focused.mockReturnValue(true)
   })
 
   it('reads what the agent holds again when the screen comes back into view', async () => {
