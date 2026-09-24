@@ -7,6 +7,8 @@ reference implementations, and not only with another copy of Keyring.
 - [2026-09-24-d3.md](./openvtc-interop-harness-plan/2026-09-24-d3.md): why
   this plan exists, the two false greens that motivated it, and the options
   rejected along the way.
+- [2026-09-24-cd.md](./openvtc-interop-harness-plan/2026-09-24-cd.md): why
+  pnm calls are serialized per slug rather than isolated by `HOME`.
 
 **Related:** [openvtc-integration-plan.md](./openvtc-integration-plan.md)
 (what Keyring implements), [release-flow-plan.md](./release-flow-plan.md)
@@ -165,16 +167,16 @@ gate is the last point before testers where that behaviour is checked.
   - The bot and card-verify get a disk budget: `target/` directories are
     capped at 20 GB in total, and a stale build is cleaned before a pin
     advance.
-  - **pnm config isolation.** pnm reads no `PNM_HOME`. Its config is always
-    `dirs::config_dir()/pnm` (VTI `pnm-cli/src/config.rs`, `a96fe02f`), which on
-    macOS is `~/Library/Application Support/pnm/config.toml`. So every session
-    shares one admin identity per runner agent, and a second session's `pnm`
-    call replaces the first's TSP session at the mediator ("replaced by a
-    newer connection", measured 2026-09-24). The harness gives each runner
-    its own `HOME` for pnm calls. That redirects `dirs::config_dir()`, but
-    whether pnm's secrets also move with it needs checking before it is
-    relied on. The upstream ask (honour `PNM_HOME` or a `--config-dir`) is
-    filed as a VTI question.
+  - **One pnm call per runner at a time.** pnm keeps each runner's admin key
+    in the login keychain, keyed by slug (`pnm-cli` / `vta:<slug>`), and never
+    reads `PNM_HOME`. So every session on the Mac is the same admin DID for a
+    given runner. The mediator keeps one socket per DID by design (VTI
+    `vta-sdk/src/acl_setup.rs`, `a96fe02f`), so two concurrent calls on one
+    slug drop one of them. Every harness pnm call goes through
+    `scripts/openvtc/pnm-locked` (keyring-wallet#154), which serializes
+    calls per slug across sessions; different slugs, such as the bot's
+    `farm-runner-openvtc` and a gate's runner, run in parallel. Nothing is
+    asked upstream: the one-socket rule is deliberate.
 
 ## 7. Phases
 
