@@ -325,6 +325,14 @@ export async function leaveCommunity(
     persona,
     peerRevisionStore: new GenericRecordsTspPeerRevisionStore(deps.agent),
   })
+  // TODO(TSP Rev 3): end the relationship with the community VTC too — send an
+  // XRFD (`packCancelRev3`, @bifold/trust-tasks) from the persona's TSP
+  // session, naming the relationship by the threadDigest of the XRFI we sent.
+  // That needs the invite digest persisted per peer when vtiAgent greets (its
+  // `greeted` set is in memory only today). Upstream accepts our cancel
+  // (ref-04s-rev3-relationship); the VTA's answering cancel fails upstream
+  // (VTI-38), which does not affect us. (Carried over from the local-only
+  // vtiLeave this replaces.)
   let disposition: string = options.disposition ?? 'policydefault'
   let alreadyGone = false
   try {
