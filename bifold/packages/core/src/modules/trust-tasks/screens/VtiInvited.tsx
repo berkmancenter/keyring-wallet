@@ -40,6 +40,7 @@ import { communityLinkReturn } from '../module/vtiLinks'
 
 import { identityShareText, shareIdentity } from './identityShare'
 import { communityLabelOf, communityLabelStartOf } from './communityName'
+import { needWords } from './claimWords'
 import { DidDetails } from './DidDetails'
 import { DirectoryConsent } from './DirectoryConsent'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
@@ -49,7 +50,7 @@ import { useCommunityDid } from './useCommunity'
 import { asksFrom, type Asks } from './VtiJoin'
 import { useVtaDid } from './VtaStatus'
 
-type Step = 'intro' | 'share' | 'waiting' | 'joined'
+type Step = 'intro' | 'share' | 'waiting' | 'joined' | 'deferred' | 'pending'
 
 export interface VtiInvitedProps {
   config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
@@ -72,6 +73,8 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const [busy, setBusy] = useState(false)
   // Off unless the person turns it on (VTI-Q14).
   const [listMe, setListMe] = useState(false)
+  // What the community still needs, when it answered the join "not yet".
+  const [needs, setNeeds] = useState<string[]>([])
   // What the community asks, so the screen says truthfully whether the
   // invitation is enough: where every way in is vetted, it is not (join.rego).
   const [asks, setAsks] = useState<Asks>()
@@ -178,7 +181,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     setError(undefined)
     setBusy(true)
     try {
-      await joinCommunity(
+      const result = await joinCommunity(
         {
           agent,
           identityStore: new GenericRecordsIdentityStore(agent),
@@ -190,7 +193,21 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
         },
         invitation
       )
-      setStep('joined')
+      // The community's answer, not "it returned": a community that vets
+      // everyone answers an invitation with request_more, and this used to
+      // say "You're a member" to someone who was not (220).
+      const effect = result.verdict?.effect
+      if (effect === 'allow' || (!effect && result.membership)) {
+        setStep('joined')
+      } else if (effect === 'requestMore') {
+        communityTarget.choose(invitation.communityDid)
+        setNeeds(result.verdict.needs ?? [])
+        setStep('deferred')
+      } else if (effect === 'refer') {
+        setStep('pending')
+      } else {
+        throw new Error(`the community answered ${effect ?? 'nothing'}`)
+      }
     } catch (e) {
       setError(plainError(e))
     } finally {
@@ -290,7 +307,8 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
 
   // An invitation for this identity is the next thing to act on, whatever step
   // the person left the screen at.
-  const current: Step = step === 'joined' ? 'joined' : invitation ? 'waiting' : step
+  const current: Step =
+    step === 'joined' || step === 'deferred' || step === 'pending' ? step : invitation ? 'waiting' : step
 
   switch (current) {
     case 'intro':
@@ -458,6 +476,43 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           />
         </>
       )
+      break
+
+    case 'deferred':
+      body = (
+        <View style={styles.card} testID={testIdWithKey('InvitedDeferred')}>
+          <ThemedText variant="headingThree" accessibilityRole="header">
+            {t('Invited.DeferredTitle', { community, interpolation: { escapeValue: false } })}
+          </ThemedText>
+          <ThemedText>{t('Invited.DeferredBody', { community, interpolation: { escapeValue: false } })}</ThemedText>
+          {needs.map((need, i) => (
+            <ThemedText key={i} testID={testIdWithKey('InvitedDeferredNeed')}>
+              {'• '}
+              {needWords(need, t)}
+            </ThemedText>
+          ))}
+        </View>
+      )
+      actions = (
+        <Button
+          title={t('VtaLink.ContinueVetting')}
+          buttonType={ButtonType.Primary}
+          onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiVetting)}
+          testID={testIdWithKey('InvitedContinueVetting')}
+        />
+      )
+      break
+
+    case 'pending':
+      body = (
+        <View style={styles.card} testID={testIdWithKey('InvitedPending')}>
+          <ThemedText variant="headingThree" accessibilityRole="header">
+            {t('Invited.PendingTitle', { community, interpolation: { escapeValue: false } })}
+          </ThemedText>
+          <ThemedText>{t('Join.StandingWithInvitation')}</ThemedText>
+        </View>
+      )
+      actions = null
       break
 
     case 'joined':

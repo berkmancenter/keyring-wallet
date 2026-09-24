@@ -1330,6 +1330,9 @@
     "UnlinkConfirm": "Unlink"
   },
   "Invited": {
+    "DeferredTitle": "Sent — {{community}} also needs vetting",
+    "DeferredBody": "Your invitation went with it. Before {{community}} admits you, it needs:",
+    "PendingTitle": "Sent — {{community}} is deciding",
     "IntroVets": "{{community}} vets everyone who joins, even when invited: after you join, you'll meet one of its vetters.",
     "ArrivedBodyVets": "{{community}} invited you, and it also vets everyone who joins. Join now, then meet one of its vetters to be admitted.",
     "WhichCommunityTitle": "Which community invited you?",

@@ -185,7 +185,7 @@ describe('I was invited', () => {
   test('an invitation to a community it admits: Join for the card, as before', async () => {
     const manifest = jest
       .spyOn(vtiAgent, 'fetchManifest')
-      .mockResolvedValue({ criteria: [{ vetting: { minStatements: 1 } }, { id: 'invited-member' }] } as never)
+      .mockResolvedValue({ criteria: [{ id: 'invited-member' }] } as never)
     const { tree } = await renderInvited([personaRecord, invitationRecord])
     await act(async () => undefined)
     expect(tree.getByTestId(testIdWithKey('InvitedArrivedBody'))).toHaveTextContent(/^Invited\.ArrivedBody$/)
@@ -204,6 +204,33 @@ describe('I was invited', () => {
       expect.objectContaining({ subjectDid: personaDid })
     )
     expect(tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+  })
+
+  // 220: a community that vets everyone answers an invitation with
+  // request_more. That is not membership, and the screen must not say it is.
+  test('the community still needs vetting: says so, never "You\'re a member", and goes on to vetting', async () => {
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    mockJoin.mockResolvedValue({ verdict: { effect: 'requestMore', needs: ['vetting:statements:1'] } })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('InvitedDeferred'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('InvitedDeferredNeed'))).toHaveTextContent(/Vetting\.NeedsStatements/)
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('InvitedContinueVetting'))))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+  })
+
+  test('referred to a person: says the community is deciding', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    mockJoin.mockResolvedValue({ verdict: { effect: 'refer', needs: [] } })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('InvitedPending'))).toBeTruthy()
   })
 })
 
