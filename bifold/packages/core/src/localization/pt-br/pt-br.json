@@ -1322,6 +1322,10 @@
     "And": "e"
   },
   "Vetting": {
+    "TicketOtherCommunity": "Este ticket é para verificação em {{other}}, não em {{community}}. Usá-lo mostraria sua identidade a {{other}}, então o Keyring não vai enviá-lo.",
+    "TicketUnreadable": "Este não é um ticket de verificador que o Keyring consegue ler.",
+    "NeedsStatements_one": "mais 1 declaração",
+    "NeedsStatements_other": "mais {{count}} declarações",
     "NeedsVetting": "verificação por um de seus verificadores",
     "NeedsInvitation": "um convite do admin",
     "NeedsAgreement": "seu acordo com o {{what}}",

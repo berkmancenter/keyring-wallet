@@ -1478,6 +1478,8 @@
     "And": "and"
   },
   "Vetting": {
+    "TicketOtherCommunity": "This ticket is for vetting in {{other}}, not {{community}}. Using it would show your identity to {{other}}, so Keyring won't send it.",
+    "TicketUnreadable": "This isn't a vetter's ticket Keyring can read.",
     "NeedsVetting": "vetting by one of its vetters",
     "NeedsInvitation": "an invitation from its admin",
     "NeedsAgreement": "your agreement to its {{what}}",

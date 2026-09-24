@@ -43,7 +43,9 @@ import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { receiveIssue } from '../module/vtiInbox'
 import {
   GenericRecordsVettingStore,
+  VettingTicketError,
   VtiApplicant,
+  checkTicketFor,
   VtiVetterDesk,
   type VettingApplication,
   type VettingDeskRequest,
@@ -64,6 +66,7 @@ import { communityLabelOf, communityLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
+import { ticketRefusalWords } from './ticketWords'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
 
@@ -93,6 +96,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const { ColorPalette, TextTheme } = useTheme()
   const { agent } = useAgent()
   const communityDid = useCommunityDid(config?.communityDid)
+  /** A refused ticket, in words: which community it is for, and why that matters. */
+  const ticketWords = useCallback((e: VettingTicketError) => ticketRefusalWords(e, communityDid, t), [t, communityDid])
   const mediatorDid = config?.mediatorDid
   const vtaDid = useVtaDid(config?.vtaDid)
 
@@ -425,13 +430,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       try {
         await fn()
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(e instanceof VettingTicketError ? ticketWords(e) : e instanceof Error ? e.message : String(e))
       } finally {
         setBusy(undefined)
         bump()
       }
     },
-    [bump]
+    [bump, ticketWords]
   )
 
   // Say what is missing and offer the way to it — a store build names neither.
@@ -862,6 +867,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     applicantStep
   ]
 
+  /**
+   * A ticket for another community is refused before anything is signed or
+   * sent: using it would show this person's identity to that community (220;
+   * openvtc's TicketUriError). Said as the link is pasted, and again if the
+   * request itself refuses it.
+   */
+  const ticketCheck = ticketLink.trim() && communityDid ? checkTicketFor(ticketLink.trim(), communityDid) : undefined
+  const ticketRefused = ticketCheck && !ticketCheck.ok ? ticketCheck.error : undefined
+
   /** Ask a vetter: scan their ticket, or paste it. */
   const ticketInputs = (
     <View style={styles.card}>
@@ -884,14 +898,19 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         autoCapitalize="none"
         autoCorrect={false}
       />
+      {ticketRefused ? (
+        <Text style={styles.error} testID={testIdWithKey('VettingTicketRefused')}>
+          {ticketWords(ticketRefused)}
+        </Text>
+      ) : null}
       {/* The paste box's own button, not a second main action: outlined, and
           dimmed until there is a link to use (218 feedback). */}
       <Pressable
-        style={[styles.buttonSecondary, !ticketLink.trim() || busy ? styles.buttonDimmed : undefined]}
+        style={[styles.buttonSecondary, !ticketLink.trim() || busy || ticketRefused ? styles.buttonDimmed : undefined]}
         testID={testIdWithKey('VettingRequestButton')}
         accessibilityRole="button"
-        accessibilityState={{ disabled: !!busy || !ticketLink.trim() }}
-        disabled={!!busy || !ticketLink.trim()}
+        accessibilityState={{ disabled: !!busy || !ticketLink.trim() || !!ticketRefused }}
+        disabled={!!busy || !ticketLink.trim() || !!ticketRefused}
         onPress={() => run('request', () => applicantRef.current!.requestVetter({ link: ticketLink.trim() }))}
       >
         {busy === 'request' ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
