@@ -179,10 +179,22 @@ async function inviteByDoor(d) {
     const expected = { NoDidHost: /nowhere to publish a new identity/ }[EXPECT_INVITED_ERROR];
     if (!expected) throw new Error(`unknown EXPECT_INVITED_ERROR=${EXPECT_INVITED_ERROR}`);
     const until = Date.now() + 180000;
-    while (Date.now() < until && !(await existsTestId(d, "InvitedError", 2000))) {
+    // The error card ends the scroll view, below the profile choice: on Android
+    // UiAutomator does not see it until it is scrolled into view (220 RC gate).
+    // Say whether the person had to scroll to see it.
+    let scrolled = false;
+    const seen = async () => {
+      if (await existsTestId(d, "InvitedError", 2000)) return true;
+      if (d.e2ePlatform !== "android") return false;
+      const el = await scrollToTestId(d, "InvitedError", 2, { both: false }).catch(() => undefined);
+      if (el) scrolled = true;
+      return Boolean(el);
+    };
+    while (Date.now() < until && !(await seen())) {
       if (await existsTestId(d, "InvitedShare", 500)) throw new Error("an identity was made on an agent with nowhere to publish it");
     }
     if (!(await existsTestId(d, "InvitedError", 1000))) throw new Error('"I was invited" never said why it could not make the identity');
+    if (scrolled) console.log(`[e2e] ${d.e2ePlatform}: the refusal is below the fold — seen only after scrolling`);
     const said = (await textOf(d, "InvitedError")).trim();
     if (!expected.test(said) || /\[TrustTasks|VtaClient/.test(said)) throw new Error(`"I was invited" says "${said}"`);
     if (!(await existsTestId(d, "InvitedErrorDetailsToggle", 3000))) throw new Error("the raw error is not kept under Details");
