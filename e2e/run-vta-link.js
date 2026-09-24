@@ -335,7 +335,29 @@ async function testerJourney(driver) {
   // Another tab and back.
   await tapTestId(driver, "Contacts", 30000);
   await sleep(1500);
-  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  if (process.env.E2E_TAB_RETURN === "1") {
+    // keyring-bifold#109: every tab unmounts when it loses focus, and a return
+    // used to show "Holds" spinning, no seat line and Join as the next step for
+    // a frame (219). The first read after the return must already show the
+    // seat. A frame that short can slip between reads, so the return is also
+    // recorded, for anyone to look at frame by frame.
+    await driver.startRecordingScreen().catch(() => undefined);
+    await (await waitForTestId(driver, "MyAgent", 30000)).click();
+    const seatAtOnce = await existsTestId(driver, "AgentSeat", 600);
+    const video = await driver.stopRecordingScreen().catch(() => "");
+    if (video) {
+      const file = `artifacts/tab-return-${driver.e2ePlatform}-${Date.now()}.mp4`;
+      writeFileSync(file, Buffer.from(video, "base64"));
+      console.log(`[e2e] journey: the return to My Agent is recorded in ${file}`);
+    }
+    if (!seatAtOnce) {
+      await screenshot(driver, "journey-tab-return-blank");
+      throw new Error("coming back to My Agent, the first read shows no seat line — the blank frame is back");
+    }
+    console.log("[e2e] journey: back on My Agent, the seat line is there at once");
+  } else {
+    await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  }
   await sleep(2000);
   await assertNoLinkedScreen(driver, "after a tab switch");
 
