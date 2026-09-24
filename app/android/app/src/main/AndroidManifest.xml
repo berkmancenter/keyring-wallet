@@ -53,6 +53,9 @@
         <category android:name="android.intent.category.BROWSABLE" />
         <data android:scheme="didcomm" />
         <data android:scheme="keyring" />
+        <!-- A bare DID (did:webvh:…) from the phone's own camera: an agent's or
+             a community's code, routed like a scan from the QR tab. -->
+        <data android:scheme="did" />
       </intent-filter>
 
       <intent-filter android:autoVerify="true">

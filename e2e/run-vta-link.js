@@ -31,6 +31,8 @@
  * Always (217's gate): no identity code outside Details on the Linked screen,
  *   the agent screen and the join/vetting steps the journey opens; with
  *   JOURNEY=1, the QR tab's scanner hint and My QR code titles (lib/gateChecks.js).
+ * E2E_UNLINK=1 (with JOURNEY=1, LINK_MODE=manual): at the end, unlink the agent
+ *   (asked first, naming it; Cancel keeps it) and link it again.
  * KEYRING_AGENT_SHOWS_AS=<name>: the runner agent's own name (its vta_name,
  *   e.g. "keyring-runner-uiux" on farm-runner-uiux). "Linked to …", the agent
  *   screen and the agent screen after a relaunch must come to say it, not the
@@ -161,6 +163,154 @@ async function openAgentHome(driver) {
   if (!open) throw new Error('My Agent offers no way to "Open your agent"');
   await open.click();
   await waitForTestId(driver, "AgentHome", 30000);
+}
+
+/**
+ * The no-QR link: name the agent, show the key, grant it by hand — ending on
+ * "Linked". Returns the phone's temporary key, recorded for the cleanup.
+ */
+async function linkManually(driver) {
+  // From My Agent, unless the link screen is already open (after an unlink it is).
+  if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000)) && !(await existsTestId(driver, "VtaLinkWithoutQr", 1000))) {
+    await dismissTourIfPresent(driver);
+    await (await waitForTestId(driver, "MyAgent", 30000)).click();
+    await tapTestId(driver, "LinkWithoutQrButton", 30000);
+  }
+  // "Link without QR" can land straight on the address screen, and then the
+  // intermediate control is never there to tap — the same shape as the
+  // "Show my code" race below: ask for the GOAL first, and treat the
+  // waypoint as optional. Measured on the candidate tree 2026-09-23, where
+  // the run died waiting 15s for a step the flow had already passed.
+  if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000))) {
+    await tapTestId(driver, "VtaLinkWithoutQr", 15000).catch(() => undefined);
+  }
+  const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
+  // Return on the keyboard submits the address, as a person would — on iOS.
+  await address.setValue(`${runnerVtaDid()}\n`);
+  // The key is revealed by "Show my code", which the screen enables once the
+  // address looks like a DID — it does not appear on submit. Measured on
+  // Android, 2026-09-22: the run waited out 60s on a screen that was only
+  // waiting for the tap.
+  // Only when the key is not already showing: submitting the address can
+  // reveal it directly, and then "Show my code" is gone before it can be
+  // tapped — a check that the element EXISTS, followed by a tap, is a race
+  // when the screen is moving. Ask for the goal first.
+  // The disclosure that reveals the key is "VtaLinkShowTheCode" on current
+  // builds and "VtaLinkShowMyCode" on older ones. Note that grepping for the
+  // old id still finds it — it survives on a DIFFERENT screen in the same
+  // file — so "the testID is still there" was never the question; which
+  // screen carries it is. Try both, newest first.
+  //
+  // They are not alternatives on current builds: "Show my code" submits the
+  // address, and the panel it opens keeps the key behind "Show the code"
+  // (TestFlight #25). Tapping whichever was found first and stopping waited
+  // out 60s on that panel (2026-09-23, iPhone 17 UIUX gate), so keep going
+  // until the key shows, tapping each step as it appears.
+  const keyBy = Date.now() + 60000;
+  const tapped = new Set();
+  while (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
+    if (Date.now() > keyBy) break;
+    for (const key of ["VtaLinkShowTheCode", "VtaLinkShowMyCode"]) {
+      if (tapped.has(key) || !(await byTestId(driver, key).isExisting().catch(() => false))) continue;
+      await tapTestId(driver, key, 15000).catch(() => undefined);
+      tapped.add(key);
+      break;
+    }
+  }
+  await waitForTestId(driver, "VtaLinkManualDid", 5000);
+  const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
+  runTempDids.push(temporaryDid);
+  console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
+  await screenshot(driver, "link-m1-key");
+  // GRANT_FIRST=1 skips the pre-grant check. It exists to isolate one
+  // variable: in the ordinary manual flow the phone signs in BEFORE its key
+  // is in the ACL, on purpose, so the screen can say "not yet" — and a VTA
+  // that answers an unknown peer with silence rather than a refusal leaves
+  // that sign-in hanging. Granting first makes the same flow sign in with a
+  // key the VTA already knows, which is what the QR journey does.
+  if (process.env.GRANT_FIRST !== "1") {
+    await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+    // "Not yet" renders at the BOTTOM of the key card, below a ~350-character
+    // did:peer, so on a phone screen it is off the bottom of the scroll view
+    // — and Android's UiAutomator does not report off-screen children, so a
+    // plain wait never sees it however long it waits. Scroll for it.
+    // Existence first, scrolling only if that fails: the two platforms hide
+    // it differently. Android's UiAutomator omits off-screen children, so
+    // only a scroll finds it; iOS reports the element but not as displayed,
+    // so a scroll-for-displayed misses what a plain existence check sees.
+    // Checking for existence alone failed on Android; scrolling alone then
+    // failed on iOS — both were measured, one after the other.
+    const notYetBy = Date.now() + 60000;
+    let notYet = false;
+    while (!notYet && Date.now() < notYetBy) {
+      notYet =
+        (await existsTestId(driver, "VtaLinkNotYet", 2000)) ||
+        Boolean(await scrollToTestId(driver, "VtaLinkNotYet", 4).catch(() => undefined));
+      if (!notYet) await sleep(2000);
+    }
+    if (!notYet) throw new Error(`${driver.e2ePlatform}: the phone never said the key was not added yet`);
+    console.log("[e2e] before the grant: not yet");
+  } else {
+    console.log("[e2e] GRANT_FIRST=1: granting before the first sign-in");
+  }
+  execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
+  await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+  await waitForTestId(driver, "VtaLinkDone", 180000);
+  await assertAgentNamed(driver, "VtaLinkLinkedBody", "the Linked screen");
+  await assertNoDidShown(driver, "the Linked screen");
+  await screenshot(driver, "link-m2-linked");
+  if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
+  console.log("[e2e] the temporary key is no longer in the ACL");
+  await tapTestId(driver, "VtaLinkContinue", 15000);
+  return temporaryDid;
+}
+
+/**
+ * Unlink, then link again (219; E2E_UNLINK=1, at the end of the journey). The
+ * confirmation names the agent; Cancel keeps the link; Unlink lands on the
+ * link screen; linking the same agent again brings the agent home back, named.
+ * The unlinked key stays on the agent's list (VTI-Q23) — the cleanup removes
+ * both links' keys.
+ */
+async function unlinkAndRelink(driver) {
+  await openAgentHome(driver);
+  const unlink = await scrollToTestId(driver, "AgentUnlink", 6).catch(() => undefined);
+  if (!unlink) throw new Error('the agent screen has no "Unlink this agent"');
+  await unlink.click();
+  await waitForTestId(driver, "AgentUnlinkConfirm", 10000);
+  const title = (await textOf(driver, "AgentUnlinkTitle")).trim();
+  const name = process.env.KEYRING_AGENT_SHOWS_AS;
+  if (name ? title !== `Unlink ${name}?` : !/^Unlink .+\?$/.test(title)) {
+    await screenshot(driver, "journey-unlink-untitled");
+    throw new Error(`the unlink confirmation is titled "${title}"${name ? `, not "Unlink ${name}?"` : ""}`);
+  }
+  await assertNoDidShown(driver, "the unlink confirmation");
+  await tapTestId(driver, "AgentUnlinkCancel", 5000);
+  if (!(await existsTestId(driver, "AgentHome", 5000)) || (await existsTestId(driver, "AgentUnlinkConfirm", 1500))) {
+    throw new Error("Cancel did not keep the link");
+  }
+  console.log("[e2e] journey: unlink asks first, naming the agent; Cancel keeps the link");
+
+  await (await scrollToTestId(driver, "AgentUnlink", 6)).click();
+  await tapTestId(driver, "AgentUnlinkConfirm", 10000);
+  let onLink = false;
+  for (let i = 0; i < 20 && !onLink; i++) {
+    onLink = (await existsTestId(driver, "VtaLinkAgentAddress", 1000)) || (await existsTestId(driver, "VtaLinkWithoutQr", 1000));
+  }
+  if (!onLink) {
+    await screenshot(driver, "journey-unlinked");
+    throw new Error("unlinking did not land on the link screen");
+  }
+  console.log("[e2e] journey: unlinked — on the link screen");
+
+  await linkManually(driver);
+  // A relink may play the introduction again: the stored link was cleared.
+  if (await existsTestId(driver, "AgentIntro", 10000)) {
+    for (let i = 0; i < 3; i++) await tapTestId(driver, "AgentIntroNext", 15000);
+  }
+  await waitForTestId(driver, "AgentHome", 30000);
+  await assertAgentNamed(driver, "AgentHomeName", "the agent screen after a relink");
+  console.log("[e2e] journey: linked the same agent again");
 }
 
 /**
@@ -314,6 +464,25 @@ async function testerJourney(driver) {
     }
   }
   await screenshot(driver, "journey-join-vetting");
+  // Step 2, in words (218 feedback, keyring-bifold#96): what the community
+  // needs is a sentence — no claim key, no "(s)" — and the paste box's button
+  // is its own, quiet one, not a second main action.
+  if (onNameStep && (await existsTestId(driver, "VettingStartButton", 3000))) {
+    await (await scrollToTestId(driver, "VettingStartButton", 4)).click();
+    await waitForTestId(driver, "VettingRequirements", 60000);
+    const needs = (await textOf(driver, "VettingRequirements")).trim();
+    if (/\(s\)|\b[a-z]+\.[a-z]+\b/i.test(needs) || !/vetters? to (confirm|vouch)/.test(needs)) {
+      await screenshot(driver, "journey-vetting-requirements");
+      throw new Error(`step 2 says "${needs}", not what a vetter confirms in words`);
+    }
+    console.log(`[e2e] journey: step 2 says "${needs}"`);
+    const use = await scrollToTestId(driver, "VettingRequestButton", 4).catch(() => undefined);
+    if (!use) throw new Error('step 2 has no "Use this link" button');
+    const label = (await textOf(driver, "VettingRequestButton")).trim();
+    if (!/Use this link/.test(label)) throw new Error(`the paste box's button reads "${label}", not "Use this link"`);
+    if (await use.isEnabled().catch(() => false)) throw new Error('"Use this link" is enabled with nothing pasted');
+    console.log('[e2e] journey: "Use this link" is the paste box\'s button, off until a link is pasted');
+  }
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
 
   // Report #11 — one agent screen. The phone is now an applicant: it holds an
@@ -423,6 +592,7 @@ async function testerJourney(driver) {
   // identity, so My QR code offers it beside the contact code.
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
   await assertQrTabSaysWhatItIs(driver);
+  if (process.env.E2E_UNLINK === "1") await unlinkAndRelink(driver);
 }
 
 async function api(method, route, body) {
@@ -534,7 +704,8 @@ let page;
 // The keys this run adds to the runner VTA, removed again in `finally`: the
 // ACL as it was, and the phone's temporary key, whose chain is ours.
 let aclBefore;
-let runTempDid;
+/** Every temporary key this run showed, in order: a relink adds a second. */
+const runTempDids = [];
 let runFailed = false;
 try {
   // Cleanup must never decide a run's outcome: no snapshot, no cleanup.
@@ -574,95 +745,7 @@ try {
 
   if (LINK_MODE === "manual") {
     // The no-QR fallback: name the agent, show the key, grant it by hand.
-    await dismissTourIfPresent(driver);
-    await (await waitForTestId(driver, "MyAgent", 30000)).click();
-    await tapTestId(driver, "LinkWithoutQrButton", 30000);
-    // "Link without QR" can land straight on the address screen, and then the
-    // intermediate control is never there to tap — the same shape as the
-    // "Show my code" race below: ask for the GOAL first, and treat the
-    // waypoint as optional. Measured on the candidate tree 2026-09-23, where
-    // the run died waiting 15s for a step the flow had already passed.
-    if (!(await existsTestId(driver, "VtaLinkAgentAddress", 2000))) {
-      await tapTestId(driver, "VtaLinkWithoutQr", 15000).catch(() => undefined);
-    }
-    const address = await waitForTestId(driver, "VtaLinkAgentAddress", 15000);
-    // Return on the keyboard submits the address, as a person would — on iOS.
-    await address.setValue(`${runnerVtaDid()}\n`);
-    // The key is revealed by "Show my code", which the screen enables once the
-    // address looks like a DID — it does not appear on submit. Measured on
-    // Android, 2026-09-22: the run waited out 60s on a screen that was only
-    // waiting for the tap.
-    // Only when the key is not already showing: submitting the address can
-    // reveal it directly, and then "Show my code" is gone before it can be
-    // tapped — a check that the element EXISTS, followed by a tap, is a race
-    // when the screen is moving. Ask for the goal first.
-    // The disclosure that reveals the key is "VtaLinkShowTheCode" on current
-    // builds and "VtaLinkShowMyCode" on older ones. Note that grepping for the
-    // old id still finds it — it survives on a DIFFERENT screen in the same
-    // file — so "the testID is still there" was never the question; which
-    // screen carries it is. Try both, newest first.
-    //
-    // They are not alternatives on current builds: "Show my code" submits the
-    // address, and the panel it opens keeps the key behind "Show the code"
-    // (TestFlight #25). Tapping whichever was found first and stopping waited
-    // out 60s on that panel (2026-09-23, iPhone 17 UIUX gate), so keep going
-    // until the key shows, tapping each step as it appears.
-    const keyBy = Date.now() + 60000;
-    const tapped = new Set();
-    while (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
-      if (Date.now() > keyBy) break;
-      for (const key of ["VtaLinkShowTheCode", "VtaLinkShowMyCode"]) {
-        if (tapped.has(key) || !(await byTestId(driver, key).isExisting().catch(() => false))) continue;
-        await tapTestId(driver, key, 15000).catch(() => undefined);
-        tapped.add(key);
-        break;
-      }
-    }
-    await waitForTestId(driver, "VtaLinkManualDid", 5000);
-    const temporaryDid = (await textOf(driver, "VtaLinkManualDid")).trim();
-    runTempDid = temporaryDid;
-    console.log(`[e2e] phone shows its key ${temporaryDid.slice(0, 32)}…`);
-    await screenshot(driver, "link-m1-key");
-    // GRANT_FIRST=1 skips the pre-grant check. It exists to isolate one
-    // variable: in the ordinary manual flow the phone signs in BEFORE its key
-    // is in the ACL, on purpose, so the screen can say "not yet" — and a VTA
-    // that answers an unknown peer with silence rather than a refusal leaves
-    // that sign-in hanging. Granting first makes the same flow sign in with a
-    // key the VTA already knows, which is what the QR journey does.
-    if (process.env.GRANT_FIRST !== "1") {
-      await tapTestId(driver, "VtaLinkCheckGrant", 15000);
-      // "Not yet" renders at the BOTTOM of the key card, below a ~350-character
-      // did:peer, so on a phone screen it is off the bottom of the scroll view
-      // — and Android's UiAutomator does not report off-screen children, so a
-      // plain wait never sees it however long it waits. Scroll for it.
-      // Existence first, scrolling only if that fails: the two platforms hide
-      // it differently. Android's UiAutomator omits off-screen children, so
-      // only a scroll finds it; iOS reports the element but not as displayed,
-      // so a scroll-for-displayed misses what a plain existence check sees.
-      // Checking for existence alone failed on Android; scrolling alone then
-      // failed on iOS — both were measured, one after the other.
-      const notYetBy = Date.now() + 60000;
-      let notYet = false;
-      while (!notYet && Date.now() < notYetBy) {
-        notYet =
-          (await existsTestId(driver, "VtaLinkNotYet", 2000)) ||
-          Boolean(await scrollToTestId(driver, "VtaLinkNotYet", 4).catch(() => undefined));
-        if (!notYet) await sleep(2000);
-      }
-      if (!notYet) throw new Error(`${driver.e2ePlatform}: the phone never said the key was not added yet`);
-      console.log("[e2e] before the grant: not yet");
-    } else {
-      console.log("[e2e] GRANT_FIRST=1: granting before the first sign-in");
-    }
-    execFileSync("bash", [ENROL_MANAGER, temporaryDid, VTA_SLUG, "admin"], { stdio: "inherit" });
-    await tapTestId(driver, "VtaLinkCheckGrant", 15000);
-    await waitForTestId(driver, "VtaLinkDone", 180000);
-    await assertAgentNamed(driver, "VtaLinkLinkedBody", "the Linked screen");
-    await assertNoDidShown(driver, "the Linked screen");
-    await screenshot(driver, "link-m2-linked");
-    if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
-    console.log("[e2e] the temporary key is no longer in the ACL");
-    await tapTestId(driver, "VtaLinkContinue", 15000);
+    await linkManually(driver);
     await checkAgentScreen(driver);
     if (JOURNEY) await testerJourney(driver);
     printSuccess("VTA LINK WITHOUT QR — not yet, then granted by hand and rotated");
@@ -692,7 +775,7 @@ try {
   const view = await waitForState(offered.offer.n, "submitted");
   // The phone's key, known once it submits — before any grant, so a run that
   // fails after this still knows which ACL entries are its own.
-  runTempDid = view.did;
+  runTempDids.push(view.did);
   console.log(`[e2e] phone code ${phoneCode} · page code ${view.code}`);
   await screenshot(driver, "link-03-code");
   if (phoneCode !== view.code) throw new Error(`codes differ: phone ${phoneCode}, page ${view.code}`);
@@ -735,9 +818,12 @@ try {
   if (aclBefore) {
     const mode = process.env.E2E_ACL_CLEANUP || "";
     if (runFailed || JOURNEY || mode === "always" || mode === "never") {
-      removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid: runTempDid, failed: runFailed });
-    } else if (runTempDid) {
-      keepForNextStep({ before: aclBefore, tempDid: runTempDid });
+      // Each link's chain by its own temporary key: an unlinked phone's key
+      // stays on the agent's list (VTI-Q23), and the relink adds another.
+      for (const tempDid of runTempDids) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid, failed: runFailed });
+      if (!runTempDids.length) removeRunKeys({ slug: VTA_SLUG, pnmHome: PNM_HOME, before: aclBefore, tempDid: undefined, failed: runFailed });
+    } else if (runTempDids.length) {
+      keepForNextStep({ before: aclBefore, tempDid: runTempDids[runTempDids.length - 1] });
     }
   }
   if (driver) await driver.deleteSession().catch(() => undefined);
