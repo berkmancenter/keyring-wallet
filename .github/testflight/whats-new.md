@@ -13,4 +13,4 @@
 • The vetting screen speaks plainly: "This community needs 1 vetter to confirm your legal name." The paste button is now "Use this link", and is dimmed until you paste one.
 • The scan screen's header is back to one line.
 • If your agent has nowhere to publish a new identity, joining says so in plain words, with the technical detail under Details.
-• Known issue: on the current Farm, creating your identity may need a second tap on Continue.
+• Known issue: on the current Farm, creating your identity can occasionally say your agent didn't answer. If a second tap on Continue doesn't help, please tell us.
