@@ -314,3 +314,106 @@ describe("the agent's own name", () => {
     expect(vta.getState().agentNames).toBeUndefined()
   })
 })
+
+describe('unlinking this phone from its agent', () => {
+  const linked = { vtaDid: offer.vta, label: offer.label, linkedAt: 't0', introSeenAt: 't1' }
+
+  function unlinkable(overrides: { clear?: jest.Mock; forgetManager?: jest.Mock } = {}) {
+    let stored: unknown = linked
+    const clear = overrides.clear ?? jest.fn(async () => void (stored = undefined))
+    const forgetManager = overrides.forgetManager ?? jest.fn(async () => undefined)
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => stored as never, set: async (l) => void (stored = l), clear }),
+      identityStore: () => ({ setManager: async () => undefined, forgetManager }) as never,
+    })
+    return { vta, clear, forgetManager, stored: () => stored }
+  }
+
+  it('closes the session, forgets the link and the manager key, and lands on no agent', async () => {
+    const { vta, clear, forgetManager, stored } = unlinkable()
+    await vta.restore({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+
+    await vta.unlink({} as never)
+
+    expect(mockClient.disconnect).toHaveBeenCalled()
+    expect(clear).toHaveBeenCalled()
+    expect(stored()).toBeUndefined()
+    expect(forgetManager).toHaveBeenCalledWith(offer.vta)
+    expect(vta.getState()).toMatchObject({
+      link: { kind: 'notLinked' },
+      status: 'disconnected',
+      vtaDid: undefined,
+      managerDid: undefined,
+      approvals: [],
+    })
+    expect(vta.getState().activity[0]).toMatchObject({ kind: 'unlinked' })
+  })
+
+  it('stays unlinked after a restart', async () => {
+    const { vta, stored } = unlinkable()
+    await vta.restore({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    await vta.unlink({} as never)
+    // The next app start reads the same store, which unlinking cleared.
+    const next = new VtaAgentController()
+    next.configure({
+      now: () => 2_000,
+      linkStore: () => ({
+        get: async () => stored() as never,
+        set: async () => undefined,
+        clear: async () => undefined,
+      }),
+      identityStore: () => ({ setManager: async () => undefined }) as never,
+    })
+    await next.restore({} as never)
+    expect(next.getState().link).toEqual({ kind: 'notLinked' })
+  })
+
+  it('unlinks an agent that cannot be reached, and stops trying to reach it', async () => {
+    jest.useFakeTimers()
+    try {
+      mockClient.connect.mockImplementation(async () => {
+        throw new Error('socket closed')
+      })
+      const { vta } = unlinkable()
+      await vta.restore({} as never)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(vta.getState().link).toMatchObject({ connection: { kind: 'reconnecting' } })
+      const attempts = mockClient.connect.mock.calls.length
+
+      await vta.unlink({} as never)
+      await jest.advanceTimersByTimeAsync(120_000)
+
+      expect(vta.getState().link).toEqual({ kind: 'notLinked' })
+      expect(mockClient.connect.mock.calls).toHaveLength(attempts)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('unlinks even when the stores fail', async () => {
+    const failing = jest.fn(async () => {
+      throw new Error('storage unavailable')
+    })
+    const { vta } = unlinkable({ clear: failing, forgetManager: failing })
+    await vta.restore({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    await expect(vta.unlink({} as never)).resolves.toBeUndefined()
+    expect(vta.getState().link).toEqual({ kind: 'notLinked' })
+  })
+
+  it('can link again afterwards, to the same agent or another', async () => {
+    const { vta } = unlinkable()
+    await vta.restore({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    await vta.unlink({} as never)
+    await vta.startManualLink({} as never, 'did:webvh:Qm:another', 'another host')
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', vtaDid: 'did:webvh:Qm:another' })
+  })
+})

@@ -155,3 +155,24 @@ describe('linking without a QR', () => {
     expect(reduceLink(linked, { type: 'keyShown', ...agent, did: 'x' })).toBe(linked)
   })
 })
+
+describe('unlinking', () => {
+  const linked = reduceLink(initialLinkState, {
+    type: 'restored',
+    link: { vtaDid: 'did:webvh:Qm:agent', label: 'agent', linkedAt: 't0' },
+    now: 0,
+  })
+
+  it('returns a linked phone to no agent, online or not', () => {
+    expect(linked.kind).toBe('linked')
+    expect(reduceLink(linked, { type: 'unlinked' })).toEqual({ kind: 'notLinked' })
+    const offline = reduceLink(linked, { type: 'sessionDropped', reason: 'socket closed', now: 5 })
+    expect(reduceLink(offline, { type: 'unlinked' })).toEqual({ kind: 'notLinked' })
+  })
+
+  it('returns a revoked phone to no agent, and leaves an unlinked one as it is', () => {
+    const revoked = reduceLink(linked, { type: 'accessRevoked', reason: 'not in ACL' })
+    expect(reduceLink(revoked, { type: 'unlinked' })).toEqual({ kind: 'notLinked' })
+    expect(reduceLink(initialLinkState, { type: 'unlinked' })).toBe(initialLinkState)
+  })
+})

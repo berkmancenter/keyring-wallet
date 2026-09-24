@@ -6,7 +6,7 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { DeviceEventEmitter } from 'react-native'
+import { DeviceEventEmitter, ScrollView } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -322,5 +322,64 @@ describe('Your agent — after linking', () => {
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentMembershipRow')))
     expect(navigate).toHaveBeenCalledWith(Screens.VtiCommunity, { communityDid })
     expect(navigate).not.toHaveBeenCalledWith(Screens.MyAgent)
+  })
+
+  describe('unlinking this agent', () => {
+    afterEach(() => jest.restoreAllMocks())
+
+    const openCard = async (tree: Awaited<ReturnType<typeof renderHome>>) => {
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
+      })
+    }
+
+    it('asks first, in place, naming the agent and saying what the person loses', async () => {
+      const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+      controller.set({ agentNames: { 'did:webvh:example:vta': { label: 'keyring-runner-uiux', source: 'vtaName' } } })
+      const tree = await renderHome([persona])
+      expect(tree.queryByTestId(testIdWithKey('AgentUnlinkCard'))).toBeNull()
+      await openCard(tree)
+      // The test translator returns keys; the agent's name is what is passed in.
+      expect(tree.getByTestId(testIdWithKey('AgentUnlinkTitle'))).toHaveTextContent('VtaLink.UnlinkTitle')
+      expect(tree.getByTestId(testIdWithKey('AgentUnlinkBody'))).toHaveTextContent('VtaLink.UnlinkBody')
+      expect(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm'))).toBeTruthy()
+      expect(tree.getByTestId(testIdWithKey('AgentUnlinkCancel'))).toBeTruthy()
+      // Nothing happens until the person confirms.
+      expect(unlink).not.toHaveBeenCalled()
+    })
+
+    it('unlinks on confirm and lands on linking an agent', async () => {
+      const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+      const navigate = useNavigation().navigate as jest.Mock
+      navigate.mockClear()
+      const tree = await renderHome([persona])
+      await openCard(tree)
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm')))
+      })
+      expect(unlink).toHaveBeenCalledTimes(1)
+      expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
+    })
+
+    it('brings the card into view when it opens, at the foot of the screen', async () => {
+      const scroll = jest.spyOn(ScrollView.prototype, 'scrollToEnd').mockImplementation(() => undefined)
+      const tree = await renderHome([persona])
+      await openCard(tree)
+      await act(async () => {
+        jest.advanceTimersByTime(100)
+      })
+      expect(scroll).toHaveBeenCalledWith({ animated: true })
+    })
+
+    it('Cancel closes the card and keeps the link', async () => {
+      const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+      const tree = await renderHome([persona])
+      await openCard(tree)
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkCancel')))
+      })
+      expect(tree.queryByTestId(testIdWithKey('AgentUnlinkCard'))).toBeNull()
+      expect(unlink).not.toHaveBeenCalled()
+    })
   })
 })

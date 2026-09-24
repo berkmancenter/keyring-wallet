@@ -1118,7 +1118,8 @@
       "wentOffline": "Ficou offline",
       "revoked": "Deixou de aceitar este telefone",
       "approved": "Você aprovou um pedido",
-      "denied": "Você recusou um pedido"
+      "denied": "Você recusou um pedido",
+      "unlinked": "Desvinculado deste telefone"
     },
     "CanDo": "O que você pode fazer",
     "JoinCommunity": "Entrar em uma comunidade",
@@ -1156,7 +1157,11 @@
     "YouCanVet": "Agora você pode verificar pessoas para {{community}}",
     "YouCanVetBody": "O admin tornou você um verificador. Entregue um ticket quando encontrar alguém.",
     "OpenDesk": "Abrir a mesa de verificação",
-    "ShareKeyHint": "Longo e fácil de digitar errado — envie em vez de ditar."
+    "ShareKeyHint": "Longo e fácil de digitar errado — envie em vez de ditar.",
+    "Unlink": "Desvincular este agente",
+    "UnlinkTitle": "Desvincular {{agent}}?",
+    "UnlinkBody": "Este telefone não vai mais funcionar com seu agente.\n\nSuas identidades e participações em comunidades ficam com o agente. Vincule-o de novo para usá-las neste telefone.\n\nO agente ainda pode listar este telefone até que o admin dele o remova, mas essa entrada não pode ser usada: este telefone esquece a chave.",
+    "UnlinkConfirm": "Desvincular"
   },
   "Invited": {
     "WhichCommunityTitle": "Qual comunidade convidou você?",

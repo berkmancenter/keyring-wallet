@@ -16,7 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -65,6 +65,15 @@ const VtaAgentHome: React.FC = () => {
   const { link } = state
   const [holdings, setHoldings] = useState<Holdings>()
   const [holdingsError, setHoldingsError] = useState(false)
+  const [unlinkOpen, setUnlinkOpen] = useState(false)
+  // The card opens below the button, at the foot of the screen: bring it into
+  // view, or a tap on "Unlink this agent" looks like it did nothing (Farm, 2026-09-24).
+  const scrollRef = useRef<ScrollView>(null)
+  useEffect(() => {
+    if (!unlinkOpen) return
+    const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50)
+    return () => clearTimeout(timer)
+  }, [unlinkOpen])
   const [refreshing, setRefreshing] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [deciding, setDeciding] = useState<string>()
@@ -190,6 +199,17 @@ const VtaAgentHome: React.FC = () => {
   }, [agent, load])
 
   const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
+
+  // Unlinking is local: this phone forgets the agent and its own key for it.
+  // The agent keeps the key on its list until its owner removes it — a client
+  // cannot remove its own entry (VTI-Q23) — and the confirmation says so. It
+  // confirms in place rather than in a native alert, which the e2e runner's
+  // autoAcceptAlerts would answer by itself.
+  const unlink = () => {
+    if (!agent) return
+    setUnlinkOpen(false)
+    void vtaAgent.unlink(agent).then(() => go(Screens.VtaLink))
+  }
   /** A screen that needs to be told which community it is about. */
   const goToCommunity = (communityDid: string) =>
     (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(Screens.VtiCommunity, {
@@ -274,6 +294,7 @@ const VtaAgentHome: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
         testID={testIdWithKey('AgentHome')}
@@ -589,6 +610,36 @@ const VtaAgentHome: React.FC = () => {
             </View>
           ) : null}
         </View>
+
+        <Button
+          title={t('VtaLink.Unlink')}
+          buttonType={ButtonType.Tertiary}
+          onPress={() => setUnlinkOpen(true)}
+          testID={testIdWithKey('AgentUnlink')}
+        />
+        {unlinkOpen ? (
+          <View style={styles.card} testID={testIdWithKey('AgentUnlinkCard')}>
+            <ThemedText variant="labelTitle" accessibilityRole="header" testID={testIdWithKey('AgentUnlinkTitle')}>
+              {t('VtaLink.UnlinkTitle', {
+                agent: agentDisplayName(withAgentName(link, state.agentNames), t),
+                interpolation: { escapeValue: false },
+              })}
+            </ThemedText>
+            <ThemedText testID={testIdWithKey('AgentUnlinkBody')}>{t('VtaLink.UnlinkBody')}</ThemedText>
+            <Button
+              title={t('VtaLink.UnlinkConfirm')}
+              buttonType={ButtonType.Critical}
+              onPress={unlink}
+              testID={testIdWithKey('AgentUnlinkConfirm')}
+            />
+            <Button
+              title={t('Global.Cancel')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => setUnlinkOpen(false)}
+              testID={testIdWithKey('AgentUnlinkCancel')}
+            />
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   )

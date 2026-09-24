@@ -61,7 +61,7 @@ export interface VtaAgentState {
 
 export interface VtaActivity {
   at: number
-  kind: 'linked' | 'reconnected' | 'wentOffline' | 'revoked' | 'approved' | 'denied'
+  kind: 'linked' | 'reconnected' | 'wentOffline' | 'revoked' | 'approved' | 'denied' | 'unlinked'
 }
 
 const ACTIVITY_LIMIT = 20
@@ -305,6 +305,45 @@ export class VtaAgentController {
   /** After a failure or a revocation, back to a phone with no agent. */
   relink() {
     this.dispatch({ type: 'relink' })
+  }
+
+  /**
+   * The person unlinks this phone from its agent. Everything is local: the
+   * session is closed, the stored link and this phone's manager identity for
+   * the agent are forgotten, and pending approvals are dropped, so nothing
+   * here can act for the agent again. The agent keeps this phone's key on its
+   * ACL until its owner removes it — a VTA refuses a client's request to
+   * delete its own entry (VTI-Q23) — so the screen says so, and an agent that
+   * cannot be reached changes nothing. Community identities and memberships
+   * stay recorded: they are held by that agent, and linking it again brings
+   * them back. Never throws; a store that fails to clear is retried at the
+   * next unlink, and the phone is unlinked either way.
+   */
+  async unlink(agent: Agent): Promise<void> {
+    const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    this.attemptToken++
+    this.offer = undefined
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    this.reconnectAttempt = 0
+    await this.reset()
+    await this.linkStore(agent)
+      .clear()
+      .catch(() => undefined)
+    if (vtaDid) {
+      await Promise.resolve(this.identityStore(agent).forgetManager?.(vtaDid)).catch(() => undefined)
+      this.namesAsked.delete(vtaDid)
+    }
+    this.set({
+      status: 'disconnected',
+      vtaDid: undefined,
+      managerDid: undefined,
+      approvals: [],
+      awaitingConsentFor: undefined,
+      error: undefined,
+    })
+    this.dispatch({ type: 'unlinked' })
+    this.note('unlinked')
   }
 
   /**
