@@ -37,6 +37,7 @@ import type { VtiCommunityStore, VtiHeldCredential } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import { IDENTITY_VETTING_ENDORSEMENT_TYPE, CREDENTIAL_EXCHANGE_ISSUE } from './vtiInbox'
 import { resolveDidDocumentRetrying } from './VtiMediatorTransport'
+import { recordAnswer, recordSent, recordStatus } from './joinSubmission'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
 import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
@@ -1144,12 +1145,13 @@ export class VtiApplicant {
           requestId: open.requestId,
           requirementsDigest,
         })
+        await recordAnswer(this.communityStore, communityDid, { verdict }).catch(() => undefined)
       } catch (e) {
         const reason = joinRequestRefusal(e)
         if (reason === 'notFound') {
           // Nothing open after all — withdrawn elsewhere or swept by retention.
           // A fresh submission is the honest next step, not an error.
-          verdict = await vtiAgent.apply(communityDid, manifest, {
+          verdict = await this.applyRecorded(manifest, {
             credentials: statements,
             requirementsDigest,
             registryConsent,
@@ -1161,7 +1163,7 @@ export class VtiApplicant {
       }
     } else {
       try {
-        verdict = await vtiAgent.apply(communityDid, manifest, {
+        verdict = await this.applyRecorded(manifest, {
           credentials: statements,
           requirementsDigest,
           registryConsent,
@@ -1179,6 +1181,10 @@ export class VtiApplicant {
             state: already.status === 'deferred' ? 'deferred' : 'pending',
             at: new Date().toISOString(),
           })
+          await recordStatus(this.communityStore, communityDid, {
+            requestId: already.requestId,
+            status: already.status === 'deferred' ? 'deferred' : 'pending',
+          }).catch(() => undefined)
         }
         throw e
       }
@@ -1219,6 +1225,32 @@ export class VtiApplicant {
         })
         return 'alreadyDecided'
       }
+      throw e
+    }
+  }
+
+  /**
+   * A fresh application, recorded for the join state (p220 item 7): sent
+   * before the send, answered after — so a lost answer still reads "Sent —
+   * waiting for the community".
+   */
+  private async applyRecorded(
+    manifest: VtiManifest,
+    options: { credentials: unknown[]; requirementsDigest?: string; registryConsent?: boolean }
+  ): Promise<VtiVerdict> {
+    const communityDid = this.persona.communityDid
+    await recordSent(this.communityStore, {
+      communityDid,
+      personaDid: this.persona.did,
+      withInvitation: false,
+      via: 'vetting',
+    }).catch(() => undefined)
+    try {
+      const verdict = await vtiAgent.apply(communityDid, manifest, options)
+      await recordAnswer(this.communityStore, communityDid, { verdict }).catch(() => undefined)
+      return verdict
+    } catch (e) {
+      await recordAnswer(this.communityStore, communityDid, { refusal: e }).catch(() => undefined)
       throw e
     }
   }

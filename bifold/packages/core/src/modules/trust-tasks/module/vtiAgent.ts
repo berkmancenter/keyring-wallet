@@ -59,6 +59,7 @@ const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
 const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
 const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
 const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
+const SELF_REMOVE = 'https://trusttasks.org/spec/vtc/members/self-remove/0.1'
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 /**
  * The community tasks this controller asks whose specifications declare the
@@ -68,7 +69,7 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
  * none, and stay unsigned: a present proof is always verified, so signing what
  * need not be signed only adds a way to be refused.
  */
-const PROOF_REQUIRED = new Set([SUBMIT, STATUS, WITHDRAW, SUPPLEMENT])
+const PROOF_REQUIRED = new Set([SUBMIT, STATUS, WITHDRAW, SUPPLEMENT, SELF_REMOVE])
 
 /**
  * A DIDComm message carrying a Trust Task in the binding envelope, presented
@@ -113,6 +114,33 @@ export class VtiRefusal extends Error {
  * community owes, so supplying more changes nothing.
  */
 export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence' | 'requestAlreadyOpen'
+
+/**
+ * Why a community refused a member's request to leave, from its code:
+ * `notMember` — the caller is not (or no longer) a member, so there is nothing
+ * to remove; `lastAdmin` — leaving would leave the community without an admin.
+ */
+export const selfRemoveRefusal = (refusal: unknown): 'notMember' | 'lastAdmin' | undefined => {
+  if (!(refusal instanceof VtiRefusal)) return undefined
+  const reason = refusal.code.split(':').pop() ?? ''
+  if (reason === 'notMember') return 'notMember'
+  if (/last.?admin/i.test(reason)) return 'lastAdmin'
+  return undefined
+}
+
+/** A join request's state, as the community's status task states it (`join-requests/status/0.1`). */
+export interface JoinRequestStatus {
+  requestId?: string
+  status: 'pending' | 'deferred' | 'approved' | 'rejected' | 'withdrawn' | (string & {})
+  /** While `deferred`: what the applicant must supply. */
+  needs?: string[]
+  /** While `deferred`: the evidence to present next. */
+  presentationDefinition?: unknown
+  /** While `rejected`: a stable code, the decider's words when there were any, and when it was decided. */
+  code?: string
+  reason?: string
+  decidedAt?: string
+}
 
 export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
   if (!(refusal instanceof VtiRefusal)) return undefined
@@ -913,6 +941,74 @@ class VtiAgentController {
       ...(options.requirementsDigest ? { extensions: { requirementsDigest: options.requirementsDigest } } : {}),
     })
     return this.verdictOf(answer, 'supplement')
+  }
+
+  /**
+   * Ask where the applicant's own join request stands
+   * (`vtc/join-requests/status/0.1`) — a read, never a resubmit. The id is
+   * optional: without it the community resolves the request from who signs the
+   * poll, which is how a request whose first answer was lost is found again.
+   * Undefined when the community holds no such request (`notFound`); other
+   * refusals surface as `VtiRefusal`.
+   */
+  async status(communityDid: string, options: { requestId?: string } = {}): Promise<JoinRequestStatus | undefined> {
+    const answer = await this.ask(communityDid, STATUS, options.requestId ? { requestId: options.requestId } : {})
+    if (!answer) throw new Error('vtiAgent: the community did not answer (status)')
+    const refusal = refusalOf(answer)
+    if (refusal) {
+      if (joinRequestRefusal(refusal) === 'notFound') return undefined
+      throw refusal
+    }
+    const payload = ((answer.body as { payload?: Record<string, unknown> } | undefined)?.payload ?? {}) as Record<
+      string,
+      unknown
+    >
+    const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
+    const status = text(payload.status)
+    if (!status) throw new Error('vtiAgent: the status answer names no status')
+    return {
+      requestId: text(payload.requestId),
+      status,
+      ...(Array.isArray(payload.needs)
+        ? { needs: payload.needs.filter((n): n is string => typeof n === 'string') }
+        : {}),
+      ...(payload.presentationDefinition !== undefined
+        ? { presentationDefinition: payload.presentationDefinition }
+        : {}),
+      // The refusal members mean a decision was taken: only ever with `rejected`.
+      ...(status === 'rejected'
+        ? { code: text(payload.code), reason: text(payload.reason), decidedAt: text(payload.decidedAt) }
+        : {}),
+    }
+  }
+
+  /**
+   * Leave the community (`vtc/members/self-remove/0.1`, proof required). The
+   * caller is the only target. `disposition` chooses what the community keeps
+   * — `purge` erases the member's record, `tombstone` keeps a marker with no
+   * personal data — and omitting it uses the community's default; the answer
+   * says which was applied. Refusals surface as `VtiRefusal`; read them with
+   * `selfRemoveRefusal`.
+   */
+  async selfRemove(
+    communityDid: string,
+    options: { disposition?: 'purge' | 'tombstone' } = {}
+  ): Promise<{ did?: string; disposition: 'purge' | 'tombstone' | 'historical' | (string & {}); removed: boolean }> {
+    const answer = await this.ask(
+      communityDid,
+      SELF_REMOVE,
+      options.disposition ? { disposition: options.disposition } : {}
+    )
+    if (!answer) throw new Error('vtiAgent: the community did not answer (self-remove)')
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const payload = (answer.body as { payload?: { did?: string; disposition?: string; removed?: boolean } } | undefined)
+      ?.payload
+    return {
+      did: payload?.did,
+      disposition: payload?.disposition ?? options.disposition ?? 'policydefault',
+      removed: payload?.removed !== false,
+    }
   }
 
   /**
