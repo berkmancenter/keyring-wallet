@@ -421,7 +421,16 @@ async function testerJourney(driver) {
   const identityMissed = async (waitMs) => {
     if (!(await existsTestId(driver, "JoinError", waitMs))) return false;
     const why = (await textOf(driver, "JoinError")).trim();
-    if (identityRetried) throw new Error(`making the identity failed twice: ${why}`);
+    // The raw error, kept under Details, is the evidence: read it before
+    // anything moves on (Prague's run lost it to a relaunch, 2026-09-24).
+    let detail = "";
+    if (await existsTestId(driver, "JoinErrorDetailsToggle", 2000)) {
+      await tapTestId(driver, "JoinErrorDetailsToggle", 5000).catch(() => undefined);
+      detail = (await textOf(driver, "JoinErrorDetail").catch(() => "")).trim();
+      console.log(`[e2e] journey: identity error detail: ${detail || "(none)"}`);
+      await screenshot(driver, `journey-identity-miss-${identityRetried ? 2 : 1}`);
+    }
+    if (identityRetried) throw new Error(`making the identity failed twice: ${why}${detail ? ` — detail: ${detail}` : ""}`);
     identityRetried = true;
     console.log(`[e2e] journey: ⚠️  FIRST-TRY MISS making the identity — "${why}" — tapping Continue once, as the app asks`);
     await screenshot(driver, "journey-identity-first-miss");
@@ -468,7 +477,21 @@ async function testerJourney(driver) {
   // needs is a sentence — no claim key, no "(s)" — and the paste box's button
   // is its own, quiet one, not a second main action.
   if (onNameStep && (await existsTestId(driver, "VettingStartButton", 3000))) {
-    await (await scrollToTestId(driver, "VettingStartButton", 4)).click();
+    // Start is disabled — "Connecting…" — until the community session opens.
+    // Tapping it before then does nothing (Prague's run, 2026-09-24: 60 s on
+    // the name step), so wait for it to be enabled, and say how long it took.
+    const start = await scrollToTestId(driver, "VettingStartButton", 4);
+    const connectBy = Date.now() + 120000;
+    const connectFrom = Date.now();
+    while (!(await start.isEnabled().catch(() => false))) {
+      if (Date.now() > connectBy) {
+        await screenshot(driver, "journey-vetting-never-connected");
+        throw new Error(`vetting's Start stayed disabled for 120 s: "${(await textOf(driver, "VettingStartButton")).trim()}"`);
+      }
+      await sleep(1000);
+    }
+    console.log(`[e2e] journey: vetting connected to the community in ${Math.round((Date.now() - connectFrom) / 1000)} s`);
+    await start.click();
     await waitForTestId(driver, "VettingRequirements", 60000);
     const needs = (await textOf(driver, "VettingRequirements")).trim();
     if (/\(s\)|\b[a-z]+\.[a-z]+\b/i.test(needs) || !/vetters? to (confirm|vouch)/.test(needs)) {
