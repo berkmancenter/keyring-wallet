@@ -145,10 +145,11 @@ gate is the last point before testers where that behaviour is checked.
   of everyone, and an admin cannot admit a deferred request.
   - `keyring-test-vtc`, as it is (invitation + vetting criteria): vetting
     flows F1–F5, and F6 with `EXPECT_JOIN=deferred`.
-  - **An invitation-only test community** (the board item from 2026-09-24,
-    name to be chosen when it is created): F6 with `EXPECT_JOIN=member`, F7,
+  - **An invitation-only test community:** F6 with `EXPECT_JOIN=member`, F7,
     and seeding a vetter by invitation without touching `keyring-test-vtc`'s
-    criteria.
+    criteria. Recommended: `keyring-vetting-vtc`, on the existing and unused
+    Farm Full Stack #22 (`keyring-vetting`), once its admin is claimed and its
+    criteria are set to invitation only (decision 2).
 
   Until the invitation-only community exists, seeding a vetter uses the
   announced criteria window: snapshot, flip, join, restore, read back.
@@ -253,8 +254,11 @@ notes say what testers will meet.
 
 1. **Create `keyring-runner-openvtc`** on the Farm (VTA Only, Platform
    stack), and confirm the pnm slug `farm-runner-openvtc`.
-2. **Create the invitation-only test community.** Pick the name, and decide
-   whether it is a second Full Stack or a second community on the existing
+2. **The invitation-only test community.** **Recommended:** claim the admin
+   of the existing, unused Farm Full Stack #22 `keyring-vetting` (VTC
+   `keyring-vetting-vtc`) by passkey, and set its criteria to invitation only.
+   Nothing new is created, and its stack VTA is already correct. The
+   alternatives are a new Full Stack, or a second community on an existing
    stack.
 3. **Which flows block a release from day one.** §8 proposes Phase 0, F1, F6
    and anything that is ours. The alternative is to start everything as
