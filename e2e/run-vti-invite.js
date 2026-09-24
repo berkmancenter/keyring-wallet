@@ -26,6 +26,7 @@ import { completeOnboarding, dismissTourIfPresent, enableDidCommV2, handleBiomet
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { assertDirectoryConsentOff, assertNoDidShown } from "./lib/gateChecks.js";
+import { vtaInventory } from "./lib/aclCleanup.js";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -118,6 +119,13 @@ async function inviteByDoor(d) {
       await openInvitedFlow(d).catch(() => undefined);
     }
   }
+  // What the agent holds before it is asked for an identity, when the run
+  // expects it to refuse: afterwards it must hold exactly the same.
+  const runner = { slug: process.env.RUNNER_VTA, pnmHome: process.env.PNM_HOME };
+  if (EXPECT_INVITED_ERROR && (!runner.slug || !runner.pnmHome)) {
+    throw new Error("EXPECT_INVITED_ERROR needs RUNNER_VTA and PNM_HOME, to check the agent minted nothing");
+  }
+  const heldBefore = EXPECT_INVITED_ERROR ? vtaInventory(runner) : undefined;
   if (await existsTestId(d, "InvitedContinue", 10000)) {
     await tapTestId(d, "InvitedContinue", 15000);
     await handleBiometricConfirmIfPresent(d);
@@ -139,6 +147,14 @@ async function inviteByDoor(d) {
     if (!(await existsTestId(d, "InvitedErrorDetailsToggle", 3000))) throw new Error("the raw error is not kept under Details");
     await assertNoDidShown(d, "the no-host refusal");
     await screenshot(d, "vti-invite-door-nohost");
+    const heldAfter = vtaInventory(runner);
+    const newKeys = [...heldAfter.keyIds].filter((id) => !heldBefore.keyIds.has(id));
+    if (newKeys.length || heldAfter.keyTotal > heldBefore.keyTotal || heldAfter.didCount > heldBefore.didCount) {
+      throw new Error(
+        `the agent minted something it could not publish: keys ${heldBefore.keyTotal} → ${heldAfter.keyTotal}, DIDs ${heldBefore.didCount} → ${heldAfter.didCount}`
+      );
+    }
+    console.log(`[e2e] ${runner.slug}: nothing minted — keys ${heldAfter.keyTotal}, DIDs ${heldAfter.didCount}, as before`);
     console.log(`[e2e] ${d.e2ePlatform}: no DID host — said plainly: "${said}"`);
     return "refused";
   }

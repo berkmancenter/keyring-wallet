@@ -113,3 +113,21 @@ export function removeRunKeys({ slug, pnmHome, before, tempDid, failed = false, 
     log(`[acl] cleanup skipped: ${err instanceof Error ? err.message.split("\n")[0] : err}`);
   }
 }
+
+/**
+ * What a runner VTA holds, read-only: its keys (ids and total) and its WebVH
+ * DIDs (count). A persona mint borrows a signing and a key-agreement key, so a
+ * mint that got anywhere grows the keys; used to prove a refused mint minted
+ * nothing (farm-runner-nohost, keyring-bifold#79/#97).
+ */
+export function vtaInventory({ slug, pnmHome }) {
+  if (REFUSED.has(slug)) throw new Error(`[acl] refusing to read "${slug}": a person's own agent, not a runner's`);
+  const keysOut = pnm(slug, pnmHome, ["keys", "list", "--json"]);
+  const keys = JSON.parse(keysOut.slice(keysOut.indexOf("{")));
+  // `dids list` ignores --json (pnm 0.19.0): read the "WebVH DIDs (N)" header.
+  const didsOut = pnm(slug, pnmHome, ["did-mgmt", "dids", "list"]).replace(/\x1b\[[0-9;]*m/g, "");
+  const dids = /WebVH DIDs \((\d+)\)/.exec(didsOut);
+  if (!dids) throw new Error(`[acl] could not read the DID count of "${slug}"`);
+  const keyIds = new Set((keys.keys ?? []).map((k) => k.id ?? k.keyId ?? JSON.stringify(k)));
+  return { keyTotal: Number(keys.total ?? keyIds.size), keyIds, didCount: Number(dids[1]) };
+}
