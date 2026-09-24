@@ -24,7 +24,7 @@ import {
   type VtiMembership,
 } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } from './VtiIdentityStore'
-import { vtiAgent, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
+import { selfRemoveRefusal, vtiAgent, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
 import { receiveIssue } from './vtiInbox'
 import { checkCredentialStatus } from './vtiStatusList'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
@@ -236,6 +236,15 @@ export async function readJoinState(
   }
 
   let submission = await store.getSubmission?.(communityDid).catch(() => undefined)
+  // Left on this phone, and nothing sent since: "You left", not "Join".
+  const departure = await store.getDeparture?.(communityDid).catch(() => undefined)
+  if (departure && (!submission || submission.sentAt <= departure.at)) {
+    return {
+      kind: 'left',
+      disposition: departure.disposition as 'purge' | 'tombstone' | 'historical',
+      at: departure.at,
+    }
+  }
   if (!submission) return { kind: 'none' }
 
   const open = !submission.acknowledgedAt || submission.status === 'pending' || submission.status === 'deferred'
@@ -285,4 +294,53 @@ export function stateOfSubmission(submission: JoinSubmission): CommunityJoinStat
     default:
       return { kind: 'pending', submission }
   }
+}
+
+export interface LeaveCommunityDeps {
+  agent: Agent
+  identityStore: VtiIdentityStore
+  communityStore: VtiCommunityStore
+  /** The vetting application for the community, cleared with the rest. */
+  vettingStore?: { forget(communityDid: string): Promise<void> }
+  mediatorDid?: string
+}
+
+/**
+ * Leave a community (p220 item 5): `members/self-remove/0.1`, as the
+ * community's persona, then clear what this phone held for it — the
+ * membership, invitations, held credentials, the vetting application and the
+ * persona record — so joining again starts from a fresh identity. A community
+ * that says the caller is not a member (`notMember`) is gone already: the
+ * phone clears the same way and says so (`alreadyGone`). Any other refusal —
+ * leaving as the last admin — throws, and nothing is cleared.
+ */
+export async function leaveCommunity(
+  deps: LeaveCommunityDeps,
+  communityDid: string,
+  options: { disposition?: 'purge' | 'tombstone' } = {}
+): Promise<{ disposition: string; alreadyGone: boolean }> {
+  const persona = await deps.identityStore.getPersona(communityDid)
+  if (!persona) throw new Error('vtiJoin: this phone holds no identity for that community')
+  await vtiAgent.connect(deps.agent, deps.mediatorDid, {
+    persona,
+    peerRevisionStore: new GenericRecordsTspPeerRevisionStore(deps.agent),
+  })
+  let disposition: string = options.disposition ?? 'policydefault'
+  let alreadyGone = false
+  try {
+    const left = await vtiAgent.selfRemove(communityDid, { disposition: options.disposition })
+    disposition = left.disposition
+  } catch (e) {
+    if (selfRemoveRefusal(e) !== 'notMember') throw e
+    alreadyGone = true
+  }
+  // What the community no longer holds, the phone no longer shows. Each step
+  // on its own: one store failing must not leave the others half-cleared.
+  await deps.communityStore.forgetCommunity(communityDid).catch(() => undefined)
+  await deps.vettingStore?.forget(communityDid).catch(() => undefined)
+  await deps.identityStore.forgetPersona(communityDid).catch(() => undefined)
+  await deps.communityStore
+    .saveDeparture?.({ communityDid, disposition, at: new Date().toISOString() })
+    .catch(() => undefined)
+  return { disposition, alreadyGone }
 }
