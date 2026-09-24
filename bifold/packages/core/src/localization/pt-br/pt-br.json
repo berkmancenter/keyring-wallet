@@ -1174,6 +1174,9 @@
     "UnlinkConfirm": "Desvincular"
   },
   "Invited": {
+    "DeferredTitle": "Enviado — {{community}} também exige verificação",
+    "DeferredBody": "Seu convite foi junto. Antes de admitir você, {{community}} precisa de:",
+    "PendingTitle": "Enviado — {{community}} está decidindo",
     "IntroVets": "{{community}} verifica todos que entram, mesmo convidados: depois de entrar, você vai encontrar um de seus verificadores.",
     "ArrivedBodyVets": "{{community}} convidou você, e também verifica todos que entram. Entre agora e depois encontre um de seus verificadores para ser admitido.",
     "WhichCommunityTitle": "Qual comunidade convidou você?",

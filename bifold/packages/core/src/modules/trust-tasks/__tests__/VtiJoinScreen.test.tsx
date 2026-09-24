@@ -51,7 +51,8 @@ describe('what a community asks for', () => {
     const vets = { vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }
     expect(asksFrom({ criteria: [vets] } as never).invitationAdmits).toBe(false)
     expect(asksFrom({ criteria: [{ id: 'invited-member', ...vets }] } as never).invitationAdmits).toBe(false)
-    expect(asksFrom({ criteria: [vets, { id: 'invited-member' }] } as never).invitationAdmits).toBe(true)
+    // Any vetting criterion makes vetting mandatory upstream: an invitation criterion beside it does not admit alone.
+    expect(asksFrom({ criteria: [vets, { id: 'invited-member' }] } as never).invitationAdmits).toBe(false)
     expect(asksFrom({ criteria: [{ id: 'invited-member' }] } as never).invitationAdmits).toBe(true)
   })
   it('only invitation criteria: admits by invitation', () => {
@@ -353,7 +354,7 @@ describe('I want to join a community', () => {
 
   it('a community an invitation admits does not say so', async () => {
     jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({
-      criteria: [{ vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }, { id: 'invited-member' }],
+      criteria: [{ id: 'invited-member' }],
     } as never)
     communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
     const tree = await renderJoin()

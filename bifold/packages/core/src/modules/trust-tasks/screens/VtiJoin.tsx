@@ -63,10 +63,13 @@ export interface Asks {
   /** It admits only by invitation. */
   invitationOnly: boolean
   /**
-   * An invitation alone admits: some criterion is about an invitation and
-   * asks for no vetting. Where every way in is vetted, an invitation does not
-   * bypass it (upstream join.rego: "neither an invitation nor a trusted
-   * credential bypasses" vetting), and nothing may suggest it does.
+   * An invitation alone admits: a criterion is about an invitation and NO
+   * criterion vets. Upstream, any published vetting criterion makes vetting
+   * mandatory for every applicant — "neither an invitation nor a trusted
+   * credential bypasses" it (join.rego), and the applicant's digest cannot
+   * choose the invitation criterion instead — so a community that vets at all
+   * answers an invitation with request_more (keyring-test-vtc, 220). Where
+   * that is so, nothing may suggest the invitation is enough.
    */
   invitationAdmits: boolean
 }
@@ -75,7 +78,8 @@ const INVITATION = /invit/i
 
 export function asksFrom(manifest: VtiManifest): Asks {
   const criteria = manifest.criteria
-  const invitationAdmits = criteria.some((c) => !c.vetting && INVITATION.test(`${c.id ?? ''} ${c.description ?? ''}`))
+  const invitationAdmits =
+    !criteria.some((c) => c.vetting) && criteria.some((c) => INVITATION.test(`${c.id ?? ''} ${c.description ?? ''}`))
   const vetting = criteria.map((c) => c.vetting).find(Boolean)
   if (vetting) {
     return {

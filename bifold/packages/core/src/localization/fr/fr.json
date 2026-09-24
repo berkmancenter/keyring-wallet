@@ -1275,6 +1275,9 @@
     "UnlinkConfirm": "Délier"
   },
   "Invited": {
+    "DeferredTitle": "Envoyé — {{community}} demande aussi une vérification",
+    "DeferredBody": "Votre invitation l'accompagnait. Avant de vous admettre, {{community}} a besoin de :",
+    "PendingTitle": "Envoyé — {{community}} décide",
     "IntroVets": "{{community}} vérifie toute personne qui la rejoint, même invitée : après votre adhésion, vous rencontrerez l'un de ses vérificateurs.",
     "ArrivedBodyVets": "{{community}} vous a invité, et elle vérifie aussi toute personne qui la rejoint. Rejoignez-la maintenant, puis rencontrez l'un de ses vérificateurs pour être admis.",
     "WhichCommunityTitle": "Quelle communauté vous a invité ?",
