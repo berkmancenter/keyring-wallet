@@ -225,6 +225,20 @@ async function linkManually(driver) {
       // a tap on an off-screen toggle does nothing, so bring it into view. The
       // swipe starts mid-screen: at the default 70% it lands on the fixed
       // "I've been added" / "Stop linking" footer, which scrolls nothing.
+      // A sliver of it counts as "displayed" on Android (7 px at the scroll
+      // view's edge, 220 gate), so first scroll the content to its end with one
+      // short swipe mid-screen, then find it.
+      const { width, height } = await driver.getWindowRect();
+      await driver
+        .action("pointer")
+        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.5) })
+        .down()
+        .pause(100)
+        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
+        .up()
+        .perform()
+        .catch(() => undefined);
+      await sleep(600);
       const toggle = await scrollToTestId(driver, key, 4, { from: 0.5 }).catch(() => undefined);
       if (toggle) await toggle.click().catch(() => undefined);
       else await tapTestId(driver, key, 15000).catch(() => undefined);
