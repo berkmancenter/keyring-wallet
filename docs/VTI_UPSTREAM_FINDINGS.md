@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.40 — 2026-09-23.** A living document: every finding here was measured
+**Version 1.41 — 2026-09-24.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1842,6 +1842,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q20 | Which name should a client show for an agent: a verified agent-name shortcut, or the operator's `vta_name`? | Raised in the round-3 report as *Q19* (a different question from this doc's VTI-Q19). **Answered 2026-09-23:** trust the verified agent-name shortcut (`example.com/@name`); `vta_name` (from `config/show`, authenticated) is an operator-set label — show it beside the DID, not instead of it. |
 | VTI-Q21 | How does a member ask what the community holds for it — its membership and role credentials — after a lost push? | Raised in the round-3 report as *Q20*. **Answered 2026-09-23:** a member-side task, `vtc/members/self/credentials/0.1` (no payload, returns the member's own credentials as held), is planned — spec first. |
 | VTI-Q22 | Now that publication follows consent, how does a member withdraw (or give) their own registry consent after admission? | Only the admin verb `vtc/members/update` can set `publishConsent`; there is no member-side task short of leaving (`members/self-remove`, which tombstones the row). [Details](#question-details). |
+| VTI-Q23 | Could a client remove its own ACL entry when it stops using an agent, so unlinking leaves nothing behind? | `delete_acl` refuses the caller's own entry (409 *cannot delete your own ACL entry*) whatever its role, and no self-service verb removes one; `swap_acl` only rotates. Keyring's Unlink therefore forgets the key on the phone and says the entry stays until the agent's owner removes it. [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2049,10 +2050,39 @@ member-side exit is `trust-tasks/members/self-remove/1.0`.
 say that only a community admin can remove the listing later, and a
 self-service switch in the member's settings waits on this.
 
+**VTI-Q23 — a client cannot remove its own ACL entry.**
+(a) A person who unlinks their phone from their agent should leave nothing
+behind on that agent. The phone holds the only copy of its manager key and can
+forget it, but the agent's ACL keeps the entry until the agent's owner deletes
+it. The phone cannot delete its own entry: `delete_acl` refuses one whose
+subject is the caller, whatever the caller's role, admin included. The only
+self-service ACL verb is `swap_acl`, which moves the caller's entry to a new key
+and removes nothing. Expected: a way for a client to give up its own access,
+either a self-service remove task (the mirror of `swap_acl`, with no
+`require_manage`), or `delete_acl` allowing `auth.did == did` except for the
+last admin. The browser plugin's "Forget" has the same limit: it deletes its
+local holder record and leaves the ACL entry.
+(b) From source, not yet sent from the phone: an authenticated client calls
+`acl/delete` with its own DID and gets 409 *cannot delete your own ACL entry*.
+(c) At `verifiable-trust-infrastructure` `e2a669ab`:
+`vta-service/src/operations/acl.rs` `delete_acl`, right after
+`auth.require_manage()`: `if auth.did == did` → `AppError::Conflict("cannot
+delete your own ACL entry")`. Present since the initial import (`22f94080`,
+2026-02-26), so the Farm's VTA 0.39.0 behaves the same. `swap_acl` just below it
+is the self-service rotation. Plugin: `packages/extension/src/offscreen.ts`
+`doForgetHolderRecord` (local only).
+(d) Keyring's "Unlink this agent" (keyring-bifold `feat/unlink-agent`) is local
+only. It closes the session, forgets the stored link and the phone's manager
+key, and tells the person that the agent may still list this phone until its
+admin removes it, and that the entry can't be used because the phone has
+forgotten the key. With a self-remove verb it would make that call first and
+drop the sentence.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.41 | 2026-09-24 | **VTI-Q23** (new): a client cannot remove its own ACL entry (`delete_acl` refuses `auth.did == did`, since the initial import), so unlinking a phone leaves its entry on the agent until the owner removes it. Read from source at `e2a669ab`. Keyring's Unlink forgets the key locally and says so. |
 | 1.40 | 2026-09-23 | **VTI-Q22** (new): after #1691 publication follows a member's consent, but only the admin verb `vtc/members/update` can change it after admission; no member-side task exists short of `members/self-remove`. Read from source at `e2a669ab`. **VTI-Q14**: on the Farm's `keyring-test-vtc` (VTC 0.11.58, before #1691) no trust registry is configured, so nobody is published; all 8 members hold `publishConsent: false`. |
 | 1.39 | 2026-09-23 | **Upstream's round-3 response recorded.** Fixed upstream: VTI-37, -38, -39, -40, -41, -43 and VTI-06 (with their public changes); VTI-42 by design (envelope only). VTI-41 leaves a Farm-side mediator setting. VTI-12 answered (to confirm); VTI-25's trace still owed. Answers to VTI-Q10, Q12, Q13 (with a correction to our premise), Q14 (a real defect, fixed), Q16, Q17; Farm-portal questions Q7/Q9/Q18 passed to the Farm operators. **New VTI-Q20** (agent naming) and **VTI-Q21** (a member's own credentials), raised as Q19/Q20 in the round-3 report. New section on the pins and the Farm lag. |
 | 1.38 | 2026-09-23 | **VTI-42 resolved upstream** by verifiable-trust-infrastructure#1687: the binding envelope is now the only DIDComm carriage, and Keyring moves to it in keyring-bifold#76. **VTI-43 recurred on the Farm**: an Android first check got no answer and the retry linked; the VTA side is unobserved. **New VTI-Q19**: a Farm VTA answered *not in ACL* for three minutes to a key its ACL held, and the retry passed. |
