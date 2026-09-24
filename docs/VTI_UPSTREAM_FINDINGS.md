@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.41 — 2026-09-24.** A living document: every finding here was measured
+**Version 1.42 — 2026-09-24.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -48,7 +48,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | Open · **Upstream 09-22:** decided — default stays off; startup warning when policies exist with enforcement off (vti #1633) | A |
 | [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open · **Upstream 09-22:** shipped (vti #1619) — persona mint needs `KeyMint` (initiator holds it); key export is its own admin-only capability; sign via `keys/sign` (Q4) | A |
 | [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579 (with VTI-26); **validated live on era H** with a phone approver · **Upstream 09-22:** shipped (vti #1579) — confirmed | A |
-| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open · **Upstream 09-22 and 09-23:** a trace of one admission is still asked for — **owed by us** | B |
+| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | **Resolved — ours, not upstream's** (traced 09-24): the `allow` reply has always carried the card inline; Keyring read the credential pushes that arrive *before* it as the reply, and stopped doing so in keyring-bifold 4eddfbd2 (09-17) | B |
 | [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579; **validated live on era H** with a phone approver. Keyring's relay stays as the fallback #1579 itself keeps · **Upstream 09-22:** shipped (vti #1579) — confirmed | B |
 | [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open · **Upstream 09-22:** already fixed (vti #1567, 18 Sep) — typed trust-task-error | B |
 | [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 · **Upstream 09-22:** already fixed (vti #1567, webvh #203) — confirmed | B, re-measured on **C**: gone |
@@ -812,6 +812,34 @@ error. Keyring now matches replies by `#response` type and gives the community
 session an inbox for the rest. **Measured:** vtc-service 0.11.58 (train code
 at `460e0ebb`), 2026-09-18.
 
+
+**Resolved — a Keyring defect, not an upstream change.** Traced from source on
+2026-09-24 at `verifiable-trust-infrastructure` `460e0ebb` (the train code this
+was measured on) and `a96fe02f` (the pin in `scripts/openvtc/PINS.json`), both
+read in the pinned `external/` clone:
+- The `allow` reply carries the card inline at both commits.
+  `trust_tasks/mod.rs` `outcome_to_verdict` returns
+  `VerdictResponse::allow(request_id, role, Some(vmc), Some(role_vec))` on
+  auto-admit. The DIDComm handler (`messaging.rs`
+  `join_request_submit_handler`) runs through the same
+  `dispatch_trust_task_core` as REST, so the transport makes no difference.
+- The two `credential-exchange/issue` messages are real, and they are sent
+  **first**. `join/orchestrate.rs` awaits
+  `credentials::delivery::deliver_membership_credentials` inside the submit,
+  before the handler builds its reply. So the pushes leave the community
+  before the `#response`.
+- Until keyring-bifold `4eddfbd2` (2026-09-17), Keyring took the first message
+  after a send as that send's reply. It read an `issue` message as the verdict
+  and found no card in it. That is the measurement above, "role first"
+  included. Since `4eddfbd2` Keyring matches a reply by `#response` type (or a
+  trust-task error), and gives the rest to the community session's inbox. It
+  takes the card from `verdict.with.vmc` when present
+  (`vtiJoin.membershipFromVerdict`) and from the delivery otherwise.
+
+This is what upstream suggested (reply matching). No upstream change is asked
+for. Not re-measured live: a Farm admission logging the raw reply's `verdict`
+keys would confirm it, and can be run outside a gate window if anyone wants
+the measurement.
 
 ### VTI-26 — A consent request is pushed only to a `did:key` approver; every other approver needs the requester to relay
 
@@ -1811,7 +1839,7 @@ with fixes merged the same day. In our own words, and by their public changes:
   `registryConsent`; and VTC replies to an enveloped request will later carry the
   envelope `type` — a client that correlates by thread or by the document inside
   (as Keyring does since keyring-bifold#76) is unaffected.
-- **Still owed by us:** a trace of one admission for VTI-25.
+- ~~**Still owed by us:** a trace of one admission for VTI-25.~~ Done 2026-09-24, from source: the inline card was there all along, and Keyring's old reply matching read the credential pushes that precede it as the reply. See VTI-25.
 
 ## Open questions and requests
 
@@ -2082,6 +2110,7 @@ drop the sentence.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.42 | 2026-09-24 | **VTI-25 resolved as ours.** Traced from source at `460e0ebb` and `a96fe02f`: the `allow` reply carries the card inline on every transport, and the two `credential-exchange/issue` pushes are awaited inside the submit, so they arrive *before* the reply. Keyring took the first message after a send as the reply until keyring-bifold `4eddfbd2` (09-17). No upstream change asked; not re-measured live. |
 | 1.41 | 2026-09-24 | **VTI-Q23** (new): a client cannot remove its own ACL entry (`delete_acl` refuses `auth.did == did`, since the initial import), so unlinking a phone leaves its entry on the agent until the owner removes it. Read from source at `e2a669ab`. Keyring's Unlink forgets the key locally and says so. |
 | 1.40 | 2026-09-23 | **VTI-Q22** (new): after #1691 publication follows a member's consent, but only the admin verb `vtc/members/update` can change it after admission; no member-side task exists short of `members/self-remove`. Read from source at `e2a669ab`. **VTI-Q14**: on the Farm's `keyring-test-vtc` (VTC 0.11.58, before #1691) no trust registry is configured, so nobody is published; all 8 members hold `publishConsent: false`. |
 | 1.39 | 2026-09-23 | **Upstream's round-3 response recorded.** Fixed upstream: VTI-37, -38, -39, -40, -41, -43 and VTI-06 (with their public changes); VTI-42 by design (envelope only). VTI-41 leaves a Farm-side mediator setting. VTI-12 answered (to confirm); VTI-25's trace still owed. Answers to VTI-Q10, Q12, Q13 (with a correction to our premise), Q14 (a real defect, fixed), Q16, Q17; Farm-portal questions Q7/Q9/Q18 passed to the Farm operators. **New VTI-Q20** (agent naming) and **VTI-Q21** (a member's own credentials), raised as Q19/Q20 in the round-3 report. New section on the pins and the Farm lag. |
