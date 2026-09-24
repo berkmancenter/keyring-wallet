@@ -114,6 +114,20 @@ export class VtiRefusal extends Error {
  */
 export type JoinRequestRefusal = 'notFound' | 'alreadyDecided' | 'notAwaitingEvidence' | 'requestAlreadyOpen'
 
+/** A join request's state, as the community's status task states it (`join-requests/status/0.1`). */
+export interface JoinRequestStatus {
+  requestId?: string
+  status: 'pending' | 'deferred' | 'approved' | 'rejected' | 'withdrawn' | (string & {})
+  /** While `deferred`: what the applicant must supply. */
+  needs?: string[]
+  /** While `deferred`: the evidence to present next. */
+  presentationDefinition?: unknown
+  /** While `rejected`: a stable code, the decider's words when there were any, and when it was decided. */
+  code?: string
+  reason?: string
+  decidedAt?: string
+}
+
 export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
   if (!(refusal instanceof VtiRefusal)) return undefined
   const reason = refusal.code.split(':').pop()
@@ -913,6 +927,45 @@ class VtiAgentController {
       ...(options.requirementsDigest ? { extensions: { requirementsDigest: options.requirementsDigest } } : {}),
     })
     return this.verdictOf(answer, 'supplement')
+  }
+
+  /**
+   * Ask where the applicant's own join request stands
+   * (`vtc/join-requests/status/0.1`) — a read, never a resubmit. The id is
+   * optional: without it the community resolves the request from who signs the
+   * poll, which is how a request whose first answer was lost is found again.
+   * Undefined when the community holds no such request (`notFound`); other
+   * refusals surface as `VtiRefusal`.
+   */
+  async status(communityDid: string, options: { requestId?: string } = {}): Promise<JoinRequestStatus | undefined> {
+    const answer = await this.ask(communityDid, STATUS, options.requestId ? { requestId: options.requestId } : {})
+    if (!answer) throw new Error('vtiAgent: the community did not answer (status)')
+    const refusal = refusalOf(answer)
+    if (refusal) {
+      if (joinRequestRefusal(refusal) === 'notFound') return undefined
+      throw refusal
+    }
+    const payload = ((answer.body as { payload?: Record<string, unknown> } | undefined)?.payload ?? {}) as Record<
+      string,
+      unknown
+    >
+    const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
+    const status = text(payload.status)
+    if (!status) throw new Error('vtiAgent: the status answer names no status')
+    return {
+      requestId: text(payload.requestId),
+      status,
+      ...(Array.isArray(payload.needs)
+        ? { needs: payload.needs.filter((n): n is string => typeof n === 'string') }
+        : {}),
+      ...(payload.presentationDefinition !== undefined
+        ? { presentationDefinition: payload.presentationDefinition }
+        : {}),
+      // The refusal members mean a decision was taken: only ever with `rejected`.
+      ...(status === 'rejected'
+        ? { code: text(payload.code), reason: text(payload.reason), decidedAt: text(payload.decidedAt) }
+        : {}),
+    }
   }
 
   /**
