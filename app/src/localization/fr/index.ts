@@ -234,9 +234,9 @@ const translation = {
   },
   "Scan": {
     "ScanOnySpecial": "Seuls les codes QR spéciaux peuvent être scannés par Keyring.",
-    "ScanOnlySpecial3": "Keyring ne prend actuellement pas en charge l'ajout de justificatifs numériques en scannant ou en prenant des photos de justificatifs physiques.",
+    "ScanOnlySpecial3": "Keyring lit le code de votre agent, celui d'une communauté, le code de contact d'un autre utilisateur de Keyring ou le ticket d'un vérificateur.",
     "WhereToUseLink": "Voyez où vous pouvez utiliser Keyring.",
-    "BadQRCodeDescription": "Le code QR scanné ne fonctionne pas avec Keyring. Keyring ne fonctionne qu'avec les services participants.\n\nIl ne peut actuellement pas ajouter de justificatifs numériques en prenant des photos de justificatifs physiques."
+    "BadQRCodeDescription": "Keyring ne peut pas utiliser ce code QR. Il lit le code de votre agent, celui d'une communauté, le code de contact d'un autre utilisateur de Keyring ou le ticket d'un vérificateur."
   },
   "Services": {
     "CatalogueTitle": "Services (FR)",
