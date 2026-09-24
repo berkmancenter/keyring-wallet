@@ -289,6 +289,27 @@ class VtiAgentController {
    * two envelope formats; the plan asks for a session-scoped choice, logged.
    */
   private readonly carriageByPeer = new Map<string, Carriage>()
+  /**
+   * How each peer last reached us, by its DID (the DIDComm sender, the TSP
+   * sender, and the document's issuer). A reply goes back the same way: a
+   * peer that wrote over DIDComm reads DIDComm, whatever its DID document
+   * advertises. Measured 2026-09-24: an openvtc vetter opened a session over
+   * DIDComm from a persona that advertises TSPTransport; Keyring answered with
+   * TSP frames, five times, and the vetter never saw the card.
+   */
+  private readonly inboundCarriage = new Map<string, Carriage>()
+
+  private noteInbound(plaintext: DidCommV2PlaintextMessage, carriage: Carriage, sender?: string): void {
+    const issuer = (unwrapBindingEnvelope(plaintext).body as { issuer?: unknown } | undefined)?.issuer
+    for (const did of [sender, plaintext.from, issuer]) {
+      if (typeof did === 'string' && did.startsWith('did:')) this.inboundCarriage.set(did, carriage)
+    }
+  }
+
+  /** How `peerDid` last reached us, if it has — what a reply to it should use. */
+  inboundCarriageOf(peerDid: string): Carriage | undefined {
+    return this.inboundCarriage.get(peerDid)
+  }
 
   /**
    * Can this session START a TSP conversation with a peer it has no
@@ -536,7 +557,10 @@ class VtiAgentController {
       this.peerRevisionStore = options.peerRevisionStore ?? this.peerRevisionStore
       const session = new VtiMediatorSession(agent, identity, mediator, {
         onError: (error) => this.set({ error: error.message }),
-        onMessage: (plaintext) => this.deliver(plaintext),
+        onMessage: (plaintext) => {
+          this.noteInbound(plaintext, 'didcomm')
+          this.deliver(plaintext)
+        },
         ...(tspSession ? { onTspFrame: (bytes: Uint8Array) => this.receiveTspFrame(bytes, did) } : {}),
       })
       await session.start()
@@ -599,6 +623,7 @@ class VtiAgentController {
       const others = (this.state.peerRevisions ?? []).filter((r) => r.vid !== record.vid)
       this.set({ peerRevisions: [...others, record] })
     }
+    this.noteInbound(plaintext, 'tsp', unpacked.sender)
     this.deliver(plaintext)
   }
 
@@ -641,11 +666,18 @@ class VtiAgentController {
     // no transports at all, so there is nothing to read. §4.2's rule applies to
     // a peer that publishes a document: if it advertises TSPTransport and we
     // hold a TSP identity, we speak TSP whether or not the toggle is on.
+    //
+    // Both apply only when we start the conversation. A peer that has already
+    // written to us is answered the way it wrote (`inboundCarriage`).
+    const inbound = this.inboundCarriage.get(toDid)
     const capable =
-      this.peerLeg === 'tsp' ||
-      (this.agent
-        ? (await chooseCarriage(this.agent, toDid, this.canInitiateTsp(), { decided: this.carriageByPeer })) === 'tsp'
-        : false)
+      inbound !== undefined
+        ? inbound === 'tsp'
+        : this.peerLeg === 'tsp' ||
+          (this.agent
+            ? (await chooseCarriage(this.agent, toDid, this.canInitiateTsp(), { decided: this.carriageByPeer })) ===
+              'tsp'
+            : false)
     if (capable && this.tsp && this.agent) {
       await this.ensureGreeted(toDid)
       const packed = await packTrustTaskForPeer(this.tsp, did, toDid, {

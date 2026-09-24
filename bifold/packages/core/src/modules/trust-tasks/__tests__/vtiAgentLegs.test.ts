@@ -11,6 +11,7 @@ const mockSessions: Array<{
   did: string
   mediator: string
   onMessage: (m: unknown) => void
+  onTspFrame?: (bytes: Uint8Array) => Promise<void>
   tsp: Uint8Array[]
   didcomm: unknown[]
 }> = []
@@ -20,7 +21,7 @@ const mockTspVia: Record<string, string | undefined> = {}
 const mockPacked: Record<string, unknown>[] = []
 
 jest.mock('@bifold/trust-tasks', () => ({
-  tsp: { CODEC_FORMS_RELATIONSHIPS: true },
+  tsp: { CODEC_FORMS_RELATIONSHIPS: true, peekRevision: () => ({ minor: 0 }) },
   TRUST_TASK_V2_ENVELOPE_TYPE: 'https://trusttasks.org/binding/didcomm/0.1/envelope',
 }))
 // Stands in for eddsa-jcs-2022: records who signed, with which keys.
@@ -52,9 +53,16 @@ jest.mock('../module/VtiMediatorTransport', () => ({
       _agent: unknown,
       identity: { did: string },
       mediator: { did: string },
-      opts: { onMessage: (m: unknown) => void }
+      opts: { onMessage: (m: unknown) => void; onTspFrame?: (bytes: Uint8Array) => Promise<void> }
     ) {
-      this.record = { did: identity.did, mediator: mediator.did, onMessage: opts.onMessage, tsp: [], didcomm: [] }
+      this.record = {
+        did: identity.did,
+        mediator: mediator.did,
+        onMessage: opts.onMessage,
+        onTspFrame: opts.onTspFrame,
+        tsp: [],
+        didcomm: [],
+      }
       mockSessions.push(this.record)
     }
     get isOpen() {
@@ -402,5 +410,50 @@ describe('directory consent on an application', () => {
 
   it('goes out when the person asked to be listed', async () => {
     expect(await sentConsent({ registryConsent: true })).toBe(true)
+  })
+})
+
+/**
+ * A peer is answered the way it wrote (2026-09-24, a maintainer's run): an
+ * openvtc vetter opened a vetting session over DIDComm from a persona whose
+ * DID document advertises TSPTransport. Keyring sent the card back as TSP
+ * frames, five times; the vetter reads DIDComm and never saw it. What a peer
+ * advertises decides only a conversation we start.
+ */
+describe('answering a peer', () => {
+  const vetter = 'did:webvh:v:dids.example:brush-say'
+  const SESSION = 'https://trusttasks.org/spec/vetting/session/0.1'
+  const card = { id: 'urn:uuid:card', type: `${SESSION}#response`, issuer: 'did:webvh:p:me', payload: {} }
+
+  it('answers over DIDComm a peer that reached us over DIDComm, though it advertises TSP', async () => {
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:me') })
+    const session = mockSessions.at(-1)!
+    session.onMessage({ id: 'urn:uuid:offer', from: vetter, type: SESSION, body: { issuer: vetter } })
+    await vtiAgent.send(vetter, `${SESSION}#response`, card, { thid: 'urn:uuid:offer' })
+    expect(session.tsp).toHaveLength(0)
+    expect(session.didcomm).toHaveLength(1)
+    expect(vtiAgent.inboundCarriageOf(vetter)).toBe('didcomm')
+  })
+
+  it('answers over TSP a peer that reached us over TSP', async () => {
+    const { unpackTrustTaskFromPeer } = jest.requireMock('../module/vtiTsp') as { unpackTrustTaskFromPeer: jest.Mock }
+    unpackTrustTaskFromPeer.mockResolvedValueOnce({
+      plaintext: { id: 'urn:uuid:offer', type: SESSION, body: { issuer: vetter } },
+      unpacked: { sender: vetter, revision: 'rev3' },
+    })
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:me2') })
+    const session = mockSessions.at(-1)!
+    await session.onTspFrame?.(new Uint8Array([9]))
+    await vtiAgent.send(vetter, `${SESSION}#response`, card)
+    expect(session.didcomm).toHaveLength(0)
+    expect(session.tsp.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('starts a conversation the way the peer advertises', async () => {
+    await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:me3') })
+    const session = mockSessions.at(-1)!
+    await vtiAgent.send('did:webvh:v:dids.example:someone-new', SESSION, card)
+    expect(session.didcomm).toHaveLength(0)
+    expect(session.tsp.length).toBeGreaterThanOrEqual(1)
   })
 })
