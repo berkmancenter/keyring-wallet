@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.44 — 2026-09-24.** A living document: every finding here was measured
+**Version 1.45 — 2026-09-24.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1831,9 +1831,11 @@ with fixes merged the same day. In our own words, and by their public changes:
 - **Pins that carry the fixes:** verifiable-trust-infrastructure `main` at or
   after `b07feb4e` (`vta-service` 0.41.0; `vtc-service` still reports 0.11.58, so
   a VTC is pinned by commit), affinidi-messaging-sdk 0.27.1, mediator ≥ 0.29.1,
-  trust-tasks 0.22.3. **The Farm is behind them** as measured on 2026-09-23: VTA
-  0.39.0, mediator 0.28.36 — so VTI-39, VTI-41 and VTI-43 are fixed upstream but
-  not yet on the Farm, and Farm results until it catches up still show them.
+  trust-tasks 0.22.3. On 2026-09-23 the Farm was behind them (VTA 0.39.0,
+  mediator 0.28.36). **It has since caught up**, as measured 2026-09-24 23:13Z:
+  the runner VTAs report vta-service 0.41.0 and `firstperson-mediator` reports
+  0.29.4, so the upstream fixes for VTI-39 and VTI-43 are deployed there.
+  VTI-41 still depends on the Farm's relay setting.
 - **Wire notes for clients:** `consentRequestsOmitted` is a new, additive member
   of `auth:consent_required` details; registry publication follows
   `registryConsent`; and VTC replies to an enveloped request will later carry the
@@ -2180,6 +2182,7 @@ community can offer.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.45 | 2026-09-24 | **The Farm's versions, measured again.** The runner VTAs (`keyring-runner-nohost`, `-uiux`, `-prague`) report vta-service **0.41.0**. The source is the public `/openapi.json` `info.version`, which is vta-service's own `CARGO_PKG_VERSION` (`vta-service/src/routes/mod.rs`); `/health` omits the version and `/health/details` needs auth. `firstperson-mediator` reports **0.29.4** in `/mediator/v1/readyz`, up since about 07:01Z. So VTI-43's fix (vti #1675, in 0.40.0) is on the Farm, and the 09-23 "the Farm is behind" note no longer holds. Measured while diagnosing an Android link whose first `auth/whoami/0.1` went unanswered on two runners from 22:54Z; that is **not attributed** here. |
 | 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
 | 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
 | 1.42 | 2026-09-24 | **VTI-25 resolved as ours.** Traced from source at `460e0ebb` and `a96fe02f`: the `allow` reply carries the card inline on every transport, and the two `credential-exchange/issue` pushes are awaited inside the submit, so they arrive *before* the reply. Keyring took the first message after a send as the reply until keyring-bifold `4eddfbd2` (09-17). No upstream change asked; not re-measured live. |
