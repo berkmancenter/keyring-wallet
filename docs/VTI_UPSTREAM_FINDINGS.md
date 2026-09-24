@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.42 — 2026-09-24.** A living document: every finding here was measured
+**Version 1.43 — 2026-09-24.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1871,6 +1871,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q21 | How does a member ask what the community holds for it — its membership and role credentials — after a lost push? | Raised in the round-3 report as *Q20*. **Answered 2026-09-23:** a member-side task, `vtc/members/self/credentials/0.1` (no payload, returns the member's own credentials as held), is planned — spec first. |
 | VTI-Q22 | Now that publication follows consent, how does a member withdraw (or give) their own registry consent after admission? | Only the admin verb `vtc/members/update` can set `publishConsent`; there is no member-side task short of leaving (`members/self-remove`, which tombstones the row). [Details](#question-details). |
 | VTI-Q23 | Could a client remove its own ACL entry when it stops using an agent, so unlinking leaves nothing behind? | `delete_acl` refuses the caller's own entry (409 *cannot delete your own ACL entry*) whatever its role, and no self-service verb removes one; `swap_acl` only rotates. Keyring's Unlink therefore forgets the key on the phone and says the entry stays until the agent's owner removes it. [Details](#question-details). |
+| VTI-Q24 | Could a vetter that refuses an applicant's Vetting Card tell the applicant, instead of only logging it? | openvtc's vetter logs *vetting card refused* and answers nothing, so the applicant reads "Card sent — the vetter is checking" and the vetter's screen stays on "waiting for their card". Neither side can see why. [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2106,10 +2107,38 @@ admin removes it, and that the entry can't be used because the phone has
 forgotten the key. With a self-remove verb it would make that call first and
 drop the sentence.
 
+**VTI-Q24 — a refused Vetting Card is refused silently.**
+(a) When an openvtc vetter cannot accept an applicant's card (a commitment
+that does not verify, an expired or over-long card, a card for a replaced
+session), it logs a warning and does nothing else. The applicant gets no
+answer, and the vetter's desk shows no change. On 2026-09-24 a run looked
+exactly like that: an openvtc vetter and a Keyring 219 applicant,
+five cards sent, the desk stuck on "waiting for their card", and the vetter
+reopening the session to try again. The cause was Keyring's
+(keyring-bifold#108: the card's identity commitment hashed an extra member).
+But nothing either person could see pointed to it, and it took reading both
+codebases to find. Expected: a refusal the applicant receives, a
+`trust-task-error` threaded on the session with a stable code (for example
+`commitmentMismatch`, `expired`, `sessionReplaced`), and a line on the
+vetter's desk saying a card arrived and was refused.
+(b) From source, not reproduced live: send a card whose `identityCommitment`
+does not match `{ type, value }` over the required claims. The vetter logs
+the refusal; no message goes back, and the desk entry stays in its session
+state.
+(c) At `openvtc` `177a218`: `openvtc-core/src/vetting/inbound.rs`, the card
+handler. `Err(e) => { warn!(%sender, error = %e, "vetting card refused");
+Handled::default() }`: no notice, no reply. The check itself is VTI's
+`verify_card` (`vta-sdk/src/vetting/card.rs`, at `a96fe02f`). The other
+refusals in the same file follow the same pattern.
+(d) Keyring's applicant can only show what it hears. With a refusal it would
+say "The vetter couldn't accept your card" and offer to send it again or
+start over, instead of "the vetter is checking" indefinitely.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
 | 1.42 | 2026-09-24 | **VTI-25 resolved as ours.** Traced from source at `460e0ebb` and `a96fe02f`: the `allow` reply carries the card inline on every transport, and the two `credential-exchange/issue` pushes are awaited inside the submit, so they arrive *before* the reply. Keyring took the first message after a send as the reply until keyring-bifold `4eddfbd2` (09-17). No upstream change asked; not re-measured live. |
 | 1.41 | 2026-09-24 | **VTI-Q23** (new): a client cannot remove its own ACL entry (`delete_acl` refuses `auth.did == did`, since the initial import), so unlinking a phone leaves its entry on the agent until the owner removes it. Read from source at `e2a669ab`. Keyring's Unlink forgets the key locally and says so. |
 | 1.40 | 2026-09-23 | **VTI-Q22** (new): after #1691 publication follows a member's consent, but only the admin verb `vtc/members/update` can change it after admission; no member-side task exists short of `members/self-remove`. Read from source at `e2a669ab`. **VTI-Q14**: on the Farm's `keyring-test-vtc` (VTC 0.11.58, before #1691) no trust registry is configured, so nobody is published; all 8 members hold `publishConsent: false`. |
