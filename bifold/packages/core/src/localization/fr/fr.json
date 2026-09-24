@@ -1265,6 +1265,8 @@
     "UnlinkConfirm": "Délier"
   },
   "Invited": {
+    "IntroVets": "{{community}} vérifie toute personne qui la rejoint, même invitée : après votre adhésion, vous rencontrerez l'un de ses vérificateurs.",
+    "ArrivedBodyVets": "{{community}} vous a invité, et elle vérifie aussi toute personne qui la rejoint. Rejoignez-la maintenant, puis rencontrez l'un de ses vérificateurs pour être admis.",
     "WhichCommunityTitle": "Quelle communauté vous a invité ?",
     "WhichCommunityBody": "Scannez ou collez le lien de la communauté. Son administrateur, ou sa page, peut vous le donner.",
     "ScanCommunity": "Scanner ou coller son lien",
@@ -1299,6 +1301,7 @@
     "Note": "Tout le monde peut voir qui y figure. Vous ne pourrez pas modifier ce choix dans Keyring plus tard. Pour être retiré de l'annuaire, demandez à l'administrateur de la communauté."
   },
   "Join": {
+    "AsksNoInvitationBypass": "Une invitation ne remplace pas cela : {{community}} vérifie toute personne qui la rejoint.",
     "WhichTitle": "Quelle communauté ?",
     "WhichBody": "Scannez ou collez le lien de la communauté — ou le ticket d'un vérificateur, qui la nomme aussi.",
     "Suggested": "Suggérée pour cette app",
@@ -1406,8 +1409,11 @@
     "And": "et"
   },
   "Vetting": {
-    "NeedsStatements_one": "encore 1 attestation",
-    "NeedsStatements_other": "encore {{count}} attestations",
+    "NeedsVetting": "une vérification par l'un de ses vérificateurs",
+    "NeedsInvitation": "une invitation de son admin",
+    "NeedsAgreement": "votre accord à son {{what}}",
+    "NeedsStatements_one": "encore 1 vérificateur",
+    "NeedsStatements_other": "encore {{count}} vérificateurs",
     "GrantUnchecked_one": "L'habilitation d'un vérificateur n'a pas pu être vérifiée pour le moment. Vous pouvez tout de même postuler ; la communauté la vérifiera.",
     "GrantUnchecked_other": "Les habilitations de {{count}} vérificateurs n'ont pas pu être vérifiées pour le moment. Vous pouvez tout de même postuler ; la communauté les vérifiera.",
     "NeedsCommunity": "Rejoignez d'abord une communauté. La vérification se fait à l'intérieur de l'une d'elles.",

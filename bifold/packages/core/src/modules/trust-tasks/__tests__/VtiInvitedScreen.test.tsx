@@ -15,6 +15,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { vtiAgent } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityLinkReturn } from '../module/vtiLinks'
 import VtiInvited from '../screens/VtiInvited'
@@ -165,6 +166,30 @@ describe('I was invited', () => {
       fireEvent.press(tree.getByTestId(testIdWithKey('InvitedDetailsToggle')))
     })
     expect(tree.getByTestId(testIdWithKey('InvitedPersonaDid'))).toHaveTextContent(personaDid)
+  })
+
+  // join.rego: where every way in is vetted, an invitation does not bypass it,
+  // so an arrived invitation must not promise a membership card by itself.
+  test('an invitation to a community that vets everyone says vetting still follows', async () => {
+    const manifest = jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue({ criteria: [{ vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }] } as never)
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('InvitedArrivedBody'))).toHaveTextContent('Invited.ArrivedBodyVets')
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('InvitedCommunityToggle'))))
+    expect(tree.getByTestId(testIdWithKey('InvitedCommunityDid'))).toHaveTextContent(communityDid)
+    manifest.mockRestore()
+  })
+
+  test('an invitation to a community it admits: Join for the card, as before', async () => {
+    const manifest = jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue({ criteria: [{ vetting: { minStatements: 1 } }, { id: 'invited-member' }] } as never)
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('InvitedArrivedBody'))).toHaveTextContent(/^Invited\.ArrivedBody$/)
+    manifest.mockRestore()
   })
 
   test('the invitation already arrived: Join', async () => {

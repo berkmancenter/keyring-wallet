@@ -37,8 +37,8 @@ describe('what the screen says', () => {
     expect(t('Vetting.Requirements', { count: 3, claims: 'your legal name' })).toBe(
       'This community needs 3 vetters to confirm your legal name.'
     )
-    expect(t('Vetting.NeedsStatements', { count: 1 })).toBe('1 more statement')
-    expect(t('Vetting.NeedsStatements', { count: 2 })).toBe('2 more statements')
+    expect(t('Vetting.NeedsStatements', { count: 1 })).toBe('1 more vetter needed')
+    expect(t('Vetting.NeedsStatements', { count: 2 })).toBe('2 more vetters needed')
     expect(t('Vetting.Discounted', { count: 2 })).toMatch(/^2 statements will not count/)
     expect(t('Vetting.GrantUnchecked', { count: 2 })).toMatch(/^2 vetters' grants could not be checked/)
   })
@@ -49,8 +49,11 @@ describe('what the screen says', () => {
 
 describe('what a community asked for when it deferred', () => {
   it('reads its keys as words', () => {
-    expect(needWords('vetting:statements:1', t)).toBe('1 more statement')
-    expect(needWords('vetting:statements:2', t)).toBe('2 more statements')
+    expect(needWords('vetting:statements:1', t)).toBe('1 more vetter needed')
+    expect(needWords('vetting:statements:2', t)).toBe('2 more vetters needed')
+    expect(needWords('vetting:invitation', t)).toBe('an invitation from its admin')
+    expect(needWords('vetting', t)).toBe('vetting by one of its vetters')
+    expect(needWords('agreed:code-of-conduct', t)).toBe('your agreement to its code of conduct')
     expect(needWords('claim:name.legal', t)).toBe('your legal name')
     expect(needWords('something:odd.key', t)).toBe('something odd key')
   })
