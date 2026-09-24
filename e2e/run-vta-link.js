@@ -314,6 +314,25 @@ async function testerJourney(driver) {
     }
   }
   await screenshot(driver, "journey-join-vetting");
+  // Step 2, in words (218 feedback, keyring-bifold#96): what the community
+  // needs is a sentence — no claim key, no "(s)" — and the paste box's button
+  // is its own, quiet one, not a second main action.
+  if (onNameStep && (await existsTestId(driver, "VettingStartButton", 3000))) {
+    await (await scrollToTestId(driver, "VettingStartButton", 4)).click();
+    await waitForTestId(driver, "VettingRequirements", 60000);
+    const needs = (await textOf(driver, "VettingRequirements")).trim();
+    if (/\(s\)|\b[a-z]+\.[a-z]+\b/i.test(needs) || !/vetters? to (confirm|vouch)/.test(needs)) {
+      await screenshot(driver, "journey-vetting-requirements");
+      throw new Error(`step 2 says "${needs}", not what a vetter confirms in words`);
+    }
+    console.log(`[e2e] journey: step 2 says "${needs}"`);
+    const use = await scrollToTestId(driver, "VettingRequestButton", 4).catch(() => undefined);
+    if (!use) throw new Error('step 2 has no "Use this link" button');
+    const label = (await textOf(driver, "VettingRequestButton")).trim();
+    if (!/Use this link/.test(label)) throw new Error(`the paste box's button reads "${label}", not "Use this link"`);
+    if (await use.isEnabled().catch(() => false)) throw new Error('"Use this link" is enabled with nothing pasted');
+    console.log('[e2e] journey: "Use this link" is the paste box\'s button, off until a link is pasted');
+  }
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
 
   // Report #11 — one agent screen. The phone is now an applicant: it holds an
