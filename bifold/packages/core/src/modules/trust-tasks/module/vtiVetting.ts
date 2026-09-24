@@ -383,9 +383,26 @@ const typeOf = (m: DidCommV2PlaintextMessage) => String(m.type ?? bodyOf(m).type
 const threadOf = (m: DidCommV2PlaintextMessage) => String(m.thid ?? bodyOf(m).threadId ?? '')
 
 /** The identity commitment: digestMultibase over `{salt, claims}` with claims sorted by type. */
+/** How long a Vetting Card may be valid: vta-sdk `vetting::card::MAX_CARD_VALIDITY`. */
+export const MAX_CARD_VALIDITY_MS = 15 * 60 * 1000
+
+/**
+ * The identity commitment a card and every statement on it carry, exactly as
+ * the spec and the VTI SDK compute it (`vta-sdk` `vetting::card::identity_commitment`,
+ * trust-tasks `vetting/session/0.1`): over `{ salt, claims }` where `claims`
+ * is `{ type, value }` — nothing else — for each distinct claim type, in code
+ * point order of the type. Keyring used to hash the whole claim, `provenance`
+ * included, and sort with `localeCompare`; its own vetters never recomputed
+ * it, so Keyring agreed with itself while every openvtc vetter refused its
+ * cards (2026-09-24, a maintainer's run: "waiting for their card").
+ */
 export function identityCommitment(salt: string, claims: { type: string; value: unknown }[]): string {
-  const sorted = [...claims].sort((a, b) => a.type.localeCompare(b.type))
-  return digestMultibase({ salt, claims: sorted })
+  const byType = new Map<string, unknown>()
+  for (const claim of claims) if (!byType.has(claim.type)) byType.set(claim.type, claim.value)
+  const selected = [...byType.keys()]
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .map((type) => ({ type, value: byType.get(type) }))
+  return digestMultibase({ salt, claims: selected })
 }
 
 // ---------------------------------------------------------------------------
@@ -997,7 +1014,9 @@ export class VtiApplicant {
     })
     const issuedAt = new Date()
     const sessionEnd = new Date(request.session.expiresAt).getTime()
-    const expiresAt = new Date(Math.min(sessionEnd || Infinity, issuedAt.getTime() + 3600000))
+    // A card is valid for at most 15 minutes (vta-sdk `MAX_CARD_VALIDITY`); a
+    // vetter refuses a longer one, whatever the session allows.
+    const expiresAt = new Date(Math.min(sessionEnd || Infinity, issuedAt.getTime() + MAX_CARD_VALIDITY_MS))
     const card: Record<string, unknown> = {
       id: `urn:uuid:${utils.uuid()}`,
       type: ['VerifiableDataStructure', 'RelationshipCard', 'VettingCard'],
