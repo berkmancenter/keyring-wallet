@@ -1,7 +1,8 @@
 /**
  * What 217's gate asserts on screen, beyond the journeys' own steps
  * (keyring-wallet-45, 2026-09-23): no identity code (DID) outside Details
- * (#12), the QR tab saying what its codes are (keyring-bifold#85), and the
+ * (#12), the QR tab saying what its codes are (keyring-bifold#85; the
+ * scanner header back to one line, #95), and the
  * directory-consent switch shown and off (keyring-bifold#89).
  *
  * The copy checked is the English text; the runners use the en locale.
@@ -62,9 +63,10 @@ async function leave(driver) {
 }
 
 /**
- * keyring-bifold#85: the QR tab says what its codes are. The scanner's hint
- * is checked when the camera is up; a simulator without one shows the camera
- * error instead, and that is said, not failed. My QR code is checked always:
+ * keyring-bifold#85: the QR tab says what its codes are — on My QR code; the
+ * scanner's header is one line again (#95). The header is checked when the
+ * camera is up; a simulator without one shows the camera error instead, and
+ * that is said, not failed. My QR code is checked always:
  * the contact code, titled as one, and — once the phone holds a community
  * identity — that identity, named for its community and without its code.
  */
@@ -72,15 +74,24 @@ export async function assertQrTabSaysWhatItIs(driver) {
   await openQrSheet(driver);
   await tapTestId(driver, "ScanQRCode", 15000);
   for (let i = 0; i < 3 && (await existsTestId(driver, "Continue", 3000)); i++) await tapTestId(driver, "Continue");
-  if (await existsTestId(driver, "ScanWhatCanI", 8000)) {
-    const hint = await textOf(driver, "ScanWhatCanI");
-    if (!/agent's code/.test(hint) || !/community's code/.test(hint)) throw new Error(`the scanner's hint reads "${hint}"`);
-    console.log("[e2e] gate: the scanner says what it takes");
+  // The header is one line again (keyring-bifold#95): a hint added in 217 sat
+  // beside it in a row and ran off both edges of a real phone's screen.
+  if (await existsTestId(driver, "ScanWhatCanI", 3000)) {
+    await screenshot(driver, "gate-scanner-hint-back");
+    throw new Error("the scanner header carries the removed \"what you can scan\" hint again");
+  }
+  const oneLine = driver.$(
+    driver.e2ePlatform === "ios"
+      ? '-ios predicate string:label == "A valid QR code will scan automatically."'
+      : 'android=new UiSelector().text("A valid QR code will scan automatically.")'
+  );
+  if (await oneLine.waitForExist({ timeout: 8000 }).then(() => true).catch(() => false)) {
+    console.log("[e2e] gate: the scanner header is the one line");
   } else if (await existsTestId(driver, "ErrorMessage", 2000)) {
-    console.log("[e2e] gate: SKIPPED the scanner's hint — no camera here (checked on a device leg)");
+    console.log("[e2e] gate: SKIPPED the scanner header — no camera here (checked on a device leg)");
   } else {
-    await screenshot(driver, "gate-scanner-no-hint");
-    throw new Error("the scanner shows neither its hint nor a camera error");
+    await screenshot(driver, "gate-scanner-header");
+    throw new Error("the scanner shows neither its one-line header nor a camera error");
   }
   await leave(driver);
 
