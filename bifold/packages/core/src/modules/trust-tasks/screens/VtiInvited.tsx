@@ -104,6 +104,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     actions: { padding: 20, gap: 12 },
+    errorDetail: { maxHeight: 160 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     error: { color: ColorPalette.semantic.error },
     mono: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
@@ -281,6 +282,9 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   // What happened and what to do, as Join says it; the original text stays
   // under Details. It showed raw ("[TrustTasks:VtaClient] the agent has no DID
   // host…") when the agent had nowhere to publish (Farm, 2026-09-24).
+  // It sits in the actions, above the button that failed: at the end of the
+  // body it fell below the fold on Android, and Continue looked like it did
+  // nothing (221). Details scroll inside the card, so the buttons stay put.
   const errorLine = error ? (
     <View style={styles.card} testID={testIdWithKey('InvitedErrorCard')}>
       <ThemedText style={styles.error} testID={testIdWithKey('InvitedError')}>
@@ -295,9 +299,11 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
         <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
       </Pressable>
       {errorOpen ? (
-        <ThemedText style={styles.muted} selectable testID={testIdWithKey('InvitedErrorDetail')}>
-          {error.detail}
-        </ThemedText>
+        <ScrollView style={styles.errorDetail}>
+          <ThemedText style={styles.muted} selectable testID={testIdWithKey('InvitedErrorDetail')}>
+            {error.detail}
+          </ThemedText>
+        </ScrollView>
       ) : null}
     </View>
   ) : null
@@ -332,19 +338,21 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
             onSelect={joinAs.setSelectedId}
             onCreate={joinAs.createProfile}
           />
-          {errorLine}
         </>
       )
       actions = (
-        <Button
-          title={busy ? t('Invited.Preparing') : t('Invited.Continue')}
-          buttonType={ButtonType.Primary}
-          onPress={() => void onContinue()}
-          disabled={busy}
-          testID={testIdWithKey('InvitedContinue')}
-        >
-          {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
-        </Button>
+        <>
+          {errorLine}
+          <Button
+            title={busy ? t('Invited.Preparing') : t('Invited.Continue')}
+            buttonType={ButtonType.Primary}
+            onPress={() => void onContinue()}
+            disabled={busy}
+            testID={testIdWithKey('InvitedContinue')}
+          >
+            {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+          </Button>
+        </>
       )
       break
 
@@ -379,11 +387,11 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
               </ThemedText>
             ) : null}
           </View>
-          {errorLine}
         </>
       )
       actions = persona ? (
         <>
+          {errorLine}
           <Button
             title={t('Invited.Share')}
             buttonType={ButtonType.Primary}
@@ -412,7 +420,9 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
             testID={testIdWithKey('InvitedSent')}
           />
         </>
-      ) : null
+      ) : (
+        errorLine
+      )
       break
 
     case 'waiting':
@@ -437,7 +447,6 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
             onChange={setListMe}
             disabled={busy}
           />
-          {errorLine}
         </>
       ) : (
         <>
@@ -447,21 +456,24 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
             <ActivityIndicator color={ColorPalette.brand.primary} />
             <ThemedText style={styles.muted}>{t('Invited.Checking')}</ThemedText>
           </View>
-          {errorLine}
         </>
       )
       actions = invitation ? (
-        <Button
-          title={busy ? t('MyAgent.Joining') : t('MyAgent.Join')}
-          buttonType={ButtonType.Primary}
-          onPress={() => void onJoin()}
-          disabled={busy}
-          testID={testIdWithKey('InvitedJoin')}
-        >
-          {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
-        </Button>
+        <>
+          {errorLine}
+          <Button
+            title={busy ? t('MyAgent.Joining') : t('MyAgent.Join')}
+            buttonType={ButtonType.Primary}
+            onPress={() => void onJoin()}
+            disabled={busy}
+            testID={testIdWithKey('InvitedJoin')}
+          >
+            {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+          </Button>
+        </>
       ) : (
         <>
+          {errorLine}
           <Button
             title={t('Invited.Paste')}
             buttonType={ButtonType.Secondary}

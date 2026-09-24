@@ -253,6 +253,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       backgroundColor: ColorPalette.brand.primaryBackground,
     },
     error: { ...TextTheme.normal, color: ColorPalette.semantic.error },
+    errorBar: {
+      flexGrow: 0,
+      maxHeight: 160,
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderTopWidth: 1,
+      borderTopColor: ColorPalette.semantic.error,
+    },
+    errorBarContent: { paddingHorizontal: 24, paddingVertical: 12 },
     row: { flexDirection: 'row', gap: 10, alignItems: 'center' },
     seat: { backgroundColor: ColorPalette.brand.primary, borderRadius: 16, padding: 18, gap: 8 },
     seatBadge: {
@@ -507,10 +515,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     </View>
   )
 
+  // Pinned under the scroll, not at its end: a step's buttons sit anywhere in a
+  // long page, and a failure written at the bottom fell below the fold on
+  // Android, so the button looked like it did nothing (221).
   const errorLine = error ? (
-    <Text style={styles.error} testID={testIdWithKey('VettingError')}>
-      {error}
-    </Text>
+    <ScrollView style={styles.errorBar} contentContainerStyle={styles.errorBarContent}>
+      <Text style={styles.error} testID={testIdWithKey('VettingError')}>
+        {error}
+      </Text>
+    </ScrollView>
   ) : null
 
   /** The full-screen match code, answered on both phones (plan §5.3–5.4). */
@@ -836,8 +849,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               <Text style={styles.buttonText}>{t('Vetting.ClearDesk')}</Text>
             </Pressable>
           ) : null}
-          {errorLine}
         </ScrollView>
+        {errorLine}
       </SafeAreaView>
     )
   }
@@ -1305,8 +1318,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             <Text style={styles.value}>{t('MyAgent.Authenticating')}</Text>
           </View>
         ) : null}
-        {errorLine}
       </ScrollView>
+      {errorLine}
     </SafeAreaView>
   )
 }
