@@ -28,24 +28,32 @@
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PNM = process.env.PNM_BIN || path.join(os.homedir(), "Documents/vti-main/target/debug/pnm");
+// Every call goes through the slug's machine-wide lock: one pnm slug is one
+// admin DID, and the mediator keeps one live socket per DID. See the script.
+const PNM_LOCKED = fileURLToPath(new URL("../../scripts/openvtc/pnm-locked", import.meta.url));
 /** A person's own agents: never touched by a runner. */
 const REFUSED = new Set(["alice", "farm"]);
 
-// A dropped transport, not an answer: the mediator closes one of two sessions
-// with the same pnm identity ("replaced by a newer connection", 220 gate).
-const TRANSIENT = /replaced by a newer connection|tsp transport error/i;
+// A dropped transport, not an answer: the mediator keeps one socket per DID, so
+// a pnm call on this slug from outside the lock (another machine, a bare pnm)
+// either replaces ours or is refused ("replaced by a newer connection", 220
+// gate; "this DID already has a live connection" from the duel damper).
+const TRANSIENT = /replaced by a newer connection|already has a live connection|tsp transport error/i;
 
 function pnm(slug, pnmHome, args) {
   for (let attempt = 1; ; attempt++) {
     try {
-      return execFileSync(PNM, ["--vta", slug, ...args], {
+      return execFileSync(PNM_LOCKED, ["--vta", slug, ...args], {
         encoding: "utf8",
-        env: { ...process.env, PNM_HOME: pnmHome },
+        // PNM_HOME is inert (pnm 0.19.0 never reads it); kept for older callers.
+        env: { ...process.env, PNM_BIN: PNM, PNM_HOME: pnmHome },
         // pnm prints its banner on stderr; keep it out of the run's log.
         stdio: ["ignore", "pipe", "pipe"],
-        timeout: 60_000,
+        // The lock may wait for another session's call first (PNM_LOCK_WAIT).
+        timeout: 360_000,
       });
     } catch (err) {
       const said = `${err?.stderr ?? ""}${err?.message ?? ""}`;

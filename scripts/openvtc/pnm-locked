@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# pnm, one call per pnm identity at a time on this machine.
+#   pnm-locked --vta <slug> <pnm arguments...>
+#
+# pnm keeps one admin key per slug (the OS keychain, service `pnm-cli`, account
+# `vta:<slug>`), whatever PNM_HOME or HOME say. Two pnm calls on the same slug
+# are therefore one DID with two connections, and the mediator keeps one live
+# socket per DID: the older call's socket is closed ("replaced by a newer
+# connection"), or, on a mediator with the duel damper, the newer one is refused
+# ("this DID already has a live connection"). Either way a call fails with a
+# dropped transport, not an answer (92's 220 gate, 2026-09-24).
+#
+# So every session, script and gate on this Mac takes the slug's lock first. The
+# lock is a perl flock on $PNM_LOCK_DIR/<slug>.lock, held by pnm itself across
+# exec and released by the kernel when pnm exits, however it exits: there is no
+# stale lock to clean up. Different slugs never wait for each other.
+#
+#   PNM_BIN        pnm binary (default ~/Documents/vti-main/target/debug/pnm)
+#   PNM_LOCK_DIR   lock directory (default ~/.keyring-pnm-locks)
+#   PNM_LOCK_WAIT  seconds to wait for the lock before giving up (default 300;
+#                  giving up exits 75, before pnm runs)
+set -uo pipefail
+PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
+if [ "${1:-}" != --vta ] || [ -z "${2:-}" ]; then
+  echo "pnm-locked: the first arguments must be --vta <slug>" >&2
+  exit 2
+fi
+case "$2" in */* | .* ) echo "pnm-locked: not a slug: $2" >&2; exit 2 ;; esac
+DIR="${PNM_LOCK_DIR:-$HOME/.keyring-pnm-locks}"
+mkdir -p "$DIR" || exit 2
+
+exec perl -MFcntl=:flock -e '
+  my ($lock, $wait, $slug, @cmd) = @ARGV;
+  $^F = 255; # keep the lock descriptor open across exec, so pnm holds it
+  open(my $fh, "+>>", $lock) or die "pnm-locked: cannot open $lock: $!\n";
+  my $deadline = time + $wait;
+  my $told = 0;
+  until (flock($fh, LOCK_EX | LOCK_NB)) {
+    if (time >= $deadline) {
+      seek($fh, 0, 0); my $holder = <$fh> // "?"; chomp $holder;
+      print STDERR "pnm-locked: gave up after ${wait}s waiting for pnm on $slug (held by $holder)\n";
+      exit 75; # EX_TEMPFAIL
+    }
+    unless ($told++) {
+      seek($fh, 0, 0); my $holder = <$fh> // "?"; chomp $holder;
+      print STDERR "pnm-locked: waiting for another pnm call on $slug (held by $holder)\n";
+    }
+    select(undef, undef, undef, 0.5);
+  }
+  truncate($fh, 0);
+  syswrite($fh, "pid $$ since " . gmtime() . " UTC\n");
+  exec { $cmd[0] } @cmd or die "pnm-locked: cannot run $cmd[0]: $!\n";
+' "$DIR/$2.lock" "${PNM_LOCK_WAIT:-300}" "$2" "$PNM" "$@"

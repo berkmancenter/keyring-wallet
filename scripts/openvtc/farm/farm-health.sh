@@ -7,19 +7,22 @@
 # QR that decodes to exactly the VTC's DID.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
+# pnm through the slug's lock, so this never drops a gate's pnm call (one slug =
+# one admin DID = one mediator socket; see ../pnm-locked).
+export PNM_BIN="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
+PNM="$HERE/../pnm-locked"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 fails=0
 bad() { echo "  ✗ $*"; fails=$((fails + 1)); }
 ok() { echo "  ✓ $*"; }
 
 vta() { # slug expect_host(yes|no)
-  local slug="$1" want="$2" home="$HOME/vti-stack/pnm-$1"
+  local slug="$1" want="$2"
   echo "== VTA $slug"
-  local h; h=$(PNM_HOME="$home" "$PNM" --vta "$slug" health 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+  local h; h=$("$PNM" --vta "$slug" health 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
   local x; x=$(grep -c "✗" <<<"$h")
   [ "$x" -eq 0 ] && ok "pnm health all ✓ ($(grep -c '✓' <<<"$h") checks)" || bad "pnm health: $x ✗ — $(grep '✗' <<<"$h" | head -2 | tr -s ' ')"
-  local s; s=$(PNM_HOME="$home" "$PNM" --vta "$slug" did-mgmt servers list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -oE "WebVH Servers \([0-9]+\)" | grep -oE "[0-9]+")
+  local s; s=$("$PNM" --vta "$slug" did-mgmt servers list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -oE "WebVH Servers \([0-9]+\)" | grep -oE "[0-9]+")
   s="${s:-0}"
   if [ "$want" = yes ]; then [ "$s" -ge 1 ] && ok "DID host registered ($s)" || bad "no DID host registered"
   else [ "$s" -eq 0 ] && ok "no DID host, as intended" || bad "has $s DID host(s); this one should have none"; fi
