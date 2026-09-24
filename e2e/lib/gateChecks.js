@@ -29,6 +29,7 @@ async function readableStrings(driver) {
  * string, cut short: the gate log must not carry whole identifiers around.
  */
 export async function assertNoDidShown(driver, where) {
+  await assertNoLeakedText(driver, where);
   const shown = (await readableStrings(driver)).find((s) => DID.test(s));
   if (!shown) {
     console.log(`[e2e] gate: no identity code on ${where}`);
@@ -37,6 +38,27 @@ export async function assertNoDidShown(driver, where) {
   await screenshot(driver, `gate-did-shown-${where.replace(/\W+/g, "-")}`);
   const did = DID.exec(shown)[0];
   throw new Error(`${where} shows an identity code outside Details: "${did.slice(0, 24)}…"`);
+}
+
+// A translation key shown as itself ("Vetting.YourVetter", 219), or a value
+// that never was one ("Auto lock time: undefined min", 219).
+const RAW_KEY = /^[A-Z][A-Za-z0-9]*\.[A-Z][A-Za-z0-9_]*$/;
+const LEAK = /\bundefined\b|\[object Object\]/;
+
+/** No raw translation key and no "undefined" on screen — checked wherever identity codes are. */
+export async function assertNoLeakedText(driver, where) {
+  const leaked = (await readableStrings(driver)).find((s) => RAW_KEY.test(s.trim()) || LEAK.test(s));
+  if (!leaked) return;
+  await screenshot(driver, `gate-leaked-text-${where.replace(/\W+/g, "-")}`);
+  throw new Error(`${where} shows "${leaked.slice(0, 80)}" — a raw key or an unset value`);
+}
+
+/** Menu → Settings reads with no raw key and no "undefined" (its lock time did, 219). */
+export async function assertSettingsReads(driver) {
+  await tapTestId(driver, "Settings", 15000);
+  await sleep(1500);
+  await assertNoLeakedText(driver, "Settings");
+  console.log("[e2e] gate: Settings reads with no raw key and no \"undefined\"");
 }
 
 const textOf = async (driver, key) =>
