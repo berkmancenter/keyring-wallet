@@ -15,7 +15,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
-import VtaAgentHome, { VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
+import VtaAgentHome, { forgetAgentHoldings, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The shared navigation mock, with focus under the test's control.
@@ -78,6 +78,7 @@ function fakeAgent(records: Rec[]) {
 describe('Your agent — after linking', () => {
   beforeEach(() => {
     jest.useFakeTimers()
+    forgetAgentHoldings()
     mockGrantState.mockReset()
     mockGrantState.mockResolvedValue({ state: 'none' })
     controller.set({
@@ -177,6 +178,81 @@ describe('Your agent — after linking', () => {
       jest.advanceTimersByTime(10)
     })
     expect(tree.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatMember')
+  })
+
+  // 219: every tab unmounts when it loses focus, so a return to My Agent
+  // rebuilt this screen with nothing read, and for a frame "Holds" spun and the
+  // seat line was missing. A return shows the last reading at once.
+  describe('coming back to the tab', () => {
+    const hanging = (records: Rec[]) => {
+      const agent = fakeAgent(records)
+      agent.agent.genericRecords.findAllByQuery = () => new Promise(() => undefined)
+      return agent
+    }
+    const mount = () =>
+      render(
+        <BasicAppContext>
+          <VtaAgentHome />
+        </BasicAppContext>
+      )
+
+    it('shows the last reading straight away, before the stores answer again', async () => {
+      const first = await renderHome([persona, membership])
+      expect(first.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatMember')
+      first.unmount()
+      ;(useAgent as jest.Mock).mockReturnValue(hanging([persona, membership]))
+      const back = mount()
+      expect(back.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatMember')
+      expect(back.getByTestId(testIdWithKey('AgentHolds'))).not.toHaveTextContent(/VtaLink\.HoldsNothing/)
+    })
+
+    it("another agent never shows the last one's reading", async () => {
+      (await renderHome([persona, membership])).unmount()
+      controller.set({
+        link: {
+          kind: 'linked',
+          vtaDid: 'did:webvh:example:other-vta',
+          label: 'carol',
+          linkedAt: '2026-09-24T00:00:00Z',
+          connection: { kind: 'online', since: 0 },
+        },
+      })
+      ;(useAgent as jest.Mock).mockReturnValue(hanging([]))
+      expect(mount().queryByTestId(testIdWithKey('AgentSeat'))).toBeNull()
+    })
+
+    it('forgets the reading on unlink', async () => {
+      const first = await renderHome([persona, membership])
+      await act(async () => fireEvent.press(first.getByTestId(testIdWithKey('AgentUnlink'))))
+      await act(async () => fireEvent.press(first.getByTestId(testIdWithKey('AgentUnlinkConfirm'))))
+      first.unmount()
+      controller.set({
+        link: {
+          kind: 'linked',
+          vtaDid: 'did:webvh:example:vta',
+          label: 'bob',
+          linkedAt: '2026-09-24T00:00:00Z',
+          connection: { kind: 'online', since: 0 },
+        },
+      })
+      ;(useAgent as jest.Mock).mockReturnValue(hanging([persona, membership]))
+      expect(mount().queryByTestId(testIdWithKey('AgentSeat'))).toBeNull()
+    })
+
+    it('a refresh that fails keeps the reading and says it could not refresh', async () => {
+      (await renderHome([persona, membership])).unmount()
+      const failing = fakeAgent([persona, membership])
+      failing.agent.genericRecords.findAllByQuery = async () => {
+        throw new Error('storage unavailable')
+      }
+      ;(useAgent as jest.Mock).mockReturnValue(failing)
+      const back = mount()
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      expect(back.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatMember')
+      expect(back.getByTestId(testIdWithKey('AgentHoldsStale'))).toBeTruthy()
+    })
   })
 
   it('says the seat in one line, for each of the four cases', async () => {
