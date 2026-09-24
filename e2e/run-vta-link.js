@@ -52,7 +52,7 @@ import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep,
 import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
-import { listAcl, ownedBy, removeRunKeys, snapshotAcl } from "./lib/aclCleanup.js";
+import { listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs } from "./lib/gateChecks.js";
 
 const platform = process.env.PLATFORM || "android";
@@ -408,6 +408,9 @@ async function testerJourney(driver) {
     console.log("[e2e] journey: Join as created a profile in the editor and came back with it");
   }
   await screenshot(driver, "journey-join-identity");
+  // What the agent holds before it makes the identity (read-only): afterwards
+  // it must hold exactly one more DID — one persona, even after a retry.
+  const heldBefore = vtaInventory({ slug: VTA_SLUG, pnmHome: PNM_HOME });
   await tapTestId(driver, "JoinAsContinue", 15000);
   await handleBiometricConfirmIfPresent(driver);
   // One retry, the app's own. On the current Farm the agent's answer to the
@@ -430,7 +433,13 @@ async function testerJourney(driver) {
       console.log(`[e2e] journey: identity error detail: ${detail || "(none)"}`);
       await screenshot(driver, `journey-identity-miss-${identityRetried ? 2 : 1}`);
     }
-    if (identityRetried) throw new Error(`making the identity failed twice: ${why}${detail ? ` — detail: ${detail}` : ""}`);
+    if (identityRetried) {
+      // Did the failed attempts mint anyway (the lost-answer family, VTI-Q17/43)?
+      const held = vtaInventory({ slug: VTA_SLUG, pnmHome: PNM_HOME });
+      throw new Error(
+        `making the identity failed twice: ${why}${detail ? ` — detail: ${detail}` : ""} — the agent's DIDs ${heldBefore.didCount} → ${held.didCount}`
+      );
+    }
     identityRetried = true;
     console.log(`[e2e] journey: ⚠️  FIRST-TRY MISS making the identity — "${why}" — tapping Continue once, as the app asks`);
     await screenshot(driver, "journey-identity-first-miss");
@@ -458,7 +467,15 @@ async function testerJourney(driver) {
     await screenshot(driver, "journey-join-vetting");
     throw new Error("making the identity did not hand over to vetting");
   }
-  console.log(`[e2e] journey: identity → vetting reached ${reached}${identityRetried ? " (after ONE retry — check the agent holds one identity for this community)" : " (first try)"}`);
+  console.log(`[e2e] journey: identity → vetting reached ${reached}${identityRetried ? " (after ONE retry)" : " (first try)"}`);
+  const heldAfter = vtaInventory({ slug: VTA_SLUG, pnmHome: PNM_HOME });
+  const newDids = heldAfter.didCount - heldBefore.didCount;
+  console.log(`[e2e] journey: the agent's DIDs ${heldBefore.didCount} → ${heldAfter.didCount}, keys ${heldBefore.keyTotal} → ${heldAfter.keyTotal}`);
+  if (newDids !== 1) {
+    throw new Error(
+      `making the identity${identityRetried ? " (with a retry)" : ""} left the agent with ${newDids} new DID(s), not exactly one`
+    );
+  }
   await assertNoDidShown(driver, "vetting's first step");
   // The name input and the Start button are siblings in the same step, so
   // which one the poll happens to see first says nothing about the screen —
