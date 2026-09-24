@@ -38,6 +38,7 @@ import { communityName } from './communityName'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
 import { claimWords } from './claimWords'
+import { DidDetails } from './DidDetails'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
@@ -61,12 +62,20 @@ export interface Asks {
   descriptions: string[]
   /** It admits only by invitation. */
   invitationOnly: boolean
+  /**
+   * An invitation alone admits: some criterion is about an invitation and
+   * asks for no vetting. Where every way in is vetted, an invitation does not
+   * bypass it (upstream join.rego: "neither an invitation nor a trusted
+   * credential bypasses" vetting), and nothing may suggest it does.
+   */
+  invitationAdmits: boolean
 }
 
 const INVITATION = /invit/i
 
 export function asksFrom(manifest: VtiManifest): Asks {
   const criteria = manifest.criteria
+  const invitationAdmits = criteria.some((c) => !c.vetting && INVITATION.test(`${c.id ?? ''} ${c.description ?? ''}`))
   const vetting = criteria.map((c) => c.vetting).find(Boolean)
   if (vetting) {
     return {
@@ -75,19 +84,21 @@ export function asksFrom(manifest: VtiManifest): Asks {
       claims: vetting.requiredClaims ?? [],
       descriptions: [],
       invitationOnly: false,
+      invitationAdmits,
     }
   }
-  if (criteria.length === 0) return { kind: 'open', claims: [], descriptions: [], invitationOnly: false }
+  if (criteria.length === 0)
+    return { kind: 'open', claims: [], descriptions: [], invitationOnly: false, invitationAdmits: false }
   // Invitation-only only when every criterion is about an invitation; any
   // other criterion is something the person may be able to present.
   if (criteria.every((c) => INVITATION.test(`${c.id ?? ''} ${c.description ?? ''}`))) {
-    return { kind: 'invitation', claims: [], descriptions: [], invitationOnly: true }
+    return { kind: 'invitation', claims: [], descriptions: [], invitationOnly: true, invitationAdmits: true }
   }
   const descriptions = criteria
     .filter((c) => !INVITATION.test(`${c.id ?? ''} ${c.description ?? ''}`))
     .map((c) => c.description ?? c.id ?? '')
     .filter(Boolean)
-  return { kind: 'other', claims: [], descriptions, invitationOnly: false }
+  return { kind: 'other', claims: [], descriptions, invitationOnly: false, invitationAdmits }
 }
 
 export interface VtiJoinProps {
@@ -367,7 +378,13 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               </>
             )}
           </View>
+          {asks?.kind === 'vetting' && !asks.invitationAdmits ? (
+            <ThemedText testID={testIdWithKey('JoinNoInvitationBypass')}>
+              {t('Join.AsksNoInvitationBypass', { community: name, interpolation: { escapeValue: false } })}
+            </ThemedText>
+          ) : null}
           {!asks || asks.kind === 'vetting' ? <ThemedText style={styles.muted}>{t('Join.AsksNext')}</ThemedText> : null}
+          {communityDid ? <DidDetails did={communityDid} testIdStem="JoinCommunity" /> : null}
         </>
       )
       actions = (

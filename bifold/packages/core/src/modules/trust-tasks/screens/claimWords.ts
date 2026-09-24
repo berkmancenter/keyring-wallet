@@ -38,9 +38,10 @@ export function claimList(claims: string[], t: TFunction): string {
 
 /**
  * One thing a community asked for when it deferred an application, in words.
- * Its verdict names them as keys — "vetting:statements:1",
- * "vetting:method:in_person:1", "claim:name.legal" — which used to be shown
- * as they came.
+ * Its verdict names them as keys — "vetting:statements:1", "vetting",
+ * "vetting:invitation", "vetting:method:in_person:1", "agreed:<id>",
+ * "claim:name.legal" (upstream join.rego) — which used to be shown as they
+ * came.
  */
 export function needWords(need: string, t: TFunction): string {
   const statements = /^vetting:statements:(\d+)$/.exec(need)
@@ -52,6 +53,12 @@ export function needWords(need: string, t: TFunction): string {
       method: t(`Vetting.Method.${method[1]}`, { defaultValue: spelt(method[1]) }),
       interpolation: { escapeValue: false },
     }) as string
+  }
+  if (need === 'vetting') return t('Vetting.NeedsVetting') as string
+  if (need === 'vetting:invitation') return t('Vetting.NeedsInvitation') as string
+  const agreement = /^agreed:(.+)$/.exec(need)
+  if (agreement) {
+    return t('Vetting.NeedsAgreement', { what: spelt(agreement[1]), interpolation: { escapeValue: false } }) as string
   }
   const claim = /^(?:claim|credential):(.+)$/.exec(need)
   if (claim) return claimWords(claim[1], t)
