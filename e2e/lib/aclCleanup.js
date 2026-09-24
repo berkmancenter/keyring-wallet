@@ -33,14 +33,27 @@ const PNM = process.env.PNM_BIN || path.join(os.homedir(), "Documents/vti-main/t
 /** A person's own agents: never touched by a runner. */
 const REFUSED = new Set(["alice", "farm"]);
 
+// A dropped transport, not an answer: the mediator closes one of two sessions
+// with the same pnm identity ("replaced by a newer connection", 220 gate).
+const TRANSIENT = /replaced by a newer connection|tsp transport error/i;
+
 function pnm(slug, pnmHome, args) {
-  return execFileSync(PNM, ["--vta", slug, ...args], {
-    encoding: "utf8",
-    env: { ...process.env, PNM_HOME: pnmHome },
-    // pnm prints its banner on stderr; keep it out of the run's log.
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 60_000,
-  });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return execFileSync(PNM, ["--vta", slug, ...args], {
+        encoding: "utf8",
+        env: { ...process.env, PNM_HOME: pnmHome },
+        // pnm prints its banner on stderr; keep it out of the run's log.
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 60_000,
+      });
+    } catch (err) {
+      const said = `${err?.stderr ?? ""}${err?.message ?? ""}`;
+      if (attempt >= 3 || !TRANSIENT.test(said)) throw err;
+      console.log(`[acl] pnm ${args[0]} ${args[1] ?? ""}: the connection was dropped (${attempt}/3), trying again`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000);
+    }
+  }
 }
 
 /** The ACL as full entries: subject, createdBy, createdAt, label. */
