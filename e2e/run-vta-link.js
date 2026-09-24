@@ -221,7 +221,27 @@ async function linkManually(driver) {
         }
         console.log("[e2e] give-key: how the admin adds it is in view before the code");
       }
-      await tapTestId(driver, key, 15000).catch(() => undefined);
+      // Below the fold since the admin's steps are shown (keyring-bifold#107):
+      // a tap on an off-screen toggle does nothing, so bring it into view. The
+      // swipe starts mid-screen: at the default 70% it lands on the fixed
+      // "I've been added" / "Stop linking" footer, which scrolls nothing.
+      // A sliver of it counts as "displayed" on Android (7 px at the scroll
+      // view's edge, 220 gate), so first scroll the content to its end with one
+      // short swipe mid-screen, then find it.
+      const { width, height } = await driver.getWindowRect();
+      await driver
+        .action("pointer")
+        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.5) })
+        .down()
+        .pause(100)
+        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
+        .up()
+        .perform()
+        .catch(() => undefined);
+      await sleep(600);
+      const toggle = await scrollToTestId(driver, key, 4, { from: 0.5 }).catch(() => undefined);
+      if (toggle) await toggle.click().catch(() => undefined);
+      else await tapTestId(driver, key, 15000).catch(() => undefined);
       tapped.add(key);
       break;
     }
@@ -335,7 +355,29 @@ async function testerJourney(driver) {
   // Another tab and back.
   await tapTestId(driver, "Contacts", 30000);
   await sleep(1500);
-  await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  if (process.env.E2E_TAB_RETURN === "1") {
+    // keyring-bifold#109: every tab unmounts when it loses focus, and a return
+    // used to show "Holds" spinning, no seat line and Join as the next step for
+    // a frame (219). The first read after the return must already show the
+    // seat. A frame that short can slip between reads, so the return is also
+    // recorded, for anyone to look at frame by frame.
+    await driver.startRecordingScreen().catch(() => undefined);
+    await (await waitForTestId(driver, "MyAgent", 30000)).click();
+    const seatAtOnce = await existsTestId(driver, "AgentSeat", 600);
+    const video = await driver.stopRecordingScreen().catch(() => "");
+    if (video) {
+      const file = `artifacts/tab-return-${driver.e2ePlatform}-${Date.now()}.mp4`;
+      writeFileSync(file, Buffer.from(video, "base64"));
+      console.log(`[e2e] journey: the return to My Agent is recorded in ${file}`);
+    }
+    if (!seatAtOnce) {
+      await screenshot(driver, "journey-tab-return-blank");
+      throw new Error("coming back to My Agent, the first read shows no seat line — the blank frame is back");
+    }
+    console.log("[e2e] journey: back on My Agent, the seat line is there at once");
+  } else {
+    await (await waitForTestId(driver, "MyAgent", 30000)).click();
+  }
   await sleep(2000);
   await assertNoLinkedScreen(driver, "after a tab switch");
 

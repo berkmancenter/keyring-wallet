@@ -109,6 +109,21 @@ export async function assertQrTabSaysWhatItIs(driver) {
   );
   if (await oneLine.waitForExist({ timeout: 8000 }).then(() => true).catch(() => false)) {
     console.log("[e2e] gate: the scanner header is the one line");
+    // The shutter's "not recognized" box: one plain line and what Keyring
+    // reads — not "Ths QR code…" and photos of physical credentials (219,
+    // keyring-bifold#107, keyring-wallet#143: the app overrides the words).
+    if (await existsTestId(driver, "ScanNow", 3000)) {
+      await tapTestId(driver, "ScanNow", 5000);
+      if (!(await existsTestId(driver, "BodyText", 8000))) throw new Error('the scanner\'s "not recognized" box did not open');
+      const body = await textOf(driver, "BodyText");
+      if (!/It reads your agent's code/.test(body) || /\bThs\b|photo/i.test(body)) {
+        await screenshot(driver, "gate-scan-failure-copy");
+        throw new Error(`the "not recognized" box reads "${body.slice(0, 120)}"`);
+      }
+      console.log("[e2e] gate: the scanner's \"not recognized\" box says what Keyring reads");
+      if (await existsTestId(driver, "Okay", 3000)) await tapTestId(driver, "Okay", 5000);
+      await sleep(1000);
+    }
   } else if (await existsTestId(driver, "ErrorMessage", 2000)) {
     console.log("[e2e] gate: SKIPPED the scanner header — no camera here (checked on a device leg)");
   } else {
