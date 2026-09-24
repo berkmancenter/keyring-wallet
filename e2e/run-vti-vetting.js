@@ -443,14 +443,18 @@ try {
       for (let i = 0; i < 4 && !enabled; i++) {
         await field.clearValue().catch(() => undefined);
         await field.click().catch(() => undefined); // focus, so typing raises events
+        // On Android the keyboard then opens over the field and the screen does
+        // not scroll it back into view, so UiAutomator no longer sees it (220
+        // RC gate). Bring it back with a swipe above the keyboard, and use that.
+        const here = await scrollToTestId(applicant, "VettingTicketInput", 4, { from: 0.4 }).catch(() => field);
         if (i === 0) {
-          await field.setValue(link).catch(() => undefined);
+          await here.setValue(link).catch(() => undefined);
         } else {
-          await field.addValue(link).catch(() => undefined);
+          await here.addValue(link).catch(() => undefined);
         }
         await sleep(1200);
         enabled = await byTestId(applicant, "VettingRequestButton").isEnabled().catch(() => false);
-        const held = ((await field.getAttribute(isIos(applicant) ? "value" : "text")) || "").trim();
+        const held = ((await here.getAttribute(isIos(applicant) ? "value" : "text").catch(() => "")) || "").trim();
         console.log(`[e2e] ${applicant.e2ePlatform}: ticket field ${held.length}/${link.length} chars, request button ${enabled ? "enabled" : "still disabled"}`);
       }
       if (!enabled) throw new Error(`${applicant.e2ePlatform}: the ticket never reached the component — request button stayed disabled`);
