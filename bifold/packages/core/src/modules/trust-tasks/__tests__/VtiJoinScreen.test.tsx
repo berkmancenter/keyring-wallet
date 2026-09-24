@@ -35,7 +35,22 @@ describe('what a community asks for', () => {
   it('reads statements and claims from a vetting criterion', () => {
     expect(
       asksFrom({ criteria: [{ vetting: { minStatements: 2, requiredClaims: ['name.legal'] } }] } as never)
-    ).toEqual({ kind: 'vetting', statements: 2, claims: ['name.legal'], descriptions: [], invitationOnly: false })
+    ).toEqual({
+      kind: 'vetting',
+      statements: 2,
+      claims: ['name.legal'],
+      descriptions: [],
+      invitationOnly: false,
+      invitationAdmits: false,
+    })
+  })
+  // join.rego: where every way in is vetted, an invitation does not bypass it.
+  it('an invitation admits alone only through a criterion that asks no vetting', () => {
+    const vets = { vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }
+    expect(asksFrom({ criteria: [vets] } as never).invitationAdmits).toBe(false)
+    expect(asksFrom({ criteria: [{ id: 'invited-member', ...vets }] } as never).invitationAdmits).toBe(false)
+    expect(asksFrom({ criteria: [vets, { id: 'invited-member' }] } as never).invitationAdmits).toBe(true)
+    expect(asksFrom({ criteria: [{ id: 'invited-member' }] } as never).invitationAdmits).toBe(true)
   })
   it('only invitation criteria: admits by invitation', () => {
     expect(asksFrom({ criteria: [{ id: 'invited-member' }] } as never).invitationOnly).toBe(true)
@@ -241,5 +256,33 @@ describe('I want to join a community', () => {
     // Without a session the screen shows what every vetting community asks.
     expect(card.props.accessibilityLabel).toContain('Join.AsksStatements')
     expect(card.props.accessibilityLabel).toContain('Join.AsksLegalName')
+  })
+
+  it('a community that vets everyone says an invitation does not replace it, and keeps its code behind Details', async () => {
+    jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue({ criteria: [{ vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }] } as never)
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('JoinNoInvitationBypass'))).toHaveTextContent('Join.AsksNoInvitationBypass')
+    expect(tree.queryByText(linked)).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCommunityToggle'))))
+    expect(tree.getByTestId(testIdWithKey('JoinCommunityDid'))).toHaveTextContent(linked)
+  })
+
+  it('a community an invitation admits does not say so', async () => {
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({
+      criteria: [{ vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }, { id: 'invited-member' }],
+    } as never)
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('JoinNoInvitationBypass'))).toBeNull()
   })
 })

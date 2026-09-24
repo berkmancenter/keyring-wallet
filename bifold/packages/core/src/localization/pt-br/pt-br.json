@@ -1164,6 +1164,8 @@
     "UnlinkConfirm": "Desvincular"
   },
   "Invited": {
+    "IntroVets": "{{community}} verifica todos que entram, mesmo convidados: depois de entrar, você vai encontrar um de seus verificadores.",
+    "ArrivedBodyVets": "{{community}} convidou você, e também verifica todos que entram. Entre agora e depois encontre um de seus verificadores para ser admitido.",
     "WhichCommunityTitle": "Qual comunidade convidou você?",
     "WhichCommunityBody": "Escaneie ou cole o link da comunidade. O administrador dela, ou a página dela, pode fornecê-lo.",
     "ScanCommunity": "Escanear ou colar o link",
@@ -1198,6 +1200,7 @@
     "Note": "Qualquer pessoa pode ver quem está listado. Você não poderá mudar isso no Keyring depois. Para ser removido do diretório, peça ao administrador da comunidade."
   },
   "Join": {
+    "AsksNoInvitationBypass": "Um convite não substitui isso: {{community}} verifica todos que entram.",
     "WhichTitle": "Qual comunidade?",
     "WhichBody": "Escaneie ou cole o link da comunidade — ou o ticket de um verificador, que também a nomeia.",
     "Suggested": "Sugerida para este app",
@@ -1309,6 +1312,11 @@
     "TicketUnreadable": "Este não é um ticket de verificador que o Keyring consegue ler.",
     "NeedsStatements_one": "mais 1 declaração",
     "NeedsStatements_other": "mais {{count}} declarações",
+    "NeedsVetting": "verificação por um de seus verificadores",
+    "NeedsInvitation": "um convite do admin",
+    "NeedsAgreement": "seu acordo com o {{what}}",
+    "NeedsStatements_one": "mais 1 verificador necessário",
+    "NeedsStatements_other": "mais {{count}} verificadores necessários",
     "GrantUnchecked_one": "A outorga de 1 verificador não pôde ser checada agora. Você ainda pode se candidatar; a comunidade vai checá-la.",
     "GrantUnchecked_other": "As outorgas de {{count}} verificadores não puderam ser checadas agora. Você ainda pode se candidatar; a comunidade vai checá-las.",
     "NeedsCommunity": "Entre em uma comunidade primeiro. A verificação acontece dentro de uma.",

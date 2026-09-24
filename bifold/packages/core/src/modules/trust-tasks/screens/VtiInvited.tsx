@@ -33,17 +33,20 @@ import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 import { GenericRecordsCommunityStore, type VtiInvitation } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { communityTarget } from '../module/vtiCommunityLink'
+import { vtiAgent } from '../module/vtiAgent'
 import { ensurePersonaFor, joinCommunity } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 import { communityLinkReturn } from '../module/vtiLinks'
 
 import { identityShareText, shareIdentity } from './identityShare'
 import { communityLabelOf, communityLabelStartOf } from './communityName'
+import { DidDetails } from './DidDetails'
 import { DirectoryConsent } from './DirectoryConsent'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
 import { useCommunityDid } from './useCommunity'
+import { asksFrom, type Asks } from './VtiJoin'
 import { useVtaDid } from './VtaStatus'
 
 type Step = 'intro' | 'share' | 'waiting' | 'joined'
@@ -69,6 +72,22 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const [busy, setBusy] = useState(false)
   // Off unless the person turns it on (VTI-Q14).
   const [listMe, setListMe] = useState(false)
+  // What the community asks, so the screen says truthfully whether the
+  // invitation is enough: where every way in is vetted, it is not (join.rego).
+  const [asks, setAsks] = useState<Asks>()
+  useEffect(() => {
+    if (!communityDid) return
+    let live = true
+    setAsks(undefined)
+    vtiAgent
+      .fetchManifest(communityDid, agent)
+      .then((m) => live && setAsks(asksFrom(m)))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [communityDid, agent])
+  const vetsEveryone = asks?.kind === 'vetting' && !asks.invitationAdmits
   const [error, setError] = useState<PlainError>()
   const [errorOpen, setErrorOpen] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -279,6 +298,14 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
         <>
           {header(1, t('Invited.IntroTitle'))}
           <ThemedText>{t('Invited.IntroBody', { community, interpolation: { escapeValue: false } })}</ThemedText>
+          {vetsEveryone ? (
+            <ThemedText testID={testIdWithKey('InvitedVetsNote')}>
+              {t('Invited.IntroVets', {
+                community: communityLabelStartOf(communityDid, t),
+                interpolation: { escapeValue: false },
+              })}
+            </ThemedText>
+          ) : null}
           <ThemedText variant="bold">{t('Join.AsTitle')}</ThemedText>
           <JoinAs
             community={community}
@@ -377,8 +404,14 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           <View style={styles.card} testID={testIdWithKey('InvitedInvitationCard')}>
             <View style={styles.row}>
               <Icon name="email-check-outline" size={24} color={ColorPalette.semantic.success} />
-              <ThemedText>{t('Invited.ArrivedBody', { community, interpolation: { escapeValue: false } })}</ThemedText>
+              <ThemedText testID={testIdWithKey('InvitedArrivedBody')}>
+                {t(vetsEveryone ? 'Invited.ArrivedBodyVets' : 'Invited.ArrivedBody', {
+                  community,
+                  interpolation: { escapeValue: false },
+                })}
+              </ThemedText>
             </View>
+            <DidDetails did={invitation.communityDid} testIdStem="InvitedCommunity" />
           </View>
           <DirectoryConsent
             communityDid={invitation.communityDid}
