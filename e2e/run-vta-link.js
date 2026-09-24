@@ -53,7 +53,7 @@ import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/confi
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
-import { assertNoDidShown, assertQrTabSaysWhatItIs } from "./lib/gateChecks.js";
+import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
 
 const platform = process.env.PLATFORM || "android";
 const keepState = process.env.E2E_KEEP_STATE === "1";
@@ -212,6 +212,15 @@ async function linkManually(driver) {
     if (Date.now() > keyBy) break;
     for (const key of ["VtaLinkShowTheCode", "VtaLinkShowMyCode"]) {
       if (tapped.has(key) || !(await byTestId(driver, key).isExisting().catch(() => false))) continue;
+      // Where the admin adds the code is in view before the code is asked for
+      // (keyring-bifold#107: behind this toggle nobody found it, 219).
+      if (key === "VtaLinkShowTheCode") {
+        if (!(await existsTestId(driver, "VtaLinkGiveKeyHow", 3000))) {
+          await screenshot(driver, "link-give-key-how-hidden");
+          throw new Error("the give-key screen hides how the admin adds the code");
+        }
+        console.log("[e2e] give-key: how the admin adds it is in view before the code");
+      }
       await tapTestId(driver, key, 15000).catch(() => undefined);
       tapped.add(key);
       break;
@@ -642,6 +651,8 @@ async function testerJourney(driver) {
   // identity, so My QR code offers it beside the contact code.
   for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
   await assertQrTabSaysWhatItIs(driver);
+  await assertSettingsReads(driver);
+  for (let i = 0; i < 3 && !(await existsTestId(driver, "MyAgent", 2000)); i++) await goBack(driver);
   if (process.env.E2E_UNLINK === "1") await unlinkAndRelink(driver);
 }
 
