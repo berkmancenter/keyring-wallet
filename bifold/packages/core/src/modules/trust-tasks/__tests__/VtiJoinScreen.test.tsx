@@ -22,8 +22,10 @@ jest.mock('../../vrc/vrc-biometric', () => ({
   requestBiometricConfirmationWithUI: jest.fn(async () => ({ success: true, reason: 'confirmed' })),
 }))
 const mockEnsurePersona = jest.fn(async () => ({ did: 'did:webvh:QmPersona:p' }))
+const mockReadJoinState = jest.fn(async (): Promise<unknown> => ({ kind: 'none' }))
 jest.mock('../module/vtiJoin', () => ({
   ensurePersonaFor: (...args: unknown[]) => mockEnsurePersona(...(args as [])),
+  readJoinState: (...args: unknown[]) => mockReadJoinState(...(args as [])),
 }))
 
 type Setter = { set(next: Record<string, unknown>): void }
@@ -111,7 +113,9 @@ describe('I want to join a community', () => {
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinStart'))))
     expect(tree.getByTestId(testIdWithKey('JoinMakeIdentity'))).toBeTruthy()
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsContinue'))))
-    expect(mockEnsurePersona).toHaveBeenCalledWith(expect.objectContaining({ communityDid: suggested }))
+    expect(mockEnsurePersona).toHaveBeenCalledWith(expect.objectContaining({ communityDid: suggested }), {
+      fresh: false,
+    })
     expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
   })
 
@@ -220,7 +224,7 @@ describe('I want to join a community', () => {
     expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinStart'))))
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsContinue'))))
-    expect(mockEnsurePersona).toHaveBeenCalledWith(expect.objectContaining({ communityDid: linked }))
+    expect(mockEnsurePersona).toHaveBeenCalledWith(expect.objectContaining({ communityDid: linked }), { fresh: false })
   })
 
   it('Join as can create a profile in the real profile editor', async () => {
@@ -232,6 +236,80 @@ describe('I want to join a community', () => {
     expect(tree.getByTestId(testIdWithKey('JoinAs'))).toBeTruthy()
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsCreateProfile'))))
     expect(navigation.navigate).toHaveBeenCalledWith(Screens.EditRCard)
+  })
+
+  describe('where the person already stands (220)', () => {
+    const submission = {
+      communityDid: linked,
+      personaDid: 'did:webvh:QmPersona:p',
+      sentAt: 't0',
+      withInvitation: false,
+      via: 'join',
+    }
+    const standAt = async (state: unknown) => {
+      mockReadJoinState.mockResolvedValue(state)
+      communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+      const tree = await renderJoin()
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      return tree
+    }
+    afterEach(() => mockReadJoinState.mockResolvedValue({ kind: 'none' }))
+
+    it('a member: Open, not Join', async () => {
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+      navigation.navigate.mockClear()
+      const tree = await standAt({ kind: 'member', membership: {} })
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinOpenCommunity'))))
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiCommunity, { communityDid: linked })
+    })
+
+    it('sent and not yet answered: says so, and whether the invitation went with it; Check again asks', async () => {
+      const tree = await standAt({ kind: 'sent', submission: { ...submission, withInvitation: true } })
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingSent')
+      expect(tree.getByTestId(testIdWithKey('JoinStandingInvitation'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      mockReadJoinState.mockClear()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCheckAgain'))))
+      expect(mockReadJoinState).toHaveBeenCalledWith(
+        expect.anything(),
+        linked,
+        expect.not.objectContaining({ poll: false })
+      )
+    })
+
+    it('deferred: what is missing, in words, and the way back to vetting', async () => {
+      const tree = await standAt({
+        kind: 'deferred',
+        submission,
+        needs: [{ kind: 'statements', count: 1 }, { kind: 'invitation' }],
+      })
+      const needs = tree.getAllByTestId(testIdWithKey('JoinStandingNeed'))
+      expect(needs[0]).toHaveTextContent(/Vetting\.NeedsStatements/)
+      expect(needs[1]).toHaveTextContent(/Vetting\.NeedsInvitation/)
+      expect(tree.getByTestId(testIdWithKey('JoinContinueVetting'))).toBeTruthy()
+    })
+
+    it('turned down: the reason, and Join again with a fresh identity', async () => {
+      const tree = await standAt({
+        kind: 'rejected',
+        submission,
+        code: 'policyDenied',
+        reason: 'Not a member of the club',
+      })
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingRejected')
+      expect(tree.getByTestId(testIdWithKey('JoinStandingReason'))).toHaveTextContent('Join.StandingReason')
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAgain'))))
+      expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinStart'))))
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsContinue'))))
+      expect(mockEnsurePersona).toHaveBeenLastCalledWith(expect.objectContaining({ communityDid: linked }), {
+        fresh: true,
+      })
+    })
   })
 
   it('the "what it asks" card says the whole sentence itself', async () => {
