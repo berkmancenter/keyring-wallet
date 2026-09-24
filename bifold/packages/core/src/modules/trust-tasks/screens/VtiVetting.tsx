@@ -62,6 +62,7 @@ import { joinSeed } from '../module/vtiJoinSeed'
 import { useCommunityDid } from './useCommunity'
 import { communityLabelOf, communityLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
+import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
@@ -226,6 +227,18 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       gap: 8,
     },
     buttonText: { ...TextTheme.bold, color: '#FFFFFF' },
+    buttonSecondary: {
+      borderWidth: 1,
+      borderColor: ColorPalette.brand.primary,
+      borderRadius: 8,
+      paddingVertical: 12,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    buttonSecondaryText: { ...TextTheme.bold, color: ColorPalette.brand.primary },
+    buttonDimmed: { opacity: 0.4 },
     input: {
       borderWidth: 1,
       borderColor: ColorPalette.grayscale.lightGrey,
@@ -871,15 +884,18 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         autoCapitalize="none"
         autoCorrect={false}
       />
+      {/* The paste box's own button, not a second main action: outlined, and
+          dimmed until there is a link to use (218 feedback). */}
       <Pressable
-        style={styles.button}
+        style={[styles.buttonSecondary, !ticketLink.trim() || busy ? styles.buttonDimmed : undefined]}
         testID={testIdWithKey('VettingRequestButton')}
         accessibilityRole="button"
+        accessibilityState={{ disabled: !!busy || !ticketLink.trim() }}
         disabled={!!busy || !ticketLink.trim()}
         onPress={() => run('request', () => applicantRef.current!.requestVetter({ link: ticketLink.trim() }))}
       >
-        {busy === 'request' ? <ActivityIndicator color="#FFFFFF" /> : null}
-        <Text style={styles.buttonText}>{t('Vetting.Request')}</Text>
+        {busy === 'request' ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
+        <Text style={styles.buttonSecondaryText}>{t('Vetting.UseThisLink')}</Text>
       </Pressable>
     </View>
   )
@@ -985,10 +1001,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
 
         {application && applicantStep !== 'name' && applicantStep !== 'member' ? (
           <Text style={styles.value} testID={testIdWithKey('VettingRequirements')}>
-            {tp('Vetting.Requirements', {
-              n: application.minStatements,
-              claims: application.requiredClaims.join(', '),
-            })}
+            {application.requiredClaims.length
+              ? tp('Vetting.Requirements', {
+                  count: application.minStatements,
+                  claims: claimList(application.requiredClaims, t),
+                })
+              : tp('Vetting.RequirementsAnyone', { count: application.minStatements })}
           </Text>
         ) : null}
 
@@ -1081,7 +1099,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               </Text>
               {checklist?.discounted ? (
                 <Text style={styles.error} testID={testIdWithKey('VettingDiscounted')}>
-                  {tp('Vetting.Discounted', { n: checklist.discounted })}
+                  {tp('Vetting.Discounted', { count: checklist.discounted })}
                 </Text>
               ) : null}
               {/*
@@ -1092,7 +1110,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               */}
               {checklist?.unchecked?.length ? (
                 <Text style={styles.label} testID={testIdWithKey('VettingGrantUnchecked')}>
-                  {tp('Vetting.GrantUnchecked', { n: checklist.unchecked.length })}
+                  {tp('Vetting.GrantUnchecked', { count: checklist.unchecked.length })}
                 </Text>
               ) : null}
               {/* The reason stays in the record; a developer build says it. */}
@@ -1111,7 +1129,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     .map((need) =>
                       need.kind === 'method'
                         ? tp('Vetting.NeedsMethod', { n: need.n, method: t(`Vetting.Method.${need.method}`) })
-                        : tp('Vetting.NeedsStatements', { n: need.n })
+                        : tp('Vetting.NeedsStatements', { count: need.n })
                     )
                     .join(' · ')}
                 </Text>
@@ -1183,7 +1201,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         if (verdict.effect === 'requestMore' || verdict.effect === 'refer') return
                         if (verdict.effect !== 'allow')
                           throw new Error(
-                            `${verdict.effect}${verdict.needs.length ? `: ${verdict.needs.join(', ')}` : ''}`
+                            `${verdict.effect}${verdict.needs.length ? `: ${verdict.needs.map((need) => needWords(need, t)).join(', ')}` : ''}`
                           )
                         for (let i = 0; i < 20; i++) {
                           const mem = await stores!.community.getMembership(communityDid)
@@ -1221,7 +1239,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   <Text style={styles.label} testID={testIdWithKey('VettingSubmissionState')}>
                     {application.submission.state === 'deferred'
                       ? tp('Vetting.SubmissionDeferred', {
-                          needs: (application.submission.needs ?? []).join(', ') || '—',
+                          needs:
+                            (application.submission.needs ?? []).map((need) => needWords(need, t)).join(', ') || '—',
                         })
                       : application.submission.state === 'pending'
                         ? t('Vetting.SubmissionPending')

@@ -37,6 +37,7 @@ import { joinSeed } from '../module/vtiJoinSeed'
 import { communityName } from './communityName'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
+import { claimWords } from './claimWords'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { useCommunity } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
@@ -229,7 +230,9 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (asks?.invitationOnly) return t('Join.AsksInvitationOnly')
     if (asks?.kind === 'open') return t('Join.AsksNothing')
     if (asks?.kind === 'other') return [t('Join.AsksOther'), ...asks.descriptions].join(' ')
-    const claims = (asks ? asks.claims : ['name.legal']).map((c) => (c === 'name.legal' ? t('Join.AsksLegalName') : c))
+    const claims = (asks ? asks.claims : ['name.legal']).map((c) =>
+      c === 'name.legal' ? t('Join.AsksLegalName') : claimWords(c, t)
+    )
     return [t('Join.AsksStatements', { count: asks?.statements ?? 1 }), ...claims].join('. ')
   })()
 
@@ -349,7 +352,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                 {(asks ? asks.claims : ['name.legal']).map((c) => (
                   <ThemedText key={c}>
                     {'• '}
-                    {c === 'name.legal' ? t('Join.AsksLegalName') : c}
+                    {c === 'name.legal' ? t('Join.AsksLegalName') : claimWords(c, t)}
                   </ThemedText>
                 ))}
               </>
