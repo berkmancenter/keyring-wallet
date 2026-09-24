@@ -21,7 +21,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createSession, ensureAppium, stopAppium, screenshot, sleep, existsTestId, waitForTestId, tapTestId, scrollToTestId } from "./lib/driver.js";
+import { byTestId, createSession, ensureAppium, stopAppium, screenshot, sleep, existsTestId, waitForTestId, tapTestId, scrollToTestId } from "./lib/driver.js";
 import { unlockIfLocked } from "./lib/flows.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
@@ -83,13 +83,11 @@ try {
   let words = "";
   for (const until = Date.now() + 60000; Date.now() < until && !words; ) {
     if (await existsTestId(driver, "ToastTitle", 2000)) {
-      words = ((await driver.$(`~${"com.ariesbifold:id/"}ToastTitle`).getAttribute("label").catch(() => "")) || "").trim();
-      if (driver.e2ePlatform === "android") {
-        words = ((await driver
-          .$('android=new UiSelector().resourceId("com.ariesbifold:id/ToastTitle")')
-          .getText()
-          .catch(() => "")) || "").trim();
-      }
+      // Read it the platform's way at once: an iOS-style lookup on Android
+      // waits out the implicit timeout, and the toast is gone by then (220 RC).
+      const title = byTestId(driver, "ToastTitle");
+      const read = driver.e2ePlatform === "android" ? title.getText() : title.getAttribute("label");
+      words = ((await read.catch(() => "")) || "").trim();
     } else if (await existsTestId(driver, "CommunityError", 500)) {
       await screenshot(driver, "leave-refused");
       throw new Error("leaving was refused (CommunityError)");
