@@ -31,13 +31,13 @@ import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
-import { ensurePersonaFor } from '../module/vtiJoin'
+import { ensurePersonaFor, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
 import { communityName } from './communityName'
 import { openScanner } from './openScanner'
 import { plainError, type PlainError } from './plainError'
-import { claimWords } from './claimWords'
+import { claimWords, joinNeedWords } from './claimWords'
 import { DidDetails } from './DidDetails'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { useCommunity } from './useCommunity'
@@ -125,6 +125,13 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // suggestion is offered first, beside "a different community".
   const [step, setStep] = useState<Step>(chosenByLink ? 'asks' : 'which')
   const [asks, setAsks] = useState<Asks>()
+  // Where the person already stands with this community (220): what the phone
+  // holds, at once, then what the community says while a request is open. It
+  // used to say only "You joined this one before", whatever had happened since.
+  const [standing, setStanding] = useState<CommunityJoinState>()
+  const [checking, setChecking] = useState(false)
+  // "Join again" was chosen: the next identity for this community is a new one.
+  const [again, setAgain] = useState(false)
   // Which community's manifest has been read (or failed to be): until then a
   // missing name means "not known yet", not "none published".
   const [nameRead, setNameRead] = useState<string>()
@@ -167,6 +174,34 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     }
   }, [communityDid, agent])
 
+  useEffect(() => {
+    setStanding(undefined)
+    setAgain(false)
+    if (!agent || !communityDid) return
+    let live = true
+    void (async () => {
+      const held = await readJoinState(agent, communityDid, { poll: false })
+      if (live) setStanding(held)
+      if (held.kind === 'sent' || held.kind === 'pending' || held.kind === 'deferred') {
+        const asked = await readJoinState(agent, communityDid, { mediatorDid: config?.mediatorDid })
+        if (live) setStanding(asked)
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [agent, communityDid, config?.mediatorDid])
+
+  const onCheckAgain = useCallback(async () => {
+    if (!agent || !communityDid) return
+    setChecking(true)
+    try {
+      setStanding(await readJoinState(agent, communityDid, { mediatorDid: config?.mediatorDid }))
+    } finally {
+      setChecking(false)
+    }
+  }, [agent, communityDid, config?.mediatorDid])
+
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { flexGrow: 1, padding: 20, gap: 16 },
@@ -188,7 +223,10 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     if (!confirmed.success) return
     setBusy(true)
     try {
-      await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+      await ensurePersonaFor(
+        { agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid },
+        { fresh: again }
+      )
       // Making the identity is what makes this the phone's community.
       communityTarget.choose(communityDid)
       // Seed by copy: the chosen profile fills the identity's name in once.
@@ -200,7 +238,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     } finally {
       setBusy(false)
     }
-  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected])
+  }, [agent, vtaDid, communityDid, name, navigation, t, joinAs.selected, again])
 
   if (!vtaDid) {
     return (
@@ -293,9 +331,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
                   earlier build — telling them their software has an opinion it
                   does not have, and sending two of us hunting a configuration
                   leak that did not exist (report #23). */}
-              <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedSource')}>
-                {remembered ? t('Join.Remembered') : t('Join.Suggested')}
-              </ThemedText>
+              {!standing || standing.kind === 'none' ? (
+                <ThemedText style={styles.muted} testID={testIdWithKey('JoinSuggestedSource')}>
+                  {remembered ? t('Join.Remembered') : t('Join.Suggested')}
+                </ThemedText>
+              ) : null}
               {/* A community the phone joined on an earlier build may be gone
                   (a lab that was only ever on someone's Mac). Say so beside
                   "a different community" rather than forget a real choice. */}
@@ -450,6 +490,116 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         </Button>
       )
       break
+  }
+
+  // Where the person stands overrides the way in, except once "Join again" is chosen.
+  const tp = (key: string, values: Record<string, unknown> = {}) =>
+    t(key, { community: name, ...values, interpolation: { escapeValue: false } }) as string
+  const mayJoinAgain =
+    standing?.kind === 'rejected' ||
+    standing?.kind === 'withdrawn' ||
+    standing?.kind === 'left' ||
+    standing?.kind === 'removed'
+  if (communityDid && standing && standing.kind !== 'none' && current !== 'as' && !(again && mayJoinAgain)) {
+    const withInvitation =
+      (standing.kind === 'sent' || standing.kind === 'pending') && standing.submission.withInvitation
+    const standingCard = (
+      <View style={styles.card} testID={testIdWithKey('JoinStanding')}>
+        <ThemedText testID={testIdWithKey('JoinStandingText')}>
+          {standing.kind === 'member'
+            ? tp('Join.StandingMember')
+            : standing.kind === 'removed'
+              ? tp('Join.StandingRemoved')
+              : standing.kind === 'sent'
+                ? tp('Join.StandingSent')
+                : standing.kind === 'pending'
+                  ? tp('Join.StandingPending')
+                  : standing.kind === 'deferred'
+                    ? tp('Join.StandingDeferred')
+                    : standing.kind === 'rejected'
+                      ? tp('Join.StandingRejected')
+                      : standing.kind === 'withdrawn'
+                        ? tp('Join.StandingWithdrawn')
+                        : tp('Join.StandingLeft')}
+        </ThemedText>
+        {withInvitation ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingInvitation')}>
+            {t('Join.StandingWithInvitation')}
+          </ThemedText>
+        ) : null}
+        {standing.kind === 'deferred'
+          ? standing.needs.map((need, i) => (
+              <ThemedText key={i} testID={testIdWithKey('JoinStandingNeed')}>
+                {'• '}
+                {joinNeedWords(need, t)}
+              </ThemedText>
+            ))
+          : null}
+        {standing.kind === 'rejected' && standing.reason ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey('JoinStandingReason')}>
+            {tp('Join.StandingReason', { reason: standing.reason })}
+          </ThemedText>
+        ) : null}
+        {mayJoinAgain ? <ThemedText style={styles.muted}>{t('Join.StandingAgain')}</ThemedText> : null}
+      </View>
+    )
+    body = (
+      <>
+        {standingCard}
+        {body}
+      </>
+    )
+    const different =
+      current === 'which' ? (
+        <Button
+          title={t('Join.Different')}
+          buttonType={ButtonType.Secondary}
+          onPress={() => openScanner(navigation)}
+          testID={testIdWithKey('JoinScanCommunity')}
+        />
+      ) : null
+    const go = (screen: string, params?: object) =>
+      (navigation as unknown as { navigate: (screen: string, params?: object) => void }).navigate(screen, params)
+    actions = (
+      <>
+        {standing.kind === 'member' ? (
+          <Button
+            title={tp('Join.Open')}
+            buttonType={ButtonType.Primary}
+            onPress={() => go(Screens.VtiCommunity, { communityDid })}
+            testID={testIdWithKey('JoinOpenCommunity')}
+          />
+        ) : standing.kind === 'sent' || standing.kind === 'pending' ? (
+          <Button
+            title={t('Join.CheckAgain')}
+            buttonType={ButtonType.Primary}
+            onPress={() => void onCheckAgain()}
+            disabled={checking}
+            testID={testIdWithKey('JoinCheckAgain')}
+          >
+            {checking ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+          </Button>
+        ) : standing.kind === 'deferred' ? (
+          <Button
+            title={t('VtaLink.ContinueVetting')}
+            buttonType={ButtonType.Primary}
+            onPress={() => go(Screens.VtiVetting)}
+            testID={testIdWithKey('JoinContinueVetting')}
+          />
+        ) : (
+          <Button
+            title={t('Join.JoinAgain')}
+            buttonType={ButtonType.Primary}
+            onPress={() => {
+              setAgain(true)
+              setStep('asks')
+            }}
+            testID={testIdWithKey('JoinAgain')}
+          />
+        )}
+        {different}
+      </>
+    )
   }
 
   return (

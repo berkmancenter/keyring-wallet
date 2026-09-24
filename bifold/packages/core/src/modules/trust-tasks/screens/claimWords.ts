@@ -9,6 +9,8 @@
 
 import type { TFunction } from 'i18next'
 
+import type { JoinNeed } from '../module/vtiJoin'
+
 /** Claims with words of their own, by key. */
 const KNOWN: Record<string, string> = {
   'name.legal': 'Claims.NameLegal',
@@ -63,4 +65,20 @@ export function needWords(need: string, t: TFunction): string {
   const claim = /^(?:claim|credential):(.+)$/.exec(need)
   if (claim) return claimWords(claim[1], t)
   return spelt(need)
+}
+
+/** The same, for a need the join state has already read (vtiJoin's JoinNeed). */
+export function joinNeedWords(need: JoinNeed, t: TFunction): string {
+  switch (need.kind) {
+    case 'statements':
+      return t('Vetting.NeedsStatements', { count: need.count }) as string
+    case 'invitation':
+      return t('Vetting.NeedsInvitation') as string
+    case 'vetting':
+      return t('Vetting.NeedsVetting') as string
+    case 'agreement':
+      return t('Vetting.NeedsAgreement', { what: spelt(need.id), interpolation: { escapeValue: false } }) as string
+    default:
+      return needWords(need.raw, t)
+  }
 }
