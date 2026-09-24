@@ -767,7 +767,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     disabled={!!busy}
                     onPress={() =>
                       run('attest', async () => {
-                        if (!(await confirmWithBiometrics(t('Vetting.CounterpartyApplicant'), 'Attest'))) return
+                        if (!(await confirmWithBiometrics('', 'Attest'))) return
                         await deskRef.current!.attest(request.requestId, {
                           documentClasses: ['passport'],
                           claimsVerified: ['name.legal'],
@@ -1080,7 +1080,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 disabled={!!busy}
                 onPress={() =>
                   run('card', async () => {
-                    if (!(await confirmWithBiometrics(t('Vetting.CounterpartyVetter'), 'Send'))) return
+                    // No name for the vetter here, so the sheet shows none rather than "your vetter".
+                    if (!(await confirmWithBiometrics('', 'Send'))) return
                     await applicantRef.current!.sendCard(active.vetterDid)
                   })
                 }

@@ -248,8 +248,15 @@ const VtaLink: React.FC = () => {
             }}
             testID={testIdWithKey('VtaLinkCopyKey')}
           />
-          {/* The code and where an admin pastes it: true, occasionally needed,
-              and not what the person on this screen has to read. */}
+          {/* Where the admin adds it, in view: behind "Show the code and how to
+              add it" nobody found it (Alberto, relinking after Unlink, 219).
+              The code itself stays behind its own toggle: a ~350-character
+              did:peer is for pasting, not reading. */}
+          <View style={{ gap: 4 }} testID={testIdWithKey('VtaLinkGiveKeyHow')}>
+            <ThemedText variant="bold">{t('VtaLink.GiveKeyHowTitle')}</ThemedText>
+            <ThemedText>{t('VtaLink.GiveKeyHow')}</ThemedText>
+            <ThemedText style={styles.muted}>{t('VtaLink.GiveKeyHowTerminal')}</ThemedText>
+          </View>
           <Pressable
             onPress={() => setKeyShown(!keyShown)}
             accessibilityRole="button"
@@ -261,14 +268,9 @@ const VtaLink: React.FC = () => {
             </ThemedText>
           </Pressable>
           {keyShown ? (
-            <>
-              <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkManualDid')} selectable>
-                {link.did}
-              </ThemedText>
-              <ThemedText style={styles.muted} testID={testIdWithKey('VtaLinkGiveKeyHow')}>
-                {t('VtaLink.GiveKeyHow')}
-              </ThemedText>
-            </>
+            <ThemedText style={styles.key} testID={testIdWithKey('VtaLinkManualDid')} selectable>
+              {link.did}
+            </ThemedText>
           ) : null}
         </View>
       )

@@ -203,7 +203,11 @@ const BiometricConfirmationModal: React.FC = () => {
                 {pendingRequest.copy?.title ?? String(t('Biometry.ConfirmRelationship') || 'Confirm Relationship')}
               </ThemedText>
 
-              <ThemedText style={styles.counterpartyName}>{pendingRequest.counterpartyName}</ThemedText>
+              {/* A name, when there is one: a stand-in like "your vetter" read as
+                  one on the sheet (219), so a caller with no name passes none. */}
+              {pendingRequest.counterpartyName ? (
+                <ThemedText style={styles.counterpartyName}>{pendingRequest.counterpartyName}</ThemedText>
+              ) : null}
 
               <ThemedText style={styles.description}>
                 {pendingRequest.copy?.description ??

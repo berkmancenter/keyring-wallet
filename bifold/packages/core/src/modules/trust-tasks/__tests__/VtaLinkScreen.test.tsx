@@ -175,13 +175,12 @@ describe('giving the code to an admin', () => {
     )
     expect(tree.getByTestId(testIdWithKey('VtaLinkShareKey'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('VtaLinkCopyKey'))).toBeTruthy()
-    // The code and the admin instructions are behind the affordance…
+    // Where the admin adds it is in view — behind a quiet link nobody found it (219)…
+    expect(tree.getByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toHaveTextContent(/VtaLink\.GiveKeyHow/)
+    // …while the code itself stays out of sight until asked for.
     expect(tree.queryByTestId(testIdWithKey('VtaLinkManualDid'))).toBeNull()
-    expect(tree.queryByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toBeNull()
-    // …and still reachable for anyone who wants them.
     fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShowTheCode')))
     expect(tree.getByTestId(testIdWithKey('VtaLinkManualDid'))).toBeTruthy()
-    expect(tree.getByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toBeTruthy()
   })
 
   test('what is shared is a message containing the code, not a bare URI', () => {
