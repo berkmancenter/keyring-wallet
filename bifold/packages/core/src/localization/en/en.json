@@ -1190,6 +1190,14 @@
     "AlertsLength": "You have {{ alerts }} alerts"
   },
   "Community": {
+    "LeaveKeepWhat": "What should {{community}} keep?",
+    "LeavePurge": "Erase me from its records",
+    "LeaveTombstone": "Keep a note that I was a member, with no personal details",
+    "LeftPurge": "You left {{community}}. It erased your record.",
+    "LeftTombstone": "You left {{community}}. It keeps a note that you were a member, with no personal details.",
+    "LeftHistorical": "You left {{community}}. It keeps its record of your membership.",
+    "LeftAlreadyGone": "{{community}} no longer had you as a member. This phone has forgotten it too.",
+    "LeaveLastAdmin": "You're the last admin of {{community}}. Make someone else an admin first.",
     "ClaimedName": "{{name}} (not confirmed by the community)",
     "UnnamedAt": "an unnamed community ({{host}})",
     "Unnamed": "an unnamed community",
@@ -1197,7 +1205,7 @@
     "Someone": "Someone",
     "Open": "Open this community",
     "Leave": "Leave community",
-    "LeaveExplains": "This phone forgets your identity, card and vetting for this community. To come back, you join again.",
+    "LeaveExplains": "{{community}} removes you as a member, and this phone forgets your identity, card and vetting for it. To come back, you join again with a new identity.",
     "LeaveConfirm": "Leave community",
     "Stay": "Stay"
   },

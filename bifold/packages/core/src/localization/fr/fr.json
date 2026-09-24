@@ -1135,6 +1135,14 @@
     }
   },
   "Community": {
+    "LeaveKeepWhat": "Que doit garder {{community}} ?",
+    "LeavePurge": "M'effacer de ses registres",
+    "LeaveTombstone": "Garder une trace que j'étais membre, sans données personnelles",
+    "LeftPurge": "Vous avez quitté {{community}}. Elle a effacé votre dossier.",
+    "LeftTombstone": "Vous avez quitté {{community}}. Elle garde une trace que vous étiez membre, sans données personnelles.",
+    "LeftHistorical": "Vous avez quitté {{community}}. Elle garde son dossier de votre adhésion.",
+    "LeftAlreadyGone": "{{community}} ne vous comptait plus parmi ses membres. Ce téléphone l'a oubliée aussi.",
+    "LeaveLastAdmin": "Vous êtes le dernier admin de {{community}}. Nommez d'abord un autre admin.",
     "ClaimedName": "{{name}} (non confirmé par la communauté)",
     "UnnamedAt": "une communauté sans nom ({{host}})",
     "Unnamed": "une communauté sans nom",
@@ -1142,7 +1150,7 @@
     "Someone": "Quelqu’un",
     "Open": "Ouvrir cette communauté",
     "Leave": "Quitter la communauté",
-    "LeaveExplains": "Ce téléphone oublie votre identité, votre carte et votre vérification pour cette communauté. Pour revenir, vous la rejoignez à nouveau.",
+    "LeaveExplains": "{{community}} vous retire de ses membres, et ce téléphone oublie votre identité, votre carte et votre vérification pour elle. Pour revenir, vous la rejoignez à nouveau avec une nouvelle identité.",
     "LeaveConfirm": "Quitter la communauté",
     "Stay": "Rester"
   },

@@ -1034,6 +1034,14 @@
     "AlertsLength": "You have {{ alerts }} alerts (PT-BR)"
   },
   "Community": {
+    "LeaveKeepWhat": "O que {{community}} deve guardar?",
+    "LeavePurge": "Apagar-me dos registros",
+    "LeaveTombstone": "Guardar uma nota de que fui membro, sem dados pessoais",
+    "LeftPurge": "Você saiu de {{community}}. Ela apagou seu registro.",
+    "LeftTombstone": "Você saiu de {{community}}. Ela guarda uma nota de que você foi membro, sem dados pessoais.",
+    "LeftHistorical": "Você saiu de {{community}}. Ela guarda o registro da sua participação.",
+    "LeftAlreadyGone": "{{community}} já não tinha você como membro. Este telefone também a esqueceu.",
+    "LeaveLastAdmin": "Você é o último admin de {{community}}. Torne outra pessoa admin primeiro.",
     "ClaimedName": "{{name}} (não confirmado pela comunidade)",
     "UnnamedAt": "uma comunidade sem nome ({{host}})",
     "Unnamed": "uma comunidade sem nome",
@@ -1041,7 +1049,7 @@
     "Someone": "Alguém",
     "Open": "Abrir esta comunidade",
     "Leave": "Sair da comunidade",
-    "LeaveExplains": "Este telefone esquece sua identidade, seu cartão e sua verificação nesta comunidade. Para voltar, você entra de novo.",
+    "LeaveExplains": "{{community}} remove você dos membros, e este telefone esquece sua identidade, cartão e verificação para ela. Para voltar, você entra de novo com uma nova identidade.",
     "LeaveConfirm": "Sair da comunidade",
     "Stay": "Ficar"
   },
