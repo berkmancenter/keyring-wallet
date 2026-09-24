@@ -15,16 +15,21 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Toast from 'react-native-toast-message'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
+
+import { ToastType } from '../../../components/toast/BaseToast'
 
 import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
-import { vtiAgent, VtiRefusal, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
-import { leaveCommunity } from '../module/vtiLeave'
+import { selfRemoveRefusal, vtiAgent, VtiRefusal, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
+import { leaveCommunity } from '../module/vtiJoin'
+import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
+import { communityLabelOf, communityLabelStartOf } from './communityName'
 import { useCommunityCalled } from './useCommunity'
 
 const VtiCommunity: React.FC = () => {
@@ -47,6 +52,9 @@ const VtiCommunity: React.FC = () => {
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  // What the community keeps: erased, or a note with no personal details.
+  // Erasing is the default — the one that keeps least about the person.
+  const [keep, setKeep] = useState<'purge' | 'tombstone'>('purge')
   // Leave is offered only where the phone holds something — an identity, a
   // membership: a community only looked at through a link has nothing to leave.
   const [holds, setHolds] = useState(false)
@@ -64,18 +72,57 @@ const VtiCommunity: React.FC = () => {
     }
   }, [agent, communityDid])
 
+  // Leaving tells the community (members/self-remove, keyring-bifold#102), then
+  // the phone forgets the identity, card and vetting. It used to forget them
+  // only on the phone, while the community still counted a member (220).
   const onLeave = useCallback(async () => {
     if (!agent) return
     setLeaving(true)
+    // The community in words, never its code; capitalised where it starts the sentence.
+    const words = (key: string, start = false) =>
+      t(key, {
+        community: start ? communityLabelStartOf(communityDid, t) : communityLabelOf(communityDid, t),
+        interpolation: { escapeValue: false },
+      }) as string
     try {
-      await leaveCommunity(agent, communityDid)
+      const left = await leaveCommunity(
+        {
+          agent,
+          identityStore: new GenericRecordsIdentityStore(agent),
+          communityStore: new GenericRecordsCommunityStore(agent),
+          vettingStore: new GenericRecordsVettingStore(agent),
+        },
+        communityDid,
+        { disposition: keep }
+      )
+      Toast.show({
+        type: ToastType.Success,
+        text1: words(
+          left.alreadyGone
+            ? 'Community.LeftAlreadyGone'
+            : left.disposition === 'tombstone'
+              ? 'Community.LeftTombstone'
+              : left.disposition === 'historical'
+                ? 'Community.LeftHistorical'
+                : 'Community.LeftPurge',
+          left.alreadyGone
+        ),
+        visibilityTime: 6000,
+        position: 'bottom',
+      })
       navigation.goBack()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(
+        selfRemoveRefusal(err) === 'lastAdmin'
+          ? words('Community.LeaveLastAdmin')
+          : err instanceof Error
+            ? err.message
+            : String(err)
+      )
       setLeaving(false)
       setConfirmingLeave(false)
     }
-  }, [agent, communityDid, navigation])
+  }, [agent, communityDid, navigation, keep, t])
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -224,7 +271,38 @@ const VtiCommunity: React.FC = () => {
 
         {!holds ? null : confirmingLeave ? (
           <View style={styles.card} testID={testIdWithKey('LeaveCommunityConfirmCard')}>
-            <Text style={styles.value}>{t('Community.LeaveExplains')}</Text>
+            <Text style={styles.value}>
+              {t('Community.LeaveExplains', {
+                community: communityLabelStartOf(communityDid, t),
+                interpolation: { escapeValue: false },
+              })}
+            </Text>
+            <Text style={styles.label}>
+              {t('Community.LeaveKeepWhat', {
+                community: communityLabelOf(communityDid, t),
+                interpolation: { escapeValue: false },
+              })}
+            </Text>
+            {(['purge', 'tombstone'] as const).map((choice) => (
+              <Pressable
+                key={choice}
+                style={styles.row}
+                testID={testIdWithKey(choice === 'purge' ? 'LeaveCommunityPurge' : 'LeaveCommunityTombstone')}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: keep === choice }}
+                disabled={leaving}
+                onPress={() => setKeep(choice)}
+              >
+                <Icon
+                  name={keep === choice ? 'radiobox-marked' : 'radiobox-blank'}
+                  size={22}
+                  color={ColorPalette.brand.primary}
+                />
+                <Text style={[styles.value, { flex: 1 }]}>
+                  {t(choice === 'purge' ? 'Community.LeavePurge' : 'Community.LeaveTombstone')}
+                </Text>
+              </Pressable>
+            ))}
             <Pressable
               style={[styles.button, { backgroundColor: ColorPalette.semantic.error }]}
               testID={testIdWithKey('LeaveCommunityConfirm')}
