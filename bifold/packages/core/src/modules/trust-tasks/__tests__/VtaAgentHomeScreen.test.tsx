@@ -6,7 +6,7 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { Alert, DeviceEventEmitter } from 'react-native'
+import { DeviceEventEmitter } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -325,50 +325,50 @@ describe('Your agent — after linking', () => {
   })
 
   describe('unlinking this agent', () => {
-    type AlertButton = { text?: string; style?: string; onPress?: () => void }
-    const buttonsOf = (spy: jest.SpyInstance) => spy.mock.calls[0][2] as AlertButton[]
-
     afterEach(() => jest.restoreAllMocks())
 
-    it('asks first, saying what the person loses and that the key stays on the agent', async () => {
-      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
-      const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
-      const tree = await renderHome([persona])
+    const openCard = async (tree: Awaited<ReturnType<typeof renderHome>>) => {
       await act(async () => {
         fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
       })
-      expect(alert).toHaveBeenCalledWith('VtaLink.UnlinkTitle', 'VtaLink.UnlinkBody', expect.any(Array))
-      const [cancel, confirm] = buttonsOf(alert)
-      expect(cancel).toMatchObject({ text: 'Global.Cancel', style: 'cancel' })
-      expect(confirm).toMatchObject({ text: 'VtaLink.UnlinkConfirm', style: 'destructive' })
+    }
+
+    it('asks first, in place, naming the agent and saying what the person loses', async () => {
+      const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+      controller.set({ agentNames: { 'did:webvh:example:vta': { label: 'keyring-runner-uiux', source: 'vtaName' } } })
+      const tree = await renderHome([persona])
+      expect(tree.queryByTestId(testIdWithKey('AgentUnlinkCard'))).toBeNull()
+      await openCard(tree)
+      // The test translator returns keys; the agent's name is what is passed in.
+      expect(tree.getByTestId(testIdWithKey('AgentUnlinkTitle'))).toHaveTextContent('VtaLink.UnlinkTitle')
+      expect(tree.getByTestId(testIdWithKey('AgentUnlinkBody'))).toHaveTextContent('VtaLink.UnlinkBody')
+      expect(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm'))).toBeTruthy()
+      expect(tree.getByTestId(testIdWithKey('AgentUnlinkCancel'))).toBeTruthy()
       // Nothing happens until the person confirms.
       expect(unlink).not.toHaveBeenCalled()
     })
 
     it('unlinks on confirm and lands on linking an agent', async () => {
-      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
       const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
       const navigate = useNavigation().navigate as jest.Mock
       navigate.mockClear()
       const tree = await renderHome([persona])
+      await openCard(tree)
       await act(async () => {
-        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
-      })
-      await act(async () => {
-        buttonsOf(alert)[1].onPress?.()
+        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm')))
       })
       expect(unlink).toHaveBeenCalledTimes(1)
       expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
     })
 
-    it('does nothing when the person cancels', async () => {
-      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
+    it('Cancel closes the card and keeps the link', async () => {
       const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
       const tree = await renderHome([persona])
+      await openCard(tree)
       await act(async () => {
-        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
+        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkCancel')))
       })
-      buttonsOf(alert)[0].onPress?.()
+      expect(tree.queryByTestId(testIdWithKey('AgentUnlinkCard'))).toBeNull()
       expect(unlink).not.toHaveBeenCalled()
     })
   })

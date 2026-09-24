@@ -1157,8 +1157,8 @@
     "OpenDesk": "Abrir a mesa de verificação",
     "ShareKeyHint": "Longo e fácil de digitar errado — envie em vez de ditar.",
     "Unlink": "Desvincular este agente",
-    "UnlinkTitle": "Desvincular este agente?",
-    "UnlinkBody": "Este telefone deixará de agir pelo seu agente.\n\nSuas identidades e participações em comunidades ficam com o agente. Este telefone não poderá usá-las até você vincular esse agente de novo.\n\nO agente mantém a chave deste telefone na lista dele até que o dono a remova. O telefone esquece a chave, então ela não pode ser usada.",
+    "UnlinkTitle": "Desvincular {{agent}}?",
+    "UnlinkBody": "Este telefone não vai mais funcionar com seu agente.\n\nSuas identidades e participações em comunidades ficam com o agente. Vincule-o de novo para usá-las neste telefone.\n\nO agente ainda pode listar este telefone até que o admin dele o remova, mas essa entrada não pode ser usada: este telefone esquece a chave.",
     "UnlinkConfirm": "Desvincular"
   },
   "Invited": {

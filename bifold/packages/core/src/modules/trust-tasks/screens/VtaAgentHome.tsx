@@ -18,7 +18,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -65,6 +65,7 @@ const VtaAgentHome: React.FC = () => {
   const { link } = state
   const [holdings, setHoldings] = useState<Holdings>()
   const [holdingsError, setHoldingsError] = useState(false)
+  const [unlinkOpen, setUnlinkOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [deciding, setDeciding] = useState<string>()
@@ -193,19 +194,14 @@ const VtaAgentHome: React.FC = () => {
 
   // Unlinking is local: this phone forgets the agent and its own key for it.
   // The agent keeps the key on its list until its owner removes it — a client
-  // cannot remove its own entry (VTI-Q23) — and the confirmation says so.
-  const confirmUnlink = () =>
-    Alert.alert(t('VtaLink.UnlinkTitle'), t('VtaLink.UnlinkBody'), [
-      { text: t('Global.Cancel'), style: 'cancel' },
-      {
-        text: t('VtaLink.UnlinkConfirm'),
-        style: 'destructive',
-        onPress: () => {
-          if (!agent) return
-          void vtaAgent.unlink(agent).then(() => go(Screens.VtaLink))
-        },
-      },
-    ])
+  // cannot remove its own entry (VTI-Q23) — and the confirmation says so. It
+  // confirms in place rather than in a native alert, which the e2e runner's
+  // autoAcceptAlerts would answer by itself.
+  const unlink = () => {
+    if (!agent) return
+    setUnlinkOpen(false)
+    void vtaAgent.unlink(agent).then(() => go(Screens.VtaLink))
+  }
   /** A screen that needs to be told which community it is about. */
   const goToCommunity = (communityDid: string) =>
     (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(Screens.VtiCommunity, {
@@ -609,9 +605,32 @@ const VtaAgentHome: React.FC = () => {
         <Button
           title={t('VtaLink.Unlink')}
           buttonType={ButtonType.Tertiary}
-          onPress={confirmUnlink}
+          onPress={() => setUnlinkOpen(true)}
           testID={testIdWithKey('AgentUnlink')}
         />
+        {unlinkOpen ? (
+          <View style={styles.card} testID={testIdWithKey('AgentUnlinkCard')}>
+            <ThemedText variant="labelTitle" accessibilityRole="header" testID={testIdWithKey('AgentUnlinkTitle')}>
+              {t('VtaLink.UnlinkTitle', {
+                agent: agentDisplayName(withAgentName(link, state.agentNames), t),
+                interpolation: { escapeValue: false },
+              })}
+            </ThemedText>
+            <ThemedText testID={testIdWithKey('AgentUnlinkBody')}>{t('VtaLink.UnlinkBody')}</ThemedText>
+            <Button
+              title={t('VtaLink.UnlinkConfirm')}
+              buttonType={ButtonType.Critical}
+              onPress={unlink}
+              testID={testIdWithKey('AgentUnlinkConfirm')}
+            />
+            <Button
+              title={t('Global.Cancel')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => setUnlinkOpen(false)}
+              testID={testIdWithKey('AgentUnlinkCancel')}
+            />
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   )

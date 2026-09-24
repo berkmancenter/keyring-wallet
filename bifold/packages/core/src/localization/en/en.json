@@ -1313,8 +1313,8 @@
     "OpenDesk": "Open the vetting desk",
     "ShareKeyHint": "Long and easy to mistype — send it rather than reading it out.",
     "Unlink": "Unlink this agent",
-    "UnlinkTitle": "Unlink this agent?",
-    "UnlinkBody": "This phone will stop acting for your agent.\n\nYour community identities and memberships are held by the agent. This phone can't use them until you link that agent again.\n\nThe agent keeps this phone's key on its list until its owner removes it. The phone forgets the key, so it can't be used.",
+    "UnlinkTitle": "Unlink {{agent}}?",
+    "UnlinkBody": "This phone will no longer work with your agent.\n\nYour community identities and memberships stay with the agent. Link it again to use them on this phone.\n\nThe agent may still list this phone until its admin removes it, but that entry can't be used: this phone forgets its key.",
     "UnlinkConfirm": "Unlink"
   },
   "Invited": {

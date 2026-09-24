@@ -1258,8 +1258,8 @@
     "OpenDesk": "Ouvrir le bureau de vérification",
     "ShareKeyHint": "Long et facile à mal saisir — envoyez-le plutôt que de le dicter.",
     "Unlink": "Délier cet agent",
-    "UnlinkTitle": "Délier cet agent ?",
-    "UnlinkBody": "Ce téléphone n'agira plus pour votre agent.\n\nVos identités et adhésions aux communautés sont détenues par l'agent. Ce téléphone ne peut plus les utiliser tant que vous ne reliez pas cet agent à nouveau.\n\nL'agent garde la clé de ce téléphone dans sa liste jusqu'à ce que son propriétaire la retire. Le téléphone oublie la clé : elle ne peut plus servir.",
+    "UnlinkTitle": "Délier {{agent}} ?",
+    "UnlinkBody": "Ce téléphone ne fonctionnera plus avec votre agent.\n\nVos identités et adhésions aux communautés restent auprès de l'agent. Reliez-le à nouveau pour les utiliser sur ce téléphone.\n\nL'agent peut encore lister ce téléphone jusqu'à ce que son admin le retire, mais cette entrée ne peut pas servir : ce téléphone oublie sa clé.",
     "UnlinkConfirm": "Délier"
   },
   "Invited": {
