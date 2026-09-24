@@ -858,6 +858,9 @@ jobs:
         shell: bash
         run: |
           set -u
+          # GitHub runs this with -e -o pipefail: a grep that matches nothing
+          # fails its whole pipeline, so every pipeline here ends in || true.
+          # Test changes to this step with: bash --noprofile --norc -e -o pipefail
           # What a tester wants in "What to Test" is what CHANGED, not the subject
           # line of whichever merge happened to be last. Most user-facing work lands
           # in the bifold submodule, so summarise both: the wallet's own commits
@@ -873,7 +876,7 @@ jobs:
               | grep -vE '^(feat|fix)\((ci|e2e|test|tests|lab|harness|deps)\)' \
               | sed -E 's/^(feat|fix)(\([^)]*\))?!?: *//' \
               | sed -E 's/[[:space:]]+$//' \
-              | awk 'NF && !seen[$0]++'
+              | awk 'NF && !seen[$0]++' || true
           }
 
           LINES=""
@@ -902,7 +905,7 @@ jobs:
             if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" = "null" ]; then
               COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
             fi
-            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
           fi
 
           # A release's own notes win: the same plain-words bullets as the build's
@@ -913,7 +916,7 @@ jobs:
             && [ -n "$(git log -1 --format=%H "$PREV_TAG..HEAD" -- "$NOTES_FILE" 2>/dev/null)" ]; then
             # Lines starting with # are the file's own instructions, not notes.
             # App Store Connect's "What to Test" holds at most 4000 characters.
-            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$NOTES_FILE" | sed '/./,$!d' | head -c 3900)
+            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$NOTES_FILE" | sed '/./,$!d' | head -c 3900 || true)
             if [ -n "$(printf '%s' "$FROM_FILE" | tr -d '[:space:]')" ]; then
               NOTES="$FROM_FILE"
               echo "using $NOTES_FILE"
