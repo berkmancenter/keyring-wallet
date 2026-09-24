@@ -49,7 +49,7 @@ import path from "node:path";
 import os from "node:os";
 
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
-import { androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
+import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
@@ -518,7 +518,17 @@ async function testerJourney(driver) {
     console.log(`[e2e] journey: step 2 says "${needs}"`);
     const use = await scrollToTestId(driver, "VettingRequestButton", 4).catch(() => undefined);
     if (!use) throw new Error('step 2 has no "Use this link" button');
-    const label = (await textOf(driver, "VettingRequestButton")).trim();
+    // A Pressable's words are its child Text's: iOS merges them into the
+    // button's label, Android keeps them on the child (the container's own
+    // text is empty — 219 gate, Android, 2026-09-24).
+    const label = (
+      driver.e2ePlatform === "android"
+        ? await driver
+            .$(`android=new UiSelector().resourceId("${TEST_ID_PREFIX}VettingRequestButton").childSelector(new UiSelector().className("android.widget.TextView"))`)
+            .getText()
+            .catch(() => "")
+        : await textOf(driver, "VettingRequestButton")
+    ).trim();
     if (!/Use this link/.test(label)) throw new Error(`the paste box's button reads "${label}", not "Use this link"`);
     if (await use.isEnabled().catch(() => false)) throw new Error('"Use this link" is enabled with nothing pasted');
     console.log('[e2e] journey: "Use this link" is the paste box\'s button, off until a link is pasted');
