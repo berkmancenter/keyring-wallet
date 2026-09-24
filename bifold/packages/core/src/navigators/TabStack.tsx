@@ -6,8 +6,10 @@ import React, { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppState, Text, useWindowDimensions, View, StyleSheet, DeviceEventEmitter } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Toast from 'react-native-toast-message'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
+import { ToastType } from '../components/toast/BaseToast'
 import { AttachTourStep } from '../components/tour/AttachTourStep'
 import { EventTypes } from '../constants'
 import { TOKENS, useServices } from '../container-api'
@@ -21,7 +23,8 @@ import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
-import { MY_AGENT_SCREEN, keyringAgentLinkKind, routeKeyringAgentLink } from '../modules/trust-tasks/module/vtiLinks'
+import { MY_AGENT_SCREEN, keyringAgentLinkKind } from '../modules/trust-tasks/module/vtiLinks'
+import { openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
@@ -50,7 +53,10 @@ const TabStack: React.FC = () => {
   const { agent } = useAgent()
   // What a community sends this phone's persona — a vetter grant, a membership —
   // is collected from unlock, not only while Vetting is open.
-  const onInboxError = useCallback((e: unknown) => logger.warn(`persona inbox: ${(e as Error)?.message ?? e}`), [logger])
+  const onInboxError = useCallback(
+    (e: unknown) => logger.warn(`persona inbox: ${(e as Error)?.message ?? e}`),
+    [logger]
+  )
   // The community chosen by a link before this launch comes back first.
   useEffect(() => {
     void communityTarget.restore()
@@ -74,21 +80,45 @@ const TabStack: React.FC = () => {
       logger.info(`Handling deeplink: ${deepLink}`)
 
       // An agent enrolment offer (keyring://vta/enrol?o=…), a community
-      // invitation (keyring://vti/invitation?c=…) or a vetter's ticket
-      // (vetting-ticket:?…) — ours, not DIDComm OOB links.
-      // The same routing the scanner and the paste screen use.
+      // invitation (keyring://vti/invitation?c=…), a vetter's ticket
+      // (vetting-ticket:?…) or a bare DID the phone's camera opened through
+      // the `did` scheme — ours, not DIDComm OOB links. The same routing the
+      // scanner and the paste screen use, and the person is told what
+      // happened: nothing on screen used to say a link had failed.
       if (keyringAgentLinkKind(deepLink)) {
         try {
           if (agent) {
-            await routeKeyringAgentLink(deepLink, agent, (destination) =>
-              (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
-                TabStacks.MyAgentStack,
-                { screen: MY_AGENT_SCREEN[destination] }
-              )
+            await openKeyringLink(
+              deepLink,
+              agent,
+              (destination) =>
+                (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
+                  TabStacks.MyAgentStack,
+                  { screen: MY_AGENT_SCREEN[destination] }
+                ),
+              (notice: KeyringLinkNotice) => {
+                if (notice.kind === 'reading') {
+                  Toast.show({
+                    type: ToastType.Info,
+                    text1: t('Scan.ReadingCode'),
+                    visibilityTime: 15000,
+                    position: 'bottom',
+                  })
+                } else if (notice.kind === 'opened') {
+                  Toast.hide()
+                } else {
+                  logger.warn(`agent link not usable: ${notice.message ?? 'unreadable'}`)
+                  Toast.show({
+                    type: ToastType.Warn,
+                    text1: t('Scan.CodeNotUsable'),
+                    text2: notice.message ?? t('Scan.CodeNotRead'),
+                    visibilityTime: 8000,
+                    position: 'bottom',
+                  })
+                }
+              }
             )
           }
-        } catch (err: unknown) {
-          logger.error(`agent link rejected: ${(err as Error)?.message ?? err}`)
         } finally {
           dispatch({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [undefined] })
         }
