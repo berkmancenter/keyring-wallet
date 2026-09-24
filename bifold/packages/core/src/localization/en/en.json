@@ -1461,6 +1461,8 @@
     "And": "and"
   },
   "Vetting": {
+    "TicketOtherCommunity": "This ticket is for vetting in {{other}}, not {{community}}. Using it would show your identity to {{other}}, so Keyring won't send it.",
+    "TicketUnreadable": "This isn't a vetter's ticket Keyring can read.",
     "NeedsCommunity": "Join a community first. Vetting happens inside one.",
     "JoinCommunity": "Join a community",
     "Title": "Vetting",
