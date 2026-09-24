@@ -170,11 +170,6 @@ const QRScanner: React.FC<Props> = ({
     choiceOptionOn: {
       backgroundColor: ColorPalette.brand.primary,
     },
-    scanHint: {
-      textAlign: 'center',
-      marginTop: 8,
-      paddingHorizontal: 24,
-    },
     profileSwitcher: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -345,10 +340,6 @@ const QRScanner: React.FC<Props> = ({
                     <Icon name="qrcode-scan" size={40} style={styles.icon} />
                     <ThemedText variant="title" style={styles.textStyle}>
                       {t('Scan.WillScanAutomatically')}
-                    </ThemedText>
-                    {/* One entry point: say what it takes (217). */}
-                    <ThemedText style={[styles.textStyle, styles.scanHint]} testID={testIdWithKey('ScanWhatCanI')}>
-                      {t('Scan.WhatCanIScan')}
                     </ThemedText>
                   </>
                 )}

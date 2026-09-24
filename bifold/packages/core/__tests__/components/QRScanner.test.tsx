@@ -520,11 +520,6 @@ describe('QRScanner — what the codes are', () => {
     return tree
   }
 
-  test('the scanner says what it can scan', async () => {
-    const tree = await renderQr(false)
-    expect(tree.getByTestId(testIdWithKey('ScanWhatCanI'))).toHaveTextContent('Scan.WhatCanIScan')
-  })
-
   test('with no community identity, the code is the contact card, and says so', async () => {
     mockedUseAgent.mockReturnValue(withPersona([]))
     const tree = await renderQr(true)
