@@ -36,6 +36,20 @@ shows *Running*, `pnm setup continue <slug> --vta-did <did>`. The ACL's admin is
 then a long-lived key created by the pasted one, which is expected. A runner's
 harness environment is `RUNNER_VTA`, `RUNNER_VTA_DID` and `PNM_HOME`.
 
+**One pnm call per runner at a time, machine-wide.** pnm keeps a runner's admin
+key in the login keychain (service `pnm-cli`, account `vta:<slug>`), and its
+profile list in `~/Library/Application Support/pnm/config.toml`. It never reads
+`PNM_HOME`, which isolates nothing and is only a label our scripts still pass.
+Every session on this Mac therefore uses the same admin DID for a slug. The
+mediator keeps one socket per DID by design (VTI `vta-sdk/src/acl_setup.rs`,
+"a second is evicted as `duplicate-channel`"), so two concurrent calls on one
+slug drop one of them: *replaced by a newer connection*, or *this DID already
+has a live connection* on a mediator with the duel damper. Different slugs
+never interfere. Call pnm on a runner through `scripts/openvtc/pnm-locked --vta
+<slug> …`, which takes that slug's lock first (`e2e/lib/aclCleanup.js` and
+`farm/farm-health.sh` do). A per-runner `HOME` would not help, because the
+keychain entry does not move with it.
+
 Runs remove the ACL entries they create (`e2e/lib/aclCleanup.js`); a failed run
 keeps them as evidence and prints the commands to remove them.
 
