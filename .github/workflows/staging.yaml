@@ -150,7 +150,8 @@ jobs:
     if: vars.DEPLOY_ANDROID != 'false' && inputs.platform != 'ios'
     runs-on: ubuntu-22.04
     environment: internal
-    timeout-minutes: 60
+    # Four ABIs of native code; 60 min left no margin.
+    timeout-minutes: 90
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
@@ -494,15 +495,17 @@ jobs:
           NDK=$(sed -n 's/.*ndkVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
           SDK=$(sed -n 's/.*compileSdkVersion *= *\([0-9]*\).*/\1/p' build.gradle)
           BT=$(sed -n 's/.*buildToolsVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
-          if [ -z "$NDK" ] || [ -z "$SDK" ] || [ -z "$BT" ]; then
-            echo "❌ Could not read ndk/compileSdk/buildTools from android/build.gradle"; exit 1
+          CMAKE=$(sed -n '/cmake *{/,/}/s/.*version *"\([^"]*\)".*/\1/p' app/build.gradle)
+          if [ -z "$NDK" ] || [ -z "$SDK" ] || [ -z "$BT" ] || [ -z "$CMAKE" ]; then
+            echo "❌ Could not read ndk/compileSdk/buildTools/cmake from android/build.gradle"; exit 1
           fi
-          echo "Installing platform-tools, android-$SDK, build-tools $BT, NDK $NDK"
+          echo "Installing platform-tools, android-$SDK, build-tools $BT, NDK $NDK, CMake $CMAKE"
           (yes || true) | sdkmanager --licenses > /dev/null
-          sdkmanager "platform-tools" "platforms;android-$SDK" "build-tools;$BT" "ndk;$NDK" > /tmp/sdkmanager.log 2>&1 || { tail -30 /tmp/sdkmanager.log; exit 1; }
+          sdkmanager "platform-tools" "platforms;android-$SDK" "build-tools;$BT" "ndk;$NDK" "cmake;$CMAKE" > /tmp/sdkmanager.log 2>&1 || { tail -30 /tmp/sdkmanager.log; exit 1; }
           test -d "$ANDROID_HOME/ndk/$NDK" || { echo "❌ NDK $NDK is not installed"; exit 1; }
           test -d "$ANDROID_HOME/platforms/android-$SDK" || { echo "❌ android-$SDK is not installed"; exit 1; }
           test -d "$ANDROID_HOME/build-tools/$BT" || { echo "❌ build-tools $BT is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/cmake/$CMAKE" || { echo "❌ CMake $CMAKE is not installed"; exit 1; }
 
           # Set ANDROID_HOME and PATH for subsequent steps
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
@@ -525,7 +528,10 @@ jobs:
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
           VERSION_CODE: ${{ env.APP_BUILD_NUMBER }}
           VERSION_NAME: ${{ env.APP_VERSION }}
-          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+          # No reactNativeArchitectures override: build the four ABIs that
+          # gradle.properties lists, as the gated local release builds do. An
+          # arm64-only native build still packaged prebuilt libs for all four,
+          # so a 32-bit phone would get hermes but no libappmodules.so.
           GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
         run: |
           # Bundle React Native code
@@ -553,7 +559,7 @@ jobs:
           df -h
 
           # Build with Gradle (limit memory to reduce disk usage)
-          cd android && ./gradlew bundleRelease assembleRelease --no-parallel --stacktrace --max-workers=1
+          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
 
           # Aggressively clean up Gradle cache immediately after build (frees ~1-2GB)
           rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
@@ -962,8 +968,8 @@ jobs:
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    # Runs when every platform that ran succeeded; a switched-off platform is skipped.
-    if: ${{ !failure() && !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
+    # Runs when any platform shipped, so the next build's notes start after this one.
+    if: ${{ !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -992,7 +998,7 @@ jobs:
 
   notify-team:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: ${{ !failure() && !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
+    if: ${{ !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
     environment: internal
     env:
