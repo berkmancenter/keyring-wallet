@@ -50,6 +50,32 @@ export interface VtiMembership {
   via: 'invitation' | 'vetting' | 'approval' | 'unknown'
 }
 
+/**
+ * A join request this phone sent, and what the community has said about it —
+ * so a screen can say "Sent — waiting for the community" until the community
+ * answers, and what it answered after that (p220 item 7). Written before the
+ * send, so a request whose answer was lost is still known to exist; the
+ * community's status task (`join-requests/status/0.1`) fills it in later.
+ */
+export interface JoinSubmission {
+  communityDid: string
+  /** The persona the request was sent as. */
+  personaDid: string
+  requestId?: string
+  sentAt: string
+  /** When the community first answered, with a verdict or a refusal. Absent: sent, no answer yet. */
+  acknowledgedAt?: string
+  /** Whether an invitation went with the request. */
+  withInvitation: boolean
+  via: 'join' | 'vetting'
+  /** The request's state as the community last stated it. */
+  status?: 'pending' | 'deferred' | 'approved' | 'rejected' | 'withdrawn'
+  /** What the community still needs, verbatim, while `deferred`. */
+  needs?: string[]
+  /** The community's refusal, while `rejected`: a stable `code`, its own words, when it decided. */
+  rejection?: { code: string; reason?: string; decidedAt?: string }
+}
+
 export interface VtiCommunityStore {
   listInvitations(): Promise<VtiInvitation[]>
   saveInvitation(invitation: VtiInvitation): Promise<void>
@@ -61,6 +87,9 @@ export interface VtiCommunityStore {
   /** Credentials a community or a vetter delivered that are not the membership itself. */
   saveHeldCredential(item: VtiHeldCredential): Promise<void>
   listHeldCredentials(kind?: VtiHeldCredential['kind'], communityDid?: string): Promise<VtiHeldCredential[]>
+  /** The last join request sent to a community. Optional: a store without it records none. */
+  getSubmission?(communityDid: string): Promise<JoinSubmission | undefined>
+  saveSubmission?(submission: JoinSubmission): Promise<void>
 }
 
 export interface VtiHeldCredential {
@@ -146,14 +175,27 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     const invitations = (await this.listInvitationRecords()).filter(
       (r) => (r.content as unknown as VtiInvitation).communityDid === communityDid
     )
-    const held = (await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'credential' })).filter(
-      (r) => (r.content as unknown as VtiHeldCredential).communityDid === communityDid
-    )
+    const held = (
+      await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'credential' })
+    ).filter((r) => (r.content as unknown as VtiHeldCredential).communityDid === communityDid)
     for (const record of [...memberships, ...invitations, ...held]) await this.agent.genericRecords.delete(record)
   }
 
   private listInvitationRecords() {
     return this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'invitation' })
+  }
+
+  async getSubmission(communityDid: string) {
+    const records = await this.agent.genericRecords.findAllByQuery({
+      recordType: RECORD_TYPE,
+      kind: 'submission',
+      key: communityDid,
+    })
+    return records[0]?.content as unknown as JoinSubmission | undefined
+  }
+
+  saveSubmission(submission: JoinSubmission) {
+    return this.put('submission', submission.communityDid, { ...submission })
   }
 
   saveHeldCredential(item: VtiHeldCredential) {
