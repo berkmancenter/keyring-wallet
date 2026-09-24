@@ -134,6 +134,24 @@ describe('I was invited', () => {
     expect(tree.getByTestId(testIdWithKey('InvitedShare'))).toBeTruthy()
   })
 
+  test('an agent with nowhere to publish: says so plainly, with the original text under Details', async () => {
+    // As the Farm's keyring-runner-nohost answers (2026-09-24): the raw text
+    // used to be the whole message.
+    const raw = '[TrustTasks:VtaClient] the agent has no DID host to publish a new identity on'
+    const { tree } = await renderInvited([])
+    mockEnsurePersona.mockRejectedValue(new Error(raw))
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedContinue')))
+    })
+    expect(tree.getByTestId(testIdWithKey('InvitedError'))).toHaveTextContent('Errors.NoDidHost')
+    expect(tree.queryByText(raw)).toBeNull()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedErrorDetailsToggle')))
+    })
+    expect(tree.getByTestId(testIdWithKey('InvitedErrorDetail'))).toHaveTextContent(raw)
+    expect(tree.queryByTestId(testIdWithKey('InvitedShare'))).toBeNull()
+  })
+
   test('an identity made earlier: straight to sending it, and Copy carries it', async () => {
     const { tree } = await renderInvited([personaRecord])
     expect(tree.queryByTestId(testIdWithKey('InvitedContinue'))).toBeNull()

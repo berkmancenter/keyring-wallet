@@ -42,6 +42,7 @@ import { communityLabelOf, communityLabelStartOf } from './communityName'
 import { DirectoryConsent } from './DirectoryConsent'
 import { JoinAs, useJoinAsChoice } from './JoinAs'
 import { openScanner } from './openScanner'
+import { plainError, type PlainError } from './plainError'
 import { useCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 
@@ -68,7 +69,8 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const [busy, setBusy] = useState(false)
   // Off unless the person turns it on (VTI-Q14).
   const [listMe, setListMe] = useState(false)
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<PlainError>()
+  const [errorOpen, setErrorOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -108,7 +110,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       .then((p) => {
         if (p) setStep((s) => (s === 'intro' ? 'share' : s))
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e) => setError(plainError(e)))
       .finally(() => setLoaded(true))
   }, [load])
 
@@ -146,7 +148,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       await load()
       setStep('share')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(plainError(e))
     } finally {
       setBusy(false)
     }
@@ -171,7 +173,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       )
       setStep('joined')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(plainError(e))
     } finally {
       setBusy(false)
     }
@@ -240,10 +242,28 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       </ThemedText>
     </View>
   )
+  // What happened and what to do, as Join says it; the original text stays
+  // under Details. It showed raw ("[TrustTasks:VtaClient] the agent has no DID
+  // host…") when the agent had nowhere to publish (Farm, 2026-09-24).
   const errorLine = error ? (
-    <ThemedText style={styles.error} testID={testIdWithKey('InvitedError')}>
-      {error}
-    </ThemedText>
+    <View style={styles.card} testID={testIdWithKey('InvitedErrorCard')}>
+      <ThemedText style={styles.error} testID={testIdWithKey('InvitedError')}>
+        {t(error.line)}
+      </ThemedText>
+      <Pressable
+        onPress={() => setErrorOpen((open) => !open)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: errorOpen }}
+        testID={testIdWithKey('InvitedErrorDetailsToggle')}
+      >
+        <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
+      </Pressable>
+      {errorOpen ? (
+        <ThemedText style={styles.muted} selectable testID={testIdWithKey('InvitedErrorDetail')}>
+          {error.detail}
+        </ThemedText>
+      ) : null}
+    </View>
   ) : null
 
   let body: React.ReactNode
