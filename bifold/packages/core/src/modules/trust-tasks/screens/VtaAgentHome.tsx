@@ -56,6 +56,18 @@ interface Holdings {
 export const VETTER_RECHECK_MS = 15_000
 const INTRO_PANELS = ['IntroKeeps', 'IntroAnswers', 'IntroApprove'] as const
 
+/**
+ * What the agent holds, as last read, kept across remounts and keyed by the
+ * linked agent. Every tab unmounts when it loses focus (TabStack,
+ * `unmountOnBlur`), so a return rebuilt this screen with nothing read: for a
+ * frame "Holds" spun, the seat line was missing and Join looked like the next
+ * step (219). A return now shows the last reading at once and refreshes it.
+ * Unlinking forgets it, and a different agent never sees another's.
+ */
+const lastHoldings = new Map<string, Holdings>()
+/** Forget every reading (unlink does; tests start clean with it). */
+export const forgetAgentHoldings = () => lastHoldings.clear()
+
 const VtaAgentHome: React.FC = () => {
   const { t } = useTranslation()
   const { agent } = useAgent()
@@ -63,7 +75,17 @@ const VtaAgentHome: React.FC = () => {
   const { ColorPalette, TextTheme } = useTheme()
   const { state } = useVtaLinkWithClock()
   const { link } = state
-  const [holdings, setHoldings] = useState<Holdings>()
+  const agentKey = link.kind === 'linked' ? link.vtaDid : undefined
+  const [holdings, setHoldings] = useState<Holdings | undefined>(() =>
+    agentKey ? lastHoldings.get(agentKey) : undefined
+  )
+  // Another agent linked while this screen stays mounted: its own reading, or none.
+  const shownFor = useRef(agentKey)
+  useEffect(() => {
+    if (shownFor.current === agentKey) return
+    shownFor.current = agentKey
+    setHoldings(agentKey ? lastHoldings.get(agentKey) : undefined)
+  }, [agentKey])
   const [holdingsError, setHoldingsError] = useState(false)
   const [unlinkOpen, setUnlinkOpen] = useState(false)
   // The card opens below the button, at the foot of the screen: bring it into
@@ -148,7 +170,7 @@ const VtaAgentHome: React.FC = () => {
           }
         })
       )
-      setHoldings({
+      const read: Holdings = {
         personas,
         memberships,
         invited: waiting.map((i) => i.communityDid),
@@ -158,13 +180,15 @@ const VtaAgentHome: React.FC = () => {
             ? [{ communityDid: g.communityDid, grant: g.grant }]
             : []
         ),
-      })
+      }
+      if (agentKey) lastHoldings.set(agentKey, read)
+      setHoldings(read)
       setHoldingsError(false)
     } catch {
       // Keep what was shown; say it could not be refreshed.
       setHoldingsError(true)
     }
-  }, [agent])
+  }, [agent, agentKey])
 
   // Read again whenever the screen comes back into view. It stays mounted
   // under Join and Vetting, so without this a phone that had just made its
@@ -208,6 +232,7 @@ const VtaAgentHome: React.FC = () => {
   const unlink = () => {
     if (!agent) return
     setUnlinkOpen(false)
+    forgetAgentHoldings()
     void vtaAgent.unlink(agent).then(() => go(Screens.VtaLink))
   }
   /** A screen that needs to be told which community it is about. */
@@ -568,7 +593,11 @@ const VtaAgentHome: React.FC = () => {
               ))}
             </>
           )}
-          {holdingsError ? <ThemedText style={styles.muted}>{t('VtaLink.HoldsStale')}</ThemedText> : null}
+          {holdingsError ? (
+            <ThemedText style={styles.muted} testID={testIdWithKey('AgentHoldsStale')}>
+              {t('VtaLink.HoldsStale')}
+            </ThemedText>
+          ) : null}
         </View>
 
         <View style={styles.card} testID={testIdWithKey('AgentActivity')}>
