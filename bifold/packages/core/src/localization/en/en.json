@@ -1328,6 +1328,8 @@
     "UnlinkConfirm": "Unlink"
   },
   "Invited": {
+    "IntroVets": "{{community}} vets everyone who joins, even when invited: after you join, you'll meet one of its vetters.",
+    "ArrivedBodyVets": "{{community}} invited you, and it also vets everyone who joins. Join now, then meet one of its vetters to be admitted.",
     "WhichCommunityTitle": "Which community invited you?",
     "WhichCommunityBody": "Scan or paste the community's link. Its admin, or its page, can give it to you.",
     "ScanCommunity": "Scan or paste its link",
@@ -1362,6 +1364,7 @@
     "Note": "Anyone can see who is listed. You can't change this in Keyring later. To be removed from the directory, ask the community's admin."
   },
   "Join": {
+    "AsksNoInvitationBypass": "An invitation doesn't replace this: {{community}} vets everyone who joins.",
     "WhichTitle": "Which community?",
     "WhichBody": "Scan or paste the community's link — or a vetter's ticket, which names the community too.",
     "Suggested": "Suggested for this app",
@@ -1469,6 +1472,9 @@
     "And": "and"
   },
   "Vetting": {
+    "NeedsVetting": "vetting by one of its vetters",
+    "NeedsInvitation": "an invitation from its admin",
+    "NeedsAgreement": "your agreement to its {{what}}",
     "NeedsCommunity": "Join a community first. Vetting happens inside one.",
     "JoinCommunity": "Join a community",
     "Title": "Vetting",
@@ -1497,8 +1503,8 @@
     "Discounted_other": "{{count}} statements will not count — the vetters' grants did not cover the moment they signed, or have since been revoked.",
     "GrantUnchecked_one": "1 vetter's grant could not be checked just now. You can still apply; the community will check it when you do.",
     "GrantUnchecked_other": "{{count}} vetters' grants could not be checked just now. You can still apply; the community will check them when you do.",
-    "NeedsStatements_one": "1 more statement",
-    "NeedsStatements_other": "{{count}} more statements",
+    "NeedsStatements_one": "1 more vetter needed",
+    "NeedsStatements_other": "{{count}} more vetters needed",
     "NeedsMethod": "{{n}} more {{method}}",
     "IndependenceCapped": "More statements from people who declared a {{relationships}} connection to you than this community counts. Your application still stands — someone will review it.",
     "UnreadableMaxAge": "This community publishes an age limit for statements ({{value}}) that this app could not read, so the count above may be more hopeful than the community's.",

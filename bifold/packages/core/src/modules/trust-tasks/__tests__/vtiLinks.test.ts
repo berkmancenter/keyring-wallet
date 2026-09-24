@@ -109,6 +109,41 @@ describe("a vetter's ticket", () => {
     expect(pendingVettingTicket.take()).toBe(ticket)
     expect(pendingVettingTicket.take()).toBeUndefined()
   })
+
+  describe('for another community than the phone chose (p220 item 3)', () => {
+    beforeEach(() => communityTarget.clear())
+    afterEach(() => communityTarget.clear())
+
+    it('is refused, typed, before the vetting screen is switched to it', async () => {
+      communityTarget.choose('did:webvh:Qm:mine')
+      const navigate = jest.fn()
+      const attempt = routeKeyringAgentLink(ticket, {} as never, navigate)
+      await expect(attempt).rejects.toBeInstanceOf(KeyringLinkError)
+      await expect(routeKeyringAgentLink(ticket, {} as never, navigate)).rejects.toMatchObject({
+        ticket: { reason: 'otherCommunity', ticketCommunityDid: 'did:webvh:Qm:community' },
+      })
+      expect(navigate).not.toHaveBeenCalled()
+      expect(communityTarget.getViewing()).toBeUndefined()
+      expect(communityTarget.getChosen()?.communityDid).toBe('did:webvh:Qm:mine')
+      expect(pendingVettingTicket.take()).toBeUndefined()
+    })
+
+    it('is taken when it is for the chosen community', async () => {
+      communityTarget.choose('did:webvh:Qm:community')
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(ticket, {} as never, navigate)
+      expect(navigate).toHaveBeenCalledWith('VtiVetting')
+      expect(pendingVettingTicket.take()).toBe(ticket)
+    })
+
+    it('with no community chosen yet, names the one being joined', async () => {
+      const navigate = jest.fn()
+      await routeKeyringAgentLink(ticket, {} as never, navigate)
+      expect(communityTarget.getViewing()?.communityDid).toBe('did:webvh:Qm:community')
+      expect(navigate).toHaveBeenCalledWith('VtiVetting')
+      pendingVettingTicket.take()
+    })
+  })
 })
 
 describe('a community link brought for "I was invited"', () => {
