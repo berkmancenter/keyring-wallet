@@ -6,7 +6,7 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { DeviceEventEmitter } from 'react-native'
+import { DeviceEventEmitter, ScrollView } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -359,6 +359,16 @@ describe('Your agent — after linking', () => {
       })
       expect(unlink).toHaveBeenCalledTimes(1)
       expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
+    })
+
+    it('brings the card into view when it opens, at the foot of the screen', async () => {
+      const scroll = jest.spyOn(ScrollView.prototype, 'scrollToEnd').mockImplementation(() => undefined)
+      const tree = await renderHome([persona])
+      await openCard(tree)
+      await act(async () => {
+        jest.advanceTimersByTime(100)
+      })
+      expect(scroll).toHaveBeenCalledWith({ animated: true })
     })
 
     it('Cancel closes the card and keeps the link', async () => {

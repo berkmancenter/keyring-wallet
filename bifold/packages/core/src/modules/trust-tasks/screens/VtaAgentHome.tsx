@@ -16,7 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -66,6 +66,14 @@ const VtaAgentHome: React.FC = () => {
   const [holdings, setHoldings] = useState<Holdings>()
   const [holdingsError, setHoldingsError] = useState(false)
   const [unlinkOpen, setUnlinkOpen] = useState(false)
+  // The card opens below the button, at the foot of the screen: bring it into
+  // view, or a tap on "Unlink this agent" looks like it did nothing (Farm, 2026-09-24).
+  const scrollRef = useRef<ScrollView>(null)
+  useEffect(() => {
+    if (!unlinkOpen) return
+    const timer = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50)
+    return () => clearTimeout(timer)
+  }, [unlinkOpen])
   const [refreshing, setRefreshing] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [deciding, setDeciding] = useState<string>()
@@ -286,6 +294,7 @@ const VtaAgentHome: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
         testID={testIdWithKey('AgentHome')}
