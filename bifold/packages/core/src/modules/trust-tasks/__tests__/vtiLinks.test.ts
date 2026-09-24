@@ -6,6 +6,7 @@ import {
   KeyringLinkError,
   communityLinkReturn,
   keyringAgentLinkKind,
+  otherDidMessage,
   pendingVettingTicket,
   routeKeyringAgentLink,
 } from '../module/vtiLinks'
@@ -140,10 +141,14 @@ describe('a bare DID, scanned or pasted', () => {
   })
   afterEach(() => jest.restoreAllMocks())
 
-  it('claims a did:webvh, and leaves any other DID to the DIDComm handling', () => {
+  it('claims a did:webvh to classify, and any other bare DID to explain', () => {
     expect(keyringAgentLinkKind(`  ${communityDid}  `)).toBe('did')
     expect(keyringAgentLinkKind(`${communityDid}#key-0`)).toBe('did')
-    expect(keyringAgentLinkKind('did:peer:2.Ez6LSabc')).toBeUndefined()
+    expect(keyringAgentLinkKind('did:peer:2.Ez6LSabc')).toBe('otherDid')
+    expect(keyringAgentLinkKind('did:key:z6MkswwZ')).toBe('otherDid')
+    // A DIDComm invitation is a URL, never a bare DID: still DIDComm's.
+    expect(keyringAgentLinkKind('https://mediator.example/?oob=eyJ0')).toBeUndefined()
+    expect(keyringAgentLinkKind('didcomm://invite?_oob=eyJ0')).toBeUndefined()
   })
 
   it('a community goes to Join on that community', async () => {
@@ -222,5 +227,42 @@ describe('a bare DID, scanned or pasted', () => {
     }
     expect(caught).toBeInstanceOf(KeyringLinkError)
     expect(caught).toBeInstanceOf(Error)
+  })
+})
+
+describe('a bare DID of another method, as the browser plugin shows beside every DID', () => {
+  // Nothing is resolved for these: the agent passed has no resolver at all.
+  const noResolver = {} as never
+  beforeEach(() => communityTarget.clear())
+  const holderPeer =
+    'did:peer:2.Vz6MkgiJThYDpnQGtyzn7FUbVT5o9K7Hjgwg3GG5v5v4Q3m1W.Ez6LSbysY2xFMRpGMhb7tFTLMpeuPRaqaWM1yECx2AtzE3KCc.SeyJ0IjoiZG0iLCJzIjp7InVyaSI6ImRpZDp3ZWJ2aDpRbTptZWRpYXRvciJ9fQ'
+
+  it.each([
+    [
+      'a did:key, such as a manager or admin key',
+      'did:key:z6MkswwZ3dWuQVXJaBhm6x3zFVWVvQm1Vc9WrBcHnwzF4cK1',
+      /is a key, not an agent or a community/,
+    ],
+    [
+      "a did:peer, such as the plugin wallet's holder",
+      holderPeer,
+      /private connection address, not an agent or a community/,
+    ],
+    ['a did:peer with a fragment', `${holderPeer}#key-1`, /private connection address/],
+    ['a did:web', 'did:web:example.com', /isn't an agent or a community/],
+    ['a did:jwk', 'did:jwk:eyJrdHkiOiJPS1AifQ', /isn't an agent or a community/],
+  ])('%s is explained in words and routed nowhere', async (_, did, message) => {
+    const navigate = jest.fn()
+    const attempt = routeKeyringAgentLink(`  ${did}\n`, noResolver, navigate)
+    await expect(attempt).rejects.toBeInstanceOf(KeyringLinkError)
+    await expect(routeKeyringAgentLink(did, noResolver, navigate)).rejects.toThrow(message)
+    expect(navigate).not.toHaveBeenCalled()
+    expect(communityTarget.getViewing()).toBeUndefined()
+  })
+
+  it('says what the code is in plain words, without DID jargon', () => {
+    for (const did of ['did:key:z6Mk', 'did:peer:2.Ez6LS', 'did:web:example.com']) {
+      expect(otherDidMessage(did)).not.toMatch(/did:/)
+    }
   })
 })
