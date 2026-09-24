@@ -15,7 +15,15 @@
  *   E2E_KEEP_STATE=1): the agent screen → I was invited → Continue (makes the
  *   identity) → the identity is read from Details, as an admin would receive
  *   it → the runner invites it → the link is pasted → back in the flow the
- *   invitation shows → Join → "You're a member".
+ *   invitation shows → Join → the outcome.
+ *
+ * EXPECT_JOIN=member|deferred|pending|rejected (default member): what the join
+ *   must end as, on the screen AND at the community. After Join the runner reads
+ *   the community's own answer through its admin API (member list, join
+ *   requests) and fails when the two disagree — the screen alone passed runs
+ *   that admitted no one (2026-09-24). A community that requires vetting
+ *   defers an invitation join by design: keyring-test-vtc with its fixed
+ *   criteria is EXPECT_JOIN=deferred.
  */
 import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, scrollToTestId, waitForTestId, byTestId, existsTestId, tapTestId, simTarget } from "./lib/driver.js";
@@ -27,7 +35,9 @@ import { printSuccess, printFailure } from "./lib/banner.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { assertDirectoryConsentOff, assertNoDidShown } from "./lib/gateChecks.js";
 import { vtaInventory } from "./lib/aclCleanup.js";
+import { OUTCOME_SCREENS, communityOutcome, disagreement } from "./lib/joinOutcome.js";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -46,6 +56,37 @@ const textOf = async (driver, key) =>
 const IOS_UDID = process.env.IOS_UDID || "";
 const INVITE_VIA = process.env.INVITE_VIA || "my-agent";
 const EXPECT_INVITED_ERROR = process.env.EXPECT_INVITED_ERROR || "";
+const EXPECT_JOIN = process.env.EXPECT_JOIN || "member";
+const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
+
+/**
+ * One read of the community's admin API, as its administrator — the same
+ * community and credential invite-persona.sh issues from (KEYRING_COMMUNITY_*,
+ * else STACK_DIR's stack.env). Read-only calls only.
+ */
+function communityRead(...args) {
+  const stackDir = process.env.STACK_DIR || path.join(os.homedir(), "vti-stack");
+  const env = Object.fromEntries(
+    readFileSync(path.join(stackDir, "stack.env"), "utf8")
+      .split("\n")
+      .filter((l) => /^[A-Z_]+=/.test(l))
+      .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)])
+  );
+  const base = process.env.KEYRING_COMMUNITY_REST || `${env.VTC_URL}/v1`;
+  const did = process.env.KEYRING_COMMUNITY_DID || env.VTC_DID;
+  const cred = process.env.KEYRING_COMMUNITY_ADMIN_CRED || path.join(stackDir, "vtc-admin-credential.json");
+  const out = execFileSync("node", [ADMIN, base, did, cred, ...args], { encoding: "utf8" });
+  return JSON.parse(out.slice(out.indexOf("\n{") + 1));
+}
+
+/** The community's answer for this applicant: member list, then its join requests of every status. */
+function readCommunityOutcome(applicantDid) {
+  const members = communityRead("members").items ?? [];
+  const requests = ["deferred", "pending", "approved", "rejected", "withdrawn"].flatMap(
+    (status) => communityRead("join-list", status).items ?? []
+  );
+  return communityOutcome(applicantDid, members, requests);
+}
 
 async function openLink(url) {
   // `simctl openurl` cuts a URL at 2048 characters (measured 2026-09-22: 1930
@@ -187,12 +228,40 @@ async function inviteByDoor(d) {
   await assertDirectoryConsentOff(d, "the arrived invitation");
   await tapTestId(d, "InvitedJoin", 15000);
   console.log(`[e2e] ${d.e2ePlatform}: joining from the flow`);
-  if (!(await existsTestId(d, "InvitedJoined", 240000))) {
-    const err = await textOf(d, "InvitedError").catch(() => "");
-    throw new Error(`join did not finish${err ? `: ${err}` : ""}`);
+  // Whichever outcome the flow shows — then what the community says.
+  let screen;
+  for (const until = Date.now() + 240000; Date.now() < until && !screen; ) {
+    for (const [id, outcome] of Object.entries(OUTCOME_SCREENS)) {
+      if (await existsTestId(d, id, 1500)) {
+        screen = outcome;
+        break;
+      }
+    }
   }
-  await screenshot(d, "vti-invite-door-joined");
-  console.log(`[e2e] ${d.e2ePlatform}: "You're a member" — joined through the door`);
+  if (!screen) throw new Error("the join showed no outcome within 240 s");
+  await screenshot(d, `vti-invite-door-${screen}`);
+  // The community may take a moment to list a member after `allow`.
+  let community = readCommunityOutcome(personaDid);
+  for (let i = 0; i < 10 && community.outcome !== screen && ["approved", "none"].includes(community.outcome); i++) {
+    await sleep(3000);
+    community = readCommunityOutcome(personaDid);
+  }
+  const said = screen === "error" ? await textOf(d, "InvitedError").catch(() => "") : "";
+  console.log(
+    `[e2e] ${d.e2ePlatform}: after Join the screen says ${screen}${said ? ` ("${said}")` : ""}; the community says ${community.outcome}${
+      community.needs?.length ? ` (needs ${community.needs.join(", ")})` : ""
+    }`
+  );
+  const wrong = disagreement({ expected: EXPECT_JOIN, screen, community });
+  if (wrong) throw new Error(`join outcome: ${wrong}`);
+  if (screen === "deferred") {
+    // A deferral says what is missing, and offers the way into vetting.
+    if (!(await existsTestId(d, "InvitedDeferredNeed", 3000))) throw new Error("the deferral does not say what the community needs");
+    if (!(await existsTestId(d, "InvitedContinueVetting", 3000))) throw new Error("the deferral offers no way into vetting");
+    await assertNoDidShown(d, "the deferred join");
+  }
+  console.log(`[e2e] ${d.e2ePlatform}: joined through the door — ${screen}, as the community says`);
+  return screen;
 }
 
 let driver;
@@ -243,7 +312,7 @@ try {
 
   if (INVITE_VIA === "door") {
     const outcome = await inviteByDoor(driver);
-    printSuccess(outcome === "refused" ? `vti-invite (door) — refused as expected: ${EXPECT_INVITED_ERROR}` : "vti-invite (door)");
+    printSuccess(outcome === "refused" ? `vti-invite (door) — refused as expected: ${EXPECT_INVITED_ERROR}` : `vti-invite (door) — ${outcome}, confirmed by the community`);
     process.exitCode = 0;
   } else {
   // 1 — the identity to be invited.

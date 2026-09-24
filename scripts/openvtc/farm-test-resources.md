@@ -43,11 +43,30 @@ keeps them as evidence and prints the commands to remove them.
 
 | VTC | DID | REST | Admission | Mediator |
 |---|---|---|---|---|
-| `keyring-test-vtc` (published name *Keyring Lab Community*) | `did:webvh:QmdervYcngPtJnKGuZSzH2tvDe8q274cty8324G4finFnV:dids-keyring-stack.ic3.dev:keyring-test-vtc` | `https://vtc-keyring-test.ic3.dev/v1` | invitation, or one vetter's statement | its stack's own (`keyring-stack-mediator`), so a runner reaches it **across mediators** |
+| `keyring-test-vtc` (published name *Keyring Lab Community*) | `did:webvh:QmdervYcngPtJnKGuZSzH2tvDe8q274cty8324G4finFnV:dids-keyring-stack.ic3.dev:keyring-test-vtc` | `https://vtc-keyring-test.ic3.dev/v1` | **one vetter's statement** (it also publishes an invitation criterion, which does not admit on its own — see below) | its stack's own (`keyring-stack-mediator`), so a runner reaches it **across mediators** |
 
-A harness run that must change admission (the vetting runner makes a community
-vetting-only while it runs) holds `criteria.lock` and restores the criteria
-afterwards. Two runs never change one community's criteria at once.
+**An invitation does not admit to `keyring-test-vtc`.** It publishes two
+criteria, `invited-member` and `vetted-member`. On VTI a community that
+publishes any vetting criterion requires vetting of every applicant: the
+default join policy says an invitation does not bypass it, and the criterion
+is picked from the vetting criteria alone. So an invitation join lands
+**deferred**, needing `vetting:statements:1`. The admin API's `decide` also
+refuses a deferred request (`409 notPending`), so an admin cannot admit it
+either. See VTI-Q25 in `docs/VTI_UPSTREAM_FINDINGS.md`.
+
+Earlier results that said otherwise came from the runners changing the
+criteria to invitation-only while they ran, until 2026-09-23 (#127). Invitation
+joins from 23:14Z that day onwards, the 219 gate's included, were deferred
+while the app said "You're a member". That was an app bug, and the harness
+trusted the screen. `run-vti-invite.js` now checks the community's own answer
+(`EXPECT_JOIN`); on this community an invitation join is
+`EXPECT_JOIN=deferred`.
+
+Criteria are fixed (`E2E_CRITERIA` unset). A run that genuinely needs other
+criteria opens an announced window: it holds `criteria.lock`, snapshots the
+criteria first, and restores them from the snapshot, checking the manifest
+reads back the same digests. Two runs never change one community's criteria at
+once.
 
 ## Versions measured
 
