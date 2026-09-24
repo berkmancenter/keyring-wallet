@@ -278,17 +278,11 @@ async function unlinkAndRelink(driver) {
   if (!unlink) throw new Error('the agent screen has no "Unlink this agent"');
   await unlink.click();
   await waitForTestId(driver, "AgentUnlinkConfirm", 10000);
+  const title = (await textOf(driver, "AgentUnlinkTitle")).trim();
   const name = process.env.KEYRING_AGENT_SHOWS_AS;
-  if (name) {
-    const titled = driver.$(
-      driver.e2ePlatform === "ios"
-        ? `-ios predicate string:label CONTAINS "Unlink ${name}?"`
-        : `android=new UiSelector().textContains("Unlink ${name}?")`
-    );
-    if (!(await titled.isExisting().catch(() => false))) {
-      await screenshot(driver, "journey-unlink-untitled");
-      throw new Error(`the unlink confirmation does not name the agent ("Unlink ${name}?")`);
-    }
+  if (name ? title !== `Unlink ${name}?` : !/^Unlink .+\?$/.test(title)) {
+    await screenshot(driver, "journey-unlink-untitled");
+    throw new Error(`the unlink confirmation is titled "${title}"${name ? `, not "Unlink ${name}?"` : ""}`);
   }
   await assertNoDidShown(driver, "the unlink confirmation");
   await tapTestId(driver, "AgentUnlinkCancel", 5000);
