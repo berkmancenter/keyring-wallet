@@ -179,6 +179,49 @@ export interface VettingSubmission {
 const openStateOf = (effect: string): 'deferred' | 'pending' | undefined =>
   effect === 'requestMore' ? 'deferred' : effect === 'refer' || effect === 'pending' ? 'pending' : undefined
 
+/**
+ * Why a vetter's ticket cannot be used for this application (p220 item 3),
+ * typed so a screen can word it: `unreadable` is not a ticket this client can
+ * read; `otherCommunity` is a ticket for vetting in a different community —
+ * using it would send this person's request, and so reveal them, to that
+ * community's vetter. Mirrors openvtc's `TicketUriError` (Unreadable,
+ * OtherCommunity). Nothing is signed or sent when this is thrown.
+ */
+export class VettingTicketError extends Error {
+  constructor(
+    readonly reason: 'unreadable' | 'otherCommunity',
+    /** The community the ticket is for, when it could be read. */
+    readonly ticketCommunityDid?: string
+  ) {
+    super(
+      reason === 'otherCommunity'
+        ? `vtiVetting: that ticket is for vetting in another community (${ticketCommunityDid})`
+        : 'vtiVetting: that is not a vetting ticket this app can read'
+    )
+    this.name = 'VettingTicketError'
+  }
+}
+
+/**
+ * Whether a ticket link can be used for an application to `communityDid` —
+ * pure, so a screen can check it as it is pasted, before anything is sent.
+ */
+export function checkTicketFor(
+  link: string,
+  communityDid: string
+): { ok: true; vetterDid: string; presentation: TicketPresentation } | { ok: false; error: VettingTicketError } {
+  let ticket: ReturnType<typeof parseTicketUri>
+  try {
+    ticket = parseTicketUri(link)
+  } catch {
+    return { ok: false, error: new VettingTicketError('unreadable') }
+  }
+  if (ticket.community !== communityDid) {
+    return { ok: false, error: new VettingTicketError('otherCommunity', ticket.community) }
+  }
+  return { ok: true, vetterDid: ticket.vetter, presentation: ticket.presentation }
+}
+
 /** The applicant's one application to one community. */
 export interface VettingApplication {
   communityDid: string
@@ -823,10 +866,12 @@ export class VtiApplicant {
     let vetterDid = input.vetterDid
     let presentation: TicketPresentation | undefined
     if (input.link) {
-      const t = parseTicketUri(input.link)
-      if (t.community !== application.communityDid) throw new Error('vtiVetting: that ticket is for another community')
-      vetterDid = t.vetter
-      presentation = t.presentation
+      // Before anything is signed or sent: a ticket for another community would
+      // hand this person's request to that community's vetter.
+      const checked = checkTicketFor(input.link, application.communityDid)
+      if (!checked.ok) throw checked.error
+      vetterDid = checked.vetterDid
+      presentation = checked.presentation
     } else if (input.code) presentation = { code: { code: input.code } }
     if (!vetterDid || !presentation) throw new Error('vtiVetting: a ticket and a vetter are needed')
     const ticket =

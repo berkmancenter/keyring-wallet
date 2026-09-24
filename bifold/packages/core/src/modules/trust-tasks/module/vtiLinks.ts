@@ -27,12 +27,21 @@ import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { vtaAgent } from './vtaAgent'
 import { communityTarget, isCommunityLink, parseCommunityLink } from './vtiCommunityLink'
 import { isVtiInvitationLink, parseVtiInvitationLink } from './vtiInvitation'
+import { VettingTicketError } from './vtiVetting'
 
 /**
  * A link of ours that cannot be used, said in words for the person: the
  * scanner shows its message as the headline rather than "Invalid QR code".
  */
-export class KeyringLinkError extends Error {}
+export class KeyringLinkError extends Error {
+  constructor(
+    message: string,
+    /** For a vetter's ticket that cannot be used here: why, typed, so a screen can word it. */
+    readonly ticket?: VettingTicketError
+  ) {
+    super(message)
+  }
+}
 
 export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket' | 'community' | 'did' | 'otherDid'
 
@@ -200,13 +209,26 @@ export async function routeKeyringAgentLink(
       return
     }
     case 'ticket': {
-      // The ticket names the community it is for: that is the one being joined.
+      // The ticket names the community it is for. A phone that has made its
+      // identity for a community is vetted there: a ticket for another one is
+      // refused here, before the vetting screen is switched to that community —
+      // switching first would make the screen's own check compare the ticket
+      // with itself and pass (p220 item 3). With no community chosen yet, the
+      // ticket's community is the one being joined.
+      let ticketCommunity: string | undefined
       try {
-        const ticket = parseTicketUri(trimmed)
-        if (ticket.community) communityTarget.set({ communityDid: ticket.community })
+        ticketCommunity = parseTicketUri(trimmed).community
       } catch {
         // an unreadable ticket is reported by the vetting screen, where it is used
       }
+      const chosen = communityTarget.getChosen()?.communityDid
+      if (ticketCommunity && chosen && ticketCommunity !== chosen) {
+        throw new KeyringLinkError(
+          "This vetter's code is for a different community than the one you're joining.",
+          new VettingTicketError('otherCommunity', ticketCommunity)
+        )
+      }
+      if (ticketCommunity) communityTarget.set({ communityDid: ticketCommunity })
       pendingTicket = trimmed
       ticketListeners.forEach((listener) => listener())
       navigate('VtiVetting')
