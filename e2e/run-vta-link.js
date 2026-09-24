@@ -222,8 +222,10 @@ async function linkManually(driver) {
         console.log("[e2e] give-key: how the admin adds it is in view before the code");
       }
       // Below the fold since the admin's steps are shown (keyring-bifold#107):
-      // a tap on an off-screen toggle does nothing, so bring it into view.
-      const toggle = await scrollToTestId(driver, key, 4).catch(() => undefined);
+      // a tap on an off-screen toggle does nothing, so bring it into view. The
+      // swipe starts mid-screen: at the default 70% it lands on the fixed
+      // "I've been added" / "Stop linking" footer, which scrolls nothing.
+      const toggle = await scrollToTestId(driver, key, 4, { from: 0.5 }).catch(() => undefined);
       if (toggle) await toggle.click().catch(() => undefined);
       else await tapTestId(driver, key, 15000).catch(() => undefined);
       tapped.add(key);
