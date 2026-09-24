@@ -6,7 +6,7 @@
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
-import { DeviceEventEmitter } from 'react-native'
+import { Alert, DeviceEventEmitter } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -322,5 +322,54 @@ describe('Your agent — after linking', () => {
     fireEvent.press(tree.getByTestId(testIdWithKey('AgentMembershipRow')))
     expect(navigate).toHaveBeenCalledWith(Screens.VtiCommunity, { communityDid })
     expect(navigate).not.toHaveBeenCalledWith(Screens.MyAgent)
+  })
+
+  describe('unlinking this agent', () => {
+    type AlertButton = { text?: string; style?: string; onPress?: () => void }
+    const buttonsOf = (spy: jest.SpyInstance) => spy.mock.calls[0][2] as AlertButton[]
+
+    afterEach(() => jest.restoreAllMocks())
+
+    it('asks first, saying what the person loses and that the key stays on the agent', async () => {
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
+      const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+      const tree = await renderHome([persona])
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
+      })
+      expect(alert).toHaveBeenCalledWith('VtaLink.UnlinkTitle', 'VtaLink.UnlinkBody', expect.any(Array))
+      const [cancel, confirm] = buttonsOf(alert)
+      expect(cancel).toMatchObject({ text: 'Global.Cancel', style: 'cancel' })
+      expect(confirm).toMatchObject({ text: 'VtaLink.UnlinkConfirm', style: 'destructive' })
+      // Nothing happens until the person confirms.
+      expect(unlink).not.toHaveBeenCalled()
+    })
+
+    it('unlinks on confirm and lands on linking an agent', async () => {
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
+      const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+      const navigate = useNavigation().navigate as jest.Mock
+      navigate.mockClear()
+      const tree = await renderHome([persona])
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
+      })
+      await act(async () => {
+        buttonsOf(alert)[1].onPress?.()
+      })
+      expect(unlink).toHaveBeenCalledTimes(1)
+      expect(navigate).toHaveBeenCalledWith(Screens.VtaLink)
+    })
+
+    it('does nothing when the person cancels', async () => {
+      const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined)
+      const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+      const tree = await renderHome([persona])
+      await act(async () => {
+        fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
+      })
+      buttonsOf(alert)[0].onPress?.()
+      expect(unlink).not.toHaveBeenCalled()
+    })
   })
 })

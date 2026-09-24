@@ -18,7 +18,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -190,6 +190,22 @@ const VtaAgentHome: React.FC = () => {
   }, [agent, load])
 
   const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
+
+  // Unlinking is local: this phone forgets the agent and its own key for it.
+  // The agent keeps the key on its list until its owner removes it — a client
+  // cannot remove its own entry (VTI-Q23) — and the confirmation says so.
+  const confirmUnlink = () =>
+    Alert.alert(t('VtaLink.UnlinkTitle'), t('VtaLink.UnlinkBody'), [
+      { text: t('Global.Cancel'), style: 'cancel' },
+      {
+        text: t('VtaLink.UnlinkConfirm'),
+        style: 'destructive',
+        onPress: () => {
+          if (!agent) return
+          void vtaAgent.unlink(agent).then(() => go(Screens.VtaLink))
+        },
+      },
+    ])
   /** A screen that needs to be told which community it is about. */
   const goToCommunity = (communityDid: string) =>
     (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate(Screens.VtiCommunity, {
@@ -589,6 +605,13 @@ const VtaAgentHome: React.FC = () => {
             </View>
           ) : null}
         </View>
+
+        <Button
+          title={t('VtaLink.Unlink')}
+          buttonType={ButtonType.Tertiary}
+          onPress={confirmUnlink}
+          testID={testIdWithKey('AgentUnlink')}
+        />
       </ScrollView>
     </SafeAreaView>
   )

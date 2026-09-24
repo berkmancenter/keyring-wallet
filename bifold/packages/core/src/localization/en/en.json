@@ -1272,7 +1272,8 @@
       "wentOffline": "Went offline",
       "revoked": "Stopped accepting this phone",
       "approved": "You approved a request",
-      "denied": "You declined a request"
+      "denied": "You declined a request",
+      "unlinked": "Unlinked from this phone"
     },
     "CanDo": "What you can do",
     "JoinCommunity": "Join a community",
@@ -1310,7 +1311,11 @@
     "YouCanVet": "You can now vet people for {{community}}",
     "YouCanVetBody": "Its admin made you a vetter. Hand out a ticket when you meet someone.",
     "OpenDesk": "Open the vetting desk",
-    "ShareKeyHint": "Long and easy to mistype — send it rather than reading it out."
+    "ShareKeyHint": "Long and easy to mistype — send it rather than reading it out.",
+    "Unlink": "Unlink this agent",
+    "UnlinkTitle": "Unlink this agent?",
+    "UnlinkBody": "This phone will stop acting for your agent.\n\nYour community identities and memberships are held by the agent. This phone can't use them until you link that agent again.\n\nThe agent keeps this phone's key on its list until its owner removes it. The phone forgets the key, so it can't be used.",
+    "UnlinkConfirm": "Unlink"
   },
   "Invited": {
     "WhichCommunityTitle": "Which community invited you?",

@@ -63,6 +63,8 @@ export type VtaLinkEvent =
   | { type: 'retryScheduled'; attempt: number; nextRetryAt: number }
   | { type: 'accessRevoked'; reason: string }
   | { type: 'relink' }
+  /** The person unlinked this phone from its agent: from any state, back to no agent. */
+  | { type: 'unlinked' }
   | ({ type: 'keyShown'; did: string } & VtaIdentityOfAgent)
   | { type: 'grantCheckStarted' }
   | { type: 'grantNotYet' }
@@ -181,6 +183,9 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
 
     case 'relink':
       return state.kind === 'revoked' || state.kind === 'notLinked' ? { kind: 'notLinked' } : state
+
+    case 'unlinked':
+      return state.kind === 'notLinked' ? state : { kind: 'notLinked' }
   }
 }
 

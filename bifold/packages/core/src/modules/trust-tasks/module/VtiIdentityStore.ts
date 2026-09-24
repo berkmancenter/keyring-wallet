@@ -55,6 +55,12 @@ export interface VtiPersona {
 export interface VtiIdentityStore {
   getManager(vtaDid: string): Promise<VtiManagerIdentity | undefined>
   setManager(identity: VtiManagerIdentity): Promise<void>
+  /**
+   * Forget this phone's manager identity for a VTA, so nothing signs as it
+   * again (unlinking). The VTA's ACL is not touched: a client cannot remove its
+   * own entry (VTI-Q23). Optional: a store without it keeps the record.
+   */
+  forgetManager?(vtaDid: string): Promise<void>
   getPersona(communityDid: string): Promise<VtiPersona | undefined>
   listPersonas(): Promise<VtiPersona[]>
   setPersona(persona: VtiPersona): Promise<void>
@@ -102,6 +108,15 @@ export class GenericRecordsIdentityStore implements VtiIdentityStore {
 
   setManager(identity: VtiManagerIdentity) {
     return this.put('manager', identity.vtaDid, { ...identity })
+  }
+
+  async forgetManager(vtaDid: string) {
+    const records = await this.agent.genericRecords.findAllByQuery({
+      recordType: RECORD_TYPE,
+      kind: 'manager',
+      key: vtaDid,
+    })
+    for (const record of records) await this.agent.genericRecords.deleteById(record.id)
   }
 
   getPersona(communityDid: string) {
