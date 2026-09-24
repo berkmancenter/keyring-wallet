@@ -196,6 +196,15 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
       <SafeAreaView style={styles.container} edges={['left', 'right']}>
         <View style={styles.content}>
           <ThemedText testID={testIdWithKey('JoinNeedsAgent')}>{t('Join.NeedsAgent')}</ThemedText>
+          {/* The way to it, as "I was invited" offers: a community's code can
+              arrive before any agent is linked (the phone's camera, a link).
+              The community stays chosen for when the person comes back. */}
+          <Button
+            title={t('VtaLink.LinkYourAgent')}
+            buttonType={ButtonType.Primary}
+            onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtaLink)}
+            testID={testIdWithKey('JoinLinkAgent')}
+          />
         </View>
       </SafeAreaView>
     )
