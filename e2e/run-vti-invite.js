@@ -44,6 +44,7 @@ const textOf = async (driver, key) =>
 // ~6 KB invitation (VTI-32) — it is pasted into the scanner instead.
 const IOS_UDID = process.env.IOS_UDID || "";
 const INVITE_VIA = process.env.INVITE_VIA || "my-agent";
+const EXPECT_INVITED_ERROR = process.env.EXPECT_INVITED_ERROR || "";
 
 async function openLink(url) {
   // `simctl openurl` cuts a URL at 2048 characters (measured 2026-09-22: 1930
@@ -121,6 +122,25 @@ async function inviteByDoor(d) {
     await tapTestId(d, "InvitedContinue", 15000);
     await handleBiometricConfirmIfPresent(d);
     console.log(`[e2e] ${d.e2ePlatform}: I was invited → Continue (making the identity)`);
+  }
+  // EXPECT_INVITED_ERROR=NoDidHost: an agent with nowhere to publish an
+  // identity (farm-runner-nohost). The flow must say so in a plain line, keep
+  // the raw text under Details, and make no identity (keyring-bifold#97).
+  if (EXPECT_INVITED_ERROR) {
+    const expected = { NoDidHost: /nowhere to publish a new identity/ }[EXPECT_INVITED_ERROR];
+    if (!expected) throw new Error(`unknown EXPECT_INVITED_ERROR=${EXPECT_INVITED_ERROR}`);
+    const until = Date.now() + 180000;
+    while (Date.now() < until && !(await existsTestId(d, "InvitedError", 2000))) {
+      if (await existsTestId(d, "InvitedShare", 500)) throw new Error("an identity was made on an agent with nowhere to publish it");
+    }
+    if (!(await existsTestId(d, "InvitedError", 1000))) throw new Error('"I was invited" never said why it could not make the identity');
+    const said = (await textOf(d, "InvitedError")).trim();
+    if (!expected.test(said) || /\[TrustTasks|VtaClient/.test(said)) throw new Error(`"I was invited" says "${said}"`);
+    if (!(await existsTestId(d, "InvitedErrorDetailsToggle", 3000))) throw new Error("the raw error is not kept under Details");
+    await assertNoDidShown(d, "the no-host refusal");
+    await screenshot(d, "vti-invite-door-nohost");
+    console.log(`[e2e] ${d.e2ePlatform}: no DID host — said plainly: "${said}"`);
+    return "refused";
   }
   await waitForTestId(d, "InvitedShare", 180000);
   await screenshot(d, "vti-invite-door-share");
@@ -206,8 +226,8 @@ try {
   }
 
   if (INVITE_VIA === "door") {
-    await inviteByDoor(driver);
-    printSuccess("vti-invite (door)");
+    const outcome = await inviteByDoor(driver);
+    printSuccess(outcome === "refused" ? `vti-invite (door) — refused as expected: ${EXPECT_INVITED_ERROR}` : "vti-invite (door)");
     process.exitCode = 0;
   } else {
   // 1 — the identity to be invited.
