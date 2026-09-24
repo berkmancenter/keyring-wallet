@@ -34,7 +34,7 @@ import { isVtiInvitationLink, parseVtiInvitationLink } from './vtiInvitation'
  */
 export class KeyringLinkError extends Error {}
 
-export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket' | 'community' | 'did'
+export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket' | 'community' | 'did' | 'otherDid'
 
 /** Which of our links this is, if any — cheap, no parsing beyond the prefix. */
 export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undefined {
@@ -44,10 +44,30 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   if (isTicketUri(trimmed)) return 'ticket'
   if (isCommunityLink(trimmed)) return 'community'
   // A bare did:webvh — what upstream's QR codes carry for an agent or a
-  // community (the VTC page, `pnm vta qr`, the browser plugin). Other methods
-  // stay with the DIDComm handling, which takes a did:peer as an invitation.
-  if (bareDid(trimmed)?.startsWith('did:webvh:')) return 'did'
+  // community (the VTC page, `pnm vta qr`, the browser plugin).
+  const did = bareDid(trimmed)
+  if (did?.startsWith('did:webvh:')) return 'did'
+  // Any other bare DID. The browser plugin draws a QR beside every DID it
+  // shows, so a person can scan a did:key (a manager or admin key) or the
+  // wallet's own did:peer holder address. Neither is an agent or a community,
+  // and DIDComm cannot use one either: a DIDComm invitation is a URL carrying
+  // oob=, c_i= or d_m=, never a bare DID, which Credo takes for a short URL and
+  // fails to fetch. So it is answered here, in words.
+  if (did) return 'otherDid'
   return undefined
+}
+
+/**
+ * Why a bare DID of a method other than did:webvh is of no use here, in the
+ * person's words. Agents and communities are did:webvh; nothing is resolved.
+ */
+export function otherDidMessage(did: string): string {
+  const method = did.split(':')[1]
+  if (method === 'key') return "This code is a key, not an agent or a community. There's nothing to link to or join."
+  if (method === 'peer') {
+    return "This code is a private connection address, not an agent or a community. There's nothing to link to or join."
+  }
+  return "This code isn't an agent or a community, so there's nothing to do with it here."
 }
 
 /** The host inside a did:webvh — what a person recognises — else the DID. */
@@ -214,6 +234,8 @@ export async function routeKeyringAgentLink(
     }
     case 'did':
       return routeBareDid(bareDid(trimmed) as string, agent, navigate)
+    case 'otherDid':
+      throw new KeyringLinkError(otherDidMessage(bareDid(trimmed) as string))
     default:
       throw new Error('not a Keyring agent link')
   }
