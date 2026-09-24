@@ -76,6 +76,14 @@ export interface JoinSubmission {
   rejection?: { code: string; reason?: string; decidedAt?: string }
 }
 
+/** A member leaving a community from this phone. */
+export interface VtiDeparture {
+  communityDid: string
+  /** What the community applied: `purge` erased the record, `tombstone` kept a marker. */
+  disposition: 'purge' | 'tombstone' | 'historical' | (string & {})
+  at: string
+}
+
 export interface VtiCommunityStore {
   listInvitations(): Promise<VtiInvitation[]>
   saveInvitation(invitation: VtiInvitation): Promise<void>
@@ -87,6 +95,9 @@ export interface VtiCommunityStore {
   /** Credentials a community or a vetter delivered that are not the membership itself. */
   saveHeldCredential(item: VtiHeldCredential): Promise<void>
   listHeldCredentials(kind?: VtiHeldCredential['kind'], communityDid?: string): Promise<VtiHeldCredential[]>
+  /** That this phone's member left a community, and how — so its screens say "You left", not "Join". */
+  getDeparture?(communityDid: string): Promise<VtiDeparture | undefined>
+  saveDeparture?(departure: VtiDeparture): Promise<void>
   /** The last join request sent to a community. Optional: a store without it records none. */
   getSubmission?(communityDid: string): Promise<JoinSubmission | undefined>
   saveSubmission?(submission: JoinSubmission): Promise<void>
@@ -192,6 +203,19 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
       key: communityDid,
     })
     return records[0]?.content as unknown as JoinSubmission | undefined
+  }
+
+  async getDeparture(communityDid: string) {
+    const records = await this.agent.genericRecords.findAllByQuery({
+      recordType: RECORD_TYPE,
+      kind: 'departure',
+      key: communityDid,
+    })
+    return records[0]?.content as unknown as VtiDeparture | undefined
+  }
+
+  saveDeparture(departure: VtiDeparture) {
+    return this.put('departure', departure.communityDid, { ...departure })
   }
 
   saveSubmission(submission: JoinSubmission) {
