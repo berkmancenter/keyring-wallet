@@ -6,11 +6,13 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Point your phone's Camera at an agent's or community's QR code and Keyring opens it, the same as scanning inside Keyring.
-• Scanning a code Keyring can't use, such as a key from the browser plugin, now says plainly what it is.
-• Unlink your agent from My Agent. Keyring asks first, and says that its access stays on the agent until the agent's owner removes it.
-• When a vetter's role is taken away, the phone shows it within about 15 seconds instead of several minutes.
-• The vetting screen speaks plainly: "This community needs 1 vetter to confirm your legal name." The paste button is now "Use this link", and is dimmed until you paste one.
-• The scan screen's header is back to one line.
-• If your agent has nowhere to publish a new identity, joining says so in plain words, with the technical detail under Details.
-• Known issue: on the current Farm, creating your identity can occasionally say your agent didn't answer. If a second tap on Continue doesn't help, please tell us.
+• Joining with an invitation now shows what the community actually answered. If it still needs you vetted, Keyring says so and what it needs, instead of showing you as a member. (Fixes the known issue in 219.)
+• Keyring says up front whether an invitation is enough for a community, and where you already stand if you've joined or asked before.
+• Your vetting card is now built the way the openvtc terminal app checks it, so a vetter using that app should be able to accept it. If you were partway through vetting on 219, send your card again, and please tell us if it still doesn't arrive.
+• Leave a community from its page. Keyring tells the community, and says what you keep.
+• A vetter's ticket for a different community is refused, with the reason.
+• Coming back to the My Agent tab no longer shows a blank frame first.
+• Relinking your agent: the steps for the agent's admin are shown straight away under Share and Copy; the long code sits behind "Show the code".
+• Settings shows your actual auto-lock time instead of "undefined min".
+• Scanning a QR code Keyring can't use says what it can read, in one line.
+• Vetting and the Face ID / fingerprint prompt no longer show raw text like "Vetting.YourVetter" or "your vetter" as a name.
