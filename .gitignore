@@ -97,3 +97,7 @@ artifacts/
 
 # The hybrid profile the lab/farm switcher keeps beside the others.
 .env.hybrid
+
+# Private notes and files never go in this public repo.
+*.local-al*
+*.private.*

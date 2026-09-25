@@ -21,6 +21,15 @@ jobs:
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color -shellcheck= .github/workflows/*.yml .github/workflows/*.yaml
 
+      # This repo is public. Private notes (*.local-al*) and files marked
+      # *.private.* must never be committed (one was, 2026-09-15 to 09-25).
+      - name: No private files in the tree
+        run: |
+          found=$(git ls-files | grep -E '\.local-al|\.private\.' || true)
+          if [ -n "$found" ]; then
+            echo "::error::Private files are committed:"; echo "$found"; exit 1
+          fi
+
   lint:
     runs-on: ubuntu-22.04
     name: Lint+Format+Types
