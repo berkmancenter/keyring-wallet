@@ -93,7 +93,9 @@ export function digestBytesEqual(a: string, b: string): boolean {
  * signing as `controllerDid` — for our use, the sender's relationship DID
  * (did:peer:0…), whose single Ed25519 key the wallet's KMS holds.
  *
- * Returns a NEW document object; the input is not mutated.
+ * Returns a NEW document object; the input is not mutated. Its whole-second
+ * `issuedAt`/`expiresAt`/`validFrom`/`validUntil` come back as `wireTimestamp`
+ * writes them — send and digest the returned document, not the input.
  */
 /**
  * The DID document's first signing-capable verification method. did:peer:0
@@ -155,6 +157,38 @@ export function verificationMethodInRelationship(
   return undefined
 }
 
+/**
+ * An instant as the VTI SDK writes it back: RFC 3339 UTC with milliseconds,
+ * and no fraction at all on a whole second (`…:53Z`, not `…:53.000Z`).
+ *
+ * vta-sdk verifies a Trust Task proof over a RE-SERIALISATION of the
+ * document, not over the bytes it received: `issuedAt`, `expiresAt` and the
+ * proof's `created` are parsed into chrono `DateTime<Utc>`
+ * (trust-tasks-rs `document.rs:84-88`, vta-sdk
+ * `trust_task_proof/verify.rs:144-161`), and chrono writes a zero fraction
+ * as nothing. A document signed with `.000Z` hashes differently there and is
+ * refused as "signature invalid" — about one document in a thousand, at
+ * random, from `toISOString()`.
+ */
+export function wireTimestamp(date: Date = new Date()): string {
+  return date.toISOString().replace(/\.000Z$/, 'Z')
+}
+
+/** The top-level members a verifier may parse as a date-time and write back. */
+const DATE_TIME_MEMBERS = ['issuedAt', 'expiresAt', 'validFrom', 'validUntil'] as const
+
+/** `.000Z` → `Z` on those members; the same instants, in the form verifiers rebuild. */
+function withWireTimestamps(document: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...document }
+  for (const member of DATE_TIME_MEMBERS) {
+    const value = out[member]
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/.test(value)) {
+      out[member] = value.replace(/\.000Z$/, 'Z')
+    }
+  }
+  return out
+}
+
 export async function signDocumentProof(
   agent: Agent,
   document: Record<string, unknown>,
@@ -182,13 +216,21 @@ export async function signDocumentProof(
   const proofConfig: Record<string, unknown> = {
     type: 'DataIntegrityProof',
     cryptosuite: 'eddsa-jcs-2022',
-    created: new Date().toISOString(),
-    verificationMethod: verificationMethod.id,
+    created: wireTimestamp(),
+    // Always absolute. A DID document may name its methods relatively
+    // (`#key-0`), but a proof is read without the document at hand: vta-sdk
+    // takes the signer to be the part before `#` and refuses an empty one
+    // (`trust_task_proof/verify.rs:147-155`, `NoDid`).
+    verificationMethod: verificationMethod.id.startsWith('#')
+      ? `${controllerDid}${verificationMethod.id}`
+      : verificationMethod.id,
     proofPurpose,
   }
 
   const configHash = sha256(new TextEncoder().encode(jcsCanonicalize(proofConfig)))
-  const documentHash = sha256(new TextEncoder().encode(jcsCanonicalize(document)))
+  // Signed as sent: whole-second instants in the form a verifier rebuilds.
+  const unsigned = withWireTimestamps(document)
+  const documentHash = sha256(new TextEncoder().encode(jcsCanonicalize(unsigned)))
   const signedInput = new Uint8Array(configHash.length + documentHash.length)
   signedInput.set(configHash, 0)
   signedInput.set(documentHash, configHash.length)
@@ -201,7 +243,7 @@ export async function signDocumentProof(
   })
 
   return {
-    ...document,
+    ...unsigned,
     proof: { ...proofConfig, proofValue: `z${TypedArrayEncoder.toBase58(signature)}` },
   }
 }
@@ -400,5 +442,93 @@ async function verifyOneProof(
     return ed25519.verify(TypedArrayEncoder.fromBase58(proofValue.slice(1)), signedInput, publicKeyBytes)
   } catch {
     return false
+  }
+}
+
+/** How far ahead of the verifier's clock a proof's `created` may be: affinidi-data-integrity `DEFAULT_CLOCK_SKEW`. */
+export const TRUST_TASK_PROOF_CLOCK_SKEW_MS = 60 * 1000
+
+/**
+ * Why a Trust Task document's proof was not accepted. `unsigned` is vta-sdk's
+ * `DiProofError::NoProof`; every other failure of the proof itself is `proof`
+ * (`NotDataIntegrity`, `NoDid`, `VerifyFailed`), with the detail saying which.
+ */
+export type TrustTaskProofFailure = 'unsigned' | 'proof'
+
+/**
+ * Verify a Trust Task document's own proof as vta-sdk
+ * `trust_task_proof::verify_trust_task_proof_with` does
+ * (`vta-sdk/src/trust_task_proof/verify.rs:136-172`, VTI ed672fff), and return
+ * the PROVEN signer: the DID before `#` in the proof's `verificationMethod`.
+ *
+ * What that function checks, and so what this checks:
+ *  - a proof is present (`NoProof`), and is one Data Integrity proof
+ *    (`NotDataIntegrity`) — `type` `DataIntegrityProof`, `cryptosuite`
+ *    `eddsa-jcs-2022`, a non-empty `proofPurpose` and `verificationMethod`,
+ *    and a multibase `proofValue` (affinidi-data-integrity 0.7.11
+ *    `conformance.rs:55-90`);
+ *  - `created`, when given, no more than 60 s ahead of now (`DEFAULT_CLOCK_SKEW`);
+ *  - the signer DID is not empty (`NoDid`) — a relative `#key-0` has none;
+ *  - the method is IN the signer's DID document, by its absolute id or its
+ *    fragment (`vm_resolver.rs:140-152`) — no fallback to "the first key",
+ *    which `verifyDocumentProof` has and upstream does not;
+ *  - the signature verifies over the document without `proof`.
+ *
+ * What it does NOT check, deliberately, as upstream does not: which
+ * `proofPurpose` (any non-empty one passes — `VerifyOptions::new()` names
+ * none), and who the signer is. Binding the signer to the document's `issuer`
+ * and to the transport sender is the caller's job (openvtc `wire::open`,
+ * `openvtc-core/src/vetting/wire.rs:204-227`).
+ */
+export async function verifyTrustTaskProof(
+  agent: Agent,
+  document: Record<string, unknown>,
+  options: { now?: Date } = {}
+): Promise<{ ok: true; signer: string } | { ok: false; reason: TrustTaskProofFailure; detail: string }> {
+  const { proof, ...unsecured } = document
+  if (proof === undefined || proof === null) return { ok: false, reason: 'unsigned', detail: 'no proof' }
+  const fail = (detail: string) => ({ ok: false as const, reason: 'proof' as const, detail })
+  if (typeof proof !== 'object' || Array.isArray(proof)) return fail('not one Data Integrity proof')
+  const p = proof as Record<string, unknown>
+  if (p.type !== 'DataIntegrityProof') return fail(`proof type ${String(p.type)}`)
+  if (p.cryptosuite !== 'eddsa-jcs-2022') return fail(`cryptosuite ${String(p.cryptosuite)}`)
+  if (typeof p.proofPurpose !== 'string' || !p.proofPurpose) return fail('proofPurpose is missing or empty')
+  const verificationMethodId = typeof p.verificationMethod === 'string' ? p.verificationMethod : ''
+  if (!verificationMethodId) return fail('verificationMethod is missing or empty')
+  const proofValue = typeof p.proofValue === 'string' ? p.proofValue : ''
+  if (!proofValue.startsWith('z')) return fail('proofValue is not base58btc multibase')
+  if (p.created !== undefined) {
+    const created = Date.parse(String(p.created))
+    const now = (options.now ?? new Date()).getTime()
+    if (!Number.isFinite(created)) return fail('created is not a date')
+    if (created > now + TRUST_TASK_PROOF_CLOCK_SKEW_MS) return fail('created is in the future')
+  }
+  const signer = verificationMethodId.split('#')[0]
+  if (!signer) return fail('the verificationMethod names no DID')
+  try {
+    const didDocument = (await agent.dids.resolveDidDocument(signer)) as unknown as RelationshipDocument
+    const fragment = verificationMethodId.includes('#')
+      ? verificationMethodId.slice(verificationMethodId.indexOf('#'))
+      : ''
+    const matches = (id: unknown) => typeof id === 'string' && (id === verificationMethodId || id === fragment)
+    const embedded = [...(didDocument.authentication ?? []), ...(didDocument.assertionMethod ?? [])].filter(
+      (entry): entry is VerificationMethod => typeof entry === 'object' && entry !== null
+    )
+    const verificationMethod = [...(didDocument.verificationMethod ?? []), ...embedded].find((m) => matches(m.id))
+    if (!verificationMethod) return fail(`${verificationMethodId} is not in the DID document for ${signer}`)
+    const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
+    const publicKeyBytes = (publicJwk.publicKey as { publicKey: Uint8Array }).publicKey
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { proofValue: _omitted, ...proofConfig } = p
+    const configHash = sha256(new TextEncoder().encode(jcsCanonicalize(proofConfig)))
+    const documentHash = sha256(new TextEncoder().encode(jcsCanonicalize(unsecured)))
+    const signedInput = new Uint8Array(configHash.length + documentHash.length)
+    signedInput.set(configHash, 0)
+    signedInput.set(documentHash, configHash.length)
+    if (!ed25519.verify(TypedArrayEncoder.fromBase58(proofValue.slice(1)), signedInput, publicKeyBytes))
+      return fail('the signature does not verify')
+    return { ok: true, signer }
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : String(e))
   }
 }

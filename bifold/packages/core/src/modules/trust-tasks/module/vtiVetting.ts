@@ -29,6 +29,7 @@ import {
   parseTicketUri,
   signDocumentProof,
   verifyDocumentProof,
+  verifyTrustTaskProof,
   vettingMatchCode,
   type TicketPresentation,
 } from '@bifold/trust-tasks'
@@ -106,6 +107,15 @@ export interface VettingDeskRequest {
   }
   card?: Record<string, unknown>
   statementId?: string
+  /**
+   * The last document on this request that was refused unread — its proof,
+   * its issuer or its type did not hold (`openPeerDocument`). Nothing it said
+   * was acted on; the screen can say a card came and was not accepted.
+   */
+  envelopeRefusal?: PeerDocumentRefusal
+  /** The task URI of that refused document. */
+  envelopeRefusalTask?: string
+  envelopeRefusedAt?: string
 }
 
 /** One request the applicant made of one vetter. */
@@ -177,6 +187,16 @@ export interface VettingApplicationRequest {
   grantStatusCheckedAt?: string
   /** Enough of the grant's `credentialStatus` to re-check it later. */
   grantStatusEntry?: { url: string; index: number; purpose: string }
+  /**
+   * The last document from this vetter that was refused unread
+   * (`openPeerDocument`): an acceptance, a session, a decline or a refusal
+   * whose proof, issuer or type did not hold. The request's `status` is left
+   * where it was — nothing the document said was believed.
+   */
+  envelopeRefusal?: PeerDocumentRefusal
+  /** The task URI of that refused document. */
+  envelopeRefusalTask?: string
+  envelopeRefusedAt?: string
   updatedAt: string
 }
 
@@ -430,6 +450,72 @@ const payloadOf = (m: DidCommV2PlaintextMessage) => (bodyOf(m).payload ?? {}) as
 const typeOf = (m: DidCommV2PlaintextMessage) => String(m.type ?? bodyOf(m).type ?? '')
 const threadOf = (m: DidCommV2PlaintextMessage) => String(m.thid ?? bodyOf(m).threadId ?? '')
 
+/**
+ * Why a peer's Trust Task document was refused before anything in it was
+ * acted on — openvtc's `WireError` (`openvtc-core/src/vetting/wire.rs`), with
+ * vta-sdk's `NoProof` kept apart from the other proof failures so a screen can
+ * tell "not signed" from "signed wrongly":
+ *
+ * - `malformed` — not a Trust Task document (`WireError::Malformed`);
+ * - `typeMismatch` — its `type` is not the message's (`TypeMismatch`);
+ * - `issuerNotSender` — its `issuer` is not who the transport says sent it (`IssuerNotSender`);
+ * - `unsigned` — it has no proof (`Proof`, from `DiProofError::NoProof`);
+ * - `proof` — its proof does not verify (`Proof`, any other cause);
+ * - `wrongSigner` — it verifies, but under someone else's key (`WrongSigner`).
+ */
+export type PeerDocumentRefusal =
+  | 'malformed'
+  | 'typeMismatch'
+  | 'issuerNotSender'
+  | 'unsigned'
+  | 'proof'
+  | 'wrongSigner'
+
+/**
+ * Open a peer's vetting document exactly as an openvtc client does before it
+ * acts on one — `wire::open` (`openvtc-core/src/vetting/wire.rs:204-227`, at
+ * ed13d29), in its order: the body is a Trust Task document, its `type` is the
+ * message's type, its `issuer` is the authenticated sender (the DIDComm `from`,
+ * or the TSP sender `unpackTrustTaskFromPeer` put there), its proof verifies as
+ * vta-sdk `verify_trust_task_proof_with` verifies one (`verifyTrustTaskProof`),
+ * and the proven signer is that same sender.
+ *
+ * Until this, both Keyring seats took a peer's identity from `body.issuer ??
+ * m.from` and never checked either: a document naming someone else as issuer,
+ * or carrying no proof at all, was acted on (conformance inventory, 2026-09-25).
+ */
+export async function openPeerDocument(
+  agent: Agent,
+  m: DidCommV2PlaintextMessage
+): Promise<
+  | { ok: true; document: Record<string, unknown>; sender: string }
+  | { ok: false; code: PeerDocumentRefusal; detail: string; sender: string }
+> {
+  const sender = typeof m.from === 'string' ? m.from : ''
+  const refuse = (code: PeerDocumentRefusal, detail: string) => ({ ok: false as const, code, detail, sender })
+  const document = m.body as Record<string, unknown> | undefined
+  if (!document || typeof document !== 'object' || Array.isArray(document))
+    return refuse('malformed', 'the body is not a document')
+  if (typeof document.id !== 'string' || !document.id) return refuse('malformed', 'the document has no id')
+  if (typeof document.type !== 'string' || !document.type) return refuse('malformed', 'the document has no type')
+  if (document.type !== String(m.type ?? ''))
+    return refuse('typeMismatch', `${document.type} sent as ${String(m.type)}`)
+  if (!sender || document.issuer !== sender)
+    return refuse('issuerNotSender', `issuer ${String(document.issuer)}, sender ${sender || 'unknown'}`)
+  const proof = await verifyTrustTaskProof(agent, document)
+  if (!proof.ok) return refuse(proof.reason, proof.detail)
+  if (proof.signer !== sender) return refuse('wrongSigner', `signed by ${proof.signer}, sent by ${sender}`)
+  return { ok: true, document, sender }
+}
+
+/** Log a refused peer document where a developer looks: the type, the sender, why. */
+function logRefusedDocument(agent: Agent, m: DidCommV2PlaintextMessage, code: PeerDocumentRefusal, detail: string) {
+  agent.config?.logger?.warn?.(`[VTI] vetting document refused unread (${code}): ${detail}`, {
+    type: String(m.type ?? ''),
+    from: String(m.from ?? ''),
+  })
+}
+
 /** The context a statement must carry: vta-sdk `vetting/statement.rs:30` `DTG_CONTEXT`. */
 const DTG_CREDENTIALS_CONTEXT = 'https://firstperson.network/credentials/dtg/v1'
 
@@ -605,10 +691,49 @@ export class VtiVetterDesk {
     return this.stop
   }
 
+  /** Stop what `listen` started. A desk left listening answers every request a second time. */
+  stopListening(): void {
+    this.stop?.()
+    this.stop = undefined
+  }
+
+  /**
+   * Nothing a peer sends is acted on until `openPeerDocument` has opened it:
+   * a request whose issuer is not its sender would otherwise bind a ticket to
+   * whoever it names (openvtc `tickets.rs` rule 4 rests on that issuer).
+   */
   private async inbound(m: DidCommV2PlaintextMessage): Promise<void> {
     const type = typeOf(m)
-    if (type === VETTING.request) return this.takeRequest(m)
-    if (type === `${VETTING.session}${RESPONSE}`) return this.receiveCard(m)
+    const isRequest = type === VETTING.request
+    const isCard = type === `${VETTING.session}${RESPONSE}`
+    if (!isRequest && !isCard) return
+    const opened = await openPeerDocument(this.agent, m)
+    if (!opened.ok) {
+      logRefusedDocument(this.agent, m, opened.code, opened.detail)
+      // A request refused unread has no desk row to note it on: it was never
+      // taken. A card does — the session it answers — when the sender is the
+      // applicant that session is with.
+      if (isCard) await this.noteRefusedCard(m, opened.code)
+      return
+    }
+    if (isRequest) return this.takeRequest(m)
+    return this.receiveCard(m)
+  }
+
+  private async noteRefusedCard(m: DidCommV2PlaintextMessage, code: PeerDocumentRefusal): Promise<void> {
+    const thread = threadOf(m)
+    const sender = String(m.from ?? '')
+    const desk = (await this.store.listDesk()).find(
+      (r) => r.session && r.applicantDid === sender && (!thread || r.session.documentId === thread)
+    )
+    if (!desk) return
+    await this.store.saveDesk({
+      ...desk,
+      envelopeRefusal: code,
+      envelopeRefusalTask: typeOf(m),
+      envelopeRefusedAt: new Date().toISOString(),
+    })
+    this.onChange?.()
   }
 
   /**
@@ -973,17 +1098,54 @@ export class VtiApplicant {
     return this.stop
   }
 
+  /** Stop what `listen` started. */
+  stopListening(): void {
+    this.stop?.()
+    this.stop = undefined
+  }
+
   private async inbound(m: DidCommV2PlaintextMessage): Promise<void> {
     const type = typeOf(m)
     // With no application there is nothing for these to change, and never
     // will be: taken and dropped, rather than failed and redelivered forever
     // (a failure withholds the mediator's ack, vtiAgent.onInbound).
     if (!(await this.store.getApplication(this.persona.communityDid))) return
+    // A statement's carrier is not opened: openvtc delivers it as a plain
+    // DIDComm message (`wire::credential_delivery`), and the statement inside
+    // carries its own proof, which `receiveStatement` checks in full.
+    if (type === CREDENTIAL_EXCHANGE_ISSUE) return this.receiveStatement(m)
+    const isPeerDocument =
+      type === `${VETTING.request}${RESPONSE}` ||
+      type.startsWith(TASK_ERROR) ||
+      type === VETTING.session ||
+      type === VETTING.decline
+    if (!isPeerDocument) return
+    const opened = await openPeerDocument(this.agent, m)
+    if (!opened.ok) {
+      logRefusedDocument(this.agent, m, opened.code, opened.detail)
+      await this.noteRefusedDocument(m, opened.code)
+      return
+    }
     if (type === `${VETTING.request}${RESPONSE}`) return this.accepted(m)
     if (type.startsWith(TASK_ERROR)) return this.refused(m)
     if (type === VETTING.session) return this.sessionOpened(m)
-    if (type === VETTING.decline) return this.declined(m)
-    if (type === CREDENTIAL_EXCHANGE_ISSUE) return this.statementDelivered(m)
+    return this.declined(m)
+  }
+
+  /**
+   * Say on the request which document from its vetter was refused unread, and
+   * why. Keyed on the authenticated sender, never on the document's claims;
+   * the request's status stays as it was.
+   */
+  private async noteRefusedDocument(m: DidCommV2PlaintextMessage, code: PeerDocumentRefusal): Promise<void> {
+    const sender = String(m.from ?? '')
+    const application = await this.store.getApplication(this.persona.communityDid)
+    if (!sender || !application?.requests.some((r) => r.vetterDid === sender)) return
+    await this.update(sender, {
+      envelopeRefusal: code,
+      envelopeRefusalTask: typeOf(m),
+      envelopeRefusedAt: new Date().toISOString(),
+    })
   }
 
   private async app(): Promise<VettingApplication> {
@@ -1139,7 +1301,13 @@ export class VtiApplicant {
     const body = bodyOf(m)
     const vetterDid = String(body.issuer ?? m.from ?? '')
     const application = await this.store.getApplication(this.persona.communityDid)
-    if (!application?.requests.some((r) => r.vetterDid === vetterDid)) return
+    const request = application?.requests.find((r) => r.vetterDid === vetterDid)
+    if (!request) return
+    // Only a refusal of the request we sent this vetter, as openvtc claims one
+    // (`inbound.rs:884-906`, threaded on the request). A refusal of anything
+    // else — an old request, another task — says nothing about this one.
+    const threads = [m.thid, bodyOf(m).threadId].filter((t): t is string => typeof t === 'string' && !!t)
+    if (threads.length > 0 && !threads.includes(request.requestDocumentId)) return
     await this.update(vetterDid, { status: 'refused', refusalCode: String(payloadOf(m).code ?? 'refused') })
   }
 
@@ -1226,8 +1394,13 @@ export class VtiApplicant {
    * card digest, the identity commitment). A statement from a vetter we asked,
    * that fails any of these, is shown as refused with the reason; one from
    * anyone else is not ours to report.
+   *
+   * The ONLY way a statement is kept. Every inbox that sees a
+   * `credential-exchange/issue` hands statements here (`receiveIssue`'s
+   * `acceptStatement`, vtiPersonaInbox, the Vetting screen); until PR D those
+   * stored any statement unchecked and `checklist()` counted it.
    */
-  private async statementDelivered(m: DidCommV2PlaintextMessage): Promise<void> {
+  async receiveStatement(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
     const p = (body.payload ?? body) as Record<string, unknown>
     const credential = ((p.credential_response as Record<string, unknown>)?.credential ?? undefined) as
@@ -1552,9 +1725,16 @@ export class VtiApplicant {
     // before holds statements naming an older join DID, and the mediator can
     // redeliver one at any time; counting those reads as "2 of 1" and would
     // let a stale statement stand in for one this application never gathered.
+    //
+    // And only statements `receiveStatement` accepted: each one it keeps is
+    // named on its request (`statementId`). A statement held without that —
+    // stored unchecked by an inbox before PR D, or by anything else — is not
+    // one this application has checked, and is not counted or submitted.
+    const accepted = new Set(application.requests.map((r) => r.statementId).filter(Boolean))
     const statements = (await this.communityStore.listHeldCredentials('vetting-statement', application.communityDid))
       .map((s) => s.credential)
       .filter((c) => (c as { credentialSubject?: { id?: string } }).credentialSubject?.id === application.joinDid)
+      .filter((c) => accepted.has(String((c as { id?: unknown }).id ?? '')))
     // What the community will actually make of these: age, per-method floors,
     // one voice per vetter, and a consistent commitment. Judged at now,
     // because the submit is the moment that decides.

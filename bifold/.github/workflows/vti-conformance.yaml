@@ -70,12 +70,56 @@ jobs:
         working-directory: packages/core
         run: CARD_OUT="$RUNNER_TEMP/conformance" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
 
+      # The same documents with every clock read on a whole second: each
+      # timestamp is one toISOString() writes as `.000Z`, which vta-sdk
+      # re-serialises without the fraction before checking a proof. Signed
+      # as-is, those were refused about once in a thousand documents, at
+      # random; this run makes that case happen every time.
+      - name: Keyring makes them again on a whole second
+        working-directory: packages/core
+        run: CONFORMANCE_WHOLE_SECOND=1 CARD_OUT="$RUNNER_TEMP/conformance-whole-second" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
+
       - name: VTI SDK judges them
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
-          out="$RUNNER_TEMP/conformance"
-          "$bin" "$out/card.json" "$out/expect.json"
-          "$bin" verify-statement "$out/statement.json" "$out/card.json" "$out/expect.json"
-          "$bin" verify-task "$out/task-applicant.json" "$(node -e "process.stdout.write(require('$out/signers.json').applicant)")"
-          "$bin" verify-task "$out/task-vetter.json" "$(node -e "process.stdout.write(require('$out/signers.json').vetter)")"
-          "$bin" verify-eligibility "$out/eligibility.json" "$out/expect.json"
+          for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
+            echo "== $out"
+            "$bin" "$out/card.json" "$out/expect.json"
+            "$bin" verify-statement "$out/statement.json" "$out/card.json" "$out/expect.json"
+            "$bin" verify-task "$out/task-applicant.json" "$(node -e "process.stdout.write(require('$out/signers.json').applicant)")"
+            "$bin" verify-task "$out/task-vetter.json" "$(node -e "process.stdout.write(require('$out/signers.json').vetter)")"
+            "$bin" verify-eligibility "$out/eligibility.json" "$out/expect.json"
+          done
+
+      # Every Trust Task document Keyring signs — to a peer, a community, its
+      # VTA — made by the shipping code (cardConformance.test.ts writes each to
+      # tasks/<name>.json and lists it in tasks.json with its expected signer).
+      # verify-task runs vta-sdk verify_trust_task_proof_with, what a VTA or a
+      # VTC runs on each task it receives. The test itself holds issuer ==
+      # signer and the type until card-verify checks them.
+      - name: VTI SDK judges every Trust Task Keyring signs
+        run: |
+          bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
+          for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
+            node -e "for (const t of require('$out/tasks.json')) console.log(t.file + '\t' + t.signer)" > "$RUNNER_TEMP/tasks.tsv"
+            count=0
+            while IFS=$'\t' read -r file signer; do
+              echo "$out/$file"
+              "$bin" verify-task "$out/$file" "$signer"
+              count=$((count + 1))
+            done < "$RUNNER_TEMP/tasks.tsv"
+            echo "vta-sdk verified $count Trust Task documents"
+            # A list that came out short means a producer was dropped, not passed.
+            test "$count" -ge 22
+          done
+
+      # What was refused, byte for byte: every document both runs wrote.
+      - name: Keep the documents upstream refused
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: conformance-documents
+          path: |
+            ${{ runner.temp }}/conformance
+            ${{ runner.temp }}/conformance-whole-second
+          retention-days: 14

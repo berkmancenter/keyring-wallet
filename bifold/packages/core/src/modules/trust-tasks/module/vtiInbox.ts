@@ -51,7 +51,8 @@ export function credentialsOfIssue(body: unknown): Record<string, unknown>[] {
   const response = (payload.credential_response ?? payload.credentialResponse) as Record<string, unknown> | undefined
   if (!response) return []
   const out: Record<string, unknown>[] = []
-  if (response.credential && typeof response.credential === 'object') out.push(response.credential as Record<string, unknown>)
+  if (response.credential && typeof response.credential === 'object')
+    out.push(response.credential as Record<string, unknown>)
   if (Array.isArray(response.credentials)) {
     for (const entry of response.credentials) {
       const c = (entry as { credential?: unknown })?.credential
@@ -91,20 +92,39 @@ export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCred
 /**
  * Keep what a community delivered. A membership credential becomes (or
  * completes) the membership record; a role endorsement fills in the role;
- * grants and statements are held as credentials in their own right.
+ * grants are held as credentials in their own right.
+ *
+ * A vetter's statement is never stored here. It is handed to
+ * `acceptStatement` — `VtiApplicant.receiveStatement`, the full check an
+ * openvtc applicant runs (vta-sdk `verify_statement`, openvtc `on_statement`)
+ * — which keeps it only if it passes. Without `acceptStatement` a statement is
+ * left alone. Until PR D this stored every statement unchecked, and the
+ * applicant's checklist counted it (conformance inventory, "Vetting statement
+ * (accepted)", the bypass).
  */
 export async function receiveIssue(
   store: VtiCommunityStore,
   personaDid: string,
   plaintext: DidCommV2PlaintextMessage,
-  options: { via?: VtiMembership['via'] } = {}
+  options: {
+    via?: VtiMembership['via']
+    /** Check a vetting statement and keep it if it passes; see above. */
+    acceptStatement?: (plaintext: DidCommV2PlaintextMessage) => Promise<void>
+  } = {}
 ): Promise<VtiReceivedCredential[]> {
   const body = plaintext.body as { type?: string } | undefined
   const isIssue = plaintext.type === CREDENTIAL_EXCHANGE_ISSUE || body?.type === CREDENTIAL_EXCHANGE_ISSUE
   if (!isIssue) return []
   const received = credentialsOfIssue(body).map(classifyCredential)
+  let statementHandled = false
   for (const item of received) {
     if (item.subjectDid && item.subjectDid !== personaDid) continue
+    if (item.kind === 'vetting-statement') {
+      // One message carries one statement; the check reads it from the message.
+      if (options.acceptStatement && !statementHandled) await options.acceptStatement(plaintext)
+      statementHandled = true
+      continue
+    }
     if (item.kind === 'membership') {
       const existing = await store.getMembership(item.communityDid)
       await store.saveMembership({
@@ -114,13 +134,18 @@ export async function receiveIssue(
         vmc: item.credential,
         roleVec: existing?.roleVec,
         grantedAt:
-          typeof item.credential.validFrom === 'string' ? (item.credential.validFrom as string) : new Date().toISOString(),
+          typeof item.credential.validFrom === 'string'
+            ? (item.credential.validFrom as string)
+            : new Date().toISOString(),
         validUntil: typeof item.credential.validUntil === 'string' ? (item.credential.validUntil as string) : undefined,
         via: existing?.via ?? options.via ?? 'unknown',
       })
     } else if (item.kind === 'role') {
       const existing = await store.getMembership(item.communityDid)
-      const role = String(((item.credential.credentialSubject as Record<string, unknown>)?.endorsement as Record<string, unknown>)?.role ?? 'member')
+      const role = String(
+        ((item.credential.credentialSubject as Record<string, unknown>)?.endorsement as Record<string, unknown>)
+          ?.role ?? 'member'
+      )
       if (existing) await store.saveMembership({ ...existing, role, roleVec: item.credential })
       else await store.saveHeldCredential({ ...item, kind: 'role' })
     } else {

@@ -37,10 +37,17 @@ jest.mock('../module/VtiIdentityStore', () => ({
     listPersonas: async () => [mockPersona],
   })),
 }))
-jest.mock('../module/VtiCommunityStore', () => ({ GenericRecordsCommunityStore: jest.fn().mockImplementation(() => ({})) }))
+jest.mock('../module/VtiCommunityStore', () => ({
+  GenericRecordsCommunityStore: jest.fn().mockImplementation(() => ({})),
+}))
 jest.mock('../module/vtiTsp', () => ({ GenericRecordsTspPeerRevisionStore: jest.fn() }))
 const mockReceiveIssue = jest.fn()
 jest.mock('../module/vtiInbox', () => ({ receiveIssue: (...a: unknown[]) => mockReceiveIssue(...a) }))
+const mockReceiveStatement = jest.fn(async () => undefined)
+jest.mock('../module/vtiVetting', () => ({
+  GenericRecordsVettingStore: jest.fn(),
+  VtiApplicant: jest.fn().mockImplementation(() => ({ receiveStatement: mockReceiveStatement })),
+}))
 
 import { startPersonaInbox as start, VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import { vtiAgent } from '../module/vtiAgent'
@@ -78,13 +85,42 @@ describe('startPersonaInbox', () => {
     mockReceiveIssue.mockResolvedValue([{ kind: 'vetter-grant', communityDid: mockPersona.communityDid }])
     const seen: unknown[] = []
     const sub = DeviceEventEmitter.addListener(VTI_PERSONA_DELIVERIES_EVENT, (e) => seen.push(e))
-    const stop = startPersonaInbox(agent, { mediatorDid: 'did:peer:m', communityDid: mockPersona.communityDid, intervalMs: 60_000 })
+    const stop = startPersonaInbox(agent, {
+      mediatorDid: 'did:peer:m',
+      communityDid: mockPersona.communityDid,
+      intervalMs: 60_000,
+    })
     await flush()
     mockHandlers[0]({ type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1' })
     await flush()
-    expect(mockReceiveIssue).toHaveBeenCalledWith(expect.anything(), mockPersona.did, expect.anything())
+    expect(mockReceiveIssue).toHaveBeenCalledWith(
+      expect.anything(),
+      mockPersona.did,
+      expect.anything(),
+      expect.anything()
+    )
     expect(seen).toEqual([{ communityDid: mockPersona.communityDid, kinds: ['vetter-grant'] }])
     sub.remove()
+    stop()
+  })
+
+  it("hands a vetter's statement to the applicant's full check, never storing it itself", async () => {
+    // Until PR D the inbox stored every statement as it came, and the
+    // checklist counted it (conformance inventory, the statement bypass).
+    mockReceiveIssue.mockResolvedValue([])
+    const stop = startPersonaInbox(agent, {
+      mediatorDid: 'did:peer:m',
+      communityDid: mockPersona.communityDid,
+      intervalMs: 60_000,
+    })
+    await flush()
+    const issue = { type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1' }
+    mockHandlers[0](issue)
+    await flush()
+    const options = mockReceiveIssue.mock.calls[0][3] as { acceptStatement?: (m: unknown) => Promise<void> }
+    expect(options?.acceptStatement).toEqual(expect.any(Function))
+    await options.acceptStatement!(issue)
+    expect(mockReceiveStatement).toHaveBeenCalledWith(issue)
     stop()
   })
 
@@ -115,7 +151,11 @@ describe('startPersonaInbox', () => {
   })
 
   it('does nothing without a persona for the community, and stops listening when stopped', async () => {
-    const stop = startPersonaInbox(agent, { mediatorDid: 'did:peer:m', communityDid: 'did:webvh:other', intervalMs: 60_000 })
+    const stop = startPersonaInbox(agent, {
+      mediatorDid: 'did:peer:m',
+      communityDid: 'did:webvh:other',
+      intervalMs: 60_000,
+    })
     await flush()
     expect(vtiAgent.connect).not.toHaveBeenCalled()
     expect(mockHandlers).toHaveLength(1)

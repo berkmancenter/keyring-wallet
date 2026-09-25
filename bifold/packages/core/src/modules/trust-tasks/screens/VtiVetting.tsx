@@ -408,10 +408,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // listener on the agent, not on a session — and closes the window.
   useEffect(() => {
     if (!agent || !stores || !persona) return
+    // A statement goes through the applicant's full check (receiveStatement)
+    // before it is kept — never stored straight from the inbox.
+    const acceptStatement = (m: Parameters<typeof receiveIssue>[2]) =>
+      new VtiApplicant(agent, persona, stores.vetting, stores.community).receiveStatement(m)
     const stopIssue = vtiAgent.onInbound(async (m) => {
-      const got = await receiveIssue(stores.community, persona.did, m)
+      const got = await receiveIssue(stores.community, persona.did, m, { acceptStatement })
       if (got.length) bump()
     })
+    let cancelled = false
     const refreshSeat = async () => {
       const grants = await stores.community.listHeldCredentials('vetter-grant', persona.communityDid)
       const mine = grants.filter((x) => x.subjectDid === persona.did)
@@ -420,9 +425,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       // desk cannot seat someone under one grant while the signature is made
       // under another — or refused.
       const picked = await pickOwnVetterGrant(agent, mine, { allowInsecureLocal: __DEV__ })
+      // Left while this was reading: starting a listener now would outlive the
+      // screen (see the cleanup below).
+      if (cancelled) return
       setGrant(picked.held)
       setStanding(picked.state)
       const m = await stores.community.getMembership(persona.communityDid)
+      if (cancelled) return
       setMembershipRole(m?.role)
       // Seated at the desk for any grant it holds, live or not — a vetter
       // whose grant was revoked should find the desk and be told why it will
@@ -455,8 +464,15 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     void refreshSeat()
     const timer = setInterval(() => void refreshSeat(), 3000)
     return () => {
+      cancelled = true
       clearInterval(timer)
       stopIssue()
+      // The desk's and the applicant's listeners go with the screen. They were
+      // left registered: each mount makes a new desk, so leaving Vetting and
+      // coming back put two desks on one persona, both answering every request
+      // (the double acceptance of 2026-09-25; vetterDeskListeners.test.tsx).
+      deskRef.current?.stopListening()
+      applicantRef.current?.stopListening()
     }
   }, [agent, stores, persona, connected, bump])
 
@@ -1290,7 +1306,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         await applicantRef.current!.refreshGrantStatus()
                         const { statements } = await applicantRef.current!.checklist()
                         const stopInbox = vtiAgent.onInbound(async (msg) => {
-                          await receiveIssue(stores!.community, persona.did, msg, { via: 'vetting' })
+                          await receiveIssue(stores!.community, persona.did, msg, {
+                            via: 'vetting',
+                            acceptStatement: (m) => applicantRef.current!.receiveStatement(m),
+                          })
                         })
                         try {
                           // Submits, or answers an open deferral in place — a
