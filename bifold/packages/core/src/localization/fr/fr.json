@@ -1275,6 +1275,8 @@
     "UnlinkConfirm": "Délier"
   },
   "Invited": {
+    "Withdraw": "Retirer ma demande",
+    "Withdrawing": "Retrait…",
     "DeferredTitle": "Envoyé — {{community}} demande aussi une vérification",
     "DeferredBody": "Votre invitation l'accompagnait. Avant de vous admettre, {{community}} a besoin de :",
     "PendingTitle": "Envoyé — {{community}} décide",
@@ -1631,6 +1633,10 @@
     "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé"
   },
   "Errors": {
+    "AlreadyAsked": "Vous avez déjà demandé à rejoindre. La communauté décide encore, ou attend votre vérification.",
+    "AlreadyDecided": "La communauté a déjà répondu à votre demande. Ouvrez la communauté pour voir sa réponse.",
+    "NothingOpen": "Vous n'avez aucune demande en cours auprès de cette communauté.",
+    "NotAwaitingEvidence": "La communauté a ce qu'il lui faut et décide. Rien d'autre à envoyer pour l'instant.",
     "NoAnswer": "Votre agent n'a pas répondu. Touchez Continuer pour réessayer — cela fonctionne généralement la deuxième fois.",
     "SentNoAnswer": "Votre demande a été envoyée, et la communauté n'a pas encore répondu. Elle est peut-être encore en train de décider — inutile de la renvoyer.",
     "NotAllowed": "Votre agent n'a pas autorisé cette action. Demandez à son administrateur si ce téléphone a toujours accès.",

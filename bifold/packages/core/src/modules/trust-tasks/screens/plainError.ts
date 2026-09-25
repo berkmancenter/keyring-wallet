@@ -55,12 +55,29 @@ const NO_ANSWER = /did not answer|no answer|timed? ?out|timeout/i
 const NOT_ALLOWED = /not in (the )?ACL|unauthori[sz]ed|forbidden|permission denied|revoked/i
 /** The agent cannot publish a new identity; only its operator can fix that. */
 const NO_DID_HOST = /no DID host/i
+
+/**
+ * A join-request refusal, by the code's last part — never the prose, which a
+ * community words as it likes (vtiAgent joinRequestRefusal reads it the same
+ * way). Each one says what already stands, so none is worth retrying.
+ */
+const JOIN_REFUSALS: Record<string, string> = {
+  requestAlreadyOpen: 'Errors.AlreadyAsked',
+  alreadyDecided: 'Errors.AlreadyDecided',
+  notFound: 'Errors.NothingOpen',
+  notAwaitingEvidence: 'Errors.NotAwaitingEvidence',
+}
+
 /** Nothing to reach: a wrong address, a service that is down, no network. */
 const UNREACHABLE = /network|fetch failed|ECONN|ENOTFOUND|unreachable|could not resolve|did not resolve/i
 
 export function plainError(error: unknown): PlainError {
   const detail = error instanceof Error ? error.message : String(error)
   const bare = withoutOurJargon(detail)
+  const code = String((error as { code?: unknown } | undefined)?.code ?? '')
+    .split(':')
+    .pop()
+  if (code && JOIN_REFUSALS[code]) return { line: JOIN_REFUSALS[code], detail, retry: false }
   // By name, not `instanceof`: this module stays free of the agent's imports.
   if ((error instanceof Error && error.name === 'VtiSentNoAnswer') || SENT_NO_ANSWER.test(bare)) {
     return { line: 'Errors.SentNoAnswer', detail, retry: false }

@@ -1174,6 +1174,8 @@
     "UnlinkConfirm": "Desvincular"
   },
   "Invited": {
+    "Withdraw": "Retirar meu pedido",
+    "Withdrawing": "Retirando…",
     "DeferredTitle": "Enviado — {{community}} também exige verificação",
     "DeferredBody": "Seu convite foi junto. Antes de admitir você, {{community}} precisa de:",
     "PendingTitle": "Enviado — {{community}} está decidindo",
@@ -1530,6 +1532,10 @@
     "AddWhatTheyAsked": "Adicionar o que pediram"
   },
   "Errors": {
+    "AlreadyAsked": "Você já pediu para entrar. A comunidade ainda está decidindo, ou aguardando sua verificação.",
+    "AlreadyDecided": "A comunidade já respondeu ao seu pedido. Abra a comunidade para ver a resposta.",
+    "NothingOpen": "Você não tem nenhum pedido em aberto com esta comunidade.",
+    "NotAwaitingEvidence": "A comunidade já tem o que precisa e está decidindo. Nada mais a enviar por enquanto.",
     "NoAnswer": "Seu agente não respondeu. Toque em Continuar para tentar de novo — normalmente funciona na segunda vez.",
     "SentNoAnswer": "Sua solicitação foi enviada, e a comunidade ainda não respondeu. Ela pode ainda estar decidindo — não é preciso enviá-la de novo.",
     "NotAllowed": "Seu agente não permitiu isso. Pergunte ao administrador dele se este telefone ainda tem acesso.",
