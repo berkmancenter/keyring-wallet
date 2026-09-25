@@ -19,6 +19,8 @@ affinidi-secrets-resolver = "=0.5.12"
 # The TrustTask type vta-sdk's proof verifier takes; the version VTI's Cargo.lock pins.
 trust-tasks-rs = "=0.22.3"
 chrono = { version = "0.4", features = ["serde"] }
+# Signs the role credential in sign-eligibility; the version VTI's Cargo.lock pins.
+affinidi-data-integrity = "=0.7.11"
 
 # Standalone: not a member of any workspace.
 [workspace]
