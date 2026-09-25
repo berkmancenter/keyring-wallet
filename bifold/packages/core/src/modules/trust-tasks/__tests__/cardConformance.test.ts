@@ -32,8 +32,9 @@
  * `verify_trust_task_proof_with`, what a VTA or a VTC runs, and the first half
  * of openvtc's `wire::open`); this test holds the rest of `wire::open` —
  * issuer is the signer, the document's type is the one it was sent as — until
- * card-verify checks those itself. Unsigned tasks (the manifest, the vetter
- * profile) are not listed: Keyring sends them without a proof.
+ * card-verify checks those itself. The vetter profile is listed since PR E
+ * (its proof is RECOMMENDED, and openvtc signs it); the manifest is the one
+ * task Keyring sends unsigned, on purpose (vtiAgent `SIGNED_TASKS`), and is not.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -60,9 +61,15 @@ if (process.env.CONFORMANCE_WHOLE_SECOND) {
 }
 
 const mockSend = jest.fn(async () => undefined)
+const mockAsk = jest.fn()
 jest.mock('../module/vtiAgent', () => ({
   ...jest.requireActual('../module/vtiAgent'),
-  vtiAgent: { send: (...a: unknown[]) => (mockSend as jest.Mock)(...a), onInbound: () => () => undefined },
+  vtiAgent: {
+    send: (...a: unknown[]) => (mockSend as jest.Mock)(...a),
+    ask: (...a: unknown[]) => mockAsk(...a),
+    sentNoAnswer: () => new Error('no answer'),
+    onInbound: () => () => undefined,
+  },
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -192,8 +199,20 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       desk.requestId,
       { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
     )
-    const issue = (mockSend.mock.calls.at(-1) as unknown as [string, string, { payload: Record<string, unknown> }])[2]
-    const statement = (issue.payload.credential_response as { credential: Record<string, unknown> }).credential
+    // Delivered as the VTC delivers a credential: the body IS the delivery,
+    // `credential_response.credential` at its top level (vtc-service
+    // credentials/delivery.rs:128-141), which is where openvtc reads it
+    // (inbound.rs:791). Not a Trust Task document, so not listed below.
+    const [, sentType, issue, sentOptions] = mockSend.mock.calls.at(-1) as unknown as [
+      string,
+      string,
+      Record<string, unknown>,
+      { thid?: string },
+    ]
+    expect(sentType).toBe('https://trusttasks.org/spec/credential-exchange/issue/0.1')
+    expect(Object.keys(issue)).toEqual(['credential_response'])
+    expect(sentOptions).toMatchObject({ thid: desk.session!.documentId })
+    const statement = (issue.credential_response as { credential: Record<string, unknown> }).credential
     const endorsement = (statement.credentialSubject as { endorsement: Record<string, unknown> }).endorsement
     expect(endorsement.cardDigestMultibase).toBe(cardDigestMultibase(card))
     expect(endorsement.identityCommitment).toBe(card.identityCommitment)
@@ -291,8 +310,11 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       writeFileSync(join(out, 'card.json'), JSON.stringify(card, null, 2))
       writeFileSync(join(out, 'statement.json'), JSON.stringify(statement, null, 2))
       // Two signed Trust Task documents, for vta-sdk's verify_trust_task_proof_with.
+      // The vetter's is its request response: the statement travels in a bare
+      // credential-exchange/issue body, which is not a signed document (the
+      // statement inside it is, and verify-statement judges it).
       writeFileSync(join(out, 'task-applicant.json'), JSON.stringify(sessionResponse, null, 2))
-      writeFileSync(join(out, 'task-vetter.json'), JSON.stringify(issue, null, 2))
+      writeFileSync(join(out, 'task-vetter.json'), JSON.stringify(response, null, 2))
       writeFileSync(
         join(out, 'signers.json'),
         JSON.stringify({ applicant: applicant.did, vetter: vetter.did }, null, 2)
@@ -453,7 +475,10 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
       claimsVerified: ['name.legal'],
       livenessConfirmed: true,
     })
-    lastSent('credential-exchange-issue', vetter.did)
+    // The statement's delivery is a bare body, not a signed Trust Task (above).
+    expect(Object.keys((mockSend.mock.calls.at(-1) as unknown as [string, string, object])[2])).toEqual([
+      'credential_response',
+    ])
     await vetterDesk.decline(opened.requestId, 'the session ended')
     lastSent('vetting-decline', vetter.did)
 
@@ -486,6 +511,33 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
       const document = toCommunity.at(-1)!
       produced.push({ name, sentAs: String(document.type), document, signer: applicant.did })
     }
+
+    // The vetter's profile, published by the shipping desk through the same
+    // controller, now speaking as the vetter.
+    Object.assign(controller as unknown as Record<string, unknown>, {
+      agent: vetter.agent,
+      persona: personaOf(vetter),
+      state: { status: 'connected', did: vetter.did },
+    })
+    mockAsk.mockImplementation((...a: unknown[]) =>
+      (controller.ask as (...x: unknown[]) => Promise<unknown>).apply(controller, a)
+    )
+    await vetterDesk
+      .publishProfile({
+        displayName: 'Carol',
+        country: 'CZ',
+        city: 'Prague',
+        events: [{ name: 'Kernel Maintainer Summit', startDate: '2026-10-05', endDate: '2026-10-08' }],
+      })
+      .catch(() => undefined)
+    const profileDocument = toCommunity.at(-1)!
+    expect(profileDocument.type).toBe(VETTING.vettersProfile)
+    produced.push({
+      name: 'vetter-profile',
+      sentAs: String(profileDocument.type),
+      document: profileDocument,
+      signer: vetter.did,
+    })
 
     // --- The VTA: every task the client sends, signed as the manager ----------
     const toVta: Record<string, unknown>[] = []

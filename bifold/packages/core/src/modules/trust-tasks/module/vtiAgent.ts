@@ -60,16 +60,25 @@ const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
 const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
 const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
 const SELF_REMOVE = 'https://trusttasks.org/spec/vtc/members/self-remove/0.1'
+const VETTERS_PROFILE = 'https://trusttasks.org/spec/vtc/vetting/vetters/profile/0.1'
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 /**
- * The community tasks this controller asks whose specifications declare the
- * document `proof` REQUIRED. A VTC refuses them unsigned (`proofRequired`)
- * since vti #1672, over every carriage — an authenticated DIDComm sender no
- * longer stands in for the proof. The manifest and the vetter profile declare
- * none, and stay unsigned: a present proof is always verified, so signing what
- * need not be signed only adds a way to be refused.
+ * The community tasks this controller signs. Those whose specifications
+ * declare the document `proof` REQUIRED — a VTC refuses them unsigned
+ * (`proofRequired`) since vti #1672, over every carriage — and the vetter
+ * profile, whose proof is RECOMMENDED so a published profile stays
+ * attributable to its vetter after the transport has closed
+ * (vtc/vetting/vetters/profile/0.1 spec.md:26-28), and which openvtc signs
+ * (`publish_profile` → `sign_and_send`, openvtc vetting_actions.rs:1731-1760,
+ * :1097-1110).
+ *
+ * The manifest stays unsigned. Its proof is RECOMMENDED too, but the spec's
+ * own privacy analysis is why not: an unproofed read discloses no applicant
+ * identifier, and a proof "converts an anonymous read into an attributable
+ * one" of someone merely considering applying (vtc/join-requests/manifest/0.2
+ * spec.md:26-28, :326-329). openvtc signs it; Keyring does not, on purpose.
  */
-const PROOF_REQUIRED = new Set([SUBMIT, STATUS, WITHDRAW, SUPPLEMENT, SELF_REMOVE])
+const SIGNED_TASKS = new Set([SUBMIT, STATUS, WITHDRAW, SUPPLEMENT, SELF_REMOVE, VETTERS_PROFILE])
 
 /**
  * The community tasks `ask` may send twice: reads, which change nothing, so a
@@ -1094,7 +1103,7 @@ class VtiAgentController {
       issuedAt: new Date().toISOString(),
       payload,
     }
-    if (!PROOF_REQUIRED.has(type)) return document
+    if (!SIGNED_TASKS.has(type)) return document
     const persona = this.persona
     const agent = this.agent
     if (!agent || !persona || persona.did !== this.state.did || !persona.kmsKeyIds?.signing) {

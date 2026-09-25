@@ -103,7 +103,13 @@ export async function joinCommunity(
   // Returned, not fired and forgotten: the mediator is told the message was
   // taken only once it is stored, and a failed store leaves it for redelivery.
   const stopInbox = vtiAgent.onInbound(async (plaintext) => {
-    await receiveIssue(deps.communityStore, persona.did, plaintext, { via })
+    await receiveIssue(deps.communityStore, persona.did, plaintext, {
+      via,
+      onRefused: (item, refusal) =>
+        deps.agent.config?.logger?.warn?.(`[VTI] delivered ${item.kind} credential not kept (${refusal})`, {
+          from: String(plaintext.from ?? ''),
+        }),
+    })
   })
 
   step('manifest')
