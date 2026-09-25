@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.49 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.50 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -67,6 +67,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | **Fixed upstream** in affinidi-tdk-rs #884 (SDK 0.26.27, 09-23) — the accept was posted to the wrong mediator. **Operator requirement remains:** the receiving mediator must admit the relayed hop (`enable_inter_mediator_relay`, or the sender in `relay_trusted_mediators`) — for the Farm, a Farm-side setting | F′ |
 | [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A DIDComm router that has never heard of verbs its own service dispatches (VTC and VTA) | **High** | **Resolved upstream** in VTI #1687 (09-23): the binding envelope is the intended — and now the only — DIDComm carriage for every verb, on both services; refusals of a task-typed message name the envelope and are threaded. Keyring sends it (keyring-bifold#76) | F′ |
 | [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | **Fixed upstream** in VTI #1675 (09-23): a relationship-control frame now completes before anything the same sender sent after it. Recurred on the Farm before the fix reached it (VTA 0.39.0) | F′ |
+| [VTI-44](#vti-44--vta-sdk-cannot-verify-a-credential-signed-with-a-proof-set) | vta-sdk cannot verify a credential signed with a proof set, which is what a hybrid-keyed VTC issues | **High** | Open, not sent. Found in Phase 2 of the openvtc interop harness (2026-09-25) |
 
 ## Stack under test
 
@@ -1433,6 +1434,44 @@ or its configuration, so that a TSP relationship forms across mediators.
 **Verification:** re-run the rung's cross-mediator legs; an XRFA naming the
 invite, then the manifest over TSP, is the pass.
 
+### VTI-44 — vta-sdk cannot verify a credential signed with a proof set
+
+(a) **What happens.** A VTC holding more than one signing key signs each
+credential it issues once per key and writes `proof` as a JSON **array**, a
+proof set. vta-sdk's vetting verifiers read `proof` as a single object, so
+every such credential fails as malformed. Concretely, a vetter grant issued by
+such a community can never pass an applicant's eligibility check, and openvtc
+logs *"vetter eligibility presentation did not verify … vetter role credential
+proof verification failed"*. The same verifier serves statements and cards, so
+a hybrid-keyed signer's statement or card would fail the same way.
+
+(b) **Measured** on our lab, 2026-09-25 11:27:11Z (openvtc `ed13d29` as
+applicant, a Keyring vetter, lab VTC 0.11.58 at VTI `ed672fff`). The grant
+Keyring presented was the one the community issued, stored and re-presented
+unchanged. The lab VTC's credentials carry `proof` = [`eddsa-jcs-2022`
+`assertionMethod` `#key-0`, `mldsa44-jcs-2024` `assertionMethod` `#key-2`],
+seen on two invitations it issued. The eligibility check is advisory, so the
+run went on; openvtc may make it blocking.
+
+(c) **Where.** `vtc-service/src/credentials/signer.rs:139-148` (`sign_multi`
+writes the array when the signer holds several keys; grants use the same
+signer, `vetting/vetters.rs:333`). `vta-sdk/src/vetting/mod.rs:143-146`
+(`verify_attached_proof` deserialises `proof` into one `DataIntegrityProof`),
+identical in vta-sdk 0.51.0 (openvtc `ed13d29`'s lock) and 0.52.0 (`ed672fff`).
+vtc-service already documents and fixes this for itself
+(`credentials/proof_set.rs:13-22`: *"every verification path here read the
+proof as a single object … a two-proof credential … is rejected as
+malformed"*), but only inside vtc-service.
+
+(d) **Expected:** vta-sdk's `verify_attached_proof` accepts a proof set:
+keep the proofs whose `proofPurpose` matches, verify each over the document
+without `proof`, and apply the same any-of and same-signer rules vtc-service
+uses (`proof_set()`, `accept_any()`). It would help to also have openvtc log
+the error's cause, not only its `Display`. Keyring's own verifier already
+accepts proof sets (it verifies the eddsa entries), so this is not a Keyring
+defect. A Keyring-side interim (presenting the grant with only its eddsa
+proof) is possible, but not taken.
+
 ### VTI-43 — A TSP reply sent before the relationship is accepted never arrives
 
 (a) **What happens.** A phone greets a VTA with an `XRFI` invite and asks its
@@ -2314,6 +2353,7 @@ asking the agent).
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.50 | 2026-09-25 | **VTI-44** (new, High): vta-sdk reads a credential's `proof` as one object, but a VTC with several keys signs with a proof set (an array: eddsa-jcs-2022 plus mldsa44-jcs-2024), so openvtc rejects every vetter grant from such a community. Measured on our lab with openvtc `ed13d29`; vtc-service fixed it for itself only (`proof_set.rs`). Not sent. |
 | 1.49 | 2026-09-25 | **VTI-Q30** (new): `acl/swap-key` is two writes and not idempotent, and pnm keeps the new key only in memory until the session is saved, so a swap answer lost after the agent swapped strands the admin key. Read at `ed672fff`; not seen live. Keyring closes the same gap on its side (keyring-bifold#127). Not sent. |
 | 1.48 | 2026-09-25 | **VTI-Q28** (new): the vetting rules that exist only in the spec, with no vta-sdk verifier a client can run on its own output (parentThreadId, session expiry, taskDigestMultibase, request fields, ticket generation, registryConsent, the membership credential's proof). From the conformance inventory. **VTI-Q29** (new): openvtc does not retry a mediator listener that failed at launch, so a vetter can be deaf behind a normal desk. Measured on our lab with `ed13d29`. Neither sent. |
 | 1.47 | 2026-09-25 | **VTI-Q27** (new): a community delivers the membership credential once, and nothing gets it again: no member-credential resend, and the id-less `join-requests/status` finds only open requests, so an approved join answers NotFound. A client that stops between receiving the credential and storing it stays pending for good. Measured on our lab with openvtc `ed13d29` (VTI `a96fe02f`); read at `a96fe02f`. Keyring has a narrower window of the same kind, which it is closing on its side. Not sent. |
