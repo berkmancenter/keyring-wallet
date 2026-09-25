@@ -210,6 +210,27 @@ async function linkManually(driver) {
   const tapped = new Set();
   while (!(await existsTestId(driver, "VtaLinkManualDid", 1500))) {
     if (Date.now() > keyBy) break;
+    // Below the fold the toggle is not in the tree at all on Android (React
+    // Native clips off-screen views: a Pixel 6 profile, RC gate 2026-09-25),
+    // so "is it there?" stays no until something scrolls. Neither toggle in
+    // the tree yet: swipe the content up mid-screen, then look again.
+    const anyToggle =
+      (await byTestId(driver, "VtaLinkShowTheCode").isExisting().catch(() => false)) ||
+      (await byTestId(driver, "VtaLinkShowMyCode").isExisting().catch(() => false));
+    if (!anyToggle) {
+      const { width, height } = await driver.getWindowRect();
+      await driver
+        .action("pointer")
+        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.5) })
+        .down()
+        .pause(100)
+        .move({ x: Math.floor(width / 2), y: Math.floor(height * 0.25), duration: 400 })
+        .up()
+        .perform()
+        .catch(() => undefined);
+      await sleep(600);
+      continue;
+    }
     for (const key of ["VtaLinkShowTheCode", "VtaLinkShowMyCode"]) {
       if (tapped.has(key) || !(await byTestId(driver, key).isExisting().catch(() => false))) continue;
       // Where the admin adds the code is in view before the code is asked for
