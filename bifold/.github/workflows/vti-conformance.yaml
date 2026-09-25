@@ -1,0 +1,78 @@
+name: VTI conformance
+
+# Upstream's own code judges what Keyring produces, on every PR that touches
+# vetting or Trust Tasks. The pinned VTI SDK (vta-sdk verify_card,
+# verify_statement + check_against_card) runs on a Vetting Card made by the
+# shipping sendCard and on the statement Keyring's vetter makes over it,
+# both really signed by a did:key. The other direction (Keyring's functions
+# on upstream-computed values) is vtiConformanceVectors.test.ts, which the
+# ordinary test job runs.
+#
+# The VTI pin and the checker are the wallet's: scripts/openvtc/PINS.json and
+# scripts/openvtc/card-verify on keyring-wallet main.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/core/src/modules/trust-tasks/**'
+      - 'packages/trust-tasks/**'
+      - '.github/workflows/vti-conformance.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/core/src/modules/trust-tasks/**'
+      - 'packages/trust-tasks/**'
+      - '.github/workflows/vti-conformance.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-judges-keyring:
+    runs-on: ubuntu-22.04
+    name: VTI SDK accepts Keyring's card and statement
+    steps:
+      - name: Checkout bifold
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Setup NodeJS
+        uses: ./.github/actions/setup-node
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build Workspace
+        run: yarn build
+
+      - name: Fetch the wallet's checker and the VTI pin
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/berkmancenter/keyring-wallet.git "$RUNNER_TEMP/wallet"
+          git -C "$RUNNER_TEMP/wallet" sparse-checkout set scripts/openvtc
+          vti="$(node -e "process.stdout.write(require('$RUNNER_TEMP/wallet/scripts/openvtc/PINS.json').repos['verifiable-trust-infrastructure'].sha)")"
+          echo "VTI pin: $vti"
+          git clone --filter=blob:none https://github.com/OpenVTC/verifiable-trust-infrastructure.git "$RUNNER_TEMP/wallet/external/verifiable-trust-infrastructure"
+          git -C "$RUNNER_TEMP/wallet/external/verifiable-trust-infrastructure" checkout --detach "$vti"
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - name: Cache the checker's build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: ${{ runner.temp }}/wallet/scripts/openvtc/card-verify -> target
+
+      - name: Build card-verify
+        working-directory: ${{ runner.temp }}/wallet/scripts/openvtc/card-verify
+        run: cargo build --release --locked
+
+      - name: Keyring makes a card and a statement
+        working-directory: packages/core
+        run: CARD_OUT="$RUNNER_TEMP/conformance" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
+
+      - name: VTI SDK judges them
+        run: |
+          bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
+          out="$RUNNER_TEMP/conformance"
+          "$bin" "$out/card.json" "$out/expect.json"
+          "$bin" verify-statement "$out/statement.json" "$out/card.json" "$out/expect.json"
