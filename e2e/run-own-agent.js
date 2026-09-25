@@ -279,14 +279,21 @@ async function connect(d, who) {
   // TODO(own-agent §7): AgentCreateConnect → AgentCreateProgress with
   //   AgentCreateStep_signIn / _owner / _ready → AgentBackup (step 5).
   //   "Not admitted yet" is AgentCreateError; fail fast on it.
-  if (await existsTestId(d, "AgentCreateConnect", 2000)) {
-    await tapTestId(d, "AgentCreateConnect", 15000);
-    await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID);
-    await handleBiometricConfirmIfPresent(d);
+  // With auto-detect (AgentCreateWaiting) the screen moves on by itself once
+  // the agent admits the code; the manual "check now" is only a nudge, and it
+  // no longer asks for Face ID (the Copy/Share did, once per visit).
+  const waiting = await existsTestId(d, "AgentCreateWaiting", 2000);
+  if (waiting || (await existsTestId(d, "AgentCreateConnect", 1000))) {
+    if (!waiting) {
+      await tapTestId(d, "AgentCreateConnect", 15000);
+      await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID, 8000);
+      await handleBiometricConfirmIfPresent(d);
+    }
     const by = Date.now() + 180000;
     while (Date.now() < by) {
       if (await existsTestId(d, "AgentCreateError", 1000)) throw new Error(`${who}: ${await textOf(d, "AgentCreateError")}`);
       if (await existsTestId(d, "AgentBackup", 1000)) return "AgentBackup";
+      if (await existsTestId(d, "AgentCreateCheckAgain", 500)) await tapTestId(d, "AgentCreateCheckAgain", 5000);
       await sleep(1500);
     }
     throw new Error(`${who}: Connecting never reached "Add a backup"`);
