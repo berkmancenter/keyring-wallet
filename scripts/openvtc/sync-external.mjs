@@ -139,6 +139,12 @@ if (advanceRepo) {
   appendFileSync(logPath, `\n- **${pins.updated}** · \`${advanceRepo}\` ${before} → ${after} — ${advanceWhy}. **Re-run the reference ladder bottom-up.**`);
   console.log(`\nADVANCED ${advanceRepo}: ${before} → ${after}. PINS.json + SYNC_LOG.md updated.`);
   console.log(`Now re-run the ladder: for d in ${ladderDir}/ref-*; do (cd "$d" && npm run -s check); done`);
+  if (advanceRepo === "verifiable-trust-infrastructure") {
+    console.log(
+      "card-verify follows this pin in the SAME pull request: set its exact pins to this commit's Cargo.lock, " +
+        "rebuild so its Cargo.lock follows, and rerun `card-verify vectors` against keyring-bifold's committed vectors (README.md)."
+    );
+  }
 }
 
 console.log(`\n=== digest done · ${tripwires} tripwire(s) ===`);
