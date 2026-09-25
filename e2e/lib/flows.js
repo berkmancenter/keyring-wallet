@@ -385,7 +385,18 @@ export async function unlockIfLocked(driver) {
   if (!(await pinInput.isExisting())) return false;
   console.log(`[e2e] ${driver.e2ePlatform}: wallet locked — unlocking`);
   await pinInput.click();
-  await pinInput.setValue(PIN);
+  // On an iOS simulator one setValue of the whole PIN can drop a keystroke:
+  // the field holds five of six digits, Enter answers "PIN is too short", and
+  // every re-tap below fails the same way (221 gate, twice in a row). Typing a
+  // digit at a time with a pause gives each keystroke its own round trip.
+  if (driver.e2ePlatform === "ios") {
+    for (const digit of PIN) {
+      await pinInput.addValue(digit);
+      await sleep(200);
+    }
+  } else {
+    await pinInput.setValue(PIN);
+  }
   if (await existsTestId(driver, "Enter", 1500)) {
     await hideKeyboard(driver);
     // A dropped tap here (same class of flakiness tapTestIdReliable exists
