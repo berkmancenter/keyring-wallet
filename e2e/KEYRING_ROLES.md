@@ -49,7 +49,7 @@ Read from the pinned `external/openvtc` at 177a218. `VA` = `openvtc/src/state_ha
 - **A card lives at most 15 minutes** (vta-sdk `vetting/card.rs:42`). `awaitStatement` records the card's age when it times out.
 - **Reopening a session replaces it.** There's a new session document, so a new match code, and a card for the old session is refused (vetter.rs:535-542). The statement's `taskContext` is the session document id.
 - **The statement is matched on `cardDigestMultibase`**, a JCS digest of the card **without** its proof (dtg-credentials `digest_multibase_json`; applicant.rs:1076-1081). A mismatch drops the statement silently. That is the maintainer case of 2026-09-25 (cd: Keyring hashed the card with its proof).
-- **Keyring's own refusals are not silent.** When Keyring refuses a document from openvtc unread (bad proof, wrong signer, wrong type; keyring-bifold#128), the screen shows `VettingEnvelopeRefused` with a reason. Every `awaitStep` then fails at once with that reason, and so does `awaitStatement`. A refused statement shows `VettingStatementRefused` (#116).
+- **Keyring's own refusals are not silent.** When Keyring refuses a document from openvtc unread (bad proof, wrong signer, wrong type; keyring-bifold#128), the screen shows `VettingEnvelopeRefused` with a reason. A card the vetter's phone refuses shows `VettingCardRefused`, and a session the applicant's phone refuses shows `VettingSessionRefused` (#130/#131). Every `awaitStep` then fails at once with that reason, and so does `awaitStatement`. A refused statement shows `VettingStatementRefused` (#116).
 - **The TUI vetter's first "open session"** may only fetch the community's manifest. It has to be done twice (VA:2036-2061).
 
 ## openvtc main (ed13d29) against the pin (177a218)

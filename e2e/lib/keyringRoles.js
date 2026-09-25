@@ -222,19 +222,30 @@ function failWith(message, observed) {
 }
 
 /**
- * A document from the other side that was refused unread (keyring-bifold#128/#129):
- * the step will not move, so fail at once with the reason the screen gives,
- * rather than wait out the deadline.
+ * A document from the other side that this phone refused: unread, for a bad
+ * proof, signer or type (keyring-bifold#128/#129); or checked and not taken,
+ * a card on the vetter's desk or a session on the applicant's request
+ * (#130/#131). The step will not move and the other side is not told, so fail
+ * at once with the reason the screen gives rather than wait out the deadline.
  */
+const REFUSALS = [
+  ["VettingEnvelopeRefused", "a message from the other side was refused unread"],
+  ["VettingCardRefused", "the applicant's card was not accepted"],
+  ["VettingSessionRefused", "the vetter's session was not accepted"],
+];
+
 async function throwIfEnvelopeRefused(d, extra = async () => ({})) {
-  if (!(await existsTestId(d, "VettingEnvelopeRefused", 500))) return;
-  const said = await textOf(d, "VettingEnvelopeRefused").catch(() => "");
-  const reason = await textOf(d, "VettingEnvelopeRefusedReason").catch(() => "");
-  throw failWith(`a message from the other side was refused unread: ${said}${reason ? ` (${reason})` : ""}`, {
-    ...(await extra()),
-    envelopeRefused: said || true,
-    envelopeRefusedReason: reason,
-  });
+  for (const [id, what] of REFUSALS) {
+    if (!(await existsTestId(d, id, 300))) continue;
+    const said = await textOf(d, id).catch(() => "");
+    const reason = await textOf(d, `${id}Reason`).catch(() => "");
+    throw failWith(`${what}: ${said}${reason ? ` (${reason})` : ""}`, {
+      ...(await extra()),
+      refused: id,
+      refusedSaid: said || true,
+      refusedReason: reason,
+    });
+  }
 }
 
 /**
@@ -317,6 +328,7 @@ async function applicantEvidence(d) {
     error: await textOf(d, "VettingError").catch(() => ""),
     statementRefused: await textOf(d, "VettingStatementRefusedDetails").catch(() => ""),
     envelopeRefusedReason: await textOf(d, "VettingEnvelopeRefusedReason").catch(() => ""),
+    sessionRefusedReason: await textOf(d, "VettingSessionRefusedReason").catch(() => ""),
   };
 }
 
