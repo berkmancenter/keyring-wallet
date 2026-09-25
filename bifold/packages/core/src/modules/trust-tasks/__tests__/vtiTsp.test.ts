@@ -199,6 +199,22 @@ describe('VtiMediatorSession — TSP frames on the DIDComm socket', () => {
     expect(ack.body.message_id_list).toEqual([tsp.tspFrameQueueId(text)])
   })
 
+  /**
+   * A grant check that gave up stopped its session while work it had started
+   * was still packing a question. That work's send then reopened the socket:
+   * a second live socket for the same DID, owned by nobody, which took the
+   * answer and left it with no one waiting (Android, 2026-09-24).
+   */
+  test('a stopped session does not reopen its socket for a late send', async () => {
+    const { session, sent } = fakeSession({ onTspFrame: () => undefined })
+    const start = jest.spyOn(session, 'start').mockResolvedValue(undefined)
+    await session.stop()
+    const packed = await packTrustTaskForPeer(sessionFor(applicant), applicant.vid, vetter.vid, request)
+    await expect(session.sendTspFrame(packed.bytes)).rejects.toThrow(/session stopped/)
+    expect(start).not.toHaveBeenCalled()
+    expect(sent).toHaveLength(0)
+  })
+
   test('a long-framed "--E…" frame (past 4095 quadlets) is routed the same way', async () => {
     const big = { ...request, payload: { blob: 'x'.repeat(13000) } }
     const packed = await packTrustTaskForPeer(sessionFor(applicant), applicant.vid, vetter.vid, big)

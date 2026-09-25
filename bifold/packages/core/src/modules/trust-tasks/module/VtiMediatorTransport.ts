@@ -311,6 +311,8 @@ export async function vtiClientIdentityFromPersona(
 export class VtiMediatorSession {
   private socket?: WebSocket
   private pollTimer?: ReturnType<typeof setInterval>
+  /** Set by `stop()`, and final: a stopped session never reopens (`ensureOpen`). */
+  private stopped = false
   private opening?: Promise<void>
   private readonly seen = new Set<string>()
   private accessToken?: string
@@ -766,6 +768,12 @@ export class VtiMediatorSession {
    */
   private async ensureOpen(): Promise<void> {
     if (this.socket?.readyState === 1) return
+    // A stopped session stays stopped. Its owner has given up on it — a grant
+    // check past its deadline, a disconnect — but work it started can still be
+    // running, and its next send used to reopen the socket here: a second live
+    // socket for the same DID, owned by nobody, which took the answer meant for
+    // the next attempt (Android link on a slow device, 2026-09-24).
+    if (this.stopped) throw new Error(`${LOG_PREFIX} session stopped`)
     // One reopen at a time: an acknowledgement, the poll and a task can all
     // find the socket closed in the same tick, and two starts racing replace
     // the socket under the first caller ("socket is not open").
@@ -854,6 +862,7 @@ export class VtiMediatorSession {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true
     if (this.pollTimer) clearInterval(this.pollTimer)
     this.pollTimer = undefined
     this.socket?.close()

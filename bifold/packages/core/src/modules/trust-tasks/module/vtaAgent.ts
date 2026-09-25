@@ -78,13 +78,17 @@ export interface VtaAgentDeps {
   now?: () => number
   /** How long "I've been added" waits for an answer; tests shorten it. */
   grantCheckDeadlineMs?: number
+  /** How long signing in may take in a grant check; see GRANT_CONNECT_DEADLINE_MS. */
+  grantConnectDeadlineMs?: number
 }
 
 /** A refusal that means the agent no longer accepts this phone at all. */
 const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
 
 /**
- * How long "I've been added" waits for the agent before it says so.
+ * How long "I've been added" waits for the agent's answer before it says so,
+ * counted from when the question is sent — not from the tap, which also pays
+ * for signing in (GRANT_CONNECT_DEADLINE_MS).
  *
  * An agent that answers says everything it has to say quickly: a first task,
  * the greeting that precedes it included, came back in 1.76 s, and later ones
@@ -99,6 +103,18 @@ const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
  * person is willing to watch it.
  */
 export const GRANT_CHECK_DEADLINE_MS = 10000
+
+/**
+ * How long signing in to the agent may take before a grant check gives up.
+ * Separate from the answer's deadline on purpose: connecting is DID
+ * resolution, a challenge and a socket on the phone's side, and on a slow
+ * phone it took most of a shared 10 s budget, so an answer that came back in
+ * time was thrown away (Android, 2026-09-24: connect ≈5.5 s, answer ≈4.3 s).
+ */
+export const GRANT_CONNECT_DEADLINE_MS = 30000
+
+/** Matches VtaClient's own "no answer in time" — a silence, not a refusal. */
+const NO_ANSWER = /the VTA did not answer/
 
 const TIMED_OUT = Symbol('timedOut')
 
@@ -122,6 +138,21 @@ export async function withDeadline(work: Promise<unknown>, ms = GRANT_CHECK_DEAD
     return (await finished) !== TIMED_OUT
   } finally {
     if (timer) clearTimeout(timer)
+  }
+}
+
+/**
+ * Ask who we are, allowing the agent `answerMs` from the send. False when it
+ * stays silent — VtaClient's own timeout, or the backstop for work that hangs
+ * before it can send; a refusal still throws, so "not added yet" keeps its
+ * meaning.
+ */
+async function answeredInTime(client: Pick<VtaClient, 'whoAmI'>, answerMs: number): Promise<boolean> {
+  try {
+    return await withDeadline(client.whoAmI(answerMs), answerMs * 3)
+  } catch (error) {
+    if (NO_ANSWER.test(error instanceof Error ? error.message : String(error))) return false
+    throw error
   }
 }
 
@@ -459,13 +490,17 @@ export class VtaAgentController {
     try {
       await this.reset()
       const client = this.client(agent, link.vtaDid, identities)
-      const answered = await withDeadline(
-        (async () => {
-          await client.connect()
-          await client.whoAmI()
-        })(),
-        this.deps.grantCheckDeadlineMs ?? GRANT_CHECK_DEADLINE_MS
+      // Two deadlines, not one. The agent is given its full time to answer,
+      // counted from when the question leaves the phone (VtaClient starts that
+      // clock after the send); getting signed in is bounded separately. The
+      // outer bound on `whoAmI` is only a backstop for work that hangs before
+      // it can send.
+      const answerMs = this.deps.grantCheckDeadlineMs ?? GRANT_CHECK_DEADLINE_MS
+      const connected = await withDeadline(
+        client.connect(),
+        this.deps.grantConnectDeadlineMs ?? GRANT_CONNECT_DEADLINE_MS
       )
+      const answered = connected && live() && (await answeredInTime(client, answerMs))
       if (!live()) return
       if (!answered) {
         // Hand the attempt on, so an answer that arrives after we have given

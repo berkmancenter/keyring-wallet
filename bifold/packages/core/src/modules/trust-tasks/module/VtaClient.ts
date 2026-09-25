@@ -524,8 +524,9 @@ export class VtaClient {
     })
   }
 
-  whoAmI() {
-    return this.task<VtaWhoAmI>(VTA_TASK.whoAmI, {})
+  /** `timeoutMs` bounds the wait for the VTA's answer, counted from the send. */
+  whoAmI(timeoutMs?: number) {
+    return this.task<VtaWhoAmI>(VTA_TASK.whoAmI, {}, timeoutMs)
   }
 
   /**

@@ -10,7 +10,7 @@ import { EnrolmentError } from '../module/vtaEnrolment'
 const mockClient = {
   connect: jest.fn(async () => undefined),
   disconnect: jest.fn(async () => undefined),
-  whoAmI: jest.fn(async () => ({ roles: ['admin'] })),
+  whoAmI: jest.fn(async (_timeoutMs?: number) => ({ roles: ['admin'] })),
   rotateManagerKey: jest.fn(async () => 'did:peer:2.permanent'),
   agentLabel: jest.fn(async (): Promise<{ label: string; source: string } | undefined> => undefined),
   managerDid: 'did:peer:2.permanent',
@@ -226,6 +226,34 @@ describe('linking without a QR through the controller', () => {
     await vta.checkManualGrant({} as never)
     expect(mockClient.rotateManagerKey).toHaveBeenCalledTimes(1)
     expect(vta.getState().link).toMatchObject({ kind: 'linked' })
+  })
+
+  /**
+   * Android, 2026-09-24: signing in took about 5.5 s on a slow emulator and the
+   * agent answered about 4.3 s after the question, so one shared 10 s budget ran
+   * out 0.1 s before the answer arrived. The check gave up, disconnected, and
+   * threw the answer away. Signing in has its own bound; the agent's time to
+   * answer starts when the question is sent.
+   */
+  it('a slow sign-in does not use up the time the agent has to answer', async () => {
+    const { vta } = controller({ grantCheckDeadlineMs: 30 })
+    await vta.startManualLink({} as never, offer.vta, 'alice host')
+    mockClient.connect.mockImplementationOnce(() => new Promise<undefined>((resolve) => setTimeout(resolve, 80)))
+
+    await vta.checkManualGrant({} as never)
+    expect(mockClient.whoAmI).toHaveBeenCalledWith(30)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked' })
+  })
+
+  it('the client giving up on an answer reads as no answer, not as a failure', async () => {
+    const { vta } = controller({ grantCheckDeadlineMs: 20 })
+    await vta.startManualLink({} as never, offer.vta, 'alice host')
+    mockClient.whoAmI.mockImplementationOnce(async () => {
+      throw new Error('[TrustTasks:VtaClient] the VTA did not answer https://trusttasks.org/spec/auth/whoami/0.1')
+    })
+
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', checking: false, noAnswer: true })
   })
 
   it('an error other than "not added yet" ends the attempt', async () => {
