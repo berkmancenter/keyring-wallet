@@ -1333,6 +1333,21 @@
     "And": "e"
   },
   "Vetting": {
+    "EligibilityUnchecked": "Não foi possível confirmar a habilitação deste verificador. A declaração pode contar, mas pergunte à comunidade se tiver dúvidas.",
+    "EligibilityReason": {
+      "malformed": "A prova do papel dele não pôde ser lida.",
+      "holder": "A prova do papel foi assinada por outra pessoa, não por este verificador.",
+      "nonce": "A prova do papel foi feita para outro pedido.",
+      "domain": "A prova do papel foi feita para outra pessoa.",
+      "proof": "A assinatura da prova do papel não confere.",
+      "noRoleCredential": "Ele não mostrou papel de verificador nesta comunidade.",
+      "grantIssuer": "O papel de verificador não foi emitido por esta comunidade.",
+      "grantSubject": "O papel de verificador nomeia outra pessoa.",
+      "grantMalformed": "O papel de verificador não pôde ser lido.",
+      "grantExpired": "O papel de verificador está vencido.",
+      "grantProof": "A assinatura da comunidade no papel de verificador não confere.",
+      "legacyExpired": "Ele usou a prova de uma versão antiga do Keyring, que não é mais aceita."
+    },
     "NeedsMethod": "mais {{n}} {{method}}",
     "IndependenceCapped": "Mais declarações de pessoas que declararam um vínculo {{relationships}} com você do que esta comunidade conta. Sua candidatura continua valendo — alguém vai analisá-la.",
     "UnreadableMaxAge": "Esta comunidade publica um limite de idade para declarações ({{value}}) que este aplicativo não conseguiu ler, então a contagem acima pode ser mais otimista que a da comunidade.",

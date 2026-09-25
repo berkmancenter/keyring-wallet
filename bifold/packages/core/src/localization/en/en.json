@@ -1489,6 +1489,21 @@
     "And": "and"
   },
   "Vetting": {
+    "EligibilityUnchecked": "This vetter's eligibility could not be checked. Their statement can still count, but ask the community if you are unsure.",
+    "EligibilityReason": {
+      "malformed": "The vetter's proof of their role could not be read.",
+      "holder": "The proof of their role was signed by someone other than this vetter.",
+      "nonce": "The proof of their role was made for a different request.",
+      "domain": "The proof of their role was made for someone else.",
+      "proof": "The signature on the proof of their role does not check out.",
+      "noRoleCredential": "They showed no vetter role for this community.",
+      "grantIssuer": "Their vetter role was not issued by this community.",
+      "grantSubject": "Their vetter role names someone else.",
+      "grantMalformed": "Their vetter role could not be read.",
+      "grantExpired": "Their vetter role is out of date.",
+      "grantProof": "The community's signature on their vetter role does not check out.",
+      "legacyExpired": "They used an older Keyring's proof, which is no longer accepted."
+    },
     "YourVetter": "Your vetter",
     "YourVetterN": "Your vetter {{n}}",
     "TicketOtherCommunity": "This ticket is for vetting in {{other}}, not {{community}}. Using it would show your identity to {{other}}, so Keyring won't send it.",

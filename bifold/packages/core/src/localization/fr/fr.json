@@ -1434,6 +1434,21 @@
     "And": "et"
   },
   "Vetting": {
+    "EligibilityUnchecked": "L'habilitation de ce vérificateur n'a pas pu être contrôlée. Sa déclaration peut compter, mais demandez à la communauté en cas de doute.",
+    "EligibilityReason": {
+      "malformed": "La preuve de son rôle est illisible.",
+      "holder": "La preuve de son rôle a été signée par quelqu'un d'autre que ce vérificateur.",
+      "nonce": "La preuve de son rôle a été faite pour une autre demande.",
+      "domain": "La preuve de son rôle a été faite pour quelqu'un d'autre.",
+      "proof": "La signature de la preuve de son rôle n'est pas valide.",
+      "noRoleCredential": "Il n'a montré aucun rôle de vérificateur pour cette communauté.",
+      "grantIssuer": "Son rôle de vérificateur n'a pas été délivré par cette communauté.",
+      "grantSubject": "Son rôle de vérificateur désigne quelqu'un d'autre.",
+      "grantMalformed": "Son rôle de vérificateur est illisible.",
+      "grantExpired": "Son rôle de vérificateur a expiré.",
+      "grantProof": "La signature de la communauté sur son rôle n'est pas valide.",
+      "legacyExpired": "Il a utilisé la preuve d'une ancienne version de Keyring, qui n'est plus acceptée."
+    },
     "NeedsMethod": "encore {{n}} {{method}}",
     "IndependenceCapped": "Plus d'attestations de personnes ayant déclaré un lien {{relationships}} avec vous que cette communauté n'en compte. Votre candidature reste valable — quelqu'un va l'examiner.",
     "UnreadableMaxAge": "Cette communauté publie une limite d'âge pour les attestations ({{value}}) que cette application n'a pas pu lire : le décompte ci-dessus est peut-être plus optimiste que celui de la communauté.",
