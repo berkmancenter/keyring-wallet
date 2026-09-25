@@ -502,6 +502,7 @@ version = "0.1.0"
 dependencies = [
  "affinidi-did-resolver-cache-sdk",
  "chrono",
+ "dtg-credentials",
  "serde_json",
  "tokio",
  "vta-sdk",
