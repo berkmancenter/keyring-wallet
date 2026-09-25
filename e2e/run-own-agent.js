@@ -412,15 +412,23 @@ try {
     //   the owner's row (a fresh owner confirmation first), and the ACL loses it.
     //   testIDs agreed with UI/UX: AgentDevices, AgentDevice_<last 8 of the DID>,
     //   AgentDeviceRemove_<same>, AgentDeviceRemoved.
-    if (!(await existsTestId(backup, "AgentDevices", 2000))) {
+    // The Devices row sits in AgentHome's top card, after the seat line.
+    const devicesRow = (await existsTestId(backup, "AgentDevices", 2000)) ? true : await scrollToTestId(backup, "AgentDevices", 4).catch(() => undefined);
+    if (!devicesRow) {
       throw new PendingAppStep("removeOwner", "the backup phone has no way to remove another phone — own_agent_subtask.md §4, D3");
     }
     const tail = ownerKey.slice(-8);
     await tapTestId(backup, "AgentDevices", 15000);
-    await waitForTestId(backup, `AgentDevice_${tail}`, 30000);
+    await waitForTestId(backup, "AgentDeviceList", 30000);
+    const row = await waitForTestId(backup, `AgentDevice_${tail}`, 30000).catch(() => scrollToTestId(backup, `AgentDevice_${tail}`, 4));
+    if (!row) throw new Error(`the device list shows no row for the owner phone (${tail})`);
     await tapTestId(backup, `AgentDeviceRemove_${tail}`, 15000);
     await answerOwnerPrompt(BACKUP_PLATFORM, process.env.BACKUP_UDID);
-    await waitForTestId(backup, "AgentDeviceRemoved", 60000);
+    for (const until = Date.now() + 60000; ; ) {
+      if (await existsTestId(backup, "AgentDeviceRemoved", 1500)) break;
+      if (await existsTestId(backup, "AgentDeviceError", 500)) throw new Error(`removing the owner phone was refused: ${await textOf(backup, "AgentDeviceError")}`);
+      if (Date.now() > until) throw new Error("no AgentDeviceRemoved within 60 s");
+    }
     const after = acl();
     if (after.some((e) => e.subject === ownerKey)) throw new Error("the owner phone's key is still in the ACL after the backup removed it");
     if (!isOwnerRow(after.find((e) => e.subject === backupKey))) throw new Error("the backup's key lost its owner grant");

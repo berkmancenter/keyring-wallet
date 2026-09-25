@@ -22,6 +22,8 @@
 # names alice, bob and community are refused (lib.sh).
 set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+# The twin's own DID, for the mediator-side readiness check below.
+[ -n "${TWIN_VTA_DID:-}" ] || TWIN_VTA_DID=$(sed -n 's/^TWIN_VTA_DID=//p' "$TWIN_ENV" 2>/dev/null)
 
 DID="${1:?usage: admit-owner.sh <did> [label]}"
 LABEL="${2:-farm-admin-did}"
@@ -42,17 +44,41 @@ else
     | strip_ansi | grep -E "DID imported|Role|Contexts|Label|rror" | sed 's/^/  /'
 fi
 
+started_at=$(date -u +%FT%T)
 twin_start
 # Ready for a phone once the agent is back on its mediator. It first waits to
 # resolve its own DID through the tunnel, with backoff; one start of five in the
 # proof run took over 60 s there (the lab's tunnels drop requests now and then),
-# so allow 120 s, and the previous start's log is kept in $TWIN_LOG.prev.
-for _ in $(seq 1 120); do
-  if sed -e 's/\x1b\[[0-9;]*m//g' "$TWIN_LOG" 2>/dev/null | grep -q "messaging connected to mediator"; then
-    echo "  $TWIN is back on the mediator"
-    exit 0
-  fi
-  sleep 1
-done
-echo "  $TWIN did not reconnect to the mediator within 120 s — see $TWIN_LOG" >&2
+# and once (2026-09-25 20:04Z) it logged "DIDComm messaging started" and never
+# connected. So wait up to 90 s, and if it has not connected, restart it once.
+wait_connected() {
+  # carol does not always log "messaging connected to mediator" (2026-09-25
+  # 20:07Z: connected, per the mediator, and never logged it), so the mediator's
+  # own record counts too: an authentication by carol's DID since this start.
+  local since="$1"
+  for _ in $(seq 1 90); do
+    if sed -e 's/\x1b\[[0-9;]*m//g' "$TWIN_LOG" 2>/dev/null | grep -q "messaging connected to mediator"; then
+      return 0
+    fi
+    if sed -e 's/\x1b\[[0-9;]*m//g' "$STACK_DIR/logs/mediator.log" 2>/dev/null \
+      | awk -v s="$since" '$1 >= s' | grep -qF "Authentication successful for $TWIN_VTA_DID"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+if wait_connected "$started_at"; then
+  echo "  $TWIN is back on the mediator"
+  exit 0
+fi
+echo "  $TWIN did not connect to the mediator within 90 s; restarting it once"
+twin_stop
+started_at=$(date -u +%FT%T)
+twin_start
+if wait_connected "$started_at"; then
+  echo "  $TWIN is back on the mediator (after one restart)"
+  exit 0
+fi
+echo "  $TWIN did not reconnect to the mediator after a restart — see $TWIN_LOG" >&2
 exit 1
