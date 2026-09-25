@@ -77,13 +77,13 @@ Nothing in `app/.env` has to change for this, and no branding is fetched over
 the network — but `app/.env`'s `ACTIVE_DEMO_PROFILE` is how you pick which
 profiles that registers:
 
-| `ACTIVE_DEMO_PROFILE`                          | Result                                                    |
-| ---------------------------------------------- | --------------------------------------------------------- |
-| unset (the default, what ships)                | no demo profiles: a plain Keyring build                   |
-| `none`                                         | the same as unset                                         |
-| a profile's `id` (`trading-card`, `approver`)  | only that one                                             |
-| `all`                                          | every installed profile, all at once (a demo day)         |
-| an id that doesn't match any installed profile | none (a typo never switches demo code on)                 |
+| `ACTIVE_DEMO_PROFILE`                          | Result                                            |
+| ---------------------------------------------- | ------------------------------------------------- |
+| unset (the default, what ships)                | no demo profiles: a plain Keyring build           |
+| `none`                                         | the same as unset                                 |
+| a profile's `id` (`trading-card`, `approver`)  | only that one                                     |
+| `all`                                          | every installed profile, all at once (a demo day) |
+| an id that doesn't match any installed profile | none (a typo never switches demo code on)         |
 
 Unset is what ships: Keyring itself, with none of this directory's demos active. Set a profile id (or `all`) to run a demo — see "Stripping demos from a
 build" below for what `none` does beyond the runtime table above.
