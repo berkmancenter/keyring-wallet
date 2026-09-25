@@ -41,7 +41,7 @@ import {
   type VtiClientIdentity,
   type VtiMediatorEndpoints,
 } from './VtiMediatorTransport'
-import type { VtiIdentityStore, VtiPersona } from './VtiIdentityStore'
+import type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './VtiIdentityStore'
 import { VtiRefusal } from './vtiAgent'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
@@ -188,6 +188,75 @@ export class PersonaHostMissing extends Error {
   }
 }
 
+/**
+ * A swap whose outcome could not be settled: neither the key the phone signed
+ * in with nor the successor it sent is accepted by the VTA right now, or the
+ * VTA could not be asked. Both keys stay recorded — either may be the live one
+ * — and the next connect asks again.
+ */
+export class ManagerKeyUnresolved extends Error {
+  constructor(
+    readonly vtaDid: string,
+    readonly current: string,
+    readonly next: string,
+    /** Whether the VTA refused both keys outright, rather than one of them going unanswered. */
+    readonly refusedBoth: boolean,
+    /** What each probe got, for the log. */
+    readonly detail: string
+  ) {
+    // Worded for the link machine's reading of a connect failure: only the
+    // VTA's refusal of both keys reads as access revoked ("not in ACL"); a key
+    // that went unanswered reads as a dropped session, which is retried.
+    super(
+      refusedBoth
+        ? `${LOG_PREFIX} ${vtaDid} accepts neither of this phone's keys after a key swap (not in ACL); both are kept`
+        : `${LOG_PREFIX} could not ask ${vtaDid} which of this phone's keys it knows after a key swap; both are kept and the next connect asks again`
+    )
+    this.name = 'ManagerKeyUnresolved'
+  }
+}
+
+/**
+ * The VTA's refusal of a sender it holds no live grant for. An envelope from a
+ * DID not in the ACL, or whose entry has lapsed, is refused before dispatch as
+ * a trust-task error `permissionDenied` whose reason is the ACL's own
+ * `forbidden: DID not in ACL: <did>` / `forbidden: ACL entry expired: <did>`
+ * (vta-service `messaging/auth.rs` `auth_for_trust_task_envelope`,
+ * `trust_tasks/mod.rs` `reject_trust_task(PermissionDenied)`, vti-common
+ * `acl/mod.rs` `check_acl_entry`); the reason travels as the error's
+ * `message`. Read from the ACL's own words rather than the code alone, since
+ * `permissionDenied` also covers policy refusals that say nothing about which
+ * key the VTA knows. For a probe this is conclusive: the key is not (or no
+ * longer) on the ACL.
+ */
+const NOT_ON_ACL = /not in (the )?ACL|ACL entry expired/i
+function refusedAsNotOnAcl(error: unknown): boolean {
+  return error instanceof VtiRefusal && NOT_ON_ACL.test(error.message)
+}
+
+/**
+ * Harness-only: what to do with the answer to the next `acl/swap-key`.
+ * `drop` — let the VTA perform the swap, then discard its answer as if the
+ * socket had dropped, and recover in place. `drop-and-stop` — the same, but
+ * leave the successor pending and fail, as an app killed mid-swap would, so a
+ * relaunch's connect is what recovers. Honoured only in a `__DEV__` build; a
+ * release build never drops an answer whatever is set.
+ */
+export type VtaSwapTestHook = 'drop' | 'drop-and-stop' | undefined
+let swapTestHook: VtaSwapTestHook
+
+/** Build-time wiring for the e2e harness, like `setPeerLegCarriage`: called once from the app's container. */
+export function setVtaSwapTestHook(mode: string | undefined): void {
+  swapTestHook = mode === 'drop' || mode === 'drop-and-stop' ? mode : undefined
+}
+
+/** The hook in force: always undefined outside a `__DEV__` build. */
+export function activeSwapTestHook(): VtaSwapTestHook {
+  return typeof __DEV__ !== 'undefined' && __DEV__ ? swapTestHook : undefined
+}
+
+type Probe = { kind: 'live' } | { kind: 'refused'; detail: string } | { kind: 'unknown'; detail: string }
+
 export class VtaClient {
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
@@ -251,6 +320,12 @@ export class VtaClient {
       onConsentPending?: (info: { taskType: string; payloadDigest?: string }) => void
       /** How long to wait for approvers before giving up on a held task. */
       consentWaitMs?: number
+      /** How long a fresh session drains the mediator's backlog before the first send. */
+      connectDrainMs?: number
+      /** How long to wait for the answer to `acl/swap-key`. */
+      swapTimeoutMs?: number
+      /** How long each `whoami` asked while settling a swap waits for its answer. */
+      probeTimeoutMs?: number
     } = {}
   ) {}
 
@@ -281,6 +356,23 @@ export class VtaClient {
     if (this.session?.isOpen) return
     this.mediator ??= await resolveVtaMediator(this.agent, this.vtaDid)
     const did = await this.ensureManagerIdentity()
+    // A swap this phone never saw the end of — the answer was lost, or the app
+    // was killed while waiting for it — is settled before anything signs as
+    // either key; settling leaves the session open as the key the VTA knows.
+    const record = await this.store.getManager(this.vtaDid)
+    if (record?.pendingNext) {
+      this.agent.config.logger.info(
+        `${LOG_PREFIX} a key swap is pending on connect (${record.pendingNext.did}); asking the VTA which key it knows`
+      )
+      await this.resolvePendingSwap(record)
+      return
+    }
+    await this.openAs(did)
+  }
+
+  /** Open the session as `did`. */
+  private async openAs(did: string): Promise<void> {
+    this.mediator ??= await resolveVtaMediator(this.agent, this.vtaDid)
     this.identity = await vtiClientIdentityFromDid(this.agent, did)
     // Best effort: a wallet whose manager key cannot back TSP ports simply
     // stays on DIDComm, and §4.2 says so rather than failing the connect.
@@ -309,7 +401,7 @@ export class VtaClient {
     // and this DID is persisted, so that backlog can include stale replies from
     // earlier sessions. No reply to any request of ours can exist yet, so a
     // short drain with nothing pending discards the backlog before the first send.
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    await new Promise((resolve) => setTimeout(resolve, this.options.connectDrainMs ?? 2000))
   }
 
   async disconnect(): Promise<void> {
@@ -540,22 +632,61 @@ export class VtaClient {
    * expiry over (`operations::acl::swap_acl`). The new key proves it consents
    * with a VP-JWT addressed to this VTA (`vta-sdk` `AclSwapPresentation`); the
    * session then reopens as the new key. Returns the new manager DID.
+   *
+   * The new key is recorded as pending before the swap is sent. The VTA moves
+   * the grant and retires the old key in one request, so if its answer never
+   * arrives the phone cannot tell from its side which key the VTA now knows —
+   * and throwing the new one away would lock the phone out of its own agent.
+   * Any failure is therefore settled by asking the VTA ({@link resolvePendingSwap}):
+   * the new key is adopted if the VTA accepts it; otherwise the old one is kept
+   * and this throws, as before. `pnm` has no such step: its new key lives only
+   * in memory until the swap answers (`vta-sdk` `session.rs`
+   * `rotate_key_over_client`).
    */
   async rotateManagerKey(reason = 'keyring: rotate the linking key onto a long-lived one'): Promise<string> {
     const current = this.identity?.did
     if (!this.session?.isOpen || !current) throw new Error(`${LOG_PREFIX} rotate needs an open session`)
     this.mediator ??= await resolveVtaMediator(this.agent, this.vtaDid)
     const next = await createVtiClientDid(this.agent, this.mediator)
+    const record: VtiManagerIdentity = {
+      ...((await this.store.getManager(this.vtaDid)) ?? { createdAt: new Date().toISOString() }),
+      vtaDid: this.vtaDid,
+      did: current,
+      pendingNext: { did: next, createdAt: new Date().toISOString() },
+    }
+    await this.store.setManager(record)
+    this.agent.config.logger.info(`${LOG_PREFIX} recorded ${next} as the pending successor before the key swap`)
     const issuedAt = nowSec()
-    const linkProof = await signCompactJws(this.agent, next, {
-      iss: next,
-      aud: this.vtaDid,
-      iat: issuedAt,
-      exp: issuedAt + 300,
-      nonce: utils.uuid(),
-      vp: { type: ['VerifiablePresentation', 'AclSwapRequest'], holder: next },
-    })
-    await this.task(VTA_TASK.aclSwapKey, { currentSubject: current, newSubject: next, linkProof, reason })
+    try {
+      const linkProof = await signCompactJws(this.agent, next, {
+        iss: next,
+        aud: this.vtaDid,
+        iat: issuedAt,
+        exp: issuedAt + 300,
+        nonce: utils.uuid(),
+        vp: { type: ['VerifiablePresentation', 'AclSwapRequest'], holder: next },
+      })
+      await this.task(
+        VTA_TASK.aclSwapKey,
+        { currentSubject: current, newSubject: next, linkProof, reason },
+        this.options.swapTimeoutMs ?? 30000
+      )
+      if (activeSwapTestHook()) {
+        throw new Error(`${LOG_PREFIX} the VTA did not answer ${VTA_TASK.aclSwapKey} (answer dropped by the e2e hook)`)
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      if (activeSwapTestHook() === 'drop-and-stop') {
+        // As if the app died here: the successor stays pending for the next connect.
+        await this.disconnect()
+        throw error
+      }
+      this.agent.config.logger.warn(`${LOG_PREFIX} key swap did not complete (${detail}); asking the VTA`)
+      await this.disconnect()
+      const live = await this.resolvePendingSwap(record)
+      if (live === next) return next
+      throw error
+    }
     await this.store.setManager({
       vtaDid: this.vtaDid,
       did: next,
@@ -565,6 +696,83 @@ export class VtaClient {
     await this.disconnect()
     await this.connect()
     return next
+  }
+
+  /**
+   * Settle a swap whose outcome the phone did not see, by asking the VTA which
+   * key it accepts. Returns the key adopted, with the session open as it.
+   *
+   * The order follows how the VTA swaps (`operations::acl::swap_acl`): it
+   * writes the successor's entry before it deletes the old one, and nothing
+   * after the write undoes it. So whether the successor is on the ACL is the
+   * one decisive fact — if it is, the swap went through (the old entry is gone,
+   * or at worst lingers with its one-hour expiry while the successor's is
+   * permanent), and it is adopted; if it is not, the swap never wrote anything
+   * and the old key must still be live, which a second `whoami` confirms before
+   * the successor is dropped. A key is only ever dropped on the VTA's own word
+   * that the other one is live; anything short of that keeps both and throws
+   * {@link ManagerKeyUnresolved}.
+   */
+  async resolvePendingSwap(record?: VtiManagerIdentity): Promise<string> {
+    const manager = record ?? (await this.store.getManager(this.vtaDid))
+    if (!manager?.pendingNext) {
+      if (!manager) throw new Error(`${LOG_PREFIX} no manager identity for ${this.vtaDid}`)
+      if (!this.session?.isOpen) await this.openAs(manager.did)
+      return manager.did
+    }
+    const current = manager.did
+    const next = manager.pendingNext.did
+    const log = this.agent.config.logger
+
+    const asNext = await this.probeAs(next)
+    if (asNext.kind === 'live') {
+      await this.store.setManager({
+        vtaDid: this.vtaDid,
+        did: next,
+        createdAt: manager.pendingNext.createdAt,
+        stage: 'permanent',
+      })
+      log.info(`${LOG_PREFIX} the VTA knows the swapped-in key; adopted ${next}`)
+      return next
+    }
+    const asCurrent = await this.probeAs(current)
+    if (asCurrent.kind === 'live') {
+      if (asNext.kind === 'refused') {
+        // The VTA's word on both: the swap never happened.
+        const kept: VtiManagerIdentity = { ...manager }
+        delete kept.pendingNext
+        await this.store.setManager(kept)
+        log.info(`${LOG_PREFIX} the key swap did not happen; kept ${current}`)
+      } else {
+        // The old key works, but whether the successor was also written is
+        // unknown — keep it pending, and ask again on the next connect.
+        log.warn(`${LOG_PREFIX} kept ${current}; could not ask as ${next} (${asNext.detail})`)
+      }
+      return current
+    }
+    await this.disconnect()
+    const detail = `as ${next}: ${asNext.kind} (${asNext.detail}); as ${current}: ${asCurrent.kind} (${asCurrent.detail})`
+    log.warn(`${LOG_PREFIX} key swap unresolved, both keys kept — ${detail}`)
+    throw new ManagerKeyUnresolved(
+      this.vtaDid,
+      current,
+      next,
+      asNext.kind === 'refused' && asCurrent.kind === 'refused',
+      detail
+    )
+  }
+
+  /** One `whoami` as `did` on a fresh session: live, refused as not on the ACL, or unknown. */
+  private async probeAs(did: string): Promise<Probe> {
+    await this.disconnect()
+    try {
+      await this.openAs(did)
+      await this.whoAmI(this.options.probeTimeoutMs ?? 20000)
+      return { kind: 'live' }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      return refusedAsNotOnAcl(error) ? { kind: 'refused', detail } : { kind: 'unknown', detail }
+    }
   }
 
   async listContexts(): Promise<VtaContext[]> {

@@ -33,6 +33,16 @@ export interface VtiManagerIdentity {
    * (`acl/swap-key/0.1`). Absent on identities minted before linking existed.
    */
   stage?: 'temporary' | 'permanent'
+  /**
+   * A successor key sent to the VTA in an `acl/swap-key/0.1` whose outcome
+   * this phone has not seen yet. Recorded before the swap leaves the phone, so
+   * a lost answer (a timeout, a dropped socket, the app killed) cannot strand
+   * the one key the VTA may now know: the VTA moves the grant onto it and
+   * retires `did` (`operations::acl::swap_acl`). While it is set, which of the
+   * two is live is settled by asking the VTA before anything else is done.
+   * Absent on every record written before this existed, and once settled.
+   */
+  pendingNext?: { did: string; createdAt: string }
 }
 
 export interface VtiPersona {

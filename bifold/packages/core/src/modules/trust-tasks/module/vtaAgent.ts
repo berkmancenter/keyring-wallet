@@ -16,7 +16,7 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import type { AgentLabel } from './agentLabel'
-import { VTA_TASK, VtaClient, resolveVtaMediator, type VtaConsentRequest } from './VtaClient'
+import { ManagerKeyUnresolved, VTA_TASK, VtaClient, resolveVtaMediator, type VtaConsentRequest } from './VtaClient'
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiClientDid } from './VtiMediatorTransport'
@@ -84,6 +84,18 @@ export interface VtaAgentDeps {
 
 /** A refusal that means the agent no longer accepts this phone at all. */
 const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
+
+/**
+ * Does a failed connect mean the VTA no longer knows this phone (relink), or
+ * only that it could not be reached (retry)? A swap left unsettled says so by
+ * its type: both keys refused is revoked; either unanswered is reachability,
+ * so both keys are kept and the next connect asks again. Anything else is
+ * read from the VTA's words.
+ */
+export function connectFailureRevokes(error: unknown): boolean {
+  if (typeof ManagerKeyUnresolved === 'function' && error instanceof ManagerKeyUnresolved) return error.refusedBoth
+  return ACCESS_REVOKED.test(error instanceof Error ? error.message : String(error))
+}
 
 /**
  * How long "I've been added" waits for the agent's answer before it says so,
@@ -560,7 +572,7 @@ export class VtaAgentController {
       this.dispatch({ type: 'sessionOpened' })
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      if (ACCESS_REVOKED.test(reason)) {
+      if (connectFailureRevokes(error)) {
         this.dispatch({ type: 'accessRevoked', reason })
         return
       }

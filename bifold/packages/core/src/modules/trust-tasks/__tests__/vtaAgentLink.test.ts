@@ -19,6 +19,7 @@ const mockClient = {
 
 jest.mock('../module/VtaClient', () => ({
   VTA_TASK: jest.requireActual('../module/VtaClient').VTA_TASK,
+  ManagerKeyUnresolved: jest.requireActual('../module/VtaClient').ManagerKeyUnresolved,
   VtaClient: jest.fn(() => mockClient),
   resolveVtaMediator: jest.fn(async () => ({ did: 'did:peer:2.mediator' })),
 }))

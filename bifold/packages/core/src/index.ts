@@ -242,6 +242,8 @@ export {
   VtaClient,
   VTA_TASK,
   resolveVtaMediator,
+  ManagerKeyUnresolved,
+  setVtaSwapTestHook,
   GenericRecordsIdentityStore,
   importVtaKey,
   decodeMultibaseKey,
