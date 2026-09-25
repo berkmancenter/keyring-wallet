@@ -1529,6 +1529,16 @@
       "expired": "Détails : la déclaration a déjà expiré.",
       "proof": "Détails : la signature de la déclaration n'a pas pu être vérifiée."
     },
+    "EnvelopeRefused": "Un message de votre vérificateur est arrivé, mais ce téléphone n'a pas pu s'y fier ; il a été ignoré.",
+    "EnvelopeRefusedDesk": "Une carte est arrivée pour cette demande, mais ce téléphone n'a pas pu s'y fier ; elle a été ignorée.",
+    "EnvelopeRefusedReason": {
+      "malformed": "Détails : le message est illisible.",
+      "typeMismatch": "Détails : le message se présente comme une chose mais a été envoyé comme une autre.",
+      "issuerNotSender": "Détails : le message nomme quelqu'un d'autre que son expéditeur.",
+      "unsigned": "Détails : le message n'est pas signé.",
+      "proof": "Détails : la signature du message n'a pas pu être vérifiée.",
+      "wrongSigner": "Détails : le message a été signé par quelqu'un d'autre que son expéditeur."
+    },
     "WaitingForCard": "En attente de son nom…",
     "CheckTheirId": "Vérifiez sa pièce d'identité — indique-t-elle ceci ?",
     "VetSomeoneElse": "Vérifier quelqu'un d'autre",
