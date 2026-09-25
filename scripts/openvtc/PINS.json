@@ -1,6 +1,6 @@
 {
   "updated": "2026-09-25",
-  "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
+  "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance. Moving verifiable-trust-infrastructure moves scripts/openvtc/card-verify in the same pull request (its exact pins and Cargo.lock follow the pinned commit's Cargo.lock; keyring-bifold's conformance check builds it with --locked). See README.md.",
   "repos": {
     "vta-browser-plugin": {
       "sha": "43e2cc7",
