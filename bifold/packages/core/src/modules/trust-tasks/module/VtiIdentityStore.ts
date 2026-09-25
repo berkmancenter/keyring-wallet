@@ -62,6 +62,9 @@ export interface VtiPersona {
   createdAt: string
 }
 
+/** A persona mint's arguments, kept with its idempotency key so a retry is the same request. */
+export type VtiMintRequest = { contextId: string; serverId?: string; didUrl?: string; label: string }
+
 export interface VtiIdentityStore {
   getManager(vtaDid: string): Promise<VtiManagerIdentity | undefined>
   setManager(identity: VtiManagerIdentity): Promise<void>
@@ -83,7 +86,15 @@ export interface VtiIdentityStore {
    * Optional: a store without it mints with a fresh key each time, as before.
    */
   getMintKey?(communityDid: string): Promise<string | undefined>
-  setMintKey?(communityDid: string, key: string): Promise<void>
+  /**
+   * `request` is the mint as first asked (context, server or URL, label). The
+   * VTA compares a keyed retry's whole payload with the first one's and refuses
+   * any difference ("idempotency key reused for a different request"), so a
+   * retry must re-send it unchanged, not rebuild it.
+   */
+  setMintKey?(communityDid: string, key: string, request?: VtiMintRequest): Promise<void>
+  /** The request saved with the key, when there is one (keys saved before 2026-09-25 have none). */
+  getMintRequest?(communityDid: string): Promise<VtiMintRequest | undefined>
   clearMintKey?(communityDid: string): Promise<void>
 }
 
@@ -155,8 +166,12 @@ export class GenericRecordsIdentityStore implements VtiIdentityStore {
     return (await this.find<{ key?: string }>('mint-key', communityDid))?.key
   }
 
-  setMintKey(communityDid: string, key: string) {
-    return this.put('mint-key', communityDid, { key })
+  setMintKey(communityDid: string, key: string, request?: VtiMintRequest) {
+    return this.put('mint-key', communityDid, { key, ...(request ? { request } : {}) })
+  }
+
+  async getMintRequest(communityDid: string) {
+    return (await this.find<{ request?: VtiMintRequest }>('mint-key', communityDid))?.request
   }
 
   async clearMintKey(communityDid: string) {
