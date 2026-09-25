@@ -31,6 +31,7 @@ import type { VtaLinkFailure } from '../module/vtaLinkMachine'
 
 import { agentDisplayName, agentDisplayNameStart, withAgentName } from './agentName'
 import { openScanner } from './openScanner'
+import { plainError } from './plainError'
 import { shareableKey } from './shareableKey'
 
 /** The agent's host, for people: the domain inside a did:webvh, else the label alone. */
@@ -66,6 +67,7 @@ const VtaLink: React.FC = () => {
   const [agentAddress, setAgentAddress] = useState('')
   const [copied, setCopied] = useState(false)
   const [keyShown, setKeyShown] = useState(false)
+  const [errorOpen, setErrorOpen] = useState(false)
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -144,7 +146,11 @@ const VtaLink: React.FC = () => {
       case 'unreachable':
         return t('VtaLink.FailedUnreachable')
       default:
-        return t('VtaLink.FailedOther')
+        // Say what was caught, in words, rather than "something went wrong":
+        // an iOS link that authenticated but never opened its mediator socket
+        // showed only that, and the cause took a mediator log to find
+        // (2026-09-25, lab).
+        return failure?.detail ? t(plainError(failure.detail).line) : t('VtaLink.FailedOther')
     }
   }
 
@@ -384,6 +390,25 @@ const VtaLink: React.FC = () => {
               <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkError')}>
                 {failureText(link.lastError)}
               </ThemedText>
+            ) : null}
+            {/* The original text, as Join and Invited keep it: for whoever reads
+                a report, one tap away and never on its own. */}
+            {link.lastError?.detail ? (
+              <>
+                <Pressable
+                  onPress={() => setErrorOpen((open) => !open)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: errorOpen }}
+                  testID={testIdWithKey('VtaLinkErrorDetailsToggle')}
+                >
+                  <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
+                </Pressable>
+                {errorOpen ? (
+                  <ThemedText style={styles.muted} selectable testID={testIdWithKey('VtaLinkErrorDetail')}>
+                    {link.lastError.detail}
+                  </ThemedText>
+                ) : null}
+              </>
             ) : null}
           </View>
           {manualEntry ? (
