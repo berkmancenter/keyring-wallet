@@ -52,7 +52,7 @@
     "Reset": "Reset (FR)",
     "ViewJSON": "View JSON Details (FR)",
     "RefreshCredentials": "Refresh Credentials (FR)",
-    "AppName": "Aries Bifold (FR)"
+    "AppName": "Keyring"
   },
   "Toast": {
     "OpenIDCredRefreshing": {
@@ -163,8 +163,8 @@
     "Title1050": "Unable to access biometrics (FR)",
     "Message1050": "There was a problem while attempting to access this device' biometrics (FR)",
     "GenericError": {
-      "Title": "Something went wrong (FR)",
-      "Message": "There was an unexpected error, please try again later. (FR)"
+      "Title": "Impossible d'ouvrir ceci",
+      "Message": "Keyring ne sait pas quoi faire de ceci. Vérifiez auprès de la personne qui vous a donné le code, ou essayez-en un autre."
     }
   },
   "SelectionAxs": {
@@ -1124,7 +1124,7 @@
     "AlertsLength": "You have {{ alerts }} alerts (FR)"
   },
   "FullScreenErrorModal": {
-    "PrimaryCTA": "Go back to home (FR)"
+    "PrimaryCTA": "Retour à Keyring"
   },
   "OpenIDNotification": {
     "CredentialRefresh": {

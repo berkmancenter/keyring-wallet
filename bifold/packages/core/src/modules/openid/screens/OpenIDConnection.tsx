@@ -7,7 +7,7 @@ import { useServices, TOKENS } from '../../../container-api'
 import LoadingSpinner from '../../../components/animated/LoadingSpinner'
 import { EventTypes } from '../../../constants'
 import FullScreenErrorModal from '../../../components/modals/FullScreenErrorModal'
-import { TabStacks } from '../../../types/navigators'
+import { Stacks } from '../../../types/navigators'
 import { BifoldError } from '../../../types/error'
 import { useTheme } from '../../../contexts/theme'
 import { useOpenID } from '../hooks/openid'
@@ -90,7 +90,12 @@ const OpenIDConnection: React.FC<ConnectionProps> = ({ navigation, route }) => {
         errorDescription={errorDetails?.description ?? ''}
         visible={showErrorModal}
         onPressCTA={() => {
-          navigation.getParent()?.navigate(TabStacks.HomeStack, { screen: Screens.Home })
+          // Close the modal, then go home. Keyring has no Home tab
+          // (TabStacks.HomeStack is never registered), so the old
+          // navigate(HomeStack) did nothing and the person was stuck behind a
+          // modal with no way out. The tab stack opens on its first tab.
+          setShowErrorModal(false)
+          navigation.getParent()?.navigate(Stacks.TabStack)
         }}
       />
     </>
