@@ -222,6 +222,22 @@ function failWith(message, observed) {
 }
 
 /**
+ * A document from the other side that was refused unread (keyring-bifold#128/#129):
+ * the step will not move, so fail at once with the reason the screen gives,
+ * rather than wait out the deadline.
+ */
+async function throwIfEnvelopeRefused(d, extra = async () => ({})) {
+  if (!(await existsTestId(d, "VettingEnvelopeRefused", 500))) return;
+  const said = await textOf(d, "VettingEnvelopeRefused").catch(() => "");
+  const reason = await textOf(d, "VettingEnvelopeRefusedReason").catch(() => "");
+  throw failWith(`a message from the other side was refused unread: ${said}${reason ? ` (${reason})` : ""}`, {
+    ...(await extra()),
+    envelopeRefused: said || true,
+    envelopeRefusedReason: reason,
+  });
+}
+
+/**
  * Wait until the page is on one of `want`. On the deadline, say where it is
  * instead, and for how long it has been there: "stuck at checking for 300 s"
  * is the finding, "timeout" is not.
@@ -254,6 +270,10 @@ async function awaitStep(d, role, want, timeoutMs, extra = async () => ({})) {
       since = Date.now();
     }
     if (current && wanted.includes(current)) return current;
+    // Only while short of the step. The refusal stays on the row, so a later
+    // wait still sees it; a refused document anywhere in a ceremony is a
+    // finding, since a conforming peer never sends one.
+    await throwIfEnvelopeRefused(d, extra);
     if (Date.now() > until) {
       const observed = {
         stepId: current,
@@ -296,6 +316,7 @@ async function applicantEvidence(d) {
     cardSentAt: await textOf(d, "VettingCardSentAt").catch(() => ""),
     error: await textOf(d, "VettingError").catch(() => ""),
     statementRefused: await textOf(d, "VettingStatementRefusedDetails").catch(() => ""),
+    envelopeRefusedReason: await textOf(d, "VettingEnvelopeRefusedReason").catch(() => ""),
   };
 }
 
@@ -691,6 +712,7 @@ export const applicant = {
           const reason = await textOf(d, "VettingStatementRefusedDetails").catch(() => "");
           throw failWith(`the statement arrived and was refused${reason ? `: ${reason}` : ""}`, { ...(await evidence()), statementRefused: reason || true });
         }
+        await throwIfEnvelopeRefused(d, evidence);
         if (Date.now() > until) await awaitStep(d, "applicant", ["apply", "member"], 0, evidence);
         await sleep(2000);
       }
