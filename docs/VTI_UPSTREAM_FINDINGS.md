@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.51 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.52 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1524,6 +1524,20 @@ accepts proof sets (it verifies the eddsa entries), so this is not a Keyring
 defect. A Keyring-side interim (presenting the grant with only its eddsa
 proof) is possible, but not taken.
 
+(e) **A second reader: the VTA's credential vault.** openvtc copies each
+membership credential it holds into its VTA's vault on connect
+(`openvtc-core/src/credential_sync.rs`, `spec/vault/credentials/receive/0.1`).
+On 2026-09-25 at 14:36:13Z our lab VTA (bob, 0.42.0) answered that push with
+`400`, and openvtc logged *"could not store a membership credential …
+malformedRequest … Data-Integrity proof has no `verificationMethod`"* for
+`urn:uuid:1060b2eb-…`, the membership the lab VTC had issued to an openvtc
+applicant at 13:09Z. Measured: the refusal, in both logs. Inferred: the
+credential's proof is the VTC's two-proof set, as on the grants above. We
+could not read the credential itself, because openvtc keeps it in an
+encrypted profile. The membership still works locally, but the vault never
+holds it, so openvtc's membership rebuild (the reason the sync exists) would
+restore nothing for such a community.
+
 ### VTI-43 — A TSP reply sent before the relationship is accepted never arrives
 
 (a) **What happens.** A phone greets a VTA with an `XRFI` invite and asks its
@@ -2405,6 +2419,7 @@ asking the agent).
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.52 | 2026-09-25 | **VTI-44** (e): the VTA credential vault refuses a proof-set membership too (400, "proof has no verificationMethod"), so openvtc's membership sync and rebuild miss it. Measured on the lab; proof shape inferred. Not sent. |
 | 1.51 | 2026-09-25 | **VTI-45** (new, High): vta-sdk verifies a Trust Task proof over its own re-serialisation, and chrono drops a `.000` fraction, so about one timestamp in a thousand signed by a JavaScript producer is refused as an invalid signature. Measured with card-verify at `ed672fff`; Keyring works around it (keyring-bifold#128). Not sent. |
 | 1.50 | 2026-09-25 | **VTI-44** (new, High): vta-sdk reads a credential's `proof` as one object, but a VTC with several keys signs with a proof set (an array: eddsa-jcs-2022 plus mldsa44-jcs-2024), so openvtc rejects every vetter grant from such a community. Measured on our lab with openvtc `ed13d29`; vtc-service fixed it for itself only (`proof_set.rs`). Not sent. |
 | 1.49 | 2026-09-25 | **VTI-Q30** (new): `acl/swap-key` is two writes and not idempotent, and pnm keeps the new key only in memory until the session is saved, so a swap answer lost after the agent swapped strands the admin key. Read at `ed672fff`; not seen live. Keyring closes the same gap on its side (keyring-bifold#127). Not sent. |
