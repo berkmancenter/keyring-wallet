@@ -20,6 +20,12 @@ export interface VtaLink {
   linkedAt: string
   /** When the person dismissed the first-link introduction; absent until then. */
   introSeenAt?: string
+  /**
+   * The agent was created from this phone ("Create my agent"), so it belongs
+   * to this phone: My Agent says so. Absent for an agent linked any other way,
+   * which says nothing either way about who else administers it.
+   */
+  owner?: boolean
 }
 
 export interface VtaLinkStore {
