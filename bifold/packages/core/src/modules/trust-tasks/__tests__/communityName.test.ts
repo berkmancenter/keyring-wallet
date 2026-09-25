@@ -4,7 +4,7 @@
  * had published no name at all (report #14, 2026-09-22): a hostname in the
  * place of a name reads as a name.
  */
-import { communityName, shortDid } from '../screens/communityName'
+import { communityLabelAnsweredOf, communityLabelOf, communityName, shortDid } from '../screens/communityName'
 import { communityTarget } from '../module/vtiCommunityLink'
 
 const did = 'did:webvh:QmUsH14W1foRZyP9v7LtfxwFy7qWgzNBLSzhWhbMQeMPJB:keyring-vti-vtc.ngrok.app'
@@ -121,5 +121,33 @@ describe("the store's snapshots are stable to read", () => {
     communityTarget.set({ communityDid: did, name: 'What The Link Said' })
     expect(communityTarget.get()).toMatchObject({ name: 'Keyring Lab Community', published: true })
     expect(communityTarget.get()).toBe(communityTarget.get())
+  })
+})
+
+describe('naming a community that has just answered (the Leave toast)', () => {
+  beforeEach(() => communityTarget.clear())
+  // The keys are the text: what matters is which name goes in, and whether it
+  // carries "(not confirmed by the community)".
+  const t = ((key: string, opts?: { name?: string; host?: string }) =>
+    key === 'Community.ClaimedName'
+      ? `${opts?.name} (not confirmed by the community)`
+      : `${key}:${opts?.host ?? ''}`) as never
+  const did = 'did:webvh:QmExample:keyring-vti-vtc.ngrok.app'
+
+  test('its published name, as everywhere', () => {
+    communityTarget.set({ communityDid: did, name: 'What The Link Said' })
+    communityTarget.publishedName(did, 'Keyring Lab Community')
+    expect(communityLabelAnsweredOf(did, t)).toBe('Keyring Lab Community')
+  })
+
+  test("the link's name without the qualifier, which stays everywhere else", () => {
+    communityTarget.set({ communityDid: did, name: 'keyring-lab' })
+    expect(communityLabelAnsweredOf(did, t)).toBe('keyring-lab')
+    expect(communityLabelOf(did, t)).toBe('keyring-lab (not confirmed by the community)')
+  })
+
+  test('unnamed, it is still said to be unnamed', () => {
+    communityTarget.set({ communityDid: did })
+    expect(communityLabelAnsweredOf(did, t)).toBe(communityLabelOf(did, t))
   })
 })

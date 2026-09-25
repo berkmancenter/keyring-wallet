@@ -85,6 +85,28 @@ export function communityLabelOf(did: string, t: TFunction): string {
   ) as string
 }
 
+/**
+ * What to call a community in a sentence about something it has just
+ * answered — "You left …" once its reply to the leave has come back.
+ *
+ * Its published name first, as everywhere. Without one, the name the link
+ * claimed is said WITHOUT "(not confirmed by the community)": right after
+ * "You left", that qualifier read as if the leave had not been confirmed,
+ * when the community had answered it and erased the record (2026-09-25, lab
+ * run B). The answer proves the phone reached that community's DID, not that
+ * the link named it truly, so this is used only where the sentence is about
+ * the answer; everywhere else the qualifier stays.
+ */
+export function communityLabelAnsweredOf(did: string, t: TFunction): string {
+  const published = communityTarget.publishedNameOf(did)
+  if (published) return published
+  const claimed = [communityTarget.getViewing(), communityTarget.getChosen()].find(
+    (l) => l?.communityDid === did && l.name && !l.published
+  )?.name
+  if (claimed) return claimed
+  return communityLabelOf(did, t)
+}
+
 /** The same, for where it starts a sentence or stands alone: "An unnamed community (…)". */
 export function communityLabelStartOf(did: string, t: TFunction): string {
   const label = communityLabelOf(did, t)

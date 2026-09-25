@@ -29,7 +29,7 @@ import { selfRemoveRefusal, vtiAgent, VtiRefusal, type VtiManifest, type VtiVerd
 import { leaveCommunity } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
-import { communityLabelOf, communityLabelStartOf } from './communityName'
+import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
 import { useCommunityCalled } from './useCommunity'
 
 const VtiCommunity: React.FC = () => {
@@ -95,9 +95,19 @@ const VtiCommunity: React.FC = () => {
         communityDid,
         { disposition: keep }
       )
+      // The community answered, so it is named plainly here: its published
+      // name, else the link's name without "(not confirmed …)", which after
+      // "You left" read as if the leave itself was unconfirmed.
+      const answered = (key: string, start = false) => {
+        const name = communityLabelAnsweredOf(communityDid, t)
+        return t(key, {
+          community: start ? name.charAt(0).toUpperCase() + name.slice(1) : name,
+          interpolation: { escapeValue: false },
+        }) as string
+      }
       Toast.show({
         type: ToastType.Success,
-        text1: words(
+        text1: answered(
           left.alreadyGone
             ? 'Community.LeftAlreadyGone'
             : left.disposition === 'tombstone'
