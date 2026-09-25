@@ -116,6 +116,14 @@ export const GRANT_CONNECT_DEADLINE_MS = 30000
 /** Matches VtaClient's own "no answer in time" — a silence, not a refusal. */
 const NO_ANSWER = /the VTA did not answer/
 
+/**
+ * How long a grant check that got no answer keeps its question open. An
+ * answer that arrives in that time settles the next "I've been added" at once,
+ * instead of that tap signing in and asking all over again — which, on the
+ * slow link that made the first one late, would be late too.
+ */
+export const GRANT_HOLD_MS = 60000
+
 const TIMED_OUT = Symbol('timedOut')
 
 /**
@@ -141,21 +149,6 @@ export async function withDeadline(work: Promise<unknown>, ms = GRANT_CHECK_DEAD
   }
 }
 
-/**
- * Ask who we are, allowing the agent `answerMs` from the send. False when it
- * stays silent — VtaClient's own timeout, or the backstop for work that hangs
- * before it can send; a refusal still throws, so "not added yet" keeps its
- * meaning.
- */
-async function answeredInTime(client: Pick<VtaClient, 'whoAmI'>, answerMs: number): Promise<boolean> {
-  try {
-    return await withDeadline(client.whoAmI(answerMs), answerMs * 3)
-  } catch (error) {
-    if (NO_ANSWER.test(error instanceof Error ? error.message : String(error))) return false
-    throw error
-  }
-}
-
 type Listener = () => void
 
 export class VtaAgentController {
@@ -168,6 +161,8 @@ export class VtaAgentController {
   }
   private listeners = new Set<Listener>()
   private current?: { client: VtaClient; vtaDid: string; store: VtiIdentityStore }
+  /** A grant check's question still open after it gave up waiting (GRANT_HOLD_MS). */
+  private heldAnswer?: { vtaDid: string; answer: Promise<unknown>; until: number }
   private deps: VtaAgentDeps = {}
   private restored = false
   private offer?: EnrolmentOffer
@@ -488,28 +483,52 @@ export class VtaAgentController {
     const identities = this.identityStore(agent)
     this.dispatch({ type: 'grantCheckStarted' })
     try {
-      await this.reset()
-      const client = this.client(agent, link.vtaDid, identities)
       // Two deadlines, not one. The agent is given its full time to answer,
-      // counted from when the question leaves the phone (VtaClient starts that
-      // clock after the send); getting signed in is bounded separately. The
-      // outer bound on `whoAmI` is only a backstop for work that hangs before
-      // it can send.
+      // counted from when the question leaves the phone; getting signed in is
+      // bounded separately. A question that outlives its deadline is held
+      // open, and the next tap waits on it rather than asking again.
       const answerMs = this.deps.grantCheckDeadlineMs ?? GRANT_CHECK_DEADLINE_MS
-      const connected = await withDeadline(
-        client.connect(),
-        this.deps.grantConnectDeadlineMs ?? GRANT_CONNECT_DEADLINE_MS
-      )
-      const answered = connected && live() && (await answeredInTime(client, answerMs))
+      let answer = this.takeHeldAnswer(link.vtaDid)
+      if (!answer) {
+        await this.reset()
+        const fresh = this.client(agent, link.vtaDid, identities)
+        const connected = await withDeadline(
+          fresh.connect(),
+          this.deps.grantConnectDeadlineMs ?? GRANT_CONNECT_DEADLINE_MS
+        )
+        if (!live()) return
+        if (!connected) {
+          this.attemptToken++
+          await this.reset()
+          this.dispatch({ type: 'grantNoAnswer' })
+          return
+        }
+        let sent: () => void = () => undefined
+        const sending = new Promise<void>((resolve) => (sent = resolve))
+        answer = fresh.whoAmI(GRANT_HOLD_MS, sent)
+        void answer.catch(() => undefined)
+        // The clock starts at the send; the bound here is only a backstop for
+        // work that hangs before it can send.
+        await withDeadline(Promise.race([sending, answer]), answerMs * 3).catch(() => undefined)
+      }
+      let silent = false
+      const answered = await withDeadline(answer, answerMs).catch((error: unknown) => {
+        if (!NO_ANSWER.test(error instanceof Error ? error.message : String(error))) throw error
+        silent = true
+        return false
+      })
       if (!live()) return
       if (!answered) {
         // Hand the attempt on, so an answer that arrives after we have given
-        // up on it cannot move the screen under the person later.
+        // up on it cannot move the screen under the person later; it waits
+        // for the next tap instead, unless the client itself stopped waiting.
         this.attemptToken++
-        await this.reset()
+        if (silent) await this.reset()
+        else this.heldAnswer = { vtaDid: link.vtaDid, answer, until: this.now() + GRANT_HOLD_MS }
         this.dispatch({ type: 'grantNoAnswer' })
         return
       }
+      const client = this.client(agent, link.vtaDid, identities)
       this.dispatch({ type: 'granted' })
       await this.finishLink(agent, link.vtaDid, link.label, identities, live, client)
     } catch (error) {
@@ -563,8 +582,17 @@ export class VtaAgentController {
     }, delay)
   }
 
-  /** Drop the current client and its session. */
+  /** The held question for this agent, if it is still worth waiting on; taken once. */
+  private takeHeldAnswer(vtaDid: string): Promise<unknown> | undefined {
+    const held = this.heldAnswer
+    this.heldAnswer = undefined
+    if (!held || held.vtaDid !== vtaDid || this.now() >= held.until || this.current?.vtaDid !== vtaDid) return
+    return held.answer
+  }
+
+  /** Drop the current client and its session, and any held question with them. */
   private async reset() {
+    this.heldAnswer = undefined
     const current = this.current
     this.current = undefined
     await current?.client.disconnect().catch(() => undefined)
