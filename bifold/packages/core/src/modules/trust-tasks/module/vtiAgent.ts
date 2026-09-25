@@ -72,6 +72,62 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 const PROOF_REQUIRED = new Set([SUBMIT, STATUS, WITHDRAW, SUPPLEMENT, SELF_REMOVE])
 
 /**
+ * The community tasks `ask` may send twice: reads, which change nothing, so a
+ * second copy costs the community one more lookup and nothing else.
+ *
+ * - `MANIFEST` — `vtc/join-requests/manifest/0.2`, the published criteria.
+ * - `STATUS` — `vtc/join-requests/status/0.1`, where the applicant's request stands.
+ *
+ * Everything else `ask` sends changes state and is a WRITE: `SUBMIT`,
+ * `SUPPLEMENT`, `WITHDRAW`, `SELF_REMOVE` above, and the vetter profile publish
+ * (`vtc/vetting/vetters/profile/0.1`, `VETTING.vettersProfile` in vtiVetting).
+ * A task this list does not name is a write too, so that a task added later is
+ * never re-sent by default. A write the community received and has not yet
+ * answered — a submit it deferred, say — sent again is a second submit, and
+ * reads as `requestAlreadyOpen`.
+ */
+export const VTI_READ_TASKS: ReadonlySet<string> = new Set([MANIFEST, STATUS])
+
+/** Whether `type` is a read `ask` may send again over DIDComm after TSP silence (see `VTI_READ_TASKS`). */
+export function isVtiReadTask(type: string): boolean {
+  return VTI_READ_TASKS.has(type)
+}
+
+/**
+ * How long an ask whose answer clock ran out keeps waiting for that answer.
+ * A late answer that arrives in that time is kept, and the next identical ask
+ * (or `takeHeldAnswer`) is given it instead of sending again. Modelled on
+ * vtaAgent's `GRANT_HOLD_MS`.
+ */
+export const VTI_ANSWER_HOLD_MS = 60000
+
+/** A task's name without the host and the version: `vtc/join-requests/submit`. */
+const taskName = (type: string) => type.replace(/^https?:\/\/[^/]+\/(spec\/)?/, '').replace(/\/[\d.]+$/, '')
+
+/**
+ * A request that went out and has had no answer yet — not a refusal, and not
+ * proof that the community never got it. A submit the community received and
+ * deferred looks exactly like this until its answer arrives, so a screen should
+ * say the request was sent and is waiting on the community, and should not
+ * invite the person to send it again: an identical ask made within
+ * `VTI_ANSWER_HOLD_MS` waits for this one's answer rather than re-sending it.
+ */
+export class VtiSentNoAnswer extends Error {
+  constructor(
+    /** The Trust Task type that was sent. */
+    readonly taskType: string,
+    /** The request's `threadId` — what the community's answer threads on. Absent when the ask was not recorded. */
+    readonly requestId: string | undefined,
+    /** When it was first sent (ms since the epoch). */
+    readonly sentAt: number | undefined,
+    readonly communityDid?: string
+  ) {
+    super(`vtiAgent: sent ${taskName(taskType)}; the community has not answered yet`)
+    this.name = 'VtiSentNoAnswer'
+  }
+}
+
+/**
  * A DIDComm message carrying a Trust Task in the binding envelope, presented
  * as the task itself: the envelope's `type` swapped for the document's own.
  * Since vti #1687 a VTC takes Trust Tasks over DIDComm only in the envelope,
@@ -187,6 +243,21 @@ const refusalOf = (plaintext: DidCommV2PlaintextMessage): VtiRefusal | undefined
   )
 }
 
+/** A DIDComm problem-report, presented as the trust-task-error `refusalOf` reads. */
+const problemReportAsRefusal = (plaintext: DidCommV2PlaintextMessage): DidCommV2PlaintextMessage => {
+  const report = (plaintext.body ?? {}) as { code?: unknown; comment?: unknown }
+  return {
+    ...plaintext,
+    type: `${TASK_ERROR}problem-report`,
+    body: {
+      payload: {
+        code: typeof report.code === 'string' ? report.code : 'problem-report',
+        message: typeof report.comment === 'string' ? report.comment : 'The community could not read the request.',
+      },
+    },
+  }
+}
+
 /** How far the connection has got, in the words the Connecting screen uses. */
 export type VtiAgentStatus = 'disconnected' | 'resolving' | 'authenticating' | 'connected' | 'failed'
 
@@ -253,6 +324,38 @@ export interface VtiVerdict {
 
 type Listener = () => void
 
+/**
+ * One request `ask` sent, until it is answered or its hold runs out.
+ *
+ * Correlated the way the VTC threads its answer, which differs by carriage:
+ * over DIDComm the reply's `thid` is the request MESSAGE's id (vtc-service
+ * `envelope_task_handler`: `thid = msg.id`), over TSP there is no message and
+ * the reply document's `threadId` is the request document's `threadId`
+ * (Trust Tasks SPEC §4.9, which `handle_tsp` returns as-is). `correlation`
+ * holds every id either can carry: the document's `threadId` and `id`, and
+ * each DIDComm message id it was sent under.
+ */
+interface AskEntry {
+  /** The request document's `threadId`. */
+  id: string
+  did: string
+  communityDid: string
+  type: string
+  /** The payload as sent, so a repeat of the same ask can be recognised. */
+  payloadKey: string
+  write: boolean
+  correlation: Set<string>
+  /** First send, and the latest one (the stale-redelivery guard reads the latest). */
+  sentAt: number
+  lastSentAt: number
+  /** Callers waiting on it now. */
+  waiters: ((plaintext: DidCommV2PlaintextMessage) => void)[]
+  /** Set when the answer clock ran out: until then a late answer is kept. */
+  heldUntil?: number
+  /** A late answer, kept for the next caller. */
+  answer?: DidCommV2PlaintextMessage
+}
+
 const hostOf = (endpoint?: string) => {
   if (!endpoint) return undefined
   const match = /^[a-z]+:\/\/([^/]+)/i.exec(endpoint)
@@ -266,19 +369,20 @@ class VtiAgentController {
   private mediator?: VtiMediatorEndpoints
   private agent?: Agent
   /**
-   * One request in flight. Its answer is the message whose type is the
-   * request's `#response` (or a trust-task-error); measured on the
-   * Eucalyptus train, a community also sends unsolicited messages right after
-   * a verdict — the credentials, over `credential-exchange/issue` — so
-   * "first message after send" is no longer a reply. Those go to the inbox.
+   * The requests in flight, and those whose clock ran out still held for a
+   * late answer, by the request's `threadId`. Each is answered by a message
+   * that threads on it (see `AskEntry`) and whose type is the request's
+   * `#response` or a trust-task-error, or by a DIDComm problem-report threaded
+   * on it. One slot matched by type used to hold them: a status poll asked
+   * during a submit took the submit's slot, and the submit's answer was lost.
+   * Measured on the Eucalyptus train, a community also sends unsolicited
+   * messages right after a verdict — the credentials, over
+   * `credential-exchange/issue` — so "first message after send" is no longer
+   * a reply. Those go to the inbox.
    */
-  private pending?: {
-    type: string
-    resolve: (plaintext: DidCommV2PlaintextMessage) => void
-    sentAt: number
-    /** What a DIDComm problem-report about this request threads on: the message's id, or the request's thread. */
-    threads?: string[]
-  }
+  private readonly asks = new Map<string, AskEntry>()
+  /** How long `ask` waits for an answer when the caller names no time. */
+  answerTimeoutMs = 30000
   private inbox: ((plaintext: DidCommV2PlaintextMessage) => void | Promise<void>)[] = []
   private tsp?: TspSessionIdentity
   /** The persona this session speaks as, when it is one: its borrowed signing key signs what a spec requires. */
@@ -390,40 +494,13 @@ class VtiAgentController {
 
   private async deliver(received: DidCommV2PlaintextMessage): Promise<void> {
     const plaintext = unwrapBindingEnvelope(received)
-    const pending = this.pending
-    const type = String(plaintext.type ?? '')
-    // A reply older than the request is a re-delivery of a stale message (a
-    // poll draining the queue), never the answer — created_time is seconds.
-    const fresh =
-      !pending || typeof plaintext.created_time !== 'number' || plaintext.created_time * 1000 >= pending.sentAt - 5000
-    const answers = pending && fresh && (type === `${pending.type}#response` || type.startsWith(TASK_ERROR))
-    if (pending && answers) {
-      this.pending = undefined
-      pending.resolve(plaintext)
-      return
-    }
-    // A refusal at the DIDComm layer — a malformed or unsupported message —
-    // comes as a problem-report threaded on the request (vti #1687 threads
-    // it), never as a Trust Task. Unanswered, it read as "the community did
-    // not answer" and hid the community's own reason; present it as the
-    // refusal it is.
-    if (
-      pending &&
-      type === PROBLEM_REPORT &&
-      pending.threads?.includes(String(plaintext.thid ?? plaintext.pthid ?? ''))
-    ) {
-      this.pending = undefined
-      const report = (plaintext.body ?? {}) as { code?: unknown; comment?: unknown }
-      pending.resolve({
-        ...plaintext,
-        type: `${TASK_ERROR}problem-report`,
-        body: {
-          payload: {
-            code: typeof report.code === 'string' ? report.code : 'problem-report',
-            message: typeof report.comment === 'string' ? report.comment : 'The community could not read the request.',
-          },
-        },
-      })
+    this.dropExpiredHolds()
+    const entry = this.askAnswered(plaintext)
+    if (entry) {
+      this.settle(
+        entry,
+        String(plaintext.type ?? '') === PROBLEM_REPORT ? problemReportAsRefusal(plaintext) : plaintext
+      )
       return
     }
     // Every handler runs, whatever another does: one handler's failure must
@@ -435,11 +512,138 @@ class VtiAgentController {
     if (failed.length > 0) {
       const reason = failed[0].reason
       throw new Error(
-        `vtiAgent: ${failed.length} inbound handler(s) failed on ${type}; left on the mediator for redelivery: ${
+        `vtiAgent: ${failed.length} inbound handler(s) failed on ${String(plaintext.type ?? '')}; left on the mediator for redelivery: ${
           reason instanceof Error ? reason.message : String(reason)
         }`
       )
     }
+  }
+
+  /**
+   * The ask `plaintext` answers, if any.
+   *
+   * By thread first: the reply document's `threadId` (TSP, and the body of a
+   * DIDComm reply — SPEC §4.9 has a response carry the request's), the
+   * DIDComm `thid` (vtc-service threads it on the request message's id) or
+   * `pthid`. A reply that names a thread no ask holds is not an answer — it
+   * belongs to an ask already settled or dropped — and goes to the inbox.
+   *
+   * By type only when the reply names no thread at all. The VTC sends one:
+   * a request body that does not parse is refused with an unrouted
+   * trust-task-error whose `threadId` is null (vtc-service
+   * `trust_tasks/helpers.rs` `body_parse_error_response`), and over TSP there
+   * is no DIDComm `thid` to stand in for it (`handle_tsp` sends the document
+   * bare). Such a reply goes to the oldest ask it could answer, waiting ones
+   * first, and only if it is not older than that ask's send: a reply older
+   * than the request is a re-delivery of a stale message (a poll draining the
+   * queue), never the answer — created_time is seconds. A problem-report is
+   * never matched by type: it answers only the request it threads on.
+   */
+  private askAnswered(plaintext: DidCommV2PlaintextMessage): AskEntry | undefined {
+    const type = String(plaintext.type ?? '')
+    const answersTask = (entry: AskEntry) => type === `${entry.type}#response` || type.startsWith(TASK_ERROR)
+    const threadId = (plaintext.body as { threadId?: unknown } | undefined)?.threadId
+    const threads = [threadId, plaintext.thid, plaintext.pthid].filter(
+      (id): id is string => typeof id === 'string' && id.length > 0
+    )
+    if (threads.length) {
+      for (const entry of this.asks.values()) {
+        if (!threads.some((id) => entry.correlation.has(id))) continue
+        // A refusal at the DIDComm layer — a malformed or unsupported message —
+        // comes as a problem-report threaded on the request (vti #1687 threads
+        // it), never as a Trust Task. Unanswered, it read as "the community did
+        // not answer" and hid the community's own reason; present it as the
+        // refusal it is.
+        if (answersTask(entry) || type === PROBLEM_REPORT) return entry
+      }
+      return undefined
+    }
+    if (type === PROBLEM_REPORT) return undefined
+    const fresh = (entry: AskEntry) =>
+      typeof plaintext.created_time !== 'number' || plaintext.created_time * 1000 >= entry.lastSentAt - 5000
+    const candidates = [...this.asks.values()]
+      .filter((entry) => !entry.answer && answersTask(entry) && fresh(entry))
+      .sort((a, b) => a.sentAt - b.sentAt)
+    return candidates.find((entry) => entry.waiters.length) ?? candidates[0]
+  }
+
+  /** Hand an answer to whoever waits on the ask, or keep it for the next caller. */
+  private settle(entry: AskEntry, answer: DidCommV2PlaintextMessage): void {
+    if (entry.waiters.length) {
+      this.asks.delete(entry.id)
+      for (const resolve of entry.waiters.splice(0)) resolve(answer)
+      return
+    }
+    entry.answer = answer
+    this.agent?.config.logger.info(
+      `vtiAgent: ${entry.communityDid} answered ${taskName(entry.type)} after its clock ran out — kept for the next caller`
+    )
+    this.listeners.forEach((listener) => listener())
+  }
+
+  private dropExpiredHolds(now = Date.now()): void {
+    for (const [id, entry] of this.asks) {
+      if (entry.heldUntil !== undefined && now >= entry.heldUntil && !entry.waiters.length) this.asks.delete(id)
+    }
+  }
+
+  /**
+   * Wait up to `timeoutMs` for the ask's answer. When the clock runs out the
+   * ask is held for `VTI_ANSWER_HOLD_MS` rather than forgotten: its answer, if
+   * it comes in that time, is kept (`settle`).
+   */
+  private waitFor(entry: AskEntry, timeoutMs: number): Promise<DidCommV2PlaintextMessage | undefined> {
+    if (entry.answer) {
+      this.asks.delete(entry.id)
+      return Promise.resolve(entry.answer)
+    }
+    entry.heldUntil = undefined
+    return new Promise((resolve) => {
+      const waiter = (plaintext: DidCommV2PlaintextMessage) => {
+        clearTimeout(timer)
+        resolve(plaintext)
+      }
+      const timer = setTimeout(() => {
+        entry.waiters = entry.waiters.filter((w) => w !== waiter)
+        if (!entry.waiters.length) entry.heldUntil = Date.now() + VTI_ANSWER_HOLD_MS
+        resolve(undefined)
+      }, timeoutMs)
+      entry.waiters.push(waiter)
+    })
+  }
+
+  /**
+   * A late answer to an ask whose clock ran out, if one arrived within
+   * `VTI_ANSWER_HOLD_MS` — taken once. `requestId` narrows it to one request
+   * (`VtiSentNoAnswer.requestId`); without it, the latest held answer to
+   * `type` from that community. An identical `ask` takes it the same way.
+   */
+  takeHeldAnswer(communityDid: string, type: string, requestId?: string): DidCommV2PlaintextMessage | undefined {
+    this.dropExpiredHolds()
+    const held = [...this.asks.values()]
+      .filter(
+        (entry) =>
+          entry.answer &&
+          entry.communityDid === communityDid &&
+          entry.type === type &&
+          (!requestId || entry.id === requestId)
+      )
+      .sort((a, b) => b.sentAt - a.sentAt)[0]
+    if (!held) return undefined
+    this.asks.delete(held.id)
+    return held.answer
+  }
+
+  /**
+   * The error for an `ask` that came back unanswered: the latest such request
+   * of `type` to that community, as `VtiSentNoAnswer`. For callers of `ask`,
+   * which returns undefined on silence.
+   */
+  sentNoAnswer(communityDid: string, type: string): VtiSentNoAnswer {
+    const entry = [...this.asks.values()]
+      .filter((e) => e.communityDid === communityDid && e.type === type && !e.waiters.length)
+      .sort((a, b) => b.sentAt - a.sentAt)[0]
+    return new VtiSentNoAnswer(type, entry?.id, entry?.sentAt, communityDid)
   }
 
   getState = (): VtiAgentState => this.state
@@ -467,7 +671,8 @@ class VtiAgentController {
    * first-vtc, and the Farm to a Farm Full Stack's own mediator — the invite is
    * stored for the community and nothing comes back), and waiting out a TSP
    * timeout first made a first Join look like a hang. On one mediator (the lab)
-   * TSP is kept, and `ask`'s TSP→DIDComm fallback stays as the safety net.
+   * TSP is kept, and `ask`'s TSP→DIDComm fallback stays as the safety net
+   * for reads (a write is never sent twice; see `VTI_READ_TASKS`).
    */
   private async preferDidcommAcrossMediators(communityDid: string): Promise<void> {
     if (!this.agent || this.carriageByPeer.has(communityDid) || !this.mediatorDid) return
@@ -602,7 +807,9 @@ class VtiAgentController {
   async disconnect(): Promise<void> {
     await this.session?.stop()
     this.session = undefined
-    this.pending = undefined
+    // What this session asked can no longer be answered on it. A caller still
+    // waiting runs out its own clock, as before.
+    this.asks.clear()
     this.tsp = undefined
     this.persona = undefined
     this.set({ status: 'disconnected', did: undefined, error: undefined, peerLeg: undefined, tspReady: undefined })
@@ -720,26 +927,78 @@ class VtiAgentController {
    * Send one Trust Task document and wait for the community's answer. The VTC
    * reads the DIDComm body as a whole document where a VTA takes a bare
    * payload — measured in `tsp-reference/ref-20`.
+   *
+   * Undefined means the request WAS sent and nothing answered it in time (a
+   * failure to send throws); `sentNoAnswer` names it for the caller. The ask
+   * is then held for `VTI_ANSWER_HOLD_MS`: an answer arriving in that time is
+   * kept, and the same ask made again — same session, community, task and
+   * payload — takes that answer, or, for a write, waits on the request already
+   * sent rather than sending a second one.
    */
   async ask(
     communityDid: string,
     type: string,
     payload: Record<string, unknown>,
-    timeoutMs = 30000
+    timeoutMs = this.answerTimeoutMs
   ): Promise<DidCommV2PlaintextMessage | undefined> {
     const session = this.session
     const did = this.state.did
     if (!session || !did) throw new Error('vtiAgent: not connected')
 
+    this.dropExpiredHolds()
+    const write = !isVtiReadTask(type)
+    const payloadKey = JSON.stringify(payload)
+    const earlier = [...this.asks.values()].find(
+      (e) => e.did === did && e.communityDid === communityDid && e.type === type && e.payloadKey === payloadKey
+    )
+    if (earlier?.answer) return this.waitFor(earlier, timeoutMs)
+    if (earlier && write) {
+      this.agent?.config.logger.info(
+        `vtiAgent: ${taskName(type)} was already sent to ${communityDid} and is unanswered — waiting on it, not sending it again`
+      )
+      return this.waitFor(earlier, timeoutMs)
+    }
+
     const threadId = `urn:uuid:${utils.uuid()}`
+    // Registered before anything is sent, so an answer that comes back at once
+    // finds it, and an identical write asked meanwhile waits on this one.
+    const entry: AskEntry = {
+      id: threadId,
+      did,
+      communityDid,
+      type,
+      payloadKey,
+      write,
+      correlation: new Set([threadId]),
+      sentAt: Date.now(),
+      lastSentAt: Date.now(),
+      waiters: [],
+    }
+    this.asks.set(threadId, entry)
+    try {
+      return await this.sendAsk(session, did, entry, payload, timeoutMs)
+    } catch (error) {
+      // Nothing to hold for a request that did not go out.
+      this.asks.delete(threadId)
+      throw error
+    }
+  }
+
+  /** `ask`'s sending half: one document, over TSP or DIDComm, and the wait for its answer. */
+  private async sendAsk(
+    session: VtiMediatorSession,
+    did: string,
+    entry: AskEntry,
+    payload: Record<string, unknown>,
+    timeoutMs: number
+  ): Promise<DidCommV2PlaintextMessage | undefined> {
+    const { communityDid, type, write, id: threadId } = entry
     // One document for either carriage, addressed and dated as the framework
     // requires (`issuer`, `recipient`, `issuedAt`), and signed as the persona
     // when the task's specification declares the proof REQUIRED.
     const document = await this.taskDocument(communityDid, type, payload, threadId)
-    const sentAt = Date.now()
-    let answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
-      this.pending = { type, resolve, sentAt }
-    })
+    entry.correlation.add(String(document.id))
+    entry.sentAt = entry.lastSentAt = Date.now()
 
     // §4.2 on the ecosystem leg. Unlike `send()` there is no toggle here on
     // purpose: a community publishes a resolvable document, so its own
@@ -759,23 +1018,27 @@ class VtiAgentController {
         this.agent.config.logger.info(
           `${TSP_LOG_PREFIX} asked ${communityDid} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
         )
-        const viaTsp = await Promise.race([
-          answer,
-          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
-        ])
-        this.pending = undefined
+        const viaTsp = await this.waitFor(entry, timeoutMs)
         if (viaTsp) return viaTsp
         // A community can advertise TSPTransport and not answer it — measured
         // on the VTA Farm's first-vtc (VTI-Q15): its mediator stores the frame
-        // and nothing comes back. Ask once more over DIDComm, and keep DIDComm
-        // for this community for the rest of the session.
+        // and nothing comes back. Keep DIDComm for this community for the rest
+        // of the session.
+        this.carriageByPeer.set(communityDid, 'didcomm')
+        // A write is not sent again: silence is not proof the community did not
+        // get it — a submit it received and deferred is silent until it
+        // answers — and a second copy is a second submit (`requestAlreadyOpen`)
+        // or a second withdraw. It stays held for its late answer.
+        if (write) {
+          this.agent.config.logger.warn(
+            `${TSP_LOG_PREFIX} ${communityDid} did not answer ${type} over TSP in ${timeoutMs}ms — a write, so not sent again over DIDComm`
+          )
+          return undefined
+        }
+        // A read is asked once more over DIDComm.
         this.agent.config.logger.warn(
           `${TSP_LOG_PREFIX} ${communityDid} did not answer ${type} over TSP in ${timeoutMs}ms — asking over DIDComm`
         )
-        this.carriageByPeer.set(communityDid, 'didcomm')
-        answer = new Promise<DidCommV2PlaintextMessage>((resolve) => {
-          this.pending = { type, resolve, sentAt: Date.now() }
-        })
       }
     }
 
@@ -784,7 +1047,9 @@ class VtiAgentController {
     // itself since vti #1687 (VTI-42), and served the envelope before it.
     const now = Math.floor(Date.now() / 1000)
     const messageId = `urn:uuid:${utils.uuid()}`
-    if (this.pending) this.pending.threads = [messageId, threadId]
+    // The VTC threads its DIDComm reply, and any problem-report, on this id.
+    entry.correlation.add(messageId)
+    entry.lastSentAt = Date.now()
     await session.sendTo(communityDid, {
       id: messageId,
       typ: 'application/didcomm-plain+json',
@@ -796,12 +1061,7 @@ class VtiAgentController {
       expires_time: now + 300,
       body: document,
     })
-    const result = await Promise.race([
-      answer,
-      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
-    ])
-    this.pending = undefined
-    return result
+    return this.waitFor(entry, timeoutMs)
   }
 
   /**
@@ -870,9 +1130,10 @@ class VtiAgentController {
     const overRest = await this.manifestOverRest(communityDid, withAgent)
     if (overRest) return overRest
     const answer = await this.ask(communityDid, MANIFEST, {})
-    // Each unanswered ask names its task: three callers used to share one
-    // sentence, and a failed join could not say which request went unanswered.
-    if (!answer) throw new Error('vtiAgent: the community did not answer (manifest)')
+    // Each unanswered ask names its task and request (`VtiSentNoAnswer`):
+    // three callers used to share one sentence, and a failed join could not
+    // say which request went unanswered.
+    if (!answer) throw this.sentNoAnswer(communityDid, MANIFEST)
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
@@ -936,8 +1197,8 @@ class VtiAgentController {
   }
 
   /** The verdict a submit or a supplement carries — deliberately the same shape. */
-  private verdictOf(answer: DidCommV2PlaintextMessage | undefined, task: string): VtiVerdict {
-    if (!answer) throw new Error(`vtiAgent: the community did not answer (${task})`)
+  private verdictOf(answer: DidCommV2PlaintextMessage | undefined, communityDid: string, type: string): VtiVerdict {
+    if (!answer) throw this.sentNoAnswer(communityDid, type)
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (
@@ -984,7 +1245,7 @@ class VtiAgentController {
       ...(options.requestId ? { requestId: options.requestId } : {}),
       ...(options.requirementsDigest ? { extensions: { requirementsDigest: options.requirementsDigest } } : {}),
     })
-    return this.verdictOf(answer, 'supplement')
+    return this.verdictOf(answer, communityDid, SUPPLEMENT)
   }
 
   /**
@@ -997,7 +1258,7 @@ class VtiAgentController {
    */
   async status(communityDid: string, options: { requestId?: string } = {}): Promise<JoinRequestStatus | undefined> {
     const answer = await this.ask(communityDid, STATUS, options.requestId ? { requestId: options.requestId } : {})
-    if (!answer) throw new Error('vtiAgent: the community did not answer (status)')
+    if (!answer) throw this.sentNoAnswer(communityDid, STATUS)
     const refusal = refusalOf(answer)
     if (refusal) {
       if (joinRequestRefusal(refusal) === 'notFound') return undefined
@@ -1043,7 +1304,7 @@ class VtiAgentController {
       SELF_REMOVE,
       options.disposition ? { disposition: options.disposition } : {}
     )
-    if (!answer) throw new Error('vtiAgent: the community did not answer (self-remove)')
+    if (!answer) throw this.sentNoAnswer(communityDid, SELF_REMOVE)
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (answer.body as { payload?: { did?: string; disposition?: string; removed?: boolean } } | undefined)
@@ -1068,7 +1329,7 @@ class VtiAgentController {
       ...(options.requestId ? { requestId: options.requestId } : {}),
       ...(options.reason ? { reason: options.reason } : {}),
     })
-    if (!answer) throw new Error('vtiAgent: the community did not answer (withdraw)')
+    if (!answer) throw this.sentNoAnswer(communityDid, WITHDRAW)
     const refusal = refusalOf(answer)
     if (refusal) throw refusal
     const payload = (answer.body as { payload?: { requestId?: string; status?: string } } | undefined)?.payload
@@ -1107,7 +1368,7 @@ class VtiAgentController {
         return digest ? { requirementsDigest: digest } : {}
       })(),
     })
-    return this.verdictOf(answer, 'submit')
+    return this.verdictOf(answer, communityDid, SUBMIT)
   }
 }
 

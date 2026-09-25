@@ -38,6 +38,14 @@ function withoutOurJargon(detail: string): string {
 }
 
 /**
+ * A request the community was sent and has not answered yet
+ * (`VtiSentNoAnswer`). Not "your agent didn't answer, try again": it was the
+ * community that owes the answer, it may well have received the request — a
+ * submit it deferred looks exactly like this — and sending it again is a
+ * second request. So it is its own sentence, with no retry offered.
+ */
+const SENT_NO_ANSWER = /the community has not answered yet/i
+/**
  * An agent or a community that did not answer is the common case by a
  * distance, and it is usually transient — a reply lost before the transport
  * could carry it (VTI-43). It is worth trying again, and saying so.
@@ -53,6 +61,10 @@ const UNREACHABLE = /network|fetch failed|ECONN|ENOTFOUND|unreachable|could not 
 export function plainError(error: unknown): PlainError {
   const detail = error instanceof Error ? error.message : String(error)
   const bare = withoutOurJargon(detail)
+  // By name, not `instanceof`: this module stays free of the agent's imports.
+  if ((error instanceof Error && error.name === 'VtiSentNoAnswer') || SENT_NO_ANSWER.test(bare)) {
+    return { line: 'Errors.SentNoAnswer', detail, retry: false }
+  }
   if (NOT_ALLOWED.test(bare)) return { line: 'Errors.NotAllowed', detail, retry: false }
   if (NO_DID_HOST.test(bare)) return { line: 'Errors.NoDidHost', detail, retry: false }
   if (NO_ANSWER.test(bare)) return { line: 'Errors.NoAnswer', detail, retry: true }

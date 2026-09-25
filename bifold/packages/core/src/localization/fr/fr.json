@@ -1583,6 +1583,7 @@
   },
   "Errors": {
     "NoAnswer": "Votre agent n'a pas répondu. Touchez Continuer pour réessayer — cela fonctionne généralement la deuxième fois.",
+    "SentNoAnswer": "Votre demande a été envoyée, et la communauté n'a pas encore répondu. Elle est peut-être encore en train de décider — inutile de la renvoyer.",
     "NotAllowed": "Votre agent n'a pas autorisé cette action. Demandez à son administrateur si ce téléphone a toujours accès.",
     "NoDidHost": "Votre agent n'a aucun endroit où publier une nouvelle identité. Demandez à son administrateur d'y enregistrer un hébergeur de DID, puis réessayez.",
     "Unreachable": "Rien n'a répondu à cette adresse. Vérifiez votre connexion, puis réessayez.",
