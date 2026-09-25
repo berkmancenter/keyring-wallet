@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.47 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.48 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1881,6 +1881,8 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q25 | Can a community offer admission by invitation OR by vetting? And can an admin admit an applicant who is waiting for vetting? | A community that publishes any vetting criterion requires vetting of everyone. An invitation neither bypasses it nor can be chosen as the criterion, although the manifest lists both as if either would do. `decide` refuses a Deferred request, so an admin cannot admit that applicant either. [Details](#question-details). |
 | VTI-Q26 | Could openvtc send a join over DIDComm, or fall back to it, when the community's TSP mediator is not its own? | openvtc sends every Trust Task over TSP whenever the peer's DID document advertises `#tsp`, with no check of whose mediator that is and no fallback. A community on another mediator never receives the join unless the two mediators relay for each other, and the applicant sees only "no response from the community yet … may not have been received". [Details](#question-details). |
 | VTI-Q27 | Could a member whose membership credential was lost get it again? | A community delivers the membership credential once. There is no member-credential resend (only `vetting/vetters/resend`), and the status poll without an id finds only open requests, so an approved join whose credential never got stored answers NotFound. A client that stops between receiving the credential and storing it stays pending for good; openvtc and Keyring both can. [Details](#question-details). |
+| VTI-Q28 | Could vta-sdk ship a verifier for the vetting rules that today live only in the spec? | Several producer obligations have no upstream check a client can run on its own output: a session's `parentThreadId` and its ≤15 min `expiresAt`, the statement's `taskDigestMultibase`, a request's `requirementsDigest`/`languages`/`message`, how ticket codes and secrets are generated, `registryConsent`, `acceptsDocumentation`/`sessionHint`, and the membership credential's proof (which openvtc doesn't verify either). A client can only be held to the schema. [Details](#question-details). |
+| VTI-Q29 | Could openvtc retry a mediator listener that failed to come up at launch? | A persona listener whose login misses its budget is logged ("listener failed to come up; continuing without it") and skipped for the whole run, with nothing on screen. A vetter launched that way shows a normal desk and never hears a request. [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2257,10 +2259,42 @@ loses the credential in the same way. We are making Keyring store before it
 acknowledges. That narrows our window and does not remove it, and it does
 nothing for the credential that is already lost.
 
+
+**VTI-Q28 — spec-only vetting rules, with no verifier a client can run.**
+(a) Keyring now checks every document it produces with upstream's own code in
+CI (`docs/VTI_CONFORMANCE_INVENTORY.md`). For these rules no upstream
+function exists, so a client can only be held to the schema:
+- a producer's `parentThreadId` on `vetting/session` (a MUST for the producer;
+  the consumer must not reject its absence), and `expiresAt` ≤15 min
+  (RECOMMENDED);
+- the statement's `taskDigestMultibase` (in the spec's example; not read by
+  `verify_statement`);
+- the request's `requirementsDigest`, `languages`, `message`;
+- how ticket codes and secrets are generated (pattern only);
+- `registryConsent` (stored, never verified);
+- `acceptsDocumentation`, `sessionHint` (schema only);
+- the membership credential's proof (openvtc does not verify it either).
+Expected: a `check_*` for each producer rule in vta-sdk, as there is for the
+card, the statement and the eligibility presentation, or a note in the spec
+that the rule is advisory.
+(b) Read at trust-tasks-tf `bdae1cf9` and VTI `ed672fff`, 2026-09-25.
+
+**VTI-Q29 — openvtc does not retry a listener that failed at launch.**
+(a) openvtc brings up one mediator listener per persona at launch. One whose
+login fails is logged and skipped for the rest of the run: *"listener failed to
+come up; continuing without it"*. Nothing on screen says so. A vetter
+launched this way shows a normal desk and never hears a request. Expected: a
+retry with backoff, or a visible "not listening" state.
+(b) Measured on our lab, 2026-09-25 08:47Z, openvtc `ed13d29`: a few seconds of
+failed requests through the lab's tunnels made the vetter persona's login miss
+openvtc's 10 s budget by 0.8 s (the mediator logged it successful at
+08:47:51.7). A Keyring applicant's request then sat queued at the mediator for
+three minutes. Our harness now relaunches the TUI until the listener is up.
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.48 | 2026-09-25 | **VTI-Q28** (new): the vetting rules that exist only in the spec, with no vta-sdk verifier a client can run on its own output (parentThreadId, session expiry, taskDigestMultibase, request fields, ticket generation, registryConsent, the membership credential's proof). From the conformance inventory. **VTI-Q29** (new): openvtc does not retry a mediator listener that failed at launch, so a vetter can be deaf behind a normal desk. Measured on our lab with `ed13d29`. Neither sent. |
 | 1.47 | 2026-09-25 | **VTI-Q27** (new): a community delivers the membership credential once, and nothing gets it again: no member-credential resend, and the id-less `join-requests/status` finds only open requests, so an approved join answers NotFound. A client that stops between receiving the credential and storing it stays pending for good. Measured on our lab with openvtc `ed13d29` (VTI `a96fe02f`); read at `a96fe02f`. Keyring has a narrower window of the same kind, which it is closing on its side. Not sent. |
 | 1.46 | 2026-09-25 | **VTI-Q26** (new): openvtc sends a join over TSP whenever the community advertises `#tsp`, with no check that the community's mediator is its own and no fallback, so a join to a community on another, non-relaying mediator is lost in silence. Measured on the Farm with openvtc `ed13d29` (the TUI as the applicant, `keyring-test-vtc` on its stack's mediator); read at `ed13d29` and `177a218`. Not sent. |
 | 1.45 | 2026-09-24 | **The Farm's versions, measured again.** The runner VTAs (`keyring-runner-nohost`, `-uiux`, `-prague`) report vta-service **0.41.0**. The source is the public `/openapi.json` `info.version`, which is vta-service's own `CARGO_PKG_VERSION` (`vta-service/src/routes/mod.rs`); `/health` omits the version and `/health/details` needs auth. `firstperson-mediator` reports **0.29.4** in `/mediator/v1/readyz`, up since about 07:01Z. So VTI-43's fix (vti #1675, in 0.40.0) is on the Farm, and the 09-23 "the Farm is behind" note no longer holds. Measured while diagnosing an Android link whose first `auth/whoami/0.1` went unanswered on two runners from 22:54Z; that turned out to be ours (keyring-bifold#112, the grant check's deadline). **Then, 2026-09-25 05:54Z, after an announced Farm upgrade:** the runner VTAs report 0.42.0; the mediator is still 0.29.4 (restarted about 05:29Z); the VTC is still 0.11.58; `farm-health.sh` is all green. |
