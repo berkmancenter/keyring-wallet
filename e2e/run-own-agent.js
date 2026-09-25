@@ -140,6 +140,61 @@ async function swipeUp(d) {
   await sleep(600);
 }
 
+
+// ------------------------------------------------ the owner checks' prompt
+//
+// Owner acts ask the phone's own lock (react-native-keychain,
+// BIOMETRY_ANY_OR_DEVICE_PASSCODE; core module/ownerConfirm.ts). A device with
+// no lock refuses "Create my agent", so the owner device gets one for the run:
+// a PIN on an Android emulator, an enrolled Face ID on an iOS simulator. The
+// prompt is answered the way a person would: the PIN typed, a face matched.
+
+const OWNER_PIN = process.env.OWNER_PIN || "1111";
+
+function adb(udid, ...args) {
+  return execFileSync("adb", ["-s", udid, ...args], { encoding: "utf8" });
+}
+
+/** Give the device a lock the owner checks can use; returns an undo. */
+function ownerLockSetup(platform, udid) {
+  if (!udid) throw new Error(`${platform}: the owner device needs a udid, to give it a screen lock`);
+  if (platform === "android") {
+    adb(udid, "shell", "locksettings", "set-pin", OWNER_PIN);
+    return () => {
+      try {
+        adb(udid, "shell", "locksettings", "clear", "--old", OWNER_PIN);
+      } catch (e) {
+        console.log(`[lock] could not clear the emulator PIN: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+      }
+    };
+  }
+  execFileSync("xcrun", ["simctl", "spawn", udid, "notifyutil", "-s", "com.apple.BiometricKit.enrollmentChanged", "1"]);
+  execFileSync("xcrun", ["simctl", "spawn", udid, "notifyutil", "-p", "com.apple.BiometricKit.enrollmentChanged"]);
+  return () => undefined;
+}
+
+/** Answer the owner prompt if one comes up within `ms`: the PIN on Android, a face match on iOS. */
+async function answerOwnerPrompt(platform, udid, ms = 20000) {
+  if (!udid) return;
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    if (platform === "android") {
+      const focus = adb(udid, "shell", "dumpsys", "window").split("\n").find((l) => l.includes("mCurrentFocus")) || "";
+      if (/systemui|ConfirmDeviceCredential|BiometricPrompt|settings\/.*Confirm/i.test(focus)) {
+        await sleep(800);
+        adb(udid, "shell", "input", "text", OWNER_PIN);
+        adb(udid, "shell", "input", "keyevent", "66");
+        console.log("[lock] answered the owner prompt with the PIN");
+        await sleep(1500);
+        return;
+      }
+    } else {
+      execFileSync("xcrun", ["simctl", "spawn", udid, "notifyutil", "-p", "com.apple.BiometricKit_Sim.pearl.match"]);
+    }
+    await sleep(1000);
+  }
+}
+
 /** A phone ready to start: unlocked at home with no agent, or onboarded fresh. */
 async function readyPhone(d, name) {
   // A fresh install's first launch can take well past a few seconds to show
@@ -176,7 +231,8 @@ async function addressThenCode(d, { owner }) {
     await tapTestId(d, "AgentCreate", 15000);
     await waitForTestId(d, "AgentCreateIntro", 15000);
     await tapTestId(d, "AgentCreateContinue", 15000);
-    await (await waitForTestId(d, "AgentCreateAddress", 15000)).setValue(AGENT_DID);
+    const addressField = (await existsTestId(d, "AgentCreateAddressInput", 5000)) ? "AgentCreateAddressInput" : "AgentCreateAddress";
+    await (await waitForTestId(d, addressField, 15000)).setValue(AGENT_DID);
     await tapTestId(d, "AgentCreateAddressContinue", 15000);
     if (await existsTestId(d, "AgentCreateError", 3000)) throw new Error(`address refused: ${await textOf(d, "AgentCreateError")}`);
     await waitForTestId(d, "AgentCreateOwnerCode", 60000);
@@ -184,6 +240,7 @@ async function addressThenCode(d, { owner }) {
     if (!(await existsTestId(d, "AgentCreateOwnerDid", 2000))) {
       const show = await scrollToTestId(d, "AgentCreateShowCode", 4).catch(() => undefined);
       if (show) await show.click();
+      await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID);
     }
     await waitForTestId(d, "AgentCreateOwnerDid", 15000);
     return (await textOf(d, "AgentCreateOwnerDid")).trim();
@@ -224,6 +281,7 @@ async function connect(d, who) {
   //   "Not admitted yet" is AgentCreateError; fail fast on it.
   if (await existsTestId(d, "AgentCreateConnect", 2000)) {
     await tapTestId(d, "AgentCreateConnect", 15000);
+    await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID);
     await handleBiometricConfirmIfPresent(d);
     const by = Date.now() + 180000;
     while (Date.now() < by) {
@@ -258,6 +316,7 @@ const step = (name, data = {}) => {
 
 let owner;
 let backup;
+let undoLock;
 const logs = [];
 let outcome = "fail";
 try {
@@ -270,6 +329,7 @@ try {
 
   await ensureAppium();
   const keepState = !FRESH;
+  undoLock = ownerLockSetup(OWNER_PLATFORM, process.env.OWNER_UDID);
   owner = await makeDriver({ platform: OWNER_PLATFORM, udid: process.env.OWNER_UDID, keepState });
   if (process.env.OWNER_UDID) logs.push(startDeviceLog({ platform: OWNER_PLATFORM, udid: process.env.OWNER_UDID, file: path.join(ARTIFACTS, `own-agent-${RUN_ID}-owner.log`) }));
   await readyPhone(owner, "Owner");
@@ -319,12 +379,12 @@ try {
       console.log("[e2e] E2E_BACKUP_GRANT=harness: the HARNESS grants the backup in place of the owner phone — this proves nothing about the app's grant");
       execFileSync(path.resolve(here, "../scripts/openvtc/pnm-locked"), ["--vta", twin.TWIN_SLUG, "acl", "create", "--did", backupTemp, "--role", "admin", "--label", "backup-harness-standin"], { stdio: "inherit" });
       step("ownerGrants", { by: "harness stand-in" });
-    } else if (await existsTestId(owner, "AgentBackupScanCode", 2000)) {
-      await tapTestId(owner, "AgentBackupScanCode", 15000);
+    } else if ((await existsTestId(owner, "AgentBackupNext", 2000)) || (await existsTestId(owner, "AgentBackupCodeInput", 2000))) {
+      if (await existsTestId(owner, "AgentBackupNext", 1000)) await tapTestId(owner, "AgentBackupNext", 15000);
       // A simulator cannot scan the other phone: paste its code (the screen offers paste, §7 step 5.3).
-      const pasteField = await waitForTestId(owner, "AgentBackupScanCode", 5000);
-      await pasteField.setValue(backupTemp).catch(() => undefined);
-      await handleBiometricConfirmIfPresent(owner);
+      await (await waitForTestId(owner, "AgentBackupCodeInput", 15000)).setValue(backupTemp);
+      await tapTestId(owner, "AgentBackupAdd", 15000);
+      await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID);
       await waitForTestId(owner, "AgentBackupAdded", 60000);
       const row = acl().find((e) => e.subject === backupTemp);
       if (!isOwnerRow(row)) throw new Error(`the owner's grant is not an unrestricted admin: ${JSON.stringify(row)}`);
@@ -372,6 +432,7 @@ try {
   if (outcome === "pending") console.log(`\n[e2e] PENDING (exit 3): ${err.message}\n`);
   else printFailure("OWN AGENT (twin)", err);
 } finally {
+  undoLock?.();
   process.exitCode = outcome === "pass" ? 0 : outcome === "pending" ? 3 : 1;
   record.outcome = outcome;
   try {
