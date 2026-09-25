@@ -154,7 +154,10 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       // Two signed Trust Task documents, for vta-sdk's verify_trust_task_proof_with.
       writeFileSync(join(out, 'task-applicant.json'), JSON.stringify(sessionResponse, null, 2))
       writeFileSync(join(out, 'task-vetter.json'), JSON.stringify(issue, null, 2))
-      writeFileSync(join(out, 'signers.json'), JSON.stringify({ applicant: applicant.did, vetter: vetter.did }, null, 2))
+      writeFileSync(
+        join(out, 'signers.json'),
+        JSON.stringify({ applicant: applicant.did, vetter: vetter.did }, null, 2)
+      )
       writeFileSync(
         join(out, 'expect.json'),
         JSON.stringify(
