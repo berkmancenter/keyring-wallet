@@ -62,16 +62,21 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     // it as a different identity (a join as a new persona, a community
     // connect), and what arrives then is not this persona's to store.
     if (!target || vtiAgent.getState().did !== target.did) return
-    void receiveIssue(community, target.did, message)
-      .then((got: VtiReceivedCredential[]) => {
+    // Returned: stored before the mediator is told it was taken (vtiAgent.onInbound).
+    return receiveIssue(community, target.did, message).then(
+      (got: VtiReceivedCredential[]) => {
         if (got.length) {
           DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, {
             communityDid: target.communityDid,
             kinds: got.map((c) => c.kind),
           })
         }
-      })
-      .catch((e) => options.onError?.(e))
+      },
+      (e) => {
+        options.onError?.(e)
+        throw e
+      }
+    )
   })
 
   const tick = async () => {

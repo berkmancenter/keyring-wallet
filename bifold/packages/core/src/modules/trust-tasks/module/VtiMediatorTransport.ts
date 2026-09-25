@@ -307,6 +307,11 @@ export async function vtiClientIdentityFromPersona(
  * to Credo's receiver and acknowledged with Pickup 3.0 `messages-received`,
  * **after** the receiver has taken them — the same persist-before-ack ordering
  * the rest of the stack holds, since the mediator drops its copy on the ack.
+ * "Taken" means `onMessage`'s promise has settled: a consumer that stores
+ * what arrived returns that work, and a consumer that throws withholds the
+ * ack, so the message is delivered again rather than lost. A community sends
+ * a membership credential once; acknowledged before it was stored, a stop in
+ * between lost it for good (VTI-Q27).
  */
 export class VtiMediatorSession {
   private socket?: WebSocket
@@ -330,7 +335,7 @@ export class VtiMediatorSession {
        * validating message". Without it, frames still go to Credo — which is
        * what a v1-shaped message wants.
        */
-      onMessage?: (plaintext: DidCommV2PlaintextMessage) => void
+      onMessage?: (plaintext: DidCommV2PlaintextMessage) => void | Promise<void>
       /**
        * A TSP frame addressed to this client, as raw qb2 bytes — sealed, so
        * the consumer holds the key. Awaited before the frame is acknowledged:
@@ -646,8 +651,11 @@ export class VtiMediatorSession {
           await this.acknowledge([queueId])
           return
         }
+        // Awaited, and remembered only once taken: a consumer that throws has
+        // not taken the message, so it is neither acknowledged nor marked seen,
+        // and the mediator's redelivery is handled afresh.
+        await this.options.onMessage(plaintext)
         this.remember(queueId)
-        this.options.onMessage(plaintext)
         await this.acknowledge([queueId])
       } else {
         const receiver = this.agent.dependencyManager.resolve(DidCommMessageReceiver)
@@ -740,8 +748,8 @@ export class VtiMediatorSession {
           continue
         }
         const plaintext = await this.unpack(jwe as DidCommV2EncryptedMessage)
+        if (!isPickup(plaintext.type)) await this.options?.onMessage?.(plaintext)
         if (attachment.id) this.remember(attachment.id)
-        if (!isPickup(plaintext.type)) this.options?.onMessage?.(plaintext)
         if (attachment.id) acknowledged.push(attachment.id)
       } catch (error) {
         this.options.onError?.(error instanceof Error ? error : new Error(String(error)))

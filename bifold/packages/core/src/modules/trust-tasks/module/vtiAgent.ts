@@ -279,7 +279,7 @@ class VtiAgentController {
     /** What a DIDComm problem-report about this request threads on: the message's id, or the request's thread. */
     threads?: string[]
   }
-  private inbox: ((plaintext: DidCommV2PlaintextMessage) => void)[] = []
+  private inbox: ((plaintext: DidCommV2PlaintextMessage) => void | Promise<void>)[] = []
   private tsp?: TspSessionIdentity
   /** The persona this session speaks as, when it is one: its borrowed signing key signs what a spec requires. */
   private persona?: VtiPersona
@@ -375,15 +375,20 @@ class VtiAgentController {
   }
   private peerRevisionStore?: TspPeerRevisionStore
 
-  /** Receive what the community sends that is not an answer (credentials, statements). */
-  onInbound(handler: (plaintext: DidCommV2PlaintextMessage) => void): () => void {
+  /**
+   * Receive what the community sends that is not an answer (credentials,
+   * statements). Return the work that stores it: the mediator is told the
+   * message was taken only once every handler's promise has settled, and a
+   * handler that rejects withholds that, so the message is delivered again.
+   */
+  onInbound(handler: (plaintext: DidCommV2PlaintextMessage) => void | Promise<void>): () => void {
     this.inbox.push(handler)
     return () => {
       this.inbox = this.inbox.filter((h) => h !== handler)
     }
   }
 
-  private deliver(received: DidCommV2PlaintextMessage): void {
+  private async deliver(received: DidCommV2PlaintextMessage): Promise<void> {
     const plaintext = unwrapBindingEnvelope(received)
     const pending = this.pending
     const type = String(plaintext.type ?? '')
@@ -421,12 +426,19 @@ class VtiAgentController {
       })
       return
     }
-    for (const handler of this.inbox) {
-      try {
-        handler(plaintext)
-      } catch {
-        // one handler's failure must not lose the message for the others
-      }
+    // Every handler runs, whatever another does: one handler's failure must
+    // not lose the message for the others. Any failure then fails the
+    // delivery, so the session withholds the ack and the message comes back —
+    // which is why a handler must be safe to run twice on one message.
+    const results = await Promise.allSettled(this.inbox.map(async (handler) => handler(plaintext)))
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    if (failed.length > 0) {
+      const reason = failed[0].reason
+      throw new Error(
+        `vtiAgent: ${failed.length} inbound handler(s) failed on ${type}; left on the mediator for redelivery: ${
+          reason instanceof Error ? reason.message : String(reason)
+        }`
+      )
     }
   }
 
@@ -559,7 +571,7 @@ class VtiAgentController {
         onError: (error) => this.set({ error: error.message }),
         onMessage: (plaintext) => {
           this.noteInbound(plaintext, 'didcomm')
-          this.deliver(plaintext)
+          return this.deliver(plaintext)
         },
         ...(tspSession ? { onTspFrame: (bytes: Uint8Array) => this.receiveTspFrame(bytes, did) } : {}),
       })
@@ -624,7 +636,7 @@ class VtiAgentController {
       this.set({ peerRevisions: [...others, record] })
     }
     this.noteInbound(plaintext, 'tsp', unpacked.sender)
-    this.deliver(plaintext)
+    await this.deliver(plaintext)
   }
 
   get isConnected(): boolean {
