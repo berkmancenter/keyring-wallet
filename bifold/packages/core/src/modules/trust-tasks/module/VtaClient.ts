@@ -41,7 +41,7 @@ import {
   type VtiClientIdentity,
   type VtiMediatorEndpoints,
 } from './VtiMediatorTransport'
-import type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './VtiIdentityStore'
+import type { VtiIdentityStore, VtiManagerIdentity, VtiMintRequest, VtiPersona } from './VtiIdentityStore'
 import { VtiRefusal } from './vtiAgent'
 import { isDigestMultibase } from './vettingShape'
 import { chooseCarriage, type Carriage } from './tspCapability'
@@ -894,13 +894,6 @@ export class VtaClient {
     if (!existing && !servers[0] && !options.personaBaseUrl) {
       throw new PersonaHostMissing(this.vtaDid)
     }
-    // One key per community until a persona is recorded for it, so every retry
-    // of this mint — a tap on Try again, or after a restart — is the same ask.
-    let mintKey: string | undefined
-    if (!existing) {
-      mintKey = (await this.store.getMintKey?.(options.communityDid)) ?? `urn:uuid:${utils.uuid()}`
-      await this.store.setMintKey?.(options.communityDid, mintKey)
-    }
     const minted = existing
       ? ({
           did: existing.did,
@@ -908,10 +901,11 @@ export class VtaClient {
           signingKeyId: existing.vtaKeyIds.signing,
           kaKeyId: existing.vtaKeyIds.keyAgreement,
         } as VtaMintedDid)
-      : await this.mintPersona(
+      : await this.mintOnce(
+          options.communityDid,
           servers[0]
-            ? { contextId, serverId: servers[0].id, label, idempotencyKey: mintKey }
-            : { contextId, didUrl: `${options.personaBaseUrl ?? ''}/${label}`, label, idempotencyKey: mintKey }
+            ? { contextId, serverId: servers[0].id, label }
+            : { contextId, didUrl: `${options.personaBaseUrl ?? ''}/${label}`, label }
         )
     const borrowed = await this.borrowKey(minted.kaKeyId)
     // The signing key too: a vetting card, an eligibility presentation and a
@@ -930,6 +924,42 @@ export class VtaClient {
     await this.store.setPersona(persona)
     await this.store.clearMintKey?.(options.communityDid)
     return persona
+  }
+
+  /**
+   * One mint per community until a persona is recorded for it: every retry — a
+   * tap on Try again, or after a restart — re-sends the first attempt's key AND
+   * request. The VTA answers a keyed retry with the first mint only when the
+   * payload is the same, and refuses any difference for 24 h ("idempotency key
+   * reused for a different request", vta-service trust_tasks/idempotency.rs);
+   * up to 224 a retry rebuilt the request with a new label, so one mint that
+   * reached the VTA without its persona being recorded blocked that community
+   * on the phone for a day.
+   *
+   * A key saved without its request (before this) cannot be re-sent unchanged.
+   * On that refusal the attempt starts over once with a new key: the first
+   * mint, if it happened, stays on the VTA unused.
+   */
+  private async mintOnce(communityDid: string, fresh: VtiMintRequest): Promise<VtaMintedDid> {
+    const savedKey = await this.store.getMintKey?.(communityDid)
+    const savedRequest = savedKey ? await this.store.getMintRequest?.(communityDid) : undefined
+    const request = savedRequest ?? fresh
+    const key = savedKey ?? `urn:uuid:${utils.uuid()}`
+    await this.store.setMintKey?.(communityDid, key, request)
+    try {
+      return await this.mintPersona({ ...request, idempotencyKey: key })
+    } catch (error) {
+      if (
+        !/idempotency key reused for a different request/i.test(error instanceof Error ? error.message : String(error))
+      )
+        throw error
+      this.agent.config?.logger?.warn?.(
+        `${LOG_PREFIX} the VTA holds a different mint under this community's key; starting the mint over with a new key`
+      )
+      const again = `urn:uuid:${utils.uuid()}`
+      await this.store.setMintKey?.(communityDid, again, fresh)
+      return this.mintPersona({ ...fresh, idempotencyKey: again })
+    }
   }
 
   /** Borrow one of the VTA's keys into the wallet's KMS; returns the KMS key id. */
