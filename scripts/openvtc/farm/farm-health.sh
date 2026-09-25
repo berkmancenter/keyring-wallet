@@ -50,6 +50,7 @@ vtc() { # name base did
 vta farm-runner yes
 vta farm-runner-prague yes
 vta farm-runner-uiux yes
+vta farm-runner-openvtc yes
 vtc keyring-test-vtc https://vtc-keyring-test.ic3.dev \
   did:webvh:QmdervYcngPtJnKGuZSzH2tvDe8q274cty8324G4finFnV:dids-keyring-stack.ic3.dev:keyring-test-vtc
 vta farm-runner-nohost no
