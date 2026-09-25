@@ -676,9 +676,17 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <Text style={styles.label} testID={testIdWithKey('LinkYourAgentHelp')}>
               {t('VtaLink.LinkYourAgentHelp')}
             </Text>
+            {/* A person with no agent at all makes one here (own_agent_subtask.md §7);
+                one who has an agent links it below. */}
             <Button
-              title={t('VtaLink.LinkYourAgent')}
+              title={t('CreateAgent.CreateMyAgent')}
               buttonType={ButtonType.Primary}
+              onPress={() => navigation.navigate(Screens.VtaCreateAgent)}
+              testID={testIdWithKey('AgentCreate')}
+            />
+            <Button
+              title={t('CreateAgent.AlreadyHaveOne')}
+              buttonType={ButtonType.Secondary}
               onPress={onLinkAgent}
               testID={testIdWithKey('LinkYourAgentButton')}
             />
