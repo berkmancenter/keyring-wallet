@@ -217,7 +217,11 @@ Errors:
 > If you lose this phone, a backup keeps your agent yours. It takes a minute.
 > **[Use another phone]** · [Not now]
 
-- **Another phone:** on the second phone, **I already have one — link it** → **Link without a QR code**, which shows its code. On this phone: "Scan or paste the other phone's code." Face ID confirms, then "Added: {{device}}."
+- **Another phone** (the handoff of §4), in four turns:
+  1. This phone shows the agent's address as a QR: "Scan this with your other phone."
+  2. On the other phone: **I already have one — link it** → **Link without a QR code** → scan it. That phone then shows its own code.
+  3. This phone: "Now scan the code it shows" (or paste it). Face ID confirms, then "Added: {{device}}."
+  4. The other phone finishes linking by itself and says **Linked**, as today.
 - **Not now:** "You can add a backup later from My Agent."
 - **The browser plugin** is not offered until D4 is decided (Phase 4).
 
