@@ -250,7 +250,8 @@ export function setVtaSwapTestHook(mode: string | undefined): void {
   swapTestHook = mode === 'drop' || mode === 'drop-and-stop' ? mode : undefined
 }
 
-function activeSwapTestHook(): VtaSwapTestHook {
+/** The hook in force: always undefined outside a `__DEV__` build. */
+export function activeSwapTestHook(): VtaSwapTestHook {
   return typeof __DEV__ !== 'undefined' && __DEV__ ? swapTestHook : undefined
 }
 

@@ -346,3 +346,44 @@ describe('the e2e hook that drops the swap answer', () => {
     expect(logger.warn).not.toHaveBeenCalledWith(expect.stringMatching(/did not complete/))
   })
 })
+
+describe('what an unsettled swap tells the person', () => {
+  // Required before release (review of #127): "revoked" only when the VTA
+  // refused both keys; a VTA that could not be asked is reachability.
+  const { connectFailureRevokes } = require('../module/vtaAgent') as typeof import('../module/vtaAgent')
+  const { ManagerKeyUnresolved } = require('../module/VtaClient') as typeof import('../module/VtaClient')
+
+  it('both keys refused: access revoked, so the person relinks', () => {
+    expect(
+      connectFailureRevokes(new ManagerKeyUnresolved('did:vta', 'did:key:old', 'did:key:new', true, 'both not in ACL'))
+    ).toBe(true)
+  })
+
+  it('neither answered: not revoked — the phone cannot reach its agent, keeps both keys and retries', () => {
+    expect(
+      connectFailureRevokes(new ManagerKeyUnresolved('did:vta', 'did:key:old', 'did:key:new', false, 'timeouts'))
+    ).toBe(false)
+  })
+
+  it("other failures are still read from the VTA's words", () => {
+    expect(connectFailureRevokes(new Error('forbidden: DID not in ACL: did:key:x'))).toBe(true)
+    expect(connectFailureRevokes(new Error('socket closed'))).toBe(false)
+  })
+})
+
+describe('the swap hook in a release build', () => {
+  it('is inert when __DEV__ is false: the swap answer is never dropped', () => {
+    const g = global as unknown as { __DEV__?: boolean }
+    const saved = g.__DEV__
+    g.__DEV__ = false
+    try {
+      jest.isolateModules(() => {
+        const client = require('../module/VtaClient') as typeof import('../module/VtaClient')
+        client.setVtaSwapTestHook('drop-and-stop')
+        expect(client.activeSwapTestHook()).toBeUndefined()
+      })
+    } finally {
+      g.__DEV__ = saved
+    }
+  })
+})
