@@ -212,6 +212,7 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     actions: { padding: 20, gap: 12 },
+    errorDetail: { maxHeight: 160 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     error: { color: ColorPalette.semantic.error },
   })
@@ -266,6 +267,8 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
   // A failure says what happened and what to do; the original text — module
   // prefixes, task URIs and all — stays under Details, where it is worth
   // something to whoever reads the report (report #17).
+  // It sits in the actions, above the button that failed, so it cannot fall
+  // below the fold (221).
   const errorLine = error ? (
     <View style={styles.card} testID={testIdWithKey('JoinErrorCard')}>
       <ThemedText style={styles.error} testID={testIdWithKey('JoinError')}>
@@ -280,9 +283,11 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
         <ThemedText style={styles.muted}>{t('Errors.ShowDetails')}</ThemedText>
       </Pressable>
       {errorOpen ? (
-        <ThemedText style={styles.muted} selectable testID={testIdWithKey('JoinErrorDetail')}>
-          {error.detail}
-        </ThemedText>
+        <ScrollView style={styles.errorDetail}>
+          <ThemedText style={styles.muted} selectable testID={testIdWithKey('JoinErrorDetail')}>
+            {error.detail}
+          </ThemedText>
+        </ScrollView>
       ) : null}
     </View>
   ) : null
@@ -479,19 +484,21 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
               onCreate={joinAs.createProfile}
             />
           </View>
-          {errorLine}
         </>
       )
       actions = (
-        <Button
-          title={busy ? t('Invited.Preparing') : t('Invited.Continue')}
-          buttonType={ButtonType.Primary}
-          onPress={() => void onJoinAs()}
-          disabled={busy}
-          testID={testIdWithKey('JoinAsContinue')}
-        >
-          {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
-        </Button>
+        <>
+          {errorLine}
+          <Button
+            title={busy ? t('Invited.Preparing') : t('Invited.Continue')}
+            buttonType={ButtonType.Primary}
+            onPress={() => void onJoinAs()}
+            disabled={busy}
+            testID={testIdWithKey('JoinAsContinue')}
+          >
+            {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+          </Button>
+        </>
       )
       break
   }
