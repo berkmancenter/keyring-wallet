@@ -11,14 +11,14 @@
 
 ## 0. The plain version
 
-- **The goal:** a person with only a phone and a web browser gets their own agent on the VTA Farm and owns it from Keyring. No computer and no command line.
-- **On the Farm's website**, they create an agent. The Farm shows the new agent's address, and they bring that address into Keyring by pasting it, or by scanning it once the Farm shows a QR code.
-- **In Keyring**, they tap **Create my agent**. Keyring makes an owner code on the phone and asks for Face ID. The person copies the code into the Farm's "Admin DID" box and taps **Provision agent**.
+- **The goal:** a person with only a phone and a web browser gets their own agent and owns it from Keyring. No computer and no command line.
+- **Like email, the agent lives with a hosting service of the person's choice,** or on their own server. The VTA Farm is the first service we support and test. Keyring's screens never name a service. They say "the service that hosts your agent".
+- **On the hosting service's website**, the person creates an agent. The service shows the new agent's address, and they bring it into Keyring by pasting it, or by scanning it where the service shows a QR code.
+- **In Keyring**, they tap **Create my agent**. Keyring makes an owner code on the phone and asks for Face ID. The person gives the code to the service: on the Farm, its "Admin DID" box. If they host the agent themselves, the code goes to whoever runs it.
 - **Keyring signs in as the owner** and moves onto a long-term key. From then on, the agent answers only to this phone.
 - **The phone's code is protected by Face ID** (Android: fingerprint or screen lock). Owner actions, like adding a backup, always ask again.
 - **Backup:** during setup Keyring offers a backup owner, most simply a second phone. The first phone approves it. A lost phone then isn't a lost agent.
-- **With the Farm's help:** if the Farm adds a QR code for this, both copy-and-paste steps become one scan. We ask the Farm for that; until then, copy and paste works.
-- **Effort:** about two weeks of our work for the minimum. Stronger hardware protection comes later, once one upstream question is measured.
+- **With the service's help:** a service that shows a QR code for this turns both copy-and-paste steps into one scan. We ask the Farm for that first; until then, copy and paste works everywhere.
 
 ## 1. What the person does, step by step
 
@@ -158,6 +158,7 @@ Estimates are one engineer's working days. **Ours** is Keyring work; **Farm/upst
 
 The screens, in the order of §1, with their English words. Other languages follow the same keys. Rules they all keep:
 
+- **Provider-neutral, like email.** The screens never name a hosting service. They say "the service that hosts your agent" and, for a self-hosted agent, "whoever runs your agent". Nothing in the flow assumes one provider. The owner code is an Ed25519 `did:key`, which any host that admits a `did:key` admin accepts (the Farm's field takes only that form, §1; pnm and the VTA plugin accept any DID). The Farm is the first provider we support and test: its Admin DID box and the QR handoff (U1) are plan details, not app words.
 - **Plain words.** "Agent" is the only term, and the person already met it on My Agent. No "DID", "key", "ACL" or "VTA" on screen. Codes are something to paste, not read, and stay behind a **Show the code** toggle, as on the link screen today.
 - **One job per screen, never a dashboard.** Each screen has one primary button.
 - **Errors sit beside the button that caused them** (the rule the link and join screens already follow), in words, with the developer text behind **Details**.
