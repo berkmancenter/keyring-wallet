@@ -11,7 +11,9 @@ reference implementations, and not only with another copy of Keyring.
   pnm calls are serialized per slug rather than isolated by `HOME`.
 - [2026-09-25-cd.md](./openvtc-interop-harness-plan/2026-09-25-cd.md):
   Alberto's go; the real TUI instead of a bot; conformance vectors in every PR;
-  what the release waits for; the third self-agreeing defect.
+  what the release waits for; the third self-agreeing defect. Afternoon: both
+  directions green against the real TUI, the two Keyring defects Phase 2
+  found, VTI-44, and why the pin is `ed13d29` and `177a218` is not a gate.
 
 **Related:** [openvtc-integration-plan.md](./openvtc-integration-plan.md)
 (what Keyring implements), [release-flow-plan.md](./release-flow-plan.md)
@@ -77,7 +79,7 @@ here.
 
   e2e runner (Node) ──── Appium ────▶ Keyring on a sim / phone   (e4's drivers)
         │
-        ├── PTY ──────────────────────▶ openvtc TUI binary (ed13d29 and 177a218)
+        ├── PTY ──────────────────────▶ openvtc TUI binary (the pin; upstream main in the drift run)
         │                                 persona on a Farm runner agent
         │
         └── vtc-admin (read-only) ────▶ the community's admin API (truth)
@@ -119,9 +121,12 @@ here.
 
 ## 4. Pinning
 
-openvtc is added to `scripts/openvtc/PINS.json`, at `177a218` today, with the
-same discipline as the VTI pin. The TUI also runs at upstream `main` (`ed13d29`
-on 2026-09-25), the version maintainers run, and both results are reported:
+openvtc is pinned in `scripts/openvtc/PINS.json` at `ed13d29`, with the same
+discipline as the VTI pin, and the release gate runs the TUI at the pin. The
+scheduled drift run (Phase 4) also runs it at upstream `main`, the version
+maintainers run, so an upstream change shows up the next day. An older build
+that cannot run against the Farm's versions is not a gate: `177a218` cannot
+create a persona against VTA 0.42.0.
 
 - It is advanced only through `sync-external.mjs --advance openvtc --why …`,
   as its own pin-only PR written against origin/main's `PINS.json`.
@@ -130,9 +135,9 @@ on 2026-09-25), the version maintainers run, and both results are reported:
   `check-keyring-card.sh` does for VTI. The `main` build is a separate
   checkout, and its commit is recorded.
 - The openvtc pin and the VTI pin move together when openvtc's `vta-sdk`
-  dependency moves. At `177a218`, openvtc builds against the published
-  vta-sdk 0.42.1 and trust-tasks-rs 0.21.3, while our VTI pin is vta-sdk
-  0.46.0. Every result records both versions.
+  dependency moves. At `ed13d29`, openvtc builds against the published
+  vta-sdk 0.51.0, while our VTI pin (`ed672fff`) is vta-sdk 0.52.0. Every
+  result records both versions.
 
 Every result states four heads: wallet, bifold, openvtc and VTI. A red run
 at the same pins as the last green one is ours. A red run straight after a
@@ -144,7 +149,7 @@ pin advance is upstream's until shown otherwise.
 |---|---|---|
 | Conformance vectors (Phase 0-bis) | Every PR that touches vetting, Trust Tasks or anything exchanged with VTI | the PR |
 | card-verify both directions (Phase 0) | Every release-candidate gate | the release |
-| TUI flows F1–F3 (Phases 1–2) | Every release-candidate gate: iOS and Android, at both openvtc versions | the release |
+| TUI flows F1–F3 (Phases 1–2) | Every release-candidate gate: iOS and Android, at the pinned openvtc build | the release |
 | TUI flows F4–F7 (Phase 3) | Every release-candidate gate | the release, once each has been green twice; advisory until then |
 | Scheduled drift run (Phase 4) | Nightly against the Farm, at the current pins **and** at upstream `main`, on a host with no gate running | nothing; it reports |
 
@@ -231,7 +236,7 @@ F4).** About 2–2.5 days.
     match code on both → the card is sent → the TUI shows it verified → the
     TUI attests → Keyring receives AND accepts the statement → Keyring applies
     → the community's own list shows the member;
-  - it runs at both openvtc versions, on iOS and on Android;
+  - it runs at the pinned openvtc build, on iOS and on Android;
   - it fails at "statement accepted" on bifold `eaa563d3` and passes with #116;
   - a reopened session makes the old card refused in openvtc's state, while
     Keyring shows the new code.
@@ -243,7 +248,7 @@ F3).** About 1.5 days. Needs `keyring-runner-openvtc`.
     → the TUI sends its card → Keyring attests → the TUI shows the statement
     received and accepted by its own check → the TUI applies → the community
     lists it as a member;
-  - it runs at both openvtc versions, with Keyring on iOS and on Android.
+  - it runs at the pinned openvtc build, with Keyring on iOS and on Android.
 
 **Phase 3: join, status, Leave and refusals (F5, F6, F7).** About 3 days.
 Needs the invitation-only community.
@@ -290,7 +295,7 @@ notes say what testers will meet.
 
 Decided on 2026-09-25: build the harness, covering every step, against the
 real TUI; the release waits for Phase 0-bis and Phases 1–2 on both platforms
-and both openvtc versions; F4–F7 gate once green twice.
+and the pinned openvtc build; F4–F7 gate once green twice.
 
 1. **Create `keyring-runner-openvtc`** on the Farm (VTA Only, Platform
    stack), and confirm the pnm slug `farm-runner-openvtc`. Phase 2 needs it.
