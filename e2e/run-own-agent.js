@@ -195,6 +195,19 @@ async function answerOwnerPrompt(platform, udid, ms = 20000) {
   }
 }
 
+
+/** The phone names its own entry "Keyring — <device name>" in the background after the swap. */
+async function assertLabelled(did, who, ms = 30000) {
+  for (const until = Date.now() + ms; Date.now() < until; await sleep(2000)) {
+    const row = acl().find((e) => e.subject === did);
+    if (row?.label?.startsWith("Keyring")) {
+      console.log(`[acl] ${who}: its entry is labelled "${row.label}"`);
+      return row.label;
+    }
+  }
+  throw new Error(`${who}: its access entry was not labelled "Keyring…" within ${ms / 1000} s (label: ${JSON.stringify(acl().find((e) => e.subject === did)?.label)})`);
+}
+
 /** A phone ready to start: unlocked at home with no agent, or onboarded fresh. */
 async function readyPhone(d, name) {
   // A fresh install's first launch can take well past a few seconds to show
@@ -293,10 +306,12 @@ async function connect(d, who) {
     while (Date.now() < by) {
       if (await existsTestId(d, "AgentCreateError", 1000)) throw new Error(`${who}: ${await textOf(d, "AgentCreateError")}`);
       if (await existsTestId(d, "AgentBackup", 1000)) return "AgentBackup";
+      // Setup without a backup step (Alberto, 2026-09-25) ends on Ready.
+      if (await existsTestId(d, "AgentCreateReady", 500)) return "AgentCreateReady";
       if (await existsTestId(d, "AgentCreateCheckAgain", 500)) await tapTestId(d, "AgentCreateCheckAgain", 5000);
       await sleep(1500);
     }
-    throw new Error(`${who}: Connecting never reached "Add a backup"`);
+    throw new Error(`${who}: Connecting never reached "Add a backup" or Ready`);
   }
   await tapTestId(d, "VtaLinkCheckGrant", 15000);
   await handleBiometricConfirmIfPresent(d);
@@ -355,6 +370,7 @@ try {
   // 3 — connect: sign in as that key, swap onto the long-term key.
   const landed = await connect(owner, "owner");
   const ownerKey = assertSwappedToOwner(ownerTemp, "owner");
+  record.ownerLabel = await assertLabelled(ownerKey, "owner");
   record.ownerKey = ownerKey;
   step("connect", { landed, ownerKey: `${ownerKey.slice(0, 32)}…` });
 
@@ -376,6 +392,15 @@ try {
     // TODO(own-agent §7): owner: AgentBackup → AgentBackupPhone → AgentBackupAddressQr.
     if (await existsTestId(owner, "AgentBackupPhone", 2000)) {
       await tapTestId(owner, "AgentBackupPhone", 15000);
+      await waitForTestId(owner, "AgentBackupAddressQr", 15000);
+      await screenshot(owner, "own-agent-04-address-qr");
+    } else if ((await existsTestId(owner, "AgentCreateReady", 2000)) || (await existsTestId(owner, "AgentHome", 2000))) {
+      // No backup step in setup: My Agent → My devices → Add another device.
+      if (await existsTestId(owner, "AgentCreateDone", 1500)) await tapTestId(owner, "AgentCreateDone", 15000);
+      const row = (await existsTestId(owner, "AgentDevices", 5000)) ? true : await scrollToTestId(owner, "AgentDevices", 4).catch(() => undefined);
+      if (!row) throw new PendingAppStep("backupLink", "My Agent has no My devices row on this build");
+      await tapTestId(owner, "AgentDevices", 15000);
+      await tapTestId(owner, "AgentDeviceAdd", 15000);
       await waitForTestId(owner, "AgentBackupAddressQr", 15000);
       await screenshot(owner, "own-agent-04-address-qr");
     } else {
@@ -410,6 +435,7 @@ try {
     // 6 — the backup notices the grant, signs in and swaps: a second owner row.
     await connect(backup, "backup");
     const backupKey = assertSwappedToOwner(backupTemp, "backup");
+    record.backupLabel = await assertLabelled(backupKey, "backup");
     const owners = acl().filter((e) => [ownerKey, backupKey].includes(e.subject) && isOwnerRow(e));
     if (owners.length !== 2) throw new Error(`expected two owner rows (owner phone and backup), found ${owners.length}`);
     record.backupKey = backupKey;
