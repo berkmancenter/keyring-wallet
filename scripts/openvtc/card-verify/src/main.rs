@@ -60,6 +60,8 @@ use vta_sdk::vetting::match_code::vetting_match_code;
 use vta_sdk::vetting::statement::verify_statement;
 use vta_sdk::trust_task_proof::verify_trust_task_proof_with;
 use vta_sdk::vetting::ticket_uri;
+use vta_sdk::vetting::eligibility::{EligibilityExpectations, build_eligibility_vp, verify_eligibility_vp};
+use affinidi_data_integrity::{DataIntegrityProof, SignOptions, crypto_suites::CryptoSuite};
 
 fn read(path: &str) -> Result<Value, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -313,6 +315,113 @@ async fn verify_statement_against(statement_path: &str, card_path: &str, expect_
     ))
 }
 
+/// A resolver for every DID a check touches: did:key alone resolves offline,
+/// anything else needs the network.
+async fn resolver_for_all(dids: &[&str]) -> Result<TrustTaskVmResolver, String> {
+    match dids.iter().find(|d| !d.starts_with("did:key:")) {
+        Some(d) => resolver_for(d).await,
+        None => Ok(TrustTaskVmResolver::did_key_only()),
+    }
+}
+
+/// vta-sdk's `verify_eligibility_vp` on a vetter's eligibility presentation:
+/// `expect.json` carries `eligibility: { vetter, community, role, challenge,
+/// domain, now? }` — challenge is the id of the vetting/request document the
+/// presentation answers, domain that request's joinDid.
+async fn verify_eligibility(vp_path: &str, expect_path: &str) -> Result<String, String> {
+    let vp = read(vp_path)?;
+    let expect = read(expect_path)?;
+    let e = expect.get("eligibility").ok_or("expect.json: missing \"eligibility\"")?;
+    let now: DateTime<Utc> = match e.get("now").and_then(Value::as_str) {
+        Some(t) => t.parse().map_err(|err| format!("eligibility.now: {err}"))?,
+        None => Utc::now(),
+    };
+    let vetter = field(e, "vetter")?;
+    let community = field(e, "community")?;
+    let resolver = resolver_for_all(&[vetter, community]).await?;
+    let expectations = EligibilityExpectations {
+        vetter,
+        community,
+        role: field(e, "role")?,
+        challenge: field(e, "challenge")?,
+        domain: field(e, "domain")?,
+        now,
+    };
+    let verified = verify_eligibility_vp(&vp, &expectations, &resolver)
+        .await
+        .map_err(|err| format!("REFUSED: {err} — {err:?}"))?;
+    Ok(format!(
+        "OK: eligibility presentation accepted by vta-sdk verify_eligibility_vp (role credential {})",
+        verified.credential_id().unwrap_or("without an id")
+    ))
+}
+
+/// An eligibility presentation signed by upstream code, for Keyring's checker
+/// to accept: a did:key community signs a CommunityRole grant for a did:key
+/// vetter (assertionMethod), and the vetter presents it with
+/// build_eligibility_vp (authentication) bound to a request id and joinDid.
+async fn sign_eligibility() -> Result<String, String> {
+    let (vetter, vetter_did) = seeded(2)?;
+    let (community_key, community_did) = seeded(3)?;
+    let (_, applicant_did) = seeded(1)?;
+    let request_id = "urn:uuid:6f1c2b0a-3d4e-4f5a-8b6c-7d8e9f0a1b01";
+    let mut grant = json!({
+        "@context": ["https://www.w3.org/ns/credentials/v2", "https://firstperson.network/credentials/dtg/v1"],
+        "id": "urn:uuid:0e9d8c7b-6a5f-4e3d-9c2b-1a0f9e8d7c6b",
+        "type": ["VerifiableCredential", "EndorsementCredential"],
+        "issuer": community_did,
+        "validFrom": "2026-09-01T00:00:00Z",
+        "validUntil": "2027-03-01T00:00:00Z",
+        "credentialSubject": {
+            "id": vetter_did,
+            "endorsement": {
+                "type": vta_sdk::protocols::vetting::COMMUNITY_ROLE_ENDORSEMENT_TYPE,
+                "communityDid": community_did,
+                "role": "vetter"
+            }
+        }
+    });
+    let proof = DataIntegrityProof::sign(
+        &grant,
+        &community_key,
+        SignOptions::new()
+            .with_proof_purpose("assertionMethod")
+            .with_cryptosuite(CryptoSuite::EddsaJcs2022),
+    )
+    .await
+    .map_err(|e| format!("sign grant: {e}"))?;
+    grant["proof"] = serde_json::to_value(proof).map_err(|e| e.to_string())?;
+    let vp = build_eligibility_vp(&vetter, vec![grant], request_id, &applicant_did)
+        .await
+        .map_err(|e| format!("build_eligibility_vp: {e}"))?;
+    let expect = json!({
+        "vetter": vetter_did, "community": community_did, "role": "vetter",
+        "challenge": request_id, "domain": applicant_did, "now": "2026-09-25T00:00:00Z"
+    });
+    // Upstream accepts its own: a fixture that fails here is not a fixture.
+    let resolver = TrustTaskVmResolver::did_key_only();
+    verify_eligibility_vp(
+        &vp,
+        &EligibilityExpectations {
+            vetter: &vetter_did,
+            community: &community_did,
+            role: "vetter",
+            challenge: request_id,
+            domain: &applicant_did,
+            now: "2026-09-25T00:00:00Z".parse().map_err(|e| format!("{e}"))?,
+        },
+        &resolver,
+    )
+    .await
+    .map_err(|e| format!("upstream refused its own fixture: {e}"))?;
+    let doc = json!({
+        "note": "Signed by upstream code (wallet scripts/openvtc/card-verify sign-eligibility: vta-sdk build_eligibility_vp; the grant signed eddsa-jcs-2022 for assertionMethod). Never re-sign with Keyring's code.",
+        "eligibility": expect,
+        "vp": vp
+    });
+    serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
@@ -323,10 +432,12 @@ async fn main() -> ExitCode {
         ["sign-fixtures"] => sign_fixtures().await,
         ["verify-task", task, signer] => verify_task(task, signer).await,
         ["verify-statement", statement, card, expect] => verify_statement_against(statement, card, expect).await,
+        ["verify-eligibility", vp, expect] => verify_eligibility(vp, expect).await,
+        ["sign-eligibility"] => sign_eligibility().await,
         [card, expect] => run(card, expect).await,
         _ => {
             eprintln!(
-                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-task <task.json> <expected-signer-did>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>"
+                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-task <task.json> <expected-signer-did>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>\n       card-verify verify-eligibility <vp.json> <expect.json>\n       card-verify sign-eligibility"
             );
             return ExitCode::from(2);
         }
