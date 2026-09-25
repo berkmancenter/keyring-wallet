@@ -886,7 +886,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
 
   // ---------------------------------------------------------- the application
   const requests = application?.requests ?? []
-  const active = requests.find((r) => ['sent', 'accepted', 'session', 'cardSent'].includes(r.status))
+  const active = requests.find((r) =>
+    ['sent', 'accepted', 'session', 'cardSent', 'statementRefused'].includes(r.status)
+  )
   const ended = requests.filter((r) => r.status === 'refused' || r.status === 'declined')
   const attestedCount = requests.filter((r) => r.status === 'attested').length
   type ApplicantStep = 'member' | 'name' | 'waiting' | 'match' | 'send' | 'checking' | 'apply' | 'ticket'
@@ -897,7 +899,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       : active
         ? active.status === 'sent' || active.status === 'accepted'
           ? 'waiting'
-          : active.status === 'cardSent'
+          : active.status === 'cardSent' || active.status === 'statementRefused'
             ? 'checking'
             : !matchConfirmed[active.vetterDid]
               ? 'match'
@@ -1140,10 +1142,23 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           {applicantStep === 'checking' && active ? (
             <>
               {stepHeader(applicantNumber, 5, t('Vetting.SendNameTitle'))}
-              <View style={styles.row}>
-                <ActivityIndicator color={ColorPalette.brand.primary} />
-                <Text style={styles.value}>{t('Vetting.WaitingForStatement')}</Text>
-              </View>
+              {active.status === 'statementRefused' ? (
+                // The statement came and could not be kept: say so, rather than
+                // keep "checking" on screen for a statement that has arrived.
+                <View testID={testIdWithKey('VettingStatementRefused')}>
+                  <Text style={styles.error}>{t('Vetting.StatementRefused')}</Text>
+                  {active.statementRefusal ? (
+                    <Text style={styles.label} testID={testIdWithKey('VettingStatementRefusedDetails')}>
+                      {t(`Vetting.StatementRefusedReason.${active.statementRefusal}`)}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.row}>
+                  <ActivityIndicator color={ColorPalette.brand.primary} />
+                  <Text style={styles.value}>{t('Vetting.WaitingForStatement')}</Text>
+                </View>
+              )}
               {active.session ? <Text style={styles.code}>{active.session.matchCode}</Text> : null}
               {requestCard(active)}
             </>

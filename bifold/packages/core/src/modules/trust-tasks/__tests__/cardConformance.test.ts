@@ -9,6 +9,12 @@
  * With `CARD_OUT=<dir>` it writes `card.json` and `expect.json` there for
  * `card-verify`; the gate runs the two together
  * (`scripts/openvtc/card-verify/check-keyring-card.sh`).
+ *
+ * The same run has Keyring's vetter (`VtiVetterDesk.attest`) attest to that
+ * card, really signed by the vetter's did:key, and writes `statement.json`:
+ * `card-verify verify-statement` runs vta-sdk's `verify_statement` and
+ * `check_against_card` on it — what an openvtc applicant runs on a statement
+ * it receives (openvtc-core `vetting/applicant.rs:1068`, at ed13d29).
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -24,7 +30,14 @@ jest.mock('../module/vtiAgent', () => ({
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
 // eslint-disable-next-line import/order
-import { MAX_CARD_VALIDITY_MS, VtiApplicant, type VtiVettingStore } from '../module/vtiVetting'
+import {
+  MAX_CARD_VALIDITY_MS,
+  VtiApplicant,
+  VtiVetterDesk,
+  cardDigestMultibase,
+  type VettingDeskRequest,
+  type VtiVettingStore,
+} from '../module/vtiVetting'
 // eslint-disable-next-line import/order
 import { verifyDocumentProof } from '@bifold/trust-tasks'
 
@@ -95,10 +108,46 @@ describe('a Vetting Card from the shipping code, really signed', () => {
     expect(window).toBeGreaterThan(0)
     expect(window).toBeLessThanOrEqual(MAX_CARD_VALIDITY_MS)
 
+    // Keyring's vetter attests to that card. The statement must name the card
+    // by its DTG digestMultibase — JCS WITHOUT the top-level proof, as the VTI
+    // SDK computes it — or an openvtc applicant refuses it (vta-sdk
+    // vetting/statement.rs check_against_card, at a96fe02f).
+    const desk: VettingDeskRequest = {
+      requestId: 'request-conformance',
+      applicantDid: applicant.did,
+      communityDid: community,
+      status: 'cardReceived',
+      receivedAt: new Date().toISOString(),
+      session: { ...session, method: 'inPerson', matchCode: 'ABCD-1234' },
+      card,
+    }
+    const deskStore = {
+      listDesk: async () => [desk],
+      saveDesk: jest.fn(async () => undefined),
+    } as unknown as VtiVettingStore
+    const vetterPersona = {
+      did: vetter.did,
+      communityDid: community,
+      vtaKeyIds: { signing: vetter.verificationMethodId, keyAgreement: vetter.verificationMethodId },
+      kmsKeyIds: { signing: 'vetter-key', keyAgreement: 'vetter-key' },
+    }
+    mockSend.mockClear()
+    await new VtiVetterDesk(vetter.agent as never, vetterPersona as never, deskStore, {} as never).attest(
+      desk.requestId,
+      { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
+    )
+    const issue = (mockSend.mock.calls.at(-1) as unknown as [string, string, { payload: Record<string, unknown> }])[2]
+    const statement = (issue.payload.credential_response as { credential: Record<string, unknown> }).credential
+    const endorsement = (statement.credentialSubject as { endorsement: Record<string, unknown> }).endorsement
+    expect(endorsement.cardDigestMultibase).toBe(cardDigestMultibase(card))
+    expect(endorsement.identityCommitment).toBe(card.identityCommitment)
+    await expect(verifyDocumentProof(vetter.agent as never, statement, vetter.did)).resolves.toBe(true)
+
     const out = process.env.CARD_OUT
     if (out) {
       mkdirSync(out, { recursive: true })
       writeFileSync(join(out, 'card.json'), JSON.stringify(card, null, 2))
+      writeFileSync(join(out, 'statement.json'), JSON.stringify(statement, null, 2))
       writeFileSync(
         join(out, 'expect.json'),
         JSON.stringify(

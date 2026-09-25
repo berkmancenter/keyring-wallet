@@ -1,0 +1,33 @@
+{
+  "id": "urn:uuid:340b89b2-157c-4ca4-a4ed-69f987cbdf1e",
+  "type": [
+    "VerifiableDataStructure",
+    "RelationshipCard",
+    "VettingCard"
+  ],
+  "cardVersion": 1,
+  "publisher": "did:key:z6MkiqTXqaVZGZSXmsb6wtWHvuiaXByP4iUeQDihXxF1XZBX",
+  "community": "did:webvh:QmCommunity:dids.example:community",
+  "domain": "did:webvh:QmCommunity:dids.example:community",
+  "audience": "did:key:z6MkwaFoU4KPCio6fdD4wr6w8xY4B6S3h78J3HHgiCRkqtm3",
+  "challenge": "QlScnBiVZptGM8oLBRk4S37fjuDCr381MUrrnd0cmHg",
+  "claims": [
+    {
+      "type": "name.legal",
+      "value": "Ada Lovelace",
+      "provenance": "selfAsserted"
+    }
+  ],
+  "commitmentSalt": "Bfm0baG9RJmTeDkIOUKQRkmc4mZZyQNT-CszHfWiCrQ",
+  "identityCommitment": "zQmdbgPVB3Z5b8EVDH5aEYjvfjfh4n8RaVTvpa5FAt38tNB",
+  "issuedAt": "2026-09-25T05:26:46.157Z",
+  "expiresAt": "2026-09-25T05:41:46.157Z",
+  "proof": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "eddsa-jcs-2022",
+    "created": "2026-09-25T05:26:46.195Z",
+    "verificationMethod": "did:key:z6MkiqTXqaVZGZSXmsb6wtWHvuiaXByP4iUeQDihXxF1XZBX#z6MkiqTXqaVZGZSXmsb6wtWHvuiaXByP4iUeQDihXxF1XZBX",
+    "proofPurpose": "assertionMethod",
+    "proofValue": "z4ADhjN3DGyaUqUpUjWhdtZisG19mkoHrMFNPjjY6YpSPh7mEvFeQAH37kAGC1dxgdRAwJtmuggFWQH5uHrffPXm8"
+  }
+}

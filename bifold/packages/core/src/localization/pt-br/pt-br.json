@@ -1401,6 +1401,18 @@
     "CodesDifferEnded": "A última sessão terminou sem declaração. Se os códigos eram diferentes, avise o verificador e peça um novo tíquete.",
     "WaitingForVetter": "Aguardando o verificador abrir a sessão…",
     "WaitingForStatement": "O verificador está conferindo seu documento…",
+    "StatementRefused": "A declaração do verificador chegou, mas este telefone não pôde aceitá-la.",
+    "StatementRefusedReason": {
+      "malformed": "Detalhes: a declaração está incompleta ou fora do formato esperado.",
+      "issuer": "Detalhes: a declaração foi assinada por outra pessoa, não pelo seu verificador.",
+      "subject": "Detalhes: a declaração é sobre outra pessoa.",
+      "session": "Detalhes: a declaração é de uma sessão anterior com este verificador.",
+      "community": "Detalhes: a declaração é de outra comunidade.",
+      "commitment": "Detalhes: a declaração traz dados diferentes do cartão enviado.",
+      "cardDigest": "Detalhes: a declaração se refere a outro cartão, não ao que você enviou.",
+      "expired": "Detalhes: a declaração já expirou.",
+      "proof": "Detalhes: não foi possível verificar a assinatura da declaração."
+    },
     "WaitingForCard": "Aguardando o nome da pessoa…",
     "CheckTheirId": "Confira o documento — ele diz isto?",
     "VetSomeoneElse": "Verificar outra pessoa",
@@ -1433,6 +1445,7 @@
       "session": "Sessão aberta",
       "cardSent": "Cartão enviado — o verificador está checando",
       "attested": "Declaração recebida",
+      "statementRefused": "Declaração não aceita",
       "declined": "Recusado",
       "cardReceived": "Cartão recebido"
     },

@@ -103,7 +103,7 @@ export interface VettingApplicationRequest {
   requestId?: string
   /** When this phone sent the request; unlike `updatedAt`, a later answer does not move it. */
   sentAt?: string
-  status: 'sent' | 'accepted' | 'refused' | 'session' | 'cardSent' | 'attested' | 'declined'
+  status: 'sent' | 'accepted' | 'refused' | 'session' | 'cardSent' | 'attested' | 'declined' | 'statementRefused'
   refusalCode?: string
   eligibilityOk?: boolean
   session?: {
@@ -116,7 +116,25 @@ export interface VettingApplicationRequest {
     matchCode: string
   }
   cardDigest?: string
+  /** The same card hashed with its proof, which Keyring vetters up to 223 put in their statements. */
+  cardDigestLegacy?: string
   statementId?: string
+  /**
+   * Why a statement from this vetter, about this application, was not kept:
+   * shown on the screen instead of waiting on a statement that has come.
+   */
+  statementRefusal?:
+    | 'malformed'
+    | 'expired'
+    | 'proof'
+    | 'issuer'
+    | 'subject'
+    | 'community'
+    | 'session'
+    | 'cardDigest'
+    | 'commitment'
+  /** The identity commitment on the card this phone sent, which a statement must repeat. */
+  cardCommitment?: string
   /** The vetter grant's window, read from the eligibility presentation. */
   grantValidFrom?: string
   grantValidUntil?: string
@@ -383,6 +401,12 @@ const typeOf = (m: DidCommV2PlaintextMessage) => String(m.type ?? bodyOf(m).type
 const threadOf = (m: DidCommV2PlaintextMessage) => String(m.thid ?? bodyOf(m).threadId ?? '')
 
 /** The identity commitment: digestMultibase over `{salt, claims}` with claims sorted by type. */
+/** The context a statement must carry: vta-sdk `vetting/statement.rs:30` `DTG_CONTEXT`. */
+const DTG_CREDENTIALS_CONTEXT = 'https://firstperson.network/credentials/dtg/v1'
+
+/** How far ahead a statement's validFrom may be: vta-sdk `vetting::card::CLOCK_SKEW` (card.rs:45). */
+export const STATEMENT_CLOCK_SKEW_MS = 60 * 1000
+
 /** How long a Vetting Card may be valid: vta-sdk `vetting::card::MAX_CARD_VALIDITY`. */
 export const MAX_CARD_VALIDITY_MS = 15 * 60 * 1000
 
@@ -403,6 +427,20 @@ export function identityCommitment(salt: string, claims: { type: string; value: 
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
     .map((type) => ({ type, value: byType.get(type) }))
   return digestMultibase({ salt, claims: selected })
+}
+
+/**
+ * A Vetting Card's `digestMultibase`, the value a statement names in
+ * `cardDigestMultibase`: JCS of the card WITHOUT its top-level `proof`, as DTG
+ * Credentials §Digest Encoding defines it and the VTI SDK computes it
+ * (`dtg_credentials::digest_multibase_json`, called by `vetting::card::verify_card`).
+ * Keyring hashed the card with its proof on both sides, so it agreed with
+ * itself and dropped every openvtc vetter's statement (a maintainer's run,
+ * 2026-09-25: "Statement signed and sent", the phone still "checking").
+ */
+export function cardDigestMultibase(card: Record<string, unknown>): string {
+  const { proof: _proof, ...unproofed } = card
+  return digestMultibase(unproofed)
 }
 
 // ---------------------------------------------------------------------------
@@ -728,8 +766,6 @@ export class VtiVetterDesk {
     if (decision.documentClasses.length === 0 && desk.session.method !== 'priorAcquaintance')
       throw new Error('vtiVetting: name the documentation relied on')
 
-    const { proof: _p, ...cardWithoutProof } = desk.card
-    void _p
     const validFrom = new Date()
     const validUntil = new Date(validFrom.getTime() + (decision.validDays ?? 120) * 86400000)
     const statement: Record<string, unknown> = {
@@ -750,12 +786,11 @@ export class VtiVetterDesk {
           claimsVerified: decision.claimsVerified,
           livenessConfirmed: true,
           identityCommitment: desk.card.identityCommitment,
-          cardDigestMultibase: digestMultibase(desk.card),
+          cardDigestMultibase: cardDigestMultibase(desk.card),
           declaredRelationship: decision.declaredRelationship ?? 'none',
         },
       },
     }
-    void cardWithoutProof
     const signed = await signDocumentProof(this.agent, statement, this.persona.did, {
       kmsKeyId: this.persona.kmsKeyIds?.signing,
       verificationMethodId: this.persona.vtaKeyIds.signing,
@@ -1045,11 +1080,27 @@ export class VtiApplicant {
       request.session.documentId
     )
     await vtiAgent.send(vetterDid, `${VETTING.session}${RESPONSE}`, response, { thid: request.session.documentId })
-    await this.update(vetterDid, { status: 'cardSent', cardDigest: digestMultibase(signed) })
+    await this.update(vetterDid, {
+      status: 'cardSent',
+      cardCommitment: String(signed.identityCommitment ?? ''),
+      cardDigest: cardDigestMultibase(signed),
+      // What a Keyring vetter up to 223 names instead: the card hashed with its proof.
+      cardDigestLegacy: digestMultibase(signed),
+    })
     return signed
   }
 
-  /** A statement is claimed only when it is about this application, and verified against our own card before it is kept. */
+  /**
+   * A statement is kept only when it verifies and is bound to this application,
+   * checked in the order upstream's own applicant checks it: VTI's
+   * `verify_statement` (vta-sdk `vetting/statement.rs`, at a96fe02f — shape,
+   * validity window, proof by the issuer), then openvtc's `on_statement`
+   * (openvtc-core `vetting/applicant.rs:1068`, at ed13d29 — issuer is the
+   * sender, subject is our join DID, community, the session it names, the
+   * card digest, the identity commitment). A statement from a vetter we asked,
+   * that fails any of these, is shown as refused with the reason; one from
+   * anyone else is not ours to report.
+   */
   private async statementDelivered(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
     const p = (body.payload ?? body) as Record<string, unknown>
@@ -1061,27 +1112,57 @@ export class VtiApplicant {
     const endorsement = subject?.endorsement
     if (endorsement?.type !== IDENTITY_VETTING_ENDORSEMENT_TYPE) return
     const application = await this.store.getApplication(this.persona.communityDid)
-    if (!application || subject?.id !== application.joinDid) return
+    if (!application) return
     const issuer =
       typeof credential.issuer === 'string'
         ? credential.issuer
         : String((credential.issuer as { id?: string })?.id ?? '')
-    const request = application.requests.find((r) => r.vetterDid === issuer)
+    const sender = String(m.from ?? body.issuer ?? issuer)
+    const request = application.requests.find((r) => r.vetterDid === sender)
     if (!request) return
-    const expectedCommitment = identityCommitment(
-      application.commitmentSalt,
-      (request.session?.requiredClaims ?? []).map((type) => ({
-        type,
-        value: application.claims[type],
-        provenance: 'selfAsserted',
-      }))
+
+    const refuse = async (statementRefusal: NonNullable<VettingApplicationRequest['statementRefusal']>) => {
+      // One already kept is never replaced by a refusal of a copy.
+      if (request.status !== 'attested') await this.update(sender, { status: 'statementRefused', statementRefusal })
+    }
+    // vta-sdk verify_statement: shape.
+    const types = ([] as unknown[]).concat(credential.type ?? [])
+    const contexts = ([] as unknown[]).concat(credential['@context'] ?? [])
+    const validUntil = Date.parse(String(credential.validUntil ?? ''))
+    const validFrom = Date.parse(String(credential.validFrom ?? ''))
+    if (
+      !['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'].every((t) => types.includes(t)) ||
+      !contexts.includes(DTG_CREDENTIALS_CONTEXT) ||
+      !credential.id ||
+      !credential.taskContext ||
+      !Number.isFinite(validUntil)
     )
-    const ok =
-      endorsement.community === application.communityDid &&
-      endorsement.identityCommitment === expectedCommitment &&
-      (!request.cardDigest || endorsement.cardDigestMultibase === request.cardDigest) &&
-      (await verifyDocumentProof(this.agent, credential, issuer))
-    if (!ok) return
+      return refuse('malformed')
+    // vta-sdk verify_statement: the validity window, with the SDK's clock skew (card.rs CLOCK_SKEW).
+    const now = Date.now()
+    if ((Number.isFinite(validFrom) && validFrom > now + STATEMENT_CLOCK_SKEW_MS) || now > validUntil)
+      return refuse('expired')
+    // vta-sdk verify_statement: the proof, by the issuer.
+    if (!(await verifyDocumentProof(this.agent, credential, issuer))) return refuse('proof')
+    // openvtc on_statement: bound to this application.
+    if (issuer !== sender) return refuse('issuer')
+    if (subject?.id !== application.joinDid) return refuse('subject')
+    if (endorsement.community !== application.communityDid) return refuse('community')
+    if (request.status === 'attested' && request.statementId === String(credential.id)) return
+    if (!request.session || credential.taskContext !== request.session.documentId) return refuse('session')
+    const cardDigestOk =
+      !request.cardDigest ||
+      endorsement.cardDigestMultibase === request.cardDigest ||
+      (!!request.cardDigestLegacy && endorsement.cardDigestMultibase === request.cardDigestLegacy)
+    if (!cardDigestOk) return refuse('cardDigest')
+    const cardCommitment =
+      request.cardCommitment ??
+      identityCommitment(
+        application.commitmentSalt,
+        request.session.requiredClaims.map((type) => ({ type, value: application.claims[type] }))
+      )
+    if (endorsement.identityCommitment !== cardCommitment) return refuse('commitment')
+
     // Two things a community checks that a verifying signature does not: the
     // signer must have held the vetter grant BEFORE signing (sign first, grant
     // second and the statement verifies perfectly, then counts for nothing —
