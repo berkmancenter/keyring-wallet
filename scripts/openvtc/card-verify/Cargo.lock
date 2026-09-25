@@ -955,9 +955,9 @@ dependencies = [
 
 [[package]]
 name = "dtg-credentials"
-version = "0.9.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa51b03528a22ad07cd0f812a99fae834b7867c205943a40ad90bb8eb62edb08"
+checksum = "b7b54c22a4b29b0f89c767b03a9cca10832fcb6bd667da3caffdb1d86d801796"
 dependencies = [
  "affinidi-data-integrity",
  "affinidi-secrets-resolver",
@@ -3316,9 +3316,9 @@ dependencies = [
 
 [[package]]
 name = "trust-tasks-rs"
-version = "0.21.8"
+version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0304c481d2fe36c0402091cde7fb5f5aa98aac30e9f7d897ded59ecf2fd7cc1"
+checksum = "26f9f1dd77f52419569cd3051e5ac1268b7304aec5063dd99b4d5feebc7decfa"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3420,7 +3420,7 @@ checksum = "5c3082ca00d5a5ef149bb8b555a72ae84c9c59f7250f013ac822ac2e49b19c64"
 
 [[package]]
 name = "vta-sdk"
-version = "0.46.0"
+version = "0.52.0"
 dependencies = [
  "affinidi-data-integrity",
  "affinidi-did-common",
