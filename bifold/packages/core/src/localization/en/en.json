@@ -1011,7 +1011,8 @@
     "VtaAgent": "Your agent",
     "Invited": "Join by invitation",
     "Join": "Join a community",
-    "VtaCreateAgent": "Create your agent"
+    "VtaCreateAgent": "Create your agent",
+    "VtaDevices": "Your devices"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -1759,5 +1760,14 @@
       "unreachable": "Keyring couldn't reach your agent. Check your connection and try again.",
       "failed": "Your agent couldn't do that."
     }
+  },
+  "Devices": {
+    "Title": "Your devices",
+    "Intro": "The phones that run your agent. If you lose one, remove it here from another.",
+    "ThisPhone": "This phone",
+    "Unnamed": "Another device",
+    "Remove": "Remove",
+    "Removed": "Removed: {{device}}. It can't use your agent any more.",
+    "OnlyThisPhone": "Only this phone runs your agent. Add a backup so a lost phone isn't a lost agent."
   }
 }

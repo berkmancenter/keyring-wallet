@@ -81,6 +81,7 @@ export enum Screens {
   VtiVetting = 'Vetting',
   VtaLink = 'Link your agent',
   VtaCreateAgent = 'Create your agent',
+  VtaDevices = 'Your devices',
   VtaAgent = 'Your agent',
   VtiInvited = 'Invited',
   VtiJoin = 'Join',
@@ -150,6 +151,7 @@ export type MyAgentStackParams = {
   [Screens.VtaAgent]: undefined
   [Screens.VtiInvited]: undefined
   [Screens.VtaCreateAgent]: undefined
+  [Screens.VtaDevices]: undefined
   [Screens.VtiJoin]: undefined
   [Screens.EditRCard]: { profileId: string } | undefined
 }

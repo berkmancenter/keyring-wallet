@@ -364,6 +364,17 @@ const VtaAgentHome: React.FC = () => {
               <Icon name="chevron-right" size={22} color={ColorPalette.brand.link} />
             </Pressable>
           ) : null}
+          {/* This phone and its backups (own_agent_subtask.md §4): where a backup
+              removes a lost phone. */}
+          <Pressable
+            style={styles.row}
+            onPress={() => go(Screens.VtaDevices)}
+            accessibilityRole="link"
+            testID={testIdWithKey('AgentDevices')}
+          >
+            <ThemedText style={[styles.link, { flex: 1 }]}>{t('Devices.Title')}</ThemedText>
+            <Icon name="chevron-right" size={22} color={ColorPalette.brand.link} />
+          </Pressable>
           <View style={styles.strip} testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
             {[
               { key: 'Linked', done: true, now: false },

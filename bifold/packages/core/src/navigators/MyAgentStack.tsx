@@ -13,6 +13,7 @@ import VtiJoin from '../modules/trust-tasks/screens/VtiJoin'
 import EditRCard from '../modules/vrc/screens/EditRCard'
 import VtaAgentHome from '../modules/trust-tasks/screens/VtaAgentHome'
 import VtaCreateAgent from '../modules/trust-tasks/screens/VtaCreateAgent'
+import VtaDevices from '../modules/trust-tasks/screens/VtaDevices'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
 import { MyAgentStackParams, Screens } from '../types/navigators'
@@ -67,7 +68,10 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         component={VtiCommunity}
         options={{ title: t('Screens.Community'), ...ScreenOptionsDictionary[Screens.VtiCommunity] }}
       />
-      <Stack.Screen name={Screens.VtiVetting} options={{ title: t('Screens.Vetting'), ...ScreenOptionsDictionary[Screens.VtiVetting] }}>
+      <Stack.Screen
+        name={Screens.VtiVetting}
+        options={{ title: t('Screens.Vetting'), ...ScreenOptionsDictionary[Screens.VtiVetting] }}
+      >
         {() => <VtiVetting config={config.vti} />}
       </Stack.Screen>
       <Stack.Screen
@@ -80,16 +84,27 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         component={VtaCreateAgent}
         options={{ title: t('Screens.VtaCreateAgent'), ...ScreenOptionsDictionary[Screens.VtaCreateAgent] }}
       />
+      <Stack.Screen
+        name={Screens.VtaDevices}
+        component={VtaDevices}
+        options={{ title: t('Screens.VtaDevices'), ...ScreenOptionsDictionary[Screens.VtaDevices] }}
+      />
       {/* The real profile editor, so Join as can create a profile and come back to it. */}
       <Stack.Screen
         name={Screens.EditRCard}
         component={EditRCard as unknown as React.FC}
         options={{ title: t('EditRCard.CreateTitle'), ...ScreenOptionsDictionary[Screens.EditRCard] }}
       />
-      <Stack.Screen name={Screens.VtiJoin} options={{ title: t('Screens.Join'), ...ScreenOptionsDictionary[Screens.VtiJoin] }}>
+      <Stack.Screen
+        name={Screens.VtiJoin}
+        options={{ title: t('Screens.Join'), ...ScreenOptionsDictionary[Screens.VtiJoin] }}
+      >
         {() => <VtiJoin config={config.vti} />}
       </Stack.Screen>
-      <Stack.Screen name={Screens.VtiInvited} options={{ title: t('Screens.Invited'), ...ScreenOptionsDictionary[Screens.VtiInvited] }}>
+      <Stack.Screen
+        name={Screens.VtiInvited}
+        options={{ title: t('Screens.Invited'), ...ScreenOptionsDictionary[Screens.VtiInvited] }}
+      >
         {() => <VtiInvited config={config.vti} />}
       </Stack.Screen>
       <Stack.Screen
