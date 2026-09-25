@@ -498,7 +498,7 @@ export class VtiVetterDesk {
     // it patiently rather than letting the first ask fail as `invalidDid`.
     await resolveDidDocumentRetrying(this.agent, this.persona.communityDid)
     const answer = await vtiAgent.ask(this.persona.communityDid, VETTING.vettersProfile, payload)
-    if (!answer) throw new Error('vtiVetting: the community did not answer the profile publish')
+    if (!answer) throw vtiAgent.sentNoAnswer(this.persona.communityDid, VETTING.vettersProfile)
     const type = String((answer.body as { type?: string } | undefined)?.type ?? '')
     if (type.startsWith(TASK_ERROR)) {
       const p = (answer.body as { payload?: { code?: string; message?: string } } | undefined)?.payload

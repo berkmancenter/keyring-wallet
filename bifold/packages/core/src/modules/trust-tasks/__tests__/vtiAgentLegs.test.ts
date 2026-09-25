@@ -176,20 +176,22 @@ describe('the community leg', () => {
     )
   })
 
+  // A read: only a read is sent again over DIDComm (a write is not — see 'a write is sent once').
   it('asks over DIDComm when a community does not answer TSP, and stays on DIDComm', async () => {
     const COMMUNITY = 'did:webvh:c:silent-on-tsp'
+    const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
     await vtiAgent.connect(agent, 'did:peer:lab', { persona: persona('did:webvh:p:x') })
     const session = mockSessions.at(-1)!
-    const asked = vtiAgent.ask(COMMUNITY, 'https://t/manifest/0.2', {}, 30)
+    const asked = vtiAgent.ask(COMMUNITY, MANIFEST, {}, 30)
     // Answer only what arrives over DIDComm.
     const reply = setInterval(() => {
       if (session.didcomm.length) {
         clearInterval(reply)
-        session.onMessage({ type: 'https://t/manifest/0.2#response', body: { payload: { criteria: [] } } })
+        session.onMessage({ type: `${MANIFEST}#response`, body: { payload: { criteria: [] } } })
       }
     }, 5)
     const answer = await asked
-    expect(answer).toMatchObject({ type: 'https://t/manifest/0.2#response' })
+    expect(answer).toMatchObject({ type: `${MANIFEST}#response` })
     expect(session.tsp.length).toBeGreaterThan(0)
     expect(session.didcomm).toHaveLength(1)
 
