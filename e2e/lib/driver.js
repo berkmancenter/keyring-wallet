@@ -583,11 +583,16 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
         await el.click().catch(() => {});
       });
     }
-    await sleep(settleMs);
-    if (await verify()) {
-      console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (attempt ${attempt + 1}/${attempts}, verified)`);
-      return;
-    }
+    // Up to settleMs for the tap to show, checked each second: a slow answer
+    // gets its time, a quick one returns at once.
+    const settleBy = Date.now() + settleMs;
+    do {
+      await sleep(Math.min(1000, settleMs));
+      if (await verify()) {
+        console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (attempt ${attempt + 1}/${attempts}, verified)`);
+        return;
+      }
+    } while (Date.now() < settleBy);
   }
   throw new Error(
     `${driver.e2ePlatform}: tap on testID=${key} did not take effect after ${attempts} attempts`

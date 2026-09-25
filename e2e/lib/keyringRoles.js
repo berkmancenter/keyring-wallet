@@ -793,9 +793,13 @@ export const vetter = {
       if (publish) {
         const enabledBy = Date.now() + 60000;
         while (Date.now() < enabledBy && !(await publish.isEnabled().catch(() => false))) await sleep(1000);
+        // A publish is a signed write the community answers over TSP: on the
+        // Farm it took longer than 4 × 5 s (RC2 gate, 2026-09-25, the button
+        // still spinning when the runner gave up). Wait for the answer before
+        // tapping again; a second tap on a busy button does nothing.
         await tapTestIdReliable(d, "VettingPublishProfileButton", () => byTestId(d, "VettingProfilePublished").isExisting().catch(() => false), {
-          attempts: 4,
-          settleMs: 5000,
+          attempts: 3,
+          settleMs: 30000,
         });
       }
       if (await byTestId(d, "VettingVetSomeoneElse").isExisting().catch(() => false)) {
