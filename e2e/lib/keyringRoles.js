@@ -188,6 +188,7 @@ async function applicantEvidence(d) {
     vetter: await textOf(d, "VettingRequestVetter").catch(() => ""),
     cardSentAt: await textOf(d, "VettingCardSentAt").catch(() => ""),
     error: await textOf(d, "VettingError").catch(() => ""),
+    statementRefused: await textOf(d, "VettingStatementRefusedDetails").catch(() => ""),
   };
 }
 
@@ -555,10 +556,24 @@ export const applicant = {
       // An openvtc vetter refuses a card older than 15 minutes, and refuses it
       // silently (verify_card, card.rs:42 at vta-sdk 0.42.1): past that, no
       // statement can come for this card, so the record says how old it was.
-      await awaitStep(d, "applicant", ["apply", "member"], timeoutMs, async () => ({
+      const evidence = async () => ({
         ...(await applicantEvidence(d)),
         ...(cardSentMs ? { cardAgeSeconds: Math.round((Date.now() - cardSentMs) / 1000), cardLifetimeSeconds: 900 } : {}),
-      }));
+      });
+      // A statement that arrived and could not be kept stays on "checking"
+      // but says so (keyring-bifold#116): fail on it at once, with its reason,
+      // rather than wait out the deadline for a statement that already came.
+      const until = Date.now() + timeoutMs;
+      for (;;) {
+        const at = await stepIdOf(d, "applicant");
+        if (at === "apply" || at === "member") break;
+        if (await existsTestId(d, "VettingStatementRefused", 500)) {
+          const reason = await textOf(d, "VettingStatementRefusedDetails").catch(() => "");
+          throw failWith(`the statement arrived and was refused${reason ? `: ${reason}` : ""}`, { ...(await evidence()), statementRefused: reason || true });
+        }
+        if (Date.now() > until) await awaitStep(d, "applicant", ["apply", "member"], 0, evidence);
+        await sleep(2000);
+      }
       const checklist = await awaitText(d, "VettingChecklist", /meets the published requirements|statements?/i, 30000);
       if (!/meets the published requirements/.test(checklist)) {
         throw failWith(`the statement arrived but the checklist does not meet the requirements: "${checklist}"`, { checklist });
