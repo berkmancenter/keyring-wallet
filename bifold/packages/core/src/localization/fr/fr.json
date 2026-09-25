@@ -1527,7 +1527,8 @@
       "commitment": "Détails : la déclaration indique d'autres informations que la carte envoyée.",
       "cardDigest": "Détails : la déclaration porte sur une autre carte que celle envoyée.",
       "expired": "Détails : la déclaration a déjà expiré.",
-      "proof": "Détails : la signature de la déclaration n'a pas pu être vérifiée."
+      "proof": "Détails : la signature de la déclaration n'a pas pu être vérifiée.",
+      "noCard": "Détails : la déclaration est arrivée avant que ce téléphone envoie votre carte pendant cette session."
     },
     "WaitingForCard": "En attente de son nom…",
     "CheckTheirId": "Vérifiez sa pièce d'identité — indique-t-elle ceci ?",

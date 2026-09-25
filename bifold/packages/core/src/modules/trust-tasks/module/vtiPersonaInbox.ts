@@ -68,7 +68,11 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     // A statement is kept only through the applicant's full check.
     const acceptStatement = (m: typeof message) =>
       new VtiApplicant(agent, target, vetting, community).receiveStatement(m)
-    return receiveIssue(community, target.did, message, { acceptStatement }).then(
+    const onRefused = (item: VtiReceivedCredential, refusal: string) =>
+      agent.config?.logger?.warn?.(`[VTI] delivered ${item.kind} credential not kept (${refusal})`, {
+        from: String(message.from ?? ''),
+      })
+    return receiveIssue(community, target.did, message, { acceptStatement, onRefused }).then(
       (got: VtiReceivedCredential[]) => {
         if (got.length) {
           DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, {

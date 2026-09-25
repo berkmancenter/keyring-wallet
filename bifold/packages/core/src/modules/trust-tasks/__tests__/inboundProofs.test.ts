@@ -79,7 +79,7 @@ const applicantKey = didKeySigner()
 const impostor = didKeySigner()
 const REQUEST_DOC_ID = 'urn:uuid:request-document-1'
 const RESPONSE = `${VETTING.request}#response`
-const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/0.3'
+const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/0.5'
 
 /** A Trust Task document, as `signedDocument` builds one. */
 const doc = (type: string, issuer: string, recipient: string, payload: Record<string, unknown>, threadId?: string) => ({
@@ -270,7 +270,16 @@ function applicant(status: VettingApplicationRequest['status'] = 'sent') {
     commitmentSalt: 'salt',
     claims: { 'name.legal': 'Ada Lovelace' },
     startedAt: 't',
-    requests: [{ vetterDid: vetter.did, requestDocumentId: REQUEST_DOC_ID, status, updatedAt: 't' }],
+    requests: [
+      {
+        vetterDid: vetter.did,
+        requestDocumentId: REQUEST_DOC_ID,
+        // A vetter's acceptance names the request; a session answers only that.
+        ...(status === 'sent' ? {} : { requestId: 'r' }),
+        status,
+        updatedAt: 't',
+      },
+    ],
   }
   const { store, state } = memoryStore({ application })
   const vti = new VtiApplicant(
@@ -291,7 +300,7 @@ const peerDocs = {
     payload: {
       requestId: 'r',
       challenge: 'c'.repeat(43),
-      domain: 'did:webvh:community',
+      domain: community.did,
       method: 'inPerson',
       requiredClaims: ['name.legal'],
       expiresAt: '2099-01-01T00:00:00Z',
@@ -299,7 +308,7 @@ const peerDocs = {
     after: 'session',
   },
   decline: { type: VETTING.decline, payload: { requestId: 'r' }, after: 'declined' },
-  error: { type: TASK_ERROR, payload: { code: 'vetting/request:invalidTicket' }, after: 'refused' },
+  error: { type: TASK_ERROR, payload: { code: 'vetting/request:invalidTicket', retryable: false }, after: 'refused' },
   response: { type: RESPONSE, payload: { requestId: 'r' }, after: 'accepted' },
 } as const
 
@@ -310,7 +319,8 @@ describe("Keyring's applicant opens every peer document before acting on it", ()
     'a %s the vetter signed is acted on',
     async (kind) => {
       const { type, payload, after } = peerDocs[kind]
-      const { inbound, request } = applicant()
+      // A session is taken only for a request the vetter accepted (openvtc `on_session`).
+      const { inbound, request } = applicant(kind === 'session' ? 'accepted' : 'sent')
       const d = await sign(vetter, doc(type, vetter.did, applicantKey.did, payload, REQUEST_DOC_ID))
       await inbound(message(type, vetter.did, d, REQUEST_DOC_ID))
       expect(request()).toMatchObject({ status: after })

@@ -1585,7 +1585,8 @@
       "commitment": "Details: the statement names different details from the card you sent.",
       "cardDigest": "Details: the statement is about a different card from the one you sent.",
       "expired": "Details: the statement has already expired.",
-      "proof": "Details: the statement's signature could not be verified."
+      "proof": "Details: the statement's signature could not be verified.",
+      "noCard": "Details: the statement came before this phone sent your card in that session."
     },
     "WaitingForCard": "Waiting for their name…",
     "CheckTheirId": "Check their ID — does it say this?",

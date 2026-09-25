@@ -48,6 +48,7 @@ import {
   verifyEligibilityPresentation,
   type EligibilityRefusal,
 } from './vtiEligibility'
+import { againstSchema, checkVetterProfile, checkVettingRequirements } from './vettingShape'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
@@ -59,6 +60,25 @@ export const VETTING = {
 } as const
 const RESPONSE = '#response'
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+/**
+ * The trust-task-error Keyring emits: 0.5, the version VTI emits and the only
+ * one trust-tasks-rs 0.22 models (`ErrorPayload`, error.rs:45-97 — `retryable`
+ * REQUIRED; specs/trust-task-error/0.5/payload.schema.json). Keyring up to PR E
+ * sent 0.3, which an openvtc peer cannot read.
+ */
+export const TASK_ERROR_TYPE = `${TASK_ERROR}0.5`
+/**
+ * Until when a peer's trust-task-error/0.3 — what Keyring vetters sent before
+ * PR E — is still read, logged as legacy. After it, 0.3 is refused like any
+ * other version Keyring does not emit.
+ */
+export const LEGACY_ERROR_03_UNTIL = '2026-11-01'
+/**
+ * Until when a statement delivered inside a signed Trust Task document (its
+ * `credential_response` under `payload`) — what Keyring vetters sent before
+ * PR E — is still read, logged as legacy.
+ */
+export const LEGACY_STATEMENT_DOCUMENT_UNTIL = '2026-11-01'
 const DTG_CONTEXT = ['https://www.w3.org/ns/credentials/v2', 'https://firstperson.network/credentials/dtg/v1']
 
 export type VettingMethod = 'inPerson' | 'video' | 'priorAcquaintance'
@@ -107,6 +127,23 @@ export interface VettingDeskRequest {
   }
   card?: Record<string, unknown>
   statementId?: string
+  /**
+   * The `threadId` of the request exchange — the request document's own
+   * `threadId`, or its `id` when it carried none (SPEC §4.9) — which every
+   * document of the session this request opens names as `parentThreadId`
+   * (vetting/session/0.1 spec.md:94). Absent on requests taken before PR E;
+   * `requestDocumentId` stands in.
+   */
+  requestThreadId?: string
+  /**
+   * Why the last card on this session was not accepted — the check a vetter
+   * runs before showing a card to a person (`verifyVettingCard`). The session
+   * stays open: a corrected card can still come.
+   */
+  cardRefusal?: VettingCardRefusal
+  /** The check's own words for that refusal, for a developer. */
+  cardRefusalDetail?: string
+  cardRefusedAt?: string
   /**
    * The last document on this request that was refused unread — its proof,
    * its issuer or its type did not hold (`openPeerDocument`). Nothing it said
@@ -164,6 +201,16 @@ export interface VettingApplicationRequest {
     | 'session'
     | 'cardDigest'
     | 'commitment'
+    /** No card was sent on the session it names: openvtc `on_statement` (applicant.rs:1104-1106). */
+    | 'noCard'
+  /**
+   * Why the last `vetting/session` from this vetter was not taken
+   * (openvtc `on_session`, applicant.rs:774-791). The request stays where it
+   * was; nothing in the session was believed.
+   */
+  sessionRefusal?: VettingSessionRefusal
+  sessionRefusalDetail?: string
+  sessionRefusedAt?: string
   /** The identity commitment on the card this phone sent, which a statement must repeat. */
   cardCommitment?: string
   /** The vetter grant's window, read from the eligibility presentation. */
@@ -279,6 +326,32 @@ export function checkTicketFor(
     return { ok: false, error: new VettingTicketError('otherCommunity', ticket.community) }
   }
   return { ok: true, vetterDid: ticket.vetter, presentation: ticket.presentation }
+}
+
+/**
+ * A vetter profile this phone would publish breaks its published shape
+ * (`detail` names the member and the rule, e.g. `events.endDate: must be at
+ * most 31 days after startDate`). Nothing is sent when this is thrown.
+ */
+export class VetterProfileError extends Error {
+  readonly reason = 'invalidProfile'
+  constructor(readonly detail: string) {
+    super(`vtiVetting: the vetter profile cannot be published: ${detail}`)
+    this.name = 'VetterProfileError'
+  }
+}
+
+/**
+ * The community's vetting requirements break their published shape, so they
+ * cannot be evaluated — openvtc's `ApplicantError::InvalidRequirements`
+ * (applicant.rs:87-89). Nothing is saved or sent when this is thrown.
+ */
+export class VettingRequirementsError extends Error {
+  readonly reason = 'invalidRequirements'
+  constructor(readonly detail: string) {
+    super(`vtiVetting: the community's vetting requirements are unusable: ${detail}`)
+    this.name = 'VettingRequirementsError'
+  }
 }
 
 /** The applicant's one application to one community. */
@@ -428,12 +501,15 @@ async function signedDocument(
   recipient: string,
   type: string,
   payload: Record<string, unknown>,
-  threadId?: string
+  threadId?: string,
+  /** The enclosing exchange's `threadId` (SPEC §4.9.2), for a document of an inner exchange. */
+  parentThreadId?: string
 ): Promise<Record<string, unknown>> {
   const doc: Record<string, unknown> = {
     id: `urn:uuid:${utils.uuid()}`,
     type,
     ...(threadId ? { threadId } : {}),
+    ...(parentThreadId && parentThreadId !== threadId ? { parentThreadId } : {}),
     issuer: persona.did,
     recipient,
     issuedAt: new Date().toISOString(),
@@ -522,8 +598,127 @@ const DTG_CREDENTIALS_CONTEXT = 'https://firstperson.network/credentials/dtg/v1'
 /** How far ahead a statement's validFrom may be: vta-sdk `vetting::card::CLOCK_SKEW` (card.rs:45). */
 export const STATEMENT_CLOCK_SKEW_MS = 60 * 1000
 
-/** How long a Vetting Card may be valid: vta-sdk `vetting::card::MAX_CARD_VALIDITY`. */
+/** How long a Vetting Card may be valid: vta-sdk `vetting::card::MAX_CARD_VALIDITY` (card.rs:42). */
 export const MAX_CARD_VALIDITY_MS = 15 * 60 * 1000
+
+/**
+ * How long a session this phone opens stays open: openvtc's default
+ * `session_minutes` (openvtc-core vetting/book.rs:45, used by `open_session`,
+ * vetter.rs:460 and :496), and the spec's RECOMMENDED bound ("No more than 15
+ * minutes", vetting/session/0.1 spec.md:159). Keyring opened hour-long
+ * sessions before PR E.
+ */
+export const VETTING_SESSION_MS = 15 * 60 * 1000
+
+/**
+ * Why a vetter did not accept a Vetting Card — vta-sdk `verify_card`'s errors
+ * (card.rs:270-327), in its order, after openvtc's own session check
+ * (`receive_card`, vetter.rs:547-551):
+ *
+ * - `sessionClosed` — the session it answers has expired (`WrongState`);
+ * - `malformed` — not the published card (`parse_card`, `Malformed`);
+ * - `audience` · `publisher` · `community` · `challenge` · `domain` — bound
+ *   to another vetter, applicant, community or session (`Binding`);
+ * - `expired` — its window is inverted, longer than 15 minutes, starts more
+ *   than 60 s ahead, or ended more than 60 s ago (`Expired`);
+ * - `outlivesSession` — it expires after the session does: the spec's check
+ *   (vetting/session/0.1 spec.md:164), which `verify_card` does not make and
+ *   every conforming applicant satisfies (openvtc `card_draft`, applicant.rs:999);
+ * - `proof` — not signed for `assertionMethod` by a key of its publisher
+ *   (`Proof`, `WrongSigner`);
+ * - `missingClaim` — a claim the session requires is absent (`MissingClaim`);
+ * - `commitment` — `identityCommitment` does not recompute (`Commitment`).
+ */
+export type VettingCardRefusal =
+  | 'sessionClosed'
+  | 'malformed'
+  | 'audience'
+  | 'publisher'
+  | 'community'
+  | 'challenge'
+  | 'domain'
+  | 'expired'
+  | 'outlivesSession'
+  | 'proof'
+  | 'missingClaim'
+  | 'commitment'
+
+/**
+ * Why an applicant did not take a `vetting/session` — openvtc `on_session`'s
+ * errors (applicant.rs:774-791), in its order:
+ *
+ * - `malformed` — the payload breaks its schema (`check_shape`);
+ * - `community` — its `domain` is not the community applied to (`WrongCommunity`);
+ * - `expired` — it has already closed (`SessionExpired`);
+ * - `unknownRequest` — this vetter accepted no request of ours with that
+ *   `requestId` (`by_request_id`, `NoMatchingRequest`);
+ * - `alreadyAttested` — this vetter has already attested (`WrongState`).
+ */
+export type VettingSessionRefusal = 'malformed' | 'community' | 'expired' | 'unknownRequest' | 'alreadyAttested'
+
+/** What a vetter expects of the card it receives: vta-sdk `CardExpectations` (card.rs:210-226). */
+export interface VettingCardExpectations {
+  /** The vetter's own DID. */
+  audience: string
+  /** The applicant's `joinDid` from the accepted request. */
+  publisher: string
+  community: string
+  challenge: string
+  domain: string
+  requiredClaims: string[]
+  /** The session's `expiresAt`, which the card's may not pass. */
+  sessionExpiresAt?: string
+  now: number
+}
+
+/**
+ * Verify a Vetting Card as vta-sdk `verify_card` does (card.rs:270-327), plus
+ * the spec's session-expiry bound: the published shape, the five bindings, the
+ * validity window with `CLOCK_SKEW`, the publisher's `assertionMethod` proof,
+ * every required claim, and the identity commitment recomputed from the
+ * card's own salt and claims. Keyring's vetter checked only the bindings and
+ * the proof before PR E, so a card an openvtc vetter refuses — expired, an
+ * hour long, or committing to something other than its claims — was shown to
+ * the vetter and attested.
+ */
+export async function verifyVettingCard(
+  agent: Agent,
+  card: unknown,
+  expect: VettingCardExpectations
+): Promise<{ ok: true } | { ok: false; code: VettingCardRefusal; detail: string }> {
+  const refuse = (code: VettingCardRefusal, detail: string) => ({ ok: false as const, code, detail })
+  const shape = againstSchema('vettingCard', card)
+  if (!shape.ok) return refuse('malformed', shape.detail)
+  const c = card as Record<string, unknown> & { claims: { type: string; value: unknown }[] }
+  for (const member of ['audience', 'publisher', 'community', 'challenge', 'domain'] as const) {
+    if (c[member] !== expect[member])
+      return refuse(member, `${member} ${String(c[member])}, expected ${expect[member]}`)
+  }
+  const issuedAt = Date.parse(String(c.issuedAt))
+  const expiresAt = Date.parse(String(c.expiresAt))
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt))
+    return refuse('malformed', 'issuedAt or expiresAt is not a date')
+  if (
+    expiresAt <= issuedAt ||
+    expiresAt - issuedAt > MAX_CARD_VALIDITY_MS ||
+    issuedAt > expect.now + STATEMENT_CLOCK_SKEW_MS ||
+    expect.now > expiresAt + STATEMENT_CLOCK_SKEW_MS
+  )
+    return refuse('expired', `valid ${String(c.issuedAt)} to ${String(c.expiresAt)}`)
+  const sessionEnd = expect.sessionExpiresAt ? Date.parse(expect.sessionExpiresAt) : NaN
+  if (Number.isFinite(sessionEnd) && expiresAt > sessionEnd)
+    return refuse('outlivesSession', `the card expires ${String(c.expiresAt)}, the session ${expect.sessionExpiresAt}`)
+  if (!(await verifyDocumentProof(agent, c, expect.publisher)))
+    return refuse('proof', `not signed for assertionMethod by ${expect.publisher}`)
+  const missing = expect.requiredClaims.find((type) => !c.claims.some((claim) => claim.type === type))
+  if (missing) return refuse('missingClaim', `no ${missing} claim`)
+  const recomputed = identityCommitment(
+    String(c.commitmentSalt),
+    c.claims.filter((claim) => expect.requiredClaims.includes(claim.type))
+  )
+  if (recomputed !== c.identityCommitment) return refuse('commitment', 'identityCommitment does not recompute')
+  return { ok: true }
+}
 
 /**
  * The identity commitment a card and every statement on it carry, exactly as
@@ -591,7 +786,7 @@ export class VtiVetterDesk {
     country?: string
     city?: string
     acceptsDocumentation?: string[]
-    events?: { name: string; startDate: string; endDate: string }[]
+    events?: { name: string; startDate: string; endDate: string; url?: string }[]
   }): Promise<void> {
     const country = input.country?.trim()
     const payload: Record<string, unknown> = {
@@ -607,6 +802,13 @@ export class VtiVetterDesk {
       acceptsDocumentation: input.acceptsDocumentation ?? [],
       events: input.events ?? [],
     }
+    // Checked before it is sent, as vta-sdk checks it on arrival (`CheckShape`
+    // for the profile payload, protocols/vetting.rs:570-597, which the
+    // community applies): the schema, and the event rule the schema states in
+    // prose only — an https `url`, and `endDate` on or after `startDate` and
+    // at most 31 days after it. Signed by `vtiAgent.ask` (its SIGNED_TASKS).
+    const shape = checkVetterProfile(payload)
+    if (!shape.ok) throw new VetterProfileError(shape.detail)
     // The community's document may not be in the resolver's cache on this
     // phone yet, and the hosting daemon rate-limits a burst (VTI-19), so warm
     // it patiently rather than letting the first ask fail as `invalidDid`.
@@ -717,7 +919,7 @@ export class VtiVetterDesk {
       return
     }
     if (isRequest) return this.takeRequest(m)
-    return this.receiveCard(m)
+    return this.receiveCard(m, opened.sender)
   }
 
   private async noteRefusedCard(m: DidCommV2PlaintextMessage, code: PeerDocumentRefusal): Promise<void> {
@@ -804,7 +1006,14 @@ export class VtiVetterDesk {
     // hold still works.
     const standing = await this.grantWithState()
     if (standing.state.state !== 'active') {
-      await this.refuse(m, applicantDid, vetterNotEligibleReason(standing.state.state))
+      // The spec's code (vetting/request/0.1 spec.md:50-52); why, in words and
+      // in `details`. Keyring sent `vetting/request:vetterNotEligible:<state>`
+      // before PR E, which is not an error code at all to trust-tasks-rs
+      // (`TrustTaskCode::from_str`, error.rs:338-358: one `:` only).
+      await this.refuse(m, applicantDid, 'vetting/request:notEligible', {
+        message: vetterNotEligibleReason(standing.state.state),
+        details: { grantState: standing.state.state },
+      })
       return
     }
 
@@ -817,6 +1026,7 @@ export class VtiVetterDesk {
       // request document's id is what binds the presentation.
       requestId: utils.uuid(),
       requestDocumentId,
+      requestThreadId: typeof body.threadId === 'string' && body.threadId ? body.threadId : requestDocumentId,
       applicantDid,
       communityDid: this.persona.communityDid,
       requirementsDigest: typeof p.requirementsDigest === 'string' ? p.requirementsDigest : undefined,
@@ -847,17 +1057,38 @@ export class VtiVetterDesk {
     this.onChange?.()
   }
 
-  private async refuse(m: DidCommV2PlaintextMessage, to: string, code: string): Promise<void> {
+  /**
+   * Refuse a request with a trust-task-error/0.5 (SPEC §8.2): the code, whether
+   * the applicant may retry it — as the request spec declares each code
+   * (vetting/request/0.1 spec.md:44-58), none of those Keyring sends is
+   * retryable — and `inResponseTo` naming the request document, as
+   * trust-tasks-rs's `reject_with` fills it (error.rs:56-73).
+   */
+  private async refuse(
+    m: DidCommV2PlaintextMessage,
+    to: string,
+    code: string,
+    extra: { message?: string; details?: Record<string, unknown> } = {}
+  ): Promise<void> {
     const body = bodyOf(m)
     const error = await signedDocument(
       this.agent,
       this.persona,
       to,
-      `${TASK_ERROR}0.3`,
-      { code, message: code },
+      TASK_ERROR_TYPE,
+      {
+        code,
+        retryable: false,
+        inResponseTo: {
+          typeUri: String(body.type ?? VETTING.request),
+          ...(typeof body.id === 'string' && body.id ? { id: body.id } : {}),
+        },
+        message: extra.message ?? code,
+        ...(extra.details ? { details: extra.details } : {}),
+      },
       String(body.threadId ?? body.id ?? '')
     )
-    await vtiAgent.send(to, `${TASK_ERROR}0.3`, error, { thid: String(m.id ?? '') })
+    await vtiAgent.send(to, TASK_ERROR_TYPE, error, { thid: String(m.id ?? '') })
   }
 
   /**
@@ -893,16 +1124,29 @@ export class VtiVetterDesk {
     const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
     if (!desk) throw new Error('vtiVetting: no such request')
     const challenge = b64url(randomBytes(32))
-    const expiresAt = new Date(Date.now() + 3600000).toISOString()
-    const doc = await signedDocument(this.agent, this.persona, desk.applicantDid, VETTING.session, {
-      requestId,
-      challenge,
-      domain: desk.communityDid,
-      method,
-      requiredClaims,
-      expiresAt,
-    })
-    await vtiAgent.send(desk.applicantDid, VETTING.session, doc, { expiresInSec: 3600 })
+    const expiresAt = new Date(Date.now() + VETTING_SESSION_MS).toISOString()
+    // The session is its own exchange inside the request's: every document of
+    // it carries the request exchange's threadId as `parentThreadId`, a
+    // producer MUST (vetting/session/0.1 spec.md:94; SPEC §4.9.2). openvtc
+    // sets none (its `open_session` action, openvtc vetting_actions.rs:2335-2342,
+    // builds the document with `wire::document`, wire.rs:63-71).
+    const doc = await signedDocument(
+      this.agent,
+      this.persona,
+      desk.applicantDid,
+      VETTING.session,
+      {
+        requestId,
+        challenge,
+        domain: desk.communityDid,
+        method,
+        requiredClaims,
+        expiresAt,
+      },
+      undefined,
+      desk.requestThreadId ?? desk.requestDocumentId
+    )
+    await vtiAgent.send(desk.applicantDid, VETTING.session, doc, { expiresInSec: VETTING_SESSION_MS / 1000 })
     desk.status = 'session'
     desk.session = {
       documentId: String(doc.id),
@@ -918,26 +1162,60 @@ export class VtiVetterDesk {
     return desk
   }
 
-  /** The applicant's card: verify it against this session before showing it. */
-  private async receiveCard(m: DidCommV2PlaintextMessage): Promise<void> {
+  /**
+   * The applicant's card, checked as an openvtc vetter checks one before a
+   * person sees it (`receive_card`, openvtc-core vetting/vetter.rs:526-579):
+   * the session it is threaded on must be this applicant's and still open,
+   * then vta-sdk `verify_card` (`verifyVettingCard`). A card that fails is
+   * recorded on the desk row with the reason; the session stays open for a
+   * corrected one.
+   */
+  private async receiveCard(m: DidCommV2PlaintextMessage, sender: string): Promise<void> {
     const body = bodyOf(m)
-    const card = (payloadOf(m).card ?? {}) as Record<string, unknown>
-    const thread = threadOf(m)
+    const card = payloadOf(m).card
+    // openvtc reads the session from the document's `threadId` (inbound.rs:731-733).
+    const thread = typeof body.threadId === 'string' && body.threadId ? body.threadId : threadOf(m)
     const desk = (await this.store.listDesk()).find(
-      (r) => r.session?.documentId === thread || r.applicantDid === String(body.issuer)
+      (r) => r.applicantDid === sender && !!r.session && r.session.documentId === thread
     )
     if (!desk?.session) return
-    const ok =
-      card.audience === this.persona.did &&
-      card.challenge === desk.session.challenge &&
-      card.domain === desk.session.domain &&
-      card.community === desk.communityDid &&
-      card.publisher === desk.applicantDid &&
-      (await verifyDocumentProof(this.agent, card, desk.applicantDid))
-    if (!ok) return
-    desk.card = card
-    desk.status = 'cardReceived'
-    await this.store.saveDesk(desk)
+    // Only a session still waiting for its card takes one (openvtc matches
+    // `DeskState::Session` alone); a copy of the card already taken is no news.
+    if (desk.status !== 'session') return
+    const refuse = async (cardRefusal: VettingCardRefusal, cardRefusalDetail: string) => {
+      this.agent.config?.logger?.warn?.(`[VTI] vetting card refused (${cardRefusal}): ${cardRefusalDetail}`, {
+        from: sender,
+      })
+      await this.store.saveDesk({
+        ...desk,
+        cardRefusal,
+        cardRefusalDetail,
+        cardRefusedAt: new Date().toISOString(),
+      })
+      this.onChange?.()
+    }
+    const now = Date.now()
+    if (Date.parse(desk.session.expiresAt) <= now)
+      return refuse('sessionClosed', `the session closed at ${desk.session.expiresAt}`)
+    const verdict = await verifyVettingCard(this.agent, card, {
+      audience: this.persona.did,
+      publisher: desk.applicantDid,
+      community: desk.communityDid,
+      challenge: desk.session.challenge,
+      domain: desk.session.domain,
+      requiredClaims: desk.session.requiredClaims,
+      sessionExpiresAt: desk.session.expiresAt,
+      now,
+    })
+    if (!verdict.ok) return refuse(verdict.code, verdict.detail)
+    await this.store.saveDesk({
+      ...desk,
+      card: card as Record<string, unknown>,
+      status: 'cardReceived',
+      cardRefusal: undefined,
+      cardRefusalDetail: undefined,
+      cardRefusedAt: undefined,
+    })
     this.onChange?.()
   }
 
@@ -992,10 +1270,17 @@ export class VtiVetterDesk {
       kmsKeyId: this.persona.kmsKeyIds?.signing,
       verificationMethodId: this.persona.vtaKeyIds.signing,
     })
-    const issue = await signedDocument(this.agent, this.persona, desk.applicantDid, CREDENTIAL_EXCHANGE_ISSUE, {
-      credential_response: { credential: signed },
-    })
-    await vtiAgent.send(desk.applicantDid, CREDENTIAL_EXCHANGE_ISSUE, issue)
+    // Delivered as the VTC and openvtc deliver a credential: the DIDComm body
+    // IS `{ credential_response: { credential } }` — vtc-service
+    // `issue_message_body` (credentials/delivery.rs:128-141), built into a
+    // plain message by `push_to_holder` (:170-173); openvtc
+    // `wire::credential_delivery` (vetting/wire.rs:177-185), threaded on the
+    // session. The statement carries its own proof. An openvtc applicant reads
+    // `/credential_response/credential` off the body (inbound.rs:791) and
+    // ignored Keyring's signed Trust Task wrapper, where it sat under
+    // `payload` (Phase 2, 2026-09-25 11:27:23Z).
+    const delivery = { credential_response: { credential: signed } }
+    await vtiAgent.send(desk.applicantDid, CREDENTIAL_EXCHANGE_ISSUE, delivery, { thid: desk.session.documentId })
     desk.status = 'attested'
     desk.statementId = String(signed.id)
     await this.store.saveDesk(desk)
@@ -1036,10 +1321,22 @@ export class VtiApplicant {
     this.now = options.now ?? (() => new Date())
   }
 
-  /** Start (or resume) the application: the join DID is the persona, chosen before gathering. */
+  /**
+   * Start (or resume) the application: the join DID is the persona, chosen before gathering.
+   *
+   * The community's requirements are read as openvtc's `adopt_manifest` reads
+   * them (applicant.rs:465-499, vta-sdk `read_requirements`): requirements
+   * that break their published shape cannot be evaluated, and throw
+   * `VettingRequirementsError` rather than being gathered against by guess.
+   */
   async start(manifest: VtiManifest, claims: Record<string, string>): Promise<VettingApplication> {
     const existing = await this.store.getApplication(this.persona.communityDid)
-    const vetting = manifest.criteria.map((c) => (c as { vetting?: Record<string, unknown> }).vetting).find(Boolean) as
+    const published = manifest.criteria.map((c) => (c as { vetting?: unknown }).vetting).find(Boolean)
+    if (published !== undefined) {
+      const shape = checkVettingRequirements(published)
+      if (!shape.ok) throw new VettingRequirementsError(shape.detail)
+    }
+    const vetting = published as
       | {
           minStatements?: number
           requiredClaims?: string[]
@@ -1300,6 +1597,17 @@ export class VtiApplicant {
   private async refused(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
     const vetterDid = String(body.issuer ?? m.from ?? '')
+    // 0.5 is what Keyring and VTI emit. 0.3 is what Keyring vetters sent
+    // before PR E: read until LEGACY_ERROR_03_UNTIL, and said so.
+    const version = typeOf(m).slice(TASK_ERROR.length)
+    if (version === '0.3' && this.now() < new Date(`${LEGACY_ERROR_03_UNTIL}T00:00:00Z`)) {
+      this.agent.config?.logger?.info?.('[VTI] vetting refusal read in the legacy trust-task-error/0.3 form', {
+        vetterDid,
+      })
+    } else if (version !== '0.5') {
+      this.agent.config?.logger?.warn?.(`[VTI] vetting refusal in trust-task-error/${version} not read`, { vetterDid })
+      return
+    }
     const application = await this.store.getApplication(this.persona.communityDid)
     const request = application?.requests.find((r) => r.vetterDid === vetterDid)
     if (!request) return
@@ -1311,13 +1619,49 @@ export class VtiApplicant {
     await this.update(vetterDid, { status: 'refused', refusalCode: String(payloadOf(m).code ?? 'refused') })
   }
 
+  /**
+   * A vetter opened a session. Taken as openvtc's `on_session` takes one
+   * (applicant.rs:774-824): the payload's published shape, `domain` this
+   * community, not yet expired, and a `requestId` this vetter accepted from
+   * us — never after it has attested. Before PR E Keyring took any session
+   * from anyone it had asked. A refused session is recorded on the request
+   * with the reason, and the request is left where it was.
+   */
   private async sessionOpened(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
     const p = payloadOf(m)
     const vetterDid = String(body.issuer ?? m.from ?? '')
     const documentId = String(body.id ?? m.id ?? '')
+    const application = await this.store.getApplication(this.persona.communityDid)
+    const request = application?.requests.find((r) => r.vetterDid === vetterDid)
+    if (!application || !request) return
+    const refuse = async (sessionRefusal: VettingSessionRefusal, sessionRefusalDetail: string) => {
+      this.agent.config?.logger?.warn?.(`[VTI] vetting session refused (${sessionRefusal}): ${sessionRefusalDetail}`, {
+        vetterDid,
+      })
+      await this.update(vetterDid, { sessionRefusal, sessionRefusalDetail, sessionRefusedAt: new Date().toISOString() })
+    }
+    const shape = againstSchema('vettingSessionPayload', p)
+    if (!shape.ok) return refuse('malformed', shape.detail)
+    if (p.domain !== application.communityDid) return refuse('community', `domain ${String(p.domain)}`)
+    // The desk's clock, as the vetter's side and `receiveStatement` read it.
+    if (!(Date.parse(String(p.expiresAt)) > Date.now())) return refuse('expired', `expired ${String(p.expiresAt)}`)
+    const accepted = ['accepted', 'session', 'cardSent', 'statementRefused', 'attested'].includes(request.status)
+    if (!accepted || !request.requestId || request.requestId !== p.requestId)
+      return refuse('unknownRequest', `requestId ${String(p.requestId)}`)
+    if (request.status === 'attested') return refuse('alreadyAttested', 'this vetter has already attested')
     await this.update(vetterDid, {
       status: 'session',
+      // A new session starts clean: the card sent on an earlier one answers
+      // that one only (openvtc replaces the session and its card, applicant.rs:817-821).
+      cardDigest: undefined,
+      cardDigestLegacy: undefined,
+      cardCommitment: undefined,
+      cardSentAt: undefined,
+      statementRefusal: undefined,
+      sessionRefusal: undefined,
+      sessionRefusalDetail: undefined,
+      sessionRefusedAt: undefined,
       session: {
         documentId,
         challenge: String(p.challenge ?? ''),
@@ -1364,13 +1708,17 @@ export class VtiApplicant {
       kmsKeyId: this.persona.kmsKeyIds?.signing,
       verificationMethodId: this.persona.vtaKeyIds.signing,
     })
+    // Threaded on the session, and naming the request exchange it sits in
+    // (`parentThreadId`, vetting/session/0.1 spec.md:94): this phone's request
+    // carried no threadId, so that exchange's thread is the request's id.
     const response = await signedDocument(
       this.agent,
       this.persona,
       vetterDid,
       `${VETTING.session}${RESPONSE}`,
       { card: signed },
-      request.session.documentId
+      request.session.documentId,
+      request.requestDocumentId
     )
     await vtiAgent.send(vetterDid, `${VETTING.session}${RESPONSE}`, response, { thid: request.session.documentId })
     await this.update(vetterDid, {
@@ -1402,7 +1750,21 @@ export class VtiApplicant {
    */
   async receiveStatement(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
-    const p = (body.payload ?? body) as Record<string, unknown>
+    // The bare body is the delivery (vtc-service delivery.rs:128-141, openvtc
+    // wire.rs:177-185). Keyring vetters before PR E wrapped it in a signed
+    // Trust Task document: read until LEGACY_STATEMENT_DOCUMENT_UNTIL, and said so.
+    if (body.credential_response === undefined && body.payload !== undefined) {
+      if (Date.now() >= Date.parse(`${LEGACY_STATEMENT_DOCUMENT_UNTIL}T00:00:00Z`)) {
+        this.agent.config?.logger?.warn?.('[VTI] statement in the retired Trust Task document shape not read', {
+          from: String(m.from ?? ''),
+        })
+        return
+      }
+      this.agent.config?.logger?.info?.('[VTI] statement read in the legacy Trust Task document shape', {
+        from: String(m.from ?? ''),
+      })
+    }
+    const p = (body.credential_response !== undefined ? body : (body.payload ?? body)) as Record<string, unknown>
     const credential = ((p.credential_response as Record<string, unknown>)?.credential ?? undefined) as
       | Record<string, unknown>
       | undefined
@@ -1449,8 +1811,10 @@ export class VtiApplicant {
     if (endorsement.community !== application.communityDid) return refuse('community')
     if (request.status === 'attested' && request.statementId === String(credential.id)) return
     if (!request.session || credential.taskContext !== request.session.documentId) return refuse('session')
+    // openvtc on_statement: a statement answers a card we sent on that session
+    // (applicant.rs:1104-1106, "take a statement before a card").
+    if (!request.cardDigest) return refuse('noCard')
     const cardDigestOk =
-      !request.cardDigest ||
       endorsement.cardDigestMultibase === request.cardDigest ||
       (!!request.cardDigestLegacy && endorsement.cardDigestMultibase === request.cardDigestLegacy)
     if (!cardDigestOk) return refuse('cardDigest')

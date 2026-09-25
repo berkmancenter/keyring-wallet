@@ -90,6 +90,36 @@ export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCred
 }
 
 /**
+ * Why a credential a community delivered was not kept — openvtc's checks on a
+ * delivered credential, all of them on who sent it and who it is for:
+ *
+ * - `issuerNotSender` — its `issuer` is not the transport-authenticated sender
+ *   (`handle_credential_issue`, openvtc-core messaging.rs:889-900);
+ * - `notFromCommunity` — the community it names is not that sender: a role
+ *   or grant must come from the community it is for (`vetter_grant`,
+ *   vetting/inbound.rs:850);
+ * - `subject` — it names no subject, or not this persona (messaging.rs:901-914,
+ *   inbound.rs:850).
+ *
+ * Its proof is not checked, as openvtc does not check it (inbound.rs:827-833):
+ * it proves nothing the authenticated sender does not, and every party it is
+ * later presented to verifies it. The spec requires no more of the holder.
+ */
+export type VtiCredentialRefusal = 'issuerNotSender' | 'notFromCommunity' | 'subject'
+
+/** Whether a delivered credential may be kept, and if not why: see `VtiCredentialRefusal`. */
+export function credentialRefusal(
+  item: VtiReceivedCredential,
+  sender: string,
+  personaDid: string
+): VtiCredentialRefusal | undefined {
+  if (!sender || issuerOf(item.credential) !== sender) return 'issuerNotSender'
+  if (item.communityDid !== sender) return 'notFromCommunity'
+  if (item.subjectDid !== personaDid) return 'subject'
+  return undefined
+}
+
+/**
  * Keep what a community delivered. A membership credential becomes (or
  * completes) the membership record; a role endorsement fills in the role;
  * grants are held as credentials in their own right.
@@ -110,21 +140,36 @@ export async function receiveIssue(
     via?: VtiMembership['via']
     /** Check a vetting statement and keep it if it passes; see above. */
     acceptStatement?: (plaintext: DidCommV2PlaintextMessage) => Promise<void>
+    /** Told of each credential not kept, and why — for the log. */
+    onRefused?: (item: VtiReceivedCredential, refusal: VtiCredentialRefusal) => void
   } = {}
 ): Promise<VtiReceivedCredential[]> {
   const body = plaintext.body as { type?: string } | undefined
   const isIssue = plaintext.type === CREDENTIAL_EXCHANGE_ISSUE || body?.type === CREDENTIAL_EXCHANGE_ISSUE
   if (!isIssue) return []
   const received = credentialsOfIssue(body).map(classifyCredential)
+  const sender = typeof plaintext.from === 'string' ? plaintext.from : ''
+  const kept: VtiReceivedCredential[] = []
   let statementHandled = false
   for (const item of received) {
-    if (item.subjectDid && item.subjectDid !== personaDid) continue
     if (item.kind === 'vetting-statement') {
+      if (item.subjectDid && item.subjectDid !== personaDid) continue
       // One message carries one statement; the check reads it from the message.
       if (options.acceptStatement && !statementHandled) await options.acceptStatement(plaintext)
       statementHandled = true
+      kept.push(item)
       continue
     }
+    // Everything else comes from a community, about this persona (openvtc
+    // `handle_credential_issue`, `vetter_grant`). Before PR E Keyring checked
+    // the type and, when there was one, the subject — so anyone could hand
+    // this persona a membership or a vetter grant in any community's name.
+    const refusal = credentialRefusal(item, sender, personaDid)
+    if (refusal) {
+      options.onRefused?.(item, refusal)
+      continue
+    }
+    kept.push(item)
     if (item.kind === 'membership') {
       const existing = await store.getMembership(item.communityDid)
       await store.saveMembership({
@@ -152,5 +197,5 @@ export async function receiveIssue(
       await store.saveHeldCredential({ ...item, kind: item.kind })
     }
   }
-  return received
+  return kept
 }

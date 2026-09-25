@@ -43,6 +43,7 @@ import {
 } from './VtiMediatorTransport'
 import type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './VtiIdentityStore'
 import { VtiRefusal } from './vtiAgent'
+import { isDigestMultibase } from './vettingShape'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
 
@@ -606,12 +607,26 @@ export class VtaClient {
     })
   }
 
-  /** An approver's answer to a consent request it was sent — signed by this client's identity. */
+  /**
+   * An approver's answer to a consent request it was sent — signed by this client's identity.
+   *
+   * `payloadDigest` is echoed from the request, and the decision schema types
+   * it as the framework's `DigestMultibase` (task-consent/decision/0.1
+   * payload.schema.json:15-18; framework 0.3: `z`/`u` multibase, at least 16
+   * characters). A VTA always sends one — the salted `wire_digest`, a
+   * base58btc SHA-256 multihash (vta-policy consent.rs:73-94, :126-131; put in
+   * the request at vta-service consent_request.rs:97) — so a value that is not
+   * one did not come from a VTA, and nothing is signed over it.
+   */
   decideConsent(
     request: Pick<VtaConsentRequest, 'challenge' | 'payloadDigest'>,
     decision: 'approve' | 'deny',
     reason?: string
   ) {
+    if (!isDigestMultibase(request.payloadDigest))
+      return Promise.reject(
+        new Error(`${LOG_PREFIX} the consent request's payloadDigest is not a digestMultibase; not deciding it`)
+      )
     return this.task<{ status?: string }>(VTA_TASK.consentDecision, {
       challenge: request.challenge,
       payloadDigest: request.payloadDigest,

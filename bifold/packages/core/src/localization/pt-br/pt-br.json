@@ -1426,7 +1426,8 @@
       "commitment": "Detalhes: a declaração traz dados diferentes do cartão enviado.",
       "cardDigest": "Detalhes: a declaração se refere a outro cartão, não ao que você enviou.",
       "expired": "Detalhes: a declaração já expirou.",
-      "proof": "Detalhes: não foi possível verificar a assinatura da declaração."
+      "proof": "Detalhes: não foi possível verificar a assinatura da declaração.",
+      "noCard": "Detalhes: a declaração chegou antes de este telefone enviar seu cartão nessa sessão."
     },
     "WaitingForCard": "Aguardando o nome da pessoa…",
     "CheckTheirId": "Confira o documento — ele diz isto?",

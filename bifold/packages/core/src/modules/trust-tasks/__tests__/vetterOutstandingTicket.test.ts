@@ -97,12 +97,14 @@ describe('a ticket redeemed after the grant died', () => {
 
     expect(sent).toHaveLength(1)
     expect(sent[0].to).toBe(APPLICANT)
-    expect(sent[0].type).toContain('trust-task-error')
-    const code = (sent[0].body as { payload?: { code?: string } }).payload?.code ?? ''
+    expect(sent[0].type).toBe('https://trusttasks.org/spec/trust-task-error/0.5')
+    const payload = (sent[0].body as { payload?: Record<string, unknown> }).payload ?? {}
     // The reason says the vetter cannot vet, not that the applicant's ticket
     // was bad — blaming the ticket would send them hunting for the wrong thing.
-    expect(code).toContain('vetterNotEligible')
-    expect(code).not.toContain('invalidTicket')
+    // The spec's own code (vetting/request/0.1 spec.md:50-52), as trust-task-error/0.5
+    // requires one: a single `:` after the slug, and `retryable`.
+    expect(payload).toMatchObject({ code: 'vetting/request:notEligible', retryable: false })
+    expect(payload.message).toContain('vetterNotEligible')
     // The ticket is NOT spent, and the order is deliberate: the refusal happens
     // BEFORE `usesLeft -= 1`. The first draft of this fix refused after the
     // decrement, which burned a stranger's single-use ticket on a failure that
@@ -118,14 +120,14 @@ describe('a ticket redeemed after the grant died', () => {
     // Against the function that BUILDS the reason, not a copy of its format:
     // a test that rebuilds the string would keep passing while the two layers
     // that read it drifted apart, which is the failure it exists to catch.
-    expect((sent[0].body as { payload?: { code?: string } }).payload?.code).toBe(
-      vetterNotEligibleReason('expired')
-    )
+    const payload = (sent[0].body as { payload?: Record<string, unknown> }).payload ?? {}
+    expect(payload.message).toBe(vetterNotEligibleReason('expired'))
+    expect(payload.details).toEqual({ grantState: 'expired' })
   })
 
   it('holds no opinion when there is no grant at all — still refuses', async () => {
     const desk = new VtiVetterDesk(agent, persona, store, communityStore([]))
     await (desk as unknown as { takeRequest: (m: unknown) => Promise<void> }).takeRequest(request)
-    expect((sent[0].body as { payload?: { code?: string } }).payload?.code).toContain('vetterNotEligible')
+    expect((sent[0].body as { payload?: { code?: string } }).payload?.code).toBe('vetting/request:notEligible')
   })
 })
