@@ -153,7 +153,12 @@ export class AppContainer implements Container {
     vtaAgent.setOwnerChecks(ownerChecks)
     // Its own entry on the agent reads "Keyring — <this phone's name>", so the
     // person can tell their devices apart in My devices and on their host.
-    vtaAgent.setDeviceName(() => DeviceInfo.getDeviceName())
+    // Android 12+ answers "unknown" without BLUETOOTH_CONNECT (and emulators
+    // always do): fall back to the model, e.g. "Keyring — Pixel 6".
+    vtaAgent.setDeviceName(async () => {
+      const name = await DeviceInfo.getDeviceName()
+      return name && name !== 'unknown' ? name : DeviceInfo.getModel()
+    })
     this._container.registerInstance(TOKENS.CONFIG, {
       ...defaultConfig,
       PINSecurity: { rules: PINRules, displayHelper: false },
