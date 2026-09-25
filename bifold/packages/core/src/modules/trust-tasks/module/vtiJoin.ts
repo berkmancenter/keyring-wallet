@@ -100,8 +100,10 @@ export async function joinCommunity(
   // Whatever the community delivers during the join — on the Eucalyptus
   // train the card and the role arrive as separate messages after the verdict.
   const via = invitation ? 'invitation' : 'approval'
-  const stopInbox = vtiAgent.onInbound((plaintext) => {
-    void receiveIssue(deps.communityStore, persona.did, plaintext, { via }).catch(() => undefined)
+  // Returned, not fired and forgotten: the mediator is told the message was
+  // taken only once it is stored, and a failed store leaves it for redelivery.
+  const stopInbox = vtiAgent.onInbound(async (plaintext) => {
+    await receiveIssue(deps.communityStore, persona.did, plaintext, { via })
   })
 
   step('manifest')

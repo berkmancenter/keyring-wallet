@@ -572,9 +572,9 @@ export class VtiVetterDesk {
   /** Start listening for requests, cards and the rest on the persona's session. */
   listen(): () => void {
     this.stop?.()
-    this.stop = vtiAgent.onInbound((m) => {
-      void this.inbound(m).catch(() => undefined)
-    })
+    // Returned: what the message changes is stored before the mediator is
+    // told it was taken, and a failure leaves it for redelivery.
+    this.stop = vtiAgent.onInbound((m) => this.inbound(m))
     return this.stop
   }
 
@@ -887,14 +887,18 @@ export class VtiApplicant {
 
   listen(): () => void {
     this.stop?.()
-    this.stop = vtiAgent.onInbound((m) => {
-      void this.inbound(m).catch(() => undefined)
-    })
+    // Returned: what the message changes is stored before the mediator is
+    // told it was taken, and a failure leaves it for redelivery.
+    this.stop = vtiAgent.onInbound((m) => this.inbound(m))
     return this.stop
   }
 
   private async inbound(m: DidCommV2PlaintextMessage): Promise<void> {
     const type = typeOf(m)
+    // With no application there is nothing for these to change, and never
+    // will be: taken and dropped, rather than failed and redelivered forever
+    // (a failure withholds the mediator's ack, vtiAgent.onInbound).
+    if (!(await this.store.getApplication(this.persona.communityDid))) return
     if (type === `${VETTING.request}${RESPONSE}`) return this.accepted(m)
     if (type.startsWith(TASK_ERROR)) return this.refused(m)
     if (type === VETTING.session) return this.sessionOpened(m)

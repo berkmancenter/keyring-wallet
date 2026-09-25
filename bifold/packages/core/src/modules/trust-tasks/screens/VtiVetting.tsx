@@ -407,8 +407,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // listener on the agent, not on a session — and closes the window.
   useEffect(() => {
     if (!agent || !stores || !persona) return
-    const stopIssue = vtiAgent.onInbound((m) => {
-      void receiveIssue(stores.community, persona.did, m).then((got) => got.length && bump())
+    const stopIssue = vtiAgent.onInbound(async (m) => {
+      const got = await receiveIssue(stores.community, persona.did, m)
+      if (got.length) bump()
     })
     const refreshSeat = async () => {
       const grants = await stores.community.listHeldCredentials('vetter-grant', persona.communityDid)
@@ -1283,8 +1284,8 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         // so a vetter revoked since is the case this catches.
                         await applicantRef.current!.refreshGrantStatus()
                         const { statements } = await applicantRef.current!.checklist()
-                        const stopInbox = vtiAgent.onInbound((msg) => {
-                          void receiveIssue(stores!.community, persona.did, msg, { via: 'vetting' })
+                        const stopInbox = vtiAgent.onInbound(async (msg) => {
+                          await receiveIssue(stores!.community, persona.did, msg, { via: 'vetting' })
                         })
                         try {
                           // Submits, or answers an open deferral in place — a
