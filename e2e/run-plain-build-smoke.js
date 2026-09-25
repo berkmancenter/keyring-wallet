@@ -51,7 +51,7 @@
  *
  * Requires a debug APK BUILT with `app/.env`'s `ACTIVE_DEMO_PROFILE=none` —
  * unlike the trading-card/approver runners (which tolerate an APK built with
- * `ACTIVE_DEMO_PROFILE` unset, since they only need THEIR OWN profile
+ * their own profile id (`approver`, `trading-card`), since unset now means none as well
  * registered and don't care what else is), this one specifically needs BOTH
  * demo profiles absent from the running container, and `App.tsx` reads
  * `Config.ACTIVE_DEMO_PROFILE` from `react-native-config`, which bakes

@@ -55,14 +55,10 @@ const App = () => {
   const bifoldContainer = new MainContainer(container.createChildContainer()).init()
   const [surveyVisible, setSurveyVisible] = useState(false)
   const bcwContainer = new AppContainer(bifoldContainer, t, navigationRef.navigate, setSurveyVisible).init()
-  // Additive, per demo-profiles/README.md ("A worked demo: trading-card/") —
-  // registers whatever profiles are installed (trading-card and approver, as
-  // of this profile) on top of the running container. No rebuild-per-demo:
-  // the whole point of the DemoProfile shape is that this is safe to leave
-  // on. ACTIVE_DEMO_PROFILE (app/.env, optional) narrows this to a single
-  // profile by id when a specific e2e run or demo-day walkthrough wants only
-  // one active, or excludes every profile with ACTIVE_DEMO_PROFILE=none for
-  // a plain Keyring build — see demo-profiles/index.ts's selectDemoProfiles.
+  // Demo profiles (demo-profiles/README.md) are opt-in per build: with
+  // ACTIVE_DEMO_PROFILE unset this registers none, so a shipped build shows the
+  // plain contact list and home header. A demo build sets a profile id, or
+  // `all` — see demo-profiles/index.ts's selectDemoProfiles.
   registerDemoProfiles(bcwContainer, selectDemoProfiles(Config.ACTIVE_DEMO_PROFILE))
 
   if (!isTablet()) {
