@@ -3,7 +3,7 @@
 **Status:** Proposal for review. Not a commitment to implement. Target: the release after the one frozen on 2026-09-25; draft PRs only until that release ships.
 **Parent:** [`keyring-on-the-vta-farm.md`](../keyring-on-the-vta-farm.md). This subtask carries its **F2 — Enrolment from the phone (L0)** for a person with no computer, and answers its §9 Q4 as far as code can (the rest is measurement, below).
 **Siblings:** [`pnm_cnm_subtask.md`](../openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client in general; this subtask adds only what owning an agent needs.
-**Reasoning:** [`2026-09-25-cd.md`](./2026-09-25-cd.md). The facts this design rests on (plugin, VTA, Farm, and Keyring code, with citations), and the positions taken on key custody and the owner model. [`2026-09-25-uiux.md`](./2026-09-25-uiux.md): the screens, their words and test IDs, and why the address comes before the owner code.
+**Reasoning:** [`2026-09-25-cd.md`](./2026-09-25-cd.md). The facts this design rests on (plugin, VTA, Farm, and Keyring code, with citations), the positions taken on key custody and the owner model, the decisions (F6), and the Admin DID measurement with the temporary `did:key` design it forces (F7). [`2026-09-25-uiux.md`](./2026-09-25-uiux.md): the screens, their words and test IDs, and why the address comes before the owner code.
 **Screens:** §7, in plain words; this document owns the flow and the calls behind them.
 **Baseline:** VTI `ed672fff`, vta-browser-plugin `43e2cc7df9`, vti-setup `22f712f`, all at the pins in `scripts/openvtc/PINS.json`; bifold `fe125e84`.
 
@@ -22,7 +22,9 @@
 
 ## 1. What the person does, step by step
 
-The order follows the Farm's own wizard, which shows the agent's address **before** it asks for the Admin DID ([[DEV-GUIDE]] `01-personal-vta.md`: _"Create session"_ shows the VTA DID; then _"paste the Admin DID … Provision agent"_). Keyring needs the address first: the phone's key is a `did:peer:2` that names the agent's mediator, which Keyring resolves from the agent's DID before it mints the key (`vtaEnrolment.ts` `resolveVtaMediator` then `createVtiClientDid`; `vtaAgent.ts` `startManualLink`).
+The Farm is the VTA Farm portal at `vtafarm.ic3.dev`. The order follows its wizard, which shows the agent's address **before** it asks for the Admin DID ([[DEV-GUIDE]] `01-personal-vta.md`: _"Create session"_ shows the VTA DID; then _"paste the Admin DID … Provision agent"_). Keyring needs the address first: it signs in through the agent's own mediator, which it resolves from the agent's DID before it shows a key (`vtaAgent.ts` `startManualLink`).
+
+**The owner code is an Ed25519 `did:key`.** The portal's Admin DID field accepts nothing else: _"Paste only the did:key value (e.g. did:key:z6Mk…) with no surrounding text, labels, quotes, or whitespace"_ (measured 2026-09-25; companion F7). Keyring mints that key as a temporary one (`createVtiTemporaryDidKey`, keyring-bifold #136), and the connect in step 6 swaps it onto Keyring's long-term `did:peer:2`. The VTA answers a `did:key` through its own mediator, which holds the reply in that DID's queue, and the phone collects it on the socket it opened as the key (VTI `vta-service/src/messaging/service.rs:535-600`; mediator `routing.rs:382-405`). The swap checks no DID method on either side (`operations/acl.rs:849-944`). The QR enrolment path (§5) keeps its `did:peer:2`.
 
 1. **My Agent → Create my agent.** Keyring explains the three steps and opens the Farm's website.
 2. **Farm: create account → Create VTA → Create session.** The Farm shows the agent's address.
@@ -39,6 +41,7 @@ The order follows the Farm's own wizard, which shows the agent's address **befor
 
 - **The key the person pastes becomes the agent's full administrator.** The VTA has no owner tier above "admin with no context restriction" (super-admin: `vti-common/src/acl/mod.rs:492-513`, `:868-870`). What the Farm grants the pasted DID is **not documented**. The guide pairs the paste with `vta import-did --role admin`, which writes an unrestricted, permanent admin (`vta-service/src/import_did.rs:57-71`). **Measure M2.**
 - **The swap keeps that authority.** `acl/swap-key` moves the caller's own entry, keeping its role and contexts, and makes it permanent (`vta-service/src/operations/acl.rs:836-930`). So after step 6, the long-term key _is_ the owner: that key is the one to protect (§3), not the temporary one. The temporary key is software and short-lived, as for every link today.
+- **The temporary key needs no service of its own.** It lasts from the grant to the first connect, stays on DIDComm (no TSP), and its swap target is the `did:peer:2` that names the mediator, so pushes reach the phone after that.
 - **The swap's new key must be Ed25519.** The link proof is EdDSA-only (`vta-sdk/src/protocols/acl_management/swap.rs:171, 208`). Keyring's keys are Ed25519 today, so nothing changes for the minimum.
 
 ## 3. Protecting the owner key
@@ -106,7 +109,7 @@ No redirect is needed: the phone waits on the status.
 
 Keyring already implements the phone's half; our lab's enrolment page is the reference implementation of the Farm's half. It already appears on the board as a maintainer's suggestion.
 
-**U2 — say what the Admin DID box accepts and grants.** Which DID methods it accepts (`did:key` only, or also `did:peer:2`, which Keyring uses today), which role, and whether the grant expires.
+**U2 — say what the Admin DID box grants.** Which methods it accepts is measured: an Ed25519 `did:key` only (F7). Still unknown: which role, and whether the grant expires.
 
 **U3 — recovery.** If every admin key is lost, can the account holder re-provision or reset the Admin DID?
 
@@ -116,13 +119,13 @@ Keyring already implements the phone's half; our lab's enrolment page is the ref
 
 Estimates are one engineer's working days. **Ours** is Keyring work; **Farm/upstream** is theirs and not estimated here.
 
-| Phase                                                                                                                                                              | Ours | Needs Farm/upstream                | Done when                                                                                |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| **M — measure first** (M1 `did:peer:2` accepted in Admin DID; M2 role and expiry granted; M3 P-256 `did:key` accepted; M4 `ecdsa-jcs-2019` on `/auth` at VTA 0.42) | 1    | a Farm account (attended, passkey) | Each answer recorded in a dated companion with evidence (the whoami result, the ACL row) |
-| **1 — the minimum, copy/paste**                                                                                                                                    | 8–9  | none, if M1 and M2 hold            | see below                                                                                |
-| **2 — Farm QR**                                                                                                                                                    | 1    | U1 shipped by the Farm             | see below                                                                                |
-| **3 — hardware owner**                                                                                                                                             | 6–10 | U4; maybe a VTI change if M4 fails | see below                                                                                |
-| **4 — browser-plugin backup**                                                                                                                                      | 1–2  | none                               | D4 decided; the plugin, granted by the owner phone, completes its own onboarding         |
+| Phase                                                                                                                                                | Ours | Needs Farm/upstream                | Done when                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| **M — measure first** (M1, **answered**: the Admin DID field takes an Ed25519 `did:key` only; M2 role and expiry granted; M3 and M4 move to Phase 3) | 1    | a Farm account (attended, passkey) | Each answer recorded in a dated companion with evidence (the whoami result, the ACL row) |
+| **1 — the minimum, copy/paste**                                                                                                                      | 8–9  | none, if M1 and M2 hold            | see below                                                                                |
+| **2 — Farm QR**                                                                                                                                      | 1    | U1 shipped by the Farm             | see below                                                                                |
+| **3 — hardware owner**                                                                                                                               | 6–10 | U4; maybe a VTI change if M4 fails | see below                                                                                |
+| **4 — browser-plugin backup**                                                                                                                        | 1–2  | none                               | D4 decided; the plugin, granted by the owner phone, completes its own onboarding         |
 
 **Phase 1 pieces:**
 
@@ -171,6 +174,7 @@ The second button is today's **Link your agent**, renamed. **Link without a QR c
 **1 — Create your agent.**
 
 > Your agent runs on the VTA Farm, a free service that keeps it online when your phone is off. You set it up on the Farm's website in a few minutes. Keep Keyring open.
+>
 > 1. Create your agent on the Farm's website
 > 2. Bring its address here
 > 3. Give the Farm this phone's owner code
@@ -185,6 +189,7 @@ The second button is today's **Link your agent**, renamed. **Link without a QR c
 > [Paste] (and **Scan** once the Farm shows a QR, U1) · **[Continue]**
 
 Errors:
+
 - Not an address: "That isn't an agent's address. It starts with did:webvh: — copy the whole line from the Farm."
 - It doesn't resolve or names no mediator: "Keyring couldn't find an agent at that address. Check you copied the whole line, and that the Farm finished creating it."
 - No connection: "Keyring couldn't reach the Farm. Check your connection and try again."
@@ -199,6 +204,7 @@ Errors:
 > **[It's online — connect]**
 
 Errors:
+
 - No screen lock or biometrics set up: "To protect your agent, turn on Face ID or a passcode in Settings first." [Open Settings]. No key is made until then.
 - Face ID cancelled: no message, and the button stays.
 - Face ID failed or locked out: "Keyring couldn't confirm it's you. Try again, or use your passcode."
@@ -208,6 +214,7 @@ Errors:
 > Signing in to your agent… · Making sure it's yours… · Getting it ready…
 
 Errors:
+
 - Not admitted yet (the key is not in the agent's ACL): "Your agent isn't accepting this phone yet. Check the Farm says Agent is online, then try again."
 - A lost answer during the move is not an error on screen. The next connect settles it (#127/#132), and the line reads "Still getting it ready…".
 
