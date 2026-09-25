@@ -16,12 +16,29 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import type { AgentLabel } from './agentLabel'
-import { ManagerKeyUnresolved, VTA_TASK, VtaClient, resolveVtaMediator, type VtaConsentRequest } from './VtaClient'
+import {
+  ManagerKeyUnresolved,
+  VTA_TASK,
+  VtaClient,
+  resolveVtaMediator,
+  type VtaAclEntry,
+  type VtaConsentRequest,
+} from './VtaClient'
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
-import { createVtiClientDid } from './VtiMediatorTransport'
+import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
+import {
+  DeviceActionRefused,
+  DeviceCannotOwn,
+  OwnerCheckNotConfigured,
+  OwnerNotConfirmed,
+  deviceRefusalOf,
+  looksLikeDid,
+  type ConfirmOwner,
+  type DeviceCanOwn,
+} from './vtaOwner'
 
 export interface VtiApproval extends VtaConsentRequest {
   /** The request document's id. */
@@ -57,6 +74,26 @@ export interface VtaAgentState {
    * whatever the operator typed.
    */
   agentNames?: Readonly<Record<string, AgentLabel>>
+  /** The linked agent was created from this phone ("Create my agent"): it belongs to this phone. */
+  ownsAgent?: boolean
+}
+
+/**
+ * One device that runs the agent: an admin row of its access list. `thisPhone`
+ * marks this phone's own key. Every admin row is shown — a backup added from
+ * this phone is an equal of it (plan §4, D3).
+ */
+export interface VtaDevice {
+  did: string
+  role: string
+  label?: string
+  thisPhone: boolean
+  /** RFC 3339; absent means the device never lapses. */
+  expiresAt?: string
+  /** RFC 3339, when the agent added it. */
+  createdAt?: string
+  /** Who added it: a DID, or the agent's own marker such as `cli:import-did`. */
+  createdBy?: string
 }
 
 export interface VtaActivity {
@@ -80,6 +117,20 @@ export interface VtaAgentDeps {
   grantCheckDeadlineMs?: number
   /** How long signing in may take in a grant check; see GRANT_CONNECT_DEADLINE_MS. */
   grantConnectDeadlineMs?: number
+  /**
+   * Ask the person to confirm an owner act now — biometrics or passcode, not
+   * only the app unlock (plan §3). Owner acts go ahead only on `ok: true`.
+   * Unset, every owner act refuses with {@link OwnerCheckNotConfigured}.
+   */
+  confirmOwner?: ConfirmOwner
+  /**
+   * Whether this phone has a screen lock or biometrics, so an owner key made
+   * on it is protected (plan §3). Unset, "Create my agent" refuses with
+   * {@link OwnerCheckNotConfigured}.
+   */
+  deviceCanOwn?: DeviceCanOwn
+  /** This phone's name, for the label of its own access entry ("Keyring — <name>"). */
+  deviceName?: () => Promise<string> | string
 }
 
 /** A refusal that means the agent no longer accepts this phone at all. */
@@ -190,10 +241,27 @@ export class VtaAgentController {
   private reconnecting = false
   /** Agents whose name is being read, or was read, in this app run. */
   private namesAsked = new Set<string>()
+  /** The agent the current link attempt is creating from this phone ("Create my agent"), if it is one. */
+  private ownerFor?: string
 
   /** Replace I/O for tests; production uses the defaults. */
   configure(deps: VtaAgentDeps) {
     this.deps = deps
+  }
+
+  /**
+   * How the app confirms the owner and checks the phone can hold an owner key
+   * (biometrics or passcode). Only these two are set; the rest of the wiring is
+   * kept. Left unset, an owner act refuses with {@link OwnerCheckNotConfigured}
+   * rather than skipping the check.
+   */
+  /** How the app names this phone in its own access entry. Only this is set; the rest is kept. */
+  setDeviceName(deviceName: () => Promise<string> | string) {
+    this.deps = { ...this.deps, deviceName }
+  }
+
+  setOwnerChecks(checks: { confirmOwner: ConfirmOwner; deviceCanOwn: DeviceCanOwn }) {
+    this.deps = { ...this.deps, confirmOwner: checks.confirmOwner, deviceCanOwn: checks.deviceCanOwn }
   }
 
   private linkStore(agent: Agent) {
@@ -329,19 +397,21 @@ export class VtaAgentController {
       .get()
       .catch(() => undefined)
     this.dispatch({ type: 'restored', link, now: this.now() })
-    this.set({ introSeen: !link || Boolean(link.introSeenAt) })
+    this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true })
     if (link) void this.ensureOnline(agent)
   }
 
   /** A scanned or pasted enrolment offer: ask the person before anything is minted. */
   scanOffer(offer: EnrolmentOffer) {
     this.offer = offer
+    this.ownerFor = undefined
     this.dispatch({ type: 'offerScanned', vtaDid: offer.vta, label: offer.label, offerUrl: offer.url, exp: offer.exp })
   }
 
   cancelLink() {
     this.attemptToken++
     this.offer = undefined
+    this.ownerFor = undefined
     this.dispatch({ type: 'cancelled' })
   }
 
@@ -366,6 +436,7 @@ export class VtaAgentController {
     const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
     this.attemptToken++
     this.offer = undefined
+    this.ownerFor = undefined
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined
     this.reconnectAttempt = 0
@@ -384,6 +455,7 @@ export class VtaAgentController {
       approvals: [],
       awaitingConsentFor: undefined,
       error: undefined,
+      ownsAgent: false,
     })
     this.dispatch({ type: 'unlinked' })
     this.note('unlinked')
@@ -503,7 +575,10 @@ export class VtaAgentController {
     if (!live()) return
     const linkedAt = new Date(this.now()).toISOString()
     const links = this.linkStore(agent)
-    await links.set({ vtaDid, label, linkedAt })
+    const owner = this.ownerFor === vtaDid
+    this.ownerFor = undefined
+    await links.set({ vtaDid, label, linkedAt, ...(owner ? { owner: true } : {}) })
+    this.set({ ownsAgent: owner })
     if (rotate) {
       this.dispatch({ type: 'rotating' })
       try {
@@ -528,6 +603,8 @@ export class VtaAgentController {
       }
       // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
       await client.whoAmI().catch(() => undefined)
+      // In the background: a slow or silent answer must not hold the link up.
+      void this.labelOwnEntry(agent, client)
     }
     this.set({ introSeen: false })
     this.reconnectAttempt = 0
@@ -540,6 +617,28 @@ export class VtaAgentController {
   private async onTemporaryKey(agent: Agent, vtaDid: string): Promise<boolean> {
     const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
     return record?.stage === 'temporary'
+  }
+
+  /**
+   * Name this phone's own access entry after the swap, "Keyring — <device
+   * name>", so an agent's admin sees which entry is which (a host's own grant
+   * carries no label, and the swap keeps whatever label the entry had). Best
+   * effort: a refusal leaves the entry unnamed and the link as it is.
+   */
+  private async labelOwnEntry(agent: Agent, client: VtaClient): Promise<void> {
+    // Nothing here may fail the link: every step, the name included, is caught.
+    try {
+      const did = client.managerDid
+      if (!did) return
+      // Platforms answer "unknown" when they will not say (Android 12+ without
+      // BLUETOOTH_CONNECT; emulators): that is no name.
+      const raw = String((await this.deps.deviceName?.()) ?? '').trim()
+      const name = raw.toLowerCase() === 'unknown' ? '' : raw
+      await client.labelAclEntry(did, name ? `Keyring — ${name}` : 'Keyring')
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] could not label this phone's access entry: ${detail}`)
+    }
   }
 
   /**
@@ -560,14 +659,38 @@ export class VtaAgentController {
    * admin-DID step. Nothing is submitted anywhere by the phone.
    */
   async startManualLink(agent: Agent, vtaDid: string, label: string): Promise<void> {
+    return this.beginManualLink(agent, vtaDid, label, false)
+  }
+
+  /**
+   * "Create my agent" (own_agent_subtask.md §1): the person created the agent
+   * on the Farm and brought its address here; the phone makes its owner code
+   * — today's temporary key — for the Farm's Admin DID box. It is the manual
+   * link from here on (`showingKey`, then `checkManualGrant`, then the swap
+   * onto a long-term key), with two differences: a phone with no screen lock
+   * or biometrics is refused before any key is made ({@link DeviceCannotOwn}),
+   * and the finished link is remembered as this phone's own (`ownsAgent`).
+   */
+  async startCreateAgent(agent: Agent, vtaDid: string, label: string = vtaDid): Promise<void> {
     if (this.state.link.kind !== 'notLinked') return
+    const canOwn = this.deps.deviceCanOwn
+    if (!canOwn) throw new OwnerCheckNotConfigured('deviceCanOwn')
+    if (!(await canOwn())) throw new DeviceCannotOwn()
+    return this.beginManualLink(agent, vtaDid, label, true)
+  }
+
+  private async beginManualLink(agent: Agent, vtaDid: string, label: string, owner: boolean): Promise<void> {
+    if (this.state.link.kind !== 'notLinked') return
+    this.ownerFor = owner ? vtaDid : undefined
     const token = ++this.attemptToken
     const live = () => token === this.attemptToken
     try {
       if (await this.resumeEarlierLink(agent, vtaDid, label, this.identityStore(agent), live)) return
       if (!live()) return
-      const mediator = await resolveVtaMediator(agent, vtaDid)
-      const did = await createVtiClientDid(agent, mediator)
+      // The agent must be reachable before a key is shown for it; the key
+      // itself is a did:key, the only form the Farm's Admin DID field takes.
+      await resolveVtaMediator(agent, vtaDid)
+      const did = await createVtiTemporaryDidKey(agent)
       await this.identityStore(agent).setManager({
         vtaDid,
         did,
@@ -656,6 +779,113 @@ export class VtaAgentController {
       this.set({ status: 'failed', error: detail })
       this.dispatch({ type: 'failed', failure: { reason: 'failed', detail } })
     }
+  }
+
+  /** The linked agent's address, for the QR a backup phone scans (plan §4); undefined before a link. */
+  agentAddress(): string | undefined {
+    const link = this.state.link
+    return link.kind === 'linked' ? link.vtaDid : undefined
+  }
+
+  /**
+   * The devices that run this agent: its admin rows, this phone's marked.
+   * Signs in if it must. Refuses with {@link DeviceActionRefused}.
+   */
+  async listDevices(agent: Agent): Promise<VtaDevice[]> {
+    const vtaDid = this.linkedAgent()
+    const client = await this.signedIn(agent, vtaDid)
+    const mine = await this.phoneKeys(agent, vtaDid)
+    const entries = await client.listAcl().catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    return entries.filter((entry) => entry.role === 'admin').map((entry) => deviceFrom(entry, mine))
+  }
+
+  /**
+   * Make another device a full administrator of this agent (plan §4): the
+   * backup phone's code, scanned or pasted. Refuses this phone's own code and
+   * anything that is not a DID before asking anyone; then asks the person to
+   * confirm ({@link OwnerNotConfirmed} if not, nothing sent); then sends
+   * `acl/grant/0.1`. Answers the device as the agent now holds it.
+   */
+  async addBackupDevice(agent: Agent, did: string, label?: string): Promise<VtaDevice> {
+    const vtaDid = this.linkedAgent()
+    if (!looksLikeDid(did)) throw new DeviceActionRefused('notADid')
+    let mine = await this.phoneKeys(agent, vtaDid)
+    if (mine.includes(did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Add a backup device to your agent')
+    const client = await this.signedIn(agent, vtaDid)
+    mine = await this.phoneKeys(agent, vtaDid)
+    if (mine.includes(did)) throw new DeviceActionRefused('thisPhone')
+    const entry = await client.grantAdmin(did, { label }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    return deviceFrom(entry, mine)
+  }
+
+  /**
+   * Take a device off this agent: `acl/revoke/0.1`. Never this phone — it is
+   * refused here before anything is asked, and the agent refuses a caller
+   * removing itself anyway (vta-service operations/acl.rs:792-796). Asks the
+   * person to confirm first; nothing is sent without it.
+   */
+  async removeDevice(agent: Agent, did: string): Promise<void> {
+    const vtaDid = this.linkedAgent()
+    if (!looksLikeDid(did)) throw new DeviceActionRefused('notADid')
+    if ((await this.phoneKeys(agent, vtaDid)).includes(did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Remove a device from your agent')
+    const client = await this.signedIn(agent, vtaDid)
+    if ((await this.phoneKeys(agent, vtaDid)).includes(did)) throw new DeviceActionRefused('thisPhone')
+    await client.revokeSubject(did).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /** The agent this phone is linked to, or a refusal a screen words as "no agent yet". */
+  private linkedAgent(): string {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) throw new DeviceActionRefused('notLinked')
+    return vtaDid
+  }
+
+  /** The session with the linked agent, opened if it must be. */
+  private async signedIn(agent: Agent, vtaDid: string): Promise<VtaClient> {
+    try {
+      await this.connect(agent, vtaDid)
+    } catch (error) {
+      if (connectFailureRevokes(error)) throw this.refused(error)
+      throw new DeviceActionRefused('unreachable', error instanceof Error ? error.message : String(error))
+    }
+    return this.client(agent, vtaDid)
+  }
+
+  /** Every key of this phone's the agent might hold: the recorded one, a pending successor, the one signed in. */
+  private async phoneKeys(agent: Agent, vtaDid: string): Promise<string[]> {
+    const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
+    const signedInAs = this.current?.vtaDid === vtaDid ? this.current.client.managerDid : undefined
+    return [record?.did, record?.pendingNext?.did, signedInAs].filter((d): d is string => Boolean(d))
+  }
+
+  /** The owner check, first thing in every owner act. Throws unless the person confirmed. */
+  private async confirmOwner(reason: string): Promise<void> {
+    const confirm = this.deps.confirmOwner
+    if (!confirm) throw new OwnerCheckNotConfigured('confirmOwner')
+    let answer: Awaited<ReturnType<ConfirmOwner>> | undefined
+    try {
+      answer = await confirm(reason)
+    } catch (error) {
+      throw new OwnerNotConfirmed('failed', error instanceof Error ? error.message : String(error))
+    }
+    if (answer?.ok !== true) throw new OwnerNotConfirmed(answer?.reason ?? 'failed')
+  }
+
+  /** An owner act's failure, worded; an agent that no longer knows this phone also moves the link. */
+  private refused(error: unknown): DeviceActionRefused {
+    const refusal = deviceRefusalOf(error)
+    if (refusal.reason === 'accessRevoked' && this.state.link.kind === 'linked') {
+      this.dispatch({ type: 'accessRevoked', reason: refusal.detail ?? refusal.message })
+    }
+    return refusal
   }
 
   /**
@@ -758,6 +988,18 @@ export class VtaAgentController {
 
   private update(id: string, patch: Partial<VtiApproval>) {
     this.set({ approvals: this.state.approvals.map((a) => (a.id === id ? { ...a, ...patch } : a)) })
+  }
+}
+
+function deviceFrom(entry: VtaAclEntry, mine: string[]): VtaDevice {
+  return {
+    did: entry.subject,
+    role: entry.role,
+    ...(entry.label ? { label: entry.label } : {}),
+    thisPhone: mine.includes(entry.subject),
+    ...(entry.expiresAt ? { expiresAt: entry.expiresAt } : {}),
+    ...(entry.createdAt ? { createdAt: entry.createdAt } : {}),
+    ...(entry.createdBy ? { createdBy: entry.createdBy } : {}),
   }
 }
 

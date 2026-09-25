@@ -73,7 +73,7 @@ export { vtiAgent, VtiRefusal } from './module/vtiAgent'
 export { bareDid, classifyDid, classifyDidDocument } from './module/classifyDid'
 export type { ClassifiableDidDocument, DidKind, DidResolverAgent } from './module/classifyDid'
 export { VtaClient, VTA_TASK, resolveVtaMediator, ManagerKeyUnresolved, setVtaSwapTestHook } from './module/VtaClient'
-export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook } from './module/VtaClient'
+export type { VtaWhoAmI, VtaContext, VtaMintedDid, VtaSwapTestHook, VtaAclEntry } from './module/VtaClient'
 export { GenericRecordsIdentityStore } from './module/VtiIdentityStore'
 export type { VtiIdentityStore, VtiManagerIdentity, VtiPersona } from './module/VtiIdentityStore'
 export { importVtaKey, decodeMultibaseKey } from './module/vtaKeys'
@@ -100,7 +100,21 @@ export {
   type VtiJoinResult,
 } from './module/vtiJoin'
 
-export { vtaAgent, type VtaAgentState, type VtiApproval } from './module/vtaAgent'
+export { vtaAgent, type VtaAgentState, type VtiApproval, type VtaDevice } from './module/vtaAgent'
+export {
+  DeviceActionRefused,
+  DeviceCannotOwn,
+  OwnerCheckNotConfigured,
+  OwnerNotConfirmed,
+  deviceRefusalOf,
+} from './module/vtaOwner'
+export type {
+  ConfirmOwner,
+  DeviceCanOwn,
+  DeviceRefusalReason,
+  OwnerConfirmation,
+  OwnerNotConfirmedReason,
+} from './module/vtaOwner'
 export type { VtaConsentRequest } from './module/VtaClient'
 export {
   receiveIssue,

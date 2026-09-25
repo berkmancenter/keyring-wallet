@@ -45,6 +45,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import {
   createPeerDidDocumentFromServices,
+  DidKey,
   getPublicJwkFromVerificationMethod,
   Kms,
   NewDidCommV2Service,
@@ -269,6 +270,43 @@ export async function createVtiClientDid(agent: Agent, mediator: VtiMediatorEndp
   const did = created.didState.did
   if (!did) throw new Error(`${LOG_PREFIX} could not create a client DID: ${created.didState.state}`)
   return did
+}
+
+/**
+ * A temporary manager key as an Ed25519 `did:key`: what a link without a QR
+ * shows for the admin to grant. The VTA Farm's Admin DID field accepts only
+ * this form ("Paste only the did:key value (e.g. did:key:z6Mk…)", measured on
+ * the Farm portal 2026-09-25), and it is what pnm and the VTA plugin show.
+ *
+ * It names no mediator, and needs none for its one job. The VTA answers the
+ * sender it authenticated through its own mediator, and that mediator keeps a
+ * message for a DID with no service in that DID's own queue (VTI ed672fff
+ * `vta-service/src/messaging/service.rs:535-600`; affinidi-messaging mediator
+ * `routing.rs:382-405`), which this phone collects on the socket it opened as
+ * the key. The first connect swaps it onto a `did:peer:2` that names the
+ * mediator ({@link createVtiClientDid}), so pushes reach the phone after that.
+ *
+ * Both of the document's methods — the Ed25519 one and the X25519 one derived
+ * from it — are recorded against the one KMS key, as the did:peer:2 builder
+ * does, so {@link vtiClientIdentityFromDid} finds the key-agreement key.
+ */
+export async function createVtiTemporaryDidKey(agent: Agent): Promise<string> {
+  const key = await agent.kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' } })
+  const publicJwk = Kms.PublicJwk.fromPublicJwk(key.publicJwk) as Kms.PublicJwk<Kms.Ed25519PublicJwk>
+  const didKey = new DidKey(publicJwk)
+  const document = didKey.didDocument
+  const relative = (id: string) => id.slice(id.indexOf('#'))
+  const methodIds = new Set<string>(
+    [...(document.verificationMethod ?? []), ...(document.keyAgreement ?? [])].map((entry) =>
+      relative(typeof entry === 'string' ? entry : entry.id)
+    )
+  )
+  await agent.dids.import({
+    did: didKey.did,
+    didDocument: document,
+    keys: [...methodIds].map((didDocumentRelativeKeyId) => ({ didDocumentRelativeKeyId, kmsKeyId: key.keyId })),
+  })
+  return didKey.did
 }
 
 /**

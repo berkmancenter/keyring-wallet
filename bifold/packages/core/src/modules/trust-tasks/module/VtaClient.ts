@@ -65,6 +65,12 @@ export const VTA_TASK = {
   consentDecision: 'https://trusttasks.org/spec/task-consent/decision/0.1',
   consentGranted: 'https://trusttasks.org/spec/task-consent/granted/0.1',
   aclSwapKey: 'https://trusttasks.org/spec/acl/swap-key/0.1',
+  // The canonical ACL family (vta-sdk trust_tasks.rs:222-260), each gated by
+  // `require_manage()` (vta-service trust_tasks/acl.rs:27-55, 57-84, 207-234).
+  aclList: 'https://trusttasks.org/spec/acl/list/0.1',
+  aclGrant: 'https://trusttasks.org/spec/acl/grant/0.1',
+  aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
+  aclUpdate: 'https://trusttasks.org/spec/acl/update/0.1',
 } as const
 
 /** What a VTA sends an approver: the request document's payload (`consent_request.rs`). */
@@ -112,6 +118,51 @@ export interface VtaMintedDid {
   kaKeyId: string
   didDocument?: unknown
   [key: string]: unknown
+}
+
+/**
+ * One row of a VTA's access list, as the canonical `AclEntry` spells it
+ * (vta-sdk protocols/acl_management/entry.rs:174-233; the published schema is
+ * `acl/_shared/0.1/acl-entry`). Only what Keyring reads is typed; the rest of a
+ * row is ignored. `scopes` absent or empty on an admin row means unrestricted:
+ * the agent's full administrator (vti-common acl/mod.rs:868-870).
+ */
+export interface VtaAclEntry {
+  subject: string
+  role: string
+  scopes?: string[]
+  label?: string
+  /** RFC 3339; absent means the row never expires. */
+  expiresAt?: string
+  createdAt?: string
+  createdBy?: string
+}
+
+/** The schema's bound on an entry's label (acl-entry.schema.json `label.maxLength`). */
+const ACL_LABEL_MAX = 256
+
+/** Read an `AclEntry` off the wire, keeping only the members Keyring uses; undefined if it is not one. */
+function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  if (typeof raw.subject !== 'string' || typeof raw.role !== 'string') return undefined
+  const text = (key: string) => (typeof raw[key] === 'string' ? { [key]: raw[key] as string } : {})
+  return {
+    subject: raw.subject,
+    role: raw.role,
+    ...(Array.isArray(raw.scopes) ? { scopes: raw.scopes.filter((s): s is string => typeof s === 'string') } : {}),
+    ...text('label'),
+    ...text('expiresAt'),
+    ...text('createdAt'),
+    ...text('createdBy'),
+  }
+}
+
+/** The `{entry}` wrapper that `acl/grant` and `acl/revoke` answer with. */
+function answeredEntry(task: string, answer: unknown): VtaAclEntry {
+  const entry = aclEntryFrom((answer as { entry?: unknown } | undefined)?.entry)
+  if (!entry) throw new Error(`${LOG_PREFIX} the VTA's answer to ${task} carries no entry`)
+  return entry
 }
 
 const nowSec = () => Math.floor(Date.now() / 1000)
@@ -377,7 +428,12 @@ export class VtaClient {
     this.identity = await vtiClientIdentityFromDid(this.agent, did)
     // Best effort: a wallet whose manager key cannot back TSP ports simply
     // stays on DIDComm, and §4.2 says so rather than failing the connect.
-    this.tsp = await tspSessionForManager(this.agent, did).catch(() => undefined)
+    // A temporary did:key stays on DIDComm: TSP delivery to a just-granted
+    // key is not exercised upstream either (the VTA plugin leads with DIDComm
+    // for its ephemeral did:key), and the key lasts only until the swap.
+    this.tsp = did.startsWith('did:key:')
+      ? undefined
+      : await tspSessionForManager(this.agent, did).catch(() => undefined)
     this.greeted = false
     this.carriageByPeer.clear()
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {
@@ -788,6 +844,66 @@ export class VtaClient {
       const detail = error instanceof Error ? error.message : String(error)
       return refusedAsNotOnAcl(error) ? { kind: 'refused', detail } : { kind: 'unknown', detail }
     }
+  }
+
+  /**
+   * The agent's access list: `acl/list/0.1` with no filter. The answer is
+   * `{entries, truncated, cursor?, redactedFields?}` (vta-sdk
+   * acl_management/list.rs:77-93); this VTA returns every entry in one page and
+   * says so with `truncated: false` (vta-service operations/acl.rs:1034-1057).
+   * Only rows the caller may audit come back. The request's `role` filter is
+   * not applied by the trust-task handler (it passes only `scope` and
+   * `direction`, trust_tasks/acl.rs:42-48), so callers filter here.
+   */
+  async listAcl(): Promise<VtaAclEntry[]> {
+    const answer = await this.task<{ entries?: unknown; truncated?: unknown }>(VTA_TASK.aclList, {})
+    if (answer?.truncated === true) {
+      this.agent.config.logger.warn(
+        `${LOG_PREFIX} ${this.vtaDid} answered a partial access list; showing the first page`
+      )
+    }
+    const entries = Array.isArray(answer?.entries) ? answer.entries : []
+    return entries.map(aclEntryFrom).filter((e): e is VtaAclEntry => e !== undefined)
+  }
+
+  /**
+   * Make `did` a full administrator of this agent: `acl/grant/0.1` with an
+   * admin entry that names no scopes (unrestricted) and no expiry (permanent).
+   * The payload is `{entry}` (vta-sdk acl_management/create.rs:24-43); the
+   * entry refuses unknown members (entry.rs:175-176), so only `subject`,
+   * `role` and `label` are sent. Only a super-admin may create an unrestricted
+   * admin (vti-common acl/mod.rs:1081-1112), and a subject already on the list
+   * is refused as a conflict (vta-service operations/acl.rs:391-395). Answers
+   * the entry the VTA now holds.
+   */
+  async grantAdmin(did: string, options: { label?: string } = {}): Promise<VtaAclEntry> {
+    const label = options.label?.trim().slice(0, ACL_LABEL_MAX)
+    const answer = await this.task(VTA_TASK.aclGrant, {
+      entry: { subject: did, role: 'admin', ...(label ? { label } : {}) },
+    })
+    return answeredEntry(VTA_TASK.aclGrant, answer)
+  }
+
+  /**
+   * Remove `did` from this agent's access list: `acl/revoke/0.1`, full
+   * removal, so no `scopes` (vta-sdk acl_management/delete.rs:23-45; a scoped
+   * revoke is refused, operations/acl.rs:1104-1126). The VTA refuses a caller
+   * removing itself (operations/acl.rs:792-796). Answers the entry as it stood.
+   */
+  async revokeSubject(did: string): Promise<VtaAclEntry> {
+    const answer = await this.task(VTA_TASK.aclRevoke, { subject: did })
+    return answeredEntry(VTA_TASK.aclRevoke, answer)
+  }
+
+  /**
+   * Set the human-readable label of an access-list entry: `acl/update/0.1`
+   * with `{subject, label}` (vta-sdk acl_management/update.rs:36-51; omitted
+   * members are left unchanged). An admin may relabel any entry it can see,
+   * its own included (vta-service operations/acl.rs:517-545).
+   */
+  async labelAclEntry(did: string, label: string): Promise<VtaAclEntry> {
+    const answer = await this.task(VTA_TASK.aclUpdate, { subject: did, label: label.trim().slice(0, ACL_LABEL_MAX) })
+    return answeredEntry(VTA_TASK.aclUpdate, answer)
   }
 
   async listContexts(): Promise<VtaContext[]> {

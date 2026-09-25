@@ -25,6 +25,7 @@ jest.mock('../module/VtaClient', () => ({
 }))
 jest.mock('../module/VtiMediatorTransport', () => ({
   createVtiClientDid: jest.fn(async () => 'did:peer:2.temporary'),
+  createVtiTemporaryDidKey: jest.fn(async () => 'did:key:z6Mktemporary'),
 }))
 
 const offer: EnrolmentOffer = {
@@ -183,7 +184,9 @@ describe('linking without a QR through the controller', () => {
   it('shows the key, reports "not yet" while the agent refuses it, then links and rotates', async () => {
     const { vta, saved } = controller()
     await vta.startManualLink({} as never, offer.vta, 'alice host')
-    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', did: 'did:peer:2.temporary' })
+    // The Farm's Admin DID field takes only a did:key.
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', did: 'did:key:z6Mktemporary' })
+    expect(jest.requireMock('../module/VtiMediatorTransport').createVtiClientDid).not.toHaveBeenCalled()
 
     mockClient.whoAmI.mockImplementationOnce(async () => {
       throw new Error('refusing trust task: DID not in ACL')
@@ -214,7 +217,7 @@ describe('linking without a QR through the controller', () => {
     await vta.checkManualGrant({} as never)
     expect(vta.getState().link).toMatchObject({
       kind: 'showingKey',
-      did: 'did:peer:2.temporary',
+      did: 'did:key:z6Mktemporary',
       checking: false,
       noAnswer: true,
       notYet: false,

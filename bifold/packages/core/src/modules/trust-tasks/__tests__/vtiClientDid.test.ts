@@ -7,7 +7,7 @@ import {
 } from '@credo-ts/core'
 import { generateKeyPairFromSeed } from '@stablelib/ed25519'
 
-import { createVtiClientDid, type VtiMediatorEndpoints } from '../module/VtiMediatorTransport'
+import { createVtiClientDid, createVtiTemporaryDidKey, type VtiMediatorEndpoints } from '../module/VtiMediatorTransport'
 
 // A VTA pushes a consent request to an approver only when the approver's DID
 // document names its mediator in a `DIDCommMessaging` service (vti #1579). The
@@ -66,5 +66,39 @@ describe('the client DID a phone presents to its VTA', () => {
     const doc = didToNumAlgo2DidDocument(did)
     expect(doc.authentication).toHaveLength(1)
     expect(doc.keyAgreement).toHaveLength(1)
+  })
+})
+
+// The VTA Farm's Admin DID field accepts only an Ed25519 did:key ("Paste only
+// the did:key value (e.g. did:key:z6Mk…)", measured 2026-09-25), the form pnm
+// and the plugin show. A link without a QR shows one; the first connect swaps
+// it onto a did:peer:2 that names the mediator.
+describe('the temporary key a person pastes into the Farm', () => {
+  function agentImporting() {
+    const x = TypedArrayEncoder.toBase64Url(generateKeyPairFromSeed(new Uint8Array(32).fill(7)).publicKey)
+    const imported: { did: string; keys?: { didDocumentRelativeKeyId: string; kmsKeyId: string }[] }[] = []
+    const agent = {
+      kms: { createKey: async () => ({ keyId: 'kms-1', publicJwk: { kty: 'OKP', crv: 'Ed25519', x, kid: 'kms-1' } }) },
+      dids: { import: async (o: (typeof imported)[number]) => void imported.push(o) },
+    } as never
+    return { agent, imported }
+  }
+
+  it('is an Ed25519 did:key', async () => {
+    const { agent } = agentImporting()
+    await expect(createVtiTemporaryDidKey(agent)).resolves.toMatch(/^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]+$/)
+  })
+
+  it('records its signing and key-agreement methods against the one KMS key', async () => {
+    const { agent, imported } = agentImporting()
+    const did = await createVtiTemporaryDidKey(agent)
+    expect(imported).toHaveLength(1)
+    expect(imported[0].did).toBe(did)
+    const ids = (imported[0].keys ?? []).map((k) => k.didDocumentRelativeKeyId).sort()
+    // The Ed25519 method (#z6Mk…) and the X25519 one derived from it (#z6LS…).
+    expect(ids).toHaveLength(2)
+    expect(ids.some((id) => id.startsWith('#z6Mk'))).toBe(true)
+    expect(ids.some((id) => id.startsWith('#z6LS'))).toBe(true)
+    expect(new Set((imported[0].keys ?? []).map((k) => k.kmsKeyId))).toEqual(new Set(['kms-1']))
   })
 })
