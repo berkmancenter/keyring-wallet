@@ -8,6 +8,7 @@ import Clipboard from '@react-native-clipboard/clipboard'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { Share } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -123,6 +124,20 @@ describe('the owner code is handed out only after Face ID', () => {
     })
     expect(confirmOwner).toHaveBeenCalledTimes(1)
     expect(check).toHaveBeenCalled()
+  })
+
+  test('Share sends the code inside a sentence, never the bare did:key (AirDrop took it for a link)', async () => {
+    showingKey()
+    ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: true })
+    const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never)
+    const tree = show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateShareCode')))
+    })
+    const sent = share.mock.calls[0][0] as { title?: string; message: string }
+    expect(sent.message).not.toBe('did:key:z6MkOwner')
+    expect(sent.message).toMatch(/^CreateAgent\.ShareCodeMessage\n\ndid:key:z6MkOwner\n$/)
+    expect(sent.title).toBe('CreateAgent.ShareCodeTitle')
   })
 
   test('an agent that has not admitted the code yet says so beside Connect', () => {

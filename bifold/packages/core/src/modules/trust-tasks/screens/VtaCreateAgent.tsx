@@ -197,7 +197,14 @@ const VtaCreateAgent: React.FC = () => {
       setOwnerConfirmed(true)
     }
     if (how === 'copy') Clipboard.setString(ownerKey)
-    else await Share.share({ message: ownerKey }).catch(() => undefined)
+    // Shared as a sentence with the code on its own line, never the bare
+    // did:key: AirDrop on a Mac took the bare code for a link it could not
+    // open. Copy stays the bare code, for pasting into the host's settings.
+    else
+      await Share.share({
+        title: t('CreateAgent.ShareCodeTitle'),
+        message: `${t('CreateAgent.ShareCodeMessage')}\n\n${ownerKey}\n`,
+      }).catch(() => undefined)
     startWaiting()
   }
 

@@ -33,6 +33,7 @@ import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
 
+import { DevicesCard } from './DevicesCard'
 import { agentDisplayName, withAgentName } from './agentName'
 import { shareIdentity } from './identityShare'
 import { communityLabelOf, partyLabelStartOf } from './communityName'
@@ -364,17 +365,6 @@ const VtaAgentHome: React.FC = () => {
               <Icon name="chevron-right" size={22} color={ColorPalette.brand.link} />
             </Pressable>
           ) : null}
-          {/* This phone and its backups (own_agent_subtask.md §4): where a backup
-              removes a lost phone. */}
-          <Pressable
-            style={styles.row}
-            onPress={() => go(Screens.VtaDevices)}
-            accessibilityRole="link"
-            testID={testIdWithKey('AgentDevices')}
-          >
-            <ThemedText style={[styles.link, { flex: 1 }]}>{t('Devices.Title')}</ThemedText>
-            <Icon name="chevron-right" size={22} color={ColorPalette.brand.link} />
-          </Pressable>
           <View style={styles.strip} testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
             {[
               { key: 'Linked', done: true, now: false },
@@ -403,6 +393,7 @@ const VtaAgentHome: React.FC = () => {
             <ThemedText style={styles.link}>{t('VtaLink.WhatIsMyAgent')}</ThemedText>
           </Pressable>
         </View>
+        <DevicesCard onPress={() => go(Screens.VtaDevices)} />
 
         {/* The vetter role is news, not a step: it shows when an admin grants it. */}
         {holdings?.vetterFor.map((communityDid) => (

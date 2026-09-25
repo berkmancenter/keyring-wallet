@@ -1770,7 +1770,9 @@
       "iris": "your iris scan",
       "screenLock": "your phone's screen lock",
       "unknown": "your phone's lock (Face ID, fingerprint or passcode)"
-    }
+    },
+    "ShareCodeTitle": "Keyring owner code",
+    "ShareCodeMessage": "My Keyring owner code — add it as an owner (admin) of my agent:"
   },
   "Devices": {
     "Title": "My devices",
@@ -1785,6 +1787,7 @@
     "AComputer": "A computer or other app",
     "AKeyringPhone": "A Keyring phone",
     "Added": "Added {{date}}",
-    "Details": "Details"
+    "Details": "Details",
+    "CardHint": "The phones and apps that own your agent. Add one, or remove a lost one."
   }
 }

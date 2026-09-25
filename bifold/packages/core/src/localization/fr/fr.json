@@ -1712,7 +1712,9 @@
       "iris": "par la reconnaissance de l'iris",
       "screenLock": "par le verrouillage d'écran de votre téléphone",
       "unknown": "par le verrouillage de votre téléphone (Face ID, empreinte ou code)"
-    }
+    },
+    "ShareCodeTitle": "Code propriétaire Keyring",
+    "ShareCodeMessage": "Mon code propriétaire Keyring — ajoutez-le comme propriétaire (admin) de mon agent :"
   },
   "Devices": {
     "Title": "Mes appareils",
@@ -1727,6 +1729,7 @@
     "AComputer": "Un ordinateur ou une autre app",
     "AKeyringPhone": "Un téléphone Keyring",
     "Added": "Ajouté le {{date}}",
-    "Details": "Détails"
+    "Details": "Détails",
+    "CardHint": "Les téléphones et apps propriétaires de votre agent. Ajoutez-en un, ou retirez un appareil perdu."
   }
 }

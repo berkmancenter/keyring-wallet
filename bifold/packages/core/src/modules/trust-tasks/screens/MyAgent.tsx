@@ -34,6 +34,7 @@ import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { DevicesCard } from './DevicesCard'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { ownVetterGrantState } from '../module/vtiGrantState'
@@ -606,14 +607,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           {/* My devices, one tap from here: where the owner adds another device
               or removes a lost one (own_agent_subtask.md §4). Also on the agent
               screen; this is where "Claim your agent" returns to. */}
-          {vta.link.kind === 'linked' ? (
-            <Button
-              title={t('Devices.Title')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => navigation.navigate(Screens.VtaDevices)}
-              testID={testIdWithKey('AgentDevices')}
-            />
-          ) : null}
+          {vta.link.kind === 'linked' ? <DevicesCard onPress={() => navigation.navigate(Screens.VtaDevices)} /> : null}
           <View style={styles.card} testID={testIdWithKey('MyAgentCard')}>
             <View style={styles.row}>
               <Icon name="check-circle" size={18} color={ColorPalette.semantic.success} />
