@@ -649,7 +649,11 @@
     "ErrorInvalidUrl": "URL non reconnue",
     "ErrorInvalidUrlDescription": "Vérifiez si l'URL est destinée aux portefeuilles numériques et si elle a été copiée correctement, puis réessayez.",
     "PasteUrlInput": "URL input (FR)",
-    "ScanDisabled": "Submit disabled, enter a URL first (FR)"
+    "ScanDisabled": "Submit disabled, enter a URL first (FR)",
+    "PasteFromClipboard": "Coller",
+    "NothingToPaste": "Rien à coller. Copiez d'abord le lien. Un lien copié sur un autre appareil peut mettre quelques secondes à arriver.",
+    "Read": "Collé : « {{text}} »",
+    "ErrorInvalidUrlRead": "Keyring a lu « {{text}} », mais ce n'est pas un lien qu'il connaît. Vérifiez que vous avez copié le lien en entier."
   },
   "Connection": {
     "JustAMoment": "Un instant pendant que nous établissons une connexion sécurisée...",

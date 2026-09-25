@@ -678,7 +678,13 @@
     "ErrorTextboxEmpty": "Textbox Empty",
     "ErrorTextboxEmptyDescription": "Please add a URL intended for digital wallets and try again.",
     "ErrorInvalidUrl": "URL not recognized",
-    "ErrorInvalidUrlDescription": "Check if the URL is intended for digital wallets and if it was copied correctly, then try again."
+    "ErrorInvalidUrlDescription": "Check if the URL is intended for digital wallets and if it was copied correctly, then try again.",
+    "PasteFromClipboard": "Paste",
+    "NothingToPaste": "Nothing to paste. Copy the link first. A link copied on another device can take a few seconds to arrive.",
+    "Read": "Pasted: “{{text}}”",
+    "ErrorInvalidUrlRead": "Keyring read “{{text}}”, but that isn't a link it knows. Check you copied the whole link.",
+    "PasteUrlInput": "Pasted link",
+    "ScanDisabled": "Continue (paste a link first)"
   },
   "Connection": {
     "JustAMoment": "Just a moment while we make a secure connection...",

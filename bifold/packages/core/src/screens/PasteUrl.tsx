@@ -1,4 +1,5 @@
 import { useAgent } from '@bifold/react-hooks'
+import Clipboard from '@react-native-clipboard/clipboard'
 import { StackScreenProps } from '@react-navigation/stack'
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -24,6 +25,10 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
   const { ColorPalette, TextTheme } = useTheme()
   const [pastedContent, setPastedContent] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<{ title: string; message: string } | undefined>()
+  // What the last Paste read, said in words: a paste that silently does nothing
+  // (an empty clipboard, or a link copied on another device that has not
+  // arrived yet) looked like a broken button.
+  const [pasteNote, setPasteNote] = useState<{ kind: 'read' | 'nothing'; text?: string } | undefined>()
   const { t } = useTranslation()
   const { agent } = useAgent()
   const [store] = useStore()
@@ -55,6 +60,22 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
     },
   })
 
+  /** A short, one-line view of what was read, for the note and the error. */
+  const glimpse = (text: string): string => {
+    const one = text.replace(/\s+/g, ' ').trim()
+    return one.length > 48 ? `${one.slice(0, 48)}…` : one
+  }
+
+  const pasteFromClipboard = async () => {
+    const text = (await Clipboard.getString().catch(() => '')).trim()
+    if (!text) {
+      setPasteNote({ kind: 'nothing' })
+      return
+    }
+    setPastedContent(text)
+    setPasteNote({ kind: 'read', text: glimpse(text) })
+  }
+
   const processPastedContent = async () => {
     try {
       await connectFromScanOrDeepLink(
@@ -75,7 +96,15 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
         setErrorMessage({ title: t('Scan.CodeNotUsable'), message: e.message })
         return
       }
-      setErrorMessage({ title: t('PasteUrl.ErrorInvalidUrl'), message: t('PasteUrl.ErrorInvalidUrlDescription') })
+      // Anything else: say what was read, so a clipboard that held something
+      // other than the link is plain to see.
+      setErrorMessage({
+        title: t('PasteUrl.ErrorInvalidUrl'),
+        message: t('PasteUrl.ErrorInvalidUrlRead', {
+          text: glimpse(pastedContent),
+          interpolation: { escapeValue: false },
+        }),
+      })
     }
   }
 
@@ -103,6 +132,28 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
         </SafeAreaModal>
         <View style={styles.content}>
           <ThemedText style={styles.description}>{t('PasteUrl.PasteUrlDescription')}</ThemedText>
+          <Button
+            title={t('PasteUrl.PasteFromClipboard')}
+            accessibilityLabel={t('PasteUrl.PasteFromClipboard')}
+            testID={testIdWithKey('PasteFromClipboard')}
+            buttonType={ButtonType.Secondary}
+            onPress={() => void pasteFromClipboard()}
+          />
+          {pasteNote ? (
+            <ThemedText
+              style={{
+                marginVertical: 10,
+                color: pasteNote.kind === 'nothing' ? ColorPalette.semantic.error : undefined,
+              }}
+              testID={testIdWithKey(pasteNote.kind === 'nothing' ? 'PasteNothing' : 'PasteRead')}
+            >
+              {pasteNote.kind === 'nothing'
+                ? t('PasteUrl.NothingToPaste')
+                : t('PasteUrl.Read', { text: pasteNote.text, interpolation: { escapeValue: false } })}
+            </ThemedText>
+          ) : (
+            <View style={{ height: 10 }} />
+          )}
           <TextInput
             testID={testIdWithKey('PastedUrl')}
             accessibilityLabel={t('PasteUrl.PasteUrlInput')}
@@ -144,6 +195,7 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
               buttonType={ButtonType.Secondary}
               onPress={() => {
                 setPastedContent('')
+                setPasteNote(undefined)
               }}
             />
           </View>

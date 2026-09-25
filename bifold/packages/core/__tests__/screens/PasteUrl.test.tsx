@@ -1,3 +1,4 @@
+import Clipboard from '@react-native-clipboard/clipboard'
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 
@@ -166,5 +167,42 @@ describe('PasteUrl Screen', () => {
     await waitFor(async () => {
       expect(await tree.queryAllByTestId(testIdWithKey('ErrorModal'))).toHaveLength(0)
     })
+  })
+  const renderScreen = () =>
+    render(
+      <BasicAppContext>
+        <StoreProvider initialState={defaultState}>
+          <PasteUrl navigation={navigation as any} route={{} as any} />
+        </StoreProvider>
+      </BasicAppContext>
+    )
+
+  test('Paste with an empty clipboard says there is nothing to paste, instead of doing nothing', async () => {
+    (Clipboard.getString as jest.Mock).mockResolvedValueOnce('')
+    const tree = renderScreen()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('PasteFromClipboard')))
+    })
+    expect(tree.getByTestId(testIdWithKey('PasteNothing'))).toHaveTextContent('PasteUrl.NothingToPaste')
+  })
+
+  test('Paste fills the box and says what it read', async () => {
+    (Clipboard.getString as jest.Mock).mockResolvedValueOnce('keyring://vti/invite?x=1')
+    const tree = renderScreen()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('PasteFromClipboard')))
+    })
+    expect(tree.getByTestId(testIdWithKey('PastedUrl')).props.value).toBe('keyring://vti/invite?x=1')
+    expect(tree.getByTestId(testIdWithKey('PasteRead'))).toBeTruthy()
+  })
+
+  test('the new words exist in each language', () => {
+    for (const lang of ['en', 'fr', 'pt-br']) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const copy = require(`../../src/localization/${lang}/${lang}.json`).PasteUrl
+      for (const key of ['PasteFromClipboard', 'NothingToPaste', 'Read', 'ErrorInvalidUrlRead']) {
+        expect(typeof copy[key]).toBe('string')
+      }
+    }
   })
 })
