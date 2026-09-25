@@ -402,7 +402,6 @@ const payloadOf = (m: DidCommV2PlaintextMessage) => (bodyOf(m).payload ?? {}) as
 const typeOf = (m: DidCommV2PlaintextMessage) => String(m.type ?? bodyOf(m).type ?? '')
 const threadOf = (m: DidCommV2PlaintextMessage) => String(m.thid ?? bodyOf(m).threadId ?? '')
 
-/** The identity commitment: digestMultibase over `{salt, claims}` with claims sorted by type. */
 /** The context a statement must carry: vta-sdk `vetting/statement.rs:30` `DTG_CONTEXT`. */
 const DTG_CREDENTIALS_CONTEXT = 'https://firstperson.network/credentials/dtg/v1'
 
