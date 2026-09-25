@@ -269,14 +269,30 @@ async function linkManually(driver) {
     // so a scroll-for-displayed misses what a plain existence check sees.
     // Checking for existence alone failed on Android; scrolling alone then
     // failed on iOS — both were measured, one after the other.
-    const notYetBy = Date.now() + 60000;
+    // E2E_NO_ANSWER_RETRY=1 is the second tap a person makes after "didn't
+    // answer": on a slow link the agent's answer can land after the phone gave
+    // up, and the next "I've been added" is expected to settle on it rather than
+    // start over (keyring-bifold#113). Without the flag a first "didn't answer"
+    // is simply waited past and the run fails as before.
+    const retryNoAnswer = process.env.E2E_NO_ANSWER_RETRY === "1";
+    let retried = false;
+    let notYetBy = Date.now() + 60000;
     let notYet = false;
     while (!notYet && Date.now() < notYetBy) {
       notYet =
         (await existsTestId(driver, "VtaLinkNotYet", 2000)) ||
         Boolean(await scrollToTestId(driver, "VtaLinkNotYet", 4).catch(() => undefined));
+      if (!notYet && retryNoAnswer && !retried && (await existsTestId(driver, "VtaLinkNoAnswer", 1000))) {
+        retried = true;
+        console.log(`[e2e] first check: the agent didn't answer — tapping "Try again" (${new Date().toISOString()})`);
+        await screenshot(driver, "link-no-answer-first");
+        await tapTestId(driver, "VtaLinkCheckGrant", 15000);
+        notYetBy = Date.now() + 60000;
+        continue;
+      }
       if (!notYet) await sleep(2000);
     }
+    if (retried && notYet) console.log(`[e2e] second check settled: not yet (${new Date().toISOString()})`);
     if (!notYet) throw new Error(`${driver.e2ePlatform}: the phone never said the key was not added yet`);
     console.log("[e2e] before the grant: not yet");
   } else {
