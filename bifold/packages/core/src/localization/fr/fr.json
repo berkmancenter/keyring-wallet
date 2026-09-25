@@ -1502,6 +1502,18 @@
     "CodesDifferEnded": "La dernière session s'est terminée sans attestation. Si les codes différaient, prévenez le vérificateur et demandez un nouveau ticket.",
     "WaitingForVetter": "En attente de l'ouverture de la session par le vérificateur…",
     "WaitingForStatement": "Le vérificateur examine votre document…",
+    "StatementRefused": "La déclaration du vérificateur est arrivée, mais ce téléphone n'a pas pu l'accepter.",
+    "StatementRefusedReason": {
+      "malformed": "Détails : la déclaration est incomplète ou n'a pas la forme attendue.",
+      "issuer": "Détails : la déclaration a été signée par une autre personne que votre vérificateur.",
+      "subject": "Détails : la déclaration concerne quelqu'un d'autre.",
+      "session": "Détails : la déclaration provient d'une session antérieure avec ce vérificateur.",
+      "community": "Détails : la déclaration concerne une autre communauté.",
+      "commitment": "Détails : la déclaration indique d'autres informations que la carte envoyée.",
+      "cardDigest": "Détails : la déclaration porte sur une autre carte que celle envoyée.",
+      "expired": "Détails : la déclaration a déjà expiré.",
+      "proof": "Détails : la signature de la déclaration n'a pas pu être vérifiée."
+    },
     "WaitingForCard": "En attente de son nom…",
     "CheckTheirId": "Vérifiez sa pièce d'identité — indique-t-elle ceci ?",
     "VetSomeoneElse": "Vérifier quelqu'un d'autre",
@@ -1534,6 +1546,7 @@
       "session": "Session ouverte",
       "cardSent": "Carte envoyée — le vérificateur vérifie",
       "attested": "Déclaration reçue",
+      "statementRefused": "Déclaration non acceptée",
       "declined": "Déclinée",
       "cardReceived": "Carte reçue"
     },
