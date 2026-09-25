@@ -79,3 +79,24 @@ jobs:
           "$bin" verify-task "$out/task-applicant.json" "$(node -e "process.stdout.write(require('$out/signers.json').applicant)")"
           "$bin" verify-task "$out/task-vetter.json" "$(node -e "process.stdout.write(require('$out/signers.json').vetter)")"
           "$bin" verify-eligibility "$out/eligibility.json" "$out/expect.json"
+
+      # Every Trust Task document Keyring signs — to a peer, a community, its
+      # VTA — made by the shipping code (cardConformance.test.ts writes each to
+      # tasks/<name>.json and lists it in tasks.json with its expected signer).
+      # verify-task runs vta-sdk verify_trust_task_proof_with, what a VTA or a
+      # VTC runs on each task it receives. The test itself holds issuer ==
+      # signer and the type until card-verify checks them.
+      - name: VTI SDK judges every Trust Task Keyring signs
+        run: |
+          bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
+          out="$RUNNER_TEMP/conformance"
+          node -e "for (const t of require('$out/tasks.json')) console.log(t.file + '\t' + t.signer)" > "$RUNNER_TEMP/tasks.tsv"
+          count=0
+          while IFS=$'\t' read -r file signer; do
+            echo "$file"
+            "$bin" verify-task "$out/$file" "$signer"
+            count=$((count + 1))
+          done < "$RUNNER_TEMP/tasks.tsv"
+          echo "vta-sdk verified $count Trust Task documents"
+          # A list that came out short means a producer was dropped, not passed.
+          test "$count" -ge 22

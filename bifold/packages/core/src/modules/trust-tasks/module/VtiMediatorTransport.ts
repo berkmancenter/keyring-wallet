@@ -676,9 +676,20 @@ export class VtiMediatorSession {
       this.agent.config.logger.debug(`${LOG_PREFIX} TSP frame left queued: no consumer on this session`)
       return
     }
+    const queueId = tsp.tspFrameQueueId(text)
+    // The same frame can come again — a pickup `delivery` of what was just
+    // pushed live, before the ack landed — under this same id (the attachment
+    // id is the queue id). Handed over twice, a vetting request was answered
+    // twice (2026-09-25). As the DIDComm path: a copy is acknowledged, not
+    // delivered, and a frame is remembered only once its consumer has settled.
+    if (this.seen.has(queueId)) {
+      await this.acknowledge([queueId])
+      return
+    }
     const bytes = tsp.fromBase64Url(text)
     await this.options.onTspFrame(bytes)
-    await this.acknowledge([tsp.tspFrameQueueId(text)])
+    this.remember(queueId)
+    await this.acknowledge([queueId])
   }
 
   /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */

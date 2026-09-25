@@ -357,8 +357,12 @@ function applicant(
     { now: () => options.now ?? new Date('2026-10-01T00:00:00Z') }
   )
   const from = options.vetterDid ?? vetter.did
+  // Straight to the acceptance handler, past the envelope check: what is judged
+  // here is the presentation inside. The envelope (its proof, issuer, type) is
+  // opened before this runs — inboundProofs.test.ts — and the upstream vector
+  // below comes with no key to sign an envelope as its vetter.
   const deliver = (payload: Record<string, unknown>) =>
-    (vti as unknown as { inbound(m: unknown): Promise<void> }).inbound({
+    (vti as unknown as { accepted(m: unknown): Promise<void> }).accepted({
       type: `${VETTING.request}#response`,
       from,
       to: [application.joinDid],

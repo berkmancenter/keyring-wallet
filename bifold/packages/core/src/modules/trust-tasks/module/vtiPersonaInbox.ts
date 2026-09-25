@@ -24,6 +24,7 @@ import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
 import { vtiAgent } from './vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
+import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
 
 /** Emitted with `{ communityDid, kinds }` whenever the inbox stores something. */
 export const VTI_PERSONA_DELIVERIES_EVENT = 'vti:persona-deliveries'
@@ -48,6 +49,7 @@ async function personaFor(agent: Agent, communityDid?: string): Promise<VtiPerso
 /** Start collecting; returns the function that stops it. */
 export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): () => void {
   const community = new GenericRecordsCommunityStore(agent)
+  const vetting = new GenericRecordsVettingStore(agent)
   const peerRevisionStore = new GenericRecordsTspPeerRevisionStore(agent)
   let persona: VtiPersona | undefined
   let stopped = false
@@ -63,7 +65,10 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     // connect), and what arrives then is not this persona's to store.
     if (!target || vtiAgent.getState().did !== target.did) return
     // Returned: stored before the mediator is told it was taken (vtiAgent.onInbound).
-    return receiveIssue(community, target.did, message).then(
+    // A statement is kept only through the applicant's full check.
+    const acceptStatement = (m: typeof message) =>
+      new VtiApplicant(agent, target, vetting, community).receiveStatement(m)
+    return receiveIssue(community, target.did, message, { acceptStatement }).then(
       (got: VtiReceivedCredential[]) => {
         if (got.length) {
           DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, {
