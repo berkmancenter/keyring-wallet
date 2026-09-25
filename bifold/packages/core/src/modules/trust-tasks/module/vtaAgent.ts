@@ -26,7 +26,7 @@ import {
 } from './VtaClient'
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
-import { createVtiClientDid } from './VtiMediatorTransport'
+import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 import {
@@ -642,8 +642,10 @@ export class VtaAgentController {
     try {
       if (await this.resumeEarlierLink(agent, vtaDid, label, this.identityStore(agent), live)) return
       if (!live()) return
-      const mediator = await resolveVtaMediator(agent, vtaDid)
-      const did = await createVtiClientDid(agent, mediator)
+      // The agent must be reachable before a key is shown for it; the key
+      // itself is a did:key, the only form the Farm's Admin DID field takes.
+      await resolveVtaMediator(agent, vtaDid)
+      const did = await createVtiTemporaryDidKey(agent)
       await this.identityStore(agent).setManager({
         vtaDid,
         did,

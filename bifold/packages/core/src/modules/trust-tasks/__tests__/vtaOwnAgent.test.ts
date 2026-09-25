@@ -28,7 +28,7 @@ const ACL_REVOKE = 'https://trusttasks.org/spec/acl/revoke/0.1'
 const VTA = 'did:webvh:QmFarm:farm.example:alice'
 const PHONE = 'did:peer:2.phone'
 const BACKUP = 'did:peer:2.backup'
-const TEMPORARY = 'did:peer:2.temporary'
+const TEMPORARY = 'did:key:z6Mktemporary'
 const PERMANENT = 'did:peer:2.permanent'
 
 type Plain = { from: string; body: { type: string; payload: Record<string, unknown> } }
@@ -94,7 +94,12 @@ jest.mock('../module/vtiTsp', () => ({
 }))
 jest.mock('../module/VtiMediatorTransport', () => ({
   createVtiClientDid: jest.fn(async () => {
-    const did = mockMinted.length === 0 ? 'did:peer:2.temporary' : 'did:peer:2.permanent'
+    const did = 'did:peer:2.permanent'
+    mockMinted.push(did)
+    return did
+  }),
+  createVtiTemporaryDidKey: jest.fn(async () => {
+    const did = 'did:key:z6Mktemporary'
     mockMinted.push(did)
     return did
   }),

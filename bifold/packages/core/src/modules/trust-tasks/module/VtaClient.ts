@@ -427,7 +427,12 @@ export class VtaClient {
     this.identity = await vtiClientIdentityFromDid(this.agent, did)
     // Best effort: a wallet whose manager key cannot back TSP ports simply
     // stays on DIDComm, and §4.2 says so rather than failing the connect.
-    this.tsp = await tspSessionForManager(this.agent, did).catch(() => undefined)
+    // A temporary did:key stays on DIDComm: TSP delivery to a just-granted
+    // key is not exercised upstream either (the VTA plugin leads with DIDComm
+    // for its ephemeral did:key), and the key lasts only until the swap.
+    this.tsp = did.startsWith('did:key:')
+      ? undefined
+      : await tspSessionForManager(this.agent, did).catch(() => undefined)
     this.greeted = false
     this.carriageByPeer.clear()
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {

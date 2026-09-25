@@ -72,6 +72,7 @@ jest.mock('../module/vtiTsp', () => ({
 }))
 jest.mock('../module/VtiMediatorTransport', () => ({
   createVtiClientDid: jest.fn(async () => 'did:peer:2.next'),
+  createVtiTemporaryDidKey: jest.fn(async () => 'did:key:z6Mkcurrent'),
   resolveVtiMediator: jest.fn(async (_a: unknown, did: string) => ({ did })),
   resolveDidDocumentRetrying: jest.fn(async () => ({
     service: [{ type: 'DIDCommMessaging', serviceEndpoint: 'did:peer:2.mediator' }],

@@ -261,6 +261,24 @@ describe('rotating the manager key', () => {
   })
 })
 
+describe('the temporary key the Farm grants, a did:key', () => {
+  it('connects over DIDComm only, never asking for TSP, and swaps onto a did:peer:2', async () => {
+    const FARM_KEY = 'did:key:z6Mkfarm'
+    mockVta.acl = new Set([FARM_KEY])
+    const store = memoryStore({ ...temporary, did: FARM_KEY })
+    const vta = client(store)
+    const { tspSessionForManager } = jest.requireMock('../module/vtiTsp')
+
+    await vta.connect()
+    await vta.rotateManagerKey()
+
+    expect(tspSessionForManager).not.toHaveBeenCalledWith(expect.anything(), FARM_KEY)
+    expect(store.manager).toMatchObject({ did: NEXT, stage: 'permanent' })
+    expect(mockVta.acl.has(FARM_KEY)).toBe(false)
+    expect(mockVta.acl.has(NEXT)).toBe(true)
+  })
+})
+
 describe('connecting with a swap pending (the app was killed mid-swap)', () => {
   it('(c) adopts the new key on connect when the VTA had swapped', async () => {
     mockVta.acl = new Set([NEXT])
