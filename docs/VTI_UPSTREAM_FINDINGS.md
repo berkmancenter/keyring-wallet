@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.54 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.55 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -2008,6 +2008,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q29 | Could openvtc retry a mediator listener that failed to come up at launch? | A persona listener whose login misses its budget is logged ("listener failed to come up; continuing without it") and skipped for the whole run, with nothing on screen. A vetter launched that way shows a normal desk and never hears a request. [Details](#question-details). |
 | VTI-Q30 | Could pnm keep the new admin key until the agent's swap answer arrives, and could the swap be made atomic? | `acl/swap-key` writes the new ACL entry and then deletes the old one, and pnm keeps the new key only in memory until it saves the session. A swap answer lost after the agent swapped strands pnm with a key the agent no longer knows. A repeat can't recover it: the old key is refused, and a partial write conflicts. [Details](#question-details). |
 | VTI-Q31 | Could an applicant cancel a vetting request it made? | `vetting/decline` lets only the vetter close an accepted request, and no task lets the applicant withdraw one, so an applicant who changes their mind, or cannot meet the vetter, is left with an open request only the vetter can end. |
+| VTI-Q32 | Should an invitation offer a standard OID4VCI wallet cannot redeem use the OID4VCI link scheme? | The console shows `invitations/deliver` channel `offer` as `openid-credential-offer://`, but the offer names the community DID as `credential_issuer` and redeems only through `credential-exchange/request`, so a wallet that honours the scheme, as the scheme invites, fails. |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2416,6 +2417,33 @@ openvtc's 10 s budget by 0.8 s (the mediator logged it successful at
 08:47:51.7). A Keyring applicant's request then sat queued at the mediator for
 three minutes. Our harness now relaunches the TUI until the listener is up.
 
+**VTI-Q32 — an invitation offer uses the OID4VCI link scheme but is not redeemable by OID4VCI.**
+(a) `vtc/invitations/deliver` with channel `offer` returns a pre-authorized-code
+credential offer (`vtc-service/src/credentials/exchange/issue.rs:253`,
+`credential_offer`), and the admin console renders it as
+`openid-credential-offer://?credential_offer=<JSON>`
+(`vtc-service/admin-ui/src/lib/invitation-offer.ts`, `offerDeepLink`). Its
+`credential_issuer` is the community's DID, for example
+`{"credential_configuration_ids":["VIC"],"credential_issuer":"did:webvh:…:keyring-test-vtc","grants":{"urn:ietf:params:oauth:grant-type:pre-authorized_code":{"pre-authorized_code":"pac_…"}}}`.
+OID4VCI takes `credential_issuer` as an https URL and finds the issuer's
+metadata and token endpoint from it. This offer is redeemed instead through the
+Trust Task `credential-exchange/request` (`POST /v1/credential-exchange/request`,
+`vtc-service/src/routes/mod.rs:1582-1585`), per upstream's own design of Trust
+Tasks wrapping OID4VCI bodies (`docs/05-design-notes/vti-credential-architecture.md`
+§6, D1). The DID issuer is therefore deliberate. The question is the link: a
+wallet that handles `openid-credential-offer://`, as the scheme invites, takes
+the offer to its OID4VCI client and fails. Expected, either:
+- a VTI-specific scheme, or a marker in the offer, for offers redeemed through
+  `credential-exchange/request`;
+- or a documented profile: an OID4VCI offer whose `credential_issuer` is a DID
+  is redeemed at the DID's `VTCRest` service through `credential-exchange/request`.
+(b) Read at `ed672fff`, 2026-09-25. Found on a real iPhone: scanning the
+console's invitation QR sent Keyring's OID4VCI client to a generic error. The
+pushed form (channel `message`, a `credential-exchange/offer/0.1`) carries the
+same offer. Keyring handles neither today; routing a DID-issuer offer to the
+VTI redemption path is Keyring's work (held for the next release). The
+`keyring://vti/invitation` link still works.
+
 **VTI-Q31 — an applicant cannot cancel a vetting request.**
 (a) Once a vetter accepts a request, only the vetter can close it:
 `vetting/decline/0.1` is the vetter's (spec.md:66-74, "A conforming **vetter**
@@ -2454,6 +2482,7 @@ asking the agent).
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.55 | 2026-09-25 | **VTI-Q32** (new): the console shows an invitation offer under the OID4VCI link scheme, but its `credential_issuer` is the community DID and it redeems only through `credential-exchange/request`, so a wallet that follows the scheme fails. Read at `ed672fff`; seen on a real iPhone. Keyring will route such offers itself. Not sent. |
 | 1.54 | 2026-09-25 | **VTI-46** (new, Medium): `acl/swap-key` rebuilds the entry from a subset of fields, so a rotation widens a key-restricted grant and drops approver and step-up settings. Read at `ed672fff`. Not sent. |
 | 1.53 | 2026-09-25 | **VTI-Q31** (new): no vetting task lets an applicant cancel a request a vetter accepted; only the vetter can decline. Not sent. |
 | 1.52 | 2026-09-25 | **VTI-44** (e): the VTA credential vault refuses a proof-set membership too (400, "proof has no verificationMethod"), so openvtc's membership sync and rebuild miss it. Measured on the lab; proof shape inferred. Not sent. |
