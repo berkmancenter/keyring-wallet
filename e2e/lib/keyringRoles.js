@@ -15,7 +15,7 @@
 // Record: { role, step, platform, device, ok, startedAt, endedAt,
 //           observed: { stepId, ... }, value?, error?, screenshot?, source? }
 
-import { appendFileSync, mkdirSync, statSync, openSync, closeSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, readdirSync, statSync, openSync, closeSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,6 +92,86 @@ export async function stepIdOf(d, role) {
 }
 
 /**
+ * The app's own log, as a tester's problem report carries it (Home → Give
+ * feedback → Share…): the in-app ring buffer, which is kept in Release. An iOS
+ * Release build writes no JavaScript console to the device log, so this is the
+ * only client-side record of an intermittent iPhone failure (2026-09-25: an
+ * iPhone's mediator socket stalled after login, twice in four links).
+ *
+ * iOS simulator: "Share…" writes the report to the app's Caches before the
+ * share sheet opens, so it is copied from the data container. Android shares
+ * the text without a file, and logcat already has the JavaScript lines, so it
+ * records that instead. Never throws: a log it cannot get is recorded as why.
+ */
+export async function exportAppLog(d, { dir = ARTIFACTS, tag = "app-log" } = {}) {
+  if (d.e2ePlatform !== "ios") return { appLogSkipped: "android: the JavaScript log is in logcat" };
+  const udid = d.capabilities?.udid || d.capabilities?.["appium:udid"];
+  if (!udid) return { appLogSkipped: "no simulator udid for this session" };
+  let container;
+  try {
+    container = execFileSync("xcrun", ["simctl", "get_app_container", udid, "asml.bkc.harvard.wallet", "data"], { encoding: "utf8" }).trim();
+  } catch {
+    return { appLogSkipped: "not a simulator (no data container): a device report needs the tester's share" };
+  }
+  const caches = path.join(container, "Library", "Caches");
+  const reports = () => {
+    try {
+      return readdirSync(caches).filter((f) => /^keyring-report-.*\.txt$/.test(f));
+    } catch {
+      return [];
+    }
+  };
+  const before = new Set(reports());
+  try {
+    await d.execute("mobile: alert", { action: "dismiss" }).catch(() => undefined);
+    if (await existsTestId(d, "EnterPIN", 1500)) await unlockIfLocked(d);
+    let button = (await existsTestId(d, "GiveFeedback", 1500)) ? byTestId(d, "GiveFeedback") : undefined;
+    for (const tab of ["Contacts", "Wallet", "Settings"]) {
+      if (button) break;
+      if (await existsTestId(d, tab, 1000)) await byTestId(d, tab).click().catch(() => undefined);
+      await sleep(1000);
+      button = await scrollToTestId(d, "GiveFeedback", 4).catch(() => undefined);
+    }
+    if (!button) return { appLogSkipped: "Give feedback is not reachable from this screen" };
+    // What matters is the report file. Some builds ask first ("Send this
+    // problem report?" → Share…), others open the share sheet at once (Menu →
+    // Help → Give feedback, 2026-09-25); either way "Share…" writes the file
+    // before the sheet shows, so wait for the file, answering the question if
+    // one is asked.
+    const waitForReport = async (ms) => {
+      for (const until = Date.now() + ms; Date.now() < until; ) {
+        if (reports().some((f) => !before.has(f))) return true;
+        if (await d.getAlertText().then(() => true, () => false)) {
+          await d.execute("mobile: alert", { action: "accept", buttonLabel: "Share…" }).catch(() => undefined);
+        }
+        await sleep(500);
+      }
+      return false;
+    };
+    await button.click();
+    if (!(await waitForReport(10000))) {
+      await tapTestIdByCoordinates(d, "GiveFeedback").catch(() => undefined);
+      if (!(await waitForReport(10000))) {
+        const shot = await screenshot(d, `${tag}-no-report`).catch(() => undefined);
+        return { appLogSkipped: `Give feedback wrote no report file${shot ? ` (screen: ${shot})` : ""}` };
+      }
+    }
+    await sleep(1000);
+    // Close the share sheet; the report is already written.
+    await d.$("~Close").click().catch(() => undefined);
+    const fresh = reports().filter((f) => !before.has(f));
+    if (fresh.length === 0) return { appLogSkipped: "the report file did not appear in the app's Caches" };
+    mkdirSync(dir, { recursive: true });
+    const out = path.join(dir, `${tag}-${fresh[fresh.length - 1]}`);
+    copyFileSync(path.join(caches, fresh[fresh.length - 1]), out);
+    console.log(`[logs] app log: ${out}`);
+    return { appLog: out };
+  } catch (e) {
+    return { appLogSkipped: `export failed: ${String(e?.message ?? e).split("\n")[0]}` };
+  }
+}
+
+/**
  * Run one step: time it, read the step the screen ended on, write the record.
  * `fn` returns { value?, observed? }; a throw becomes a StepError with a
  * screenshot, the page source, and the step the screen was on at the time.
@@ -116,15 +196,19 @@ async function runStep(d, role, step, opts, fn) {
     const tag = `step-${role}-${step}-${d.e2ePlatform}`;
     const shot = await screenshot(d, tag).catch(() => undefined);
     const source = await dumpSource(d, tag).catch(() => undefined);
+    // Last, because it leaves the failed screen: the app's own log (iOS).
+    const stepId = await stepIdOf(d, role);
+    const appLog = process.env.E2E_APP_LOG_ON_FAIL === "0" ? { appLogSkipped: "E2E_APP_LOG_ON_FAIL=0" } : await exportAppLog(d, { dir: opts?.log ? path.dirname(opts.log) : ARTIFACTS, tag });
     const record = {
       ...base,
       ok: false,
       startedAt,
       endedAt: new Date().toISOString(),
-      observed: { stepId: await stepIdOf(d, role), ...(err?.observed || {}) },
+      observed: { stepId, ...(err?.observed || {}) },
       error: err?.message || String(err),
       ...(typeof shot === "string" ? { screenshot: shot } : {}),
       ...(typeof source === "string" ? { source } : {}),
+      ...appLog,
     };
     writeRecord(opts, record);
     console.log(`[step] ${role}.${step} FAILED — ${record.error}`);
