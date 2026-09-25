@@ -26,6 +26,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>keyring</string>
+				<string>vetting-ticket</string>
 			</array>
 		</dict>
 		<dict>

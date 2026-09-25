@@ -56,6 +56,10 @@
         <!-- A bare DID (did:webvh:…) from the phone's own camera: an agent's or
              a community's code, routed like a scan from the QR tab. -->
         <data android:scheme="did" />
+        <!-- A vetter's ticket (vetting-ticket:?v=1&…), as openvtc and Keyring
+             vetters share it: tapped in a message, it opens Get vetted with
+             the ticket filled in, as a scan of its QR does. -->
+        <data android:scheme="vetting-ticket" />
       </intent-filter>
 
       <intent-filter android:autoVerify="true">
