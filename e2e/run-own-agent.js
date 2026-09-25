@@ -423,7 +423,14 @@ try {
       await (await waitForTestId(owner, "AgentBackupCodeInput", 15000)).setValue(backupTemp);
       await tapTestId(owner, "AgentBackupAdd", 15000);
       await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID);
-      await waitForTestId(owner, "AgentBackupAdded", 60000);
+      // Setup's backup step ends on AgentBackupAdded; "Add another device" from
+      // My devices goes back to the list, where the new row is the sign.
+      const addedRow = `AgentDevice_${backupTemp.slice(-8)}`;
+      for (const until = Date.now() + 60000; ; ) {
+        if ((await existsTestId(owner, "AgentBackupAdded", 1000)) || (await existsTestId(owner, addedRow, 1000))) break;
+        if (await existsTestId(owner, "AgentCreateError", 500)) throw new Error(`adding the backup was refused: ${await textOf(owner, "AgentCreateError")}`);
+        if (Date.now() > until) throw new Error(`neither AgentBackupAdded nor ${addedRow} within 60 s`);
+      }
       const row = acl().find((e) => e.subject === backupTemp);
       if (!isOwnerRow(row)) throw new Error(`the owner's grant is not an unrestricted admin: ${JSON.stringify(row)}`);
       if (row.createdBy !== ownerKey) throw new Error(`the backup's row was created by ${row.createdBy}, not the owner phone's key`);
