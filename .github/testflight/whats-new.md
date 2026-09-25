@@ -9,6 +9,7 @@
 • Vetting with a vetter who uses the openvtc app now works: Keyring accepts their statement instead of silently ignoring it. If a vetter already sent you a statement that never arrived, ask them to send it again.
 • Your Keyring can now vet someone who uses the openvtc app, all the way to their membership.
 • Fixes an occasional failure (about 1 or 2 in 1,000 requests) that could show as a failed link, a "doesn't know why" error, or a vetting step that never moved on.
+• Joining no longer gets stuck on "idempotency key reused for a different request" after a first attempt that didn't finish; tapping again now works, including on phones already stuck.
 • After you ask to join, Keyring shows where your request stands (joined, waiting for vetting, or pending) instead of saying the community didn't answer, and you can withdraw a waiting request.
 • Linking your agent recovers on its own if an answer is lost or the connection stalls, and a failed link now says why under Details.
 • When Keyring refuses something a vetter or community sent, it says why in plain words.
