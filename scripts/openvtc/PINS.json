@@ -38,6 +38,19 @@
         "crates/messaging/affinidi-messaging-mediator/"
       ]
     },
+    "openvtc": {
+      "url": "https://github.com/OpenVTC/openvtc.git",
+      "sha": "ed13d29",
+      "commitDate": "2026-09-24",
+      "pinnedOn": "2026-09-25",
+      "why": "The openvtc build the interop harness gates on: both phases are green against it on the lab at the Farm's versions (2026-09-25). 177a218, the build this clone sat on by hand, cannot create a persona against VTA 0.42.0 (its vta-sdk 0.42.1 does not read contexts/get's 422 as NotFound; openvtc-core config/community_context.rs ~:296-303), so it cannot run either phase.",
+      "watch": [
+        "openvtc/src/ui/pages/",
+        "openvtc/src/state_handler/vetting_actions.rs",
+        "openvtc-core/src/vetting/",
+        "openvtc-core/src/join.rs"
+      ]
+    },
     "vti-didcomm-js": {
       "sha": "2365c86",
       "commitDate": "2026-07-19",
