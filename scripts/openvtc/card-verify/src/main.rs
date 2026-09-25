@@ -25,6 +25,11 @@
 //!   (`vetting::match_code::vetting_match_code`) and the ticket URI
 //!   (`vetting::ticket_uri::decode`, then `encode`). Keyring's tests check its
 //!   own functions against that file.
+//! - `card-verify sign-fixtures` prints a card and a statement SIGNED BY
+//!   UPSTREAM CODE (vta-sdk `vetting::card::sign_card` and
+//!   `vetting::statement::sign_statement`) with fixed-seed did:key keys, and the
+//!   card's digest from `verify_card`. Keyring's tests verify these proofs and
+//!   accept this statement with its own code.
 //! - `card-verify verify-statement <statement.json> <card.json> <expect.json>`
 //!   verifies the card as above, then runs vta-sdk's `verify_statement` and
 //!   `check_against_card` on the statement: what an openvtc applicant runs on a
@@ -43,7 +48,10 @@ use vta_sdk::trust_task_proof::TrustTaskVmResolver;
 use vta_sdk::vetting::card::{CardExpectations, VerifiedVettingCard, verify_card};
 use serde_json::json;
 use vta_sdk::protocols::vetting::session::v0_1::VettingCardClaim;
-use vta_sdk::vetting::card::identity_commitment;
+use affinidi_secrets_resolver::secrets::Secret;
+use vta_sdk::protocols::vetting::IdentityVettingEndorsement;
+use vta_sdk::vetting::card::{CardDraft, identity_commitment, sign_card};
+use vta_sdk::vetting::statement::{StatementDraft, sign_statement};
 use vta_sdk::vetting::match_code::vetting_match_code;
 use vta_sdk::vetting::statement::verify_statement;
 use vta_sdk::vetting::ticket_uri;
@@ -173,6 +181,89 @@ fn vectors(card_path: &str) -> Result<String, String> {
     serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
 }
 
+/// A did:key Ed25519 secret from a fixed seed, `id` = `<did>#<multibase>`, as
+/// vta-sdk's own test support makes one (vetting/mod.rs test_support::secret).
+fn seeded(seed_byte: u8) -> Result<(Secret, String), String> {
+    let mut secret = Secret::generate_ed25519(None, Some(&[seed_byte; 32]));
+    let public = secret.get_public_keymultibase().map_err(|e| e.to_string())?;
+    secret.id = format!("did:key:{public}#{public}");
+    Ok((secret, format!("did:key:{public}")))
+}
+
+async fn sign_fixtures() -> Result<String, String> {
+    let (applicant, applicant_did) = seeded(1)?;
+    let (vetter, vetter_did) = seeded(2)?;
+    let community = "did:webvh:QmCommunity:dids.example:community".to_string();
+    let session_id = "urn:uuid:7c9d0e1f-2a3b-4c5d-8e6f-7a8b9c0d1e2f".to_string();
+    let challenge = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8".to_string();
+    let issued_at: DateTime<Utc> = "2026-09-25T00:00:00Z".parse().map_err(|e| format!("{e}"))?;
+    let claims: Vec<VettingCardClaim> = serde_json::from_value(json!([
+        { "type": "name.legal", "value": "Ada Lovelace", "provenance": "selfAsserted" }
+    ]))
+    .map_err(|e| format!("claims: {e}"))?;
+    let card = sign_card(
+        CardDraft {
+            id: "urn:uuid:3f1e8a2c-6b4d-4e5f-9a1b-2c3d4e5f6a7b".into(),
+            publisher: applicant_did.clone(),
+            audience: vetter_did.clone(),
+            community: community.clone(),
+            challenge: challenge.clone(),
+            domain: community.clone(),
+            issued_at,
+            validity: Duration::minutes(10),
+            claims,
+            identity_types: vec!["name.legal".into()],
+            salt: "c2FsdC11cHN0cmVhbS1maXh0dXJlLTMyLWJ5dGVzLS0".into(),
+        },
+        &applicant,
+    )
+    .await
+    .map_err(|e| format!("sign_card: {e}"))?;
+    let expect = json!({
+        "audience": vetter_did, "publisher": applicant_did, "community": community,
+        "challenge": challenge, "domain": community, "requiredClaims": ["name.legal"],
+        "now": "2026-09-25T00:00:01Z"
+    });
+    let verified = verified_card(&card, &expect).await?;
+    let endorsement: IdentityVettingEndorsement = serde_json::from_value(json!({
+        "type": vta_sdk::protocols::vetting::IDENTITY_VETTING_ENDORSEMENT_TYPE,
+        "community": community,
+        "method": "inPerson",
+        "documentClasses": ["passport"],
+        "claimsVerified": ["name.legal"],
+        "livenessConfirmed": true,
+        "identityCommitment": card.get("identityCommitment").cloned().unwrap_or_default(),
+        "cardDigestMultibase": verified.digest_multibase(),
+        "declaredRelationship": "none"
+    }))
+    .map_err(|e| format!("endorsement: {e}"))?;
+    let statement = sign_statement(
+        StatementDraft {
+            id: "urn:uuid:5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d".into(),
+            issuer: vetter_did.clone(),
+            subject: applicant_did.clone(),
+            endorsement,
+            valid_from: issued_at + Duration::minutes(1),
+            valid_until: issued_at + Duration::days(120),
+            task_context: session_id.clone(),
+        },
+        &vetter,
+    )
+    .await
+    .map_err(|e| format!("sign_statement: {e}"))?;
+    let doc = json!({
+        "note": "Signed by upstream code (wallet scripts/openvtc/card-verify sign-fixtures: vta-sdk sign_card, sign_statement). Never re-sign with Keyring's code.",
+        "applicantDid": applicant_did,
+        "vetterDid": vetter_did,
+        "community": community,
+        "session": { "documentId": session_id, "challenge": challenge, "domain": community, "requiredClaims": ["name.legal"] },
+        "card": card,
+        "cardDigest": verified.digest_multibase(),
+        "statement": statement
+    });
+    serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
+}
+
 fn digest(value_path: &str) -> Result<String, String> {
     dtg_credentials::digest_multibase_json(&read(value_path)?).map_err(|e| format!("digest: {e}"))
 }
@@ -211,11 +302,12 @@ async fn main() -> ExitCode {
     let result = match &argv[1..] {
         ["digest", value] => digest(value),
         ["vectors", card] => vectors(card),
+        ["sign-fixtures"] => sign_fixtures().await,
         ["verify-statement", statement, card, expect] => verify_statement_against(statement, card, expect).await,
         [card, expect] => run(card, expect).await,
         _ => {
             eprintln!(
-                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>"
+                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-statement <statement.json> <card.json> <expect.json>"
             );
             return ExitCode::from(2);
         }
