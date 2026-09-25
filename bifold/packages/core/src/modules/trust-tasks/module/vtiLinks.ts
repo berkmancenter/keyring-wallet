@@ -5,7 +5,8 @@
  * Every QR in these flows has a link twin, so scanning, pasting and opening a
  * deep link are the same act and land in the same place — the hand-over the
  * peer-to-peer VRC exchange already uses: an agent enrolment offer, a
- * community invitation, and a vetter's ticket.
+ * community invitation (as our link, or as the offer a community's admin
+ * console shows), and a vetter's ticket.
  *
  * @module trust-tasks/module/vtiLinks
  */
@@ -24,9 +25,16 @@ import { Screens } from '../../../types/navigators'
 
 import { bareDid, classifyDid } from './classifyDid'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
+import { GenericRecordsIdentityStore } from './VtiIdentityStore'
 import { vtaAgent } from './vtaAgent'
 import { communityTarget, isCommunityLink, parseCommunityLink } from './vtiCommunityLink'
 import { isVtiInvitationLink, parseVtiInvitationLink } from './vtiInvitation'
+import {
+  isInvitationOfferLink,
+  parseInvitationOfferLink,
+  redeemInvitationOffer,
+  VtiInvitationOfferError,
+} from './vtiInvitationOffer'
 import { VettingTicketError } from './vtiVetting'
 
 /**
@@ -43,13 +51,24 @@ export class KeyringLinkError extends Error {
   }
 }
 
-export type KeyringAgentLinkKind = 'enrolment' | 'invitation' | 'ticket' | 'community' | 'did' | 'otherDid'
+export type KeyringAgentLinkKind =
+  | 'enrolment'
+  | 'invitation'
+  | 'invitationOffer'
+  | 'ticket'
+  | 'community'
+  | 'did'
+  | 'otherDid'
 
 /** Which of our links this is, if any — cheap, no parsing beyond the prefix. */
 export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undefined {
   const trimmed = text.trim()
   if (isEnrolmentLink(trimmed)) return 'enrolment'
   if (isVtiInvitationLink(trimmed)) return 'invitation'
+  // A community admin console's invitation QR: an OID4VCI offer whose issuer
+  // is the community's DID. Ours, not the OpenID flow's, which cannot redeem
+  // it (VTI-Q32) and used to end on an error screen with no way back.
+  if (isInvitationOfferLink(trimmed)) return 'invitationOffer'
   if (isTicketUri(trimmed)) return 'ticket'
   if (isCommunityLink(trimmed)) return 'community'
   // A bare did:webvh — what upstream's QR codes carry for an agent or a
@@ -64,6 +83,25 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // fails to fetch. So it is answered here, in words.
   if (did) return 'otherDid'
   return undefined
+}
+
+/** Why an invitation offer could not be taken, in the person's words. */
+export function invitationOfferMessage(error: unknown): string {
+  const reason = error instanceof VtiInvitationOfferError ? error.reason : 'failed'
+  switch (reason) {
+    case 'noIdentity':
+      return 'This invitation is for an identity this phone has not made yet. Open My Agent, choose I was invited, and send the identity it shows to the admin.'
+    case 'otherIdentity':
+      return 'This invitation is for a different identity from the one this phone uses for that community. Ask the admin to invite the identity under I was invited.'
+    case 'used':
+      return 'This invitation has already been used, or the admin replaced it. Ask the admin to send it again.'
+    case 'unreachable':
+      return "Keyring couldn't reach the community. Check your connection and try again."
+    case 'cannotSign':
+      return "This phone can't sign for that identity yet. Open My Agent and try again."
+    default:
+      return "The community didn't hand over the invitation. Ask the admin to send it again."
+  }
 }
 
 /**
@@ -240,6 +278,23 @@ export async function routeKeyringAgentLink(
       await new GenericRecordsCommunityStore(agent).saveInvitation(invitation)
       // A linked phone accepts it on "I was invited"; the operator panel,
       // where it used to land, is only for a phone with a build-named agent.
+      navigate(vtaAgent.getState().link.kind === 'linked' ? 'VtiInvited' : 'MyAgent')
+      return
+    }
+    case 'invitationOffer': {
+      const offer = parseInvitationOfferLink(trimmed)
+      if (!offer) throw new KeyringLinkError('This invitation could not be read.')
+      // The community binds the offer to the identity it invited, the one
+      // this phone made for that community on "I was invited".
+      const persona = await new GenericRecordsIdentityStore(agent).getPersona(offer.communityDid)
+      let invitation
+      try {
+        invitation = await redeemInvitationOffer(agent, offer, persona)
+      } catch (e) {
+        throw new KeyringLinkError(invitationOfferMessage(e))
+      }
+      communityTarget.set({ communityDid: offer.communityDid })
+      await new GenericRecordsCommunityStore(agent).saveInvitation(invitation)
       navigate(vtaAgent.getState().link.kind === 'linked' ? 'VtiInvited' : 'MyAgent')
       return
     }

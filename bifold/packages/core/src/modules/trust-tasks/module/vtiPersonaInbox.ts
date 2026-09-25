@@ -1,7 +1,8 @@
 /**
  * What a community sends a persona, collected wherever the person is in the app.
  *
- * A vetter grant, a membership, an invitation's issue — each arrives as a
+ * A vetter grant, a membership, an invitation's issue, a community's
+ * invitation offer — each arrives as a
  * message to the persona's DID, and the mediator holds it until a session for
  * that DID collects it. Until 2026-09-22 only the Vetting screen and a join
  * in flight opened that session, so a grant issued while the person was
@@ -22,6 +23,7 @@ import { DeviceEventEmitter } from 'react-native'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
+import { invitationOfferOfMessage, redeemInvitationOffer, VtiInvitationOfferError } from './vtiInvitationOffer'
 import { vtiAgent } from './vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
@@ -64,6 +66,10 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     // it as a different identity (a join as a new persona, a community
     // connect), and what arrives then is not this persona's to store.
     if (!target || vtiAgent.getState().did !== target.did) return
+    // A community admin console's Send: an offer of the invitation, redeemed
+    // here for the invitation itself, which "I was invited" then joins with.
+    const offer = invitationOfferOfMessage(message)
+    if (offer) return takeInvitationOffer(agent, community, target, offer, options)
     // Returned: stored before the mediator is told it was taken (vtiAgent.onInbound).
     // A statement is kept only through the applicant's full check.
     const acceptStatement = (m: typeof message) =>
@@ -112,6 +118,39 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     stopped = true
     clearInterval(timer)
     stopListening()
+  }
+}
+
+/**
+ * Redeem a pushed invitation offer and keep the invitation. Safe to run twice:
+ * the message comes back when a handler fails, and a code already redeemed is
+ * answered 404, so only a community that could not be reached leaves the
+ * message on the mediator for another try. Anything else is logged and let go.
+ */
+async function takeInvitationOffer(
+  agent: Agent,
+  community: GenericRecordsCommunityStore,
+  persona: VtiPersona,
+  offer: NonNullable<ReturnType<typeof invitationOfferOfMessage>>,
+  options: Pick<PersonaInboxOptions, 'onError'>
+): Promise<void> {
+  const logger = agent.config?.logger
+  if (offer.communityDid !== persona.communityDid) {
+    logger?.warn?.(
+      `[VTI] invitation offer from ${offer.communityDid} reached the identity for ${persona.communityDid}; not taken`
+    )
+    return
+  }
+  try {
+    const invitation = await redeemInvitationOffer(agent, offer, persona)
+    await community.saveInvitation(invitation)
+    DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, { communityDid: persona.communityDid, kinds: ['invitation'] })
+  } catch (e) {
+    if (e instanceof VtiInvitationOfferError && e.reason === 'unreachable') {
+      options.onError?.(e)
+      throw e
+    }
+    logger?.warn?.(`[VTI] invitation offer not taken: ${(e as Error).message}`)
   }
 }
 

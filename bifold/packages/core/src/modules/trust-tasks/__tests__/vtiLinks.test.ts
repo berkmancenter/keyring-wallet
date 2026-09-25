@@ -24,6 +24,21 @@ jest.mock('../module/vtiInvitation', () => ({
   parseVtiInvitationLink: (url: string) => ({ id: url }),
 }))
 
+const mockPersona = {
+  did: 'did:webvh:QmPersona:host:negative-weird',
+  communityDid: 'did:webvh:QmC:host:keyring-test-vtc',
+}
+jest.mock('../module/VtiIdentityStore', () => ({
+  GenericRecordsIdentityStore: jest.fn(() => ({
+    getPersona: async (communityDid: string) => (communityDid === mockPersona.communityDid ? mockPersona : undefined),
+  })),
+}))
+const mockRedeem = jest.fn()
+jest.mock('../module/vtiInvitationOffer', () => ({
+  ...jest.requireActual('../module/vtiInvitationOffer'),
+  redeemInvitationOffer: (...a: unknown[]) => mockRedeem(...a),
+}))
+
 const offer: EnrolmentOffer = {
   v: 1,
   t: 'vta-enrol',
@@ -87,6 +102,60 @@ describe('routing them', () => {
     expect(navigate).toHaveBeenCalledWith('VtiInvited')
     expect(navigate).not.toHaveBeenCalledWith('MyAgent')
     controller.set({ link: { kind: 'notLinked' } })
+  })
+})
+
+describe("a community admin console's invitation QR", () => {
+  const consoleOffer = {
+    credential_configuration_ids: ['VIC'],
+    credential_issuer: mockPersona.communityDid,
+    grants: { 'urn:ietf:params:oauth:grant-type:pre-authorized_code': { 'pre-authorized_code': 'pac_1' } },
+  }
+  const link = `openid-credential-offer://?credential_offer=${encodeURIComponent(JSON.stringify(consoleOffer))}`
+  const controller = vtaAgent as unknown as { set(next: Record<string, unknown>): void }
+  const linked = {
+    kind: 'linked',
+    vtaDid: 'did:webvh:example:vta',
+    label: 'bob',
+    linkedAt: '2026-09-23T00:00:00Z',
+    connection: { kind: 'online', since: 0 },
+  }
+  beforeEach(() => {
+    mockRedeem.mockReset()
+    mockSaveInvitation.mockClear()
+  })
+  afterEach(() => controller.set({ link: { kind: 'notLinked' } }))
+
+  it("is ours, not the OpenID flow's", () => {
+    expect(keyringAgentLinkKind(link)).toBe('invitationOffer')
+  })
+
+  it('is redeemed as the identity made for that community, kept, and opens "I was invited"', async () => {
+    controller.set({ link: linked })
+    const invitation = { id: 'urn:uuid:vic', communityDid: mockPersona.communityDid, subjectDid: mockPersona.did }
+    mockRedeem.mockResolvedValue(invitation)
+    const navigate = jest.fn()
+    await routeKeyringAgentLink(link, {} as never, navigate)
+    expect(mockRedeem).toHaveBeenCalledWith(
+      {},
+      { communityDid: mockPersona.communityDid, configurationIds: ['VIC'], preAuthorizedCode: 'pac_1' },
+      mockPersona
+    )
+    expect(mockSaveInvitation).toHaveBeenCalledWith(invitation)
+    expect(communityTarget.get()?.communityDid).toBe(mockPersona.communityDid)
+    expect(navigate).toHaveBeenCalledWith('VtiInvited')
+  })
+
+  it('a code already used is explained in words; nothing is kept or opened', async () => {
+    controller.set({ link: linked })
+    const { VtiInvitationOfferError } = jest.requireActual('../module/vtiInvitationOffer')
+    mockRedeem.mockRejectedValue(new VtiInvitationOfferError('used'))
+    const navigate = jest.fn()
+    const opening = routeKeyringAgentLink(link, {} as never, navigate)
+    await expect(opening).rejects.toBeInstanceOf(KeyringLinkError)
+    await expect(opening).rejects.toThrow(/already been used/)
+    expect(mockSaveInvitation).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
   })
 })
 
