@@ -71,9 +71,10 @@ The VTA's ACL rows are independent, so a second full administrator is a second r
 
 **Another phone (Phase 1, recommended):**
 
-1. **The second phone** uses today's "I already have one — link it" without a QR. It makes its temporary key and shows it as a QR code and as text (`vtaAgent.startManualLink`).
-2. **The owner phone** chooses Add a backup → scans that QR → confirms with Face ID → sends `acl/grant/0.1` for that DID: role admin, no context restriction. This call is new in Keyring. The task already exists upstream (`acl/{grant}` in `vta-service/src/trust_tasks/acl.rs`), and Keyring's generic `task()` already sends any task (`VtaClient.ts:420-473`).
-3. **The second phone** notices the grant, signs in and swaps onto its own long-term key: today's `checkManualGrant` → `finishLink`, unchanged.
+1. **The owner phone** chooses Add a backup and shows the agent's address as a QR code. The second phone needs it first, for the same reason as §1: its key names the agent's mediator, so it can't be made until the agent is known.
+2. **The second phone** uses today's "I already have one — link it" without a QR, and scans that address (Keyring already reads a bare agent DID from a scan). It makes its temporary key and shows it as a QR code and as text (`vtaAgent.startManualLink`).
+3. **The owner phone** chooses Add a backup → scans that QR → confirms with Face ID → sends `acl/grant/0.1` for that DID: role admin, no context restriction. This call is new in Keyring. The task already exists upstream (`acl/{grant}` in `vta-service/src/trust_tasks/acl.rs`), and Keyring's generic `task()` already sends any task (`VtaClient.ts:420-473`).
+4. **The second phone** notices the grant, signs in and swaps onto its own long-term key: today's `checkManualGrant` → `finishLink`, unchanged.
 
 **The browser plugin (Phase 4, decision needed):**
 
