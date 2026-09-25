@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.53 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.54 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -69,6 +69,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | **Fixed upstream** in VTI #1675 (09-23): a relationship-control frame now completes before anything the same sender sent after it. Recurred on the Farm before the fix reached it (VTA 0.39.0) | F′ |
 | [VTI-44](#vti-44--vta-sdk-cannot-verify-a-credential-signed-with-a-proof-set) | vta-sdk cannot verify a credential signed with a proof set, which is what a hybrid-keyed VTC issues | **High** | Open, not sent. Found in Phase 2 of the openvtc interop harness (2026-09-25) |
 | [VTI-45](#vti-45--vta-sdk-checks-a-trust-task-proof-over-its-own-re-serialisation-not-the-bytes-it-received) | vta-sdk checks a Trust Task proof over its own re-serialisation, not the bytes it received, so a valid signature over `…:53.000Z` is refused | **High** | Open, not sent. Worked around in Keyring (keyring-bifold#128) |
+| [VTI-46](#vti-46--acl-swap-key-widens-a-key-restricted-grant-and-drops-approval-settings) | `acl/swap-key` widens a key-restricted grant and drops its approval and step-up settings | Medium | Open, not sent. Read at `ed672fff`; not seen live |
 
 ## Stack under test
 
@@ -1435,6 +1436,23 @@ or its configuration, so that a TSP relationship forms across mediators.
 **Verification:** re-run the rung's cross-mediator legs; an XRFA naming the
 invite, then the manifest over TSP, is the pass.
 
+### VTI-46 — `acl/swap-key` widens a key-restricted grant and drops approval settings
+
+(a) **What happens.** A client that swaps its ACL entry onto a new key gets a new entry built from only some of the old one's fields. It carries role, label, contexts, kind, capabilities and device. It resets:
+
+- **`allowed_keys` to none.** None means "every key in scope", so a grant restricted to particular keys becomes wider after the swap.
+- **`approve_scope` to none.** The entry loses its approver authority.
+- **`step_up_approver` and `step_up_require`.** Both are dropped.
+
+An admin who grants a key with any of these, for example through a console, sees a different entry once the client rotates, which every pnm and Keyring link does on first connect.
+
+(b) **Read, not measured,** at VTI `ed672fff`, 2026-09-25, while designing Keyring's own-my-agent flow:
+- `vta-service/src/operations/acl.rs:902-908` copies only those fields.
+- `AclEntry::new` resets the rest (`vti-common/src/acl/mod.rs:752-769`).
+- None means all keys in scope (`acl/mod.rs:557-564`).
+
+(c) **Expected:** the swap carries the whole entry except the subject. At the least, `allowed_keys`, `approve_scope` and the step-up fields should be copied, since a rotation is meant to change the key, not the grant.
+
 ### VTI-45 — vta-sdk checks a Trust Task proof over its own re-serialisation, not the bytes it received
 
 (a) **What happens.** vta-sdk verifies an `eddsa-jcs-2022` proof on a Trust
@@ -2436,6 +2454,7 @@ asking the agent).
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.54 | 2026-09-25 | **VTI-46** (new, Medium): `acl/swap-key` rebuilds the entry from a subset of fields, so a rotation widens a key-restricted grant and drops approver and step-up settings. Read at `ed672fff`. Not sent. |
 | 1.53 | 2026-09-25 | **VTI-Q31** (new): no vetting task lets an applicant cancel a request a vetter accepted; only the vetter can decline. Not sent. |
 | 1.52 | 2026-09-25 | **VTI-44** (e): the VTA credential vault refuses a proof-set membership too (400, "proof has no verificationMethod"), so openvtc's membership sync and rebuild miss it. Measured on the lab; proof shape inferred. Not sent. |
 | 1.51 | 2026-09-25 | **VTI-45** (new, High): vta-sdk verifies a Trust Task proof over its own re-serialisation, and chrono drops a `.000` fraction, so about one timestamp in a thousand signed by a JavaScript producer is refused as an invalid signature. Measured with card-verify at `ed672fff`; Keyring works around it (keyring-bifold#128). Not sent. |
