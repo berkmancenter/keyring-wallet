@@ -30,6 +30,10 @@
 //!   `vetting::statement::sign_statement`) with fixed-seed did:key keys, and the
 //!   card's digest from `verify_card`. Keyring's tests verify these proofs and
 //!   accept this statement with its own code.
+//! - `card-verify verify-task <task.json> <expected-signer-did>` runs vta-sdk's
+//!   `trust_task_proof::verify_trust_task_proof_with` on a Trust Task document
+//!   Keyring signed, which is what a VTA or a VTC runs on each task it receives,
+//!   and checks the proven signer.
 //! - `card-verify verify-statement <statement.json> <card.json> <expect.json>`
 //!   verifies the card as above, then runs vta-sdk's `verify_statement` and
 //!   `check_against_card` on the statement: what an openvtc applicant runs on a
@@ -54,6 +58,7 @@ use vta_sdk::vetting::card::{CardDraft, identity_commitment, sign_card};
 use vta_sdk::vetting::statement::{StatementDraft, sign_statement};
 use vta_sdk::vetting::match_code::vetting_match_code;
 use vta_sdk::vetting::statement::verify_statement;
+use vta_sdk::trust_task_proof::verify_trust_task_proof_with;
 use vta_sdk::vetting::ticket_uri;
 
 fn read(path: &str) -> Result<Value, String> {
@@ -264,6 +269,19 @@ async fn sign_fixtures() -> Result<String, String> {
     serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
 }
 
+async fn verify_task(task_path: &str, expected_signer: &str) -> Result<String, String> {
+    let doc: trust_tasks_rs::TrustTask<Value> =
+        serde_json::from_value(read(task_path)?).map_err(|e| format!("task: {e}"))?;
+    let resolver = resolver_for(expected_signer).await?;
+    let signer = verify_trust_task_proof_with(&doc, &resolver)
+        .await
+        .map_err(|e| format!("REFUSED: {e} — {e:?}"))?;
+    if signer != expected_signer {
+        return Err(format!("REFUSED: the proof is by {signer}, not {expected_signer}"));
+    }
+    Ok(format!("OK: task proof verified by vta-sdk verify_trust_task_proof_with (signer {signer})"))
+}
+
 fn digest(value_path: &str) -> Result<String, String> {
     dtg_credentials::digest_multibase_json(&read(value_path)?).map_err(|e| format!("digest: {e}"))
 }
@@ -303,11 +321,12 @@ async fn main() -> ExitCode {
         ["digest", value] => digest(value),
         ["vectors", card] => vectors(card),
         ["sign-fixtures"] => sign_fixtures().await,
+        ["verify-task", task, signer] => verify_task(task, signer).await,
         ["verify-statement", statement, card, expect] => verify_statement_against(statement, card, expect).await,
         [card, expect] => run(card, expect).await,
         _ => {
             eprintln!(
-                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-statement <statement.json> <card.json> <expect.json>"
+                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-task <task.json> <expected-signer-did>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>"
             );
             return ExitCode::from(2);
         }

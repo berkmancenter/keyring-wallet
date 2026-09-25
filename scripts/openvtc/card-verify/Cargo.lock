@@ -506,6 +506,7 @@ dependencies = [
  "dtg-credentials",
  "serde_json",
  "tokio",
+ "trust-tasks-rs",
  "vta-sdk",
 ]
 
