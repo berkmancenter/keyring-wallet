@@ -9,6 +9,9 @@ reference implementations, and not only with another copy of Keyring.
   rejected along the way.
 - [2026-09-24-cd.md](./openvtc-interop-harness-plan/2026-09-24-cd.md): why
   pnm calls are serialized per slug rather than isolated by `HOME`.
+- [2026-09-25-cd.md](./openvtc-interop-harness-plan/2026-09-25-cd.md):
+  Alberto's go; the real TUI instead of a bot; conformance vectors in every PR;
+  what the release waits for; the third self-agreeing defect.
 
 **Related:** [openvtc-integration-plan.md](./openvtc-integration-plan.md)
 (what Keyring implements), [release-flow-plan.md](./release-flow-plan.md)
@@ -31,6 +34,12 @@ sides. On 2026-09-24 two such defects shipped to testers:
   answer that was not an error. The harness read the screen, so runs passed
   while the community had admitted no one (keyring-wallet#148).
 
+A third followed on 2026-09-25: **the card digest in a vetting statement.**
+Keyring hashed the card with its proof on both sides, while the spec and the
+VTI SDK hash it without. Keyring↔Keyring passed, and every openvtc vetter's
+statement was dropped by a Keyring applicant without a word
+(keyring-bifold#116).
+
 Both were found only when an openvtc vetter and the community's own records
 were in the loop. This harness keeps them in the loop on every release
 candidate. **Its assertions read the other party's state and the community's
@@ -41,81 +50,89 @@ public endpoints and admin API.
 
 ## 2. Scope: flows × roles
 
-Each row runs in both directions where both roles exist. "Driver" says
-whether upstream already drives the openvtc side headlessly (so our bot wraps
-existing code) or whether we write new code.
+Each row runs in both directions where both roles exist. The upstream driver
+column names the openvtc code that already walks each flow headlessly: the
+fallback for a step the TUI cannot take (§3), and the reference for what
+openvtc concludes.
 
 | # | Flow | Keyring role | openvtc role | Upstream headless driver at openvtc `177a218` | New code |
 |---|---|---|---|---|---|
-| F1 | Vetting ceremony: ticket, request, session, card, statement | applicant | vetter | `openvtc-core/tests/vetting_e2e.rs` walks it over an in-process mediator; `vetter.rs` `open_session`, `receive_card` | Bot vetter: issue a ticket, print the ticket URI, open a session on request, verify the card, issue the statement. The TUI's `issue_ticket` lives in the TUI crate (`openvtc/src/state_handler/vetting_actions.rs`), so the bot calls openvtc-core directly |
-| F2 | Vetting ceremony | vetter | applicant | `vetting_e2e.rs` (applicant half); `applicant.rs` | Bot applicant: take our ticket URI, request, compare the code, send its card, receive our statement |
+| F1 | Vetting ceremony: ticket, request, session, card, statement | applicant | vetter | `openvtc-core/tests/vetting_e2e.rs` walks it over an in-process mediator; `vetter.rs` `open_session`, `receive_card` | TUI as vetter: issue a ticket (its `vetting-ticket:` link, openvtc-core `vetting/tickets.rs`), accept the request, open a session, verify the card, attest (`openvtc/src/state_handler/vetting_actions.rs`) |
+| F2 | Vetting ceremony | vetter | applicant | `vetting_e2e.rs` (applicant half); `applicant.rs` | TUI as applicant: paste our ticket, request, compare the code, send its card, receive our statement |
 | F3 | Statement acceptance | both | both | the applicant checks inside `applicant.rs` | Assert that each side accepts the other's statement by its own check, and that the community counts it at intake |
 | F4 | Reopen or replace a session | both | both | `vetter.rs` `open_session` (*"Reopening replaces an earlier session, whose card will no longer be accepted"*) | A card on the replaced session is refused. Keyring shows the new code and nothing hangs |
-| F5 | Refusal paths: expired card, card for a replaced session, ticket for another community, wrong audience | both | both | the refusal branches of `verify_card` (VTI `vta-sdk/src/vetting/card.rs`) | Stage each one and assert the refusal on the receiving side. Today openvtc refuses silently (VTI-Q24), so until that is answered the bot reads its own log and state |
+| F5 | Refusal paths: expired card, card for a replaced session, ticket for another community, wrong audience | both | both | the refusal branches of `verify_card` (VTI `vta-sdk/src/vetting/card.rs`) | Stage each one and assert the refusal on the receiving side. Today openvtc refuses silently (VTI-Q24), so until that is answered the runner reads openvtc's log and state |
 | F6 | Join by invitation, and join status | applicant | none (the VTC is the party) | `openvtc-core/tests/join_lifecycle_e2e.rs` (in-process mediator) | Against the real Farm VTC: the outcome Keyring shows equals the community's record (`join-list`, `members`). This already runs through `run-vti-invite.js` `EXPECT_JOIN` |
-| F7 | Leave (`members/self-remove`) | member | member | `openvtc-core/src/join.rs` sends `MEMBER_SELF_REMOVE` | Keyring leaves, and the community's member list agrees. The bot leaves the same way, as a cross-check that both clients produce the same record |
+| F7 | Leave (`members/self-remove`) | member | member | `openvtc-core/src/join.rs` sends `MEMBER_SELF_REMOVE` | Keyring leaves, and the community's member list agrees. The TUI leaves the same way, as a cross-check that both clients produce the same record |
 
-**Out of scope:** the openvtc TUI itself (see §3), and flows neither side
-implements today, such as VRC exchange with openvtc. Those are added when
-openvtc ships them, as new rows here.
+openvtc's side of every row is the openvtc TUI, driven as a maintainer drives
+it (§3). **Out of scope:** flows neither side implements today, such as VRC
+exchange with openvtc. Those are added when openvtc ships them, as new rows
+here.
 
 ## 3. Architecture
 
 ```
-  e2e runner (Node) ──── Appium ────▶ Keyring on a sim / phone
+  conformance vectors (PR CI) ── upstream Rust ⇄ Keyring TS, both directions
+
+  e2e runner (Node) ──── Appium ────▶ Keyring on a sim / phone   (e4's drivers)
         │
-        ├── HTTP (localhost) ─────────▶ openvtc bot (Rust, on openvtc-core)
-        │                                 persona on the Farm's openvtc runner agent
+        ├── PTY ──────────────────────▶ openvtc TUI binary (ed13d29 and 177a218)
+        │                                 persona on a Farm runner agent
         │
         └── vtc-admin (read-only) ────▶ the community's admin API (truth)
 ```
 
-- **A headless bot on openvtc-core, never the TUI.** Driving the TUI means a
-  pseudo-terminal and keystrokes, which break on ratatui redraws, and a
-  screen-scrape is exactly the kind of evidence §1 rejects. The bot links
-  openvtc-core at the pin (§4) and uses the same `VettingBook`, `handle` and
-  transport code the TUI uses. It is the TUI's engine without its face.
-- **The bot is a small local HTTP service** on `127.0.0.1`, one port per run.
-  Its endpoints are steps and reads:
-  - steps: `POST /ticket`, `POST /session/{request}/open`,
-    `POST /statement/{request}`, `POST /apply`, `POST /leave`;
-  - reads: `GET /state` (its book: requests, sessions, cards received and
-    refused, with the refusal reason), and a log stream.
-  The runner calls a step, drives the phone, then polls the other side. A CLI
-  would fork the process per step and lose the in-memory session state the
-  vetting book holds between steps.
+- **Conformance vectors first, in every PR.** Every value Keyring exchanges
+  with VTI that is hashed, canonicalised, committed or signed has two tests:
+  upstream's own function, at the pin, run on Keyring's output; and Keyring's
+  function run on an upstream-produced fixture. Each cites the upstream
+  file:line it mirrors. `scripts/openvtc/card-verify` is the upstream side: a
+  small cargo binary on the pinned vta-sdk and dtg-credentials
+  (keyring-wallet#146, #162). The inventory: the card's identity commitment,
+  the card digest, card and statement proofs, the statement's bindings, task
+  and envelope digests, JCS inputs and multibase encodings.
+- **The real openvtc TUI, driven over a pseudo-terminal.** Each step a
+  maintainer takes is taken in the TUI binary: the runner reads the screen
+  through a vt100 buffer and sends keys. Assertions on the screen use the TUI's
+  own strings, cited by file:line. A step that genuinely cannot be driven
+  through the TUI falls back to openvtc-core, and every fallback is named in
+  the run report. The TUI runs at two versions: the openvtc pin, and the
+  upstream `main` that maintainers run.
 - **Lockstep.** The runner owns the sequence. Each step has one actor. The
   runner waits for the observable effect on the other side before moving on:
-  a request appears in `GET /state`, a testID appears on the phone. It never
-  sleeps to guess. A step that times out fails with both sides' state
-  attached.
+  a TUI screen line, a testID on the phone. It never sleeps to guess. A step
+  that times out fails with both sides' state attached.
+- **One step log per run.** Both sides append JSONL records: `role`, `step`,
+  `ok`, times, `observed`. The TUI side adds `observed.tuiState` (the screen
+  line), `observed.tuiSource` (its file:line) and `observed.openvtcVersion`.
+  Keyring's side adds `observed.stepId` (the step testID).
 - **Where truth is read.** Every assertion comes from at least one of:
-  - the bot's `GET /state`, which is what openvtc concluded;
+  - openvtc's own conclusion: its log and its persisted state, not only its
+    screen, because openvtc refuses some things silently (VTI-Q24);
   - the community's admin API (`members`, `join-list <status>`), read-only;
   - the Farm's public endpoints.
 
   The phone's screen is asserted too, but only against one of those. The
   comparison pattern is `e2e/lib/joinOutcome.js` (screen vs community vs
   expectation).
-- **The cheap layer stays.** `scripts/openvtc/card-verify` (keyring-wallet#146)
-  runs the VTI SDK's `verify_card` on a card the shipping `sendCard` produces:
-  seconds, no simulator, no network. It is the first gate step and catches
-  card-shape regressions before any device run starts.
 
 ## 4. Pinning
 
 openvtc is added to `scripts/openvtc/PINS.json`, at `177a218` today, with the
-same discipline as the VTI pin:
+same discipline as the VTI pin. The TUI also runs at upstream `main` (`ed13d29`
+on 2026-09-25), the version maintainers run, and both results are reported:
 
 - It is advanced only through `sync-external.mjs --advance openvtc --why …`,
   as its own pin-only PR written against origin/main's `PINS.json`.
-- The bot builds only from the pinned `external/openvtc`. Its build script
-  refuses a clone that is off the pin or has local changes, as
-  `check-keyring-card.sh` does for VTI.
+- The TUI at the pin builds only from the pinned `external/openvtc`. The
+  build script refuses a clone that is off the pin or has local changes, as
+  `check-keyring-card.sh` does for VTI. The `main` build is a separate
+  checkout, and its commit is recorded.
 - The openvtc pin and the VTI pin move together when openvtc's `vta-sdk`
   dependency moves. At `177a218`, openvtc builds against the published
   vta-sdk 0.42.1 and trust-tasks-rs 0.21.3, while our VTI pin is vta-sdk
-  0.46.0. The bot records both versions in every result.
+  0.46.0. Every result records both versions.
 
 Every result states four heads: wallet, bifold, openvtc and VTI. A red run
 at the same pins as the last green one is ours. A red run straight after a
@@ -125,23 +142,27 @@ pin advance is upstream's until shown otherwise.
 
 | Layer | When | Blocks |
 |---|---|---|
-| card-verify (Phase 0) | Every release-candidate gate. Also on demand, since it takes seconds | the release |
-| Bot flows F1–F7 (Phases 1–3) | Every release-candidate gate, before the TestFlight push | the release, for the flows marked required in §8 |
+| Conformance vectors (Phase 0-bis) | Every PR that touches vetting, Trust Tasks or anything exchanged with VTI | the PR |
+| card-verify both directions (Phase 0) | Every release-candidate gate | the release |
+| TUI flows F1–F3 (Phases 1–2) | Every release-candidate gate: iOS and Android, at both openvtc versions | the release |
+| TUI flows F4–F7 (Phase 3) | Every release-candidate gate | the release, once each has been green twice; advisory until then |
 | Scheduled drift run (Phase 4) | Nightly against the Farm, at the current pins **and** at upstream `main`, on a host with no gate running | nothing; it reports |
 
-**Not on every PR.** A bot run needs a Farm community, a runner agent and two
-Keyring builds or a device. It costs minutes to tens of minutes and holds the
-Farm test community's criteria and the compile slot, which one Mac shares
-between sessions. PR CI stays unit-level. The interop defects in §1 came from
-behaviour that unit tests on one side cannot see, and the release-candidate
-gate is the last point before testers where that behaviour is checked.
+**End-to-end flows are not run on every PR.** A TUI run needs a Farm
+community, a runner agent and a Keyring build on a device or simulator. It
+costs minutes to tens of minutes and holds the Farm test community's criteria
+and the compile slot, which one Mac shares between sessions. The conformance
+vectors are what run on every PR: they are cheap, and each of §1's defects
+was a value one of them checks.
 
 ## 6. Infrastructure
 
-- **Farm runner agent for the bot:** `keyring-runner-openvtc`, a VTA Only on
-  the Platform stack, with pnm slug `farm-runner-openvtc`. **Alberto creates
-  it** in the Farm portal. It holds the bot's personas: one vetter and one
-  applicant, minted by the bot through openvtc's own bootstrap.
+- **Farm runner agents for the TUI.** The TUI as vetter uses
+  `keyring-runner-prague` (`farm-runner-prague`) until a dedicated runner
+  exists. Its key sits on that agent's ACL for the run, and is removed at
+  cleanup. The TUI as applicant (Phase 2) needs a second agent with a DID host,
+  to mint its persona: `keyring-runner-openvtc` (`farm-runner-openvtc`), which
+  **Alberto creates** in the Farm portal.
 - **Communities.** Two are needed, because of how VTI treats criteria
   (VTI-Q25): a community that publishes any vetting criterion requires vetting
   of everyone, and an admin cannot admit a deferred request.
@@ -155,16 +176,17 @@ gate is the last point before testers where that behaviour is checked.
 
   Until the invitation-only community exists, seeding a vetter uses the
   announced criteria window: snapshot, flip, join, restore, read back.
-- **Persona and grant setup.** The bot's vetter joins by invitation (the
+- **Persona and grant setup.** The TUI's vetter joins by invitation (the
   invitation-only community), or by vetting from a seeded vetter
   (`keyring-test-vtc`), and gets `vetter-grant` from the community admin.
   Setup is a script. Its state (persona DIDs, grant endorsement ids) is written
   to `artifacts/interop-setup.json`, and teardown reads it back to revoke and
   leave.
 - **Machine rules.**
-  - One heavy cargo build at a time on the Mac, announced first. The bot's
-    build reuses `external/openvtc/target`, 3.8 GB at `177a218`.
-  - The bot and card-verify get a disk budget: `target/` directories are
+  - One heavy cargo build at a time on the Mac, announced first. The TUI
+    at the pin reuses `external/openvtc/target`, 3.8 GB at `177a218`; the
+    `main` build has its own, cleared when superseded.
+  - The TUI builds and card-verify get a disk budget: `target/` directories are
     capped at 20 GB in total, and a stale build is cleaned before a pin
     advance.
   - **One pnm call per runner at a time.** pnm keeps each runner's admin key
@@ -174,7 +196,7 @@ gate is the last point before testers where that behaviour is checked.
     `vta-sdk/src/acl_setup.rs`, `a96fe02f`), so two concurrent calls on one
     slug drop one of them. Every harness pnm call goes through
     `scripts/openvtc/pnm-locked` (keyring-wallet#154), which serializes
-    calls per slug across sessions; different slugs, such as the bot's
+    calls per slug across sessions; different slugs, such as the TUI's
     `farm-runner-openvtc` and a gate's runner, run in parallel. Nothing is
     asked upstream: the one-socket rule is deliberate.
 
@@ -192,24 +214,36 @@ release PR.*
     2026-09-24);
   - the script refuses an off-pin VTI clone.
 
-**Phase 1: an openvtc vetter against a Keyring applicant (F1, F3, F4).**
-About 3–4 days. Needs `keyring-runner-openvtc`.
+**Phase 0-bis: conformance vectors in PR CI.** About 1 day.
 - Acceptance:
-  - the bot builds from the pinned openvtc;
-  - one command drives a full ceremony, with the bot as vetter and Keyring on
-    a simulator as applicant, ending in the community's `join-list` showing
-    the applicant approved and `members` listing it;
-  - the bot's `GET /state` shows the card accepted;
-  - a reopened session makes the old card refused in the bot's state, while
-    Keyring shows the new code;
-  - rerun on the pre-#108 bifold, the ceremony fails at the card with the
-    bot's refusal reason attached.
+  - each value in §3's inventory has both tests, citing upstream file:line;
+  - they run on every PR that touches vetting, Trust Tasks or anything
+    exchanged with VTI;
+  - the card-digest vector fails on bifold `eaa563d3` (before #116), and the
+    commitment vector fails on the pre-#108 code.
 
-**Phase 2: the reverse direction (F2, F3).** About 2–3 days.
+**Phase 1: the openvtc TUI as vetter against a Keyring applicant (F1, F3,
+F4).** About 2–2.5 days.
 - Acceptance:
-  - with the bot as applicant and Keyring as vetter, the bot's state shows
-    Keyring's statement accepted by its own check;
-  - the community counts the statement at intake, and the bot is admitted.
+  - one command drives the ceremony with every step asserted on both sides
+    and at the community: a ticket is issued in the TUI → Keyring pastes or
+    deep-links it → the request reaches the TUI → a session opens → the same
+    match code on both → the card is sent → the TUI shows it verified → the
+    TUI attests → Keyring receives AND accepts the statement → Keyring applies
+    → the community's own list shows the member;
+  - it runs at both openvtc versions, on iOS and on Android;
+  - it fails at "statement accepted" on bifold `eaa563d3` and passes with #116;
+  - a reopened session makes the old card refused in openvtc's state, while
+    Keyring shows the new code.
+
+**Phase 2: Keyring as vetter against the openvtc TUI as applicant (F2,
+F3).** About 1.5 days. Needs `keyring-runner-openvtc`.
+- Acceptance:
+  - the TUI pastes Keyring's ticket → request → session → the same match code
+    → the TUI sends its card → Keyring attests → the TUI shows the statement
+    received and accepted by its own check → the TUI applies → the community
+    lists it as a member;
+  - it runs at both openvtc versions, with Keyring on iOS and on Android.
 
 **Phase 3: join, status, Leave and refusals (F5, F6, F7).** About 3 days.
 Needs the invitation-only community.
@@ -254,20 +288,17 @@ notes say what testers will meet.
 
 ## 9. Open decisions for Alberto
 
+Decided on 2026-09-25: build the harness, covering every step, against the
+real TUI; the release waits for Phase 0-bis and Phases 1–2 on both platforms
+and both openvtc versions; F4–F7 gate once green twice.
+
 1. **Create `keyring-runner-openvtc`** on the Farm (VTA Only, Platform
-   stack), and confirm the pnm slug `farm-runner-openvtc`.
+   stack), and confirm the pnm slug `farm-runner-openvtc`. Phase 2 needs it.
 2. **The invitation-only test community.** **Recommended:** claim the admin
    of the existing, unused Farm Full Stack #22 `keyring-vetting` (VTC
    `keyring-vetting-vtc`) by passkey, and set its criteria to invitation only.
-   Nothing new is created, and its stack VTA is already correct. The
-   alternatives are a new Full Stack, or a second community on an existing
-   stack.
-3. **Which flows block a release from day one.** §8 proposes Phase 0, F1, F6
-   and anything that is ours. The alternative is to start everything as
-   advisory.
-4. **Where the nightly drift run lives:** this Mac (it needs the compile slot
-   and a simulator), or a CI runner with a macOS simulator. Upstream's
-   openvtc-core tests run headless on Linux, but the Keyring side needs iOS or
-   Android.
-5. **Whether to offer the bot upstream** once it works, as a headless vetter
-   and applicant for openvtc's own CI. Nothing in it is Keyring-specific.
+   Until then, `keyring-test-vtc` is used with announced criteria windows.
+3. **Where the nightly drift run lives:** this Mac (it needs the compile slot
+   and a simulator), or a CI runner with a macOS simulator.
+4. **Whether to offer the TUI driver upstream** once it works, for openvtc's
+   own CI. Nothing in it is Keyring-specific.
