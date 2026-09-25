@@ -501,10 +501,12 @@ name = "card-verify"
 version = "0.1.0"
 dependencies = [
  "affinidi-did-resolver-cache-sdk",
+ "affinidi-secrets-resolver",
  "chrono",
  "dtg-credentials",
  "serde_json",
  "tokio",
+ "trust-tasks-rs",
  "vta-sdk",
 ]
 
