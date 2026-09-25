@@ -23,6 +23,7 @@ import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/confi
 import os from "node:os";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
+import * as roles from "./lib/keyringRoles.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -235,6 +236,56 @@ try {
   console.log(`[e2e] applicant = ${platforms[0]}, vetter = ${platforms[1]}`);
   keepalive = setInterval(() => { vetter.getWindowSize().catch(() => undefined); applicant.getWindowSize().catch(() => undefined); }, 20000);
   await Promise.all([unlockToHome(applicant), unlockToHome(vetter)]);
+
+  // The ordinary ceremony runs through lib/keyringRoles.js: the same one-step
+  // drivers the openvtc interop harness calls (keyring-wallet#150), so a green
+  // Keyring↔Keyring run keeps proving them. Each step asserts the page's step
+  // testID and its words, and appends a record to the step log. The refusal
+  // modes below still stage their admin actions inline; E2E_LEGACY_CEREMONY=1
+  // runs the ordinary ceremony that way too, for comparison.
+  if (!REFUSAL && process.env.E2E_LEGACY_CEREMONY !== "1") {
+    const o = { log: process.env.E2E_STEP_LOG || path.join(here, "artifacts", `vetting-steps-${Date.now()}.jsonl`) };
+    console.log(`[e2e] step log: ${o.log}`);
+    await roles.vetter.openDesk(vetter, o);
+    const { value: ticket } = await roles.vetter.issueTicket(vetter, o);
+    await screenshot(vetter, "vetting-01-ticket");
+    await roles.applicant.reset(applicant, { allowInProgress: process.env.E2E_ALLOW_IN_PROGRESS === "1" }, o);
+    await roles.applicant.start(
+      applicant,
+      {
+        communityDid: process.env.KEYRING_COMMUNITY_DID,
+        communityName: process.env.KEYRING_COMMUNITY_NAME || "keyring-test",
+        door: process.env.APPLICANT_DOOR === "link" ? "link" : "vetting",
+        legalName: LEGAL_NAME,
+      },
+      o
+    );
+    await roles.applicant.request(applicant, { ticketUri: ticket, via: process.env.TICKET_VIA || "field" }, o);
+    await roles.applicant.awaitAccepted(applicant, {}, o);
+    await screenshot(applicant, "vetting-02-accepted");
+    await roles.vetter.awaitRequest(vetter, {}, o);
+    const { value: vetterCode } = await roles.vetter.openSession(vetter, o);
+    const { value: applicantCode } = await roles.applicant.readMatchCode(applicant, {}, o);
+    console.log(`[e2e] match code vetter=${vetterCode} applicant=${applicantCode}`);
+    if (vetterCode !== applicantCode) throw new Error(`match codes differ: ${vetterCode} vs ${applicantCode}`);
+    await screenshot(applicant, "vetting-04-match-code");
+    await roles.applicant.confirmMatch(applicant, { match: true }, o);
+    await roles.vetter.confirmMatch(vetter, { match: true }, o);
+    const { value: sent } = await roles.applicant.sendCard(applicant, o);
+    const { value: claim } = await roles.vetter.awaitCard(vetter, {}, o);
+    if (!new RegExp(LEGAL_NAME).test(claim)) throw new Error(`${vetter.e2ePlatform}: unexpected card claim: ${claim}`);
+    await screenshot(vetter, "vetting-05-card");
+    await roles.vetter.attest(vetter, o);
+    await screenshot(vetter, "vetting-06-attested");
+    await roles.applicant.awaitStatement(applicant, { cardSentMs: sent.cardSentMs }, o);
+    await screenshot(applicant, "vetting-07-checklist");
+    const { value: outcome } = await roles.applicant.apply(applicant, {}, o);
+    await screenshot(applicant, "vetting-08-member");
+    if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);
+    printSuccess("vti-vetting");
+    process.exitCode = 0;
+    throw Object.assign(new Error("done"), { done: true });
+  }
 
   // — vetter: the desk, a ticket
   await openVetting(vetter);
