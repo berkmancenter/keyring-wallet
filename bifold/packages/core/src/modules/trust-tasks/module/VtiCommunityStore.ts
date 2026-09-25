@@ -20,6 +20,8 @@
 
 import type { Agent } from '@credo-ts/core'
 
+import { changeOfHeldCredential, emitCommunityChanged } from './communityChanged'
+
 export interface VtiInvitation {
   /** The invitation credential's own id. */
   id: string
@@ -156,8 +158,9 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     return this.list<VtiInvitation>('invitation')
   }
 
-  saveInvitation(invitation: VtiInvitation) {
-    return this.put('invitation', invitation.id, { ...invitation })
+  async saveInvitation(invitation: VtiInvitation) {
+    await this.put('invitation', invitation.id, { ...invitation })
+    emitCommunityChanged(invitation.communityDid, 'invitation')
   }
 
   async getMembership(communityDid: string) {
@@ -173,8 +176,9 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     return this.list<VtiMembership>('membership')
   }
 
-  saveMembership(membership: VtiMembership) {
-    return this.put('membership', membership.communityDid, { ...membership })
+  async saveMembership(membership: VtiMembership) {
+    await this.put('membership', membership.communityDid, { ...membership })
+    emitCommunityChanged(membership.communityDid, 'membership')
   }
 
   async forgetCommunity(communityDid: string) {
@@ -190,6 +194,7 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
       await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'credential' })
     ).filter((r) => (r.content as unknown as VtiHeldCredential).communityDid === communityDid)
     for (const record of [...memberships, ...invitations, ...held]) await this.agent.genericRecords.delete(record)
+    emitCommunityChanged(communityDid, 'forgotten')
   }
 
   private listInvitationRecords() {
@@ -214,16 +219,19 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
     return records[0]?.content as unknown as VtiDeparture | undefined
   }
 
-  saveDeparture(departure: VtiDeparture) {
-    return this.put('departure', departure.communityDid, { ...departure })
+  async saveDeparture(departure: VtiDeparture) {
+    await this.put('departure', departure.communityDid, { ...departure })
+    emitCommunityChanged(departure.communityDid, 'departure')
   }
 
-  saveSubmission(submission: JoinSubmission) {
-    return this.put('submission', submission.communityDid, { ...submission })
+  async saveSubmission(submission: JoinSubmission) {
+    await this.put('submission', submission.communityDid, { ...submission })
+    emitCommunityChanged(submission.communityDid, 'submission')
   }
 
-  saveHeldCredential(item: VtiHeldCredential) {
-    return this.put('credential', heldCredentialKey(item), { ...item })
+  async saveHeldCredential(item: VtiHeldCredential) {
+    await this.put('credential', heldCredentialKey(item), { ...item })
+    emitCommunityChanged(item.communityDid, changeOfHeldCredential(item.kind))
   }
 
   async listHeldCredentials(kind?: VtiHeldCredential['kind'], communityDid?: string) {
