@@ -142,7 +142,15 @@ async function swipeUp(d) {
 
 /** A phone ready to start: unlocked at home with no agent, or onboarded fresh. */
 async function readyPhone(d, name) {
-  if (await existsTestId(d, "GetStarted", 8000)) {
+  // A fresh install's first launch can take well past a few seconds to show
+  // its first screen (2026-09-25: "Get Started" came after the 8 s check, and
+  // the run took the already-onboarded path). Wait for whichever comes first.
+  let fresh = false;
+  for (const until = Date.now() + 90000; Date.now() < until; ) {
+    if (await existsTestId(d, "GetStarted", 1500)) { fresh = true; break; }
+    if ((await existsTestId(d, "EnterPIN", 1000)) || (await existsTestId(d, "Contacts", 1000))) break;
+  }
+  if (fresh) {
     await completeOnboarding(d, { firstName: name, lastName: "Twin" });
   } else {
     await unlockToHome(d);
