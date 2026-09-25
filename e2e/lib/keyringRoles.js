@@ -200,18 +200,26 @@ async function applicantEvidence(d) {
  * keeps an app it did not install (the E2E_KEEP_APP trap, 221 gate).
  */
 export async function makeDriver({ platform, app, udid, deviceName, keepState = false }) {
-  if (platform === "android") {
-    if (app) process.env.ANDROID_APK = app;
-    if (udid) process.env.ANDROID_UDID = udid;
-  } else {
-    if (app) process.env.IOS_APP = app;
-    if (deviceName) process.env.IOS_DEVICE_NAME = deviceName;
+  // Capabilities built here, not through process.env: config.js reads
+  // ANDROID_APK / IOS_APP / ANDROID_UDID once, at import, so setting them now
+  // did nothing — and androidCaps() names an AVD with fullReset, which on a
+  // machine that has that AVD would wipe the app a caller had prepared (found
+  // by cd, 2026-09-25).
+  const caps = platform === "android" ? { ...androidCaps() } : { ...iosCaps() };
+  if (platform === "android" && udid) {
+    delete caps["appium:avd"];
+    caps["appium:udid"] = udid;
   }
-  const caps = platform === "android" ? androidCaps() : iosCaps();
-  return createSession(
-    platform,
-    keepState ? { ...caps, "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false } : caps
-  );
+  if (platform !== "android" && deviceName) caps["appium:deviceName"] = deviceName;
+  if (platform !== "android" && udid) caps["appium:udid"] = udid;
+  if (keepState) {
+    // Drive the app that is installed, as it is: never install, reset or wipe.
+    delete caps["appium:app"];
+    Object.assign(caps, { "appium:fullReset": false, "appium:noReset": true, "appium:enforceAppInstall": false });
+  } else if (app) {
+    caps["appium:app"] = app;
+  }
+  return createSession(platform, caps);
 }
 
 /**
