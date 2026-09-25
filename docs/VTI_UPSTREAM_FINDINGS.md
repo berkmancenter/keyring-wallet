@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.45 — 2026-09-24.** A living document: every finding here was measured
+**Version 1.46 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1879,6 +1879,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q23 | Could a client remove its own ACL entry when it stops using an agent, so unlinking leaves nothing behind? | `delete_acl` refuses the caller's own entry (409 *cannot delete your own ACL entry*) whatever its role, and no self-service verb removes one; `swap_acl` only rotates. Keyring's Unlink therefore forgets the key on the phone and says the entry stays until the agent's owner removes it. [Details](#question-details). |
 | VTI-Q24 | Could a vetter that refuses an applicant's Vetting Card tell the applicant, instead of only logging it? | openvtc's vetter logs *vetting card refused* and answers nothing, so the applicant reads "Card sent — the vetter is checking" and the vetter's screen stays on "waiting for their card". Neither side can see why. [Details](#question-details). |
 | VTI-Q25 | Can a community offer admission by invitation OR by vetting? And can an admin admit an applicant who is waiting for vetting? | A community that publishes any vetting criterion requires vetting of everyone. An invitation neither bypasses it nor can be chosen as the criterion, although the manifest lists both as if either would do. `decide` refuses a Deferred request, so an admin cannot admit that applicant either. [Details](#question-details). |
+| VTI-Q26 | Could openvtc send a join over DIDComm, or fall back to it, when the community's TSP mediator is not its own? | openvtc sends every Trust Task over TSP whenever the peer's DID document advertises `#tsp`, with no check of whose mediator that is and no fallback. A community on another mediator never receives the join unless the two mediators relay for each other, and the applicant sees only "no response from the community yet … may not have been received". [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2182,10 +2183,47 @@ vets. Keyring's harness checks the community's answer. The cause of Keyring
 showing "member" was ours, and it is fixed. This question is only about what a
 community can offer.
 
+
+**VTI-Q26 — openvtc sends a join over TSP across mediators, with no fallback.**
+(a) An openvtc user whose persona sits on one mediator cannot join a community
+that sits on another, unless the two mediators relay TSP for each other. The
+TUI prefers TSP whenever the community's DID document advertises `#tsp`, and
+does not look at whether that mediator is its own. On a deployment where the
+mediators do not relay (the default: `security.enable_inter_mediator_relay` is
+off), the join is lost in silence. The TUI then shows *"no response from the
+community yet (sent over TSP) — the request may not have been received"*, and
+the community never sees a request. Expected, any of:
+- when the peer's TSP mediator differs from the sender's own, send over
+  DIDComm (which crosses mediators through its forward), and keep TSP for a
+  shared mediator;
+- or keep TSP first, and fall back to DIDComm when no answer comes within a
+  bound, for a peer that advertises both;
+- or state in the join flow that the community is on another mediator and may
+  be unreachable over TSP.
+(b) Measured on the Farm, 2026-09-25 06:19–06:23Z, openvtc `ed13d29`. The TUI's
+persona is on `firstperson-mediator`; `keyring-test-vtc` advertises both
+`#tsp` and `#didcomm` on `keyring-stack-mediator`; both mediators are 0.29.4.
+The TUI logged *"peer advertises #tsp — sending trust tasks over TSP"* and
+showed *"Join request sent."*. The community's `join-list` and `members` had
+nothing from the persona, including after 90 s with the TUI running. Keyring,
+sending over DIDComm from the same mediator to the same community, joins.
+(c) At openvtc `ed13d29` and at `177a218`: `openvtc-core/src/config/mod.rs`
+`peer_tsp_mediator` (:893) returns the peer's `#tsp` mediator whenever it is
+advertised (log line at :913), and `PeerTransports::preferred` follows the
+*"prefer-TSP-then-DIDComm order"* (:957). No setting changes the choice. The
+mediator side of the requirement is VTI-41: the receiving mediator must admit
+a relayed hop (affinidi-messaging-mediator 0.29.4 `docs/multi-mediator.md` §4
+and §8).
+(d) Keyring asks a community behind another mediator over DIDComm from the
+start (keyring-bifold `75c6fdbf`, 2026-09-22), for the same reason. For the
+Farm, we have asked for relaying between these two mediators. That fixes our
+case, but not a community on a mediator that does not relay.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.46 | 2026-09-25 | **VTI-Q26** (new): openvtc sends a join over TSP whenever the community advertises `#tsp`, with no check that the community's mediator is its own and no fallback, so a join to a community on another, non-relaying mediator is lost in silence. Measured on the Farm with openvtc `ed13d29` (the TUI as the applicant, `keyring-test-vtc` on its stack's mediator); read at `ed13d29` and `177a218`. Not sent. |
 | 1.45 | 2026-09-24 | **The Farm's versions, measured again.** The runner VTAs (`keyring-runner-nohost`, `-uiux`, `-prague`) report vta-service **0.41.0**. The source is the public `/openapi.json` `info.version`, which is vta-service's own `CARGO_PKG_VERSION` (`vta-service/src/routes/mod.rs`); `/health` omits the version and `/health/details` needs auth. `firstperson-mediator` reports **0.29.4** in `/mediator/v1/readyz`, up since about 07:01Z. So VTI-43's fix (vti #1675, in 0.40.0) is on the Farm, and the 09-23 "the Farm is behind" note no longer holds. Measured while diagnosing an Android link whose first `auth/whoami/0.1` went unanswered on two runners from 22:54Z; that turned out to be ours (keyring-bifold#112, the grant check's deadline). **Then, 2026-09-25 05:54Z, after an announced Farm upgrade:** the runner VTAs report 0.42.0; the mediator is still 0.29.4 (restarted about 05:29Z); the VTC is still 0.11.58; `farm-health.sh` is all green. |
 | 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
 | 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
