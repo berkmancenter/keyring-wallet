@@ -18,10 +18,20 @@
  */
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { useNavigation } from '@react-navigation/native'
-import React, { useState, useSyncExternalStore } from 'react'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
+import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Linking, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native'
+import {
+  ActivityIndicator,
+  AppState,
+  Linking,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -39,6 +49,15 @@ import { DeviceCannotOwn, deviceRefusalOf, type DeviceRefusalReason } from '../m
  * the words say "your agent's host", as for email. Unset, there is no button.
  */
 export const AGENT_HOST_WEBSITE: string | undefined = undefined
+
+/**
+ * While the owner code is out, the phone asks the agent whether it has been
+ * admitted, on its own: every 6 s for up to 10 min, then "Check again". A
+ * host may only apply a new admin after a refresh, so the person needn't
+ * guess when to tap.
+ */
+export const GRANT_POLL_EVERY_MS = 6000
+export const GRANT_POLL_WINDOW_MS = 10 * 60 * 1000
 
 type LocalStep = 'intro' | 'address' | 'backup' | 'backupAddress' | 'backupCode' | 'ready'
 
@@ -60,6 +79,13 @@ const VtaCreateAgent: React.FC = () => {
   const [error, setError] = useState<string | undefined>()
   const [codeShown, setCodeShown] = useState(false)
   const [howShown, setHowShown] = useState(false)
+  // Face ID is asked once, when the code is handed out; checks after that are quiet.
+  const [ownerConfirmed, setOwnerConfirmed] = useState(false)
+  const [pollUntil, setPollUntil] = useState<number | undefined>()
+  const [pollExpired, setPollExpired] = useState(false)
+  // Paused only when the app is known to be away; an unknown state keeps waiting.
+  const [appActive, setAppActive] = useState(AppState.currentState !== 'background')
+  const focused = useIsFocused()
   const [busy, setBusy] = useState(false)
   const [backupCode, setBackupCode] = useState('')
   const [backupAdded, setBackupAdded] = useState<string | undefined>()
@@ -136,30 +162,64 @@ const VtaCreateAgent: React.FC = () => {
 
   const ownerKey = link.kind === 'showingKey' ? link.did : undefined
 
-  /** Copy and Share hand the owner code out: an owner act, so it asks first. */
+  const startWaiting = () => {
+    setPollExpired(false)
+    setPollUntil(Date.now() + GRANT_POLL_WINDOW_MS)
+  }
+
+  /** Copy and Share hand the owner code out: an owner act, so it asks first, then the phone waits for the agent. */
   const handOut = async (how: 'copy' | 'share') => {
     if (!ownerKey) return
     setError(undefined)
-    const confirmed = await confirmOwner(t('CreateAgent.ConfirmReason'))
-    if (!confirmed.ok) {
-      setError(ownerFailureLine(confirmed.reason))
-      return
+    if (!ownerConfirmed) {
+      const confirmed = await confirmOwner(t('CreateAgent.ConfirmReason'))
+      if (!confirmed.ok) {
+        setError(ownerFailureLine(confirmed.reason))
+        return
+      }
+      setOwnerConfirmed(true)
     }
     if (how === 'copy') Clipboard.setString(ownerKey)
     else await Share.share({ message: ownerKey }).catch(() => undefined)
+    startWaiting()
   }
 
-  /** "It's online — connect": sign in as the owner code, then move onto the long-term key. */
+  /** "I've added it — check now" and "Check again": one check now, and a fresh waiting window. */
   const onConnect = async () => {
     if (!agent) return
     setError(undefined)
-    const confirmed = await confirmOwner(t('CreateAgent.ConfirmReason'))
-    if (!confirmed.ok) {
-      setError(ownerFailureLine(confirmed.reason))
-      return
+    if (!ownerConfirmed) {
+      const confirmed = await confirmOwner(t('CreateAgent.ConfirmReason'))
+      if (!confirmed.ok) {
+        setError(ownerFailureLine(confirmed.reason))
+        return
+      }
+      setOwnerConfirmed(true)
     }
+    startWaiting()
     await vtaAgent.checkManualGrant(agent)
   }
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => setAppActive(next !== 'background'))
+    return () => subscription.remove()
+  }, [])
+
+  // The quiet check: only on the owner-code screen, in view, in the foreground,
+  // inside the window. checkManualGrant skips while one is already in flight.
+  const showingCode = link.kind === 'showingKey'
+  const waiting = showingCode && pollUntil !== undefined && !pollExpired
+  useEffect(() => {
+    if (!waiting || !focused || !appActive || !agent || pollUntil === undefined) return
+    const timer = setInterval(() => {
+      if (Date.now() >= pollUntil) {
+        setPollExpired(true)
+        return
+      }
+      void vtaAgent.checkManualGrant(agent)
+    }, GRANT_POLL_EVERY_MS)
+    return () => clearInterval(timer)
+  }, [waiting, focused, appActive, agent, pollUntil])
 
   // Which screen: the link machine's own state wins once it has moved on.
   const screen: 'intro' | 'address' | 'ownerCode' | 'connecting' | LocalStep =
@@ -303,7 +363,12 @@ const VtaCreateAgent: React.FC = () => {
     )
     actions = (
       <>
-        {link.notYet ? (
+        {waiting ? (
+          <View style={styles.row} testID={testIdWithKey('AgentCreateWaiting')}>
+            <ActivityIndicator color={ColorPalette.brand.primary} />
+            <ThemedText style={{ flex: 1 }}>{t('CreateAgent.Waiting')}</ThemedText>
+          </View>
+        ) : link.notYet ? (
           <ThemedText style={styles.error} testID={testIdWithKey('AgentCreateError')}>
             {t('CreateAgent.NotAcceptedYet')}
           </ThemedText>
@@ -314,14 +379,23 @@ const VtaCreateAgent: React.FC = () => {
         ) : (
           errorLine('AgentCreateError')
         )}
+        {pollExpired ? (
+          <Button
+            title={t('CreateAgent.CheckAgain')}
+            buttonType={ButtonType.Primary}
+            onPress={onConnect}
+            disabled={link.checking}
+            testID={testIdWithKey('AgentCreateCheckAgain')}
+          />
+        ) : null}
         <Button
           title={t('CreateAgent.Connect')}
-          buttonType={ButtonType.Primary}
+          buttonType={pollExpired ? ButtonType.Secondary : ButtonType.Primary}
           onPress={onConnect}
           disabled={link.checking}
           testID={testIdWithKey('AgentCreateConnect')}
         >
-          {link.checking ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+          {link.checking && !waiting ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
         </Button>
       </>
     )

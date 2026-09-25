@@ -1706,6 +1706,9 @@
     "ShowDetails": "Details"
   },
   "CreateAgent": {
+    "CheckAgain": "Check again",
+    "Waiting": "Waiting for your agent to accept this phone…",
+    "Connect": "I've added it — check now",
     "CreateMyAgent": "Create my agent",
     "AlreadyHaveOne": "I already have one — link it",
     "IntroTitle": "Create your agent",

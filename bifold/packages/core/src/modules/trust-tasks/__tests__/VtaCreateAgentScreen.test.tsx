@@ -15,7 +15,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { confirmOwner } from '../module/ownerConfirm'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceActionRefused, DeviceCannotOwn } from '../module/vtaOwner'
-import VtaCreateAgent from '../screens/VtaCreateAgent'
+import VtaCreateAgent, { GRANT_POLL_EVERY_MS, GRANT_POLL_WINDOW_MS } from '../screens/VtaCreateAgent'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../module/ownerConfirm', () => ({
@@ -106,7 +106,7 @@ describe('the owner code is handed out only after Face ID', () => {
     expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('CreateAgent.NotConfirmed')
   })
 
-  test('confirmed, the code is copied; connect signs in only after Face ID too', async () => {
+  test('confirmed, the code is copied; checking after that asks no second time', async () => {
     showingKey()
     ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: true })
     const copy = jest.spyOn(Clipboard, 'setString')
@@ -119,7 +119,7 @@ describe('the owner code is handed out only after Face ID', () => {
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AgentCreateConnect')))
     })
-    expect(confirmOwner).toHaveBeenCalledTimes(2)
+    expect(confirmOwner).toHaveBeenCalledTimes(1)
     expect(check).toHaveBeenCalled()
   })
 
@@ -205,5 +205,69 @@ describe('a backup phone, once the agent is linked', () => {
     ]) {
       expect(typeof copy.CreateAgent.Device[reason]).toBe('string')
     }
+  })
+})
+
+describe('the phone waits for the agent to admit the code, on its own', () => {
+  const showingKey = () =>
+    controller.set({
+      link: { kind: 'showingKey', vtaDid: VTA, label: 'a', did: 'did:key:z6MkOwner', checking: false },
+    })
+
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  test('nothing is checked before the code is handed out', async () => {
+    showingKey()
+    const check = jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+    show()
+    await act(async () => {
+      jest.advanceTimersByTime(GRANT_POLL_EVERY_MS * 3)
+    })
+    expect(check).not.toHaveBeenCalled()
+  })
+
+  test('after Copy it checks on the interval, and moves on once the agent admits the phone', async () => {
+    showingKey()
+    ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: true })
+    const check = jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+    const tree = show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateCopyCode')))
+    })
+    expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
+    await act(async () => {
+      jest.advanceTimersByTime(GRANT_POLL_EVERY_MS * 2)
+    })
+    expect(check).toHaveBeenCalledTimes(2)
+    expect(confirmOwner).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      controller.set({ link: { kind: 'linking', step: 'rotating', vtaDid: VTA, label: 'a' } })
+    })
+    expect(tree.getByTestId(id('AgentCreateProgress'))).toBeTruthy()
+  })
+
+  test('after 10 minutes it stops and offers Check again, which waits another window', async () => {
+    showingKey()
+    ;(confirmOwner as jest.Mock).mockResolvedValue({ ok: true })
+    const check = jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+    const tree = show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateCopyCode')))
+    })
+    await act(async () => {
+      jest.advanceTimersByTime(GRANT_POLL_WINDOW_MS + GRANT_POLL_EVERY_MS)
+    })
+    expect(tree.queryByTestId(id('AgentCreateWaiting'))).toBeNull()
+    const calls = check.mock.calls.length
+    await act(async () => {
+      jest.advanceTimersByTime(GRANT_POLL_EVERY_MS * 3)
+    })
+    expect(check.mock.calls).toHaveLength(calls)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentCreateCheckAgain')))
+    })
+    expect(check.mock.calls).toHaveLength(calls + 1)
+    expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
   })
 })

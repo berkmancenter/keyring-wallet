@@ -1547,6 +1547,9 @@
     "ShowDetails": "Detalhes"
   },
   "CreateAgent": {
+    "CheckAgain": "Verificar de novo",
+    "Waiting": "Esperando seu agente aceitar este telefone…",
+    "Connect": "Já adicionei — verificar agora",
     "CreateMyAgent": "Criar meu agente",
     "AlreadyHaveOne": "Já tenho um — vincular",
     "IntroTitle": "Crie seu agente",

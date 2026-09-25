@@ -1648,6 +1648,9 @@
     "ShowDetails": "Détails"
   },
   "CreateAgent": {
+    "CheckAgain": "Vérifier à nouveau",
+    "Waiting": "En attente que votre agent accepte ce téléphone…",
+    "Connect": "Je l'ai ajouté — vérifier maintenant",
     "CreateMyAgent": "Créer mon agent",
     "AlreadyHaveOne": "J'en ai déjà un — le relier",
     "IntroTitle": "Créer votre agent",
