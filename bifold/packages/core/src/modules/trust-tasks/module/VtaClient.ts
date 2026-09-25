@@ -329,9 +329,11 @@ export class VtaClient {
     payload: Record<string, unknown>,
     timeoutMs = 30000,
     /** Members beside `payload` on the signed document itself — e.g. `idempotencyKey`. */
-    documentExtras: Record<string, unknown> = {}
+    documentExtras: Record<string, unknown> = {},
+    /** Called once the task has left the phone — the moment `timeoutMs` starts. */
+    onSent?: () => void
   ): Promise<T> {
-    const run = (): Promise<T> => this.sendTask<T>(type, payload, timeoutMs, documentExtras)
+    const run = (): Promise<T> => this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent)
     // Chain behind whatever is in flight, but do not let one failure poison the next.
     const next = this.queue.then(run, run)
     this.queue = next.catch(() => undefined)
@@ -382,7 +384,8 @@ export class VtaClient {
     type: string,
     payload: Record<string, unknown>,
     timeoutMs: number,
-    documentExtras: Record<string, unknown> = {}
+    documentExtras: Record<string, unknown> = {},
+    onSent?: () => void
   ): Promise<T> {
     {
       const session = this.session
@@ -448,6 +451,7 @@ export class VtaClient {
           expires_time: nowSec() + 300,
           body: document,
         })
+      onSent?.()
       const answer = await Promise.race([
         reply,
         new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), timeoutMs)),
@@ -524,9 +528,9 @@ export class VtaClient {
     })
   }
 
-  /** `timeoutMs` bounds the wait for the VTA's answer, counted from the send. */
-  whoAmI(timeoutMs?: number) {
-    return this.task<VtaWhoAmI>(VTA_TASK.whoAmI, {}, timeoutMs)
+  /** `timeoutMs` bounds the wait for the VTA's answer, counted from the send (`onSent`). */
+  whoAmI(timeoutMs?: number, onSent?: () => void) {
+    return this.task<VtaWhoAmI>(VTA_TASK.whoAmI, {}, timeoutMs, {}, onSent)
   }
 
   /**

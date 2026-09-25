@@ -1,6 +1,6 @@
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
-import { VtaAgentController } from '../module/vtaAgent'
+import { GRANT_HOLD_MS, VtaAgentController } from '../module/vtaAgent'
 import { EnrolmentError } from '../module/vtaEnrolment'
 
 // The controller runs the whole link — submit, wait for the admin, sign in as
@@ -10,7 +10,7 @@ import { EnrolmentError } from '../module/vtaEnrolment'
 const mockClient = {
   connect: jest.fn(async () => undefined),
   disconnect: jest.fn(async () => undefined),
-  whoAmI: jest.fn(async (_timeoutMs?: number) => ({ roles: ['admin'] })),
+  whoAmI: jest.fn(async (_timeoutMs?: number, _onSent?: () => void) => ({ roles: ['admin'] })),
   rotateManagerKey: jest.fn(async () => 'did:peer:2.permanent'),
   agentLabel: jest.fn(async (): Promise<{ label: string; source: string } | undefined> => undefined),
   managerDid: 'did:peer:2.permanent',
@@ -222,7 +222,7 @@ describe('linking without a QR through the controller', () => {
     expect(vta.getState().link).toMatchObject({ kind: 'showingKey', noAnswer: true })
     expect(mockClient.rotateManagerKey).not.toHaveBeenCalled()
 
-    // Trying again is a fresh attempt, and a healthy agent links as usual.
+    // Trying again takes the answer that arrived late, and links as usual.
     await vta.checkManualGrant({} as never)
     expect(mockClient.rotateManagerKey).toHaveBeenCalledTimes(1)
     expect(vta.getState().link).toMatchObject({ kind: 'linked' })
@@ -241,8 +241,32 @@ describe('linking without a QR through the controller', () => {
     mockClient.connect.mockImplementationOnce(() => new Promise<undefined>((resolve) => setTimeout(resolve, 80)))
 
     await vta.checkManualGrant({} as never)
-    expect(mockClient.whoAmI).toHaveBeenCalledWith(30)
+    expect(mockClient.whoAmI.mock.calls[0][0]).toBe(GRANT_HOLD_MS)
     expect(vta.getState().link).toMatchObject({ kind: 'linked' })
+  })
+
+  /**
+   * On a slow link the answer can arrive after the deadline. It is kept, and
+   * the next "I've been added" settles from it at once: no second sign-in, no
+   * second question, both of which would be just as slow.
+   */
+  it('an answer that arrives after the deadline settles the next tap at once', async () => {
+    const { vta } = controller({ grantCheckDeadlineMs: 20 })
+    await vta.startManualLink({} as never, offer.vta, 'alice host')
+    let refuse: (error: Error) => void = () => undefined
+    mockClient.whoAmI.mockImplementationOnce((_timeoutMs?: number, onSent?: () => void) => {
+      onSent?.()
+      return new Promise((_resolve, reject) => (refuse = reject))
+    })
+
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', noAnswer: true })
+
+    refuse(new Error('refusing trust task: DID not in ACL'))
+    await vta.checkManualGrant({} as never)
+    expect(vta.getState().link).toMatchObject({ kind: 'showingKey', notYet: true, noAnswer: false })
+    expect(mockClient.connect).toHaveBeenCalledTimes(1)
+    expect(mockClient.whoAmI).toHaveBeenCalledTimes(1)
   })
 
   it('the client giving up on an answer reads as no answer, not as a failure', async () => {
