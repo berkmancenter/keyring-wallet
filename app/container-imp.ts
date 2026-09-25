@@ -24,6 +24,8 @@ import {
   testIdWithKey,
   initializeVrcModule,
   setPeerLegCarriage,
+  ownerChecks,
+  vtaAgent,
 } from '@bifold/core'
 import { BrandingOverlayType, RemoteOCABundleResolver } from '@bifold/oca/build/legacy'
 import { getProofRequestTemplates } from '@bifold/verifier'
@@ -144,6 +146,10 @@ export class AppContainer implements Container {
     // the mediator socket; anything else keeps DIDComm v2. Read here, once.
     const vtiPeerLeg = Config.VTI_PEER_LEG === 'tsp' ? 'tsp' : 'didcomm'
     setPeerLegCarriage(vtiPeerLeg)
+    // Owning an agent from this phone (own_agent_subtask.md §3): owner acts ask
+    // for Face ID, a fingerprint or the passcode at that moment. Unwired, the
+    // controller refuses every owner act, so a build that forgot this fails loudly.
+    vtaAgent.setOwnerChecks(ownerChecks)
     this._container.registerInstance(TOKENS.CONFIG, {
       ...defaultConfig,
       PINSecurity: { rules: PINRules, displayHelper: false },
