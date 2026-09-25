@@ -361,6 +361,9 @@ export class VtaClient {
     // either key; settling leaves the session open as the key the VTA knows.
     const record = await this.store.getManager(this.vtaDid)
     if (record?.pendingNext) {
+      this.agent.config.logger.info(
+        `${LOG_PREFIX} a key swap is pending on connect (${record.pendingNext.did}); asking the VTA which key it knows`
+      )
       await this.resolvePendingSwap(record)
       return
     }
@@ -652,6 +655,7 @@ export class VtaClient {
       pendingNext: { did: next, createdAt: new Date().toISOString() },
     }
     await this.store.setManager(record)
+    this.agent.config.logger.info(`${LOG_PREFIX} recorded ${next} as the pending successor before the key swap`)
     const issuedAt = nowSec()
     try {
       const linkProof = await signCompactJws(this.agent, next, {
