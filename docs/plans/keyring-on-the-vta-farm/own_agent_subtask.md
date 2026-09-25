@@ -155,6 +155,8 @@ Estimates are one engineer's working days. **Ours** is Keyring work; **Farm/upst
 
 The screens, in the order of §1, with their English words. Other languages follow the same keys. Rules they all keep:
 
+- **No provider named on screen.** The app says "your agent's host", like an email provider; the Farm is one such host, and self-hosting stays possible in the words. Provider-specific help belongs behind **How?**, never in the main text.
+
 - **Plain words.** "Agent" is the only term, and the person already met it on My Agent. No "DID", "key", "ACL" or "VTA" on screen. Codes are something to paste, not read, and stay behind a **Show the code** toggle, as on the link screen today.
 - **One job per screen, never a dashboard.** Each screen has one primary button.
 - **Errors sit beside the button that caused them** (the rule the link and join screens already follow), in words, with the developer text behind **Details**.
@@ -170,30 +172,31 @@ The second button is today's **Link your agent**, renamed. **Link without a QR c
 
 **1 — Create your agent.**
 
-> Your agent runs on the VTA Farm, a free service that keeps it online when your phone is off. You set it up on the Farm's website in a few minutes. Keep Keyring open.
-> 1. Create your agent on the Farm's website
+> Your agent lives with a service that hosts it and keeps it online when your phone is off, much like an email provider. You can also run your own. Keep Keyring open while you set it up.
+> 1. Create your agent with the service that hosts it
 > 2. Bring its address here
-> 3. Give the Farm this phone's owner code
+> 3. Add this phone's owner code to your agent
 >
-> **[Open the Farm's website]** · [Continue]
+> **[Open your agent host's website]** (only once a host's website is known) · [Continue]
 
 **2 — Bring your agent here** (§1 step 3).
 
 > **Step 1 of 3 · Your agent's address**
-> On the Farm, choose **Create session**. It shows your agent's address, starting with `did:webvh:`. Copy it and paste it here.
+> Once your agent is created, its host shows its address. It starts with `did:webvh:`. Copy it and paste it here.
 >
-> [Paste] (and **Scan** once the Farm shows a QR, U1) · **[Continue]**
+> [Paste] (and **Scan** once hosts show a QR, U1) · **[Continue]**
 
 Errors:
-- Not an address: "That isn't an agent's address. It starts with did:webvh: — copy the whole line from the Farm."
-- It doesn't resolve or names no mediator: "Keyring couldn't find an agent at that address. Check you copied the whole line, and that the Farm finished creating it."
-- No connection: "Keyring couldn't reach the Farm. Check your connection and try again."
+- Not an address: "That isn't an agent's address. It starts with did:webvh: — copy the whole line your agent's host shows."
+- It doesn't resolve or names no mediator: "Keyring couldn't find an agent at that address. Check you copied the whole line, and that your agent has finished being created."
+- No connection: "Keyring couldn't reach your agent. Check your connection and try again."
 
 **3 — This phone's owner code** (§1 step 4). Keyring makes the key when this screen opens, once the phone has a screen lock (§3).
 
 > **Step 2 of 3 · Your owner code**
-> Give this code to the Farm so your agent knows this phone owns it. The code is protected by your Face ID.
-> On the Farm, paste it where it asks for the **Admin DID**, then choose **Provision agent**. Come back when it says **Agent is online**.
+> This code tells your agent that this phone owns it. The code is protected by your Face ID.
+> Copy this code and add it as an owner (admin) in your agent host's settings. If you run your own agent, give this code to it as an admin. Come back when your agent is online.
+> › How? (a host's settings page where admins are added; or your own agent's command-line tool — a host may be named here later, never in the main text)
 >
 > **[Copy]** · [Share] · › Show the code
 > **[It's online — connect]**
@@ -208,7 +211,7 @@ Errors:
 > Signing in to your agent… · Making sure it's yours… · Getting it ready…
 
 Errors:
-- Not admitted yet (the key is not in the agent's ACL): "Your agent isn't accepting this phone yet. Check the Farm says Agent is online, then try again."
+- Not admitted yet (the key is not in the agent's ACL): "Your agent isn't accepting this phone yet. Check that the code is added as an admin and your agent is online, then try again."
 - A lost answer during the move is not an error on screen. The next connect settles it (#127/#132), and the line reads "Still getting it ready…".
 
 **5 — Add a backup** (§4; skippable).
