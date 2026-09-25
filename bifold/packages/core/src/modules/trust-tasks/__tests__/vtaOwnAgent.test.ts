@@ -25,6 +25,7 @@ const SWAP = 'https://trusttasks.org/spec/acl/swap-key/0.1'
 const ACL_LIST = 'https://trusttasks.org/spec/acl/list/0.1'
 const ACL_GRANT = 'https://trusttasks.org/spec/acl/grant/0.1'
 const ACL_REVOKE = 'https://trusttasks.org/spec/acl/revoke/0.1'
+const ACL_UPDATE = 'https://trusttasks.org/spec/acl/update/0.1'
 const VTA = 'did:webvh:QmFarm:farm.example:alice'
 const PHONE = 'did:peer:2.phone'
 const BACKUP = 'did:peer:2.backup'
@@ -36,6 +37,7 @@ type Row = { role: string; scopes?: string[]; label?: string; expiresAt?: string
 type Refusal = { code: string; message: string; details?: unknown }
 
 const mockVta = {
+  refuseUpdate: false,
   acl: new Map<string, Row>(),
   asked: [] as { from: string; type: string; payload: Record<string, unknown> }[],
   /** Everything that happened, in order — owner confirmations and sends. */
@@ -206,6 +208,17 @@ jest.mock('../module/VtiMediatorTransport', () => ({
           mockAnswer(this.record, `${ACL_REVOKE}#response`, { entry: mockWireEntry(subject, row) })
           return
         }
+        case ACL_UPDATE: {
+          const subject = String(payload.subject)
+          const row = mockVta.acl.get(subject)
+          if (!row || mockVta.refuseUpdate) {
+            refuse({ code: 'taskFailed', message: `not found: ACL entry not found for DID: ${subject}` })
+            return
+          }
+          if (typeof payload.label === 'string') row.label = payload.label
+          mockAnswer(this.record, `${ACL_UPDATE}#response`, { entry: mockWireEntry(subject, row) })
+          return
+        }
         default:
           refuse({ code: 'unsupportedType', message: `no handler for ${body.type}` })
       }
@@ -321,8 +334,15 @@ async function linkedPhone(owner: Owner = { confirmOwner: confirmed() }) {
 }
 
 const sentOf = (type: string) => mockVta.asked.filter((a) => a.type === type)
+/** Wait (in 10 ms steps, up to 2 s) until the phone has sent its background acl/update. */
+async function labelSent() {
+  for (let waited = 0; sentOf(ACL_UPDATE).length === 0 && waited < 2000; waited += 10) {
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
 
 beforeEach(() => {
+  mockVta.refuseUpdate = false
   mockVta.acl = new Map([
     [PHONE, { role: 'admin' }],
     ['did:key:z6MkMediator', { role: 'application', scopes: ['vta'] }],
@@ -418,8 +438,16 @@ describe('the device list', () => {
     const { vta } = await linkedPhone()
     const devices = await vta.listDevices(agent)
     expect(devices).toEqual([
-      { did: PHONE, role: 'admin', thisPhone: true },
-      { did: BACKUP, role: 'admin', label: 'Pixel 8', thisPhone: false, expiresAt: '2026-10-01T00:00:00Z' },
+      { did: PHONE, role: 'admin', thisPhone: true, createdAt: '2026-09-25T00:00:00Z', createdBy: PHONE },
+      {
+        did: BACKUP,
+        role: 'admin',
+        label: 'Pixel 8',
+        thisPhone: false,
+        expiresAt: '2026-10-01T00:00:00Z',
+        createdAt: '2026-09-25T00:00:00Z',
+        createdBy: PHONE,
+      },
     ])
   })
 
@@ -449,7 +477,14 @@ describe('adding a backup device', () => {
     expect(sentOf(ACL_GRANT).map((a) => a.payload)).toEqual([
       { entry: { subject: BACKUP, role: 'admin', label: 'Pixel 8' } },
     ])
-    expect(added).toEqual({ did: BACKUP, role: 'admin', label: 'Pixel 8', thisPhone: false })
+    expect(added).toEqual({
+      did: BACKUP,
+      role: 'admin',
+      label: 'Pixel 8',
+      thisPhone: false,
+      createdAt: '2026-09-25T00:00:00Z',
+      createdBy: PHONE,
+    })
     expect(mockVta.acl.get(BACKUP)).toMatchObject({ role: 'admin' })
   })
 
@@ -482,6 +517,12 @@ describe('adding a backup device', () => {
     const { vta } = await linkedPhone({})
     await expect(vta.addBackupDevice(agent, BACKUP)).rejects.toBeInstanceOf(OwnerCheckNotConfigured)
     expect(sentOf(ACL_GRANT)).toEqual([])
+  })
+
+  it('lists each device with when it was added and by whom', async () => {
+    const { vta } = await linkedPhone({ confirmOwner: confirmed() })
+    const devices = await vta.listDevices(agent)
+    expect(devices[0]).toMatchObject({ createdAt: '2026-09-25T00:00:00Z', createdBy: PHONE })
   })
 
   it('owner checks set by the app are used, and setting them keeps the rest of the wiring', async () => {
@@ -691,6 +732,32 @@ describe('creating an agent', () => {
     // Swapped onto the long-term key, as every link does.
     expect(mockVta.acl.has(PERMANENT)).toBe(true)
     expect(mockVta.acl.has(TEMPORARY)).toBe(false)
+  })
+
+  it('names its own access entry after the swap: "Keyring — <device name>"', async () => {
+    const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    vta.setDeviceName(() => 'Test phone')
+    await vta.startCreateAgent(agent, VTA, 'farm.example')
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent)
+
+    expect(vta.getState().link).toMatchObject({ kind: 'linked' })
+    // The label goes out in the background, after the link is done.
+    await labelSent()
+    expect(sentOf(ACL_UPDATE).map((a) => a.payload)).toEqual([{ subject: PERMANENT, label: 'Keyring — Test phone' }])
+    expect(mockVta.acl.get(PERMANENT)).toMatchObject({ label: 'Keyring — Test phone' })
+  })
+
+  it('without a device name the label is just "Keyring"; a refused relabel does not fail the link', async () => {
+    mockVta.refuseUpdate = true
+    const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    await vta.startCreateAgent(agent, VTA, 'farm.example')
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent)
+
+    await labelSent()
+    expect(sentOf(ACL_UPDATE).map((a) => a.payload)).toEqual([{ subject: PERMANENT, label: 'Keyring' }])
+    expect(vta.getState().link).toMatchObject({ kind: 'linked' })
   })
 
   it('a plain manual link is not marked as owned', async () => {

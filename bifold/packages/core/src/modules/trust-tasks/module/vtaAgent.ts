@@ -90,6 +90,10 @@ export interface VtaDevice {
   thisPhone: boolean
   /** RFC 3339; absent means the device never lapses. */
   expiresAt?: string
+  /** RFC 3339, when the agent added it. */
+  createdAt?: string
+  /** Who added it: a DID, or the agent's own marker such as `cli:import-did`. */
+  createdBy?: string
 }
 
 export interface VtaActivity {
@@ -125,6 +129,8 @@ export interface VtaAgentDeps {
    * {@link OwnerCheckNotConfigured}.
    */
   deviceCanOwn?: DeviceCanOwn
+  /** This phone's name, for the label of its own access entry ("Keyring — <name>"). */
+  deviceName?: () => Promise<string> | string
 }
 
 /** A refusal that means the agent no longer accepts this phone at all. */
@@ -249,6 +255,11 @@ export class VtaAgentController {
    * kept. Left unset, an owner act refuses with {@link OwnerCheckNotConfigured}
    * rather than skipping the check.
    */
+  /** How the app names this phone in its own access entry. Only this is set; the rest is kept. */
+  setDeviceName(deviceName: () => Promise<string> | string) {
+    this.deps = { ...this.deps, deviceName }
+  }
+
   setOwnerChecks(checks: { confirmOwner: ConfirmOwner; deviceCanOwn: DeviceCanOwn }) {
     this.deps = { ...this.deps, confirmOwner: checks.confirmOwner, deviceCanOwn: checks.deviceCanOwn }
   }
@@ -592,6 +603,8 @@ export class VtaAgentController {
       }
       // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
       await client.whoAmI().catch(() => undefined)
+      // In the background: a slow or silent answer must not hold the link up.
+      void this.labelOwnEntry(agent, client)
     }
     this.set({ introSeen: false })
     this.reconnectAttempt = 0
@@ -604,6 +617,25 @@ export class VtaAgentController {
   private async onTemporaryKey(agent: Agent, vtaDid: string): Promise<boolean> {
     const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
     return record?.stage === 'temporary'
+  }
+
+  /**
+   * Name this phone's own access entry after the swap, "Keyring — <device
+   * name>", so an agent's admin sees which entry is which (a host's own grant
+   * carries no label, and the swap keeps whatever label the entry had). Best
+   * effort: a refusal leaves the entry unnamed and the link as it is.
+   */
+  private async labelOwnEntry(agent: Agent, client: VtaClient): Promise<void> {
+    // Nothing here may fail the link: every step, the name included, is caught.
+    try {
+      const did = client.managerDid
+      if (!did) return
+      const name = String((await this.deps.deviceName?.()) ?? '').trim()
+      await client.labelAclEntry(did, name ? `Keyring — ${name}` : 'Keyring')
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error)
+      agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] could not label this phone's access entry: ${detail}`)
+    }
   }
 
   /**
@@ -963,6 +995,8 @@ function deviceFrom(entry: VtaAclEntry, mine: string[]): VtaDevice {
     ...(entry.label ? { label: entry.label } : {}),
     thisPhone: mine.includes(entry.subject),
     ...(entry.expiresAt ? { expiresAt: entry.expiresAt } : {}),
+    ...(entry.createdAt ? { createdAt: entry.createdAt } : {}),
+    ...(entry.createdBy ? { createdBy: entry.createdBy } : {}),
   }
 }
 

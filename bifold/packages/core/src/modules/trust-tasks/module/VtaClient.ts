@@ -70,6 +70,7 @@ export const VTA_TASK = {
   aclList: 'https://trusttasks.org/spec/acl/list/0.1',
   aclGrant: 'https://trusttasks.org/spec/acl/grant/0.1',
   aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
+  aclUpdate: 'https://trusttasks.org/spec/acl/update/0.1',
 } as const
 
 /** What a VTA sends an approver: the request document's payload (`consent_request.rs`). */
@@ -892,6 +893,17 @@ export class VtaClient {
   async revokeSubject(did: string): Promise<VtaAclEntry> {
     const answer = await this.task(VTA_TASK.aclRevoke, { subject: did })
     return answeredEntry(VTA_TASK.aclRevoke, answer)
+  }
+
+  /**
+   * Set the human-readable label of an access-list entry: `acl/update/0.1`
+   * with `{subject, label}` (vta-sdk acl_management/update.rs:36-51; omitted
+   * members are left unchanged). An admin may relabel any entry it can see,
+   * its own included (vta-service operations/acl.rs:517-545).
+   */
+  async labelAclEntry(did: string, label: string): Promise<VtaAclEntry> {
+    const answer = await this.task(VTA_TASK.aclUpdate, { subject: did, label: label.trim().slice(0, ACL_LABEL_MAX) })
+    return answeredEntry(VTA_TASK.aclUpdate, answer)
   }
 
   async listContexts(): Promise<VtaContext[]> {
