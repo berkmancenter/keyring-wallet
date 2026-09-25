@@ -1,5 +1,5 @@
 /**
- * Create my agent (own_agent_subtask.md §1, §7): a person with only a phone
+ * Claim your agent (own_agent_subtask.md §1, §7): a person with only a phone
  * and the VTA Farm's website makes an agent and owns it from Keyring.
  *
  * The steps follow the Farm's own wizard: the agent's address first (the

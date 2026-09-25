@@ -80,7 +80,7 @@ export enum Screens {
   VtiCommunity = 'Community',
   VtiVetting = 'Vetting',
   VtaLink = 'Link your agent',
-  VtaCreateAgent = 'Create your agent',
+  VtaCreateAgent = 'Claim your agent',
   VtaDevices = 'Your devices',
   VtaAgent = 'Your agent',
   VtiInvited = 'Invited',
