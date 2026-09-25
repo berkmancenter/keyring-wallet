@@ -29,6 +29,8 @@
  *     manifest
  *     vetters-list
  *     vetter-grant <memberDid> [validitySeconds]
+ *     invitations-list
+ *     invitation-deliver <invitationId> [message|offer]
  */
 import { readFileSync } from "node:fs";
 import { generateDidKeyHolder, signDocument, base58encode } from "./di-proof.mjs";
@@ -258,6 +260,20 @@ async function main() {
           method: "POST",
           token,
           body: { subjectDid: args[0], role: args[1] ?? "member", validityDays: 30 },
+        })
+      );
+    case "invitations-list":
+      // The answer is { invitations: [...] }, not a paged { items } list.
+      return void show("GET /invitations", await call(base, "https://trusttasks.org/spec/vtc/invitations/list/0.1", "/invitations", { token }));
+    case "invitation-deliver":
+      // What the admin console's Send (channel "message") and QR offer
+      // (channel "offer") do (vtc-service routes/invitations.rs, deliver).
+      return void show(
+        "POST /invitations/deliver",
+        await call(base, "https://trusttasks.org/spec/vtc/invitations/deliver/0.1", "/invitations/deliver", {
+          method: "POST",
+          token,
+          body: { id: args[0], channel: args[1] ?? "offer" },
         })
       );
     case "members":

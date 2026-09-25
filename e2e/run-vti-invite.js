@@ -17,6 +17,19 @@
  *   it → the runner invites it → the link is pasted → back in the flow the
  *   invitation shows → Join → the outcome.
  *
+ * INVITE_VIA=console-push | console-qr: the door, but the invitation comes the
+ *   way a community's admin console hands it out (keyring-bifold#139). The
+ *   runner issues it and delivers it through the community's own admin API, as
+ *   the console's buttons do:
+ *   - console-push: "Send" (channel message). Nothing is opened on the phone;
+ *     the invitation must arrive in the flow by itself.
+ *   - console-qr: "QR offer" (channel offer), an openid-credential-offer:// link
+ *     with the community's DID as issuer. It is opened while an ordinary OpenID
+ *     offer's full-screen error is up (the state a person was stuck in on
+ *     2026-09-25), and "I was invited" must come to the top. After the join
+ *     the same link is opened again: the used code must be explained in words,
+ *     never a modal.
+ *
  * EXPECT_JOIN=member|deferred|pending|rejected (default member): what the join
  *   must end as, on the screen AND at the community. After Join the runner reads
  *   the community's own answer through its admin API (member list, join
@@ -86,6 +99,38 @@ function readCommunityOutcome(applicantDid) {
     (status) => communityRead("join-list", status).items ?? []
   );
   return communityOutcome(applicantDid, members, requests);
+}
+
+/** A write through the community's admin API — what its console's buttons call. */
+function communityWrite(...args) {
+  return communityRead(...args)
+}
+
+const CONSOLE = INVITE_VIA.startsWith("console-")
+// The raw keys of the OpenID flow's full-screen error, as a build without its
+// words shows them — and the words, as one with them does (keyring-bifold#138).
+const OPENID_ERROR = /Error\.GenericError|FullScreenErrorModal\.PrimaryCTA|Something went wrong/
+
+/** Issue an invitation to `personaDid` and deliver it on `channel`, as the console does; returns the offer link for `offer`. */
+function consoleInvite(personaDid, channel) {
+  const issued = communityWrite("invite", personaDid, "member")
+  const listed = communityRead("invitations-list").invitations ?? []
+  const id =
+    issued?.id ??
+    listed
+      .filter((i) => i.subjectDid === personaDid)
+      .sort((a, b) => String(b.issuedAt).localeCompare(String(a.issuedAt)))[0]?.id
+  if (!id) throw new Error(`the community lists no invitation for ${personaDid}`)
+  const delivered = communityWrite("invitation-deliver", id, channel)
+  console.log(`[e2e] console: invitation ${id} issued and delivered (${channel})`)
+  if (channel !== "offer") return undefined
+  if (!delivered?.offer?.credential_issuer?.startsWith("did:")) throw new Error(`the offer names no DID issuer: ${JSON.stringify(delivered)}`)
+  // admin-ui/src/lib/invitation-offer.ts, offerDeepLink
+  return `openid-credential-offer://?credential_offer=${encodeURIComponent(JSON.stringify(delivered.offer))}`
+}
+
+async function pageHas(d, pattern) {
+  return pattern.test(await d.getPageSource())
 }
 
 async function openLink(url) {
@@ -218,11 +263,53 @@ async function inviteByDoor(d) {
   if (!personaDid.startsWith("did:")) throw new Error(`no identity under Details: ${personaDid}`);
   console.log(`[e2e] ${d.e2ePlatform}: identity to send the admin ${personaDid}`);
 
-  const out = execFileSync("bash", [INVITE, personaDid, "member"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
-  const link = /INVITATION_LINK=(\S+)/.exec(out)?.[1];
-  if (!link) throw new Error(`no invitation link:\n${out}`);
-  console.log(`[e2e] invitation issued (${link.length} chars)`);
-  await openLink(link);
+  let offerLink;
+  if (INVITE_VIA === "console-push") {
+    // The person stays on "Waiting for your invitation"; nothing is opened.
+    await tapTestId(d, "InvitedSent", 15000).catch(() => undefined);
+    consoleInvite(personaDid, "message");
+  } else if (INVITE_VIA === "console-qr") {
+    offerLink = consoleInvite(personaDid, "offer");
+    // First the state a person was stuck in: an ordinary OpenID offer whose
+    // issuer cannot be reached ends on the OpenID flow's full-screen error.
+    const decoy = `openid-credential-offer://?credential_offer=${encodeURIComponent(
+      JSON.stringify({
+        credential_issuer: "https://issuer.invalid",
+        credential_configuration_ids: ["x"],
+        grants: { "urn:ietf:params:oauth:grant-type:pre-authorized_code": { "pre-authorized_code": "decoy" } },
+      })
+    )}`
+    await openLink(decoy);
+    let stuck = false;
+    for (let i = 0; i < 20 && !stuck; i++) {
+      await sleep(3000);
+      stuck = await pageHas(d, OPENID_ERROR);
+    }
+    await screenshot(d, "vti-invite-console-qr-modal");
+    if (!stuck) throw new Error("the OpenID offer's error never came up; nothing to prove the pop against");
+    console.log(`[e2e] ${d.e2ePlatform}: the OpenID flow's full-screen error is up`);
+    console.log(`[e2e] console QR offer link: ${offerLink.length} chars`);
+    await openLink(offerLink);
+  } else {
+    const out = execFileSync("bash", [INVITE, personaDid, "member"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+    const link = /INVITATION_LINK=(\S+)/.exec(out)?.[1];
+    if (!link) throw new Error(`no invitation link:\n${out}`);
+    console.log(`[e2e] invitation issued (${link.length} chars)`);
+    await openLink(link);
+  }
+
+  if (INVITE_VIA === "console-qr") {
+    // The link must bring its screen to the top, over the modal: the card is
+    // there without anyone touching the phone, and the error is gone.
+    const until = Date.now() + 60000;
+    let top = false;
+    while (Date.now() < until && !top) {
+      top = (await existsTestId(d, "InvitedInvitationCard", 3000)) && !(await pageHas(d, OPENID_ERROR));
+    }
+    await screenshot(d, "vti-invite-console-qr-top");
+    if (!top) throw new Error('"Your invitation arrived" did not come to the top over the OpenID error');
+    console.log(`[e2e] ${d.e2ePlatform}: the console QR opened "Your invitation arrived" on top; the error is gone`);
+  }
 
   // The flow picks the invitation up wherever the person left it.
   let card = false;
@@ -273,6 +360,19 @@ async function inviteByDoor(d) {
     await assertNoDidShown(d, "the deferred join");
   }
   console.log(`[e2e] ${d.e2ePlatform}: joined through the door — ${screen}, as the community says`);
+  if (offerLink) {
+    // The same QR again: its code is spent. Said in words, never a modal.
+    await openLink(offerLink);
+    let said = false;
+    for (let i = 0; i < 30 && !said; i++) {
+      await sleep(1000);
+      said = await pageHas(d, /already been used/);
+    }
+    await screenshot(d, "vti-invite-console-qr-used");
+    if (!said) throw new Error("opening the used QR again did not say it was used");
+    if (await pageHas(d, OPENID_ERROR)) throw new Error("opening the used QR again brought up the OpenID error");
+    console.log(`[e2e] ${d.e2ePlatform}: the used QR is explained in words ("already been used"), no modal`);
+  }
   return screen;
 }
 
@@ -322,9 +422,9 @@ try {
     await leaveCommunityInApp(driver);
   }
 
-  if (INVITE_VIA === "door") {
+  if (INVITE_VIA === "door" || CONSOLE) {
     const outcome = await inviteByDoor(driver);
-    printSuccess(outcome === "refused" ? `vti-invite (door) — refused as expected: ${EXPECT_INVITED_ERROR}` : `vti-invite (door) — ${outcome}, confirmed by the community`);
+    printSuccess(outcome === "refused" ? `vti-invite (${INVITE_VIA}) — refused as expected: ${EXPECT_INVITED_ERROR}` : `vti-invite (${INVITE_VIA}) — ${outcome}, confirmed by the community`);
     process.exitCode = 0;
   } else {
   // 1 — the identity to be invited.
