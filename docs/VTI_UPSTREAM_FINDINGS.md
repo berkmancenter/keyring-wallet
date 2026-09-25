@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.46 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.47 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1880,6 +1880,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q24 | Could a vetter that refuses an applicant's Vetting Card tell the applicant, instead of only logging it? | openvtc's vetter logs *vetting card refused* and answers nothing, so the applicant reads "Card sent — the vetter is checking" and the vetter's screen stays on "waiting for their card". Neither side can see why. [Details](#question-details). |
 | VTI-Q25 | Can a community offer admission by invitation OR by vetting? And can an admin admit an applicant who is waiting for vetting? | A community that publishes any vetting criterion requires vetting of everyone. An invitation neither bypasses it nor can be chosen as the criterion, although the manifest lists both as if either would do. `decide` refuses a Deferred request, so an admin cannot admit that applicant either. [Details](#question-details). |
 | VTI-Q26 | Could openvtc send a join over DIDComm, or fall back to it, when the community's TSP mediator is not its own? | openvtc sends every Trust Task over TSP whenever the peer's DID document advertises `#tsp`, with no check of whose mediator that is and no fallback. A community on another mediator never receives the join unless the two mediators relay for each other, and the applicant sees only "no response from the community yet … may not have been received". [Details](#question-details). |
+| VTI-Q27 | Could a member whose membership credential was lost get it again? | A community delivers the membership credential once. There is no member-credential resend (only `vetting/vetters/resend`), and the status poll without an id finds only open requests, so an approved join whose credential never got stored answers NotFound. A client that stops between receiving the credential and storing it stays pending for good; openvtc and Keyring both can. [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2219,10 +2220,48 @@ start (keyring-bifold `75c6fdbf`, 2026-09-22), for the same reason. For the
 Farm, we have asked for relaying between these two mediators. That fixes our
 case, but not a community on a mediator that does not relay.
 
+**VTI-Q27 — a lost membership credential cannot be had again.**
+(a) When a community admits someone, it sends the membership credential once
+(`credential-exchange/issue/0.1`). If the client takes it off the mediator but
+stops before storing it, the join is stuck for good. The community holds the
+request as approved. The client holds it as pending and cannot recover it:
+- there is no task that sends a member's credential again (the only resend is
+  `vtc/vetting/vetters/resend/0.1`, for a vetter's grant);
+- `join-requests/status` without an id resolves only the applicant's *open*
+  request (`status_by_applicant`), so an approved one answers NotFound, and
+  openvtc reports it as `taskFailed`.
+Expected, either:
+- a member-side task, or an admin one, that delivers a member's current
+  membership credential again;
+- or a status answer for the authenticated applicant's latest request, open or
+  settled, that says it was approved and carries or points to the credential.
+(b) Measured on our lab, 2026-09-25, openvtc `ed13d29` against VTI `a96fe02f`.
+The TUI joined `keyring-vti-vtc` by invitation. The submit's reply arrived at
+06:37:41Z and the two `credential-exchange/issue` pushes at 06:37:43Z. Our
+fixture closed the TUI at 06:37:48Z, before openvtc logged *"stored issued
+credential"*. On every launch since, the TUI polls with `request_id=None` and
+gets `taskFailed`, and it cannot hand out tickets for that community because
+the membership is not active. A second join, with the TUI left on the join page
+until the credentials were applied, stored them 17 s after they arrived, the
+moment the page was left (06:53:35Z → 06:53:52Z).
+(c) At `a96fe02f`: `vtc-service/src/routes/join_requests/status.rs:111-126`
+(`status_by_applicant` → `find_open_request`, NotFound when none is open);
+`vtc-service/src/routes/mod.rs:816-817` (the only resend task). At openvtc
+`ed13d29`: `openvtc-core/src/messaging.rs:934-945` (the credential activates the
+membership) and `openvtc/src/state_handler/join_status_poll.rs:27-31` (the
+id-less poll). Unchanged at `ed672fff` (vta-service 0.42.0 / vtc-service
+0.11.58, what the Farm runs): `status.rs:127-131`, `routes/mod.rs:884-885`.
+(d) Keyring has the same exposure, with a narrower window: it acknowledges the
+mediator delivery without waiting for the store, so a stop between the two
+loses the credential in the same way. We are making Keyring store before it
+acknowledges. That narrows our window and does not remove it, and it does
+nothing for the credential that is already lost.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.47 | 2026-09-25 | **VTI-Q27** (new): a community delivers the membership credential once, and nothing gets it again: no member-credential resend, and the id-less `join-requests/status` finds only open requests, so an approved join answers NotFound. A client that stops between receiving the credential and storing it stays pending for good. Measured on our lab with openvtc `ed13d29` (VTI `a96fe02f`); read at `a96fe02f`. Keyring has a narrower window of the same kind, which it is closing on its side. Not sent. |
 | 1.46 | 2026-09-25 | **VTI-Q26** (new): openvtc sends a join over TSP whenever the community advertises `#tsp`, with no check that the community's mediator is its own and no fallback, so a join to a community on another, non-relaying mediator is lost in silence. Measured on the Farm with openvtc `ed13d29` (the TUI as the applicant, `keyring-test-vtc` on its stack's mediator); read at `ed13d29` and `177a218`. Not sent. |
 | 1.45 | 2026-09-24 | **The Farm's versions, measured again.** The runner VTAs (`keyring-runner-nohost`, `-uiux`, `-prague`) report vta-service **0.41.0**. The source is the public `/openapi.json` `info.version`, which is vta-service's own `CARGO_PKG_VERSION` (`vta-service/src/routes/mod.rs`); `/health` omits the version and `/health/details` needs auth. `firstperson-mediator` reports **0.29.4** in `/mediator/v1/readyz`, up since about 07:01Z. So VTI-43's fix (vti #1675, in 0.40.0) is on the Farm, and the 09-23 "the Farm is behind" note no longer holds. Measured while diagnosing an Android link whose first `auth/whoami/0.1` went unanswered on two runners from 22:54Z; that turned out to be ours (keyring-bifold#112, the grant check's deadline). **Then, 2026-09-25 05:54Z, after an announced Farm upgrade:** the runner VTAs report 0.42.0; the mediator is still 0.29.4 (restarted about 05:29Z); the VTC is still 0.11.58; `farm-health.sh` is all green. |
 | 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
