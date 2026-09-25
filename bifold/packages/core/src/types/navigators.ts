@@ -150,7 +150,7 @@ export type MyAgentStackParams = {
   [Screens.VtaLink]: { withoutQr?: boolean } | undefined
   [Screens.VtaAgent]: undefined
   [Screens.VtiInvited]: undefined
-  [Screens.VtaCreateAgent]: undefined
+  [Screens.VtaCreateAgent]: { addDevice?: boolean } | undefined
   [Screens.VtaDevices]: undefined
   [Screens.VtiJoin]: undefined
   [Screens.EditRCard]: { profileId: string } | undefined

@@ -1012,7 +1012,7 @@
     "Invited": "Join by invitation",
     "Join": "Join a community",
     "VtaCreateAgent": "Create your agent",
-    "VtaDevices": "Your devices"
+    "VtaDevices": "My devices"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",
@@ -1707,8 +1707,8 @@
   },
   "CreateAgent": {
     "CheckAgain": "Check again",
-    "Waiting": "Waiting for your agent to accept this phone…",
-    "Connect": "I've added it — check now",
+    "Waiting": "Waiting for your agent host to add this phone… we'll continue automatically.",
+    "Connect": "It's online — connect",
     "CreateMyAgent": "Create my agent",
     "AlreadyHaveOne": "I already have one — link it",
     "IntroTitle": "Create your agent",
@@ -1723,24 +1723,18 @@
     "NotAnAddress": "That isn't an agent's address. It starts with did:webvh: — copy the whole line your agent's host shows.",
     "NoAgentThere": "Keyring couldn't find an agent at that address. Check you copied the whole line, and that your agent has finished being created.",
     "OwnerTitle": "Your owner code",
-    "OwnerBody": "This code tells your agent that this phone owns it. The code is protected by your Face ID.",
+    "OwnerBody": "This code tells your agent that this phone owns it. The code is protected by {{method}}.",
     "OwnerWhereToPaste": "Copy this code and add it as an owner (admin) in your agent host's settings. If you run your own agent, give this code to it as an admin. Come back when your agent is online.",
-    "Connect": "It's online — connect",
     "ConfirmReason": "Create your agent with this phone",
-    "NeedsScreenLock": "To protect your agent, turn on Face ID or a passcode in Settings first.",
     "NotConfirmed": "Keyring couldn't confirm it's you. Try again, or use your passcode.",
     "NotAcceptedYet": "Your agent isn't accepting this phone yet. Check that the code is added as an admin and your agent is online, then try again.",
     "Unreachable": "Keyring couldn't reach your agent. Check your connection and try again.",
     "SigningIn": "Signing in to your agent…",
     "GettingReady": "Getting it ready…",
-    "BackupTitle": "Add a backup",
-    "BackupBody": "If you lose this phone, a backup keeps your agent yours. It takes a minute.",
-    "NotNow": "Not now",
-    "BackupLater": "You can add a backup later from My Agent.",
+    "BackupLater": "You can add another device later from My devices.",
     "ReadyTitle": "Your agent is ready",
     "ReadyBody": "{{label}} is online and belongs to this phone.",
     "JoinCommunity": "Join a community",
-    "UseAnotherPhone": "Use another phone",
     "BackupScanThis": "Scan this with your other phone",
     "BackupScanThisBody": "On the other phone, open Keyring, go to My Agent, choose I already have one — link it, then Link without a QR code, and scan this.",
     "BackupNowScan": "Now scan the code it shows",
@@ -1764,15 +1758,33 @@
     },
     "OpenHost": "Open your agent host's website",
     "OwnerHowToggle": "How?",
-    "OwnerHow": "Your agent's host has a settings page for the agent, where owners or admins are added: paste the code there as an admin. If you run your own agent, add the code as an admin with your agent's command-line tool."
+    "OwnerHow": "Your agent's host has a settings page for the agent, where owners or admins are added: paste the code there as an admin. If you run your own agent, add the code as an admin with your agent's command-line tool.",
+    "NeedsScreenLockIos": "To protect your agent, turn on Face ID, Touch ID or a passcode in Settings first.",
+    "NeedsScreenLockAndroid": "To protect your agent, turn on a fingerprint, face unlock or a screen lock in Settings first.",
+    "Lock": {
+      "faceId": "your Face ID",
+      "touchId": "your Touch ID",
+      "opticId": "your Optic ID",
+      "fingerprint": "your fingerprint",
+      "face": "face unlock",
+      "iris": "your iris scan",
+      "screenLock": "your phone's screen lock",
+      "unknown": "your phone's lock (Face ID, fingerprint or passcode)"
+    }
   },
   "Devices": {
-    "Title": "Your devices",
-    "Intro": "The phones that run your agent. If you lose one, remove it here from another.",
+    "Title": "My devices",
+    "Intro": "Everything that can act as your agent's owner: this phone, other phones, a computer, a browser plugin. If you lose one, remove it here from another.",
     "ThisPhone": "This phone",
     "Unnamed": "Another device",
     "Remove": "Remove",
     "Removed": "Removed: {{device}}. It can't use your agent any more.",
-    "OnlyThisPhone": "Only this phone runs your agent. Add a backup so a lost phone isn't a lost agent."
+    "OnlyThisPhone": "Only this phone runs your agent. Add a backup so a lost phone isn't a lost agent.",
+    "AddAnother": "Add another device",
+    "BrowserPlugin": "Browser plugin",
+    "AComputer": "A computer or other app",
+    "AKeyringPhone": "A Keyring phone",
+    "Added": "Added {{date}}",
+    "Details": "Details"
   }
 }

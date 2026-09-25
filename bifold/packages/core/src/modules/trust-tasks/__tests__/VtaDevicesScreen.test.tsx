@@ -2,6 +2,7 @@
  * Your devices (own_agent_subtask.md §4): this phone and its backups, with
  * Remove on the others — how a backup takes a lost phone off the agent.
  */
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { act, render } from '@testing-library/react-native'
 import { fireEvent } from '@testing-library/react-native'
 import React from 'react'
@@ -12,13 +13,10 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceActionRefused } from '../module/vtaOwner'
-import VtaDevices, { deviceKey } from '../screens/VtaDevices'
+import { Screens } from '../../../types/navigators'
+import VtaDevices, { deviceKey, deviceNameKey } from '../screens/VtaDevices'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
-jest.mock('@react-navigation/native', () => {
-  const actual = jest.requireActual('@react-navigation/native')
-  return { ...actual, useFocusEffect: (effect: () => void) => require('react').useEffect(effect, []) }
-})
 
 const THIS = 'did:peer:2.Vz6MkThisPhone00000001'
 const LOST = 'did:peer:2.Vz6MkLostPhone00000002'
@@ -36,6 +34,8 @@ const show = async () => {
 
 beforeEach(() => {
   jest.restoreAllMocks()
+  // Run the focus effect once, as a screen coming into view would, and keep it.
+  ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => void) => require('react').useEffect(effect, []))
   ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
 })
 
@@ -46,9 +46,31 @@ describe('your devices', () => {
       { did: LOST, role: 'admin', label: 'Old phone', thisPhone: false },
     ])
     const tree = await show()
-    expect(tree.getByTestId(id(`AgentDevice_${deviceKey(THIS)}`))).toHaveTextContent('Devices.ThisPhone')
+    expect(tree.getByTestId(id(`AgentDevice_${deviceKey(THIS)}`))).toHaveTextContent(/Devices\.ThisPhone/)
     expect(tree.queryByTestId(id(`AgentDeviceRemove_${deviceKey(THIS)}`))).toBeNull()
     expect(tree.getByTestId(id(`AgentDevice_${deviceKey(LOST)}`))).toHaveTextContent(/Old phone/)
+    // No DID in the main text; it sits behind Details.
+    expect(tree.getByTestId(id(`AgentDevice_${deviceKey(LOST)}`))).not.toHaveTextContent(new RegExp(LOST))
+    fireEvent.press(tree.getByTestId(id(`AgentDeviceDetails_${deviceKey(LOST)}`)))
+    expect(tree.getByTestId(id(`AgentDeviceDid_${deviceKey(LOST)}`))).toHaveTextContent(LOST)
+  })
+
+  test('every admin gets a plain name: its label, the browser plugin, or the kind of key', () => {
+    expect(deviceNameKey({ did: LOST, label: 'Keyring — Ada’s iPhone' })).toEqual({ label: 'Keyring — Ada’s iPhone' })
+    expect(deviceNameKey({ did: 'did:key:z6Mk1', label: 'browser-plugin onboarding' }).key).toBe(
+      'Devices.BrowserPlugin'
+    )
+    expect(deviceNameKey({ did: 'did:key:z6Mk1' }).key).toBe('Devices.AComputer')
+    expect(deviceNameKey({ did: LOST }).key).toBe('Devices.AKeyringPhone')
+  })
+
+  test('Add another device opens the add flow', async () => {
+    jest.spyOn(vtaAgent, 'listDevices').mockResolvedValue([{ did: THIS, role: 'admin', thisPhone: true }])
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const tree = await show()
+    fireEvent.press(tree.getByTestId(id('AgentDeviceAdd')))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaCreateAgent, { addDevice: true })
   })
 
   test('Remove takes the other device off, says so, and reads the list again', async () => {

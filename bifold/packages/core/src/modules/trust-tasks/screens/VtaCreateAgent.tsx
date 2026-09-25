@@ -18,13 +18,14 @@
  */
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { useIsFocused, useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
   AppState,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -40,7 +41,7 @@ import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import QRRenderer from '../../../components/misc/QRRenderer'
-import { confirmOwner, type OwnerConfirmFailure } from '../module/ownerConfirm'
+import { confirmOwner, ownerLockKind, type OwnerConfirmFailure, type OwnerLockKind } from '../module/ownerConfirm'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceCannotOwn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
 
@@ -59,7 +60,7 @@ export const AGENT_HOST_WEBSITE: string | undefined = undefined
 export const GRANT_POLL_EVERY_MS = 6000
 export const GRANT_POLL_WINDOW_MS = 10 * 60 * 1000
 
-type LocalStep = 'intro' | 'address' | 'backup' | 'backupAddress' | 'backupCode' | 'ready'
+type LocalStep = 'intro' | 'address' | 'backupAddress' | 'backupCode' | 'ready'
 
 /** An agent's address, as the Farm shows it after "Create session". */
 export const looksLikeAgentAddress = (text: string): boolean => /^did:webvh:[^\s]+:[^\s]+$/.test(text.trim())
@@ -71,10 +72,13 @@ const VtaCreateAgent: React.FC = () => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
+  // "Add another device" from My devices opens this screen at the backup
+  // step: setup itself no longer offers a backup (decided 2026-09-25).
+  const addDevice = Boolean((useRoute().params as { addDevice?: boolean } | undefined)?.addDevice)
   const { ColorPalette, TextTheme } = useTheme()
   const { link } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
 
-  const [step, setStep] = useState<LocalStep>('intro')
+  const [step, setStep] = useState<LocalStep>(addDevice ? 'backupAddress' : 'intro')
   const [address, setAddress] = useState('')
   const [error, setError] = useState<string | undefined>()
   const [codeShown, setCodeShown] = useState(false)
@@ -86,6 +90,17 @@ const VtaCreateAgent: React.FC = () => {
   // Paused only when the app is known to be away; an unknown state keeps waiting.
   const [appActive, setAppActive] = useState(AppState.currentState !== 'background')
   const focused = useIsFocused()
+  // The person's own lock, named on the owner-code screen (not always "Face ID").
+  const [lockKind, setLockKind] = useState<OwnerLockKind>('unknown')
+  useEffect(() => {
+    let live = true
+    void ownerLockKind().then((kind) => live && setLockKind(kind))
+    return () => {
+      live = false
+    }
+  }, [])
+  const needsScreenLock = () =>
+    t(Platform.OS === 'ios' ? 'CreateAgent.NeedsScreenLockIos' : 'CreateAgent.NeedsScreenLockAndroid')
   const [busy, setBusy] = useState(false)
   const [backupCode, setBackupCode] = useState('')
   const [backupAdded, setBackupAdded] = useState<string | undefined>()
@@ -113,7 +128,7 @@ const VtaCreateAgent: React.FC = () => {
     reason === 'cancelled'
       ? undefined // cancelling is not an error: the button stays, nothing is said
       : reason === 'unavailable'
-        ? t('CreateAgent.NeedsScreenLock')
+        ? needsScreenLock()
         : t('CreateAgent.NotConfirmed')
 
   const refusalLine = (reason: DeviceRefusalReason) => t(`CreateAgent.Device.${reason}`)
@@ -126,7 +141,9 @@ const VtaCreateAgent: React.FC = () => {
     try {
       const device = await vtaAgent.addBackupDevice(agent, backupCode.trim(), t('CreateAgent.BackupLabel'))
       setBackupAdded(device.label ?? t('CreateAgent.BackupLabel'))
-      setStep('ready')
+      // Back to My devices, which reads the list again on focus.
+      if (addDevice) navigation.goBack()
+      else setStep('ready')
     } catch (e) {
       const refusal = deviceRefusalOf(e)
       setError(
@@ -152,7 +169,7 @@ const VtaCreateAgent: React.FC = () => {
     try {
       await vtaAgent.startCreateAgent(agent, did, hostOf(did))
     } catch (e) {
-      setError(e instanceof DeviceCannotOwn ? t('CreateAgent.NeedsScreenLock') : t('CreateAgent.NotConfirmed'))
+      setError(e instanceof DeviceCannotOwn ? needsScreenLock() : t('CreateAgent.NotConfirmed'))
       return
     } finally {
       setBusy(false)
@@ -228,10 +245,10 @@ const VtaCreateAgent: React.FC = () => {
       : link.kind === 'linking'
         ? 'connecting'
         : link.kind === 'linked'
-          ? step === 'ready' || step === 'backupAddress' || step === 'backupCode'
+          ? step === 'backupAddress' || step === 'backupCode'
             ? step
-            : 'backup'
-          : step === 'backup' || step === 'ready' || step === 'backupAddress' || step === 'backupCode'
+            : 'ready'
+          : step === 'ready' || step === 'backupAddress' || step === 'backupCode'
             ? 'address'
             : step
 
@@ -276,7 +293,7 @@ const VtaCreateAgent: React.FC = () => {
   } else if (screen === 'address') {
     body = (
       <View style={styles.card} testID={testIdWithKey('AgentCreateAddress')}>
-        <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 1, of: 3 })}</ThemedText>
+        <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 1, of: 2 })}</ThemedText>
         <ThemedText variant="headingThree">{t('CreateAgent.AddressTitle')}</ThemedText>
         <ThemedText>{t('CreateAgent.AddressBody')}</ThemedText>
         <TextInput
@@ -313,9 +330,14 @@ const VtaCreateAgent: React.FC = () => {
   } else if (screen === 'ownerCode' && link.kind === 'showingKey') {
     body = (
       <View style={styles.card} testID={testIdWithKey('AgentCreateOwnerCode')}>
-        <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 2, of: 3 })}</ThemedText>
+        <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 2, of: 2 })}</ThemedText>
         <ThemedText variant="headingThree">{t('CreateAgent.OwnerTitle')}</ThemedText>
-        <ThemedText>{t('CreateAgent.OwnerBody')}</ThemedText>
+        <ThemedText testID={testIdWithKey('AgentCreateOwnerBody')}>
+          {t('CreateAgent.OwnerBody', {
+            method: t(`CreateAgent.Lock.${lockKind}`),
+            interpolation: { escapeValue: false },
+          })}
+        </ThemedText>
         <ThemedText>{t('CreateAgent.OwnerWhereToPaste')}</ThemedText>
         <Pressable
           onPress={() => setHowShown(!howShown)}
@@ -409,30 +431,6 @@ const VtaCreateAgent: React.FC = () => {
           </ThemedText>
         </View>
       </View>
-    )
-  } else if (screen === 'backup') {
-    body = (
-      <View style={styles.card} testID={testIdWithKey('AgentBackup')}>
-        <ThemedText style={styles.muted}>{t('CreateAgent.Step', { n: 3, of: 3 })}</ThemedText>
-        <ThemedText variant="headingThree">{t('CreateAgent.BackupTitle')}</ThemedText>
-        <ThemedText>{t('CreateAgent.BackupBody')}</ThemedText>
-      </View>
-    )
-    actions = (
-      <>
-        <Button
-          title={t('CreateAgent.UseAnotherPhone')}
-          buttonType={ButtonType.Primary}
-          onPress={() => setStep('backupAddress')}
-          testID={testIdWithKey('AgentBackupPhone')}
-        />
-        <Button
-          title={t('CreateAgent.NotNow')}
-          buttonType={ButtonType.Secondary}
-          onPress={() => setStep('ready')}
-          testID={testIdWithKey('AgentBackupLater')}
-        />
-      </>
     )
   } else if (screen === 'backupAddress') {
     const agentDid = vtaAgent.agentAddress()

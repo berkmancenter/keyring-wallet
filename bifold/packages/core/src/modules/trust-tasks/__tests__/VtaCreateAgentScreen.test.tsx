@@ -5,6 +5,7 @@
  * does not happen.
  */
 import Clipboard from '@react-native-clipboard/clipboard'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
 
@@ -21,6 +22,7 @@ jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../module/ownerConfirm', () => ({
   confirmOwner: jest.fn(),
   deviceCanOwn: jest.fn(async () => true),
+  ownerLockKind: jest.fn(async () => 'fingerprint'),
 }))
 
 type Setter = { set(next: Record<string, unknown>): void }
@@ -74,7 +76,7 @@ describe('create my agent: the address comes first', () => {
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AgentCreateAddressContinue')))
     })
-    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('CreateAgent.NeedsScreenLock')
+    expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent(/CreateAgent\.NeedsScreenLock(Ios|Android)/)
   })
 })
 
@@ -132,7 +134,7 @@ describe('the owner code is handed out only after Face ID', () => {
   })
 })
 
-describe('a backup phone, once the agent is linked', () => {
+describe('setup ends at Ready; another device is added from My devices', () => {
   const linked = () =>
     controller.set({
       link: {
@@ -143,32 +145,45 @@ describe('a backup phone, once the agent is linked', () => {
         connection: { kind: 'online', since: 0 },
       },
     })
+  const asAddDevice = () => (useRoute as jest.Mock).mockReturnValue({ params: { addDevice: true } })
+  afterEach(() => (useRoute as jest.Mock).mockReturnValue({ params: {} }))
+
+  test('once linked, setup goes straight to Ready: no backup step', () => {
+    linked()
+    const tree = show()
+    expect(tree.getByTestId(id('AgentCreateReady'))).toBeTruthy()
+    expect(tree.queryByTestId(id('AgentBackupAddressQr'))).toBeNull()
+    expect(tree.getByTestId(id('AgentBackupNone'))).toHaveTextContent('CreateAgent.BackupLater')
+  })
 
   const toBackupCode = async () => {
     const tree = show()
-    fireEvent.press(tree.getByTestId(id('AgentBackupPhone')))
     expect(tree.getByTestId(id('AgentBackupAddressQr'))).toBeTruthy()
     fireEvent.press(tree.getByTestId(id('AgentBackupNext')))
     fireEvent.changeText(tree.getByTestId(id('AgentBackupCodeInput')), 'did:key:z6MkBackup')
     return tree
   }
 
-  test("the other phone's code is added, and Ready names the backup", async () => {
+  test("Add another device: the other phone's code is added, and it returns to My devices", async () => {
     linked()
+    asAddDevice()
     jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
     const add = jest
       .spyOn(vtaAgent, 'addBackupDevice')
       .mockResolvedValue({ did: 'did:key:z6MkBackup', role: 'admin', label: 'Backup phone', thisPhone: false })
+    const navigation = useNavigation() as unknown as { goBack: jest.Mock }
+    navigation.goBack.mockClear()
     const tree = await toBackupCode()
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AgentBackupAdd')))
     })
     expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkBackup', 'CreateAgent.BackupLabel')
-    expect(tree.getByTestId(id('AgentBackupAdded'))).toHaveTextContent(/CreateAgent\.YourBackup/)
+    expect(navigation.goBack).toHaveBeenCalled()
   })
 
   test("this phone's own code is refused in words, and the screen stays", async () => {
     linked()
+    asAddDevice()
     jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
     jest.spyOn(vtaAgent, 'addBackupDevice').mockRejectedValue(new DeviceActionRefused('thisPhone'))
     const tree = await toBackupCode()
@@ -177,13 +192,6 @@ describe('a backup phone, once the agent is linked', () => {
     })
     expect(tree.getByTestId(id('AgentCreateError'))).toHaveTextContent('CreateAgent.Device.thisPhone')
     expect(tree.getByTestId(id('AgentBackupScanCode'))).toBeTruthy()
-  })
-
-  test('Not now goes to Ready, which says a backup can be added later', () => {
-    linked()
-    const tree = show()
-    fireEvent.press(tree.getByTestId(id('AgentBackupLater')))
-    expect(tree.getByTestId(id('AgentBackupNone'))).toHaveTextContent('CreateAgent.BackupLater')
   })
 
   test('every refusal a device action can give has words', () => {

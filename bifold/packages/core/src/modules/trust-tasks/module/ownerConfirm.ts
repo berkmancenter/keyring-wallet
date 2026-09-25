@@ -68,3 +68,50 @@ export async function confirmOwner(reason: string): Promise<OwnerConfirmation> {
 
 /** The pair the controller takes (`vtaAgent.setOwnerChecks`), for the app to plug in once. */
 export const ownerChecks: { confirmOwner: ConfirmOwner; deviceCanOwn: DeviceCanOwn } = { confirmOwner, deviceCanOwn }
+
+/**
+ * What protects the owner code on this phone, so the words name the person's
+ * own lock and not always "Face ID": Touch ID on older iPhones, a fingerprint
+ * or face unlock on Android, the screen lock when there is no biometry.
+ */
+export type OwnerLockKind =
+  | 'faceId'
+  | 'touchId'
+  | 'opticId'
+  | 'fingerprint'
+  | 'face'
+  | 'iris'
+  | 'screenLock'
+  | 'unknown'
+
+/** The lock from the keychain's biometry type (its string values), a passcode alone being the screen lock. */
+export function lockKindFrom(biometry: string | null | undefined, passcode: boolean): OwnerLockKind {
+  switch (biometry) {
+    case 'FaceID':
+      return 'faceId'
+    case 'TouchID':
+      return 'touchId'
+    case 'OpticID':
+      return 'opticId'
+    case 'Fingerprint':
+      return 'fingerprint'
+    case 'Face':
+      return 'face'
+    case 'Iris':
+      return 'iris'
+    default:
+      return passcode ? 'screenLock' : 'unknown'
+  }
+}
+
+export async function ownerLockKind(): Promise<OwnerLockKind> {
+  try {
+    const [biometry, passcode] = await Promise.all([
+      Keychain.getSupportedBiometryType(),
+      Keychain.isPasscodeAuthAvailable().catch(() => false),
+    ])
+    return lockKindFrom(biometry, passcode)
+  } catch {
+    return 'unknown'
+  }
+}

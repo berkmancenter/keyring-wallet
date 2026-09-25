@@ -38,6 +38,7 @@ export const setGenericPassword = jest.fn().mockResolvedValue(true)
 export const getGenericPassword = jest.fn().mockResolvedValue(false)
 export const resetGenericPassword = jest.fn().mockResolvedValue(true)
 export const getSupportedBiometryType = jest.fn().mockResolvedValue(null)
+export const isPasscodeAuthAvailable = jest.fn().mockResolvedValue(true)
 
 export default {
   ACCESS_CONTROL,
@@ -49,4 +50,5 @@ export default {
   getGenericPassword,
   resetGenericPassword,
   getSupportedBiometryType,
+  isPasscodeAuthAvailable,
 }
