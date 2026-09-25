@@ -18,6 +18,13 @@
 //!   of the value: JCS without the top-level `proof`, sha-256 multihash,
 //!   base58btc (`dtg_credentials::digest_multibase_json`, the function vta-sdk's
 //!   `vetting::digest` calls for a card or a statement).
+//! - `card-verify vectors <card.json>` prints golden vectors as JSON: for fixed
+//!   inputs (and the given card), what upstream computes for the identity
+//!   commitment (`vetting::card::identity_commitment`), the card digest
+//!   (`dtg_credentials::digest_multibase_json`), the match code
+//!   (`vetting::match_code::vetting_match_code`) and the ticket URI
+//!   (`vetting::ticket_uri::decode`, then `encode`). Keyring's tests check its
+//!   own functions against that file.
 //! - `card-verify verify-statement <statement.json> <card.json> <expect.json>`
 //!   verifies the card as above, then runs vta-sdk's `verify_statement` and
 //!   `check_against_card` on the statement: what an openvtc applicant runs on a
@@ -34,7 +41,12 @@ use chrono::{DateTime, Duration, Utc};
 use serde_json::Value;
 use vta_sdk::trust_task_proof::TrustTaskVmResolver;
 use vta_sdk::vetting::card::{CardExpectations, VerifiedVettingCard, verify_card};
+use serde_json::json;
+use vta_sdk::protocols::vetting::session::v0_1::VettingCardClaim;
+use vta_sdk::vetting::card::identity_commitment;
+use vta_sdk::vetting::match_code::vetting_match_code;
 use vta_sdk::vetting::statement::verify_statement;
+use vta_sdk::vetting::ticket_uri;
 
 fn read(path: &str) -> Result<Value, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -90,6 +102,77 @@ async fn run(card_path: &str, expect_path: &str) -> Result<String, String> {
     Ok(format!("OK: card accepted by vta-sdk verify_card (digest {})", verified.digest_multibase()))
 }
 
+fn vectors(card_path: &str) -> Result<String, String> {
+    let card = read(card_path)?;
+    let claims = |v: Value| -> Result<Vec<VettingCardClaim>, String> {
+        serde_json::from_value(v).map_err(|e| format!("claims: {e}"))
+    };
+    let mut commitments = Vec::new();
+    let cases = [
+        (
+            card.get("commitmentSalt").cloned().unwrap_or_default(),
+            card.get("claims").cloned().unwrap_or_default(),
+            json!(["name.legal"]),
+        ),
+        (
+            json!("salt-1"),
+            json!([{ "type": "name.legal", "value": "Ada Lovelace", "provenance": "selfAsserted" }]),
+            json!(["name.legal"]),
+        ),
+        (
+            json!("salt-1"),
+            json!([
+                { "type": "name.legal", "value": "Ada Lovelace", "provenance": "selfAsserted" },
+                { "type": "name.legal", "value": "Someone Else", "provenance": "selfAsserted" }
+            ]),
+            json!(["name.legal"]),
+        ),
+    ];
+    for (salt, claim_list, required) in cases {
+        let salt_str = salt.as_str().ok_or("salt is not a string")?.to_string();
+        let required_list: Vec<String> = serde_json::from_value(required.clone()).map_err(|e| e.to_string())?;
+        let expected = identity_commitment(&salt_str, &claims(claim_list.clone())?, &required_list)
+            .map_err(|e| format!("identity_commitment: {e}"))?;
+        commitments.push(json!({ "salt": salt_str, "claims": claim_list, "requiredClaims": required, "expected": expected }));
+    }
+    let match_codes: Vec<Value> = [
+        "urn:uuid:5b0e1c2a-7d4f-4a51-9c6e-2f1b8d3a9e70",
+        "urn:uuid:a",
+        "urn:uuid:session-conformance",
+    ]
+    .iter()
+    .map(|id| json!({ "sessionDocumentId": id, "expected": vetting_match_code(id) }))
+    .collect();
+    let mut tickets = Vec::new();
+    for uri in [
+        "vetting-ticket:?v=1&community=did%3Awebvh%3AQmCommunity%3Adids.example%3Acommunity&vetter=did%3Awebvh%3AQmVetter%3Adids.example%3Avetter&ticket=tkt-0001&secret=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "vetting-ticket:?v=1&community=did%3Awebvh%3AQmCommunity%3Adids.example%3Acommunity&vetter=did%3Akey%3Az6MkVetter&code=K7QF-2M9X",
+    ] {
+        let decoded = ticket_uri::decode(uri).map_err(|e| format!("ticket decode {uri}: {e}"))?;
+        let encoded = ticket_uri::encode(&decoded).map_err(|e| format!("ticket encode: {e}"))?;
+        let presentation = serde_json::to_value(&decoded.presentation).map_err(|e| e.to_string())?;
+        tickets.push(json!({
+            "uri": uri,
+            "decoded": { "community": decoded.community, "vetter": decoded.vetter, "presentation": presentation },
+            "reencoded": encoded
+        }));
+    }
+    let doc = json!({
+        "note": "Golden vectors computed by upstream code (wallet scripts/openvtc/card-verify vectors). Keyring's tests check its own functions against these; never regenerate them with Keyring's code.",
+        "sources": {
+            "identityCommitment": "vta-sdk vetting/card.rs identity_commitment",
+            "cardDigest": "dtg-credentials digest_multibase_json (lib.rs:534), via vta-sdk vetting/mod.rs digest",
+            "matchCode": "vta-sdk vetting/match_code.rs vetting_match_code",
+            "ticketUri": "vta-sdk vetting/ticket_uri.rs decode, encode"
+        },
+        "identityCommitment": commitments,
+        "cardDigest": { "card": card.clone(), "expected": dtg_credentials::digest_multibase_json(&card).map_err(|e| e.to_string())? },
+        "matchCode": match_codes,
+        "ticketUri": tickets
+    });
+    serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
+}
+
 fn digest(value_path: &str) -> Result<String, String> {
     dtg_credentials::digest_multibase_json(&read(value_path)?).map_err(|e| format!("digest: {e}"))
 }
@@ -127,11 +210,12 @@ async fn main() -> ExitCode {
     let argv: Vec<&str> = args.iter().map(String::as_str).collect();
     let result = match &argv[1..] {
         ["digest", value] => digest(value),
+        ["vectors", card] => vectors(card),
         ["verify-statement", statement, card, expect] => verify_statement_against(statement, card, expect).await,
         [card, expect] => run(card, expect).await,
         _ => {
             eprintln!(
-                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>"
+                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>"
             );
             return ExitCode::from(2);
         }
