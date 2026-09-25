@@ -68,6 +68,7 @@ import { communityLabelOf, communityLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
+import { EligibilityNote } from './EligibilityNote'
 import { ticketRefusalWords } from './ticketWords'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
@@ -1015,6 +1016,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           {t('Vetting.CardSentAt', { time: whenShown(r.cardSentAt) })}
         </Text>
       ) : null}
+      {/* Advisory, as the spec makes the eligibility check: the step goes on,
+          but the person is told this vetter could not be confirmed, and why
+          (keyring-bifold#125). A legacy acceptance is logged, never shown. */}
+      <EligibilityNote request={r} style={styles.label} />
       <DidDetails did={r.vetterDid} testIdStem="VettingRequestVetter" />
     </View>
   )
