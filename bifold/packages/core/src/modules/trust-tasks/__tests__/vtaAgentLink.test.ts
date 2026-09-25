@@ -43,6 +43,7 @@ function controller(
   const saved: unknown[] = []
   let stored = overrides.linked as never
   const vta = new VtaAgentController()
+  const current = () => stored as unknown
   const submit = overrides.submit ?? jest.fn(async () => ({ did: 'did:peer:2.temp', code: 'ABCD-EFGH' }))
   const waitForGrant = overrides.waitForGrant ?? jest.fn(async () => undefined)
   vta.configure({
@@ -53,13 +54,15 @@ function controller(
         saved.push(link)
         stored = link as never
       },
-      clear: async () => undefined,
+      clear: async () => {
+        stored = undefined as never
+      },
     }),
     identityStore: () => ({ setManager: async () => undefined }) as never,
     enrol: { submit: submit as never, waitForGrant: waitForGrant as never },
     ...(overrides.grantCheckDeadlineMs ? { grantCheckDeadlineMs: overrides.grantCheckDeadlineMs } : {}),
   })
-  return { vta, saved, submit, waitForGrant }
+  return { vta, saved, submit, waitForGrant, current }
 }
 
 beforeEach(() => {
@@ -128,11 +131,12 @@ describe('linking through the controller', () => {
     mockClient.rotateManagerKey.mockImplementationOnce(async () => {
       throw new Error('acl/swap-key refused')
     })
-    const { vta, saved } = controller()
+    const { vta, current } = controller()
     vta.scanOffer(offer)
     await vta.confirmOffer({} as never)
     expect(vta.getState().link).toMatchObject({ kind: 'notLinked', lastError: { reason: 'failed' } })
-    expect(saved).toEqual([])
+    // Remembered while the swap was in flight, forgotten once it settled as not done.
+    expect(current()).toBeUndefined()
   })
 })
 

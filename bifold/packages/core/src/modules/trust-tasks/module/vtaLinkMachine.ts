@@ -12,6 +12,14 @@
  *   without a QR (plan §5.1 fallback): notLinked ─keyShown─▶ showingKey
  *   ─granted─▶ linking — the admin pastes the key into their own console.
  *
+ *   an earlier link's key swap still unsettled for this agent: notLinked /
+ *   confirming / submitting ─resumed─▶ linking — the agent already knows this
+ *   phone, so no new grant is asked for.
+ *
+ *   a key swap the agent refused both keys of (the temporary key expired
+ *   before the swap settled): linked / linking ─linkLost─▶ notLinked(lastError)
+ *   — the link never finished, so it is "link again", not "revoked".
+ *
  *   linked carries one connection sub-state:
  *       online ⇄ offline(since, reason) ⇄ reconnecting(attempt, nextRetryAt, since)
  *
@@ -56,7 +64,14 @@ export type VtaLinkEvent =
   | { type: 'submitted'; code: string }
   | { type: 'granted' }
   | { type: 'rotating' }
-  | { type: 'linked'; linkedAt: string }
+  /**
+   * `connection` defaults to online. A first link whose key-swap answer was
+   * lost is linked offline: the phone is linked from the grant on, and which
+   * of its two keys the agent holds is settled by the next connect.
+   */
+  | { type: 'linked'; linkedAt: string; connection?: VtaConnection }
+  | ({ type: 'resumed' } & VtaIdentityOfAgent)
+  | { type: 'linkLost'; failure: VtaLinkFailure }
   | { type: 'failed'; failure: VtaLinkFailure }
   | { type: 'sessionOpened' }
   | { type: 'sessionDropped'; reason?: string; now: number }
@@ -139,8 +154,18 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
             vtaDid: state.vtaDid,
             label: state.label,
             linkedAt: event.linkedAt,
-            connection: { kind: 'online' },
+            connection: event.connection ?? { kind: 'online' },
           }
+        : state
+
+    case 'resumed':
+      return state.kind === 'notLinked' || state.kind === 'confirming' || state.kind === 'submitting'
+        ? { kind: 'linking', step: 'connecting', vtaDid: event.vtaDid, label: event.label }
+        : state
+
+    case 'linkLost':
+      return state.kind === 'linked' || state.kind === 'linking'
+        ? { kind: 'notLinked', lastError: event.failure }
         : state
 
     case 'failed':
