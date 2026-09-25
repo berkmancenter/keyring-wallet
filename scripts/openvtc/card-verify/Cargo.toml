@@ -16,8 +16,10 @@ serde_json = "1"
 dtg-credentials = "=0.11.0"
 # The Secret type vta-sdk's signers take; the version VTI's Cargo.lock pins.
 affinidi-secrets-resolver = "=0.5.12"
-# The TrustTask type vta-sdk's proof verifier takes; the version VTI's Cargo.lock pins.
-trust-tasks-rs = "=0.22.3"
+# The TrustTask type vta-sdk's proof verifier takes, and the typed payloads and
+# published schemas verify-task checks (`validate`, as VTI's workspace enables it);
+# the version VTI's Cargo.lock pins.
+trust-tasks-rs = { version = "=0.22.3", features = ["validate"] }
 chrono = { version = "0.4", features = ["serde"] }
 # Signs the role credential in sign-eligibility; the version VTI's Cargo.lock pins.
 affinidi-data-integrity = "=0.7.11"

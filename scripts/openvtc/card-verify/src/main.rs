@@ -30,10 +30,15 @@
 //!   `vetting::statement::sign_statement`) with fixed-seed did:key keys, and the
 //!   card's digest from `verify_card`. Keyring's tests verify these proofs and
 //!   accept this statement with its own code.
-//! - `card-verify verify-task <task.json> <expected-signer-did>` runs vta-sdk's
-//!   `trust_task_proof::verify_trust_task_proof_with` on a Trust Task document
-//!   Keyring signed, which is what a VTA or a VTC runs on each task it receives,
-//!   and checks the proven signer.
+//! - `card-verify verify-task <task.json> <expected-signer-did> [<expected-type>]`
+//!   runs vta-sdk's `trust_task_proof::verify_trust_task_proof_with` on a Trust
+//!   Task document Keyring signed, which is what a VTA or a VTC runs on each
+//!   task it receives; requires the proven signer to be the expected one and
+//!   the document's `issuer`, and the `type` to be the expected one; then checks
+//!   the payload against trust-tasks-rs's typed spec for that type (policy,
+//!   published schema, typed parse). See `check_task`.
+//! - `card-verify verify-tasks <tasks.json> <dir>` runs `verify-task` on every
+//!   `{ file, type, signer }` entry of a conformance run's list.
 //! - `card-verify verify-statement <statement.json> <card.json> <expect.json>`
 //!   verifies the card as above, then runs vta-sdk's `verify_statement` and
 //!   `check_against_card` on the statement: what an openvtc applicant runs on a
@@ -271,9 +276,88 @@ async fn sign_fixtures() -> Result<String, String> {
     serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
 }
 
-async fn verify_task(task_path: &str, expected_signer: &str) -> Result<String, String> {
+/// What a Trust Task check concluded about a document it did not refuse.
+enum TaskVerdict {
+    /// Proof, issuer, type and payload all checked.
+    Ok(String),
+    /// Proof, issuer and type checked; upstream publishes no typed payload for
+    /// this type, so the payload was not.
+    PayloadUnchecked(String),
+}
+
+/// The payload checks for one typed spec `P`, in the order vtc-service's
+/// spine runs them: the specification's own consumer policy
+/// (`schema_index::spec_policy_for(..).enforce`, vtc-service
+/// `trust_tasks/mod.rs:302`), then the published JSON Schema the codegen
+/// inlined (`validate::ValidatedPayload::validate_value`), then serde into the
+/// typed payload — the parse openvtc's `vetting/wire.rs:204` `open::<P>` runs.
+fn check_typed<P: trust_tasks_rs::Payload>(doc: &trust_tasks_rs::TrustTask<Value>) -> Result<String, String> {
+    use trust_tasks_rs::validate::ValidatedPayload;
+    trust_tasks_rs::SpecPolicy::of::<P>()
+        .enforce(doc)
+        .map_err(|r| format!("REFUSED: the specification's policy refuses it: {r}"))?;
+    P::validate_value(&doc.payload)
+        .map_err(|e| format!("REFUSED: payload fails the published schema of {}: {}", P::TYPE_URI, e.messages().join("; ")))?;
+    serde_json::from_value::<P>(doc.payload.clone())
+        .map_err(|e| format!("REFUSED: payload does not parse as {}: {e}", std::any::type_name::<P>()))?;
+    Ok(format!("payload: schema + {}", std::any::type_name::<P>().trim_start_matches("trust_tasks_rs::specs::")))
+}
+
+/// Type URI -> the trust-tasks-rs 0.22.3 typed payload for it: `Payload` for a
+/// request, the spec's `Response` for `#response`. `None` when upstream has no
+/// typed payload for the URI.
+fn typed_payload_check(type_uri: &str, doc: &trust_tasks_rs::TrustTask<Value>) -> Option<Result<String, String>> {
+    use trust_tasks_rs::specs::*;
+    macro_rules! typed {
+        ($($uri:literal => $ty:ty),* $(,)?) => {
+            match type_uri {
+                $($uri => Some(check_typed::<$ty>(doc)),)*
+                // The framework error: hand-modelled in the crate (no schema),
+                // for the version upstream emits.
+                "https://trusttasks.org/spec/trust-task-error/0.5" => Some(
+                    serde_json::from_value::<trust_tasks_rs::ErrorPayload>(doc.payload.clone())
+                        .map(|_| "payload: trust_tasks_rs::ErrorPayload (0.5, no schema upstream)".to_string())
+                        .map_err(|e| format!("REFUSED: payload does not parse as trust_tasks_rs::ErrorPayload: {e}")),
+                ),
+                _ => None,
+            }
+        };
+    }
+    typed! {
+        "https://trusttasks.org/spec/vetting/request/0.1" => vetting::request::v0_1::Payload,
+        "https://trusttasks.org/spec/vetting/request/0.1#response" => vetting::request::v0_1::Response,
+        "https://trusttasks.org/spec/vetting/session/0.1" => vetting::session::v0_1::Payload,
+        "https://trusttasks.org/spec/vetting/session/0.1#response" => vetting::session::v0_1::Response,
+        "https://trusttasks.org/spec/vetting/decline/0.1" => vetting::decline::v0_1::Payload,
+        "https://trusttasks.org/spec/credential-exchange/issue/0.1" => credential_exchange::issue::v0_1::Payload,
+        "https://trusttasks.org/spec/vtc/join-requests/submit/0.2" => vtc::join_requests::submit::v0_2::Payload,
+        "https://trusttasks.org/spec/vtc/join-requests/supplement/0.1" => vtc::join_requests::supplement::v0_1::Payload,
+        "https://trusttasks.org/spec/vtc/join-requests/status/0.1" => vtc::join_requests::status::v0_1::Payload,
+        "https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1" => vtc::join_requests::withdraw::v0_1::Payload,
+        "https://trusttasks.org/spec/vtc/members/self-remove/0.1" => vtc::members::self_remove::v0_1::Payload,
+        "https://trusttasks.org/spec/auth/whoami/0.1" => auth::whoami::v0_1::Payload,
+        "https://trusttasks.org/spec/config/show/0.1" => config::show::v0_1::Payload,
+        "https://trusttasks.org/spec/vta/contexts/list/1.0" => vta::contexts::list::v1_0::Payload,
+        "https://trusttasks.org/spec/vta/contexts/create/1.0" => vta::contexts::create::v1_0::Payload,
+        "https://trusttasks.org/spec/vta/webvh/servers/list/1.0" => vta::webvh::servers::list::v1_0::Payload,
+        "https://trusttasks.org/spec/vta/webvh/dids/list/1.0" => vta::webvh::dids::list::v1_0::Payload,
+        "https://trusttasks.org/spec/vta/webvh/dids/create/1.0" => vta::webvh::dids::create::v1_0::Payload,
+        "https://trusttasks.org/spec/keys/export-secret/0.1" => keys::export_secret::v0_1::Payload,
+        "https://trusttasks.org/spec/task-consent/decision/0.1" => task_consent::decision::v0_1::Payload,
+        "https://trusttasks.org/spec/acl/swap-key/0.1" => acl::swap_key::v0_1::Payload,
+    }
+}
+
+/// The checks a VTA or a VTC runs on a Trust Task it receives, on a document
+/// Keyring signed: the proof (vta-sdk `verify_trust_task_proof_with`), the
+/// proven signer is the expected one AND the document's own `issuer` (SPEC
+/// §4.7, as vtc-service `trust_tasks/mod.rs:326-349` refuses a proof by a DID
+/// other than the issuer), the `type` when one is expected, then the payload
+/// against its typed spec (`typed_payload_check`). A type upstream knows only
+/// by schema is checked against the schema alone.
+async fn check_task(doc_value: Value, expected_signer: &str, expected_type: Option<&str>) -> Result<TaskVerdict, String> {
     let doc: trust_tasks_rs::TrustTask<Value> =
-        serde_json::from_value(read(task_path)?).map_err(|e| format!("task: {e}"))?;
+        serde_json::from_value(doc_value).map_err(|e| format!("REFUSED: not a Trust Task document: {e}"))?;
     let resolver = resolver_for(expected_signer).await?;
     let signer = verify_trust_task_proof_with(&doc, &resolver)
         .await
@@ -281,7 +365,83 @@ async fn verify_task(task_path: &str, expected_signer: &str) -> Result<String, S
     if signer != expected_signer {
         return Err(format!("REFUSED: the proof is by {signer}, not {expected_signer}"));
     }
-    Ok(format!("OK: task proof verified by vta-sdk verify_trust_task_proof_with (signer {signer})"))
+    if doc.issuer.as_deref() != Some(signer.as_str()) {
+        return Err(format!(
+            "REFUSED: the proof is by {signer} but the document's issuer is {} (SPEC §4.7)",
+            doc.issuer.as_deref().unwrap_or("absent")
+        ));
+    }
+    let type_uri = doc.type_uri.to_string();
+    if let Some(expected) = expected_type
+        && type_uri != expected
+    {
+        return Err(format!("REFUSED: the document's type is {type_uri}, not {expected}"));
+    }
+    let head = format!("proof by {signer} = issuer");
+    match typed_payload_check(&type_uri, &doc) {
+        Some(Ok(payload)) => Ok(TaskVerdict::Ok(format!("{head}; {payload}"))),
+        Some(Err(e)) => Err(e),
+        None => match trust_tasks_rs::schema_index::schema_for(&type_uri) {
+            Some(schema) => {
+                trust_tasks_rs::validate::against_schema(schema, &doc.payload)
+                    .map_err(|e| format!("REFUSED: payload fails the published schema of {type_uri}: {}", e.messages().join("; ")))?;
+                Ok(TaskVerdict::Ok(format!("{head}; payload: published schema (no typed mapping in card-verify)")))
+            }
+            None => Ok(TaskVerdict::PayloadUnchecked(format!("{head}; payload: no typed schema upstream"))),
+        },
+    }
+}
+
+async fn verify_task(task_path: &str, expected_signer: &str, expected_type: Option<&str>) -> Result<String, String> {
+    match check_task(read(task_path)?, expected_signer, expected_type).await? {
+        TaskVerdict::Ok(detail) => Ok(format!("OK: {detail}")),
+        TaskVerdict::PayloadUnchecked(detail) => Ok(format!("OK (payload unchecked): {detail}")),
+    }
+}
+
+/// Every document a conformance run wrote: `tasks.json` is
+/// `[{ file, type, signer, .. }]`, `file` relative to `dir`. One line per
+/// document, a summary, and an error when any is refused or the list is empty.
+async fn verify_tasks(list_path: &str, dir: &str) -> Result<String, String> {
+    let list = read(list_path)?;
+    let entries = list.as_array().ok_or(format!("{list_path}: not a JSON array"))?;
+    if entries.is_empty() {
+        return Err(format!("{list_path}: no documents listed"));
+    }
+    let (mut ok, mut unchecked, mut refused) = (0, 0, 0);
+    for entry in entries {
+        let get = |k: &str| entry.get(k).and_then(Value::as_str);
+        let file = get("file").unwrap_or("<no file>");
+        let outcome = match (get("file"), get("signer"), get("type")) {
+            (Some(file), Some(signer), Some(type_uri)) => {
+                let path = std::path::Path::new(dir).join(file);
+                match read(&path.to_string_lossy()) {
+                    Ok(doc) => check_task(doc, signer, Some(type_uri)).await,
+                    Err(e) => Err(format!("REFUSED: {e}")),
+                }
+            }
+            _ => Err("REFUSED: the list entry lacks file, signer or type".to_string()),
+        };
+        match outcome {
+            Ok(TaskVerdict::Ok(detail)) => {
+                ok += 1;
+                println!("OK                 {file}: {detail}");
+            }
+            Ok(TaskVerdict::PayloadUnchecked(detail)) => {
+                unchecked += 1;
+                println!("PAYLOAD-UNCHECKED  {file}: {detail}");
+            }
+            Err(reason) => {
+                refused += 1;
+                println!("REFUSED            {file}: {}", reason.trim_start_matches("REFUSED: "));
+            }
+        }
+    }
+    let summary = format!(
+        "{} documents: {ok} OK, {unchecked} payload-unchecked, {refused} REFUSED",
+        entries.len()
+    );
+    if refused > 0 { Err(summary) } else { Ok(summary) }
 }
 
 fn digest(value_path: &str) -> Result<String, String> {
@@ -430,14 +590,16 @@ async fn main() -> ExitCode {
         ["digest", value] => digest(value),
         ["vectors", card] => vectors(card),
         ["sign-fixtures"] => sign_fixtures().await,
-        ["verify-task", task, signer] => verify_task(task, signer).await,
+        ["verify-task", task, signer] => verify_task(task, signer, None).await,
+        ["verify-task", task, signer, type_uri] => verify_task(task, signer, Some(type_uri)).await,
+        ["verify-tasks", list, dir] => verify_tasks(list, dir).await,
         ["verify-statement", statement, card, expect] => verify_statement_against(statement, card, expect).await,
         ["verify-eligibility", vp, expect] => verify_eligibility(vp, expect).await,
         ["sign-eligibility"] => sign_eligibility().await,
         [card, expect] => run(card, expect).await,
         _ => {
             eprintln!(
-                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-task <task.json> <expected-signer-did>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>\n       card-verify verify-eligibility <vp.json> <expect.json>\n       card-verify sign-eligibility"
+                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify sign-fixtures\n       card-verify verify-task <task.json> <expected-signer-did> [<expected-type>]\n       card-verify verify-tasks <tasks.json> <dir>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>\n       card-verify verify-eligibility <vp.json> <expect.json>\n       card-verify sign-eligibility"
             );
             return ExitCode::from(2);
         }
