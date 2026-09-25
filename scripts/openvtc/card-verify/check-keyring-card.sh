@@ -7,11 +7,18 @@
 #   scripts/openvtc/card-verify/check-keyring-card.sh
 #   CARD_VERIFY_BUILD=1 scripts/openvtc/card-verify/check-keyring-card.sh   # build card-verify first (a heavy compile: declare it)
 #
-# Exit 0 and "OK: card accepted" when the card passes; non-zero otherwise.
+# Then the reverse direction: the statement Keyring's vetter makes over that
+# card, checked by vta-sdk's verify_statement + check_against_card (what an
+# openvtc applicant runs on a statement it receives).
+#
+#   BIFOLD_DIR=<bifold checkout> …   # check a bifold other than the submodule
+#
+# Exit 0 and the OK lines when both pass; non-zero otherwise.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 HERE="$ROOT/scripts/openvtc/card-verify"
 VTI="$ROOT/external/verifiable-trust-infrastructure"
+BIFOLD="${BIFOLD_DIR:-$ROOT/bifold}"
 BIN="$VTI/target/release/card-verify"
 
 # The verifier is only as good as the SDK it is built from: the pinned one.
@@ -36,11 +43,17 @@ fi
 
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
-(cd "$ROOT/bifold/packages/core" && CARD_OUT="$OUT" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts >"$OUT/jest.log" 2>&1) || {
+(cd "$BIFOLD/packages/core" && CARD_OUT="$OUT" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts >"$OUT/jest.log" 2>&1) || {
   echo "check-keyring-card: the card producer failed — $OUT/jest.log" >&2
   tail -20 "$OUT/jest.log" >&2
   trap - EXIT
   exit 1
 }
-echo "check-keyring-card: VTI ${have:0:8} (pinned), bifold $(git -C "$ROOT/bifold" rev-parse --short=8 HEAD)"
+echo "check-keyring-card: VTI ${have:0:8} (pinned), bifold $(git -C "$BIFOLD" rev-parse --short=8 HEAD)"
 "$BIN" "$OUT/card.json" "$OUT/expect.json"
+if [ -f "$OUT/statement.json" ]; then
+  "$BIN" verify-statement "$OUT/statement.json" "$OUT/card.json" "$OUT/expect.json"
+else
+  echo "check-keyring-card: this bifold writes no statement.json (before keyring-bifold#116); the statement check was not run" >&2
+  exit 1
+fi

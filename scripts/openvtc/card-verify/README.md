@@ -58,3 +58,19 @@ Measured at VTI `a96fe02f`, 2026-09-24:
 - a card from the fixed code is accepted;
 - the same producer on the old commitment code is refused with *"identity
   commitment does not recompute from the card"*.
+
+## Conformance modes
+
+Two more modes, each running upstream's own function at the pin:
+
+```sh
+card-verify digest <value.json>
+card-verify verify-statement <statement.json> <card.json> <expect.json>
+```
+
+- **`digest`** prints DTG Credentials' `digestMultibase`: JCS without the top-level `proof`, sha-256 multihash, base58btc (`dtg_credentials::digest_multibase_json`, the function vta-sdk's `vetting::digest` calls). A golden vector for a fixture comes from this, never from Keyring's own code (keyring-bifold `openvtcVetterStatement.test.ts`).
+- **`verify-statement`** verifies the card, then runs vta-sdk's `verify_statement` and `check_against_card` on the statement. That is what an openvtc applicant runs on a statement it receives (openvtc-core `vetting/applicant.rs:1068`, at `ed13d29`). `expect.json` may add `statementNow`, which defaults to one second after the statement's `validFrom`.
+
+`check-keyring-card.sh` runs both directions: the card Keyring's applicant sends, and the statement Keyring's vetter makes over it. `BIFOLD_DIR` points it at a bifold checkout other than the submodule.
+
+Measured on 2026-09-25: on bifold main (`eaa563d3`), Keyring's statement was refused with `Binding("cardDigestMultibase")`, because Keyring hashed the card with its proof. keyring-bifold#116 fixes that, and both directions then pass.

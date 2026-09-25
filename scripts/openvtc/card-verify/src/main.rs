@@ -10,6 +10,27 @@
 //! the SDK's default policy).
 //!
 //! Exit 0 and one `OK` line on success; exit 1 and the SDK's reason otherwise.
+//!
+//! Two more modes, for the conformance vectors (each runs upstream's own
+//! function, at the pin, on a value Keyring produced or will be checked against):
+//!
+//! - `card-verify digest <value.json>` prints DTG Credentials' `digestMultibase`
+//!   of the value: JCS without the top-level `proof`, sha-256 multihash,
+//!   base58btc (`dtg_credentials::digest_multibase_json`, the function vta-sdk's
+//!   `vetting::digest` calls for a card or a statement).
+//! - `card-verify vectors <card.json>` prints golden vectors as JSON: for fixed
+//!   inputs (and the given card), what upstream computes for the identity
+//!   commitment (`vetting::card::identity_commitment`), the card digest
+//!   (`dtg_credentials::digest_multibase_json`), the match code
+//!   (`vetting::match_code::vetting_match_code`) and the ticket URI
+//!   (`vetting::ticket_uri::decode`, then `encode`). Keyring's tests check its
+//!   own functions against that file.
+//! - `card-verify verify-statement <statement.json> <card.json> <expect.json>`
+//!   verifies the card as above, then runs vta-sdk's `verify_statement` and
+//!   `check_against_card` on the statement: what an openvtc applicant runs on a
+//!   statement it receives (openvtc-core `vetting/applicant.rs` `on_statement`).
+//!   `expect.json` may add `"statementNow"` (RFC 3339); it defaults to one
+//!   second after the statement's `validFrom`.
 
 use std::process::ExitCode;
 
@@ -19,7 +40,13 @@ use affinidi_did_resolver_cache_sdk::network_resolvers::HostPolicy;
 use chrono::{DateTime, Duration, Utc};
 use serde_json::Value;
 use vta_sdk::trust_task_proof::TrustTaskVmResolver;
-use vta_sdk::vetting::card::{CardExpectations, verify_card};
+use vta_sdk::vetting::card::{CardExpectations, VerifiedVettingCard, verify_card};
+use serde_json::json;
+use vta_sdk::protocols::vetting::session::v0_1::VettingCardClaim;
+use vta_sdk::vetting::card::identity_commitment;
+use vta_sdk::vetting::match_code::vetting_match_code;
+use vta_sdk::vetting::statement::verify_statement;
+use vta_sdk::vetting::ticket_uri;
 
 fn read(path: &str) -> Result<Value, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -30,9 +57,16 @@ fn field<'a>(v: &'a Value, name: &str) -> Result<&'a str, String> {
     v.get(name).and_then(Value::as_str).ok_or_else(|| format!("expect.json: missing \"{name}\""))
 }
 
-async fn run(card_path: &str, expect_path: &str) -> Result<String, String> {
-    let card = read(card_path)?;
-    let expect = read(expect_path)?;
+async fn resolver_for(did: &str) -> Result<TrustTaskVmResolver, String> {
+    if did.starts_with("did:key:") {
+        return Ok(TrustTaskVmResolver::did_key_only());
+    }
+    let config = DIDCacheConfigBuilder::default().with_host_policy(HostPolicy::PublicOnly).build();
+    let client = DIDCacheClient::new(config).await.map_err(|e| format!("resolver: {e}"))?;
+    Ok(TrustTaskVmResolver::new(client))
+}
+
+async fn verified_card(card: &Value, expect: &Value) -> Result<VerifiedVettingCard, String> {
     let required: Vec<String> = expect
         .get("requiredClaims")
         .and_then(Value::as_array)
@@ -47,37 +81,146 @@ async fn run(card_path: &str, expect_path: &str) -> Result<String, String> {
             issued.parse::<DateTime<Utc>>().map_err(|e| format!("card issuedAt: {e}"))? + Duration::seconds(1)
         }
     };
-    let publisher = field(&expect, "publisher")?;
-    let resolver = if publisher.starts_with("did:key:") {
-        TrustTaskVmResolver::did_key_only()
-    } else {
-        let config = DIDCacheConfigBuilder::default().with_host_policy(HostPolicy::PublicOnly).build();
-        let client = DIDCacheClient::new(config).await.map_err(|e| format!("resolver: {e}"))?;
-        TrustTaskVmResolver::new(client)
-    };
+    let publisher = field(expect, "publisher")?;
+    let resolver = resolver_for(publisher).await?;
     let expectations = CardExpectations {
-        audience: field(&expect, "audience")?,
+        audience: field(expect, "audience")?,
         publisher,
-        community: field(&expect, "community")?,
-        challenge: field(&expect, "challenge")?,
-        domain: field(&expect, "domain")?,
+        community: field(expect, "community")?,
+        challenge: field(expect, "challenge")?,
+        domain: field(expect, "domain")?,
         required_claims: &required,
         now,
     };
-    let verified = verify_card(&card, &expectations, &resolver)
+    verify_card(card, &expectations, &resolver)
+        .await
+        .map_err(|e| format!("REFUSED: {e} — {e:?}"))
+}
+
+async fn run(card_path: &str, expect_path: &str) -> Result<String, String> {
+    let verified = verified_card(&read(card_path)?, &read(expect_path)?).await?;
+    Ok(format!("OK: card accepted by vta-sdk verify_card (digest {})", verified.digest_multibase()))
+}
+
+fn vectors(card_path: &str) -> Result<String, String> {
+    let card = read(card_path)?;
+    let claims = |v: Value| -> Result<Vec<VettingCardClaim>, String> {
+        serde_json::from_value(v).map_err(|e| format!("claims: {e}"))
+    };
+    let mut commitments = Vec::new();
+    let cases = [
+        (
+            card.get("commitmentSalt").cloned().unwrap_or_default(),
+            card.get("claims").cloned().unwrap_or_default(),
+            json!(["name.legal"]),
+        ),
+        (
+            json!("salt-1"),
+            json!([{ "type": "name.legal", "value": "Ada Lovelace", "provenance": "selfAsserted" }]),
+            json!(["name.legal"]),
+        ),
+        (
+            json!("salt-1"),
+            json!([
+                { "type": "name.legal", "value": "Ada Lovelace", "provenance": "selfAsserted" },
+                { "type": "name.legal", "value": "Someone Else", "provenance": "selfAsserted" }
+            ]),
+            json!(["name.legal"]),
+        ),
+    ];
+    for (salt, claim_list, required) in cases {
+        let salt_str = salt.as_str().ok_or("salt is not a string")?.to_string();
+        let required_list: Vec<String> = serde_json::from_value(required.clone()).map_err(|e| e.to_string())?;
+        let expected = identity_commitment(&salt_str, &claims(claim_list.clone())?, &required_list)
+            .map_err(|e| format!("identity_commitment: {e}"))?;
+        commitments.push(json!({ "salt": salt_str, "claims": claim_list, "requiredClaims": required, "expected": expected }));
+    }
+    let match_codes: Vec<Value> = [
+        "urn:uuid:5b0e1c2a-7d4f-4a51-9c6e-2f1b8d3a9e70",
+        "urn:uuid:a",
+        "urn:uuid:session-conformance",
+    ]
+    .iter()
+    .map(|id| json!({ "sessionDocumentId": id, "expected": vetting_match_code(id) }))
+    .collect();
+    let mut tickets = Vec::new();
+    for uri in [
+        "vetting-ticket:?v=1&community=did%3Awebvh%3AQmCommunity%3Adids.example%3Acommunity&vetter=did%3Awebvh%3AQmVetter%3Adids.example%3Avetter&ticket=tkt-0001&secret=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "vetting-ticket:?v=1&community=did%3Awebvh%3AQmCommunity%3Adids.example%3Acommunity&vetter=did%3Akey%3Az6MkVetter&code=K7QF-2M9X",
+    ] {
+        let decoded = ticket_uri::decode(uri).map_err(|e| format!("ticket decode {uri}: {e}"))?;
+        let encoded = ticket_uri::encode(&decoded).map_err(|e| format!("ticket encode: {e}"))?;
+        let presentation = serde_json::to_value(&decoded.presentation).map_err(|e| e.to_string())?;
+        tickets.push(json!({
+            "uri": uri,
+            "decoded": { "community": decoded.community, "vetter": decoded.vetter, "presentation": presentation },
+            "reencoded": encoded
+        }));
+    }
+    let doc = json!({
+        "note": "Golden vectors computed by upstream code (wallet scripts/openvtc/card-verify vectors). Keyring's tests check its own functions against these; never regenerate them with Keyring's code.",
+        "sources": {
+            "identityCommitment": "vta-sdk vetting/card.rs identity_commitment",
+            "cardDigest": "dtg-credentials digest_multibase_json (lib.rs:534), via vta-sdk vetting/mod.rs digest",
+            "matchCode": "vta-sdk vetting/match_code.rs vetting_match_code",
+            "ticketUri": "vta-sdk vetting/ticket_uri.rs decode, encode"
+        },
+        "identityCommitment": commitments,
+        "cardDigest": { "card": card.clone(), "expected": dtg_credentials::digest_multibase_json(&card).map_err(|e| e.to_string())? },
+        "matchCode": match_codes,
+        "ticketUri": tickets
+    });
+    serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())
+}
+
+fn digest(value_path: &str) -> Result<String, String> {
+    dtg_credentials::digest_multibase_json(&read(value_path)?).map_err(|e| format!("digest: {e}"))
+}
+
+async fn verify_statement_against(statement_path: &str, card_path: &str, expect_path: &str) -> Result<String, String> {
+    let statement = read(statement_path)?;
+    let expect = read(expect_path)?;
+    let card = verified_card(&read(card_path)?, &expect).await?;
+    let now: DateTime<Utc> = match expect.get("statementNow").and_then(Value::as_str) {
+        Some(t) => t.parse().map_err(|e| format!("expect.json statementNow: {e}"))?,
+        None => {
+            let from = statement.get("validFrom").and_then(Value::as_str).ok_or("statement: missing validFrom")?;
+            from.parse::<DateTime<Utc>>().map_err(|e| format!("statement validFrom: {e}"))? + Duration::seconds(1)
+        }
+    };
+    let issuer = match statement.get("issuer") {
+        Some(Value::String(s)) => s.clone(),
+        Some(v) => v.get("id").and_then(Value::as_str).unwrap_or_default().to_string(),
+        None => return Err("statement: missing issuer".into()),
+    };
+    let resolver = resolver_for(&issuer).await?;
+    let verified = verify_statement(&statement, now, &resolver)
         .await
         .map_err(|e| format!("REFUSED: {e} — {e:?}"))?;
-    Ok(format!("OK: card accepted by vta-sdk verify_card (digest {})", verified.digest_multibase()))
+    verified.check_against_card(&card).map_err(|e| format!("REFUSED: {e} — {e:?}"))?;
+    Ok(format!(
+        "OK: statement accepted by vta-sdk verify_statement + check_against_card (card digest {})",
+        card.digest_multibase()
+    ))
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 3 {
-        eprintln!("usage: card-verify <card.json> <expect.json>");
-        return ExitCode::from(2);
-    }
-    match run(&args[1], &args[2]).await {
+    let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+    let result = match &argv[1..] {
+        ["digest", value] => digest(value),
+        ["vectors", card] => vectors(card),
+        ["verify-statement", statement, card, expect] => verify_statement_against(statement, card, expect).await,
+        [card, expect] => run(card, expect).await,
+        _ => {
+            eprintln!(
+                "usage: card-verify <card.json> <expect.json>\n       card-verify digest <value.json>\n       card-verify vectors <card.json>\n       card-verify verify-statement <statement.json> <card.json> <expect.json>"
+            );
+            return ExitCode::from(2);
+        }
+    };
+    match result {
         Ok(line) => {
             println!("{line}");
             ExitCode::SUCCESS
