@@ -176,3 +176,40 @@ describe('unlinking', () => {
     expect(reduceLink(initialLinkState, { type: 'unlinked' })).toBe(initialLinkState)
   })
 })
+
+describe('a first link whose key swap is unsettled', () => {
+  const linking = run([offerScanned, { type: 'confirmed' }, { type: 'submitted', code: 'C' }, { type: 'granted' }])
+
+  it('is linked but offline while the agent is asked which key it holds', () => {
+    const state = reduceLink(linking, {
+      type: 'linked',
+      linkedAt: 't0',
+      connection: { kind: 'offline', since: 7, reason: 'swap unanswered' },
+    })
+    expect(state).toEqual({
+      kind: 'linked',
+      ...agent,
+      linkedAt: 't0',
+      connection: { kind: 'offline', since: 7, reason: 'swap unanswered' },
+    })
+    // …and the next connect brings it online.
+    expect(reduceLink(state, { type: 'sessionOpened' })).toMatchObject({ connection: { kind: 'online' } })
+  })
+
+  it('both keys refused: not linked, with the reason — link again, not "revoked"', () => {
+    const failure = { reason: 'failed' as const, detail: 'accepts neither of this phone’s keys (not in ACL)' }
+    expect(reduceLink(linked, { type: 'linkLost', failure })).toEqual({ kind: 'notLinked', lastError: failure })
+    expect(reduceLink(linking, { type: 'linkLost', failure })).toEqual({ kind: 'notLinked', lastError: failure })
+    expect(reduceLink(initialLinkState, { type: 'linkLost', failure })).toBe(initialLinkState)
+  })
+
+  it('a fresh attempt the agent already knows resumes into linking without a new grant', () => {
+    const confirming = reduceLink(initialLinkState, offerScanned)
+    const submitting = reduceLink(confirming, { type: 'confirmed' })
+    for (const from of [initialLinkState, confirming, submitting]) {
+      expect(reduceLink(from, { type: 'resumed', ...agent })).toEqual({ kind: 'linking', step: 'connecting', ...agent })
+    }
+    // Never over a working link.
+    expect(reduceLink(linked, { type: 'resumed', ...agent })).toBe(linked)
+  })
+})

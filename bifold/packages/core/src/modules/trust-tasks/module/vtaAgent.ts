@@ -93,8 +93,13 @@ const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
  * read from the VTA's words.
  */
 export function connectFailureRevokes(error: unknown): boolean {
-  if (typeof ManagerKeyUnresolved === 'function' && error instanceof ManagerKeyUnresolved) return error.refusedBoth
+  if (isUnsettledSwap(error)) return error.refusedBoth
   return ACCESS_REVOKED.test(error instanceof Error ? error.message : String(error))
+}
+
+/** A key swap the VTA could not be asked about, or refused both keys of. */
+function isUnsettledSwap(error: unknown): error is ManagerKeyUnresolved {
+  return typeof ManagerKeyUnresolved === 'function' && error instanceof ManagerKeyUnresolved
 }
 
 /**
@@ -398,6 +403,8 @@ export class VtaAgentController {
     const identities = this.identityStore(agent)
     const enrol = this.deps.enrol ?? { submit: submitEnrolment, waitForGrant }
     try {
+      if (await this.resumeEarlierLink(agent, offer.vta, offer.label, identities, live)) return
+      if (!live()) return
       const { code } = await enrol.submit(agent, offer, identities, { fetch: this.deps.fetch })
       if (!live()) return
       this.dispatch({ type: 'submitted', code })
@@ -419,9 +426,61 @@ export class VtaAgentController {
   }
 
   /**
+   * A fresh link attempt for an agent this phone left a key swap unsettled
+   * with — the swap's answer was lost, and the app never settled it. The agent
+   * may hold the successor key, and minting a new temporary key would
+   * overwrite the only record of it, so the agent is asked first (a connect
+   * settles a pending swap). If it knows one of this phone's keys the phone is
+   * linked again with it, no new grant needed: true. If it refused both, the
+   * record holds nothing live and the attempt goes on as a new link: false.
+   * If it could not be asked, the attempt fails rather than risk the key.
+   *
+   * A pending swap with a different agent is left alone: the identity store
+   * keeps one record per agent, so it waits there for that agent to be linked
+   * again. The phone cannot take the key off that agent's ACL (VTI-Q23); only
+   * its admin can.
+   */
+  private async resumeEarlierLink(
+    agent: Agent,
+    vtaDid: string,
+    label: string,
+    identities: VtiIdentityStore,
+    live: () => boolean
+  ): Promise<boolean> {
+    const record = await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)
+    if (!record?.pendingNext) return false
+    await this.reset()
+    const client = this.client(agent, vtaDid, identities)
+    this.set({ status: 'connecting', error: undefined })
+    try {
+      await client.connect()
+    } catch (error) {
+      await this.reset()
+      if (isUnsettledSwap(error) && error.refusedBoth) return false
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new EnrolmentError(detail, 'unreachable')
+    }
+    if (!live()) return true
+    // Settled: rotate only a temporary key the VTA confirmed it kept (the swap
+    // never happened). A successor still pending is never replaced by a new
+    // one — rotating would overwrite it — and the next connect asks again.
+    const settled = await Promise.resolve(identities.getManager(vtaDid)).catch(() => undefined)
+    const rotate = settled?.stage === 'temporary' && !settled.pendingNext
+    this.dispatch({ type: 'resumed', vtaDid, label })
+    await this.finishLink(agent, vtaDid, label, identities, live, client, rotate)
+    return true
+  }
+
+  /**
    * The granted key signs in, rotates onto a long-lived one, and the agent is
    * remembered — the same for a scanned offer and for a key pasted by hand.
    * Assumes the machine is in `linking` (it dispatched `granted`).
+   *
+   * The link is remembered before the swap is sent: the agent granted this
+   * phone, and the swap only moves that grant to another of its keys. So an
+   * answer lost to a dropped socket or a killed app leaves a linked phone
+   * whose next connect settles which key the agent holds — never an unlinked
+   * one whose agent holds a key it will not use again.
    */
   private async finishLink(
     agent: Agent,
@@ -429,7 +488,8 @@ export class VtaAgentController {
     label: string,
     identities: VtiIdentityStore,
     live: () => boolean,
-    signedIn?: VtaClient
+    signedIn?: VtaClient,
+    rotate = true
   ): Promise<void> {
     let client = signedIn
     if (!client) {
@@ -441,17 +501,56 @@ export class VtaAgentController {
       await client.whoAmI()
     }
     if (!live()) return
-    this.dispatch({ type: 'rotating' })
-    await client.rotateManagerKey()
-    // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
-    await client.whoAmI().catch(() => undefined)
     const linkedAt = new Date(this.now()).toISOString()
-    await this.linkStore(agent).set({ vtaDid, label, linkedAt })
+    const links = this.linkStore(agent)
+    await links.set({ vtaDid, label, linkedAt })
+    if (rotate) {
+      this.dispatch({ type: 'rotating' })
+      try {
+        await client.rotateManagerKey()
+      } catch (error) {
+        if (!(await this.swapStillOpen(error, identities, vtaDid))) {
+          // Settled on the VTA's word that the swap never happened (or it was
+          // refused outright): the attempt failed, as before, and is forgotten.
+          await links.clear().catch(() => undefined)
+          throw error
+        }
+        // The swap's outcome is not known yet. Linked, offline: the next
+        // connect asks the VTA which key it holds, and this screen does not
+        // say "didn't answer" about a request the agent may well have done.
+        const reason = error instanceof Error ? error.message : String(error)
+        await this.reset()
+        this.set({ introSeen: false, status: 'disconnected', vtaDid, error: reason })
+        this.reconnectAttempt = 0
+        this.dispatch({ type: 'linked', linkedAt, connection: { kind: 'offline', since: this.now(), reason } })
+        void this.ensureOnline(agent)
+        return
+      }
+      // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
+      await client.whoAmI().catch(() => undefined)
+    }
     this.set({ introSeen: false })
     this.reconnectAttempt = 0
     this.set({ status: 'connected', vtaDid, managerDid: client.managerDid })
     this.dispatch({ type: 'linked', linkedAt })
     this.learnAgentName(client, vtaDid)
+  }
+
+  /** Whether this phone still speaks to `vtaDid` with the temporary key its link began with. */
+  private async onTemporaryKey(agent: Agent, vtaDid: string): Promise<boolean> {
+    const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
+    return record?.stage === 'temporary'
+  }
+
+  /**
+   * Whether a failed rotation left the successor pending: the VTA could not
+   * be asked, or it was asked and the answer did not settle it. Refused both
+   * keys is settled — nothing live is left to link with.
+   */
+  private async swapStillOpen(error: unknown, identities: VtiIdentityStore, vtaDid: string): Promise<boolean> {
+    if (isUnsettledSwap(error)) return !error.refusedBoth
+    const record = await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)
+    return Boolean(record?.pendingNext)
   }
 
   /**
@@ -463,7 +562,10 @@ export class VtaAgentController {
   async startManualLink(agent: Agent, vtaDid: string, label: string): Promise<void> {
     if (this.state.link.kind !== 'notLinked') return
     const token = ++this.attemptToken
+    const live = () => token === this.attemptToken
     try {
+      if (await this.resumeEarlierLink(agent, vtaDid, label, this.identityStore(agent), live)) return
+      if (!live()) return
       const mediator = await resolveVtaMediator(agent, vtaDid)
       const did = await createVtiClientDid(agent, mediator)
       await this.identityStore(agent).setManager({
@@ -572,6 +674,21 @@ export class VtaAgentController {
       this.dispatch({ type: 'sessionOpened' })
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
+      if (isUnsettledSwap(error) && error.refusedBoth && (await this.onTemporaryKey(agent, link.vtaDid))) {
+        // A first link whose swap answer was lost, and the VTA now refuses
+        // both keys: the temporary one expired, and the successor was never
+        // written. The link never finished, so this is "link again", with the
+        // VTA's words under Details, not a revocation of a working link and
+        // not a retry that can never succeed. A later swap from a permanent
+        // key refused both ways is a revocation, read as one below.
+        await this.linkStore(agent)
+          .clear()
+          .catch(() => undefined)
+        await this.reset()
+        this.set({ status: 'disconnected', managerDid: undefined })
+        this.dispatch({ type: 'linkLost', failure: { reason: 'failed', detail: reason } })
+        return
+      }
       if (connectFailureRevokes(error)) {
         this.dispatch({ type: 'accessRevoked', reason })
         return
