@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.48 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.49 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1883,6 +1883,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q27 | Could a member whose membership credential was lost get it again? | A community delivers the membership credential once. There is no member-credential resend (only `vetting/vetters/resend`), and the status poll without an id finds only open requests, so an approved join whose credential never got stored answers NotFound. A client that stops between receiving the credential and storing it stays pending for good; openvtc and Keyring both can. [Details](#question-details). |
 | VTI-Q28 | Could vta-sdk ship a verifier for the vetting rules that today live only in the spec? | Several producer obligations have no upstream check a client can run on its own output: a session's `parentThreadId` and its ≤15 min `expiresAt`, the statement's `taskDigestMultibase`, a request's `requirementsDigest`/`languages`/`message`, how ticket codes and secrets are generated, `registryConsent`, `acceptsDocumentation`/`sessionHint`, and the membership credential's proof (which openvtc doesn't verify either). A client can only be held to the schema. [Details](#question-details). |
 | VTI-Q29 | Could openvtc retry a mediator listener that failed to come up at launch? | A persona listener whose login misses its budget is logged ("listener failed to come up; continuing without it") and skipped for the whole run, with nothing on screen. A vetter launched that way shows a normal desk and never hears a request. [Details](#question-details). |
+| VTI-Q30 | Could pnm keep the new admin key until the agent's swap answer arrives, and could the swap be made atomic? | `acl/swap-key` writes the new ACL entry and then deletes the old one, and pnm keeps the new key only in memory until it saves the session. A swap answer lost after the agent swapped strands pnm with a key the agent no longer knows. A repeat can't recover it: the old key is refused, and a partial write conflicts. [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2290,10 +2291,30 @@ failed requests through the lab's tunnels made the vetter persona's login miss
 openvtc's 10 s budget by 0.8 s (the mediator logged it successful at
 08:47:51.7). A Keyring applicant's request then sat queued at the mediator for
 three minutes. Our harness now relaunches the TUI until the listener is up.
+
+**VTI-Q30 — a lost swap answer strands the admin key.**
+(a) `acl/swap-key` moves a grant from one DID to another in two writes: the new
+entry, then deleting the old (`vta-service/src/operations/acl.rs:912-915`; the
+new entry does not inherit the old one's expiry, `:892-910`). A client that
+loses the answer after the agent swapped holds a key the agent no longer
+knows. Repeating doesn't help: the old key is refused before the swap
+(`messaging/auth.rs:81-133`), and after a partial write the new entry
+conflicts ("ACL entry already exists", `acl.rs:886-890`). pnm keeps the new key
+only in memory until it saves the session, and a swap error returns early
+(`vta-sdk/src/session.rs:1499-1502`, `:1627-1639`), so pnm is stranded the same
+way. Expected, either:
+- pnm saves the new key as pending before sending, and on a lost answer asks
+  the agent which key it knows;
+- or the swap becomes one transaction and a repeat of the same swap is
+  answered as success.
+(b) Read at VTI `ed672fff`, 2026-09-25. Not seen live. Keyring had the same gap
+and closes it on its side (keyring-bifold#127: pending key, then resolution by
+asking the agent).
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.49 | 2026-09-25 | **VTI-Q30** (new): `acl/swap-key` is two writes and not idempotent, and pnm keeps the new key only in memory until the session is saved, so a swap answer lost after the agent swapped strands the admin key. Read at `ed672fff`; not seen live. Keyring closes the same gap on its side (keyring-bifold#127). Not sent. |
 | 1.48 | 2026-09-25 | **VTI-Q28** (new): the vetting rules that exist only in the spec, with no vta-sdk verifier a client can run on its own output (parentThreadId, session expiry, taskDigestMultibase, request fields, ticket generation, registryConsent, the membership credential's proof). From the conformance inventory. **VTI-Q29** (new): openvtc does not retry a mediator listener that failed at launch, so a vetter can be deaf behind a normal desk. Measured on our lab with `ed13d29`. Neither sent. |
 | 1.47 | 2026-09-25 | **VTI-Q27** (new): a community delivers the membership credential once, and nothing gets it again: no member-credential resend, and the id-less `join-requests/status` finds only open requests, so an approved join answers NotFound. A client that stops between receiving the credential and storing it stays pending for good. Measured on our lab with openvtc `ed13d29` (VTI `a96fe02f`); read at `a96fe02f`. Keyring has a narrower window of the same kind, which it is closing on its side. Not sent. |
 | 1.46 | 2026-09-25 | **VTI-Q26** (new): openvtc sends a join over TSP whenever the community advertises `#tsp`, with no check that the community's mediator is its own and no fallback, so a join to a community on another, non-relaying mediator is lost in silence. Measured on the Farm with openvtc `ed13d29` (the TUI as the applicant, `keyring-test-vtc` on its stack's mediator); read at `ed13d29` and `177a218`. Not sent. |
