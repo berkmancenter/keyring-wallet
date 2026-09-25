@@ -6,7 +6,13 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Android: linking your agent no longer gives up early on a slow phone or network. If it still says your agent didn't answer, tap Try again and Keyring picks up the answer that came in late. (Fixes the known issue in the last Android build.)
-• When you paste a vetter's ticket, the field, its message and "Use this link" stay above the keyboard on iPhone and Android.
-• On the screen for linking your agent, the buttons no longer hide behind the keyboard on Android.
-• If joining by invitation can't make your identity (for example, your agent has nowhere to publish it), the message now shows right above Continue, not at the bottom of the page.
+• Vetting with a vetter who uses the openvtc app now works: Keyring accepts their statement instead of silently ignoring it. If a vetter already sent you a statement that never arrived, ask them to send it again.
+• Your Keyring can now vet someone who uses the openvtc app, all the way to their membership.
+• Fixes an occasional failure (about 1 or 2 in 1,000 requests) that could show as a failed link, a "doesn't know why" error, or a vetting step that never moved on.
+• Joining no longer gets stuck on "idempotency key reused for a different request" after a first attempt that didn't finish; tapping again now works, including on phones already stuck.
+• After you ask to join, Keyring shows where your request stands (joined, waiting for vetting, or pending) instead of saying the community didn't answer, and you can withdraw a waiting request.
+• Linking your agent recovers on its own if an answer is lost or the connection stalls, and a failed link now says why under Details.
+• When Keyring refuses something a vetter or community sent, it says why in plain words.
+• Tapping a vetter's ticket link (for example in Signal) opens it in Keyring.
+• Problem reports now keep about an hour of history instead of a few minutes.
+• Known issue: once you've asked a vetter, you can't cancel that request from your phone yet; the vetter can decline it.
