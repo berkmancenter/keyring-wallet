@@ -1587,6 +1587,16 @@
       "expired": "Details: the statement has already expired.",
       "proof": "Details: the statement's signature could not be verified."
     },
+    "EnvelopeRefused": "A message from your vetter arrived, but this phone could not trust it, so it was ignored.",
+    "EnvelopeRefusedDesk": "A card arrived for this request, but this phone could not trust it, so it was ignored.",
+    "EnvelopeRefusedReason": {
+      "malformed": "Details: the message could not be read.",
+      "typeMismatch": "Details: the message says it is one thing but was sent as another.",
+      "issuerNotSender": "Details: the message names someone other than who sent it.",
+      "unsigned": "Details: the message is not signed.",
+      "proof": "Details: the message's signature could not be verified.",
+      "wrongSigner": "Details: the message was signed by someone other than who sent it."
+    },
     "WaitingForCard": "Waiting for their name…",
     "CheckTheirId": "Check their ID — does it say this?",
     "VetSomeoneElse": "Vet someone else",

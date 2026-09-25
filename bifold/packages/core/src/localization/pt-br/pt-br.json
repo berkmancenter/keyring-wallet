@@ -1428,6 +1428,16 @@
       "expired": "Detalhes: a declaração já expirou.",
       "proof": "Detalhes: não foi possível verificar a assinatura da declaração."
     },
+    "EnvelopeRefused": "Uma mensagem do seu verificador chegou, mas este telefone não pôde confiar nela, então ela foi ignorada.",
+    "EnvelopeRefusedDesk": "Um cartão chegou para este pedido, mas este telefone não pôde confiar nele, então ele foi ignorado.",
+    "EnvelopeRefusedReason": {
+      "malformed": "Detalhes: não foi possível ler a mensagem.",
+      "typeMismatch": "Detalhes: a mensagem diz ser uma coisa, mas foi enviada como outra.",
+      "issuerNotSender": "Detalhes: a mensagem nomeia alguém diferente de quem a enviou.",
+      "unsigned": "Detalhes: a mensagem não está assinada.",
+      "proof": "Detalhes: não foi possível verificar a assinatura da mensagem.",
+      "wrongSigner": "Detalhes: a mensagem foi assinada por alguém diferente de quem a enviou."
+    },
     "WaitingForCard": "Aguardando o nome da pessoa…",
     "CheckTheirId": "Confira o documento — ele diz isto?",
     "VetSomeoneElse": "Verificar outra pessoa",

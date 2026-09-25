@@ -69,6 +69,7 @@ import { DidDetails } from './DidDetails'
 import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
 import { EligibilityNote } from './EligibilityNote'
+import { EnvelopeRefusalNote } from './EnvelopeRefusalNote'
 import { ticketRefusalWords } from './ticketWords'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
@@ -780,6 +781,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 <Text style={styles.label} testID={testIdWithKey('VettingDeskStatus')}>
                   {t(`Vetting.Status.${request.status}`)}
                 </Text>
+                <EnvelopeRefusalNote
+                  refusal={request.envelopeRefusal}
+                  side="vetter"
+                  style={styles.label}
+                  errorStyle={styles.error}
+                />
 
                 {vetterStep === 'request' ? (
                   <>
@@ -1019,6 +1026,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         {t(`Vetting.Status.${r.status}`)}
         {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
       </Text>
+      <EnvelopeRefusalNote
+        refusal={r.envelopeRefusal}
+        side="applicant"
+        style={styles.label}
+        errorStyle={styles.error}
+      />
       {/* When it was sent is what a person can use to tell two requests apart;
           which request it is rides in the testID, for tests only. Requests
           stored before sentAt existed show no line. */}
