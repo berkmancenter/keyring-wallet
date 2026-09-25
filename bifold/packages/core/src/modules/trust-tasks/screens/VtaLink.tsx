@@ -12,20 +12,12 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
+import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -47,7 +39,18 @@ export function agentHost(vtaDid: string): string | undefined {
   return parts[1] === 'webvh' && parts.length >= 4 ? decodeURIComponent(parts[3]) : undefined
 }
 
+// The header's height, for the keyboard offset; a render without a header
+// (a screen test) has none to report, and throws.
+const useSafeHeaderHeight = (): number => {
+  try {
+    return useHeaderHeight()
+  } catch {
+    return 0
+  }
+}
+
 const VtaLink: React.FC = () => {
+  const headerHeight = useSafeHeaderHeight()
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
@@ -444,7 +447,11 @@ const VtaLink: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* The app draws under the system bars (KeyboardProvider), so Android no
+          longer resizes the window for the keyboard: the footer stayed behind
+          it there. keyboard-controller's view lifts it on both platforms, by
+          the keyboard's overlap below the header. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={headerHeight}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {body}
         </ScrollView>

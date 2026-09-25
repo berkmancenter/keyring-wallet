@@ -4,8 +4,9 @@
  * "No agent is configured for this build" before a person can do anything.
  */
 import { useNavigation } from '@react-navigation/native'
-import { render, act, fireEvent } from '@testing-library/react-native'
+import { render, act, fireEvent, within } from '@testing-library/react-native'
 import React from 'react'
+import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -192,6 +193,19 @@ describe('Vetting — a member', () => {
     const line = await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
     expect(line).toHaveTextContent(/Vetting\.Member\b/)
     expect(line).not.toHaveTextContent(/Already/i)
+  })
+
+  test('the page makes room for the keyboard: the scroll moves a focused field up with room below it', async () => {
+    // The ticket field, its "can't read this" line and "Use this link" were all
+    // behind the keyboard on both platforms (221 gate): the app draws under the
+    // system bars, so neither resizes the page by itself.
+    const tree = await renderAs('member')
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    const avoiding = tree.UNSAFE_getByType(KeyboardAvoidingView)
+    expect(avoiding.props.behavior).toBe('padding')
+    const scroll = within(avoiding).UNSAFE_getByType(KeyboardAwareScrollView)
+    expect(scroll.props.bottomOffset).toBeGreaterThanOrEqual(150)
+    expect(within(scroll).getByTestId(testIdWithKey('VettingAlreadyMember'))).toBeTruthy()
   })
 
   test('a role that says more than member is named', async () => {
