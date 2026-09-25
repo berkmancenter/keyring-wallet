@@ -243,6 +243,16 @@ export class VtaAgentController {
     this.deps = deps
   }
 
+  /**
+   * How the app confirms the owner and checks the phone can hold an owner key
+   * (biometrics or passcode). Only these two are set; the rest of the wiring is
+   * kept. Left unset, an owner act refuses with {@link OwnerCheckNotConfigured}
+   * rather than skipping the check.
+   */
+  setOwnerChecks(checks: { confirmOwner: ConfirmOwner; deviceCanOwn: DeviceCanOwn }) {
+    this.deps = { ...this.deps, confirmOwner: checks.confirmOwner, deviceCanOwn: checks.deviceCanOwn }
+  }
+
   private linkStore(agent: Agent) {
     return this.deps.linkStore?.(agent) ?? new GenericRecordsVtaLinkStore(agent)
   }

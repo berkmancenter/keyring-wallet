@@ -484,6 +484,16 @@ describe('adding a backup device', () => {
     expect(sentOf(ACL_GRANT)).toEqual([])
   })
 
+  it('owner checks set by the app are used, and setting them keeps the rest of the wiring', async () => {
+    const confirmOwner = confirmed()
+    const { vta } = await linkedPhone({})
+    // What the app does at start: only the owner checks, nothing else replaced.
+    vta.setOwnerChecks({ confirmOwner, deviceCanOwn: async () => true })
+    await vta.addBackupDevice(agent, BACKUP)
+    expect(confirmOwner).toHaveBeenCalledTimes(1)
+    expect(sentOf(ACL_GRANT)).toHaveLength(1)
+  })
+
   it("refuses this phone's own code before asking the owner or the agent", async () => {
     const confirmOwner = confirmed()
     const { vta } = await linkedPhone({ confirmOwner })
