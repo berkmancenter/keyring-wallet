@@ -121,6 +121,15 @@ if (bothAndroid && !ANDROID_AVD2) {
  * before trusting the negative (no `TradingCard`/`TradingCardRarity`) — see
  * this file's header comment on why the positive check can't be skipped.
  */
+/**
+ * R-Card photos are opt-in (E2E_PLAIN_PHOTOS=1). Without them the positive
+ * proof is the peer's name on screen: a TradingCard would show the name too,
+ * so "name shown, no TradingCard testID" still tells the default card apart,
+ * and the run no longer depends on an AVD's photo picker (API 31's differs)
+ * or on seeding a photo. With photos, ContactAvatarImage is required as before.
+ */
+const WITH_PHOTOS = process.env.E2E_PLAIN_PHOTOS === "1";
+
 async function assertDefaultContactCardRendered(driver, peerName, timeout = 60000) {
   // Same overlay-dismissal dance run-vrc-exchange-trading-card.js does:
   // whichever side just tapped ProposalAccept lands on Chat.tsx's
@@ -133,7 +142,7 @@ async function assertDefaultContactCardRendered(driver, peerName, timeout = 6000
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     const cardRenderedWithContent =
-      (await existsTestId(driver, "ContactAvatarImage", 4000)) &&
+      (!WITH_PHOTOS || (await existsTestId(driver, "ContactAvatarImage", 4000))) &&
       (await byTextContains(driver, peerName).isExisting());
     if (cardRenderedWithContent) {
       // Positive proof established — now the negative check actually means
@@ -152,6 +161,7 @@ async function assertDefaultContactCardRendered(driver, peerName, timeout = 6000
         `[e2e] ${driver.e2ePlatform}: default ContactCard rendered for "${peerName}" ` +
           `(no TradingCard leak)`
       );
+      await screenshot(driver, "plain-contacts");
       return;
     }
     await new Promise((r) => setTimeout(r, 2000));
@@ -176,7 +186,11 @@ async function assertDefaultContactCardRendered(driver, peerName, timeout = 6000
 async function assertNoApproverSection(driver, peerName, timeout = 30000) {
   await openContactDetail(driver, peerName);
 
-  const screenRendered = await existsTestId(driver, "ContactAvatarImage", timeout);
+  const screenRendered = WITH_PHOTOS
+    ? await existsTestId(driver, "ContactAvatarImage", timeout)
+    : await byTextContains(driver, peerName)
+        .waitForExist({ timeout })
+        .then(() => true, () => false);
   if (!screenRendered) {
     await screenshot(driver, "contact-details-not-rendered");
     throw new Error(
@@ -197,6 +211,7 @@ async function assertNoApproverSection(driver, peerName, timeout = 30000) {
   console.log(
     `[e2e] ${driver.e2ePlatform}: Contact Details screen for "${peerName}" confirmed clean of Approver demo UI`
   );
+  await screenshot(driver, "plain-contact-detail");
 }
 
 let a, b;
@@ -212,15 +227,15 @@ try {
   );
 
   await Promise.all([
-    // BOTH wallets attach a photo — unlike run-vrc-exchange-trading-card.js
+    // With E2E_PLAIN_PHOTOS=1, BOTH wallets attach a photo — unlike run-vrc-exchange-trading-card.js
     // (which only needs one side's photo to prove the field survives the
     // exchange), this run's positive check (ContactAvatarImage rendered)
     // has to hold on BOTH sides' Contacts list, since it asserts the default
     // ContactCard on both. A contact with no photo renders the fallback
     // account icon instead of ContactAvatarImage — a false "TradingCard
     // absent" reading on that side would prove nothing.
-    completeOnboarding(a, { firstName: "Alice", lastName: "Anderson", photo: true }),
-    completeOnboarding(b, { firstName: "Bob", lastName: "Baker", photo: true }),
+    completeOnboarding(a, { firstName: "Alice", lastName: "Anderson", photo: WITH_PHOTOS }),
+    completeOnboarding(b, { firstName: "Bob", lastName: "Baker", photo: WITH_PHOTOS }),
   ]);
 
   const invitationUrl = await showRelationshipInvitation(a);
