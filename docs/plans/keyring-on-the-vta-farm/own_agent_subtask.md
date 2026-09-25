@@ -3,8 +3,8 @@
 **Status:** Proposal for review. Not a commitment to implement. Target: the release after the one frozen on 2026-09-25; draft PRs only until that release ships.
 **Parent:** [`keyring-on-the-vta-farm.md`](../keyring-on-the-vta-farm.md). This subtask carries its **F2 — Enrolment from the phone (L0)** for a person with no computer, and answers its §9 Q4 as far as code can (the rest is measurement, below).
 **Siblings:** [`pnm_cnm_subtask.md`](../openvtc-integration-plan/pnm_cnm_subtask.md) owns the VTA client in general; this subtask adds only what owning an agent needs.
-**Reasoning:** [`2026-09-25-cd.md`](./2026-09-25-cd.md). The facts this design rests on (plugin, VTA, Farm, and Keyring code, with citations), and the positions taken on key custody and the owner model.
-**Screens:** drafted by UI/UX in plain words (§7); this document owns the flow and the calls behind them.
+**Reasoning:** [`2026-09-25-cd.md`](./2026-09-25-cd.md). The facts this design rests on (plugin, VTA, Farm, and Keyring code, with citations), and the positions taken on key custody and the owner model. [`2026-09-25-uiux.md`](./2026-09-25-uiux.md): the screens, their words and test IDs, and why the address comes before the owner code.
+**Screens:** §7, in plain words; this document owns the flow and the calls behind them.
 **Baseline:** VTI `ed672fff`, vta-browser-plugin `43e2cc7df9`, vti-setup `22f712f`, all at the pins in `scripts/openvtc/PINS.json`; bifold `fe125e84`.
 
 ---
@@ -152,9 +152,83 @@ Estimates are one engineer's working days. **Ours** is Keyring work; **Farm/upst
 
 ## 7. Screens
 
-UI/UX owns the screens and words: My Agent's empty state gains **Create my agent**, followed by explain, owner code, the agent's address, progress, add a backup, and ready. Every error has its own words: biometrics cancelled, failed, or not set up; a wrong or unready address; a lost answer during the move.
+The screens, in the order of §1, with their English words. Other languages follow the same keys. Rules they all keep:
 
-**Ordering change for UI/UX:** the address screen comes **before** the owner code (§1). UI/UX edits this section with the final copy.
+- **Plain words.** "Agent" is the only term, and the person already met it on My Agent. No "DID", "key", "ACL" or "VTA" on screen. Codes are something to paste, not read, and stay behind a **Show the code** toggle, as on the link screen today.
+- **One job per screen, never a dashboard.** Each screen has one primary button.
+- **Errors sit beside the button that caused them** (the rule the link and join screens already follow), in words, with the developer text behind **Details**.
+- **Face ID is not a step.** It is the system prompt, shown when the phone acts as owner (§3). Android says "fingerprint or screen lock" wherever iOS says "Face ID".
+
+**My Agent, no agent yet.** Today's empty state, with a new primary button:
+
+> **Your agent**
+> An agent holds your identity for a community and carries messages to it. You need one before you can join or be vetted.
+> **[Create my agent]** · [I already have one — link it]
+
+The second button is today's **Link your agent**, renamed. **Link without a QR code** stays under it.
+
+**1 — Create your agent.**
+
+> Your agent runs on the VTA Farm, a free service that keeps it online when your phone is off. You set it up on the Farm's website in a few minutes. Keep Keyring open.
+> 1. Create your agent on the Farm's website
+> 2. Bring its address here
+> 3. Give the Farm this phone's owner code
+>
+> **[Open the Farm's website]** · [Continue]
+
+**2 — Bring your agent here** (§1 step 3).
+
+> **Step 1 of 3 · Your agent's address**
+> On the Farm, choose **Create session**. It shows your agent's address, starting with `did:webvh:`. Copy it and paste it here.
+>
+> [Paste] (and **Scan** once the Farm shows a QR, U1) · **[Continue]**
+
+Errors:
+- Not an address: "That isn't an agent's address. It starts with did:webvh: — copy the whole line from the Farm."
+- It doesn't resolve or names no mediator: "Keyring couldn't find an agent at that address. Check you copied the whole line, and that the Farm finished creating it."
+- No connection: "Keyring couldn't reach the Farm. Check your connection and try again."
+
+**3 — This phone's owner code** (§1 step 4). Keyring makes the key when this screen opens, once the phone has a screen lock (§3).
+
+> **Step 2 of 3 · Your owner code**
+> Give this code to the Farm so your agent knows this phone owns it. The code is protected by your Face ID.
+> On the Farm, paste it where it asks for the **Admin DID**, then choose **Provision agent**. Come back when it says **Agent is online**.
+>
+> **[Copy]** · [Share] · › Show the code
+> **[It's online — connect]**
+
+Errors:
+- No screen lock or biometrics set up: "To protect your agent, turn on Face ID or a passcode in Settings first." [Open Settings]. No key is made until then.
+- Face ID cancelled: no message, and the button stays.
+- Face ID failed or locked out: "Keyring couldn't confirm it's you. Try again, or use your passcode."
+
+**4 — Connecting** (§1 step 6). Progress only, under one Face ID prompt:
+
+> Signing in to your agent… · Making sure it's yours… · Getting it ready…
+
+Errors:
+- Not admitted yet (the key is not in the agent's ACL): "Your agent isn't accepting this phone yet. Check the Farm says Agent is online, then try again."
+- A lost answer during the move is not an error on screen. The next connect settles it (#127/#132), and the line reads "Still getting it ready…".
+
+**5 — Add a backup** (§4; skippable).
+
+> **Step 3 of 3 · Add a backup**
+> If you lose this phone, a backup keeps your agent yours. It takes a minute.
+> **[Use another phone]** · [Not now]
+
+- **Another phone:** on the second phone, **I already have one — link it** → **Link without a QR code**, which shows its code. On this phone: "Scan or paste the other phone's code." Face ID confirms, then "Added: {{device}}."
+- **Not now:** "You can add a backup later from My Agent."
+- **The browser plugin** is not offered until D4 is decided (Phase 4).
+
+**6 — Ready.**
+
+> **Your agent is ready**
+> {{agent name}} is online and belongs to this phone. {{Your backup: {{device}}.}}
+> **[Join a community]** · [Done]
+
+**Afterwards, on My Agent:** a **Backup** line reads "None — add one" or "{{device}}". A missing backup is a quiet line there, never a prompt.
+
+The full draft, with the test IDs each screen carries for the e2e runner (§8), is kept with the reasoning in [`2026-09-25-uiux.md`](./2026-09-25-uiux.md).
 
 ## 8. Tests and infrastructure
 
