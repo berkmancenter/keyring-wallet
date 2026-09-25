@@ -33,6 +33,7 @@ import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
 
+import { DevicesCard } from './DevicesCard'
 import { agentDisplayName, withAgentName } from './agentName'
 import { shareIdentity } from './identityShare'
 import { communityLabelOf, partyLabelStartOf } from './communityName'
@@ -392,6 +393,7 @@ const VtaAgentHome: React.FC = () => {
             <ThemedText style={styles.link}>{t('VtaLink.WhatIsMyAgent')}</ThemedText>
           </Pressable>
         </View>
+        <DevicesCard onPress={() => go(Screens.VtaDevices)} />
 
         {/* The vetter role is news, not a step: it shows when an admin grants it. */}
         {holdings?.vetterFor.map((communityDid) => (

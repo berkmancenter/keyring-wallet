@@ -515,3 +515,5 @@ export type { NotificationItemType, NotificationReturnType, NotificationsInputPr
 // OpenID / mediator URIs before parsing them as DIDComm OOB invitations.
 export { isMediatorInvitation } from './utils/mediatorhelpers'
 export { isDidCommInvitation, isOpenIdCredentialOffer, isOpenIdPresentationRequest } from './utils/parsers'
+
+export { ownerChecks } from './modules/trust-tasks/module/ownerConfirm'

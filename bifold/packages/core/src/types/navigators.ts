@@ -80,6 +80,8 @@ export enum Screens {
   VtiCommunity = 'Community',
   VtiVetting = 'Vetting',
   VtaLink = 'Link your agent',
+  VtaCreateAgent = 'Claim your agent',
+  VtaDevices = 'Your devices',
   VtaAgent = 'Your agent',
   VtiInvited = 'Invited',
   VtiJoin = 'Join',
@@ -148,6 +150,8 @@ export type MyAgentStackParams = {
   [Screens.VtaLink]: { withoutQr?: boolean } | undefined
   [Screens.VtaAgent]: undefined
   [Screens.VtiInvited]: undefined
+  [Screens.VtaCreateAgent]: { addDevice?: boolean } | undefined
+  [Screens.VtaDevices]: undefined
   [Screens.VtiJoin]: undefined
   [Screens.EditRCard]: { profileId: string } | undefined
 }

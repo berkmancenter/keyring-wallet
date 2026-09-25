@@ -34,6 +34,7 @@ import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { DevicesCard } from './DevicesCard'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { ownVetterGrantState } from '../module/vtiGrantState'
@@ -603,6 +604,10 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               testID={testIdWithKey('OpenYourAgentButton')}
             />
           ) : null}
+          {/* My devices, one tap from here: where the owner adds another device
+              or removes a lost one (own_agent_subtask.md §4). Also on the agent
+              screen; this is where "Claim your agent" returns to. */}
+          {vta.link.kind === 'linked' ? <DevicesCard onPress={() => navigation.navigate(Screens.VtaDevices)} /> : null}
           <View style={styles.card} testID={testIdWithKey('MyAgentCard')}>
             <View style={styles.row}>
               <Icon name="check-circle" size={18} color={ColorPalette.semantic.success} />
@@ -676,9 +681,17 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <Text style={styles.label} testID={testIdWithKey('LinkYourAgentHelp')}>
               {t('VtaLink.LinkYourAgentHelp')}
             </Text>
+            {/* A person with no agent at all makes one here (own_agent_subtask.md §7);
+                one who has an agent links it below. */}
             <Button
-              title={t('VtaLink.LinkYourAgent')}
+              title={t('CreateAgent.CreateMyAgent')}
               buttonType={ButtonType.Primary}
+              onPress={() => navigation.navigate(Screens.VtaCreateAgent)}
+              testID={testIdWithKey('AgentCreate')}
+            />
+            <Button
+              title={t('CreateAgent.AlreadyHaveOne')}
+              buttonType={ButtonType.Secondary}
               onPress={onLinkAgent}
               testID={testIdWithKey('LinkYourAgentButton')}
             />
