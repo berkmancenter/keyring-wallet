@@ -70,6 +70,7 @@ import { claimList, needWords } from './claimWords'
 import { DirectoryConsent } from './DirectoryConsent'
 import { EligibilityNote } from './EligibilityNote'
 import { EnvelopeRefusalNote } from './EnvelopeRefusalNote'
+import { RefusalNote } from './RefusalNote'
 import { ticketRefusalWords } from './ticketWords'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
@@ -781,6 +782,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 <Text style={styles.label} testID={testIdWithKey('VettingDeskStatus')}>
                   {t(`Vetting.Status.${request.status}`)}
                 </Text>
+                <RefusalNote kind="Card" refusal={request.cardRefusal} style={styles.label} errorStyle={styles.error} />
                 <EnvelopeRefusalNote
                   refusal={request.envelopeRefusal}
                   side="vetter"
@@ -1026,6 +1028,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         {t(`Vetting.Status.${r.status}`)}
         {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
       </Text>
+      <RefusalNote kind="Session" refusal={r.sessionRefusal} style={styles.label} errorStyle={styles.error} />
       <EnvelopeRefusalNote
         refusal={r.envelopeRefusal}
         side="applicant"

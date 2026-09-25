@@ -1588,6 +1588,29 @@
       "proof": "Details: the statement's signature could not be verified.",
       "noCard": "Details: the statement came before this phone sent your card in that session."
     },
+    "CardRefused": "The applicant's card arrived, but this phone could not accept it. The session is still open, so they can send it again.",
+    "CardRefusedReason": {
+      "sessionClosed": "Details: the session had already closed.",
+      "malformed": "Details: the card is incomplete or not in the expected form.",
+      "audience": "Details: the card is addressed to a different vetter.",
+      "publisher": "Details: the card names a different applicant.",
+      "community": "Details: the card is for a different community.",
+      "challenge": "Details: the card answers a different session.",
+      "domain": "Details: the card names a different domain from this session.",
+      "expired": "Details: the card has expired, or its dates are not valid.",
+      "outlivesSession": "Details: the card is set to last longer than the session.",
+      "proof": "Details: the card's signature could not be verified.",
+      "missingClaim": "Details: the card leaves out something the session asked for.",
+      "commitment": "Details: the card's details do not match the identity check it carries."
+    },
+    "SessionRefused": "Your vetter opened a session, but this phone could not accept it.",
+    "SessionRefusedReason": {
+      "malformed": "Details: the session is incomplete or not in the expected form.",
+      "community": "Details: the session is for a different community.",
+      "expired": "Details: the session had already closed.",
+      "unknownRequest": "Details: the session does not match any request you made to this vetter.",
+      "alreadyAttested": "Details: this vetter has already vouched for you."
+    },
     "EnvelopeRefused": "A message from your vetter arrived, but this phone could not trust it, so it was ignored.",
     "EnvelopeRefusedDesk": "A card arrived for this request, but this phone could not trust it, so it was ignored.",
     "EnvelopeRefusedReason": {

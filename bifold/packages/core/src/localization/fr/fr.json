@@ -1530,6 +1530,29 @@
       "proof": "Détails : la signature de la déclaration n'a pas pu être vérifiée.",
       "noCard": "Détails : la déclaration est arrivée avant que ce téléphone envoie votre carte pendant cette session."
     },
+    "CardRefused": "La carte du demandeur est arrivée, mais ce téléphone n'a pas pu l'accepter. La session est toujours ouverte ; il peut la renvoyer.",
+    "CardRefusedReason": {
+      "sessionClosed": "Détails : la session était déjà fermée.",
+      "malformed": "Détails : la carte est incomplète ou n'a pas la forme attendue.",
+      "audience": "Détails : la carte est adressée à un autre vérificateur.",
+      "publisher": "Détails : la carte nomme un autre demandeur.",
+      "community": "Détails : la carte concerne une autre communauté.",
+      "challenge": "Détails : la carte répond à une autre session.",
+      "domain": "Détails : la carte nomme un autre domaine que cette session.",
+      "expired": "Détails : la carte a expiré, ou ses dates ne sont pas valides.",
+      "outlivesSession": "Détails : la carte doit durer plus longtemps que la session.",
+      "proof": "Détails : la signature de la carte n'a pas pu être vérifiée.",
+      "missingClaim": "Détails : il manque à la carte un élément demandé par la session.",
+      "commitment": "Détails : les informations de la carte ne correspondent pas à la vérification d'identité qu'elle contient."
+    },
+    "SessionRefused": "Votre vérificateur a ouvert une session, mais ce téléphone n'a pas pu l'accepter.",
+    "SessionRefusedReason": {
+      "malformed": "Détails : la session est incomplète ou n'a pas la forme attendue.",
+      "community": "Détails : la session concerne une autre communauté.",
+      "expired": "Détails : la session était déjà fermée.",
+      "unknownRequest": "Détails : la session ne correspond à aucune demande que vous avez faite à ce vérificateur.",
+      "alreadyAttested": "Détails : ce vérificateur s'est déjà porté garant de vous."
+    },
     "EnvelopeRefused": "Un message de votre vérificateur est arrivé, mais ce téléphone n'a pas pu s'y fier ; il a été ignoré.",
     "EnvelopeRefusedDesk": "Une carte est arrivée pour cette demande, mais ce téléphone n'a pas pu s'y fier ; elle a été ignorée.",
     "EnvelopeRefusedReason": {

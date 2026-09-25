@@ -1429,6 +1429,29 @@
       "proof": "Detalhes: não foi possível verificar a assinatura da declaração.",
       "noCard": "Detalhes: a declaração chegou antes de este telefone enviar seu cartão nessa sessão."
     },
+    "CardRefused": "O cartão do solicitante chegou, mas este telefone não pôde aceitá-lo. A sessão continua aberta, então ele pode enviá-lo de novo.",
+    "CardRefusedReason": {
+      "sessionClosed": "Detalhes: a sessão já estava encerrada.",
+      "malformed": "Detalhes: o cartão está incompleto ou não está no formato esperado.",
+      "audience": "Detalhes: o cartão é destinado a outro verificador.",
+      "publisher": "Detalhes: o cartão nomeia outro solicitante.",
+      "community": "Detalhes: o cartão é para outra comunidade.",
+      "challenge": "Detalhes: o cartão responde a outra sessão.",
+      "domain": "Detalhes: o cartão nomeia um domínio diferente desta sessão.",
+      "expired": "Detalhes: o cartão expirou ou suas datas não são válidas.",
+      "outlivesSession": "Detalhes: o cartão foi feito para durar mais do que a sessão.",
+      "proof": "Detalhes: não foi possível verificar a assinatura do cartão.",
+      "missingClaim": "Detalhes: falta no cartão algo que a sessão pediu.",
+      "commitment": "Detalhes: os dados do cartão não correspondem à verificação de identidade que ele traz."
+    },
+    "SessionRefused": "Seu verificador abriu uma sessão, mas este telefone não pôde aceitá-la.",
+    "SessionRefusedReason": {
+      "malformed": "Detalhes: a sessão está incompleta ou não está no formato esperado.",
+      "community": "Detalhes: a sessão é para outra comunidade.",
+      "expired": "Detalhes: a sessão já estava encerrada.",
+      "unknownRequest": "Detalhes: a sessão não corresponde a nenhum pedido que você fez a este verificador.",
+      "alreadyAttested": "Detalhes: este verificador já garantiu por você."
+    },
     "EnvelopeRefused": "Uma mensagem do seu verificador chegou, mas este telefone não pôde confiar nela, então ela foi ignorada.",
     "EnvelopeRefusedDesk": "Um cartão chegou para este pedido, mas este telefone não pôde confiar nele, então ele foi ignorado.",
     "EnvelopeRefusedReason": {
