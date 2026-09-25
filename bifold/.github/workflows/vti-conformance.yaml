@@ -76,3 +76,5 @@ jobs:
           out="$RUNNER_TEMP/conformance"
           "$bin" "$out/card.json" "$out/expect.json"
           "$bin" verify-statement "$out/statement.json" "$out/card.json" "$out/expect.json"
+          "$bin" verify-task "$out/task-applicant.json" "$(node -e "process.stdout.write(require('$out/signers.json').applicant)")"
+          "$bin" verify-task "$out/task-vetter.json" "$(node -e "process.stdout.write(require('$out/signers.json').vetter)")"

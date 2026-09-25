@@ -101,6 +101,9 @@ describe('a Vetting Card from the shipping code, really signed', () => {
     const card = await new VtiApplicant(applicant.agent as never, persona as never, store, {} as never).sendCard(
       vetter.did
     )
+    // The session response that carries the card: a Trust Task document the
+    // applicant signed, as every task Keyring sends is signed.
+    const sessionResponse = (mockSend.mock.calls.at(-1) as unknown as [string, string, Record<string, unknown>])[2]
 
     // The proof verifies against the did:key, before anyone else looks at it.
     await expect(verifyDocumentProof(applicant.agent as never, card, applicant.did)).resolves.toBe(true)
@@ -148,6 +151,13 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       mkdirSync(out, { recursive: true })
       writeFileSync(join(out, 'card.json'), JSON.stringify(card, null, 2))
       writeFileSync(join(out, 'statement.json'), JSON.stringify(statement, null, 2))
+      // Two signed Trust Task documents, for vta-sdk's verify_trust_task_proof_with.
+      writeFileSync(join(out, 'task-applicant.json'), JSON.stringify(sessionResponse, null, 2))
+      writeFileSync(join(out, 'task-vetter.json'), JSON.stringify(issue, null, 2))
+      writeFileSync(
+        join(out, 'signers.json'),
+        JSON.stringify({ applicant: applicant.did, vetter: vetter.did }, null, 2)
+      )
       writeFileSync(
         join(out, 'expect.json'),
         JSON.stringify(

@@ -1,0 +1,73 @@
+{
+  "applicantDid": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+  "card": {
+    "audience": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH",
+    "cardVersion": 1,
+    "challenge": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "claims": [
+      {
+        "provenance": "selfAsserted",
+        "type": "name.legal",
+        "value": "Ada Lovelace"
+      }
+    ],
+    "commitmentSalt": "c2FsdC11cHN0cmVhbS1maXh0dXJlLTMyLWJ5dGVzLS0",
+    "community": "did:webvh:QmCommunity:dids.example:community",
+    "domain": "did:webvh:QmCommunity:dids.example:community",
+    "expiresAt": "2026-09-25T00:10:00Z",
+    "id": "urn:uuid:3f1e8a2c-6b4d-4e5f-9a1b-2c3d4e5f6a7b",
+    "identityCommitment": "zQmTpxHiaisC5veqP3CFUD4EhUrWnhXNm1ZkAyULkD9DxTK",
+    "issuedAt": "2026-09-25T00:00:00Z",
+    "proof": {
+      "created": "2026-09-25T05:51:58Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z2XW5hVjt9PfoWEDD57GfPfgjhXYrHvnpnWQs43uCFgAijGLeUPdhppsXETgnuunK85JyXkqGHb9YV4is3EN2LAwW",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX#z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+    },
+    "publisher": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+    "type": ["VerifiableDataStructure", "RelationshipCard", "VettingCard"]
+  },
+  "cardDigest": "zQmZdubwrW14GRABWD49GQ6DbRPZDA81uiaD9YDw5ZqVH5c",
+  "community": "did:webvh:QmCommunity:dids.example:community",
+  "note": "Signed by upstream code (wallet scripts/openvtc/card-verify sign-fixtures: vta-sdk sign_card, sign_statement). Never re-sign with Keyring's code.",
+  "session": {
+    "challenge": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "documentId": "urn:uuid:7c9d0e1f-2a3b-4c5d-8e6f-7a8b9c0d1e2f",
+    "domain": "did:webvh:QmCommunity:dids.example:community",
+    "requiredClaims": ["name.legal"]
+  },
+  "statement": {
+    "@context": ["https://www.w3.org/ns/credentials/v2", "https://firstperson.network/credentials/dtg/v1"],
+    "credentialSubject": {
+      "endorsement": {
+        "cardDigestMultibase": "zQmZdubwrW14GRABWD49GQ6DbRPZDA81uiaD9YDw5ZqVH5c",
+        "claimsVerified": ["name.legal"],
+        "community": "did:webvh:QmCommunity:dids.example:community",
+        "declaredRelationship": "none",
+        "documentClasses": ["passport"],
+        "identityCommitment": "zQmTpxHiaisC5veqP3CFUD4EhUrWnhXNm1ZkAyULkD9DxTK",
+        "livenessConfirmed": true,
+        "method": "inPerson",
+        "type": "https://firstperson.network/endorsements/identity-vetting/0.1"
+      },
+      "id": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+    },
+    "id": "urn:uuid:5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+    "issuer": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH",
+    "proof": {
+      "created": "2026-09-25T05:51:58Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z5KSjZrJ5UWxinae9VTSDXRNMWFJCwggSSzDv6My8G129qGj6SNLW61zet9HXu7NWmrm1tQzprq4gTHeerYe82iUj",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH#z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH"
+    },
+    "taskContext": "urn:uuid:7c9d0e1f-2a3b-4c5d-8e6f-7a8b9c0d1e2f",
+    "type": ["VerifiableCredential", "DTGCredential", "EndorsementCredential"],
+    "validFrom": "2026-09-25T00:01:00Z",
+    "validUntil": "2027-01-23T00:00:00Z"
+  },
+  "vetterDid": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH"
+}
