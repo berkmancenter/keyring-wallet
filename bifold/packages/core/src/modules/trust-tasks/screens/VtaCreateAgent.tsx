@@ -34,8 +34,11 @@ import { confirmOwner, type OwnerConfirmFailure } from '../module/ownerConfirm'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceCannotOwn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
 
-/** The Farm's public website, once the Farm documents one (plan §5, U1). Until then there is no button. */
-export const FARM_WEBSITE: string | undefined = undefined
+/**
+ * A known agent host's website, to open from the intro. Never named on screen:
+ * the words say "your agent's host", as for email. Unset, there is no button.
+ */
+export const AGENT_HOST_WEBSITE: string | undefined = undefined
 
 type LocalStep = 'intro' | 'address' | 'backup' | 'backupAddress' | 'backupCode' | 'ready'
 
@@ -56,6 +59,7 @@ const VtaCreateAgent: React.FC = () => {
   const [address, setAddress] = useState('')
   const [error, setError] = useState<string | undefined>()
   const [codeShown, setCodeShown] = useState(false)
+  const [howShown, setHowShown] = useState(false)
   const [busy, setBusy] = useState(false)
   const [backupCode, setBackupCode] = useState('')
   const [backupAdded, setBackupAdded] = useState<string | undefined>()
@@ -193,12 +197,12 @@ const VtaCreateAgent: React.FC = () => {
     )
     actions = (
       <>
-        {FARM_WEBSITE ? (
+        {AGENT_HOST_WEBSITE ? (
           <Button
-            title={t('CreateAgent.OpenFarm')}
+            title={t('CreateAgent.OpenHost')}
             buttonType={ButtonType.Secondary}
-            onPress={() => Linking.openURL(FARM_WEBSITE as string)}
-            testID={testIdWithKey('AgentCreateOpenFarm')}
+            onPress={() => Linking.openURL(AGENT_HOST_WEBSITE as string)}
+            testID={testIdWithKey('AgentCreateOpenHost')}
           />
         ) : null}
         <Button
@@ -253,6 +257,19 @@ const VtaCreateAgent: React.FC = () => {
         <ThemedText variant="headingThree">{t('CreateAgent.OwnerTitle')}</ThemedText>
         <ThemedText>{t('CreateAgent.OwnerBody')}</ThemedText>
         <ThemedText>{t('CreateAgent.OwnerWhereToPaste')}</ThemedText>
+        <Pressable
+          onPress={() => setHowShown(!howShown)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: howShown }}
+          testID={testIdWithKey('AgentCreateOwnerHowToggle')}
+        >
+          <ThemedText style={styles.muted}>{t('CreateAgent.OwnerHowToggle')}</ThemedText>
+        </Pressable>
+        {howShown ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey('AgentCreateOwnerHow')}>
+            {t('CreateAgent.OwnerHow')}
+          </ThemedText>
+        ) : null}
         <View style={styles.row}>
           <Button
             title={t('VtaLink.CopyKey')}
