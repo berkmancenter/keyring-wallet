@@ -131,6 +131,7 @@ describe('Vetting — the agent it works with', () => {
     expect(tree.queryByText('MyAgent.NotConfigured')).toBeNull()
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('VettingJoinCommunity'))))
     expect(navigate).toHaveBeenCalledWith(Screens.VtiJoin)
+    expect(tree.getByTestId(testIdWithKey('VettingApplicantStep_noCommunity'))).toBeTruthy()
   })
 
   test('no linked agent and no build VTA: says so', async () => {

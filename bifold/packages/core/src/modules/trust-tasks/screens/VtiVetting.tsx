@@ -478,7 +478,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   if (!vtaDid || !communityDid) {
     const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
     return (
-      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey(`VettingApplicantStep_${!vtaDid ? 'noAgent' : 'noCommunity'}`)}
+      >
         <View style={styles.content}>
           <Text style={styles.value} testID={testIdWithKey(!vtaDid ? 'VettingNeedsAgent' : 'VettingNeedsCommunity')}>
             {!vtaDid ? t('Join.NeedsAgent') : t('Vetting.NeedsCommunity')}
@@ -499,7 +503,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // No persona yet: the join DID is chosen before gathering, so this is step one.
   if (!persona) {
     return (
-      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey('VettingApplicantStep_identity')}
+      >
         <ScrollView contentContainerStyle={styles.content}>
           {seatBanner('applicant')}
           <Text style={styles.value}>{t('Vetting.NeedIdentity')}</Text>
