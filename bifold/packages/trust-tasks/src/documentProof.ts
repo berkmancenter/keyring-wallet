@@ -93,7 +93,9 @@ export function digestBytesEqual(a: string, b: string): boolean {
  * signing as `controllerDid` — for our use, the sender's relationship DID
  * (did:peer:0…), whose single Ed25519 key the wallet's KMS holds.
  *
- * Returns a NEW document object; the input is not mutated.
+ * Returns a NEW document object; the input is not mutated. Its whole-second
+ * `issuedAt`/`expiresAt`/`validFrom`/`validUntil` come back as `wireTimestamp`
+ * writes them — send and digest the returned document, not the input.
  */
 /**
  * The DID document's first signing-capable verification method. did:peer:0
@@ -155,6 +157,38 @@ export function verificationMethodInRelationship(
   return undefined
 }
 
+/**
+ * An instant as the VTI SDK writes it back: RFC 3339 UTC with milliseconds,
+ * and no fraction at all on a whole second (`…:53Z`, not `…:53.000Z`).
+ *
+ * vta-sdk verifies a Trust Task proof over a RE-SERIALISATION of the
+ * document, not over the bytes it received: `issuedAt`, `expiresAt` and the
+ * proof's `created` are parsed into chrono `DateTime<Utc>`
+ * (trust-tasks-rs `document.rs:84-88`, vta-sdk
+ * `trust_task_proof/verify.rs:144-161`), and chrono writes a zero fraction
+ * as nothing. A document signed with `.000Z` hashes differently there and is
+ * refused as "signature invalid" — about one document in a thousand, at
+ * random, from `toISOString()`.
+ */
+export function wireTimestamp(date: Date = new Date()): string {
+  return date.toISOString().replace(/\.000Z$/, 'Z')
+}
+
+/** The top-level members a verifier may parse as a date-time and write back. */
+const DATE_TIME_MEMBERS = ['issuedAt', 'expiresAt', 'validFrom', 'validUntil'] as const
+
+/** `.000Z` → `Z` on those members; the same instants, in the form verifiers rebuild. */
+function withWireTimestamps(document: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...document }
+  for (const member of DATE_TIME_MEMBERS) {
+    const value = out[member]
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/.test(value)) {
+      out[member] = value.replace(/\.000Z$/, 'Z')
+    }
+  }
+  return out
+}
+
 export async function signDocumentProof(
   agent: Agent,
   document: Record<string, unknown>,
@@ -182,7 +216,7 @@ export async function signDocumentProof(
   const proofConfig: Record<string, unknown> = {
     type: 'DataIntegrityProof',
     cryptosuite: 'eddsa-jcs-2022',
-    created: new Date().toISOString(),
+    created: wireTimestamp(),
     // Always absolute. A DID document may name its methods relatively
     // (`#key-0`), but a proof is read without the document at hand: vta-sdk
     // takes the signer to be the part before `#` and refuses an empty one
@@ -194,7 +228,9 @@ export async function signDocumentProof(
   }
 
   const configHash = sha256(new TextEncoder().encode(jcsCanonicalize(proofConfig)))
-  const documentHash = sha256(new TextEncoder().encode(jcsCanonicalize(document)))
+  // Signed as sent: whole-second instants in the form a verifier rebuilds.
+  const unsigned = withWireTimestamps(document)
+  const documentHash = sha256(new TextEncoder().encode(jcsCanonicalize(unsigned)))
   const signedInput = new Uint8Array(configHash.length + documentHash.length)
   signedInput.set(configHash, 0)
   signedInput.set(documentHash, configHash.length)
@@ -207,7 +243,7 @@ export async function signDocumentProof(
   })
 
   return {
-    ...document,
+    ...unsigned,
     proof: { ...proofConfig, proofValue: `z${TypedArrayEncoder.toBase58(signature)}` },
   }
 }

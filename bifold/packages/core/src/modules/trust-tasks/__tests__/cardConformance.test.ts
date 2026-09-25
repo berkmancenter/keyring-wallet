@@ -41,6 +41,24 @@ import { join } from 'node:path'
 import { DidKey, TypedArrayEncoder } from '@credo-ts/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
 
+// CONFORMANCE_WHOLE_SECOND=1: every clock read lands on a whole second, so
+// every timestamp Keyring signs is one `toISOString()` writes as `.000Z`.
+// vta-sdk re-serialises those without the fraction before checking a proof,
+// and refused about one document in a thousand at random until
+// signDocumentProof wrote them its way (wireTimestamp). CI runs this file
+// once as-is and once like this; `Date.now` is already pinned to a whole
+// second by jestSetup.
+if (process.env.CONFORMANCE_WHOLE_SECOND) {
+  const RealDate = Date
+  const wholeSecond = () => Math.floor(new RealDate().getTime() / 1000) * 1000
+  global.Date = class extends RealDate {
+    constructor(...args: unknown[]) {
+      if (args.length) super(...(args as [string]))
+      else super(wholeSecond())
+    }
+  } as DateConstructor
+}
+
 const mockSend = jest.fn(async () => undefined)
 jest.mock('../module/vtiAgent', () => ({
   ...jest.requireActual('../module/vtiAgent'),
@@ -62,7 +80,13 @@ import {
 // eslint-disable-next-line import/order
 import { verifyEligibilityPresentation } from '../module/vtiEligibility'
 // eslint-disable-next-line import/order
-import { signCompactJws, signDocumentProof, verifyDocumentProof, verifyTrustTaskProof } from '@bifold/trust-tasks'
+import {
+  digestMultibase,
+  signCompactJws,
+  signDocumentProof,
+  verifyDocumentProof,
+  verifyTrustTaskProof,
+} from '@bifold/trust-tasks'
 // eslint-disable-next-line import/order
 import { VTA_TASK, VtaClient } from '../module/VtaClient'
 
@@ -492,7 +516,13 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
         () => client.mintPersona({ contextId: 'vetting', serverId: 'host-1', label: 'p', idempotencyKey: 'k-1' }),
       ],
       ['vta-keys-export-secret', () => client.borrowKey(`${vta.did}#key-0`)],
-      ['vta-consent-decision', () => client.decideConsent({ challenge: random32(), payloadDigest: 'zQm' }, 'approve')],
+      [
+        'vta-consent-decision',
+        // A digest as a VTA sends one: the salted wire digest, a base58btc
+        // SHA-256 multihash (vta-policy consent.rs:73-94, :126-131).
+        () =>
+          client.decideConsent({ challenge: random32(), payloadDigest: digestMultibase({ consent: 1 }) }, 'approve'),
+      ],
       [
         'vta-acl-swap-key',
         () =>
@@ -506,7 +536,8 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
     ]
     // Each task is answered at once, but its answer clock (30 s) would keep
     // the run alive after it: fake timers for this part, cleared after.
-    jest.useFakeTimers()
+    // `now` from the (possibly whole-second) clock, not the fake's own.
+    jest.useFakeTimers({ now: new Date() })
     try {
       for (const [name, task] of vtaTasks) {
         await task().catch(() => undefined)
