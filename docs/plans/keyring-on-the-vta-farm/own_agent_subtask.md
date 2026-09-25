@@ -246,13 +246,15 @@ The full draft, with the test IDs each screen carries for the e2e runner (§8), 
 - **The Farm (attended):** the Farm needs its passkey account in a browser, so provisioning can't be scripted from here. Alberto, or a tester, runs Phase 1 once per platform on the Farm, with the phone's log captured, before the release that ships it.
 - **CI:** nothing new beyond the unit tests. The e2e runners run from the lab host, as today.
 
-## 9. Decisions for Alberto
+## 9. Decisions
 
-- **D1 — key custody for the minimum.** Accept "software key inside the encrypted wallet + a fresh confirmation for owner acts" for Phase 1, with the hardware owner in Phase 3. Or hold the feature until Phase 3. Recommended: accept, and say it honestly on screen.
-- **D2 — the owner model after Phase 3.** One key that is both owner and everyday key (the minimum), or two keys: a hardware owner plus a narrower everyday key. Recommended: two, once M4 allows it.
-- **D3 — the backup's power.** An equal super-admin, which can remove the owner, or a narrower backup role. The VTA has no "recovery-only" role today, so narrower means an upstream ask. Recommended: an equal backup for now, and show the risk in one line.
-- **D4 — the browser plugin as a backup.** It keeps a VTA-minted software key. Allow it as a backup (its custody, not Keyring's), or offer only a second phone. Recommended: a second phone in Phase 1; the plugin in Phase 4 after this decision.
-- **D5 — send U1–U3 to the Farm now.** They cost the Farm little. U1 removes both pastes, and U3 decides what "lost phone, no backup" means.
+Decided by Alberto on 2026-09-25 ([`2026-09-25-cd.md`](./2026-09-25-cd.md) F6). "Own my agent" is the top priority for the next release.
+
+- **D1 — custody for the minimum: software key, honestly worded.** Phase 1's owner key is Ed25519 inside Keyring's encrypted wallet, and owner acts need a fresh Face ID, fingerprint or passcode confirmation. The screens say "protected by your Face ID". The hardware owner (Phase 3) is held for later.
+- **D2 — two keys, later.** A hardware owner plus a narrower everyday key is the eventual model, and is held with Phase 3.
+- **D3 — an equal backup phone now.** The backup is a second unrestricted admin, and the screens state the risk in one line: the backup can also remove this phone.
+- **D4 — the browser plugin as a backup: held.** Important later, not in Phase 1.
+- **D5 — the Farm asks go out.** U1–U3 are sent to the Farm's maintainers. The Farm QR (U1) is their build; Keyring's side of it is already implemented (§5).
 
 ## 10. Rejected alternatives, as standing rationale
 
