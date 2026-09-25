@@ -45,10 +45,11 @@ export const installedDemoProfiles: readonly DemoProfile[] = [tradingCardProfile
  * sentinel.
  */
 export function selectDemoProfiles(activeProfileId?: string): readonly DemoProfile[] {
-  if (!activeProfileId) return installedDemoProfiles
-  if (activeProfileId === 'none') return []
+  // A shipped build registers none: the demos are opt-in per build, never on
+  // by default (decided 2026-09-25). `all` is the old default, for a demo day.
+  if (activeProfileId === 'all') return installedDemoProfiles
   const match = installedDemoProfiles.find((p) => p.id === activeProfileId)
-  return match ? [match] : installedDemoProfiles
+  return match ? [match] : []
 }
 
 export type { DemoProfile } from './types'

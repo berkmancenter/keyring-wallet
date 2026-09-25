@@ -64,7 +64,7 @@ OCA branding overlay in `trading-card/ocaBundles.ts`, keyed by the R-Card
 template id — the identifier `DefaultOCABundleResolver` falls back to when a
 credential has no AnonCreds schema or credential-definition id.
 
-`App.tsx` already registers every installed profile on the container:
+`App.tsx` registers the profiles `ACTIVE_DEMO_PROFILE` selects on the container (none unless a build asks):
 
 ```ts
 import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
@@ -79,13 +79,13 @@ profiles that registers:
 
 | `ACTIVE_DEMO_PROFILE`                          | Result                                                    |
 | ---------------------------------------------- | --------------------------------------------------------- |
-| unset (the default)                            | every installed profile, all at once                      |
+| unset (the default, what ships)                | no demo profiles: a plain Keyring build                   |
+| `none`                                         | the same as unset                                         |
 | a profile's `id` (`trading-card`, `approver`)  | only that one                                             |
-| an id that doesn't match any installed profile | every installed profile (a typo isn't a request for zero) |
-| `none`                                         | no demo profiles at all — a plain Keyring build           |
+| `all`                                          | every installed profile, all at once (a demo day)         |
+| an id that doesn't match any installed profile | none (a typo never switches demo code on)                 |
 
-`none` is the one to reach for if you want to build and run Keyring itself,
-with none of this directory's demos active — see "Stripping demos from a
+Unset is what ships: Keyring itself, with none of this directory's demos active. Set a profile id (or `all`) to run a demo — see "Stripping demos from a
 build" below for what `none` does beyond the runtime table above.
 
 ## A worked demo: `approver/`
@@ -142,7 +142,7 @@ the same token means the last one wins.
 
 ## Stripping demos from a build
 
-`ACTIVE_DEMO_PROFILE=none` drives two independent levers, one for RUNTIME
+Unset or `ACTIVE_DEMO_PROFILE=none` drives two independent levers, one for RUNTIME
 behaviour and one for the BUNDLE — both keyed off the same value on purpose,
 so there is no way for "runtime says no demos" and "the bundle still ships
 them" to drift apart:

@@ -1,4 +1,7 @@
 /**
+ * Needs a debug APK built with `ACTIVE_DEMO_PROFILE=approver` (or `all`) in
+ * app/.env: since 2026-09-25 an unset value registers no demo profile.
+ *
  * Two-wallet Approver demo E2E (app/src/demo-profiles/approver/): fresh
  * install → onboarding on both devices → an established VRC relationship
  * (same handshake every other VRC runner uses) → wallet A proposes an
@@ -19,8 +22,8 @@
  * mediator (`yarn mediator`). Since Android debug builds load JS from Metro,
  * no rebuild is needed for this profile's JS-only addition as long as the
  * already-built APK's `.env` (MEDIATOR_URL, ACTIVE_DEMO_PROFILE) is still
- * what's wanted — `ACTIVE_DEMO_PROFILE` unset registers both profiles, which
- * is what this test needs (it uses neither the trading-card renderer nor a
+ * what's wanted — `ACTIVE_DEMO_PROFILE=approver` (or `all`) registers the
+ * approver profile, which is what this test needs (it uses neither the trading-card renderer nor a
  * DI token that profile owns).
  *
  * Usage:
