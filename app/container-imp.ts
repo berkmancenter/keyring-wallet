@@ -24,10 +24,13 @@ import {
   testIdWithKey,
   initializeVrcModule,
   setPeerLegCarriage,
+  ownerChecks,
+  vtaAgent,
 } from '@bifold/core'
 import { BrandingOverlayType, RemoteOCABundleResolver } from '@bifold/oca/build/legacy'
 import { getProofRequestTemplates } from '@bifold/verifier'
 // import { Agent } from '@credo-ts/core' // DISABLED: Only used by push notifications
+import DeviceInfo from 'react-native-device-info'
 import { NavigationProp } from '@react-navigation/native'
 import { TFunction } from 'react-i18next'
 // import { Linking } from 'react-native'
@@ -144,6 +147,18 @@ export class AppContainer implements Container {
     // the mediator socket; anything else keeps DIDComm v2. Read here, once.
     const vtiPeerLeg = Config.VTI_PEER_LEG === 'tsp' ? 'tsp' : 'didcomm'
     setPeerLegCarriage(vtiPeerLeg)
+    // Owning an agent from this phone (own_agent_subtask.md §3): owner acts ask
+    // for Face ID, a fingerprint or the passcode at that moment. Unwired, the
+    // controller refuses every owner act, so a build that forgot this fails loudly.
+    vtaAgent.setOwnerChecks(ownerChecks)
+    // Its own entry on the agent reads "Keyring — <this phone's name>", so the
+    // person can tell their devices apart in My devices and on their host.
+    // Android 12+ answers "unknown" without BLUETOOTH_CONNECT (and emulators
+    // always do): fall back to the model, e.g. "Keyring — Pixel 6".
+    vtaAgent.setDeviceName(async () => {
+      const name = await DeviceInfo.getDeviceName()
+      return name && name !== 'unknown' ? name : DeviceInfo.getModel()
+    })
     this._container.registerInstance(TOKENS.CONFIG, {
       ...defaultConfig,
       PINSecurity: { rules: PINRules, displayHelper: false },
