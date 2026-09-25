@@ -1,0 +1,62 @@
+{
+  "eligibility": {
+    "challenge": "urn:uuid:6f1c2b0a-3d4e-4f5a-8b6c-7d8e9f0a1b01",
+    "community": "did:key:z6MkvRXNYcE7MMduynWTgeKbDaT1iijDSC8pZqXZc8rHPrf2",
+    "domain": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+    "now": "2026-09-25T00:00:00Z",
+    "role": "vetter",
+    "vetter": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH"
+  },
+  "note": "Signed by upstream code (wallet scripts/openvtc/card-verify sign-eligibility: vta-sdk build_eligibility_vp; the grant signed eddsa-jcs-2022 for assertionMethod). Never re-sign with Keyring's code.",
+  "vp": {
+    "@context": [
+      "https://www.w3.org/ns/credentials/v2"
+    ],
+    "domain": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+    "holder": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH",
+    "nonce": "urn:uuid:6f1c2b0a-3d4e-4f5a-8b6c-7d8e9f0a1b01",
+    "proof": {
+      "created": "2026-09-25T10:07:37Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "authentication",
+      "proofValue": "z2mUUPyxBRASvCfJ7rUiqKvHxjfkeeyZXFZV8evy6A3cCnUCQLeSZP8Gv8Ha3PecJYM8dwbpji4xVDm71HW3fMRHA",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH#z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH"
+    },
+    "type": [
+      "VerifiablePresentation"
+    ],
+    "verifiableCredential": [
+      {
+        "@context": [
+          "https://www.w3.org/ns/credentials/v2",
+          "https://firstperson.network/credentials/dtg/v1"
+        ],
+        "credentialSubject": {
+          "endorsement": {
+            "communityDid": "did:key:z6MkvRXNYcE7MMduynWTgeKbDaT1iijDSC8pZqXZc8rHPrf2",
+            "role": "vetter",
+            "type": "CommunityRole"
+          },
+          "id": "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH"
+        },
+        "id": "urn:uuid:0e9d8c7b-6a5f-4e3d-9c2b-1a0f9e8d7c6b",
+        "issuer": "did:key:z6MkvRXNYcE7MMduynWTgeKbDaT1iijDSC8pZqXZc8rHPrf2",
+        "proof": {
+          "created": "2026-09-25T10:07:37Z",
+          "cryptosuite": "eddsa-jcs-2022",
+          "proofPurpose": "assertionMethod",
+          "proofValue": "z2X2nNUB4XXQKLsVLAJSuzpnWEDs8XUDCZkthhSjkjnhtMnkEuD4YmxBpCqgqv56Y1EEQ1RSetp6GJPX52mEja7pV",
+          "type": "DataIntegrityProof",
+          "verificationMethod": "did:key:z6MkvRXNYcE7MMduynWTgeKbDaT1iijDSC8pZqXZc8rHPrf2#z6MkvRXNYcE7MMduynWTgeKbDaT1iijDSC8pZqXZc8rHPrf2"
+        },
+        "type": [
+          "VerifiableCredential",
+          "EndorsementCredential"
+        ],
+        "validFrom": "2026-09-01T00:00:00Z",
+        "validUntil": "2027-03-01T00:00:00Z"
+      }
+    ]
+  }
+}
