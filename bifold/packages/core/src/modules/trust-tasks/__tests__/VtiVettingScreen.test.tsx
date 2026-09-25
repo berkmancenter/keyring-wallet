@@ -13,7 +13,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
-import VtiVetting, { requestRef, requestTestKey } from '../screens/VtiVetting'
+import VtiVetting, { requestRef, requestTestKey, whenShown } from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
 
@@ -51,6 +51,15 @@ function fakeAgent() {
 }
 
 describe('requestRef', () => {
+  test('a request card time: the time today, the date with it on another day', () => {
+    const now = new Date('2026-09-25T18:59:00')
+    const today = whenShown(new Date('2026-09-25T16:21:00').toISOString(), now)
+    const earlier = whenShown(new Date('2026-09-24T16:21:00').toISOString(), now)
+    expect(today).not.toMatch(/Sep/)
+    expect(earlier).toMatch(/Sep 24/)
+    expect(earlier.endsWith(today)).toBe(true)
+  })
+
   test('names a request by the tail of its document id', () => {
     expect(requestRef('urn:uuid:0f8e2a4c-9b1d-4e7a-8c3f-5d6b7a9e1c2f')).toBe('7a9e1c2f')
   })
@@ -206,6 +215,12 @@ describe('Vetting — a member', () => {
     const scroll = within(avoiding).UNSAFE_getByType(KeyboardAwareScrollView)
     expect(scroll.props.bottomOffset).toBeGreaterThanOrEqual(150)
     expect(within(scroll).getByTestId(testIdWithKey('VettingAlreadyMember'))).toBeTruthy()
+  })
+
+  test('the page names its step for a driver: a member is on "member"', async () => {
+    const tree = await renderAs('member')
+    await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))
+    expect(tree.getByTestId(testIdWithKey('VettingApplicantStep_member'))).toBeTruthy()
   })
 
   test('a role that says more than member is named', async () => {
