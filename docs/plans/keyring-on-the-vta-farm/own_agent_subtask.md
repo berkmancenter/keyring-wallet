@@ -11,14 +11,14 @@
 
 ## 0. The plain version
 
-- **The goal:** a person with only a phone and a web browser gets their own agent on the VTA Farm and owns it from Keyring. No computer and no command line.
-- **On the Farm's website**, they create an agent. The Farm shows the new agent's address, and they bring that address into Keyring by pasting it, or by scanning it once the Farm shows a QR code.
-- **In Keyring**, they tap **Create my agent**. Keyring makes an owner code on the phone and asks for Face ID. The person copies the code into the Farm's "Admin DID" box and taps **Provision agent**.
+- **The goal:** a person with only a phone and a web browser gets their own agent and owns it from Keyring. No computer and no command line.
+- **Like email, the agent lives with a hosting service of the person's choice,** or on their own server. The VTA Farm is the first service we support and test. Keyring's screens never name a service. They say "the service that hosts your agent".
+- **On the hosting service's website**, the person creates an agent. The service shows the new agent's address, and they bring it into Keyring by pasting it, or by scanning it where the service shows a QR code.
+- **In Keyring**, they tap **Create my agent**. Keyring makes an owner code on the phone and asks for Face ID. The person gives the code to the service: on the Farm, its "Admin DID" box. If they host the agent themselves, the code goes to whoever runs it.
 - **Keyring signs in as the owner** and moves onto a long-term key. From then on, the agent answers only to this phone.
 - **The phone's code is protected by Face ID** (Android: fingerprint or screen lock). Owner actions, like adding a backup, always ask again.
 - **Backup:** during setup Keyring offers a backup owner, most simply a second phone. The first phone approves it. A lost phone then isn't a lost agent.
-- **With the Farm's help:** if the Farm adds a QR code for this, both copy-and-paste steps become one scan. We ask the Farm for that; until then, copy and paste works.
-- **Effort:** about two weeks of our work for the minimum. Stronger hardware protection comes later, once one upstream question is measured.
+- **With the service's help:** a service that shows a QR code for this turns both copy-and-paste steps into one scan. We ask the Farm for that first; until then, copy and paste works everywhere.
 
 ## 1. What the person does, step by step
 
@@ -29,17 +29,16 @@ The Farm is the VTA Farm portal at `vtafarm.ic3.dev`. The order follows its wiza
 1. **My Agent → Create my agent.** Keyring explains the three steps and opens the Farm's website.
 2. **Farm: create account → Create VTA → Create session.** The Farm shows the agent's address.
 3. **Keyring: paste (or scan) the address.** Keyring checks that it's an agent (it resolves and names a mediator).
-4. **Keyring: the owner code.** Keyring makes the key, which needs Face ID, and offers Copy and Share.
-5. **Farm: paste into Admin DID → Provision agent.** The person waits for "Agent is online".
-6. **Keyring: Connect.** Keyring signs in as that key (whoami), then swaps it onto a long-term key (`acl/swap-key/0.1`, with the crash-safe pending-swap recovery of #127/#132), then reads the agent's name. All of this happens under the same Face ID prompt.
-7. **Backup (skippable).** Another phone, or the browser plugin (§4).
-8. **Ready.**
+4. **Keyring: the owner code.** Keyring makes the key and offers Copy and Share. The first Copy or Share asks for Face ID, once for the visit.
+5. **Host: give the code as the agent's admin** (on the Farm: paste into Admin DID → Provision agent).
+6. **Keyring connects by itself.** From the first Copy or Share, Keyring asks the agent every 6 s whether the code is admitted ("Waiting for your agent host to add this phone… we'll continue automatically"). It stops after 10 min and offers "Check again", and "I've added it — check now" is always there. It pauses while the screen or app is in the background. At the first yes it signs in as that key (whoami), swaps it onto a long-term key (`acl/swap-key/0.1`, with the crash-safe pending-swap recovery of #127/#132), labels its own entry "Keyring — <device name>" (`acl/update/0.1`, in the background), and reads the agent's name. None of the checks asks for Face ID again.
+7. **Ready.** Setup offers no backup step (D3). "Add another device" is in **My devices** (§4).
 
 **With the Farm QR (§5):** steps 2–5 become "scan the Farm's QR, compare a short code, tap Provision". The phone hands its key to the Farm itself, over the existing `keyring://vta/enrol` exchange.
 
 ## 2. The owner model
 
-- **The key the person pastes becomes the agent's full administrator.** The VTA has no owner tier above "admin with no context restriction" (super-admin: `vti-common/src/acl/mod.rs:492-513`, `:868-870`). What the Farm grants the pasted DID is **not documented**. The guide pairs the paste with `vta import-did --role admin`, which writes an unrestricted, permanent admin (`vta-service/src/import_did.rs:57-71`). **Measure M2.**
+- **The key the person pastes becomes the agent's full administrator.** The VTA has no owner tier above "admin with no context restriction" (super-admin: `vti-common/src/acl/mod.rs:492-513`, `:868-870`). On the Farm the pasted DID becomes **"admin (super admin)", contexts unrestricted, with no expiry** (M2, read from the Farm's ACL list on 2026-09-25; companion F9), the same row `vta import-did --role admin` writes (`vta-service/src/import_did.rs:57-71`).
 - **The swap keeps that authority.** `acl/swap-key` moves the caller's own entry, keeping its role and contexts, and makes it permanent (`vta-service/src/operations/acl.rs:836-930`). So after step 6, the long-term key _is_ the owner: that key is the one to protect (§3), not the temporary one. The temporary key is software and short-lived, as for every link today.
 - **The temporary key needs no service of its own.** It lasts from the grant to the first connect, stays on DIDComm (no TSP), and its swap target is the `did:peer:2` that names the mediator, so pushes reach the phone after that.
 - **The swap's new key must be Ed25519.** The link proof is EdDSA-only (`vta-sdk/src/protocols/acl_management/swap.rs:171, 208`). Keyring's keys are Ed25519 today, so nothing changes for the minimum.
@@ -69,6 +68,8 @@ The Farm is the VTA Farm portal at `vtafarm.ic3.dev`. The order follows its wiza
 **Condition flagged:** Phase 3's design depends on M3 and M4. If the VTA does not accept `ecdsa-jcs-2019` on `/auth`, the hardware owner needs an upstream change, and the minimum stands as the design.
 
 ## 4. A backup way back in
+
+**My devices** (on My Agent) lists every administrator of the agent, not only Keyring phones: other phones, a computer's pnm key, the browser plugin. Each has a friendly name (its label, or "A Keyring phone" / "A computer or other app" by DID type) and the date it was added. "Add another device" is at the top; Remove is on every row but this phone's. Setup itself offers no backup step (D3): a person who already holds other administrators (a pnm key, the plugin) has their way back in, and a host with an account login (the Farm's passkey plus its "Link another PNM") is another. **Keyring names its own rows** "Keyring — <device name>" (§1 step 6), so an admin can tell them apart.
 
 The VTA's ACL rows are independent, so a second full administrator is a second row (R: `acl/mod.rs`). Only a super-admin may create an unrestricted admin (`acl/mod.rs:1081-1112`; `operations/acl.rs:361-363`). The owner phone is one (M2).
 
@@ -119,13 +120,13 @@ Keyring already implements the phone's half; our lab's enrolment page is the ref
 
 Estimates are one engineer's working days. **Ours** is Keyring work; **Farm/upstream** is theirs and not estimated here.
 
-| Phase                                                                                                                                                | Ours | Needs Farm/upstream                | Done when                                                                                |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| **M — measure first** (M1, **answered**: the Admin DID field takes an Ed25519 `did:key` only; M2 role and expiry granted; M3 and M4 move to Phase 3) | 1    | a Farm account (attended, passkey) | Each answer recorded in a dated companion with evidence (the whoami result, the ACL row) |
-| **1 — the minimum, copy/paste**                                                                                                                      | 8–9  | none, if M1 and M2 hold            | see below                                                                                |
-| **2 — Farm QR**                                                                                                                                      | 1    | U1 shipped by the Farm             | see below                                                                                |
-| **3 — hardware owner**                                                                                                                               | 6–10 | U4; maybe a VTI change if M4 fails | see below                                                                                |
-| **4 — browser-plugin backup**                                                                                                                        | 1–2  | none                               | D4 decided; the plugin, granted by the owner phone, completes its own onboarding         |
+| Phase                                                                                                                                                                                     | Ours | Needs Farm/upstream                | Done when                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| **M — measure first** (M1 and M2 **answered**: the Admin DID field takes an Ed25519 `did:key` only, and grants "admin (super admin)", unrestricted, no expiry; M3 and M4 move to Phase 3) | 1    | a Farm account (attended, passkey) | Each answer recorded in a dated companion with evidence (the whoami result, the ACL row) |
+| **1 — the minimum, copy/paste**                                                                                                                                                           | 8–9  | none, if M1 and M2 hold            | see below                                                                                |
+| **2 — Farm QR**                                                                                                                                                                           | 1    | U1 shipped by the Farm             | see below                                                                                |
+| **3 — hardware owner**                                                                                                                                                                    | 6–10 | U4; maybe a VTI change if M4 fails | see below                                                                                |
+| **4 — browser-plugin backup**                                                                                                                                                             | 1–2  | none                               | D4 decided; the plugin, granted by the owner phone, completes its own onboarding         |
 
 **Phase 1 pieces:**
 
@@ -158,6 +159,7 @@ Estimates are one engineer's working days. **Ours** is Keyring work; **Farm/upst
 
 The screens, in the order of §1, with their English words. Other languages follow the same keys. Rules they all keep:
 
+- **Provider-neutral, like email.** The screens never name a hosting service. They say "the service that hosts your agent" and, for a self-hosted agent, "whoever runs your agent". Nothing in the flow assumes one provider. The owner code is an Ed25519 `did:key`, which any host that admits a `did:key` admin accepts (the Farm's field takes only that form, §1; pnm and the VTA plugin accept any DID). The Farm is the first provider we support and test: its Admin DID box and the QR handoff (U1) are plan details, not app words.
 - **Plain words.** "Agent" is the only term, and the person already met it on My Agent. No "DID", "key", "ACL" or "VTA" on screen. Codes are something to paste, not read, and stay behind a **Show the code** toggle, as on the link screen today.
 - **One job per screen, never a dashboard.** Each screen has one primary button.
 - **Errors sit beside the button that caused them** (the rule the link and join screens already follow), in words, with the developer text behind **Details**.
@@ -259,7 +261,7 @@ Decided by Alberto on 2026-09-25 ([`2026-09-25-cd.md`](./2026-09-25-cd.md) F6). 
 
 - **D1 — custody for the minimum: software key, honestly worded.** Phase 1's owner key is Ed25519 inside Keyring's encrypted wallet, and owner acts need a fresh Face ID, fingerprint or passcode confirmation. The screens say "protected by your Face ID". The hardware owner (Phase 3) is held for later.
 - **D2 — two keys, later.** A hardware owner plus a narrower everyday key is the eventual model, and is held with Phase 3.
-- **D3 — an equal backup phone now.** The backup is a second unrestricted admin, and the screens state the risk in one line: the backup can also remove this phone.
+- **D3 — no backup step in setup; "Add another device" in My devices.** A backup is an equal unrestricted admin, and the screen states the risk in one line: the backup can also remove this phone.
 - **D4 — the browser plugin as a backup: held.** Important later, not in Phase 1.
 - **D5 — the Farm asks go out.** U1–U3 are sent to the Farm's maintainers. The Farm QR (U1) is their build; Keyring's side of it is already implemented (§5).
 
