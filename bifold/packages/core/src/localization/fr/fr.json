@@ -1315,7 +1315,7 @@
   },
   "Registry": {
     "ListMe": "M'inscrire dans l'annuaire public des membres de {{community}}",
-    "Note": "Tout le monde peut voir qui y figure. Vous ne pourrez pas modifier ce choix dans Keyring plus tard. Pour être retiré de l'annuaire, demandez à l'administrateur de la communauté."
+    "Note": "Figurer dans l’annuaire ne veut pas dire apparaître sur une page que tout le monde peut parcourir. Cela veut dire que quelqu’un qui a déjà votre identifiant peut demander à {{community}} si vous en êtes membre, et obtenir un oui. Vous ne pourrez pas modifier ce choix dans Keyring plus tard. Pour en être retiré, demandez à l’administrateur de la communauté."
   },
   "Join": {
     "StandingMember": "Vous êtes membre de {{community}}.",

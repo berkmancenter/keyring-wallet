@@ -7,6 +7,8 @@ import React, { useState } from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
+import fr from '../../../localization/fr/fr.json'
+import ptBr from '../../../localization/pt-br/pt-br.json'
 import { testIdWithKey } from '../../../utils/testable'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { DirectoryConsent } from '../screens/DirectoryConsent'
@@ -52,5 +54,13 @@ describe('directory consent', () => {
     expect(en.Registry.ListMe).toContain('{{community}}')
     expect(en.Registry.Note).toMatch(/can't change this in Keyring later/)
     expect(en.Registry.Note).toMatch(/ask the community's admin/)
+  })
+
+  it('says what "listed" means: a yes to someone who has your ID, not a page to browse', () => {
+    expect(en.Registry.Note).toMatch(/doesn't mean a page anyone can browse/)
+    expect(en.Registry.Note).toMatch(/already has your ID/)
+    for (const words of [en, fr, ptBr]) {
+      expect(words.Registry.Note).toContain('{{community}}')
+    }
   })
 })

@@ -1370,7 +1370,7 @@
   },
   "Registry": {
     "ListMe": "List me in the public member directory of {{community}}",
-    "Note": "Anyone can see who is listed. You can't change this in Keyring later. To be removed from the directory, ask the community's admin."
+    "Note": "Listed doesn't mean a page anyone can browse. It means someone who already has your ID can ask {{community}} whether you're a member, and get a yes. You can't change this in Keyring later. To be unlisted, ask the community's admin."
   },
   "Join": {
     "StandingMember": "You're a member of {{community}}.",
