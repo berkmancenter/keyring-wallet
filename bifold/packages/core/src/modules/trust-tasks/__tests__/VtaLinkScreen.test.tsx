@@ -202,3 +202,41 @@ describe('the scanner these flows open', () => {
     })
   })
 })
+
+describe('a link that failed', () => {
+  const failed = (lastError: Record<string, unknown>) =>
+    (vtaAgent as unknown as Setter).set({ link: { kind: 'notLinked', lastError } })
+
+  test('says what was caught in words, with the original text behind Details', async () => {
+    // As an iPhone's link failed on the lab (2026-09-25): the mediator socket
+    // never opened, and the screen said only "something went wrong".
+    const mockUseAgent = useAgent as jest.Mock
+    mockUseAgent.mockReturnValue({ agent: {} })
+    const raw = '[TrustTasks:VtiMediatorTransport] socket failed to open: network connection lost'
+    failed({ reason: 'failed', detail: raw })
+    const tree = render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent('Errors.Unreachable')
+    expect(tree.queryByText(raw)).toBeNull()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkErrorDetailsToggle')))
+    })
+    expect(tree.getByTestId(testIdWithKey('VtaLinkErrorDetail'))).toHaveTextContent(raw)
+  })
+
+  test('with nothing caught, the general sentence and no Details', () => {
+    const mockUseAgent = useAgent as jest.Mock
+    mockUseAgent.mockReturnValue({ agent: {} })
+    failed({ reason: 'failed' })
+    const tree = render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+    expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent('VtaLink.FailedOther')
+    expect(tree.queryByTestId(testIdWithKey('VtaLinkErrorDetailsToggle'))).toBeNull()
+  })
+})
