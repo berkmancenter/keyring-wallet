@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.52 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.53 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1989,6 +1989,7 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q28 | Could vta-sdk ship a verifier for the vetting rules that today live only in the spec? | Several producer obligations have no upstream check a client can run on its own output: a session's `parentThreadId` and its ≤15 min `expiresAt`, the statement's `taskDigestMultibase`, a request's `requirementsDigest`/`languages`/`message`, how ticket codes and secrets are generated, `registryConsent`, `acceptsDocumentation`/`sessionHint`, and the membership credential's proof (which openvtc doesn't verify either). A client can only be held to the schema. [Details](#question-details). |
 | VTI-Q29 | Could openvtc retry a mediator listener that failed to come up at launch? | A persona listener whose login misses its budget is logged ("listener failed to come up; continuing without it") and skipped for the whole run, with nothing on screen. A vetter launched that way shows a normal desk and never hears a request. [Details](#question-details). |
 | VTI-Q30 | Could pnm keep the new admin key until the agent's swap answer arrives, and could the swap be made atomic? | `acl/swap-key` writes the new ACL entry and then deletes the old one, and pnm keeps the new key only in memory until it saves the session. A swap answer lost after the agent swapped strands pnm with a key the agent no longer knows. A repeat can't recover it: the old key is refused, and a partial write conflicts. [Details](#question-details). |
+| VTI-Q31 | Could an applicant cancel a vetting request it made? | `vetting/decline` lets only the vetter close an accepted request, and no task lets the applicant withdraw one, so an applicant who changes their mind, or cannot meet the vetter, is left with an open request only the vetter can end. |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2397,6 +2398,22 @@ openvtc's 10 s budget by 0.8 s (the mediator logged it successful at
 08:47:51.7). A Keyring applicant's request then sat queued at the mediator for
 three minutes. Our harness now relaunches the TUI until the listener is up.
 
+**VTI-Q31 — an applicant cannot cancel a vetting request.**
+(a) Once a vetter accepts a request, only the vetter can close it:
+`vetting/decline/0.1` is the vetter's (spec.md:66-74, "A conforming **vetter**
+… **MAY** decline a request it accepted"), and no vetting task lets the
+applicant withdraw. An applicant who changes their mind, or never meets the
+vetter, keeps an open request until the vetter acts. The community's own
+`join-requests/withdraw` covers only the application, which comes later.
+Expected: an applicant-side cancel (for example, `vetting/decline` accepted
+from the `recipient` too, or a `vetting/request#withdraw`), after which the
+vetter treats the request as closed.
+(b) Read in dtgwg-trust-tasks-tf `specs/vetting/decline/0.1/spec.md` and
+openvtc `ed13d29`, 2026-09-25. Found in our own release test: an iOS
+applicant whose run ended mid-vetting could not start again. Keyring will add
+a local "stop and forget this request" in the meantime (held for the next
+release); the vetter is not told.
+
 **VTI-Q30 — a lost swap answer strands the admin key.**
 (a) `acl/swap-key` moves a grant from one DID to another in two writes: the new
 entry, then deleting the old (`vta-service/src/operations/acl.rs:912-915`; the
@@ -2419,6 +2436,7 @@ asking the agent).
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.53 | 2026-09-25 | **VTI-Q31** (new): no vetting task lets an applicant cancel a request a vetter accepted; only the vetter can decline. Not sent. |
 | 1.52 | 2026-09-25 | **VTI-44** (e): the VTA credential vault refuses a proof-set membership too (400, "proof has no verificationMethod"), so openvtc's membership sync and rebuild miss it. Measured on the lab; proof shape inferred. Not sent. |
 | 1.51 | 2026-09-25 | **VTI-45** (new, High): vta-sdk verifies a Trust Task proof over its own re-serialisation, and chrono drops a `.000` fraction, so about one timestamp in a thousand signed by a JavaScript producer is refused as an invalid signature. Measured with card-verify at `ed672fff`; Keyring works around it (keyring-bifold#128). Not sent. |
 | 1.50 | 2026-09-25 | **VTI-44** (new, High): vta-sdk reads a credential's `proof` as one object, but a VTC with several keys signs with a proof set (an array: eddsa-jcs-2022 plus mldsa44-jcs-2024), so openvtc rejects every vetter grant from such a community. Measured on our lab with openvtc `ed13d29`; vtc-service fixed it for itself only (`proof_set.rs`). Not sent. |
