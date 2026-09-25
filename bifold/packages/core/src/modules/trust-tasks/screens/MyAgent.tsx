@@ -603,6 +603,17 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
               testID={testIdWithKey('OpenYourAgentButton')}
             />
           ) : null}
+          {/* My devices, one tap from here: where the owner adds another device
+              or removes a lost one (own_agent_subtask.md §4). Also on the agent
+              screen; this is where "Claim your agent" returns to. */}
+          {vta.link.kind === 'linked' ? (
+            <Button
+              title={t('Devices.Title')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => navigation.navigate(Screens.VtaDevices)}
+              testID={testIdWithKey('AgentDevices')}
+            />
+          ) : null}
           <View style={styles.card} testID={testIdWithKey('MyAgentCard')}>
             <View style={styles.row}>
               <Icon name="check-circle" size={18} color={ColorPalette.semantic.success} />
