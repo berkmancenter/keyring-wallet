@@ -30,6 +30,7 @@ import {
 import { BrandingOverlayType, RemoteOCABundleResolver } from '@bifold/oca/build/legacy'
 import { getProofRequestTemplates } from '@bifold/verifier'
 // import { Agent } from '@credo-ts/core' // DISABLED: Only used by push notifications
+import DeviceInfo from 'react-native-device-info'
 import { NavigationProp } from '@react-navigation/native'
 import { TFunction } from 'react-i18next'
 // import { Linking } from 'react-native'
@@ -150,6 +151,9 @@ export class AppContainer implements Container {
     // for Face ID, a fingerprint or the passcode at that moment. Unwired, the
     // controller refuses every owner act, so a build that forgot this fails loudly.
     vtaAgent.setOwnerChecks(ownerChecks)
+    // Its own entry on the agent reads "Keyring — <this phone's name>", so the
+    // person can tell their devices apart in My devices and on their host.
+    vtaAgent.setDeviceName(() => DeviceInfo.getDeviceName())
     this._container.registerInstance(TOKENS.CONFIG, {
       ...defaultConfig,
       PINSecurity: { rules: PINRules, displayHelper: false },
