@@ -70,6 +70,18 @@ const PICKUP_PROTOCOL = 'https://didcomm.org/messagepickup/3.0/'
 const PICKUP_STATUS = 'https://didcomm.org/messagepickup/3.0/status'
 /** A resync never starts a second drain within this long of the last one. */
 const RESYNC_DEBOUNCE_MS = 1000
+/**
+ * How long a websocket gets to open. Without a bound, a connect that stalls
+ * (no open, error or close event: a TLS connect hanging in a tunnel) held
+ * `start()` until the caller's own deadline, and the person saw only "Something
+ * went wrong while linking" (iOS, 2026-09-25: the mediator logged the login and
+ * never an upgrade). vti-didcomm-js bounds its connect the same way
+ * (mediator-transport.js, `connectTimeoutMs`, 15 s). Two tries fit inside the
+ * 30 s connect deadline a grant check allows (vtaAgent GRANT_CONNECT_DEADLINE_MS).
+ */
+export const SOCKET_OPEN_TIMEOUT_MS = 8000
+const SOCKET_OPEN_TIMEOUT = 'socket did not open'
+const isOpenTimeout = (error: unknown) => error instanceof Error && error.message.includes(SOCKET_OPEN_TIMEOUT)
 const PLAIN = 'application/didcomm-plain+json'
 const WS_APP_SUBPROTOCOL = 'didcomm'
 
@@ -451,9 +463,15 @@ export class VtiMediatorSession {
     try {
       await this.openSocket()
     } catch (error) {
-      if (!hadCachedToken) throw error
-      this.accessToken = undefined
-      await this.ensureAccessToken()
+      if (hadCachedToken) {
+        // Refused with a cached token: the token is the suspect, mint another.
+        this.accessToken = undefined
+        await this.ensureAccessToken()
+      } else if (!isOpenTimeout(error)) {
+        throw error
+      }
+      // A stalled open gets one fresh socket: the login was good, the connect
+      // is what failed.
       await this.openSocket()
     }
     await this.startLiveDelivery()
@@ -480,7 +498,19 @@ export class VtiMediatorSession {
         const { code, reason } = (event ?? {}) as { code?: number; reason?: string }
         reject(new Error(`${LOG_PREFIX} socket closed during handshake (${code ?? '?'}${reason ? ` ${reason}` : ''})`))
       }
+      // Neither: give up on this socket, and close it so a late open cannot
+      // leave a second live socket for the DID behind.
+      const timer = setTimeout(() => {
+        cleanup()
+        try {
+          socket.close()
+        } catch {
+          /* never opened */
+        }
+        reject(new Error(`${LOG_PREFIX} ${SOCKET_OPEN_TIMEOUT} after ${SOCKET_OPEN_TIMEOUT_MS} ms`))
+      }, SOCKET_OPEN_TIMEOUT_MS)
       const cleanup = () => {
+        clearTimeout(timer)
         socket.removeEventListener('open', onOpen)
         socket.removeEventListener('error', onError)
         socket.removeEventListener('close', onClose)
