@@ -71,3 +71,31 @@ describe('the sentences themselves', () => {
     expect(copy.NotAllowed).not.toMatch(/try again/i)
   })
 })
+
+describe('what a community said about a join request', () => {
+  const refusal = (code: string) => Object.assign(new Error('prose the community chose'), { code })
+  test('an open request already exists: said as already asked, not unknown, and not retried', () => {
+    expect(plainError(refusal('vtc/join-requests/submit:requestAlreadyOpen'))).toMatchObject({
+      line: 'Errors.AlreadyAsked',
+      retry: false,
+    })
+  })
+  test('the other known refusals are named, none retried', () => {
+    expect(plainError(refusal('vtc/join-requests/supplement:alreadyDecided')).line).toBe('Errors.AlreadyDecided')
+    expect(plainError(refusal('vtc/join-requests/withdraw:notFound')).line).toBe('Errors.NothingOpen')
+    expect(plainError(refusal('vtc/join-requests/supplement:notAwaitingEvidence')).retry).toBe(false)
+  })
+  test('a request the community has not answered yet is not "your agent didn\'t answer"', () => {
+    const sent = Object.assign(
+      new Error('vtiAgent: sent vtc/join-requests/submit; the community has not answered yet'),
+      {
+        name: 'VtiSentNoAnswer',
+      }
+    )
+    expect(plainError(sent)).toMatchObject({ line: 'Errors.SentNoAnswer', retry: false })
+    expect(
+      plainError(new Error('[TrustTasks:VtaClient] the VTA did not answer https://trusttasks.org/spec/auth/whoami/0.1'))
+        .line
+    ).toBe('Errors.NoAnswer')
+  })
+})

@@ -16,7 +16,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
-import { vtiAgent } from '../module/vtiAgent'
+import { VtiRefusal, vtiAgent } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityLinkReturn } from '../module/vtiLinks'
 import VtiInvited from '../screens/VtiInvited'
@@ -27,9 +27,11 @@ jest.mock('../../vrc/vrc-biometric', () => ({
 }))
 const mockEnsurePersona = jest.fn()
 const mockJoin = jest.fn()
+const mockReadJoinState = jest.fn()
 jest.mock('../module/vtiJoin', () => ({
   ensurePersonaFor: (...args: unknown[]) => mockEnsurePersona(...args),
   joinCommunity: (...args: unknown[]) => mockJoin(...args),
+  readJoinState: (...args: unknown[]) => mockReadJoinState(...args),
 }))
 
 type Setter = { set(next: Record<string, unknown>): void }
@@ -233,6 +235,62 @@ describe('I was invited', () => {
     expect(tree.getByTestId(testIdWithKey('InvitedDeferredNeed'))).toHaveTextContent(/Vetting\.NeedsStatements/)
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('InvitedContinueVetting'))))
     expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+  })
+
+  // Lab, 2026-09-25: the join's answer was lost ("Your agent didn't answer"),
+  // the community had deferred it, and the second tap met it still open.
+  test('a join the community already holds: shows where it stands, never "didn\'t answer" or "doesn\'t know why"', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    mockJoin.mockRejectedValue(
+      new VtiRefusal('vtc/join-requests/submit:requestAlreadyOpen', 'an open join request already exists', {
+        requestId: 'cfea2409',
+        status: 'deferred',
+      })
+    )
+    mockReadJoinState.mockResolvedValue({
+      kind: 'deferred',
+      submission: { needs: ['vetting:statements:1'] },
+      needs: [{ kind: 'statements', count: 1 }],
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    expect(mockReadJoinState).toHaveBeenCalledWith(expect.anything(), communityDid, expect.anything())
+    expect(tree.getByTestId(testIdWithKey('InvitedDeferred'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('InvitedDeferredNeed'))).toHaveTextContent(/Vetting\.NeedsStatements/)
+    expect(tree.queryByTestId(testIdWithKey('InvitedError'))).toBeNull()
+  })
+
+  test('the community fell silent after the submit: asks where it stands instead of offering a blind retry', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    mockJoin.mockRejectedValue(
+      Object.assign(new Error('vtiAgent: sent vtc/join-requests/submit; the community has not answered yet'), {
+        name: 'VtiSentNoAnswer',
+      })
+    )
+    mockReadJoinState.mockResolvedValue({ kind: 'sent', submission: {} })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    expect(tree.getByTestId(testIdWithKey('InvitedPending'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('InvitedError'))).toBeNull()
+  })
+
+  test('a request the community holds open can be withdrawn from the flow, which offers Join again', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    mockJoin.mockResolvedValue({ verdict: { effect: 'refer', needs: [] } })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    const connect = jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+    const withdraw = jest.spyOn(vtiAgent, 'withdraw').mockResolvedValue({ status: 'withdrawn' })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedWithdraw')))
+    })
+    expect(withdraw).toHaveBeenCalledWith(communityDid)
+    expect(tree.getByTestId(testIdWithKey('InvitedJoin'))).toBeTruthy()
+    connect.mockRestore()
+    withdraw.mockRestore()
   })
 
   test('referred to a person: says the community is deciding', async () => {

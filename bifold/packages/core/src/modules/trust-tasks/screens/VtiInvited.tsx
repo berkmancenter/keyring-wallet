@@ -33,8 +33,9 @@ import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 import { GenericRecordsCommunityStore, type VtiInvitation } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { communityTarget } from '../module/vtiCommunityLink'
-import { vtiAgent } from '../module/vtiAgent'
-import { ensurePersonaFor, joinCommunity } from '../module/vtiJoin'
+import { openJoinRequestOf, vtiAgent } from '../module/vtiAgent'
+import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
+import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 import { communityLinkReturn } from '../module/vtiLinks'
 
@@ -210,11 +211,64 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
         throw new Error(`the community answered ${effect ?? 'nothing'}`)
       }
     } catch (e) {
+      // The request may already be with the community: its answer was lost,
+      // or an earlier tap's was ("Your agent didn't answer" for a join the
+      // community had deferred, lab 2026-09-25). Ask where it stands — never
+      // resubmit — and show that instead of an error. A second submit only
+      // meets the first one still open.
+      if (openJoinRequestOf(e) || (e instanceof Error && e.name === 'VtiSentNoAnswer')) {
+        const state = await readJoinState(agent, invitation.communityDid, { mediatorDid }).catch(() => undefined)
+        if (state?.kind === 'member') {
+          setStep('joined')
+          return
+        }
+        if (state?.kind === 'deferred') {
+          communityTarget.choose(invitation.communityDid)
+          setNeeds(state.submission.needs ?? [])
+          setStep('deferred')
+          return
+        }
+        if (state?.kind === 'pending' || state?.kind === 'sent') {
+          setStep('pending')
+          return
+        }
+      }
       setError(plainError(e))
     } finally {
       setBusy(false)
     }
   }, [agent, vtaDid, mediatorDid, invitation, listMe])
+
+  // The person's own way out of a request the community holds open
+  // (vtc/join-requests/withdraw): it frees them to ask again later. The
+  // community resolves the request from who is asking, so no id is needed.
+  const onWithdraw = useCallback(async () => {
+    if (!agent || !persona || !communityDid) return
+    setError(undefined)
+    setBusy(true)
+    try {
+      await vtiAgent.connect(agent, mediatorDid, {
+        persona,
+        peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+      })
+      await vtiAgent.withdraw(communityDid)
+      setStep('waiting')
+    } catch (e) {
+      setError(plainError(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [agent, persona, mediatorDid, communityDid])
+
+  const withdrawButton = (
+    <Button
+      title={busy ? t('Invited.Withdrawing') : t('Invited.Withdraw')}
+      buttonType={ButtonType.Tertiary}
+      onPress={() => void onWithdraw()}
+      disabled={busy || !persona}
+      testID={testIdWithKey('InvitedWithdraw')}
+    />
+  )
 
   const scan = () => openScanner(navigation)
 
@@ -506,12 +560,16 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
         </View>
       )
       actions = (
-        <Button
-          title={t('VtaLink.ContinueVetting')}
-          buttonType={ButtonType.Primary}
-          onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiVetting)}
-          testID={testIdWithKey('InvitedContinueVetting')}
-        />
+        <>
+          <Button
+            title={t('VtaLink.ContinueVetting')}
+            buttonType={ButtonType.Primary}
+            onPress={() => (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiVetting)}
+            testID={testIdWithKey('InvitedContinueVetting')}
+          />
+          {errorLine}
+          {withdrawButton}
+        </>
       )
       break
 
@@ -524,7 +582,12 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
           <ThemedText>{t('Join.StandingWithInvitation')}</ThemedText>
         </View>
       )
-      actions = null
+      actions = (
+        <>
+          {errorLine}
+          {withdrawButton}
+        </>
+      )
       break
 
     case 'joined':

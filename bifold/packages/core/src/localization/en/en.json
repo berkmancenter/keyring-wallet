@@ -1330,6 +1330,8 @@
     "UnlinkConfirm": "Unlink"
   },
   "Invited": {
+    "Withdraw": "Withdraw my request",
+    "Withdrawing": "Withdrawing…",
     "DeferredTitle": "Sent — {{community}} also needs vetting",
     "DeferredBody": "Your invitation went with it. Before {{community}} admits you, it needs:",
     "PendingTitle": "Sent — {{community}} is deciding",
@@ -1666,6 +1668,10 @@
     "AddWhatTheyAsked": "Add what they asked for"
   },
   "Errors": {
+    "AlreadyAsked": "You already asked to join. The community is still deciding, or waiting for your vetting.",
+    "AlreadyDecided": "The community has already decided on your request. Open the community to see its answer.",
+    "NothingOpen": "You have no open request with this community.",
+    "NotAwaitingEvidence": "The community already has what it needs and is deciding. Nothing more to send for now.",
     "NoAnswer": "Your agent didn't answer. Tap Continue to try again — this usually works the second time.",
     "SentNoAnswer": "Your request was sent, and the community hasn't answered yet. It may still be deciding — you don't need to send it again.",
     "NotAllowed": "Your agent wouldn't allow that. Ask its admin whether this phone still has access.",
