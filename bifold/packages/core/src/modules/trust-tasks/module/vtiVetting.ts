@@ -41,6 +41,12 @@ import { recordAnswer, recordSent, recordStatus } from './joinSubmission'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
 import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
+import {
+  VETTER_ROLE,
+  buildEligibilityPresentation,
+  verifyEligibilityPresentation,
+  type EligibilityRefusal,
+} from './vtiEligibility'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
@@ -76,6 +82,12 @@ export interface VettingTicket {
 /** One request on the vetter's desk. */
 export interface VettingDeskRequest {
   requestId: string
+  /**
+   * The `id` of the applicant's vetting/request document this answers — the
+   * eligibility presentation's `nonce`, and the key that makes a second copy
+   * of the same request a no-op. Absent on requests taken before build 224.
+   */
+  requestDocumentId?: string
   applicantDid: string
   communityDid: string
   requirementsDigest?: string
@@ -107,7 +119,14 @@ export interface VettingApplicationRequest {
   cardSentAt?: string
   status: 'sent' | 'accepted' | 'refused' | 'session' | 'cardSent' | 'attested' | 'declined' | 'statementRefused'
   refusalCode?: string
+  /** Whether the vetter's eligibility presentation verified (vtiEligibility). */
   eligibilityOk?: boolean
+  /** Why it did not, when it did not — a code a screen words. Absent when none was shown. */
+  eligibilityRefusal?: EligibilityRefusal
+  /** The check's own words for that refusal, for a developer. */
+  eligibilityDetail?: string
+  /** Set when it verified only in the pre-224 Keyring shape; says how it was recognised. */
+  eligibilityLegacy?: string
   session?: {
     documentId: string
     challenge: string
@@ -250,6 +269,8 @@ export interface VettingApplication {
   minStatements: number
   requiredClaims: string[]
   acceptedMethods: VettingMethod[]
+  /** The manifest's `eligibleVetters.role`: the role a vetter's grant must name. */
+  vetterRole?: string
   /** Per-method floors the community published, e.g. at least one `inPerson`. */
   minByMethod?: Record<string, number>
   /** ISO 8601 duration; a statement older than this at submit does not count. */
@@ -284,6 +305,13 @@ export interface VtiVettingStore {
 }
 
 const RECORD_TYPE = 'keyring/vti-vetting'
+
+/**
+ * Request documents a desk is taking right now, across every desk instance on
+ * this phone — two listeners on one persona each hold their own desk, so the
+ * claim cannot live on the instance.
+ */
+const takingRequests = new Set<string>()
 
 export class GenericRecordsVettingStore implements VtiVettingStore {
   constructor(private readonly agent: Agent) {}
@@ -583,13 +611,45 @@ export class VtiVetterDesk {
     if (type === `${VETTING.session}${RESPONSE}`) return this.receiveCard(m)
   }
 
-  /** A request earns an answer only with a live ticket; accepting is automatic. */
+  /**
+   * A request earns an answer only with a live ticket; accepting is automatic.
+   *
+   * Once per request DOCUMENT. The same request can reach the desk twice — a
+   * desk listener left registered by a screen that was left and re-entered
+   * (each mount makes a new desk; nothing stops the old one's listener), or a
+   * frame delivered live and again by a pickup before its acknowledgement
+   * lands — and each copy used to be taken on its own: the ticket read as
+   * unspent by both, two acceptances with different requestIds sent on one
+   * thread 90 ms apart (measured 2026-09-25), which an openvtc applicant
+   * refuses the second of (`applicant.rs:643-647`, a different request_id is
+   * WrongState). A copy now sends nothing.
+   */
   private async takeRequest(m: DidCommV2PlaintextMessage): Promise<void> {
+    const body = bodyOf(m)
+    const requestDocumentId = String(body.id ?? m.id ?? '')
+    const key = `${this.persona.did} ${requestDocumentId}`
+    // Claimed synchronously, before any await, so two copies racing through
+    // two listeners cannot both pass; the stored desk covers every later copy.
+    if (!requestDocumentId || takingRequests.has(key)) return
+    takingRequests.add(key)
+    try {
+      if ((await this.store.listDesk()).some((r) => r.requestDocumentId === requestDocumentId)) {
+        this.agent.config?.logger?.debug?.(`[VTI] vetting request ${requestDocumentId} already taken; copy ignored`)
+        return
+      }
+      await this.takeRequestOnce(m, requestDocumentId)
+    } finally {
+      takingRequests.delete(key)
+    }
+  }
+
+  private async takeRequestOnce(m: DidCommV2PlaintextMessage, requestDocumentId: string): Promise<void> {
     const body = bodyOf(m)
     const p = payloadOf(m)
     const applicantDid = String(body.issuer ?? m.from ?? '')
     if (String(p.community ?? '') !== this.persona.communityDid) return
-    if (String(p.joinDid ?? '') !== applicantDid) return
+    const joinDid = String(p.joinDid ?? '')
+    if (joinDid !== applicantDid) return
     const presented = p.ticket as { code?: string; ticketId?: string; secret?: string } | undefined
     const tickets = await this.store.listTickets(this.persona.communityDid)
     const now = Date.now()
@@ -628,7 +688,10 @@ export class VtiVetterDesk {
     await this.store.saveTicket(ticket)
 
     const request: VettingDeskRequest = {
+      // Keyring's own handle, carried by the session and any decline; the
+      // request document's id is what binds the presentation.
       requestId: utils.uuid(),
+      requestDocumentId,
       applicantDid,
       communityDid: this.persona.communityDid,
       requirementsDigest: typeof p.requirementsDigest === 'string' ? p.requirementsDigest : undefined,
@@ -640,7 +703,7 @@ export class VtiVetterDesk {
     await this.store.saveDesk(request)
     const grant = await this.grant()
     const eligibilityVp = grant
-      ? await this.eligibilityPresentation(grant.credential, applicantDid, request.requestId)
+      ? await this.eligibilityPresentation(grant.credential, { nonce: requestDocumentId, domain: joinDid })
       : undefined
     const response = await signedDocument(
       this.agent,
@@ -672,20 +735,28 @@ export class VtiVetterDesk {
     await vtiAgent.send(to, `${TASK_ERROR}0.3`, error, { thid: String(m.id ?? '') })
   }
 
-  /** The VP that shows the applicant this persona currently holds the vetter role. */
-  private async eligibilityPresentation(grant: Record<string, unknown>, applicantDid: string, nonce: string) {
-    const vp = {
-      '@context': ['https://www.w3.org/ns/credentials/v2'],
-      type: ['VerifiablePresentation'],
-      holder: this.persona.did,
-      domain: applicantDid,
-      nonce,
-      verifiableCredential: [grant],
-    }
-    return signDocumentProof(this.agent, vp, this.persona.did, {
-      kmsKeyId: this.persona.kmsKeyIds?.signing,
-      verificationMethodId: this.persona.vtaKeyIds.signing,
-    })
+  /**
+   * The VP that shows the applicant this persona currently holds the vetter
+   * role, bound as the spec binds it (specs/vetting/request/0.1/spec.md:105-109):
+   * `nonce` the `id` of the request document answered — the value an openvtc
+   * vetter uses too (openvtc-core `vetting/inbound.rs:529-533`,
+   * `nonce: opened.document.id`) — and `domain` that request's `joinDid`,
+   * signed for `authentication`. Keyring up to 223 used its own desk uuid as
+   * the nonce, the applicant as the domain and `assertionMethod`, which every
+   * openvtc applicant refused ("nonce does not match", and the schema's
+   * `authentication` const).
+   */
+  private async eligibilityPresentation(grant: Record<string, unknown>, binding: { nonce: string; domain: string }) {
+    return buildEligibilityPresentation(
+      this.agent,
+      {
+        did: this.persona.did,
+        kmsKeyId: this.persona.kmsKeyIds?.signing,
+        verificationMethodId: this.persona.vtaKeyIds.signing,
+      },
+      [grant],
+      binding
+    )
   }
 
   /** Open the session: a fresh challenge, the community as domain, the required claims. */
@@ -827,13 +898,18 @@ export class VtiVetterDesk {
 
 export class VtiApplicant {
   private stop?: () => void
+  private readonly now: () => Date
   constructor(
     private readonly agent: Agent,
     private readonly persona: VtiPersona,
     private readonly store: VtiVettingStore,
     private readonly communityStore: VtiCommunityStore,
-    private readonly onChange?: () => void
-  ) {}
+    private readonly onChange?: () => void,
+    /** `now` for the eligibility check — a test injects the clock. */
+    options: { now?: () => Date } = {}
+  ) {
+    this.now = options.now ?? (() => new Date())
+  }
 
   /** Start (or resume) the application: the join DID is the persona, chosen before gathering. */
   async start(manifest: VtiManifest, claims: Record<string, string>): Promise<VettingApplication> {
@@ -849,6 +925,7 @@ export class VtiApplicant {
             maxByDeclaredRelationship?: Record<string, number>
             requireConsistentIdentityCommitment?: boolean
           }
+          eligibleVetters?: { role?: unknown }
         }
       | undefined
     const digest =
@@ -872,6 +949,10 @@ export class VtiApplicant {
     application.minStatements = vetting?.minStatements ?? 1
     application.requiredClaims = vetting?.requiredClaims ?? ['name.legal']
     application.acceptedMethods = vetting?.acceptedMethods ?? ['inPerson', 'video']
+    // The role a vetter's grant must name, as openvtc reads it
+    // (`applicant.rs:619-623` `vetter_role`, `vetter` when the criterion names none).
+    application.vetterRole =
+      typeof vetting?.eligibleVetters?.role === 'string' ? vetting.eligibleVetters.role : VETTER_ROLE
     // The rest of the published requirement. A community sets every one of
     // these and applies them at intake; an applicant that reads only the
     // statement count gathers against a rule it never saw.
@@ -967,25 +1048,61 @@ export class VtiApplicant {
     this.onChange?.()
   }
 
+  /**
+   * The vetter accepted. Its eligibility presentation is judged as vta-sdk
+   * `verify_eligibility_vp` judges it (vtiEligibility): bound by `nonce` to
+   * the request document this phone sent and by `domain` to this join DID,
+   * signed by the vetter for `authentication`, carrying the community's grant
+   * in the manifest's role. The old check took any `vetter` credential and an
+   * `assertionMethod` proof, which refused every spec-correct presentation and
+   * never looked at the binding. Advisory, as the spec says (spec.md:113): the
+   * outcome is recorded for the screen, the request is accepted either way.
+   */
   private async accepted(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
     const p = payloadOf(m)
     const vetterDid = String(body.issuer ?? m.from ?? '')
     const vp = p.eligibilityVp as Record<string, unknown> | undefined
+    const application = await this.store.getApplication(this.persona.communityDid)
+    const sent = application?.requests.find((r) => r.vetterDid === vetterDid)
     let eligibilityOk = false
+    let eligibilityRefusal: EligibilityRefusal | undefined
+    let eligibilityDetail: string | undefined
+    let eligibilityLegacy: string | undefined
     let grantValidFrom: string | undefined
     let grantValidUntil: string | undefined
     let grantCredential: Record<string, unknown> | undefined
-    if (vp) {
-      const creds = (vp.verifiableCredential as Record<string, unknown>[]) ?? []
-      const grant = creds.find((c) => {
-        const e = (c.credentialSubject as { endorsement?: { role?: string; communityDid?: string } })?.endorsement
-        return e?.role === 'vetter' && e?.communityDid === this.persona.communityDid
+    if (vp && application && sent) {
+      const verdict = await verifyEligibilityPresentation(this.agent, vp, {
+        vetter: vetterDid,
+        community: application.communityDid,
+        role: application.vetterRole ?? VETTER_ROLE,
+        challenge: sent.requestDocumentId,
+        domain: application.joinDid,
+        now: this.now(),
+        legacyRequestId: typeof p.requestId === 'string' ? p.requestId : undefined,
       })
-      eligibilityOk = !!grant && (await verifyDocumentProof(this.agent, vp, vetterDid))
-      grantValidFrom = typeof grant?.validFrom === 'string' ? grant.validFrom : undefined
-      grantValidUntil = typeof grant?.validUntil === 'string' ? grant.validUntil : undefined
-      grantCredential = grant
+      if (verdict.ok) {
+        eligibilityOk = true
+        eligibilityLegacy = verdict.legacy
+        grantValidFrom = verdict.validFrom
+        grantValidUntil = verdict.validUntil
+        grantCredential = verdict.credential
+        if (verdict.legacy)
+          this.agent.config?.logger?.info(
+            `[VTI] vetter eligibility accepted in the legacy Keyring shape: ${verdict.legacy}`,
+            {
+              vetterDid,
+            }
+          )
+      } else {
+        eligibilityRefusal = verdict.reason
+        eligibilityDetail = verdict.detail
+        this.agent.config?.logger?.warn(
+          `[VTI] vetter eligibility presentation did not verify (${verdict.reason}): ${verdict.detail}`,
+          { vetterDid }
+        )
+      }
     }
     // The window says when the grant was *meant* to be live; the status list
     // says whether the community has since withdrawn it. Only the second one
@@ -1005,6 +1122,9 @@ export class VtiApplicant {
       status: 'accepted',
       requestId: String(p.requestId ?? ''),
       eligibilityOk,
+      eligibilityRefusal,
+      eligibilityDetail,
+      eligibilityLegacy,
       grantValidFrom,
       grantValidUntil,
       grantCheckedAt: new Date().toISOString(),

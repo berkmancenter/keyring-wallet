@@ -112,6 +112,49 @@ function firstSigningVerificationMethod(didDocument: {
     embedded(didDocument.authentication)) as VerificationMethod | undefined
 }
 
+/**
+ * The verification relationship a proof is made for. `assertionMethod` is the
+ * default and what every document proof here has always used. `authentication`
+ * is for a holder proving control to a verifier — an eligibility presentation
+ * (dtgwg-trust-tasks-tf `specs/vetting/request/0.1/spec.md:109`, "`proof` is a
+ * Data Integrity proof by `holder`, with `proofPurpose` `authentication`";
+ * payload.schema.json:216-220 makes the purpose a const), as vta-sdk
+ * `vetting/eligibility.rs:43` `ELIGIBILITY_PROOF_PURPOSE` signs it.
+ */
+export type ProofPurpose = 'assertionMethod' | 'authentication'
+
+type RelationshipDocument = {
+  id?: string
+  verificationMethod?: VerificationMethod[]
+  authentication?: unknown[]
+  assertionMethod?: unknown[]
+}
+
+/**
+ * The verification method `verificationMethodId` names, when — and only when —
+ * the DID document lists it under `relationship`, by reference or embedded.
+ * Ids compare as credo's `DidDocument.matchKeyId` does: relative to the
+ * document's own id, so `#key-0` and `<did>#key-0` are the same key.
+ */
+export function verificationMethodInRelationship(
+  didDocument: RelationshipDocument,
+  relationship: ProofPurpose,
+  verificationMethodId: string
+): VerificationMethod | undefined {
+  const docId = didDocument.id ?? ''
+  const relative = (id: string) => (docId && id.startsWith(docId) ? id.slice(docId.length) : id)
+  const wanted = relative(verificationMethodId)
+  for (const entry of didDocument[relationship] ?? []) {
+    if (typeof entry === 'string') {
+      if (relative(entry) !== wanted) continue
+      return didDocument.verificationMethod?.find((m) => relative(m.id) === wanted)
+    }
+    const embedded = entry as VerificationMethod | null
+    if (embedded && typeof embedded.id === 'string' && relative(embedded.id) === wanted) return embedded
+  }
+  return undefined
+}
+
 export async function signDocumentProof(
   agent: Agent,
   document: Record<string, unknown>,
@@ -125,15 +168,23 @@ export async function signDocumentProof(
     kmsKeyId?: string
     /** The verification method to name in the proof; defaults to the first signing one. */
     verificationMethodId?: string
+    /**
+     * `assertionMethod` (default) or `authentication`. For `authentication`
+     * the key MUST be listed under the signer's `authentication` relationship:
+     * a proof naming a key the holder never authorised for it is refused by a
+     * conforming verifier, so it is refused here, before anything is sent.
+     */
+    proofPurpose?: ProofPurpose
   } = {}
 ): Promise<Record<string, unknown>> {
+  const proofPurpose = options.proofPurpose ?? 'assertionMethod'
   const { verificationMethod, publicJwk } = await resolveSigningKey(agent, controllerDid, options)
   const proofConfig: Record<string, unknown> = {
     type: 'DataIntegrityProof',
     cryptosuite: 'eddsa-jcs-2022',
     created: new Date().toISOString(),
     verificationMethod: verificationMethod.id,
-    proofPurpose: 'assertionMethod',
+    proofPurpose,
   }
 
   const configHash = sha256(new TextEncoder().encode(jcsCanonicalize(proofConfig)))
@@ -165,13 +216,38 @@ export async function signDocumentProof(
 async function resolveSigningKey(
   agent: Agent,
   controllerDid: string,
-  options: { kmsKeyId?: string; verificationMethodId?: string }
+  options: { kmsKeyId?: string; verificationMethodId?: string; proofPurpose?: ProofPurpose }
 ) {
   const didDocument = await agent.dids.resolveDidDocument(controllerDid)
-  const verificationMethod = options.verificationMethodId
-    ? (didDocument.dereferenceKey(options.verificationMethodId, ['assertionMethod', 'authentication']) ??
-      firstSigningVerificationMethod(didDocument as never))
-    : firstSigningVerificationMethod(didDocument as never)
+  let verificationMethod: VerificationMethod | undefined
+  if (options.proofPurpose === 'authentication') {
+    // Only a key the holder lists under `authentication` may sign for it. A
+    // persona minted by the VTA lists its signing key `#key-0` under both
+    // `authentication` and `assertionMethod` (vta-service
+    // `operations/did_webvh/document.rs:318-361`; the did-host-* templates,
+    // vta-sdk `templates/did-host-didcomm.json:37-38`, do the same), so this
+    // finds it; a DID that does not is refused rather than signed for.
+    const authentication = (didDocument as unknown as RelationshipDocument).authentication ?? []
+    const firstAuthentication = authentication[0]
+    const wanted =
+      options.verificationMethodId ??
+      (typeof firstAuthentication === 'string'
+        ? firstAuthentication
+        : (firstAuthentication as VerificationMethod | undefined)?.id)
+    verificationMethod = wanted
+      ? verificationMethodInRelationship(didDocument as unknown as RelationshipDocument, 'authentication', wanted)
+      : undefined
+    if (!verificationMethod) {
+      throw new Error(
+        `${controllerDid}: ${wanted ?? 'no key'} is not listed under the DID's authentication relationship`
+      )
+    }
+  } else {
+    verificationMethod = options.verificationMethodId
+      ? (didDocument.dereferenceKey(options.verificationMethodId, ['assertionMethod', 'authentication']) ??
+        firstSigningVerificationMethod(didDocument as never))
+      : firstSigningVerificationMethod(didDocument as never)
+  }
   if (!verificationMethod) {
     throw new Error(`no verification method on ${controllerDid}`)
   }
@@ -230,12 +306,24 @@ export async function signCompactJws(
 export async function verifyDocumentProof(
   agent: Agent,
   document: Record<string, unknown>,
-  expectedController: string
+  expectedController: string,
+  options: {
+    /**
+     * The purpose the proof must be made for. Omitted, it is `assertionMethod`
+     * and verification is exactly what it has always been. Given, the proof's
+     * `proofPurpose` must be it AND the verification method must be listed
+     * under that relationship in the controller's DID document — the check
+     * the spec asks of an eligibility presentation ("The `proof` verifies
+     * under an `authentication` key of `holder`", specs/vetting/request/0.1
+     * spec.md:113).
+     */
+    proofPurpose?: ProofPurpose
+  } = {}
 ): Promise<boolean> {
   const { proof, ...unsecured } = document
   if (!proof || typeof proof !== 'object') return false
   if (!Array.isArray(proof))
-    return verifyOneProof(agent, proof as Record<string, unknown>, unsecured, expectedController)
+    return verifyOneProof(agent, proof as Record<string, unknown>, unsecured, expectedController, options.proofPurpose)
 
   // A PROOF SET (Data Integrity §2.1.2): several independent proofs, each over
   // the document without any of them. vtc-service signs its status lists this
@@ -251,7 +339,7 @@ export async function verifyDocumentProof(
   )
   if (ours.length === 0) return false
   for (const p of ours) {
-    if (!(await verifyOneProof(agent, p, unsecured, expectedController))) return false
+    if (!(await verifyOneProof(agent, p, unsecured, expectedController, options.proofPurpose))) return false
   }
   return true
 }
@@ -260,11 +348,12 @@ async function verifyOneProof(
   agent: Agent,
   p: Record<string, unknown>,
   unsecured: Record<string, unknown>,
-  expectedController: string
+  expectedController: string,
+  requiredPurpose?: ProofPurpose
 ): Promise<boolean> {
   try {
     if (p.type !== 'DataIntegrityProof' || p.cryptosuite !== 'eddsa-jcs-2022') return false
-    if (p.proofPurpose !== 'assertionMethod') return false
+    if (p.proofPurpose !== (requiredPurpose ?? 'assertionMethod')) return false
     const verificationMethodId = String(p.verificationMethod ?? '')
     // The id must belong to the expected controller. did:peer:0 ids are
     // absolute under the DID; did:peer:4 documents may carry RELATIVE ids
@@ -292,10 +381,18 @@ async function verifyOneProof(
     const fragment = verificationMethodId.includes('#')
       ? verificationMethodId.slice(verificationMethodId.indexOf('#'))
       : ''
-    const verificationMethod =
-      didDocument.verificationMethod?.find(
-        (m) => m.id === verificationMethodId || (fragment && m.id.endsWith(fragment))
-      ) ?? firstSigningVerificationMethod(didDocument as never)
+    // An explicit purpose binds the key to that relationship: no fallback to
+    // "the first signing key", which could sign for a purpose it was never
+    // listed under.
+    const verificationMethod = requiredPurpose
+      ? verificationMethodInRelationship(
+          didDocument as unknown as RelationshipDocument,
+          requiredPurpose,
+          verificationMethodId.startsWith('#') ? `${expectedController}${verificationMethodId}` : verificationMethodId
+        )
+      : (didDocument.verificationMethod?.find(
+          (m) => m.id === verificationMethodId || (fragment && m.id.endsWith(fragment))
+        ) ?? firstSigningVerificationMethod(didDocument as never))
     if (!verificationMethod) return false
     const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
     const publicKeyBytes = (publicJwk.publicKey as { publicKey: Uint8Array }).publicKey
