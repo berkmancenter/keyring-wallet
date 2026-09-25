@@ -630,7 +630,10 @@ export class VtaAgentController {
     try {
       const did = client.managerDid
       if (!did) return
-      const name = String((await this.deps.deviceName?.()) ?? '').trim()
+      // Platforms answer "unknown" when they will not say (Android 12+ without
+      // BLUETOOTH_CONNECT; emulators): that is no name.
+      const raw = String((await this.deps.deviceName?.()) ?? '').trim()
+      const name = raw.toLowerCase() === 'unknown' ? '' : raw
       await client.labelAclEntry(did, name ? `Keyring — ${name}` : 'Keyring')
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)

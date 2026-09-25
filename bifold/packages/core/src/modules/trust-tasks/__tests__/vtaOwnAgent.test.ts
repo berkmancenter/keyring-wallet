@@ -748,6 +748,16 @@ describe('creating an agent', () => {
     expect(mockVta.acl.get(PERMANENT)).toMatchObject({ label: 'Keyring — Test phone' })
   })
 
+  it('a platform that answers "unknown" gives the plain "Keyring" label', async () => {
+    const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
+    vta.setDeviceName(() => 'unknown')
+    await vta.startCreateAgent(agent, VTA, 'farm.example')
+    mockVta.acl.set(TEMPORARY, { role: 'admin' })
+    await vta.checkManualGrant(agent)
+    await labelSent()
+    expect(sentOf(ACL_UPDATE).map((a) => a.payload)).toEqual([{ subject: PERMANENT, label: 'Keyring' }])
+  })
+
   it('without a device name the label is just "Keyring"; a refused relabel does not fail the link', async () => {
     mockVta.refuseUpdate = true
     const { vta } = freshPhone({ deviceCanOwn: jest.fn(async () => true) })
