@@ -355,6 +355,12 @@ try {
     outcome = "pass";
     printSuccess("OWN AGENT (twin) — created, admitted, connected, swapped to an owner key");
   } else {
+    const undoOwnerLock = undoLock;
+    const undoBackupLock = ownerLockSetup(BACKUP_PLATFORM, process.env.BACKUP_UDID);
+    undoLock = () => {
+      undoOwnerLock?.();
+      undoBackupLock();
+    };
     backup = await makeDriver({ platform: BACKUP_PLATFORM, udid: process.env.BACKUP_UDID, keepState });
     if (process.env.BACKUP_UDID) logs.push(startDeviceLog({ platform: BACKUP_PLATFORM, udid: process.env.BACKUP_UDID, file: path.join(ARTIFACTS, `own-agent-${RUN_ID}-backup.log`) }));
     await readyPhone(backup, "Backup");
@@ -402,17 +408,19 @@ try {
     record.backupKey = backupKey;
     step("backupFinish", { backupKey: `${backupKey.slice(0, 32)}…` });
 
-    // 7 — the backup removes the first phone.
-    // TODO(own-agent §7): no testIDs are defined for removing a device yet
-    //   (2026-09-25-uiux.md lists none); AgentDevices / AgentDeviceRemove are
-    //   placeholders until the screens document names them.
+    // 7 — the backup removes the first phone: My Agent → Devices → Remove on
+    //   the owner's row (a fresh owner confirmation first), and the ACL loses it.
+    //   testIDs agreed with UI/UX: AgentDevices, AgentDevice_<last 8 of the DID>,
+    //   AgentDeviceRemove_<same>, AgentDeviceRemoved.
     if (!(await existsTestId(backup, "AgentDevices", 2000))) {
       throw new PendingAppStep("removeOwner", "the backup phone has no way to remove another phone — own_agent_subtask.md §4, D3");
     }
+    const tail = ownerKey.slice(-8);
     await tapTestId(backup, "AgentDevices", 15000);
-    await tapTestId(backup, "AgentDeviceRemove", 15000);
-    await handleBiometricConfirmIfPresent(backup);
-    await sleep(5000);
+    await waitForTestId(backup, `AgentDevice_${tail}`, 30000);
+    await tapTestId(backup, `AgentDeviceRemove_${tail}`, 15000);
+    await answerOwnerPrompt(BACKUP_PLATFORM, process.env.BACKUP_UDID);
+    await waitForTestId(backup, "AgentDeviceRemoved", 60000);
     const after = acl();
     if (after.some((e) => e.subject === ownerKey)) throw new Error("the owner phone's key is still in the ACL after the backup removed it");
     if (!isOwnerRow(after.find((e) => e.subject === backupKey))) throw new Error("the backup's key lost its owner grant");
