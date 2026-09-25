@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.50 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.51 — 2026-09-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -68,6 +68,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A DIDComm router that has never heard of verbs its own service dispatches (VTC and VTA) | **High** | **Resolved upstream** in VTI #1687 (09-23): the binding envelope is the intended — and now the only — DIDComm carriage for every verb, on both services; refusals of a task-typed message name the envelope and are threaded. Keyring sends it (keyring-bifold#76) | F′ |
 | [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | **Fixed upstream** in VTI #1675 (09-23): a relationship-control frame now completes before anything the same sender sent after it. Recurred on the Farm before the fix reached it (VTA 0.39.0) | F′ |
 | [VTI-44](#vti-44--vta-sdk-cannot-verify-a-credential-signed-with-a-proof-set) | vta-sdk cannot verify a credential signed with a proof set, which is what a hybrid-keyed VTC issues | **High** | Open, not sent. Found in Phase 2 of the openvtc interop harness (2026-09-25) |
+| [VTI-45](#vti-45--vta-sdk-checks-a-trust-task-proof-over-its-own-re-serialisation-not-the-bytes-it-received) | vta-sdk checks a Trust Task proof over its own re-serialisation, not the bytes it received, so a valid signature over `…:53.000Z` is refused | **High** | Open, not sent. Worked around in Keyring (keyring-bifold#128) |
 
 ## Stack under test
 
@@ -1434,6 +1435,57 @@ or its configuration, so that a TSP relationship forms across mediators.
 **Verification:** re-run the rung's cross-mediator legs; an XRFA naming the
 invite, then the manifest over TSP, is the pass.
 
+### VTI-45 — vta-sdk checks a Trust Task proof over its own re-serialisation, not the bytes it received
+
+(a) **What happens.** vta-sdk verifies an `eddsa-jcs-2022` proof on a Trust
+Task document after parsing it into a typed `TrustTask` and serialising that
+again. It does not use the JSON it received. Any member the round trip writes
+differently changes the hash, and a correctly signed document is refused as
+*"signature invalid for cryptosuite EddsaJcs2022"*. The case we hit:
+`issuedAt`, `expiresAt` and the proof's `created` are parsed as chrono
+`DateTime<Utc>` and written back without a zero fraction. A producer that
+signs `2026-09-25T12:37:33.000Z`, which is what JavaScript's `toISOString()`
+writes on every whole second, is refused, because vta-sdk hashes
+`2026-09-25T12:37:33Z`. That is about one document in a thousand per
+timestamp, at random, on every path that verifies this way: a VTA or VTC
+receiving a task (answered with `proofInvalid`), and an openvtc peer
+(`wire::open`, which logs and drops the message, so the sender hears nothing:
+`openvtc-core/src/vetting/inbound.rs:417-428` at `ed13d29`).
+
+(b) **Measured** 2026-09-25 with card-verify at VTI `ed672fff`
+(`verify_trust_task_proof_with`). Hand-signed documents with `issuedAt`,
+`expiresAt` or proof `created` at `.000Z` were refused; the same documents at
+`.319Z` or `.100Z` were accepted. Keyring's conformance producer with every
+clock read on a whole second was refused on all 22 Trust Task documents and
+both carrier tasks. The card, the statement and the eligibility presentation
+in that run were **accepted**: `verify_card`, `verify_statement` and
+`verify_eligibility_vp` hash the received JSON (`vetting/mod.rs:133-173`,
+`verify_attached_proof`), which is the fix this finding asks for. So the
+hazard is the Trust Task envelope around them. It appeared first as an
+intermittent red in keyring-bifold's conformance CI (`vetting-request-response`,
+one document in one run).
+
+(c) **Where.** `vta-sdk/src/trust_task_proof/verify.rs:137-161`
+(`verify_trust_task_proof_with` clones the typed document, sets `proof` to
+`None` and verifies what that serialises to). The function's own comment
+calls re-serialising before the signature check *"the one place in the path
+that could change what was signed"*. trust-tasks-rs 0.22.3
+`src/document.rs:84-88` (`issued_at`, `expires_at: Option<DateTime<Utc>>`).
+
+(d) **Expected:** verify over the received JSON (`serde_json::Value` with
+`proof` removed), not a typed round trip, the way the function's own comment
+recommends for typed callers. At the least, keep datetimes as the strings
+received. **Keyring's interim** (keyring-bifold#128): `signDocumentProof`
+writes whole-second instants the way chrono does (`…:53Z`), and CI signs every
+document on a whole second to keep it that way. Other rewrites we measured
+through the same path, none of which Keyring emits today: `null` on a known
+optional member (`threadId`, `parentThreadId`, `expiresAt`, `@context`,
+`ceremony`) is dropped and refused; any member added to the proof beyond the
+five `DataIntegrityProof` fields (`nonce`, `challenge`, `expires`) is dropped
+and refused; a timestamp written `+00:00`, with a one-digit fraction or a
+lowercase `z` is refused. Unknown top-level members, the payload, numbers,
+Unicode and the type URI survive the round trip.
+
 ### VTI-44 — vta-sdk cannot verify a credential signed with a proof set
 
 (a) **What happens.** A VTC holding more than one signing key signs each
@@ -2353,6 +2405,7 @@ asking the agent).
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.51 | 2026-09-25 | **VTI-45** (new, High): vta-sdk verifies a Trust Task proof over its own re-serialisation, and chrono drops a `.000` fraction, so about one timestamp in a thousand signed by a JavaScript producer is refused as an invalid signature. Measured with card-verify at `ed672fff`; Keyring works around it (keyring-bifold#128). Not sent. |
 | 1.50 | 2026-09-25 | **VTI-44** (new, High): vta-sdk reads a credential's `proof` as one object, but a VTC with several keys signs with a proof set (an array: eddsa-jcs-2022 plus mldsa44-jcs-2024), so openvtc rejects every vetter grant from such a community. Measured on our lab with openvtc `ed13d29`; vtc-service fixed it for itself only (`proof_set.rs`). Not sent. |
 | 1.49 | 2026-09-25 | **VTI-Q30** (new): `acl/swap-key` is two writes and not idempotent, and pnm keeps the new key only in memory until the session is saved, so a swap answer lost after the agent swapped strands the admin key. Read at `ed672fff`; not seen live. Keyring closes the same gap on its side (keyring-bifold#127). Not sent. |
 | 1.48 | 2026-09-25 | **VTI-Q28** (new): the vetting rules that exist only in the spec, with no vta-sdk verifier a client can run on its own output (parentThreadId, session expiry, taskDigestMultibase, request fields, ticket generation, registryConsent, the membership credential's proof). From the conformance inventory. **VTI-Q29** (new): openvtc does not retry a mediator listener that failed at launch, so a vetter can be deaf behind a normal desk. Measured on our lab with `ed13d29`. Neither sent. |
