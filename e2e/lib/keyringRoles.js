@@ -147,19 +147,42 @@ async function awaitStep(d, role, want, timeoutMs, extra = async () => ({})) {
   const until = Date.now() + timeoutMs;
   let current = null;
   let since = Date.now();
+  // The last vetting step seen, and when: the PIN screen of the inactivity
+  // lock hides the page, and "not showing" alone read like a navigation
+  // (cd's run A, 2026-09-25: the lock at 07:12:48 after five idle minutes).
+  let lastStepSeen = null;
+  let lastStepAt = null;
+  let unlocks = 0;
   for (;;) {
     const now = await stepIdOf(d, role);
+    if (now) {
+      lastStepSeen = now;
+      lastStepAt = new Date().toISOString();
+    } else if (await existsTestId(d, "EnterPIN", 500)) {
+      // The wallet locked itself while we waited: unlock and keep waiting,
+      // as the person would. The lock is not a finding.
+      if (++unlocks > 5) throw failWith("the wallet kept locking while waiting (5 unlocks)", { lastStepSeen, lastStepAt });
+      await unlockIfLocked(d);
+      continue;
+    }
     if (now !== current) {
       current = now;
       since = Date.now();
     }
     if (current && wanted.includes(current)) return current;
     if (Date.now() > until) {
-      const observed = { stepId: current, secondsOnStep: Math.round((Date.now() - since) / 1000), ...(await extra()) };
+      const observed = {
+        stepId: current,
+        secondsOnStep: Math.round((Date.now() - since) / 1000),
+        lastStepSeen,
+        lastStepAt,
+        unlocksWhileWaiting: unlocks,
+        ...(await extra()),
+      };
       throw failWith(
         current
           ? `stuck at "${current}" for ${observed.secondsOnStep} s, waiting for ${wanted.join(" | ")}`
-          : `the vetting page is not showing (waiting for ${wanted.join(" | ")})`,
+          : `the vetting page is not showing (last step seen: ${lastStepSeen ?? "none"}${lastStepAt ? ` at ${lastStepAt}` : ""}; waiting for ${wanted.join(" | ")})`,
         observed
       );
     }
@@ -575,6 +598,11 @@ export const applicant = {
       for (;;) {
         const at = await stepIdOf(d, "applicant");
         if (at === "apply" || at === "member") break;
+        if (!at && (await existsTestId(d, "EnterPIN", 500))) {
+          // The inactivity lock, not a navigation: unlock and keep waiting.
+          await unlockIfLocked(d);
+          continue;
+        }
         if (await existsTestId(d, "VettingStatementRefused", 500)) {
           const reason = await textOf(d, "VettingStatementRefusedDetails").catch(() => "");
           throw failWith(`the statement arrived and was refused${reason ? `: ${reason}` : ""}`, { ...(await evidence()), statementRefused: reason || true });
