@@ -103,6 +103,8 @@ export interface VettingApplicationRequest {
   requestId?: string
   /** When this phone sent the request; unlike `updatedAt`, a later answer does not move it. */
   sentAt?: string
+  /** When this phone sent its card on the request's session. */
+  cardSentAt?: string
   status: 'sent' | 'accepted' | 'refused' | 'session' | 'cardSent' | 'attested' | 'declined' | 'statementRefused'
   refusalCode?: string
   eligibilityOk?: boolean
@@ -1086,6 +1088,7 @@ export class VtiApplicant {
       cardDigest: cardDigestMultibase(signed),
       // What a Keyring vetter up to 223 names instead: the card hashed with its proof.
       cardDigestLegacy: digestMultibase(signed),
+      cardSentAt: new Date().toISOString(),
     })
     return signed
   }

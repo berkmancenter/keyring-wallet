@@ -97,6 +97,19 @@ const useSafeHeaderHeight = (): number => {
   }
 }
 
+/**
+ * A moment on a request card: the time when it is today, and the date with it
+ * when it is not. "Sent 04:21 PM" read as the card's time on a phone whose
+ * clock said 06:59; it was the request's, sent hours earlier (2026-09-25).
+ */
+export const whenShown = (iso: string, now: Date = new Date()): string => {
+  const at = new Date(iso)
+  const time = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return at.toDateString() === now.toDateString()
+    ? time
+    : `${at.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
+}
+
 const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const headerHeight = useSafeHeaderHeight()
   const { t } = useTranslation()
@@ -465,7 +478,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   if (!vtaDid || !communityDid) {
     const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
     return (
-      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey(`VettingApplicantStep_${!vtaDid ? 'noAgent' : 'noCommunity'}`)}
+      >
         <View style={styles.content}>
           <Text style={styles.value} testID={testIdWithKey(!vtaDid ? 'VettingNeedsAgent' : 'VettingNeedsCommunity')}>
             {!vtaDid ? t('Join.NeedsAgent') : t('Vetting.NeedsCommunity')}
@@ -486,7 +503,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // No persona yet: the join DID is chosen before gathering, so this is step one.
   if (!persona) {
     return (
-      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey('VettingApplicantStep_identity')}
+      >
         <ScrollView contentContainerStyle={styles.content}>
           {seatBanner('applicant')}
           <Text style={styles.value}>{t('Vetting.NeedIdentity')}</Text>
@@ -624,7 +645,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     const request = vetterStep === 'done' ? latest : current
 
     return (
-      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey(`VettingVetterStep_${vetterStep}`)}
+      >
         <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
           <KeyboardAwareScrollView {...keyboardAware}>
             {seatBanner('vetter')}
@@ -981,9 +1006,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           stored before sentAt existed show no line. */}
       {r.sentAt ? (
         <Text style={styles.label} testID={testIdWithKey(requestTestKey(r.requestDocumentId))}>
-          {t('Vetting.SentAt', {
-            time: new Date(r.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          })}
+          {t('Vetting.AskedAt', { time: whenShown(r.sentAt) })}
+        </Text>
+      ) : null}
+      {r.cardSentAt ? (
+        <Text style={styles.label} testID={testIdWithKey('VettingCardSentAt')}>
+          {t('Vetting.CardSentAt', { time: whenShown(r.cardSentAt) })}
         </Text>
       ) : null}
       <DidDetails did={r.vetterDid} testIdStem="VettingRequestVetter" />
@@ -991,7 +1019,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+    // Which step the page is on, for whoever drives it: the step text says
+    // "Step 4 of 5", which cannot tell "waiting for the statement" from a
+    // screen that moved on (openvtc interop harness, keyring-wallet#150).
+    <SafeAreaView
+      style={styles.container}
+      edges={['left', 'right']}
+      testID={testIdWithKey(`VettingApplicantStep_${applicantStep}`)}
+    >
       <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
         <KeyboardAwareScrollView {...keyboardAware}>
           {seatBanner('applicant')}
