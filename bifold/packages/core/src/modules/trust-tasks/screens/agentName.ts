@@ -5,10 +5,11 @@
  * In order: the name the agent gives itself (its verified agent name, else the
  * operator's `vta_name` — the maintainers' answer to Q19), read once a session
  * opens and merged in by `withAgentName`; then the label the enrolment offer
- * gave it, then the host its DID is
- * served from, then plain words. Never the DID itself: a manual link stores the
- * DID as its label when the DID has no host, and that label is treated as
- * absent (#12).
+ * gave it; then plain words ("your agent"). Never the DID itself, and never
+ * the host its DID is served from: that is the agent host's own domain, a
+ * provider named where a person expects their agent's name (225 gate). A
+ * manual link or a claim stores the DID as its label, and a label that is
+ * only the host (stored before 226) is treated as absent too (#12).
  *
  * @module trust-tasks/screens/agentName
  */
@@ -32,10 +33,12 @@ const isDid = (text: string) => /^did:[a-z0-9]+:/i.test(text)
 export function agentDisplayName(agent: NamedAgent | undefined, t: TFunction): string {
   const name = agent?.name?.trim()
   if (name) return name
-  const label = agent?.label?.trim()
-  if (label && !isDid(label)) return label
+  // A label that is only the host (what a link stored before 226) is the
+  // agent host's own domain, not the agent's name: said as "your agent".
   const host = agent?.vtaDid ? agentHost(agent.vtaDid) : undefined
-  return host ?? (t('VtaLink.YourAgentFallback') as string)
+  const label = agent?.label?.trim()
+  if (label && !isDid(label) && label !== host) return label
+  return t('VtaLink.YourAgentFallback') as string
 }
 
 /** For a sentence that starts with the agent's name: "Your agent didn't answer." */

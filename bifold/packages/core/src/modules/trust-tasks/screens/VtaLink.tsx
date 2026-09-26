@@ -108,7 +108,7 @@ const VtaLink: React.FC = () => {
     const vtaDid = agentAddress.trim()
     if (!agent || !/^did:[a-z0-9]+:.+/.test(vtaDid)) return
     setCopied(false)
-    void vtaAgent.startManualLink(agent, vtaDid, agentHost(vtaDid) ?? vtaDid)
+    void vtaAgent.startManualLink(agent, vtaDid, vtaDid)
   }, [agent, agentAddress])
 
   const onCheckGrant = useCallback(() => {
