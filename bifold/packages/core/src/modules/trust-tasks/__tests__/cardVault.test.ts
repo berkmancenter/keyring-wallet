@@ -108,6 +108,14 @@ describe('what the screens read', () => {
     expect(cardVaultStateOf(membershipCard.id)).toMatchObject({ state: 'kept' })
   })
 
+  it('returns the same object until the state changes, so it can be a snapshot as it is', async () => {
+    expect(cardVaultStateOf('urn:uuid:never-sent')).toBe(cardVaultStateOf('urn:uuid:never-sent'))
+    const { agent } = fakeAgent()
+    const { store } = fakeCommunityStore({ memberships: [{ ...membership, roleVec: undefined }] })
+    await keepCardsInAgent(agent, store, persona, fakeVault().task)
+    expect(cardVaultStateOf(membershipCard.id)).toBe(cardVaultStateOf(membershipCard.id))
+  })
+
   it('can be put in any state for a screen test, and says so to subscribers', () => {
     const heard = jest.fn()
     const stop = subscribeCardVault(heard)
