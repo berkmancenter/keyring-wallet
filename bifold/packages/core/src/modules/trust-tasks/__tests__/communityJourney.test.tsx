@@ -60,8 +60,7 @@ describe('the community-changed event', () => {
     const { heard, stop } = listen()
     emitCommunityChanged(A, 'membership')
     expect(heard).toEqual([])
-    await settle()
-    expect(heard).toEqual([{ communityDid: A, what: 'membership' }])
+    await waitFor(() => expect(heard).toEqual([{ communityDid: A, what: 'membership' }]))
     stop()
   })
 
@@ -95,8 +94,7 @@ describe('the stores announce their writes', () => {
     const { heard, stop } = listen()
     await new GenericRecordsCommunityStore(recordsAgent).saveMembership({ communityDid: A } as VtiMembership)
     expect(records).toHaveLength(1)
-    await settle()
-    expect(heard).toEqual([{ communityDid: A, what: 'membership' }])
+    await waitFor(() => expect(heard).toEqual([{ communityDid: A, what: 'membership' }]))
     stop()
   })
 
@@ -109,8 +107,7 @@ describe('the stores announce their writes', () => {
       credential: { id: 'urn:grant:1' },
       receivedAt: '2026-09-25T00:00:00Z',
     } as never)
-    await settle()
-    expect(heard).toEqual([{ communityDid: A, what: 'grant' }])
+    await waitFor(() => expect(heard).toEqual([{ communityDid: A, what: 'grant' }]))
     stop()
   })
 
@@ -118,8 +115,7 @@ describe('the stores announce their writes', () => {
     const { agent: recordsAgent } = fakeRecordsAgent()
     const { heard, stop } = listen()
     await new GenericRecordsVettingStore(recordsAgent).saveApplication({ communityDid: A } as never)
-    await settle()
-    expect(heard).toEqual([{ communityDid: A, what: 'application' }])
+    await waitFor(() => expect(heard).toEqual([{ communityDid: A, what: 'application' }]))
     stop()
   })
 
@@ -149,11 +145,10 @@ describe('listening for changes', () => {
     await settle()
     expect(refresh).not.toHaveBeenCalled()
     emitCommunityChanged(A, 'membership')
-    await settle()
-    expect(refresh).toHaveBeenCalledTimes(1)
+    // The emit and the coalesced refresh are two ticks: wait for them, not a fixed time.
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
     DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, { communityDid: A, kinds: ['membership'] })
-    await settle()
-    expect(refresh).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
   })
 
   test('changes that land together refresh once', async () => {
@@ -162,8 +157,20 @@ describe('listening for changes', () => {
     // A delivery: the store's own announcement, then the inbox's.
     DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid: A, what: 'membership' })
     DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, { communityDid: A, kinds: ['membership'] })
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
     await settle()
     expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  test('a change queued just before the screen hands in a new callback is not dropped', async () => {
+    const first = jest.fn()
+    const second = jest.fn()
+    const tree = render(<Listener refresh={first} communityDid={A} />)
+    DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid: A, what: 'membership' })
+    // Before the change's tick, the screen re-renders with a new refresh.
+    tree.rerender(<Listener refresh={second} communityDid={A} />)
+    await waitFor(() => expect(second).toHaveBeenCalledTimes(1))
+    expect(first).not.toHaveBeenCalled()
   })
 
   test('never refreshes after unmount', async () => {

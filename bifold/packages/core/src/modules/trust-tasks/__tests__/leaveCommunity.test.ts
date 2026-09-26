@@ -112,6 +112,50 @@ describe('leaving a community', () => {
     expect(s.departure()).toBeUndefined()
   })
 
+  // A leave's answer lost on a slow community (Farm, 2026-09-26): the leave
+  // stopped with a raw error and the phone kept a membership it may not have.
+  const noAnswer = () =>
+    Object.assign(new Error('vtiAgent: sent vtc/members/self-remove; the community has not answered yet'), {
+      name: 'VtiSentNoAnswer',
+    })
+
+  it('an answer lost, then asked again: the community removes, and the leave finishes', async () => {
+    const ask = jest
+      .spyOn(vtiAgent, 'ask')
+      .mockRejectedValueOnce(noAnswer())
+      .mockResolvedValueOnce(answer({ disposition: 'purge', removed: true }))
+    const s = stores()
+    await expect(leaveCommunity(s.deps, COMMUNITY, { disposition: 'purge' })).resolves.toEqual({
+      disposition: 'purge',
+      alreadyGone: false,
+    })
+    expect(ask).toHaveBeenCalledTimes(2)
+    expect(s.communityStore.forgetCommunity).toHaveBeenCalledWith(COMMUNITY)
+    expect(s.identityStore.forgetPersona).toHaveBeenCalledWith(COMMUNITY)
+  })
+
+  it('an answer lost, then asked again: "not a member" — the first request was taken — finishes as gone', async () => {
+    jest
+      .spyOn(vtiAgent, 'ask')
+      .mockRejectedValueOnce(noAnswer())
+      .mockResolvedValueOnce(refusal('vtc/members/self-remove:notMember'))
+    const s = stores()
+    await expect(leaveCommunity(s.deps, COMMUNITY, { disposition: 'purge' })).resolves.toEqual({
+      disposition: 'purge',
+      alreadyGone: true,
+    })
+    expect(s.communityStore.forgetCommunity).toHaveBeenCalled()
+  })
+
+  it('no answer twice: it says so, and the phone keeps what it holds', async () => {
+    jest.spyOn(vtiAgent, 'ask').mockRejectedValue(noAnswer())
+    const s = stores()
+    await expect(leaveCommunity(s.deps, COMMUNITY)).rejects.toMatchObject({ name: 'VtiSentNoAnswer' })
+    expect(s.communityStore.forgetCommunity).not.toHaveBeenCalled()
+    expect(s.identityStore.forgetPersona).not.toHaveBeenCalled()
+    expect(s.departure()).toBeUndefined()
+  })
+
   it('needs an identity for the community', async () => {
     const s = stores()
     s.identityStore.getPersona.mockResolvedValue(undefined as never)

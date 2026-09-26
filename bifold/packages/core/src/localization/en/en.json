@@ -1211,6 +1211,8 @@
     "LeftHistorical": "You left {{community}}. It keeps its record of your membership.",
     "LeftAlreadyGone": "{{community}} no longer had you as a member. This phone has forgotten it too.",
     "LeaveLastAdmin": "You're the last admin of {{community}}. Make someone else an admin first.",
+    "LeaveNoAnswer": "You asked {{community}} to remove you, and it hasn't answered yet. As far as this phone knows, you're still a member. Try again in a moment.",
+    "LeaveTryAgain": "Try again",
     "ClaimedName": "{{name}} (not confirmed by the community)",
     "UnnamedAt": "an unnamed community ({{host}})",
     "Unnamed": "an unnamed community",

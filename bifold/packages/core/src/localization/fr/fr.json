@@ -1149,6 +1149,8 @@
     "LeftHistorical": "Vous avez quitté {{community}}. Elle garde son dossier de votre adhésion.",
     "LeftAlreadyGone": "{{community}} ne vous comptait plus parmi ses membres. Ce téléphone l'a oubliée aussi.",
     "LeaveLastAdmin": "Vous êtes le dernier admin de {{community}}. Nommez d'abord un autre admin.",
+    "LeaveNoAnswer": "Vous avez demandé à {{community}} de vous retirer, et elle n'a pas encore répondu. Pour ce téléphone, vous êtes toujours membre. Réessayez dans un instant.",
+    "LeaveTryAgain": "Réessayer",
     "ClaimedName": "{{name}} (non confirmé par la communauté)",
     "UnnamedAt": "une communauté sans nom ({{host}})",
     "Unnamed": "une communauté sans nom",
