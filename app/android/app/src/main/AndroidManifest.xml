@@ -60,6 +60,13 @@
              vetters share it: tapped in a message, it opens Get vetted with
              the ticket filled in, as a scan of its QR does. -->
         <data android:scheme="vetting-ticket" />
+        <!-- A credential offer (openid-credential-offer://?credential_offer=…)
+             from the phone's own camera. A community admin console's
+             invitation QR is one, with the community's DID as issuer, and
+             Keyring redeems it as an invitation; any other goes to the OpenID
+             flow. Another wallet on the phone may claim this scheme too, and
+             the system then asks, or chooses, which app opens it. -->
+        <data android:scheme="openid-credential-offer" />
       </intent-filter>
 
       <intent-filter android:autoVerify="true">
