@@ -661,7 +661,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     const vetterStep: VetterStep = current
       ? current.status === 'accepted'
         ? 'request'
-        : !matchConfirmed[current.requestId]
+        : !(matchConfirmed[current.requestId] || current.matchConfirmedAt)
           ? 'match'
           : current.status === 'cardReceived'
             ? 'check'
@@ -836,7 +836,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                     {matchStep(
                       request.session.matchCode,
                       t('Vetting.MatchQuestionVetter'),
-                      () => setMatchConfirmed((m) => ({ ...m, [request.requestId]: true })),
+                      () => {
+                        setMatchConfirmed((m) => ({ ...m, [request.requestId]: true }))
+                        // Kept for a relaunch; the screen has already moved on.
+                        void deskRef.current?.confirmMatch(request.requestId).catch(() => undefined)
+                      },
                       // The vetter's decline reaches the applicant: the session ends on both phones.
                       () => run('decline', () => deskRef.current!.decline(request.requestId, 'match code differs'))
                     )}
@@ -971,7 +975,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           ? 'waiting'
           : active.status === 'cardSent' || active.status === 'statementRefused'
             ? 'checking'
-            : !matchConfirmed[active.vetterDid]
+            : !(matchConfirmed[active.vetterDid] || active.matchConfirmedAt)
               ? 'match'
               : 'send'
         : attestedCount > 0 || application.submission
@@ -1218,7 +1222,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               {matchStep(
                 active.session.matchCode,
                 t('Vetting.MatchQuestionApplicant'),
-                () => setMatchConfirmed((m) => ({ ...m, [active.vetterDid]: true })),
+                () => {
+                  setMatchConfirmed((m) => ({ ...m, [active.vetterDid]: true }))
+                  void applicantRef.current?.confirmMatch(active.vetterDid).catch(() => undefined)
+                },
                 () => run('abandon', () => applicantRef.current!.abandonSession(active.vetterDid))
               )}
               {requestCard(active)}
