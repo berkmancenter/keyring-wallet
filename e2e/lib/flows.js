@@ -2342,9 +2342,30 @@ async function leaveFromCommunityRow(driver, row) {
   await scrollToTestId(driver, "LeaveCommunityButton", 8);
   await tapTestIdReliable(driver, "LeaveCommunityButton", () => existsTestId(driver, "LeaveCommunityConfirm", 2000));
   await scrollToTestId(driver, "LeaveCommunityConfirm", 4);
-  await tapTestIdReliable(driver, "LeaveCommunityConfirm", async () =>
-    (await existsTestId(driver, "LeaveCommunityConfirm", 2000)) === false
-  );
+  // One tap: a slow leave keeps the confirm button (spinning), so "the button
+  // went away" is not the test of a leave — and tapping again while it runs
+  // is not a retry. What proves the leave is the community screen closing.
+  await tapTestId(driver, "LeaveCommunityConfirm", 15000);
+  for (let retries = 0, until = Date.now() + 120000; ; ) {
+    if (!(await existsTestId(driver, "CommunityName", 2000))) break;
+    if (await existsTestId(driver, "CommunityError", 1000)) {
+      const said = await (await byTestId(driver, "CommunityError")).getText().catch(() => "");
+      // A build that offers Try again after an unanswered leave: use it, twice at most.
+      if (retries < 2 && (await existsTestId(driver, "LeaveCommunityRetry", 1000))) {
+        retries++;
+        console.log(`[e2e] ${driver.e2ePlatform}: the leave went unanswered ("${said.trim()}") — Try again (${retries}/2)`);
+        await tapTestId(driver, "LeaveCommunityRetry", 10000);
+        continue;
+      }
+      await screenshot(driver, "leave-community-failed");
+      throw new Error(`${driver.e2ePlatform}: the leave did not happen — the community screen says "${said.trim()}"`);
+    }
+    if (Date.now() > until) {
+      await screenshot(driver, "leave-community-stuck");
+      throw new Error(`${driver.e2ePlatform}: the leave neither finished nor failed within 2 minutes`);
+    }
+    await sleep(2000);
+  }
   // Leaving returns to My Agent.
   await waitForTestId(driver, "MyAgent", 30000);
   await sleep(1500);
