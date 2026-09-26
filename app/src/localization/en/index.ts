@@ -239,9 +239,9 @@ const translation = {
   },
   "Scan": {
     "ScanOnySpecial": "Only special QR codes can be scanned by Keyring.",
-    "ScanOnlySpecial3": "Keyring currently doesn't support adding digital credential by scanning or taking photos of physical ones.",
+    "ScanOnlySpecial3": "Keyring reads your agent's code, a community's code, another Keyring user's contact code, or a vetter's ticket.",
     "WhereToUseLink": "See where you can use Keyring",
-    "BadQRCodeDescription": "Ths QR code scanned doesn't work with Keyring. Keyring only works with participating services.\n\nIt currently can't add digital credentials by taking photos of physical ones."
+    "BadQRCodeDescription": "Keyring can't use this QR code. It reads your agent's code, a community's code, another Keyring user's contact code, or a vetter's ticket."
   },
   "Services": {
     "CatalogueTitle": "Services",

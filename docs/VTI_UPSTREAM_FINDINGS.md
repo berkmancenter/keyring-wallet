@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.37 — 2026-09-23.** A living document: every finding here was measured
+**Version 1.44 — 2026-09-24.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -29,13 +29,13 @@ from a report or an issue always lands on the right entry.
 | [VTI-03](#vti-03) | A `requestMore` join request can never be closed | High | **Resolved upstream** — vti #1591 (`withdraw/0.1`) and #1593 (`supplement/0.1`); **client half built** (bifold `877d26f`), not yet run against a live VTC | A |
 | [VTI-04](#vti-04) | A second application from one DID is refused, not answered | Medium | **Resolved upstream** — vti #1592 names the open request; with #1591/#1593 the applicant can now act on it | A |
 | [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | **Resolved upstream** — `affinidi-tdk-rs` #831 · **Upstream 09-22:** shipped (tdk-rs #831) — confirmed | A |
-| [VTI-06](#vti-06) | A misplaced configuration key is accepted in silence | Low | CORS half answered by #831; general case open · **Upstream 09-22:** needs **our** reproduction — they read it as the CORS half; ours is TOML scoping, repro supplied below | A, re-checked on **C** |
+| [VTI-06](#vti-06) | A misplaced configuration key is accepted in silence | Low | **Fixed upstream** (09-23): mediator (affinidi-tdk-rs #886, mediator 0.29.1) and VTC (VTI #1678) now warn at startup about every ignored key by its full dotted path; the VTA already did. No repro needed | A, re-checked on **C** |
 | [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | **Resolved upstream** — tdk-rs #843; **verified on our stack** (era H) · **Upstream 09-22:** shipped (tdk-rs #843) — confirmed | A, re-measured on **H** |
 | [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | Open — workaround · **Upstream 09-22:** already fixed by vti #1526, an ancestor of our era-G build; **re-run without `RUST_MIN_STACK`** to verify | A |
 | [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | Open · **Upstream 09-22:** already fixed (vti #858, 29 Jul) — the VTA tightens to full documents after a deprecation window; Keyring already sends full, signed documents | A |
 | [VTI-10](#vti-10) | A document's issuer must equal the DIDComm sender | Low | **Confirmed by upstream** — deliberate; specification gap stands · **Upstream 09-22:** declined — design intent, to be documented | A |
 | [VTI-11](#vti-11) | A fresh VTC has an empty ACL and cannot authenticate its own admin | Low | Open · **Upstream 09-22:** shipped — bootstrap runbook, vti #1627 | A |
-| [VTI-12](#vti-12) | A community's advertised transports are fixed at mint | Low | Open · **Upstream 09-22:** needs our repro; vti #1632 (`dids edit` → `get-log` → `cnm did-log install`) may already answer it — test on the new pins | A |
+| [VTI-12](#vti-12) | A community's advertised transports are fixed at mint | Low | **Answered upstream** (09-23): the `dids edit` → `get-log` → `cnm did-log install` flow is the remedy, now documented in one place (VTI #1679); a community on a DID-hosting server needs only the edit. To confirm on the new pins | A |
 | [VTI-13](#vti-13) | A criterion cannot express "no requirements" | Medium | **Corrected** — misattributed; the refusal is `affinidi-openid4vp`'s and spec-correct. Narrowed, and our answer on the shape is inside · **Upstream 09-22:** re-scoped — DCQL stays; the VTC needs a criterion model that admits an empty requirement; their question back: auto-admit or admit-pending-review | A |
 | [VTI-14](#vti-14) | `cnm`'s vetting subcommands ignore `--url` / `VTA_URL` | Low | **Resolved upstream** — vti #1601 · **Upstream 09-22:** shipped (vti #1601) — confirmed | A |
 | [VTI-15](#vti-15) | A VTC DID cannot be used as a `cnm` community | Low | Open · **Upstream 09-22:** shipped (vti #1615) — VTCRest now carries `/v1` for communities minted from now on; **our client must stop appending a second `/v1`** | A |
@@ -48,7 +48,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | Open · **Upstream 09-22:** decided — default stays off; startup warning when policies exist with enforcement off (vti #1633) | A |
 | [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open · **Upstream 09-22:** shipped (vti #1619) — persona mint needs `KeyMint` (initiator holds it); key export is its own admin-only capability; sign via `keys/sign` (Q4) | A |
 | [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579 (with VTI-26); **validated live on era H** with a phone approver · **Upstream 09-22:** shipped (vti #1579) — confirmed | A |
-| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | Open · **Upstream 09-22:** needs **our** reproduction — they find the card still inline in `verdict.with` at both builds; a trace of one admission is asked for | B |
+| [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | **Resolved — ours, not upstream's** (traced 09-24): the `allow` reply has always carried the card inline; Keyring read the credential pushes that arrive *before* it as the reply, and stopped doing so in keyring-bifold 4eddfbd2 (09-17) | B |
 | [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579; **validated live on era H** with a phone approver. Keyring's relay stays as the fallback #1579 itself keeps · **Upstream 09-22:** shipped (vti #1579) — confirmed | B |
 | [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open · **Upstream 09-22:** already fixed (vti #1567, 18 Sep) — typed trust-task-error | B |
 | [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 · **Upstream 09-22:** already fixed (vti #1567, webvh #203) — confirmed | B, re-measured on **C**: gone |
@@ -60,13 +60,13 @@ from a report or an issue always lands on the right entry.
 | [VTI-34](#vti-34--tsp--true-is-inert-on-a-vta-built-without-the-tsp-feature-and-nothing-says-so) | `tsp = true` is inert on a VTA built without the `tsp` feature, and nothing says so | Medium | New · **Upstream 09-22:** shipped (vti #1620) — the VTA refuses to start with `tsp = true` on a build without it | G |
 | [VTI-35](#vti-35--a-vtc-cannot-advertise-the-tsp-service-it-is-able-to-serve) | A VTC cannot advertise the TSP service it is able to serve | Medium | New · **Upstream 09-22:** shipped (vti #1632) — a self-hosted community answers `did-management/did/register`; `cnm did-log install` replaces our DID-log edit | G |
 | [VTI-36](#vti-36--vta-services-tsp-enable-tells-a-self-hosted-vta-to-redeploy-a-log-it-already-serves) | `vta services tsp enable` tells a self-hosted VTA to redeploy a log it already serves | Low | New — documentation · **Upstream 09-22:** shipped (vti #1624) | G |
-| [VTI-37](#vti-37--a-consent-refusal-loses-its-challenge-once-the-approver-set-grows) | A consent refusal loses its challenge once the approver set grows | Medium | New | H |
-| [VTI-38](#vti-38--a-cancelled-relationship-is-forgotten-before-the-vta-can-answer-the-cancel) | A cancelled relationship is forgotten before the VTA can answer the cancel | Low | New | H |
-| [VTI-39](#vti-39--a-tsp-reply-that-fails-to-send-once-is-lost) | A TSP reply that fails to send once is lost | Low | New — observed once | H |
-| [VTI-40](#vti-40--vta-browser-plugin-a-consent-approve-can-be-recorded-as-a-deny) | vta-browser-plugin: a consent Approve can be recorded as a Deny | Medium | New — fix drafted | F |
-| [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | New — cause located to the return leg, not proven | F′ |
-| [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A DIDComm router that has never heard of verbs its own service dispatches (VTC and VTA) | **High** | New — reachable via the binding envelope; the plain-DIDComm arms are the gap | F′ |
-| [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | New — ordering established on both sides of the wire; the drop itself not localised | F′ |
+| [VTI-37](#vti-37--a-consent-refusal-loses-its-challenge-once-the-approver-set-grows) | A consent refusal loses its challenge once the approver set grows | Medium | **Fixed upstream** in VTI #1680 (09-23): the challenge's core members always sent; signed requests omitted whole past 4 KiB and counted by `consentRequestsOmitted`. Client reads the digest from `details` (keyring-bifold#83) | H |
+| [VTI-38](#vti-38--a-cancelled-relationship-is-forgotten-before-the-vta-can-answer-the-cancel) | A cancelled relationship is forgotten before the VTA can answer the cancel | Low | **Fixed upstream** in affinidi-tdk-rs #887 (SDK 0.27.1), adopted by the VTA and VTC in VTI #1693 (09-23) | H |
+| [VTI-39](#vti-39--a-tsp-reply-that-fails-to-send-once-is-lost) | A TSP reply that fails to send once is lost | Low | **Fixed upstream** in affinidi-tdk-rs #883 (SDK 0.26.26, 09-23): the same sealed frame is re-posted on a dropped connection, deduplicated by the mediator; 30 s per request | H |
+| [VTI-40](#vti-40--vta-browser-plugin-a-consent-approve-can-be-recorded-as-a-deny) | vta-browser-plugin: a consent Approve can be recorded as a Deny | Medium | **Fixed upstream**: our patch merged in vta-browser-plugin #272 (09-23), with a grace period and the disclosure window handled too | F |
+| [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | **Fixed upstream** in affinidi-tdk-rs #884 (SDK 0.26.27, 09-23) — the accept was posted to the wrong mediator. **Operator requirement remains:** the receiving mediator must admit the relayed hop (`enable_inter_mediator_relay`, or the sender in `relay_trusted_mediators`) — for the Farm, a Farm-side setting | F′ |
+| [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A DIDComm router that has never heard of verbs its own service dispatches (VTC and VTA) | **High** | **Resolved upstream** in VTI #1687 (09-23): the binding envelope is the intended — and now the only — DIDComm carriage for every verb, on both services; refusals of a task-typed message name the envelope and are threaded. Keyring sends it (keyring-bifold#76) | F′ |
+| [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | **Fixed upstream** in VTI #1675 (09-23): a relationship-control frame now completes before anything the same sender sent after it. Recurred on the Farm before the fix reached it (VTA 0.39.0) | F′ |
 
 ## Stack under test
 
@@ -813,6 +813,34 @@ session an inbox for the rest. **Measured:** vtc-service 0.11.58 (train code
 at `460e0ebb`), 2026-09-18.
 
 
+**Resolved — a Keyring defect, not an upstream change.** Traced from source on
+2026-09-24 at `verifiable-trust-infrastructure` `460e0ebb` (the train code this
+was measured on) and `a96fe02f` (the pin in `scripts/openvtc/PINS.json`), both
+read in the pinned `external/` clone:
+- The `allow` reply carries the card inline at both commits.
+  `trust_tasks/mod.rs` `outcome_to_verdict` returns
+  `VerdictResponse::allow(request_id, role, Some(vmc), Some(role_vec))` on
+  auto-admit. The DIDComm handler (`messaging.rs`
+  `join_request_submit_handler`) runs through the same
+  `dispatch_trust_task_core` as REST, so the transport makes no difference.
+- The two `credential-exchange/issue` messages are real, and they are sent
+  **first**. `join/orchestrate.rs` awaits
+  `credentials::delivery::deliver_membership_credentials` inside the submit,
+  before the handler builds its reply. So the pushes leave the community
+  before the `#response`.
+- Until keyring-bifold `4eddfbd2` (2026-09-17), Keyring took the first message
+  after a send as that send's reply. It read an `issue` message as the verdict
+  and found no card in it. That is the measurement above, "role first"
+  included. Since `4eddfbd2` Keyring matches a reply by `#response` type (or a
+  trust-task error), and gives the rest to the community session's inbox. It
+  takes the card from `verdict.with.vmc` when present
+  (`vtiJoin.membershipFromVerdict`) and from the delivery otherwise.
+
+This is what upstream suggested (reply matching). No upstream change is asked
+for. Not re-measured live: a Farm admission logging the raw reply's `verdict`
+keys would confirm it, and can be run outside a gate window if anyone wants
+the measurement.
+
 ### VTI-26 — A consent request is pushed only to a `did:key` approver; every other approver needs the requester to relay
 
 *Measured on era **B** (see [Stack under test](#stack-under-test)).*
@@ -1485,7 +1513,24 @@ deadline sits at 10 s with roughly five times headroom. Related: [VTI-27](#vti-2
 and [VTI-39](#vti-39), both about answers that are produced and never reach the
 client.
 
+**Recurrence on the VTA Farm (2026-09-23).** The same shape, intermittent, against
+the Farm's runner VTA (`keyring-runner-vta`, `vta-keyring-runner.ic3.dev`) and not
+the lab: an Android emulator (AVD `API36_S25_B`, `emulator-5554`), Release APK
+(bundle `b55847a4579e`), manual link. The **first**, pre-grant "I've been added"
+at 17:44:28.6Z got **no answer at all**: the phone showed *"… didn't answer"*
+(`VtaLinkNoAnswer`), not the "not yet" a refusal produces. The run failed at
+17:45:31Z. The very next run, on the same emulator, build and VTA, linked
+normally. The Farm VTA's own log is not ours to read, so the VTA-side ordering
+that would make this VTI-43 is **not observed here**. It is classified by its
+shape, which is the one measured on both sides in the lab: a first ask
+unanswered, a later one answered. The failing run captured no app log (the
+passing one did), so the phone-side gap between greeting and ask is not
+measured either. The client's re-send on the relationship's accept (see (d))
+was in this build.
+
 ### VTI-42 — A DIDComm router that has never heard of verbs its own service dispatches (a community's, and a VTA's)
+
+> **Resolved upstream, 2026-09-23**, by verifiable-trust-infrastructure#1687 (`fix(vtc)!: a Trust Task over DIDComm rides the binding envelope only`), which names this finding. Upstream took the other branch of the choice below: rather than teaching the router the missing task-typed arms, it removed all twelve, so the binding envelope is the **only** DIDComm carriage for a Trust Task and a task-typed message gets a threaded problem-report. That is a breaking change for any client that sent task-typed. Keyring's community leg moves to the envelope in keyring-bifold#76, which was measured joining the Farm test community with it. Replies are still typed as the document; binding §5's envelope-typed reply is deferred upstream, and Keyring reads both.
 
 (a) **What happens.** An applicant with an open request is told by the community
 itself to close it with `vtc/join-requests/withdraw/0.1`. Sent as a DIDComm
@@ -1768,6 +1813,34 @@ advertises `#tsp` when its mediator carries TSP (vti #1652). Q7 and Q9 are route
 to the Farm operators. Q8 we answered ourselves. EXT-01: agreed, it is
 credo-ts's.
 
+## Upstream's response, round 3 (2026-09-23)
+
+The maintainers answered VTI-37 to VTI-43 and the open questions in one reply,
+with fixes merged the same day. In our own words, and by their public changes:
+
+- **Fixed:** VTI-37 (VTI #1680), VTI-38 (affinidi-tdk-rs #887, VTI #1693),
+  VTI-39 (affinidi-tdk-rs #883), VTI-40 (vta-browser-plugin #272, our patch),
+  VTI-41 (affinidi-tdk-rs #884), VTI-43 (VTI #1675), and VTI-06 (affinidi-tdk-rs
+  #886, VTI #1678). VTI-42 is by design: the envelope is the only DIDComm
+  carriage, and VTI #1687 made that true on both services.
+- **VTI-41 leaves an operator setting.** The receiving mediator must admit a
+  relayed hop (`enable_inter_mediator_relay`, or the sending mediator in
+  `relay_trusted_mediators`). On the VTA Farm that is the Farm's setting to make;
+  until it is, a TSP frame across the Farm's mediators is refused (now with a
+  logged 401 rather than silence), and Keyring stays on DIDComm there.
+- **Pins that carry the fixes:** verifiable-trust-infrastructure `main` at or
+  after `b07feb4e` (`vta-service` 0.41.0; `vtc-service` still reports 0.11.58, so
+  a VTC is pinned by commit), affinidi-messaging-sdk 0.27.1, mediator ≥ 0.29.1,
+  trust-tasks 0.22.3. **The Farm is behind them** as measured on 2026-09-23: VTA
+  0.39.0, mediator 0.28.36 — so VTI-39, VTI-41 and VTI-43 are fixed upstream but
+  not yet on the Farm, and Farm results until it catches up still show them.
+- **Wire notes for clients:** `consentRequestsOmitted` is a new, additive member
+  of `auth:consent_required` details; registry publication follows
+  `registryConsent`; and VTC replies to an enveloped request will later carry the
+  envelope `type` — a client that correlates by thread or by the document inside
+  (as Keyring does since keyring-bifold#76) is unaffected.
+- ~~**Still owed by us:** a trace of one admission for VTI-25.~~ Done 2026-09-24, from source: the inline card was there all along, and Keyring's old reply matching read the credential pushes that precede it as the reply. See VTI-25.
+
 ## Open questions and requests
 
 Not defects — things we would like answered or changed, kept here so one link
@@ -1781,18 +1854,25 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q4 | Is borrowing a persona's signing key from the VTA the expected pattern for signing a Vetting Card (D19), or should the VTA sign it? | We borrow, as the reference client does; confirming it settles our custody model. |
 | VTI-Q5 | Is a Trust Task that links an `openvtc` request to a Keyring device something you would like drafted? | Raised in conversation; we would write it if wanted. |
 | VTI-Q6 | Does a dry-run gate assume the applicant stores the vetter's statement in the VTA vault (`purpose: vetting`) rather than on the device? | We hold it on the device today. |
-| VTI-Q7 | Could our persona be admitted to the Farm community's (`vtc.ic3.dev`) access list — or is a Full Stack share code the intended route onto a community? | The wallet now connects to our Farm VTA; the community answers `DID not in ACL`, which is the only thing between us and a ceremony on Farm infrastructure. |
+| VTI-Q7 | Could our persona be admitted to the Farm community's (`vtc.ic3.dev`) access list — or is a Full Stack share code the intended route onto a community? | The wallet now connects to our Farm VTA; the community answers `DID not in ACL`, which is the only thing between us and a ceremony on Farm infrastructure. **09-23:** a Farm-portal matter; upstream has passed it to the Farm operators. |
 | ~~VTI-Q8~~ | ~~Will the Farm's mediator be advanced (it reports 0.26.4; VTA and VTC are current)?~~ | **Answered 2026-09-22:** `mediator.ic3.dev` reports **0.28.23**, newer than the lab's 0.28.11, and its DID advertises `TSPTransport`. See [Era F re-measured](#stack-under-test). |
-| VTI-Q9 | Is Full Stack mode (a community of one's own) coming to the staging Farm, which offers VTA Only today? | The vetting ceremony needs a community we administer — publishing criteria, granting a vetter, provoking refusals. **Answered in part 2026-09-22:** Full Stack exists and is enabled **per account** by the Farm operator — the create wizard shows Mode as a fixed *VTA Only* chip, while the portal code carries the whole `full_stack` path (`vtafarm` `693d519` `src/lib/api.ts` `SetupMode`, and the `step_vtc_setup`/`deploy_vtc` status chain). Ours was enabled on request and we now run a Full Stack (`keyring-stack`). A VTA-Only account joins someone else's stack with an **invite code**, pasted under *Customize → Share code*; manual entry of a non-Farm stack's DID host and mediator "may come later". The remaining ask is whether maintainers get Full Stack on request, and what to tell them in a hand-off. |
-| VTI-Q10 | Could provisioning a VTA take its admin DID from a phone — a QR the phone scans, or a provisioning API — instead of a paste into the console? | A phone cannot paste into a browser it is not running; our own stack script labels the same step "the paste a QR would replace". Useful to any headless client, and to CI. **Measured on the Farm, 2026-09-22 ([details](#question-details)):** there is still no scannable "link a client" offer; the linking is `pnm acl create` or the browser client's paste-only *Grant access* form. |
+| VTI-Q9 | Is Full Stack mode (a community of one's own) coming to the staging Farm, which offers VTA Only today? | The vetting ceremony needs a community we administer — publishing criteria, granting a vetter, provoking refusals. **Answered in part 2026-09-22:** Full Stack exists and is enabled **per account** by the Farm operator — the create wizard shows Mode as a fixed *VTA Only* chip, while the portal code carries the whole `full_stack` path (`vtafarm` `693d519` `src/lib/api.ts` `SetupMode`, and the `step_vtc_setup`/`deploy_vtc` status chain). Ours was enabled on request and we now run a Full Stack (`keyring-stack`). A VTA-Only account joins someone else's stack with an **invite code**, pasted under *Customize → Share code*; manual entry of a non-Farm stack's DID host and mediator "may come later". The remaining ask is whether maintainers get Full Stack on request, and what to tell them in a hand-off. **09-23:** a Farm-portal matter; passed to the Farm operators. |
+| VTI-Q10 | Could provisioning a VTA take its admin DID from a phone — a QR the phone scans, or a provisioning API — instead of a paste into the console? | A phone cannot paste into a browser it is not running; our own stack script labels the same step "the paste a QR would replace". Useful to any headless client, and to CI. **Measured on the Farm, 2026-09-22 ([details](#question-details)):** there is still no scannable "link a client" offer; the linking is `pnm acl create` or the browser client's paste-only *Grant access* form. **Answered 2026-09-23:** yes — the enrolment ceremony will be built into the VTA as Trust Tasks (a short-lived offer shown as a QR, the phone's authcrypt submission as proof of possession, an admin-confirmed short code, the ACL entry written atomically), keeping our offer shape and code derivation where they fit. Spec draft to follow. |
 | VTI-Q11 | Should a persona minted by a TSP-capable VTA advertise `TSPTransport` in its own document? | Personas advertise only DIDComm today, so a Rev 3 client reading the document keeps the applicant ↔ vetter leg on DIDComm. |
-| VTI-Q12 | Could a community issue an **open invitation** — one not bound to a subject DID in advance (a bearer or by-reference credential, redeemed by whichever persona presents it)? | A person invited to a community has no persona yet: the admin's `invitations` route needs a `subject_did` (`vtc-service/src/routes/invitations.rs:40-44`), so today the phone must mint a community identity first and show it to the admin before being invited. `subjectLinkage` (`invitation_verify.rs:198-236`) lets a different DID redeem, but links the two at the community. An open invitation — with VTI-32's by-reference delivery — would let "I was invited to X" start from the invitation itself. Keyring's decision for now (2026-09-22) is to send the community identity; this is the ask. **Also on the Farm (2026-09-22, [details](#question-details)):** the hosted admin console's *Invitations* needs an invitee DID too, so there is no open or bearer invitation from the console either. |
-| VTI-Q13 | Which sign-in should a community administrator use in the admin console, and could the console say so? | Plain *Sign in with VTA wallet* presents the browser client's holder `did:key`; only *VTA-proxied SIOP* presents the VTA DID that the community's access list names. Nothing on the page tells an administrator which one works. [Details](#question-details). |
-| VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). |
+| VTI-Q12 | Could a community issue an **open invitation** — one not bound to a subject DID in advance (a bearer or by-reference credential, redeemed by whichever persona presents it)? | A person invited to a community has no persona yet: the admin's `invitations` route needs a `subject_did` (`vtc-service/src/routes/invitations.rs:40-44`), so today the phone must mint a community identity first and show it to the admin before being invited. `subjectLinkage` (`invitation_verify.rs:198-236`) lets a different DID redeem, but links the two at the community. An open invitation — with VTI-32's by-reference delivery — would let "I was invited to X" start from the invitation itself. Keyring's decision for now (2026-09-22) is to send the community identity; this is the ask. **Also on the Farm (2026-09-22, [details](#question-details)):** the hosted admin console's *Invitations* needs an invitee DID too, so there is no open or bearer invitation from the console either. **Answered 2026-09-23:** yes, as a community **policy** decision rather than a wire change: bearer invitations off by default; the join policy sees the invitation kind and any second factor; spec-first. |
+| VTI-Q13 | Which sign-in should a community administrator use in the admin console, and could the console say so? | Plain *Sign in with VTA wallet* presents the browser client's holder `did:key`; only *VTA-proxied SIOP* presents the VTA DID that the community's access list names. Nothing on the page tells an administrator which one works. [Details](#question-details). **Answered 2026-09-23:** the console's buttons now say which identity each presents (VTI #1679). **Correction to our premise:** since vta-browser-plugin #146 the first button presents the identity bound to that site, or asks; the holder key is only the fallback for older wallets. |
+| VTI-Q14 | What does `registryConsent` on `join-requests/submit` grant, and should a client ask the person for it? | It is stored on the request and shown in the console, but nothing acts on it, and the submit spec defines the field without saying what it grants. [Details](#question-details). **Answered 2026-09-23 — a real defect, fixed:** `registryConsent` was stored and never read (VTI #1682), and the registry published every member regardless (VTI #1691). Publication now follows consent. **The client must ask the person.** On the Farm (2026-09-23, `keyring-test-vtc`, VTC 0.11.58, before #1691) this cannot be seen either way: no trust registry is configured (`GET /v1/registry/records` → 503 *no trust registry is configured for this community*; `/health/diagnostics` shows `syncerEnabled: false`), so nobody is published, consenting or not. All 8 members hold `publishConsent: false`. |
 | ~~VTI-Q15~~ | ~~Does `first-vtc` serve TSP Rev 3 today, and are the Farm and storm mediators on each other's relay allowlists?~~ | **Promoted to [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) (2026-09-22).** The community serves TSP (same-mediator control: accept in 1.15 s); an accept is never returned across two mediators; the allowlist is not the cause under defaults. |
-| VTI-Q16 | Could a community's manifest, or the VTA and mediator documents, say whether the operator of a member's VTA and of the mediator differs from the VTC's operator, so a client can tell a vetter whether hidden-mode anonymity holds for them? | The hidden-vetter design makes it a deployment rule that the vetter's VTA and the mediator are not run by the VTC's operator: a vetter's VTA can compute every tag its user produces. Nothing a client can read says which operator runs what, so a Farm hosting both a member's VTA and the community's VTC would silently void anonymity. [Details](#question-details). |
-| VTI-Q17 | Could `vta/webvh/dids/create/1.0` take an idempotency key — a retry returning the first mint — or `vta/webvh/dids/list/1.0` carry the label the client sent and the minted keys' ids? | A mint whose answer is lost succeeds at the VTA and fails for the person (measured three times: on the Farm, in the lab, and on a real phone running a shipped build). The client cannot recover it: the list route's record (`vta-sdk/src/webvh.rs` `WebvhDidRecord`) carries neither the label nor the key ids it needs to borrow, so a retry is the only move and it leaves an orphan DID on the VTA and the DID host. [Details](#question-details). |
-| VTI-Q18 | Could the Full Stack wizard echo the admin DID it imported, and label which component each admin key is for? | The Admin DID step accepts any `did:key` and shows nothing back. A key meant for the VTC was pasted there and became the stack VTA's admin; the mistake surfaced only when the first `pnm` call was refused ("DID not in ACL … has your admin run `vta import-did …`?"). An echo on the session page, and in the Collected DIDs card, would make the step checkable. [Details](#question-details). |
+| VTI-Q16 | Could a community's manifest, or the VTA and mediator documents, say whether the operator of a member's VTA and of the mediator differs from the VTC's operator, so a client can tell a vetter whether hidden-mode anonymity holds for them? | The hidden-vetter design makes it a deployment rule that the vetter's VTA and the mediator are not run by the VTC's operator: a vetter's VTA can compute every tag its user produces. Nothing a client can read says which operator runs what, so a Farm hosting both a member's VTA and the community's VTC would silently void anonymity. [Details](#question-details). **09-23:** noted in upstream's hidden-vetting design; no change yet. |
+| VTI-Q17 | Could `vta/webvh/dids/create/1.0` take an idempotency key — a retry returning the first mint — or `vta/webvh/dids/list/1.0` carry the label the client sent and the minted keys' ids? | A mint whose answer is lost succeeds at the VTA and fails for the person (measured three times: on the Farm, in the lab, and on a real phone running a shipped build). The client cannot recover it: the list route's record (`vta-sdk/src/webvh.rs` `WebvhDidRecord`) carries neither the label nor the key ids it needs to borrow, so a retry is the only move and it leaves an orphan DID on the VTA and the DID host. [Details](#question-details). **Answered 2026-09-23:** the VTA already accepts a signed top-level `idempotencyKey` on `vta/webvh/dids/create/1.0` (same key within 24 h returns the first mint); to be specified. Keyring sends one per community, reused across retries (keyring-bifold#83). VTI-39's fix should make the lost answer rare. |
+| VTI-Q18 | Could the Full Stack wizard echo the admin DID it imported, and label which component each admin key is for? | The Admin DID step accepts any `did:key` and shows nothing back. A key meant for the VTC was pasted there and became the stack VTA's admin; the mistake surfaced only when the first `pnm` call was refused ("DID not in ACL … has your admin run `vta import-did …`?"). An echo on the session page, and in the Collected DIDs card, would make the step checkable. [Details](#question-details). **09-23:** a Farm-portal matter; passed to the Farm operators. |
+| VTI-Q19 | A VTA answered *not in ACL* for three minutes to a key its ACL already held. Is there a window in which a newly created ACL entry is not yet honoured, or can a refusal be kept for a session or relationship? | Seen once on the Farm, then gone on the retry. A person who has been added is told they have not been, and nothing tells them to wait. Details: [VTI-Q19](#vti-q19-detail). |
+| VTI-Q20 | Which name should a client show for an agent: a verified agent-name shortcut, or the operator's `vta_name`? | Raised in the round-3 report as *Q19* (a different question from this doc's VTI-Q19). **Answered 2026-09-23:** trust the verified agent-name shortcut (`example.com/@name`); `vta_name` (from `config/show`, authenticated) is an operator-set label — show it beside the DID, not instead of it. |
+| VTI-Q21 | How does a member ask what the community holds for it — its membership and role credentials — after a lost push? | Raised in the round-3 report as *Q20*. **Answered 2026-09-23:** a member-side task, `vtc/members/self/credentials/0.1` (no payload, returns the member's own credentials as held), is planned — spec first. |
+| VTI-Q22 | Now that publication follows consent, how does a member withdraw (or give) their own registry consent after admission? | Only the admin verb `vtc/members/update` can set `publishConsent`; there is no member-side task short of leaving (`members/self-remove`, which tombstones the row). [Details](#question-details). |
+| VTI-Q23 | Could a client remove its own ACL entry when it stops using an agent, so unlinking leaves nothing behind? | `delete_acl` refuses the caller's own entry (409 *cannot delete your own ACL entry*) whatever its role, and no self-service verb removes one; `swap_acl` only rotates. Keyring's Unlink therefore forgets the key on the phone and says the entry stays until the agent's owner removes it. [Details](#question-details). |
+| VTI-Q24 | Could a vetter that refuses an applicant's Vetting Card tell the applicant, instead of only logging it? | openvtc's vetter logs *vetting card refused* and answers nothing, so the applicant reads "Card sent — the vetter is checking" and the vetter's screen stays on "waiting for their card". Neither side can see why. [Details](#question-details). |
+| VTI-Q25 | Can a community offer admission by invitation OR by vetting? And can an admin admit an applicant who is waiting for vetting? | A community that publishes any vetting criterion requires vetting of everyone. An invitation neither bypasses it nor can be chosen as the criterion, although the manifest lists both as if either would do. `decide` refuses a Deferred request, so an admin cannot admit that applicant either. [Details](#question-details). |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -1959,10 +2039,154 @@ they pasted finds a different super admin, created by it. This is the same
 temp-then-rotate model Keyring uses when a phone links a VTA.
 
 
+
+<a id="vti-q19-detail"></a>
+**VTI-Q19 — a VTA refused a key its ACL already held.**
+(a) iOS simulator (`iPhone 17 UIUX gate`), Release build (bundle `657b326466eb`), manual link against the Farm's runner VTA (`keyring-runner-vta`), 2026-09-23. The first "I've been added", at 17:31:27.488Z, answered *"Your agent doesn't accept this phone yet"* (`VtaLinkNotYet`). That was correct: nothing had been granted. The runner then created the ACL entry (`pnm acl create … --role admin`, "ACL entry created"), and it is still listed by `pnm acl list --full-display`. The key granted is the key the phone showed, both halves of the `did:peer:2` identical. The next "I've been added", at 17:31:42.618Z, and every check after it until the run's 180 s deadline (about 17:34:44Z), answered the **same refusal**. The next run, on the same simulator, build and VTA, linked normally. Expected: once the entry exists, the next sign-in is admitted.
+This is **not** [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives). There an answer is produced and lost; here an answer arrives, and it is the wrong one.
+(b) Not reproducible on demand: it happened once in two runs, and the retry passed. `e2e/run-vta-link.js` with `LINK_MODE=manual`, `RUNNER_VTA=farm-runner`, and a long wait after the grant, is what showed it.
+(c) Unobserved: the Farm VTA's log. Without it we cannot say whether the refusal was computed afresh against an ACL that did not yet show the entry, or was served from state kept for the session or the TSP relationship opened before the grant. The failing run captured no app log.
+(d) The client's "I've been added" re-asks on every tap, so a person who tries again after a pause can get through. A mint of a new temporary key is not involved: the key was checked.
+
+**VTI-Q22 — a member cannot change their own registry consent.**
+(a) Since VTI #1682 and #1691 (VTI-Q14), a member's `registryConsent` on
+`join-requests/submit` becomes `Member.publishConsent`, and the registry
+publishes only members whose flag is `true`. The trust-registry guide's
+"Consent can change after admission" describes a withdrawal (`true → false`)
+removing the record on the next sync tick. But only an admin can make that
+change: `vtc/members/update` is the one task that writes `publishConsent`, and it
+is admin-gated. A member who consented at admission and later changes their mind
+has two options: ask an admin, or leave the community with
+`members/self-remove`, which tombstones the row and clears the flag with
+everything else. Expected: a member-side task that sets the member's own
+`publishConsent` (and possibly `departurePreference`, which has the same gate),
+consistent with #1691's position that consent is the applicant's to give.
+(b) Read from source, not yet measured against a running VTC: admit a member
+with `registryConsent: true`, then, authenticated as that member, look for a
+task that sets `publishConsent: false`. There is none, and `members/update`
+takes `AdminAuth`. The Farm's VTCs (0.11.58) predate #1691, and
+`keyring-test-vtc` has no registry configured, so the published effect cannot be
+observed there.
+(c) At `verifiable-trust-infrastructure` `e2a669ab`: the handler takes
+`auth: AdminAuth` (`vtc-service/src/routes/members/update.rs:93-99`) and writes
+the flag at `:159-168`; its Trust Task shares the `members/{did}` mount
+(`vtc-service/src/routes/mod.rs:294-298`); the spec states the admin gate
+(`trust-tasks/members/update/1.0/spec.md`, "`AdminAuth`. Phase 1 keeps a uniform
+admin gate"); `vtc-service/src/registry/mod.rs:10-18` names the only two
+sources of the flag (the applicant's submit, or an admin `members/update`);
+`docs/03-vtc/trust-registry.md` "Consent can change after admission". The only
+member-side exit is `trust-tasks/members/self-remove/1.0`.
+(d) Keyring is adding an opt-in to its apply step, off by default. Its copy has to
+say that only a community admin can remove the listing later, and a
+self-service switch in the member's settings waits on this.
+
+**VTI-Q23 — a client cannot remove its own ACL entry.**
+(a) A person who unlinks their phone from their agent should leave nothing
+behind on that agent. The phone holds the only copy of its manager key and can
+forget it, but the agent's ACL keeps the entry until the agent's owner deletes
+it. The phone cannot delete its own entry: `delete_acl` refuses one whose
+subject is the caller, whatever the caller's role, admin included. The only
+self-service ACL verb is `swap_acl`, which moves the caller's entry to a new key
+and removes nothing. Expected: a way for a client to give up its own access,
+either a self-service remove task (the mirror of `swap_acl`, with no
+`require_manage`), or `delete_acl` allowing `auth.did == did` except for the
+last admin. The browser plugin's "Forget" has the same limit: it deletes its
+local holder record and leaves the ACL entry.
+(b) From source, not yet sent from the phone: an authenticated client calls
+`acl/delete` with its own DID and gets 409 *cannot delete your own ACL entry*.
+(c) At `verifiable-trust-infrastructure` `e2a669ab`:
+`vta-service/src/operations/acl.rs` `delete_acl`, right after
+`auth.require_manage()`: `if auth.did == did` → `AppError::Conflict("cannot
+delete your own ACL entry")`. Present since the initial import (`22f94080`,
+2026-02-26), so the Farm's VTA 0.39.0 behaves the same. `swap_acl` just below it
+is the self-service rotation. Plugin: `packages/extension/src/offscreen.ts`
+`doForgetHolderRecord` (local only).
+(d) Keyring's "Unlink this agent" (keyring-bifold `feat/unlink-agent`) is local
+only. It closes the session, forgets the stored link and the phone's manager
+key, and tells the person that the agent may still list this phone until its
+admin removes it, and that the entry can't be used because the phone has
+forgotten the key. With a self-remove verb it would make that call first and
+drop the sentence.
+
+**VTI-Q24 — a refused Vetting Card is refused silently.**
+(a) When an openvtc vetter cannot accept an applicant's card (a commitment
+that does not verify, an expired or over-long card, a card for a replaced
+session), it logs a warning and does nothing else. The applicant gets no
+answer, and the vetter's desk shows no change. On 2026-09-24 a run looked
+exactly like that: an openvtc vetter and a Keyring 219 applicant,
+five cards sent, the desk stuck on "waiting for their card", and the vetter
+reopening the session to try again. The cause was Keyring's
+(keyring-bifold#108: the card's identity commitment hashed an extra member).
+But nothing either person could see pointed to it, and it took reading both
+codebases to find. Expected: a refusal the applicant receives, a
+`trust-task-error` threaded on the session with a stable code (for example
+`commitmentMismatch`, `expired`, `sessionReplaced`), and a line on the
+vetter's desk saying a card arrived and was refused.
+(b) From source, not reproduced live: send a card whose `identityCommitment`
+does not match `{ type, value }` over the required claims. The vetter logs
+the refusal; no message goes back, and the desk entry stays in its session
+state.
+(c) At `openvtc` `177a218`: `openvtc-core/src/vetting/inbound.rs`, the card
+handler. `Err(e) => { warn!(%sender, error = %e, "vetting card refused");
+Handled::default() }`: no notice, no reply. The check itself is VTI's
+`verify_card` (`vta-sdk/src/vetting/card.rs`, at `a96fe02f`). The other
+refusals in the same file follow the same pattern.
+(d) Keyring's applicant can only show what it hears. With a refusal it would
+say "The vetter couldn't accept your card" and offer to send it again or
+start over, instead of "the vetter is checking" indefinitely.
+
+**VTI-Q25 — "invitation OR vetting" cannot be offered, and a deferred applicant cannot be admitted.**
+(a) A community publishing two criteria, an invitation (`invited-member`) and
+one vetter's statement (`vetted-member`), shows applicants both in its
+manifest, as if either would do. On VTI, vetting is required of everyone:
+- an applicant presenting a valid, trusted, unconsumed InvitationCredential
+  issued by the community itself gets `request_more` with
+  `vetting:statements:1`, and the request is stored Deferred;
+- naming the invitation criterion's `requirementsDigest` changes nothing;
+- the admin cannot move it on: `join-requests/{id}/decide` answers
+  `409 vtc/join-requests/decide:notPending`, because decide takes only
+  Pending requests.
+So the invitation path in the manifest is not reachable while a vetting
+criterion exists. Expected, either of:
+- criteria are alternatives: an applicant who meets any one criterion is
+  admitted, and names which one with `requirementsDigest`;
+- or criteria are cumulative, and the manifest says so, so that a client does
+  not present an invitation as enough.
+And separately, a way for an admin to admit or reject a Deferred request.
+(b) On the Farm, read with the admin API, 2026-09-24 (`keyring-test-vtc`,
+VTC 0.11.58):
+- seven invitation joins since 2026-09-22 are all Deferred with
+  `request_more` / `vetting:statements:1`, each carrying one InvitationCredential
+  for its own applicant;
+- `decide approved` on one of them returned 409 `notPending`;
+- the same submission shape was admitted on 2026-09-23 while the vetting
+  criterion had been removed.
+(c) At `verifiable-trust-infrastructure` `a96fe02f`:
+- `vtc-service/policies/default/join.rego`, header: *"when the community's
+  join criterion requires peer identity vetting, admission waits on it — …
+  neither an invitation nor a trusted credential bypasses them"*;
+- `vtc-service/src/vetting/mod.rs` `vetting_facts` projects only criteria with
+  `vetting`, and `select_criterion` falls back to the first of them, so a
+  digest naming a non-vetting criterion is ignored;
+- the decide route refuses anything that isn't Pending.
+(d) Keyring now says what the community decided, not "You're a member"
+(keyring-bifold, 220): "needs a vetter's statement", with the way into
+vetting. It no longer describes an invitation as enough on a community that
+vets. Keyring's harness checks the community's answer. The cause of Keyring
+showing "member" was ours, and it is fixed. This question is only about what a
+community can offer.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
+| 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
+| 1.42 | 2026-09-24 | **VTI-25 resolved as ours.** Traced from source at `460e0ebb` and `a96fe02f`: the `allow` reply carries the card inline on every transport, and the two `credential-exchange/issue` pushes are awaited inside the submit, so they arrive *before* the reply. Keyring took the first message after a send as the reply until keyring-bifold `4eddfbd2` (09-17). No upstream change asked; not re-measured live. |
+| 1.41 | 2026-09-24 | **VTI-Q23** (new): a client cannot remove its own ACL entry (`delete_acl` refuses `auth.did == did`, since the initial import), so unlinking a phone leaves its entry on the agent until the owner removes it. Read from source at `e2a669ab`. Keyring's Unlink forgets the key locally and says so. |
+| 1.40 | 2026-09-23 | **VTI-Q22** (new): after #1691 publication follows a member's consent, but only the admin verb `vtc/members/update` can change it after admission; no member-side task exists short of `members/self-remove`. Read from source at `e2a669ab`. **VTI-Q14**: on the Farm's `keyring-test-vtc` (VTC 0.11.58, before #1691) no trust registry is configured, so nobody is published; all 8 members hold `publishConsent: false`. |
+| 1.39 | 2026-09-23 | **Upstream's round-3 response recorded.** Fixed upstream: VTI-37, -38, -39, -40, -41, -43 and VTI-06 (with their public changes); VTI-42 by design (envelope only). VTI-41 leaves a Farm-side mediator setting. VTI-12 answered (to confirm); VTI-25's trace still owed. Answers to VTI-Q10, Q12, Q13 (with a correction to our premise), Q14 (a real defect, fixed), Q16, Q17; Farm-portal questions Q7/Q9/Q18 passed to the Farm operators. **New VTI-Q20** (agent naming) and **VTI-Q21** (a member's own credentials), raised as Q19/Q20 in the round-3 report. New section on the pins and the Farm lag. |
+| 1.38 | 2026-09-23 | **VTI-42 resolved upstream** by verifiable-trust-infrastructure#1687: the binding envelope is now the only DIDComm carriage, and Keyring moves to it in keyring-bifold#76. **VTI-43 recurred on the Farm**: an Android first check got no answer and the retry linked; the VTA side is unobserved. **New VTI-Q19**: a Farm VTA answered *not in ACL* for three minutes to a key its ACL held, and the retry passed. |
 | 1.37 | 2026-09-23 | **VTI-Q17 gains its third occurrence, and its first outside testing**: a person joining a community on a shipped build saw "the VTA did not answer …/dids/create/1.0" at the "Who are you joining as?" step, on a real phone against their own Farm VTA. The retry worked, as it has every time. The question is no longer about something we hit while testing — the lost answer is on the ordinary first-run path, and an orphan DID is left behind each time. |
 | 1.36 | 2026-09-22 | **VTI-42 extended to `vta-service`**: a VTA answers a task-typed `auth/whoami/0.1` with "unsupported message type" and serves the identical request inside the binding envelope, returning the proper `permissionDenied` refusal. Same defect, same remedy, second service — folded in rather than numbered separately, and the finding retitled so it does not read as VTC-only. |
 | 1.35 | 2026-09-22 | **VTI-43**: a VTA's reply to a first Trust Task is dispatched before it accepts the TSP relationship that would carry it, and is never received. Measured on both sides of the wire: the refusal dispatched at `.638`, the relationship `Bidirectional` at `.966`, nothing at the phone — against the same three events in the opposite order eleven seconds later in the same log, 4 ms apart, answering 200 OK. It costs every flow whose first task is deliberately sent before authorisation, which is exactly Keyring's no-QR link ("not yet" never appears). Granting first passes on the same build and device. The drop is not localised without a wire capture. Client side: re-send the first ask when the peer's accept lands (~330 ms), and fall back to DIDComm for a VTA that never answers TSP, on a 10 s deadline measured from a 1.76 s healthy first task. |

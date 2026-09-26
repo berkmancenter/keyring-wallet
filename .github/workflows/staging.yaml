@@ -4,6 +4,12 @@ on:
   push:
     branches: [staging]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Which store builds to run (a rerun of one failed platform need not rebuild the other)
+        type: choice
+        options: [both, android, ios]
+        default: both
 
 permissions:
   contents: read
@@ -140,10 +146,12 @@ jobs:
   build-android-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
     # Repository variable DEPLOY_ANDROID=false switches the platform off.
-    if: vars.DEPLOY_ANDROID != 'false'
+    # A manual run can build one platform only (inputs.platform is empty on push).
+    if: vars.DEPLOY_ANDROID != 'false' && inputs.platform != 'ios'
     runs-on: ubuntu-22.04
     environment: internal
-    timeout-minutes: 60
+    # Four ABIs of native code; 60 min left no margin.
+    timeout-minutes: 90
     env:
       APP_VERSION: ${{ needs.extract-version.outputs.app_version }}
       APP_BUILD_NUMBER: ${{ needs.calculate-build-number.outputs.build_number }}
@@ -389,21 +397,10 @@ jobs:
           find bifold/packages -type f -name "*.map" -delete 2>/dev/null || true
           find bifold/packages -type f -name "*.d.ts.map" -delete 2>/dev/null || true
 
-          # Clean up large node_modules that aren't needed for Android build
-          # Keep only what's needed for Metro bundling and native builds
-          # CRITICAL: Do NOT delete android/ or ios/ directories - Gradle needs them for native modules!
-          # Remove test directories and files (not needed for runtime/bundling, but exclude native dirs)
-          find . -path "*/node_modules/*" -type d -name "__tests__" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type d -name "test" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type d -name "tests" ! -path "*/android/*" ! -path "*/ios/*" -exec rm -rf {} + 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.test.js" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.spec.js" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          # Remove documentation files (not needed for runtime/bundling, but preserve CMakeLists.txt and native dirs)
-          find . -path "*/node_modules/*" -type f -name "*.md" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "*.txt" ! -name "CMakeLists.txt" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "LICENSE*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "CHANGELOG*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
-          find . -path "*/node_modules/*" -type f -name "README*" ! -path "*/android/*" ! -path "*/ios/*" -delete 2>/dev/null || true
+          # Never delete files inside node_modules by name: a folder called
+          # "test" can be runtime code (@openvtc/trust-tasks exports
+          # dist/vtc/policies/test/, and deleting it broke build 220's bundle).
+          # There is ~96 GB free at this point; those deletions saved nothing.
 
           # Clean up yarn cache (if not already cleaned)
           yarn cache clean 2>/dev/null || true
@@ -489,12 +486,26 @@ jobs:
 
             export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
 
-            echo "Accepting Android SDK licenses..."
-            yes | sdkmanager --licenses > /dev/null 2>&1 || true
+            echo "Accepting licenses and installing below."
 
-            echo "Installing Android SDK components..."
-            sdkmanager "platform-tools" "platforms;android-35" "build-tools;33.0.2" "ndk;25.1.8937393" > /dev/null 2>&1 || true
           fi
+
+          # Install exactly what the app declares (android/build.gradle), and
+          # fail here if it can't, instead of letting Gradle find out later.
+          NDK=$(sed -n 's/.*ndkVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          SDK=$(sed -n 's/.*compileSdkVersion *= *\([0-9]*\).*/\1/p' build.gradle)
+          BT=$(sed -n 's/.*buildToolsVersion *= *"\([^"]*\)".*/\1/p' build.gradle)
+          CMAKE=$(sed -n '/cmake *{/,/}/s/.*version *"\([^"]*\)".*/\1/p' app/build.gradle)
+          if [ -z "$NDK" ] || [ -z "$SDK" ] || [ -z "$BT" ] || [ -z "$CMAKE" ]; then
+            echo "❌ Could not read ndk/compileSdk/buildTools/cmake from android/build.gradle"; exit 1
+          fi
+          echo "Installing platform-tools, android-$SDK, build-tools $BT, NDK $NDK, CMake $CMAKE"
+          (yes || true) | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-$SDK" "build-tools;$BT" "ndk;$NDK" "cmake;$CMAKE" > /tmp/sdkmanager.log 2>&1 || { tail -30 /tmp/sdkmanager.log; exit 1; }
+          test -d "$ANDROID_HOME/ndk/$NDK" || { echo "❌ NDK $NDK is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/platforms/android-$SDK" || { echo "❌ android-$SDK is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/build-tools/$BT" || { echo "❌ build-tools $BT is not installed"; exit 1; }
+          test -d "$ANDROID_HOME/cmake/$CMAKE" || { echo "❌ CMake $CMAKE is not installed"; exit 1; }
 
           # Set ANDROID_HOME and PATH for subsequent steps
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
@@ -517,7 +528,10 @@ jobs:
           PLAY_STORE_JKS_PASSWD: ${{ secrets.PLAY_STORE_JKS_PASSWD }}
           VERSION_CODE: ${{ env.APP_BUILD_NUMBER }}
           VERSION_NAME: ${{ env.APP_VERSION }}
-          ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+          # No reactNativeArchitectures override: build the four ABIs that
+          # gradle.properties lists, as the gated local release builds do. An
+          # arm64-only native build still packaged prebuilt libs for all four,
+          # so a 32-bit phone would get hermes but no libappmodules.so.
           GRADLE_OPTS: "-Xmx2048m -XX:MaxMetaspaceSize=512m"
         run: |
           # Bundle React Native code
@@ -545,7 +559,7 @@ jobs:
           df -h
 
           # Build with Gradle (limit memory to reduce disk usage)
-          cd android && ./gradlew bundleRelease assembleRelease --no-parallel --stacktrace --max-workers=1
+          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
 
           # Aggressively clean up Gradle cache immediately after build (frees ~1-2GB)
           rm -rf ~/.gradle/caches/transforms-* 2>/dev/null || true
@@ -587,7 +601,7 @@ jobs:
         run: |
           COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
+          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -20 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
           if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then
@@ -620,7 +634,7 @@ jobs:
   build-ios-staging:
     needs: [calculate-build-number, extract-version, check-secrets, test]
     # Repository variable DEPLOY_IOS=false switches the platform off.
-    if: vars.DEPLOY_IOS != 'false'
+    if: vars.DEPLOY_IOS != 'false' && inputs.platform != 'android'
     # App Store Connect only accepts uploads built with Xcode 26 / the iOS 26 SDK
     # since 2026-04-28; macos-26 carries every Xcode 26 release.
     runs-on: macos-26
@@ -633,6 +647,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          # The release-notes step reads the range since the previous staging tag.
+          fetch-depth: 0
 
       - name: Verify bifold submodule commit
         run: |
@@ -856,20 +872,25 @@ jobs:
         shell: bash
         run: |
           set -u
+          # GitHub runs this with -e -o pipefail: a grep that matches nothing
+          # fails its whole pipeline, so every pipeline here ends in || true.
+          # Test changes to this step with: bash --noprofile --norc -e -o pipefail
           # What a tester wants in "What to Test" is what CHANGED, not the subject
           # line of whichever merge happened to be last. Most user-facing work lands
           # in the bifold submodule, so summarise both: the wallet's own commits
           # since the previous staging tag, and the submodule commits the pointer
           # moved across. Fall back to the old behaviour if either range is unknown.
-          PREV_TAG=$(git tag --list 'staging-v*' --sort=-creatordate | sed -n '2p')
-          [ -n "${PREV_TAG:-}" ] || PREV_TAG=$(git tag --list 'staging-v*' --sort=-creatordate | sed -n '1p')
+          # This build's own tag is created after the build, so the previous
+          # release is the newest staging tag reachable from HEAD's parent.
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'staging-v*' HEAD^ 2>/dev/null || true)
 
           collect() { # $1 = repo dir, $2 = range
             git -C "$1" log --no-merges --pretty=%s "$2" 2>/dev/null \
               | grep -E '^(feat|fix)(\(|:)' \
+              | grep -vE '^(feat|fix)\((ci|e2e|test|tests|lab|harness|deps)\)' \
               | sed -E 's/^(feat|fix)(\([^)]*\))?!?: *//' \
               | sed -E 's/[[:space:]]+$//' \
-              | awk 'NF && !seen[$0]++'
+              | awk 'NF && !seen[$0]++' || true
           }
 
           LINES=""
@@ -898,7 +919,22 @@ jobs:
             if [ -z "$COMMIT_MSG" ] || [ "$COMMIT_MSG" = "null" ]; then
               COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
             fi
-            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            NOTES=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//' | sed '/^[[:space:]]*$/d' | head -5 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+          fi
+
+          # A release's own notes win: the same plain-words bullets as the build's
+          # card on the command center. Used only when this release changed the
+          # file, so one release's notes are never shipped with the next.
+          NOTES_FILE=.github/testflight/whats-new.md
+          if [ -s "$NOTES_FILE" ] && [ -n "${PREV_TAG:-}" ] \
+            && [ -n "$(git log -1 --format=%H "$PREV_TAG..HEAD" -- "$NOTES_FILE" 2>/dev/null)" ]; then
+            # Lines starting with # are the file's own instructions, not notes.
+            # App Store Connect's "What to Test" holds at most 4000 characters.
+            FROM_FILE=$(sed '/^[[:space:]]*#/d' "$NOTES_FILE" | sed '/./,$!d' | head -c 3900 || true)
+            if [ -n "$(printf '%s' "$FROM_FILE" | tr -d '[:space:]')" ]; then
+              NOTES="$FROM_FILE"
+              echo "using $NOTES_FILE"
+            fi
           fi
 
           if [ -z "$NOTES" ] || [ ${#NOTES} -lt 5 ]; then
@@ -932,8 +968,8 @@ jobs:
 
   create-staging-tag:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    # Runs when every platform that ran succeeded; a switched-off platform is skipped.
-    if: ${{ !failure() && !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
+    # Runs when any platform shipped, so the next build's notes start after this one.
+    if: ${{ !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -962,7 +998,7 @@ jobs:
 
   notify-team:
     needs: [calculate-build-number, build-android-staging, build-ios-staging]
-    if: ${{ !failure() && !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
+    if: ${{ !cancelled() && (needs.build-ios-staging.result == 'success' || needs.build-android-staging.result == 'success') }}
     runs-on: ubuntu-22.04
     environment: internal
     env:
@@ -983,7 +1019,7 @@ jobs:
         run: |
           COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null || echo "")
 
-          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//' | sed -E 's/^Merge pull request #[0-9]+ from [^[:space:]]+[[:space:]]*//')
+          CLEAN_MSG=$(echo "$COMMIT_MSG" | sed -E 's/^Merge (pull request #[0-9]+|branch [^[:space:]]+ into [^[:space:]]+)[[:space:]]*//; s/^from [^[:space:]]+[[:space:]]*//')
           CLEAN_MSG=$(echo "$CLEAN_MSG" | sed '/^[[:space:]]*$/d' | head -3 | tr '\n' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
           if [ -z "$CLEAN_MSG" ] || [ ${#CLEAN_MSG} -lt 5 ]; then

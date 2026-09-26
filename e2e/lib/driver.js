@@ -1,5 +1,6 @@
+import { execFileSync as execFileSyncForSim } from "node:child_process";
 import { remote } from "webdriverio";
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -123,8 +124,56 @@ export async function ensureAppium() {
   throw new Error("appium did not start within 60s");
 }
 
+/** Every process below `pid`, by PID (never by name). */
+function descendantPids(pid) {
+  let kids = [];
+  try {
+    kids = execFileSync("pgrep", ["-P", String(pid)], { encoding: "utf8" }).trim().split(/\s+/).filter(Boolean).map(Number);
+  } catch {
+    return []; // pgrep exits 1 when there are none
+  }
+  return kids.flatMap((k) => [k, ...descendantPids(k)]);
+}
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Stop the Appium this run started — and what it started. WebDriverAgent runs
+ * as an `xcodebuild … test-without-building` child of Appium; SIGTERM to Appium
+ * alone left it running, reparented to PID 1, holding the device's WDA port and
+ * counting as an xcodebuild to anyone checking the Mac (an iPhone 11 runner
+ * outlived its run by 40 minutes, 2026-09-23, and ignored SIGTERM). So note the
+ * whole tree first, stop Appium, then its descendants, escalating to SIGKILL
+ * for any still alive after a short grace. By PID only; an Appium this run did
+ * not start (appiumProc unset) is never touched.
+ */
 export function stopAppium() {
-  if (appiumProc) appiumProc.kill("SIGTERM");
+  if (!appiumProc) return;
+  const tree = descendantPids(appiumProc.pid);
+  appiumProc.kill("SIGTERM");
+  for (const pid of tree) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      /* already gone */
+    }
+  }
+  for (let i = 0; i < 6 && tree.some(alive); i++) execFileSync("sleep", ["0.5"]);
+  for (const pid of tree.filter(alive)) {
+    try {
+      process.kill(pid, "SIGKILL");
+      console.log(`[e2e] stopped a leftover Appium child by PID ${pid}`);
+    } catch {
+      /* already gone */
+    }
+  }
 }
 
 export async function createSession(platform, capsOverride) {
@@ -230,11 +279,7 @@ export async function createSession(platform, capsOverride) {
       // phone, which is then never relaunched: that phone shows neither the
       // home tabs nor the PIN screen, and the run blames whatever it was
       // waiting for. Measured 2026-09-23 on a two-simulator vetting run.
-      const simUdid =
-        driver.capabilities.udid ||
-        driver.capabilities.deviceUDID ||
-        driver.capabilities["appium:udid"];
-      execSync(`xcrun simctl privacy ${simUdid ? simUdid : "booted"} grant camera ${APP_ID}`);
+      execSync(`xcrun simctl privacy ${simTarget(driver)} grant camera ${APP_ID}`);
       // granting TCC permission kills the app; relaunch it cleanly (immediate
       // activate can race the teardown and leave a black screen)
       await driver.terminateApp(APP_ID).catch(() => {});
@@ -302,6 +347,23 @@ export async function collapseNotificationShadeIfOpen(driver) {
  * Find an element by bifold testID (testIdWithKey key).
  * RN maps testID → resource-id on Android and → accessibility identifier on iOS.
  */
+/**
+ * The simulator a simctl command should target: this session's own udid, or —
+ * when the session does not know it — the only booted simulator. Never
+ * "booted" with two up: simctl then picks one WITHOUT erroring, and a grant
+ * kills the app it lands on, so one session silently broke the other's phone
+ * (2026-09-23). With several booted and no udid known, refuse rather than guess.
+ */
+export function simTarget(driver) {
+  const caps = driver?.capabilities ?? {};
+  const udid = caps.udid || caps.deviceUDID || caps["appium:udid"] || process.env.IOS_UDID;
+  if (udid) return udid;
+  const out = execFileSyncForSim("xcrun", ["simctl", "list", "devices", "booted", "-j"], { encoding: "utf8" });
+  const booted = Object.values(JSON.parse(out).devices ?? {}).flat().filter((d) => d.state === "Booted");
+  if (booted.length === 1) return booted[0].udid;
+  throw new Error(`simTarget: ${booted.length} simulators are booted and this session's udid is unknown — refusing to guess which one`);
+}
+
 export function byTestId(driver, key) {
   const full = `${TEST_ID_PREFIX}${key}`;
   if (driver.e2ePlatform === "android") {
@@ -521,11 +583,16 @@ export async function tapTestIdReliable(driver, key, verify, options = {}) {
         await el.click().catch(() => {});
       });
     }
-    await sleep(settleMs);
-    if (await verify()) {
-      console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (attempt ${attempt + 1}/${attempts}, verified)`);
-      return;
-    }
+    // Up to settleMs for the tap to show, checked each second: a slow answer
+    // gets its time, a quick one returns at once.
+    const settleBy = Date.now() + settleMs;
+    do {
+      await sleep(Math.min(1000, settleMs));
+      if (await verify()) {
+        console.log(`[e2e] ${deviceTag(driver)}: tapped testID=${key} (attempt ${attempt + 1}/${attempts}, verified)`);
+        return;
+      }
+    } while (Date.now() < settleBy);
   }
   throw new Error(
     `${driver.e2ePlatform}: tap on testID=${key} did not take effect after ${attempts} attempts`

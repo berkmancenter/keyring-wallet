@@ -16,6 +16,7 @@
  * See run-store-migration.js's header for BASELINE_APK build instructions —
  * unchanged here, the baseline apk is unrelated to the peer's platform.
  */
+import "./lib/cli-guard.js";
 import { androidCaps, ANDROID_AVD2 } from "./lib/config.js";
 import { createSession } from "./lib/driver.js";
 import { runStoreMigration } from "./lib/storeMigrationFlow.js";

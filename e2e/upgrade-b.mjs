@@ -6,6 +6,7 @@
  * there. The question is the one going in front of maintainers: does updating
  * release it, or must they reinstall and link again?
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, sleep, waitForTestId, byTestId, existsTestId } from "./lib/driver.js";
 import { androidCaps } from "./lib/config.js";
 import { unlockIfLocked } from "./lib/flows.js";

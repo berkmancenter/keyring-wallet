@@ -22,6 +22,7 @@
  * Usage:
  *   ANDROID_AVD2=<second-avd> node run-vrc-exchange-didcomm-v2.js
  */
+import "./lib/cli-guard.js";
 import {
   createSession,
   ensureAppium,

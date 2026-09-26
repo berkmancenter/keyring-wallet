@@ -16,6 +16,7 @@
  *
  * Usage: ANDROID_AVD2=<second-avd> node run-vrc-exchange-didcomm-v2-tsp.js
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource } from "./lib/driver.js";
 import {
   acceptInvitationViaPaste,

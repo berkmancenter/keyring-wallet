@@ -24,12 +24,23 @@
  *
  * Needs a phone that is already the lab community's vetter (the vetting
  * suite's `invite` + grant steps). Runner VTA only; never alice.
+ *
+ * Another community (a Farm Full Stack's): STACK_DIR=<dir> holding a
+ * `stack.env` with VTC_URL and VTC_DID, and that community's
+ * `vtc-admin-credential.json`.
+ *
+ * Waits are sized to the Farm, measured 2026-09-23 on an online phone: a grant
+ * reaches the open screen in 10–15 s, a revocation shows after about 4.5 min
+ * (the community refuses the revoked vetter at once; the phone's view lags).
+ * The runner used to wait 90 s for every step and read the revocation lag as
+ * "never". GRANT_WAIT_MS / REVOKE_WAIT_MS override the defaults.
  */
+import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { createSession, ensureAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, scrollToTestId } from "./lib/driver.js";
+import { createSession, ensureAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, scrollToTestId, deviceTag } from "./lib/driver.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { unlockIfLocked, dismissTourIfPresent } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
@@ -76,30 +87,56 @@ async function grant(memberDid, seconds) {
 }
 
 const textOf = async (d, key) => (await byTestId(d, key).getAttribute(PLATFORM === "ios" ? "label" : "text")) || "";
-// Two surfaces show the seat. A phone LINKED to its agent opens the agent home
-// from My Agent ("Your agent"): "Vet someone" is enabled or locked, and a
-// lapsed grant says why. A phone whose build names its agent (a debug build
-// with VTI_VTA_DID) shows My Agent's vetting card, whose badge reads "You are
-// the vetter" or "You are being vetted" and refreshes by itself.
+// Two surfaces show the seat. A phone LINKED to its agent lands on the agent
+// home, whose one line (AgentSeat) says what the phone is, with the vetter card
+// (AgentVetterCard) while a grant stands and AgentVetterLapsed once it has
+// lapsed. A phone whose build names its agent (a debug build with
+// VTI_VTA_DID) lands on My Agent's panel, whose vetting card's badge reads
+// "You are the vetter" or "You are being vetted" and refreshes by itself.
+// (Until keyring-bifold's one-agent-screen change this read `AgentGetVetted`,
+// an id that never existed, so the agent-home branch never ran.)
 async function toAgentHome(d) {
   await dismissTourIfPresent(d).catch(() => undefined);
   await (await waitForTestId(d, "MyAgent", 30000)).click();
-  const open = await waitForTestId(d, "OpenYourAgentButton", 20000).catch(() => undefined);
-  if (open) {
-    await open.click();
-    await waitForTestId(d, "AgentGetVetted", 120000);
-  } else {
-    await waitForTestId(d, "MyAgentVettingSeat", 180000);
+  // Builds before the one-agent screen: a linked phone could still be on the panel.
+  const open = await waitForTestId(d, "OpenYourAgentButton", 15000).catch(() => undefined);
+  if (open) await open.click();
+  // The agent home (AgentSeat on the one-agent screen, AgentDoors before it)
+  // or the panel's vetting card. Landing on none of them is a failure, never
+  // a seat: reading the panel's branch off a screen that is not the panel
+  // would report a seat for a screen the phone is not on.
+  const until = Date.now() + 180000;
+  let landed;
+  while (Date.now() < until && !landed) {
+    if (await byTestId(d, "AgentSeat").isExisting().catch(() => false)) landed = "AgentSeat";
+    else if (await byTestId(d, "MyAgentVettingSeat").isExisting().catch(() => false)) landed = "MyAgentVettingSeat";
+    else if (await byTestId(d, "AgentDoors").isExisting().catch(() => false)) {
+      // The home before the one-agent screen: its cards come after a store read.
+      await sleep(5000);
+      landed = "AgentDoors";
+    } else await sleep(2000);
+  }
+  if (!landed) {
+    await screenshot(d, "lifecycle-no-seat-surface");
+    throw new Error(`${deviceTag(d)}: My Agent showed neither the agent home (AgentSeat/AgentDoors) nor the panel's vetting card within 180s`);
   }
   await sleep(2500);
 }
-/** What the seat says: { surface, vetter, lapsed }. */
+/**
+ * What the seat says: { surface, vetter, lapsed }. One read of the screen as it
+ * is: poll it (as expectSeat does) rather than trust a single read taken while
+ * the screen may still be settling.
+ */
 async function seat(d) {
-  if (await byTestId(d, "AgentGetVetted").isExisting().catch(() => false)) {
-    await scrollToTestId(d, "AgentVetOthers", 4).catch(() => undefined);
-    const enabled = (await byTestId(d, "AgentVetOthers").getAttribute("enabled").catch(() => "false")) === "true";
+  const hasSeat = await byTestId(d, "AgentSeat").isExisting().catch(() => false);
+  if (hasSeat || (await byTestId(d, "AgentDoors").isExisting().catch(() => false))) {
+    // Read what the screen states; the line's words are translated, so the
+    // verdict comes from which cards are there, and the line is reported.
+    // Before the one-agent screen there is no line, but the cards are the same.
+    const line = hasSeat ? await textOf(d, "AgentSeat").catch(() => "") : "(no AgentSeat on this build)";
+    const card = Boolean(await scrollToTestId(d, "AgentVetterCard", 4).catch(() => undefined));
     const lapsed = (await byTestId(d, "AgentVetterLapsed").isExisting().catch(() => false)) ? await textOf(d, "AgentVetterLapsed") : "";
-    return { surface: "agent home", vetter: enabled && !lapsed, lapsed };
+    return { surface: "agent home", vetter: card && !lapsed, lapsed, line };
   }
   // The card's accessible name carries its seat ("Vetting. You are the
   // vetter"); the badge's own text is a flattened sibling on Android.
@@ -117,6 +154,10 @@ async function relaunch(d) {
   await toAgentHome(d);
 }
 /** Record whether the open screen noticed on its own, then relaunch and require `want`. */
+/** A grant shows in seconds; a revocation in minutes (see the header). */
+const GRANT_WAIT_MS = Number(process.env.GRANT_WAIT_MS || 150_000);
+const REVOKE_WAIT_MS = Number(process.env.REVOKE_WAIT_MS || 420_000);
+
 async function expectSeat(d, step, want, { waitMs = 90000 } = {}) {
   await (await waitForTestId(d, "Contacts", 30000)).click();
   await sleep(1500);
@@ -135,8 +176,15 @@ async function expectSeat(d, step, want, { waitMs = 90000 } = {}) {
   // this records whether a grant is collected without the person going there.
   // STRICT_ARRIVAL=1: a grant must show on its own; opening Vetting is not allowed to help.
   if (!want(live) && process.env.STRICT_ARRIVAL === "1") throw new Error(`${step}: the seat did not move on the open screen: ${JSON.stringify(live)}`);
-  if (!want(live) && (await byTestId(d, "MyAgentVettingRow").isExisting().catch(() => false))) {
-    await (await scrollToTestId(d, "MyAgentVettingRow", 4)).click();
+  // The way into Vetting on either surface: the panel's vetting card, the
+  // agent home's "Continue your vetting" (an applicant) or its desk (a vetter).
+  const intoVetting =
+    (await byTestId(d, "MyAgentVettingRow").isExisting().catch(() => false)) ? "MyAgentVettingRow"
+    : (await byTestId(d, "AgentContinueVetting").isExisting().catch(() => false)) ? "AgentContinueVetting"
+    : (await byTestId(d, "AgentVetOthers").isExisting().catch(() => false)) ? "AgentVetOthers"
+    : undefined;
+  if (!want(live) && intoVetting) {
+    await (await scrollToTestId(d, intoVetting, 4)).click();
     await sleep(15000);
     await d.back().catch(() => undefined);
     await sleep(3000);
@@ -184,18 +232,18 @@ try {
   await toAgentHome(d);
   const active = (s) => s.vetter;
   const lapsedFor = (re) => (s) => !s.vetter && (s.surface !== "agent home" || re.test(s.lapsed));
-  report.push(["L1 granted", await expectSeat(d, "L1-granted", active)]);
+  report.push(["L1 granted", await expectSeat(d, "L1-granted", active, { waitMs: GRANT_WAIT_MS })]);
 
   // L2 — revoked.
   const mine = ((admin("vetters-list") ?? {}).vetters ?? []).find((v) => v.memberDid === P && v.live && !v.revoked);
   if (!mine) throw new Error(`${P} holds no live grant to revoke`);
   const revoked = admin("revoke-endorsement", mine.endorsementId);
   log(`revoked (status-list bit ${revoked?.statusListIndex})`);
-  report.push(["L2 revoked", await expectSeat(d, "L2-revoked", lapsedFor(/revok|withdr/i))]);
+  report.push(["L2 revoked", await expectSeat(d, "L2-revoked", lapsedFor(/revok|withdr/i), { waitMs: REVOKE_WAIT_MS })]);
 
   // L3 — granted again; the lab keeps a standing vetter.
   await grant(P);
-  report.push(["L3 re-granted", await expectSeat(d, "L3-regranted", active)]);
+  report.push(["L3 re-granted", await expectSeat(d, "L3-regranted", active, { waitMs: GRANT_WAIT_MS })]);
 
   for (const [step, r] of report) log(`${step}: relaunched ${JSON.stringify(r.relaunched)}; before relaunch ${JSON.stringify(r.live)}`);
   printSuccess("vetter-grant lifecycle (granted → revoked → granted)");

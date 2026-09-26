@@ -11570,6 +11570,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"expo-sharing@npm:~14.0.8":
+  version: 14.0.8
+  resolution: "expo-sharing@npm:14.0.8"
+  peerDependencies:
+    expo: "*"
+  checksum: 10c0/64c6f42272b7e762988dbb92af6eabb71bd8229366cdc675cda78513fea39c46c9a46bb250ffaf5587b8361bd824a89820e46771cb5f97fc16bbfc87e3f00518
+  languageName: node
+  linkType: hard
+
 "expo@npm:~54.0.31":
   version: 54.0.35
   resolution: "expo@npm:54.0.35"
@@ -14601,6 +14610,7 @@ __metadata:
     expo-image-manipulator: "npm:~14.0.8"
     expo-image-picker: "npm:~17.0.11"
     expo-secure-store: "npm:~15.0.8"
+    expo-sharing: "npm:~14.0.8"
     fast-text-encoding: "npm:~1.0.6"
     husky: "npm:~7.0.4"
     i18next: "npm:~21.6.16"

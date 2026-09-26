@@ -59,7 +59,9 @@ const bifoldNodeModules = fs.realpathSync(path.join(__dirname, '..', 'bifold', '
 // one README table, no way for "runtime says none" and "bundle still has
 // them" to drift apart. See src/demo-profiles/README.md's "Stripping demos
 // from a build" section.
-const stripDemoProfiles = process.env.ACTIVE_DEMO_PROFILE === 'none'
+// Unset strips too: a shipped build carries no demo code at all (decided
+// 2026-09-25). A demo build sets a profile id or `all`, which keeps them.
+const stripDemoProfiles = !process.env.ACTIVE_DEMO_PROFILE || process.env.ACTIVE_DEMO_PROFILE === 'none'
 const demoProfilesStubPath = path.join(__dirname, 'metro', 'demoProfilesStub.ts')
 
 const watchFolders = [...packageDirs, bifoldNodeModules]

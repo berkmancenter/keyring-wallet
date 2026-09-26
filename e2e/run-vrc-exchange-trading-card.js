@@ -1,4 +1,7 @@
 /**
+ * Needs a debug APK built with `ACTIVE_DEMO_PROFILE=trading-card` (or `all`) in
+ * app/.env: since 2026-09-25 an unset value registers no demo profile.
+ *
  * Two-wallet VRC exchange E2E for the trading-card demo profile
  * (app/src/demo-profiles/trading-card/): fresh install → onboarding on both
  * devices (wallet A attaches an R-Card photo, so the avatar field is actually
@@ -24,6 +27,7 @@
  *   PLATFORMS=android,android ANDROID_AVD2=<second-avd> \
  *     node run-vrc-exchange-trading-card.js                # two android emulators (no macOS/Xcode)
  */
+import "./lib/cli-guard.js";
 import {
   createSession,
   ensureAppium,

@@ -4,12 +4,19 @@
 # harness is comfortable with (2026-09-22: TestFlight 206 shipped two bugs that
 # only existed without VTI_VTA_DID, which every debug run had baked in).
 #
-# What TestFlight bakes (keyring-wallet #68): VTI_MEDIATOR_DID,
-# VTI_COMMUNITY_DID, VTI_PERSONA_BASE_URL. What it does NOT: VTI_VTA_DID (the
-# tester links an agent instead) and VTI_PROBE_ON_START (a developer probe).
-# Everything else comes from app/.env as it is.
+# What TestFlight bakes: no VTI_* value at all, since build 216 (keyring-wallet
+# #121). The tester links their own agent and brings their own community; no
+# agent, community, VTI mediator or persona host is built in. So every VTI_* key
+# in app/.env is dropped here, and everything else (the DIDComm mediator URLs
+# and the rest) comes from app/.env as it is.
+#
+# A harness build that needs a value baked in says so explicitly:
+# TESTFLIGHT_OVERRIDES=<file of KEY=VALUE> adds exactly those keys (an empty
+# VALUE leaves the key out). Nothing else can put one back.
 #
 #   e2e/scripts/build-testflight-sim.sh            # → prints the .app path
+#   TESTFLIGHT_ENV_ONLY=1 e2e/scripts/build-testflight-sim.sh
+#                                                  # → prints the .env it would build with, builds nothing
 #
 # Release bundles resolve @bifold/core from its built lib/, so core is built
 # first. app/.env is restored afterwards whatever happens.
@@ -27,19 +34,25 @@ BACKUP="$(mktemp)"
 cp "$APP/.env" "$BACKUP"
 trap 'cp "$BACKUP" "$APP/.env"; rm -f "$BACKUP"' EXIT
 
-grep -vE '^(VTI_VTA_DID|VTI_PROBE_ON_START)=' "$BACKUP" > "$APP/.env"
-# TESTFLIGHT_OVERRIDES=<file of KEY=VALUE>: replace those keys (a Farm build
-# bakes the Farm's community and mediator); an empty VALUE drops the key.
+# The store config: no VTI_* key survives from app/.env.
+grep -vE '^VTI_[A-Z0-9_]*=' "$BACKUP" > "$APP/.env" || true
+# TESTFLIGHT_OVERRIDES=<file of KEY=VALUE>: add those keys, explicitly (a Farm
+# harness build that must bake a community); an empty VALUE leaves the key out.
 if [ -n "${TESTFLIGHT_OVERRIDES:-}" ]; then
-  while IFS='=' read -r key value; do
+  while IFS='=' read -r key value || [ -n "$key" ]; do
     [ -z "$key" ] || [ "${key#\#}" != "$key" ] && continue
-    grep -vE "^${key}=" "$APP/.env" > "$APP/.env.tmp" && mv "$APP/.env.tmp" "$APP/.env"
-    [ -n "$value" ] && printf '%s=%s\n' "$key" "$value" >> "$APP/.env"
+    grep -vE "^${key}=" "$APP/.env" > "$APP/.env.tmp" || true
+    mv "$APP/.env.tmp" "$APP/.env"
+    if [ -n "$value" ]; then printf '%s=%s\n' "$key" "$value" >> "$APP/.env"; fi
   done < "$TESTFLIGHT_OVERRIDES"
 fi
-for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID; do
-  grep -qE "^${key}=.+" "$APP/.env" || { echo "build-testflight-sim: app/.env has no $key — TestFlight builds bake it" >&2; exit 1; }
-done
+# Say what is baked, so a build log shows it: nothing, for the store config.
+baked="$(grep -oE '^VTI_[A-Z0-9_]*' "$APP/.env" | tr '\n' ' ' || true)"
+echo "build-testflight-sim: VTI keys baked in: ${baked:-none (store config)}" >&2
+if [ "${TESTFLIGHT_ENV_ONLY:-}" = 1 ]; then
+  cat "$APP/.env"
+  exit 0
+fi
 
 (cd "$ROOT/bifold" && yarn workspace @bifold/core build >/dev/null)
 (cd "$ROOT/bifold/packages/trust-tasks" && yarn build >/dev/null)

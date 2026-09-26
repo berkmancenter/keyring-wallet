@@ -63,6 +63,15 @@ the reference ladder. **Don't advance pins in the middle of a piece of work** â€
 do it at a boundary, then re-run the ladder bottom-up: the first rung that goes
 red tells you which layer upstream changed.
 
+**Moving the `verifiable-trust-infrastructure` pin moves `card-verify` in the
+same pull request.** It builds against the pinned clone with `--locked` in
+keyring-bifold's conformance check, and its exact pins (`dtg-credentials`,
+`affinidi-secrets-resolver`, `trust-tasks-rs`) follow the pinned commit's own
+`Cargo.lock`. Update them, rebuild so `Cargo.lock` follows, and rerun the
+check's steps and `card-verify vectors` against bifold's committed vectors
+before merging. #168 moved the pin alone and turned that check red on every
+bifold pull request until #169.
+
 ## Files here
 
 | File | Purpose |

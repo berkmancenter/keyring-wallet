@@ -14,6 +14,7 @@ import {
   tapTestIdReliable,
   waitForTestId,
   screenshot,
+  simTarget
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
@@ -154,8 +155,9 @@ export async function seedTestPhoto(driver) {
       );
       console.log(`[e2e] android: seeded test photo + granted media permission`);
     } else {
-      execSync(`xcrun simctl addmedia booted "${TEST_PHOTO_PATH}"`);
-      execSync(`xcrun simctl privacy booted grant photos ${APP_ID}`);
+      const sim = simTarget(driver);
+      execSync(`xcrun simctl addmedia ${sim} "${TEST_PHOTO_PATH}"`);
+      execSync(`xcrun simctl privacy ${sim} grant photos ${APP_ID}`);
       console.log(`[e2e] ios: seeded test photo + granted photos permission`);
     }
   } catch (err) {
@@ -383,7 +385,18 @@ export async function unlockIfLocked(driver) {
   if (!(await pinInput.isExisting())) return false;
   console.log(`[e2e] ${driver.e2ePlatform}: wallet locked — unlocking`);
   await pinInput.click();
-  await pinInput.setValue(PIN);
+  // On an iOS simulator one setValue of the whole PIN can drop a keystroke:
+  // the field holds five of six digits, Enter answers "PIN is too short", and
+  // every re-tap below fails the same way (221 gate, twice in a row). Typing a
+  // digit at a time with a pause gives each keystroke its own round trip.
+  if (driver.e2ePlatform === "ios") {
+    for (const digit of PIN) {
+      await pinInput.addValue(digit);
+      await sleep(200);
+    }
+  } else {
+    await pinInput.setValue(PIN);
+  }
   if (await existsTestId(driver, "Enter", 1500)) {
     await hideKeyboard(driver);
     // A dropped tap here (same class of flakiness tapTestIdReliable exists
@@ -816,7 +829,7 @@ async function qrSheetIsOpen(driver, timeout = 4000) {
  * IMPORTANT: never tap the opener while the sheet is already up — the tap
  * lands on the sheet's dark overlay and CLOSES it (open/close toggle loop).
  */
-async function openQrSheet(driver) {
+export async function openQrSheet(driver) {
   // A process-level watchdog kill can relock the wallet at any moment,
   // independent of the in-app inactivity timer (autoLockTime doesn't
   // prevent this — a fresh process always needs the PIN again) — check
@@ -1738,7 +1751,7 @@ export async function startIosLogCapture(driver, deviceUdid) {
   mkdirSync("artifacts", { recursive: true });
   const file = `artifacts/ios-js-${Date.now()}.log`;
   const fd = openSync(file, "a");
-  const sim = process.env.IOS_UDID || "booted";
+  const sim = simTarget(undefined);
   const proc = spawn(
     "xcrun",
     [
@@ -2179,7 +2192,7 @@ export async function pasteLinkOnScanScreen(driver, url) {
  * "forget this community" as the harness's reset. Returns false when this
  * phone has no community row to leave (nothing to reset).
  */
-export async function leaveCommunityInApp(driver) {
+export async function leaveCommunityInApp(driver, { allowInProgress = false } = {}) {
   await dismissTourIfPresent(driver);
   // Everything below reads operator-panel ids (MyAgentCard, MyAgentCommunityRow,
   // MyAgentMembershipCard). keyring-bifold#11 means a LINKED phone lands on the
@@ -2187,37 +2200,55 @@ export async function leaveCommunityInApp(driver) {
   // connected" about a phone plainly showing "Online", and threw after 180s
   // rather than reporting the truth, which was that it holds no community and
   // there is nothing to leave (2026-09-23).
-  // A linked phone that is NOT a member has no route to the panel at all:
-  // "Open my communities" (AgentOpenCommunities) renders only inside the
-  // isMember branch of the agent home's AgentDoors card, and the other branch
-  // says "What brings you here?". So check that state FIRST and answer it
-  // directly — a non-member has nothing to leave, which is a positive reading
-  // of the screen rather than a failure to find a row. Without this the reset
-  // hunted panel ids on the agent home and reported "the agent never
-  // connected" about a phone showing "Online" (2026-09-23).
+  // A LINKED phone lands on the agent home (keyring-bifold's one-agent
+  // screen): it has no operator panel at all, so read the home directly.
+  // AgentSeat is always there on it, and says what the phone is.
   await (await waitForTestId(driver, "MyAgent", 30000)).click()
   await sleep(2000)
-  if (
-    (await byTestId(driver, "AgentDoors").isExisting().catch(() => false)) &&
-    !(await existsTestId(driver, "AgentOpenCommunities", 3000))
-  ) {
-    // LIMITATION, stated loudly because this function's whole doctrine is that
-    // a silent skip is worse than a failure. "Not a member" is NOT the same as
-    // "a fresh applicant": a phone can hold a community persona and an
-    // in-flight vetting request while still being a non-member, and on this
-    // build the agent home shows no marker for it (AgentJourney is the
-    // Linked/Join/Member strip, always rendered; AgentContinueVetting does not
-    // exist yet). So this cannot clear that state and cannot see it.
-    // 2026-09-23: skipping it here let a previous run's applicant identity
-    // survive, and the next run's join silently took the "you already have an
-    // identity" path and failed 4 minutes later on a missing name field.
-    console.log(`[e2e] ${deviceTag(driver)}: linked, member of nothing — nothing to LEAVE`)
-    console.log(
-      `[e2e] ${deviceTag(driver)}: WARNING — cannot verify this applicant is fresh. If it ran a vetting ` +
-        `flow before, its persona and request survive and the next join will take a different path. ` +
-        `Reinstall the app on this phone between runs until a marker exists for it.`
-    )
-    return false
+  // AgentSeat is the one-agent screen's line; a build before it shows the
+  // agent home without it, and cannot show AgentContinueVetting either.
+  const hasSeat = await existsTestId(driver, "AgentSeat", 8000)
+  const onHome = hasSeat || (await byTestId(driver, "AgentDoors").isExisting().catch(() => false))
+  if (onHome) {
+    // A member opens each community from its row; Leave is on that screen.
+    const member = await scrollToTestId(driver, "AgentMembershipRow", 6).catch(() => undefined)
+    if (member) return leaveFromCommunityRow(driver, member)
+    // Before the one-agent screen a member's only way in was "Open my
+    // communities": such a build falls through to the panel below.
+    if (!(await existsTestId(driver, "AgentOpenCommunities", 2000))) {
+      if (await existsTestId(driver, "AgentContinueVetting", 2000)) {
+        // An applicant: it holds an identity and maybe a vetting request, and
+        // the agent home offers no Leave for one. The harness can SEE this now,
+        // so carrying on would be the silent skip this function exists to
+        // prevent — it is what broke run ten (2026-09-23), when the next join
+        // took the "you already have an identity" path. A flow that means to
+        // continue a vetting in progress says so with allowInProgress.
+        const line = await byTestId(driver, "AgentSeat").getAttribute(driver.e2ePlatform === "ios" ? "label" : "text").catch(() => "")
+        const what = `this phone is an applicant (${line || "AgentContinueVetting shown"}): its identity and any vetting request survive`
+        if (allowInProgress) {
+          console.log(`[e2e] ${deviceTag(driver)}: ${what} — continuing, as the caller asked (allowInProgress)`)
+          return false
+        }
+        await screenshot(driver, "leave-community-applicant")
+        throw new Error(
+          `[${deviceTag(driver)}] NOT FRESH — ${what}, and the agent home offers no Leave for an applicant. ` +
+            `Reinstall the app on this phone, or pass allowInProgress if this flow continues that vetting.`
+        )
+      }
+      if (!hasSeat) {
+        // A build before the one-agent screen cannot show an applicant, so
+        // "nothing here" is not "fresh" — say so as loudly as it always has.
+        console.log(`[e2e] ${deviceTag(driver)}: linked, member of nothing — nothing to LEAVE`)
+        console.log(
+          `[e2e] ${deviceTag(driver)}: WARNING — cannot verify this applicant is fresh on this build (no AgentSeat). If it ran a vetting ` +
+            `flow before, its persona and request survive and the next join will take a different path. ` +
+            `Reinstall the app on this phone between runs.`
+        )
+        return false
+      }
+      console.log(`[e2e] ${deviceTag(driver)}: linked, holds no community identity — nothing to leave`)
+      return false
+    }
   }
   await openMyAgentPanel(driver);
   await sleep(1500);
@@ -2281,6 +2312,11 @@ export async function leaveCommunityInApp(driver) {
         " within 180s; refusing to skip the reset"
     );
   }
+  return leaveFromCommunityRow(driver, row);
+}
+
+/** Open a community from a row that leads to it, and leave it from its screen. */
+async function leaveFromCommunityRow(driver, row) {
   await row.click();
   // A phone that is linked but has never joined still shows a row for the
   // community its build names, and opening it lands on a screen that cannot
@@ -2306,9 +2342,30 @@ export async function leaveCommunityInApp(driver) {
   await scrollToTestId(driver, "LeaveCommunityButton", 8);
   await tapTestIdReliable(driver, "LeaveCommunityButton", () => existsTestId(driver, "LeaveCommunityConfirm", 2000));
   await scrollToTestId(driver, "LeaveCommunityConfirm", 4);
-  await tapTestIdReliable(driver, "LeaveCommunityConfirm", async () =>
-    (await existsTestId(driver, "LeaveCommunityConfirm", 2000)) === false
-  );
+  // One tap: a slow leave keeps the confirm button (spinning), so "the button
+  // went away" is not the test of a leave — and tapping again while it runs
+  // is not a retry. What proves the leave is the community screen closing.
+  await tapTestId(driver, "LeaveCommunityConfirm", 15000);
+  for (let retries = 0, until = Date.now() + 120000; ; ) {
+    if (!(await existsTestId(driver, "CommunityName", 2000))) break;
+    if (await existsTestId(driver, "CommunityError", 1000)) {
+      const said = await (await byTestId(driver, "CommunityError")).getText().catch(() => "");
+      // A build that offers Try again after an unanswered leave: use it, twice at most.
+      if (retries < 2 && (await existsTestId(driver, "LeaveCommunityRetry", 1000))) {
+        retries++;
+        console.log(`[e2e] ${driver.e2ePlatform}: the leave went unanswered ("${said.trim()}") — Try again (${retries}/2)`);
+        await tapTestId(driver, "LeaveCommunityRetry", 10000);
+        continue;
+      }
+      await screenshot(driver, "leave-community-failed");
+      throw new Error(`${driver.e2ePlatform}: the leave did not happen — the community screen says "${said.trim()}"`);
+    }
+    if (Date.now() > until) {
+      await screenshot(driver, "leave-community-stuck");
+      throw new Error(`${driver.e2ePlatform}: the leave neither finished nor failed within 2 minutes`);
+    }
+    await sleep(2000);
+  }
   // Leaving returns to My Agent.
   await waitForTestId(driver, "MyAgent", 30000);
   await sleep(1500);
@@ -2347,6 +2404,25 @@ export async function pasteLinkFromHome(driver, link) {
  * Returns "agent-home" when it had to walk, "panel" when the tab landed there
  * already — an unlinked phone still goes straight to the panel.
  */
+/**
+ * Open My Agent and say which surface it is: "panel" (a phone whose build
+ * names its agent, or a build before the one-agent screen) or "agent home" (a
+ * linked phone on the one-agent screen). Only the "no panel from here" answer
+ * becomes "agent home", and only when the home is really on screen; anything
+ * else (a locked wallet, no tab) still throws.
+ */
+export async function openMyAgentSurface(driver) {
+  try {
+    return await openMyAgentPanel(driver)
+  } catch (error) {
+    if (!/operator panel is not reachable/.test(String(error?.message))) throw error
+    if ((await existsTestId(driver, "AgentSeat", 5000)) || (await byTestId(driver, "AgentDoors").isExisting().catch(() => false))) {
+      return "agent home"
+    }
+    throw error
+  }
+}
+
 export async function openMyAgentPanel(driver) {
   await (await waitForTestId(driver, "MyAgent", 30000)).click()
   await sleep(2500)
@@ -2364,7 +2440,7 @@ export async function openMyAgentPanel(driver) {
     if (!onPanel) {
       throw new Error(
         `[${deviceTag(driver)}] the operator panel is not reachable from here: no "AgentOpenCommunities" to walk through and no MyAgent* id on screen. ` +
-          `On a build where a linked phone no longer has a panel, read the agent home instead (AgentVetterCard/AgentVetterLapsed/AgentMemberRow).`
+          `A linked phone has no panel on the one-agent screen: read the agent home instead (AgentSeat, AgentVetterCard/AgentVetterLapsed, AgentContinueVetting, AgentMembershipRow).`
       )
     }
     return "panel"

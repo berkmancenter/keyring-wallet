@@ -24,6 +24,7 @@
  * Needs the lab stack up; starts its own enrolment page on ENROL_PORT (8192;
  * 8190 is alice's for the TestFlight phone, 8191 the UI/UX session's).
  */
+import "./lib/cli-guard.js";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";

@@ -22,6 +22,7 @@
  *
  * Usage: yarn e2e:vrc:witnessed:ios-devices[:didcomm-v2[:tsp]]
  */
+import "./lib/cli-guard.js";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";

@@ -29,6 +29,8 @@
  *     manifest
  *     vetters-list
  *     vetter-grant <memberDid> [validitySeconds]
+ *     invitations-list
+ *     invitation-deliver <invitationId> [message|offer]
  */
 import { readFileSync } from "node:fs";
 import { generateDidKeyHolder, signDocument, base58encode } from "./di-proof.mjs";
@@ -122,6 +124,27 @@ async function call(base, task, path, { method = "GET", body, token } = {}) {
   return { status: res.status, body: parsed };
 }
 
+/**
+ * Every page of a list (members, join requests): both page at 50 by default
+ * (vtc members/list/1.0, join-requests/list/1.0: `cursor`, `limit` up to 200,
+ * `nextCursor`). Reading one page misses whoever joined after the 50th — the
+ * lab passed 50 members on 2026-09-25 and a join read as "not a member".
+ * Returns the first failing page as is, or every item under one `items`.
+ */
+async function callAll(base, task, path, { token } = {}) {
+  const items = [];
+  let cursor;
+  for (let page = 0; page < 100; page++) {
+    const sep = path.includes("?") ? "&" : "?";
+    const r = await call(base, task, `${path}${sep}limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { token });
+    if (r.status !== 200 || typeof r.body !== "object" || !Array.isArray(r.body.items)) return r;
+    items.push(...r.body.items);
+    cursor = r.body.nextCursor;
+    if (!cursor) return { status: 200, body: { items, pages: page + 1 } };
+  }
+  throw new Error(`${path}: more than 100 pages`);
+}
+
 /** `/v1/auth/challenge` → signed `auth/authenticate/0.1` → `/v1/auth/` → bearer. */
 async function authenticate(base, vtcDid, holder) {
   const challenge = await call(base, TASK.challenge, "/auth/challenge", {
@@ -194,7 +217,7 @@ async function main() {
     case "manifest":
       return void show("GET /join-requests/manifest", await call(base, TASK.manifest, "/join-requests/manifest", { token }));
     case "join-list":
-      return void show("GET /join-requests", await call(base, TASK.joinList, args[0] ? `/join-requests?status=${args[0]}` : "/join-requests", { token }));
+      return void show("GET /join-requests", await callAll(base, TASK.joinList, args[0] ? `/join-requests?status=${args[0]}` : "/join-requests", { token }));
     case "join-decide":
       return void show(
         `POST /join-requests/${args[0]}/decide`,
@@ -239,8 +262,22 @@ async function main() {
           body: { subjectDid: args[0], role: args[1] ?? "member", validityDays: 30 },
         })
       );
+    case "invitations-list":
+      // The answer is { invitations: [...] }, not a paged { items } list.
+      return void show("GET /invitations", await call(base, "https://trusttasks.org/spec/vtc/invitations/list/0.1", "/invitations", { token }));
+    case "invitation-deliver":
+      // What the admin console's Send (channel "message") and QR offer
+      // (channel "offer") do (vtc-service routes/invitations.rs, deliver).
+      return void show(
+        "POST /invitations/deliver",
+        await call(base, "https://trusttasks.org/spec/vtc/invitations/deliver/0.1", "/invitations/deliver", {
+          method: "POST",
+          token,
+          body: { id: args[0], channel: args[1] ?? "offer" },
+        })
+      );
     case "members":
-      return void show("GET /members", await call(base, TASK.membersList, "/members", { token }));
+      return void show("GET /members", await callAll(base, TASK.membersList, "/members", { token }));
     case "vetters-list":
       return void show("GET /vetting/vetters", await call(base, TASK.vettersList, "/vetting/vetters", { token }));
     case "vetter-grant":

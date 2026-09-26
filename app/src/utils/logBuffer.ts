@@ -37,6 +37,51 @@ const OPAQUE_TOKEN = /[A-Za-z0-9_-]{81,}/g
 const lines: string[] = []
 let installed = false
 
+// Mediator polling is most of a quiet app's log: every few seconds a Pickup
+// status-request, its status answer, and credo's service lookup for the send.
+// Left in, it filled all 3,000 lines in about four minutes of an idle app, so a
+// report covered 18 s to 5 min and lost the vetting that had gone wrong before
+// it (maintainer reports, 2026-09-25). Each minute's polling is collapsed into
+// one counted line; every other line is kept, and so is any polling line that
+// carries a message waiting or an error.
+const POLLING: Array<[RegExp, string]> = [
+  [/messagepickup\/[\d.]+\/status-request/, 'status requests'],
+  [/messagepickup\/[\d.]+\/delivery-request/, 'delivery requests'],
+  [/messagepickup\/[\d.]+\/live-delivery-change/, 'live-delivery changes'],
+  [/messagepickup\/[\d.]+\/messages-received/, 'receipts'],
+  [/messagepickup\/[\d.]+\/status\b/, 'statuses'],
+  [/Retriev(?:ing|ed) (?:\d+ )?services for (?:message to )?connection/, 'service lookups'],
+]
+/** A polling line that still carries something: a message waiting, or trouble. */
+const CARRIES = /"?message_count"?\s*[:=]\s*[1-9]|error|fail|refus|denied|timeout/i
+
+let pollMinute = ''
+let pollCounts: Record<string, number> = {}
+let pollLines = 0
+
+const pollingKind = (level: string, text: string): string | undefined => {
+  if (level === 'warn' || level === 'error') return undefined
+  const kind = POLLING.find(([pattern]) => pattern.test(text))?.[1]
+  if (!kind || CARRIES.test(text)) return undefined
+  return kind
+}
+
+const pollSummary = (): string | undefined => {
+  if (!pollMinute || pollLines === 0) return undefined
+  const parts = Object.entries(pollCounts).map(([kind, n]) => `${n} ${kind}`)
+  return `${pollMinute}:00.000Z INFO [log buffer] mediator polling in this minute: ${parts.join(
+    ', '
+  )}, no messages (${pollLines} lines collapsed)`
+}
+
+const flushPolling = (): void => {
+  const summary = pollSummary()
+  if (summary) lines.push(summary)
+  pollMinute = ''
+  pollCounts = {}
+  pollLines = 0
+}
+
 const stringify = (value: unknown): string => {
   if (typeof value === 'string') return value
   if (value instanceof Error) return `${value.name}: ${value.message}`
@@ -72,17 +117,34 @@ export const recordLogLine = (level: string, args: unknown[], now: Date = new Da
   if (text.length > LOG_LINE_MAX_LENGTH) {
     text = `${text.slice(0, LOG_LINE_MAX_LENGTH)}… (${text.length - LOG_LINE_MAX_LENGTH} more chars)`
   }
-  lines.push(`${now.toISOString()} ${level.toUpperCase()} ${text}`)
+  const stamp = now.toISOString()
+  const minute = stamp.slice(0, 16)
+  // A new minute closes the one before, so its summary sits in time order.
+  if (pollMinute && pollMinute !== minute) flushPolling()
+  const kind = pollingKind(level, text)
+  if (kind) {
+    pollMinute = minute
+    pollCounts[kind] = (pollCounts[kind] ?? 0) + 1
+    pollLines++
+    return
+  }
+  lines.push(`${stamp} ${level.toUpperCase()} ${text}`)
   if (lines.length > LOG_BUFFER_CAPACITY) {
     lines.splice(0, lines.length - LOG_BUFFER_CAPACITY)
   }
 }
 
-/** Oldest first. */
-export const getRecentLogLines = (): string[] => [...lines]
+/** Oldest first, with the current minute's polling summary last. */
+export const getRecentLogLines = (): string[] => {
+  const pending = pollSummary()
+  return pending ? [...lines, pending] : [...lines]
+}
 
 export const clearLogBuffer = (): void => {
   lines.length = 0
+  pollMinute = ''
+  pollCounts = {}
+  pollLines = 0
 }
 
 export const installLogBuffer = (target: Console = console): void => {

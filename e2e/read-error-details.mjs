@@ -5,6 +5,7 @@
  * that control is the only place the actual error appears on a Release build,
  * which emits no JS console to the system log on a simulator.
  */
+import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, sleep, byTestId, existsTestId, tapTestId } from "./lib/driver.js";
 import { iosCaps } from "./lib/config.js";
 
