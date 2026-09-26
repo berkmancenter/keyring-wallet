@@ -7,6 +7,16 @@
  */
 import type { VtiCommunityStore, VtiHeldCredential, VtiMembership } from '../../module/VtiCommunityStore'
 import type { VtiPersona } from '../../module/VtiIdentityStore'
+import { seedCardVaultStateForTests, type CardVaultState } from '../../module/vtiCardVault'
+
+/**
+ * Put a card in a vault state for a screen test, without the keep or recover
+ * paths: the state is read at once through `cardVaultStateOf`, and subscribers
+ * hear it. Call `resetCardVaultCache` between tests.
+ */
+export function seedCardVaultState(credentialId: string, state: CardVaultState): void {
+  seedCardVaultStateForTests(credentialId, state)
+}
 
 export const COMMUNITY = 'did:webvh:QmCommunity:vtc.example:keyring-test-vtc'
 export const PERSONA_DID = 'did:webvh:QmPersona:dids.example:negative-weird'

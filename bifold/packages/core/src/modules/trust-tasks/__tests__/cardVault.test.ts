@@ -26,6 +26,7 @@ import {
   persona,
   PERSONA_DID,
   roleCard,
+  seedCardVaultState,
   vetterGrantProofSet,
 } from './fixtures/cardVault'
 
@@ -105,6 +106,15 @@ describe('what the screens read', () => {
     expect(heard).toHaveBeenCalled()
     stop()
     expect(cardVaultStateOf(membershipCard.id)).toMatchObject({ state: 'kept' })
+  })
+
+  it('can be put in any state for a screen test, and says so to subscribers', () => {
+    const heard = jest.fn()
+    const stop = subscribeCardVault(heard)
+    seedCardVaultState(vetterGrantProofSet.id, { state: 'cannotKeep', reason: 'proofSet' })
+    stop()
+    expect(heard).toHaveBeenCalledTimes(1)
+    expect(cardVaultStateOf(vetterGrantProofSet.id)).toEqual({ state: 'cannotKeep', reason: 'proofSet' })
   })
 
   it('remembers across a relaunch', async () => {

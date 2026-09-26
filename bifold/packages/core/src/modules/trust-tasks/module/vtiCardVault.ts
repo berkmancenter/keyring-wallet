@@ -99,6 +99,12 @@ export function resetCardVaultCache(): void {
   cache.clear()
 }
 
+/** For tests: set one card's state in the cache only (nothing is stored), and announce it. */
+export function seedCardVaultStateForTests(credentialId: string, state: CardVaultState): void {
+  cache.set(credentialId, state)
+  DeviceEventEmitter.emit(VTI_CARD_VAULT_EVENT, { credentialId })
+}
+
 // ---------------------------------------------------------------------------
 // Sending cards to the agent
 // ---------------------------------------------------------------------------
