@@ -11,7 +11,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import { useFocusEffect } from '@react-navigation/native'
+import { useIsFocused } from '@react-navigation/native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useCommunityChanged } from './communityChanged'
@@ -113,11 +113,12 @@ export function useCommunityJourney(
     setJourney(undefined)
   }, [communityDid])
 
-  useFocusEffect(
-    useCallback(() => {
-      read(poll)
-    }, [read, poll])
-  )
+  // Coming into view: an effect on focus, so it runs once each time the screen
+  // is shown (not on every render).
+  const focused = useIsFocused()
+  useEffect(() => {
+    if (focused) read(poll)
+  }, [focused, read, poll])
 
   useCommunityChanged(refresh, communityDid)
 

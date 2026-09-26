@@ -4,7 +4,6 @@
  * finished step still pending, My Agent late to a new membership).
  */
 import type { Agent } from '@credo-ts/core'
-import { useFocusEffect } from '@react-navigation/native'
 import { act, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { DeviceEventEmitter, Text } from 'react-native'
@@ -178,11 +177,6 @@ describe('listening for changes', () => {
 })
 
 describe('the journey hook', () => {
-  // Coming into view once, as a screen would, rather than on every render.
-  beforeEach(() => {
-    jest.mocked(useFocusEffect).mockImplementation((effect) => React.useEffect(effect, [effect]))
-  })
-
   const member: CommunityJoinState = { kind: 'member', membership: { communityDid: A } as VtiMembership }
   const none: CommunityJoinState = { kind: 'none' }
 
