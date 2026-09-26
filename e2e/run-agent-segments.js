@@ -7,7 +7,8 @@
  *     - the header says "Your agent", with the agent's name under it;
  *     - Your devices is in reach on every segment;
  *     - Communities holds the doors and the community cards, and each card
- *       has at most one filled button;
+ *       has at most one filled button — judged scrolled to, not unscrolled;
+ *       an applicant's and a vetter's card show theirs, a member's none;
  *     - Manage holds Unlink; Status holds the activity and Details, and the
  *       agent's DID shows only once Details is opened;
  *     - a waiting approval shows its banner on every segment, and it opens Manage.
@@ -48,6 +49,68 @@ async function openAgentHome(driver) {
   await waitForTestId(driver, "AgentHome", 30000);
 }
 
+/** Drag the page up a fifth of the window: brings a button half under the tab bar above it. */
+async function nudge(driver) {
+  const { width, height } = await driver.getWindowSize();
+  const x = Math.round(width / 2);
+  await driver.performActions([
+    {
+      type: "pointer",
+      id: "finger",
+      parameters: { pointerType: "touch" },
+      actions: [
+        { type: "pointerMove", duration: 0, x, y: Math.round(height * 0.6) },
+        { type: "pointerDown", button: 0 },
+        { type: "pause", duration: 100 },
+        { type: "pointerMove", duration: 400, x, y: Math.round(height * 0.4) },
+        { type: "pointerUp", button: 0 },
+      ],
+    },
+  ]);
+  await driver.releaseActions().catch(() => undefined);
+  await sleep(700);
+}
+
+/**
+ * Each community card, judged where it is drawn: the cards sit under the
+ * doors, below the fold on a phone, so what the segment shows unscrolled
+ * says nothing about them (the first applicant walk "passed" with its card
+ * never on screen). A card with a next step must show it filled, whole above
+ * the tab bar, with nothing else filled beside it.
+ */
+async function cards(driver) {
+  await scrollToTestId(driver, "AgentHolds", 8).catch(() => undefined);
+  const keys = new Set();
+  // Android's page source holds only what is on screen: read it twice, a
+  // nudge apart, so a card below the first view is found too.
+  for (let pass = 0; pass < 2; pass++) {
+    for (const m of (await driver.getPageSource()).matchAll(/AgentCommunityCard_([^"]+)"/g)) keys.add(m[1]);
+    if (pass === 0) await nudge(driver);
+  }
+  const filled = [];
+  for (const key of keys) {
+    const primary = `AgentCommunityPrimary_${key}`;
+    if (!(await scrollToTestId(driver, primary, 6).catch(() => undefined))) {
+      console.log(`[e2e] segments ${person}/card ${key}: no next step`);
+      continue;
+    }
+    let judged = [];
+    for (let i = 0; i < 4 && !judged.some((b) => b.id === primary); i++) {
+      if (i > 0) await nudge(driver);
+      judged = await buttonsOnScreen(driver);
+    }
+    await screenshot(driver, `segments-${person}-card-${key}`);
+    const mine = judged.find((b) => b.id === primary);
+    if (!mine) throw new Error(`card ${key}: its next step never came whole above the tab bar`);
+    const others = judged.filter((b) => b.filled && !b.id.startsWith("AgentCommunityPrimary_")).map((b) => b.id);
+    console.log(`[e2e] segments ${person}/card ${key}: next step ${mine.filled ? "filled" : "OUTLINED"} (${mine.share}); other filled ${JSON.stringify(others)}`);
+    if (!mine.filled) throw new Error(`card ${key}: its next step is not drawn filled (share ${mine.share})`);
+    if (others.length) throw new Error(`card ${key}: filled beside its next step: ${JSON.stringify(others)}`);
+    filled.push(primary);
+  }
+  return { keys: [...keys], filled };
+}
+
 async function segment(driver, key) {
   await tapTestId(driver, `AgentSegment_${key}`, 10000);
   await must(driver, "AgentDevices", key);
@@ -84,6 +147,21 @@ try {
   if (communities.length !== cardPrimaries.length) {
     throw new Error(`communities: filled buttons besides the cards' next steps: ${JSON.stringify(communities)}`);
   }
+  // What each of the gate's people must find on their cards (§3): a new person
+  // has none; an applicant's card says continue the vetting and a vetter's
+  // opens the desk; a member's card has nothing left to do.
+  const held = await cards(driver);
+  const expectCards = {
+    new: () => held.keys.length === 0,
+    applicant: () => held.filled.length >= 1,
+    vetter: () => held.filled.length >= 1,
+    member: () => held.keys.length >= 1 && held.filled.length === 0,
+  }[person];
+  if (expectCards && !expectCards()) {
+    throw new Error(`communities: a ${person} holds cards ${JSON.stringify(held.keys)} with next steps ${JSON.stringify(held.filled)}`);
+  }
+  console.log(`[e2e] segments ${person}/cards: ${JSON.stringify(held.keys)}, next steps filled ${JSON.stringify(held.filled)}`);
+  await scrollToTestId(driver, "AgentSegment_manage", 8, { direction: "up" }).catch(() => undefined);
 
   await segment(driver, "manage");
   await must(driver, "AgentUnlink", "manage");
