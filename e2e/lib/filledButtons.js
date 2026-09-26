@@ -13,7 +13,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { byTestId } from "./driver.js";
+import { byTestId, scrollToTestId, sleep } from "./driver.js";
 import { fillShareOfBmp, judgeButtons } from "./filledRule.js";
 
 export { FILLED_SHARE, fillShareOfBmp, judgeButtons } from "./filledRule.js";
@@ -105,6 +105,39 @@ async function vettingStepOf(driver) {
  */
 export async function checkVettingStep(driver, where) {
   if (process.env.E2E_ONE_FILLED !== "1") return;
+  // A step settles over a moment (a ticket in the field is checked before
+  // "Use this link" takes over): judge it for up to ~6 s, not at one instant.
+  // A button that never changes still fails, with what was last seen.
+  let last;
+  for (let i = 0; i < 6; i++) {
+    if (i > 0) await sleep(1000);
+    const { at, expected } = await expectedAt(driver, where);
+    const seen = await buttonsOnScreen(driver);
+    const filledSet = new Set(seen.filter((b) => b.filled).map((b) => b.id));
+    // The step's button below the fold (the desk's "Codes match" sits under
+    // the big code): scroll it into view and judge both views together, so a
+    // second filled button cannot hide by scrolling away. Being reachable is
+    // §6's question; this says when it took a scroll.
+    if (expected && !seen.some((b) => b.id === expected)) {
+      const el = await scrollToTestId(driver, expected, 3).catch(() => undefined);
+      if (el) {
+        for (const b of await buttonsOnScreen(driver)) if (b.filled) filledSet.add(b.id);
+        console.log(`[e2e] ${where}: ${expected} was below the fold — judged after one scroll`);
+      }
+    }
+    const filled = [...filledSet];
+    const want = expected ? [expected] : [];
+    last = { at, filled, want };
+    if (filled.length === want.length && filled.every((id) => want.includes(id))) {
+      console.log(`[e2e] ${where} (${at.side} ${at.step}): one filled button${expected ? ` (${expected})` : " — none, a waiting step"}`);
+      return;
+    }
+  }
+  throw new Error(`${where} (${last.at.side} ${last.at.step}): filled buttons ${JSON.stringify(last.filled)}, expected ${JSON.stringify(last.want)}`);
+}
+
+/** The step the vetting screen is on, and the one button that should be filled on it. */
+async function expectedAt(driver, where) {
   const at = await vettingStepOf(driver);
   if (!at) throw new Error(`${where}: the vetting screen names no step`);
   let expected;
@@ -115,9 +148,14 @@ export async function checkVettingStep(driver, where) {
     const pasted = async () => {
       const input = await driver.$(`//*[contains(@resource-id,"VettingTicketInput") or @name="VettingTicketInput"]`);
       const text = (await input.getText().catch(() => "")) ?? "";
-      return text.startsWith("vetting-ticket:");
+      // An empty field on Android reports its placeholder as its text, and the
+      // placeholder is a ticket's start ("vetting-ticket:?v=1&…"): not a ticket.
+      const hint = (await input.getAttribute("hint").catch(() => null)) ?? "vetting-ticket:?v=1&…";
+      return text.startsWith("vetting-ticket:") && text !== hint && !text.endsWith("…");
     };
-    const askVetter = (await pasted()) ? "VettingRequestButton" : "VettingScanTicketButton";
+    // As the screen decides (VtiVetting ticketLinkReady): "Use this link" once
+    // the field holds a ticket the screen has not refused.
+    const askVetter = (await pasted()) && !(await has("VettingTicketRefused")) ? "VettingRequestButton" : "VettingScanTicketButton";
     expected = {
       member: "VettingGoToMyAgent",
       name: "VettingStartButton",
@@ -129,5 +167,5 @@ export async function checkVettingStep(driver, where) {
       checking: undefined,
     }[at.step];
   }
-  await assertOneFilled(driver, expected, `${where} (${at.side} ${at.step})`);
+  return { at, expected };
 }

@@ -782,6 +782,8 @@ export const vetter = {
         let ended = false;
         for (const key of ["VettingCodesDiffer", "VettingEndSession"]) {
           if (await byTestId(d, key).isExisting().catch(() => false)) {
+            // Below the fold under the match code on a phone: bring it into view first.
+            await scrollToTestId(d, key, 4).catch(() => undefined);
             await tapTestIdByCoordinates(d, key);
             await sleep(3000);
             ended = true;

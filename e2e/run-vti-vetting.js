@@ -155,6 +155,25 @@ async function unlockToHome(d) {
   }
   await sleep(4000);
 }
+/** Relaunch the vetter's app and come back to the desk: its step must be the same. */
+async function relaunchKeepsDesk(d) {
+  const before = await roles.stepIdOf(d, "vetter");
+  const appId = "asml.bkc.harvard.wallet";
+  await d.terminateApp(appId).catch(() => undefined);
+  await sleep(2000);
+  await d.activateApp(appId);
+  await existsTestId(d, "EnterPIN", 120000);
+  await unlockIfLocked(d);
+  // A first-visit tip may cover the tabs after a relaunch ("Add credentials": Done).
+  const tip = d.e2ePlatform === "ios" ? await d.$('-ios predicate string:label == "Done" AND type == "XCUIElementTypeButton"') : await d.$('//*[@text="Done" or @text="DONE"]');
+  if (await tip.isExisting().catch(() => false)) await tip.click().catch(() => undefined);
+  await openVetting(d);
+  const after = await roles.stepIdOf(d, "vetter");
+  await screenshot(d, "vetting-desk-after-relaunch");
+  console.log(`[e2e] ${deviceTag(d)}: desk across a relaunch: step "${before}" → "${after}"`);
+  if (after !== before) throw new Error(`${deviceTag(d)}: after a relaunch the desk was on "${after}", not "${before}"`);
+}
+
 /** Contacts and back to My Agent: the vetting screen must come back on the same step. */
 async function tabSwitchKeepsStep(d, where) {
   const before = await roles.stepIdOf(d, "applicant");
@@ -311,6 +330,9 @@ try {
     await checkVettingStep(applicant, "applicant, waiting for the statement");
     const { value: claim } = await roles.vetter.awaitCard(vetter, {}, o);
     await checkVettingStep(vetter, "desk, checking the card");
+    // A vetter who relaunches keeps their place: the codes they confirmed and
+    // the card in hand (225 gate: the desk went back to "Compare the codes").
+    if (process.env.E2E_RELAUNCH_DESK === "1") await relaunchKeepsDesk(vetter);
     if (!new RegExp(LEGAL_NAME).test(claim)) throw new Error(`${vetter.e2ePlatform}: unexpected card claim: ${claim}`);
     // The release gate's §2(c): a tab switch mid-journey, not only a relaunch.
     // The applicant waits for the statement; away and back, the step stays.
