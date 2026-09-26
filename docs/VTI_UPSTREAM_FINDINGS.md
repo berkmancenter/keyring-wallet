@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.56 — 2026-09-25.** A living document: every finding here was measured
+**Version 1.57 — 2026-09-26.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -2203,6 +2203,10 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q30 | Could pnm keep the new admin key until the agent's swap answer arrives, and could the swap be made atomic? | `acl/swap-key` writes the new ACL entry and then deletes the old one, and pnm keeps the new key only in memory until it saves the session. A swap answer lost after the agent swapped strands pnm with a key the agent no longer knows. A repeat can't recover it: the old key is refused, and a partial write conflicts. [Details](#question-details). |
 | VTI-Q31 | Could an applicant cancel a vetting request it made? | `vetting/decline` lets only the vetter close an accepted request, and no task lets the applicant withdraw one, so an applicant who changes their mind, or cannot meet the vetter, is left with an open request only the vetter can end. [Details](#question-details). |
 | VTI-Q32 | Should an invitation offer a standard OID4VCI wallet cannot redeem use the OID4VCI link scheme? | The console shows `invitations/deliver` channel `offer` as `openid-credential-offer://`, but the offer names the community DID as `credential_issuer` and redeems only through `credential-exchange/request`, so a wallet that honours the scheme, as the scheme invites, fails. [Details](#question-details). Follows on from VTI-21 and VTI-32, which vti #1648 resolved. |
+| VTI-Q33 | Can a client tell whether approval rules are enforced? | Rules gate nothing unless the VTA's config sets `policy.enforcement` (a restart), and no task reports it, so an owner can write a rule that does nothing and cannot tell. [Details](#question-details) |
+| VTI-Q34 | Could an approver list the consent requests waiting for it? | A `task-consent/request` is pushed once, when raised, and no task lists pending requests or reports one's status, so a device that missed the push cannot find it. [Details](#question-details) |
+| VTI-Q35 | Should a VTA receive what is addressed to the personas it holds? | The VTA holds a persona's keys but listens only as its own DID, so a community's credential deposits for the persona reach whichever client connects as the persona, never the VTA's vault; and the VTA's own `issue` path stores with a random id and unscoped. [Details](#question-details) |
+| VTI-Q36 | Should `vault/credentials/receive` store in the caller's context when none is given, and refuse to overwrite across contexts? | Without `contextId` an unrestricted admin stores unscoped, readable by every vault reader, where the spec says the consumer's own context; and a receive with an existing id overwrites another context's record and revives an archived one. [Details](#question-details) |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2673,10 +2677,66 @@ same offer. Keyring handles neither today; routing a DID-issuer offer to the
 VTI redemption path is Keyring's work (held for the next release). The
 `keyring://vti/invitation` link still works.
 
+**VTI-Q33 — whether approval rules are enforced is invisible to clients.**
+(a) Approval rules are the policy row `approvals` (`vta-sdk/src/approvals/mod.rs:50`),
+written with `policy/upsert/0.2`. They gate nothing unless the VTA's configuration
+sets `policy.enforcement = true`, which needs a restart
+(`docs/02-vta/approvals.md:13-16, 131-150`), and no config or policy task reports
+the flag. An owner's client can therefore write a rule, show it as set, and have
+it do nothing. Expected: the flag readable by an admin (for example in
+`policy/get` of the `approvals` row, or a config read task), so a client says
+whether a rule is live.
+(b) Read at `ed672fff`, 2026-09-26, for the owner's approval-rules screen
+(`docs/plans/keyring-on-the-vta-farm/agent_policy_and_vault_subtask.md` §3.4).
+Keyring's screen will not claim a rule is enforced until this is answered.
+
+**VTI-Q34 — an approver cannot list the consent requests waiting for it.**
+(a) The VTA pushes a `task-consent/request/0.1` once, when the request is newly
+raised (`vta-service/src/policy_gate.rs:621-634`), and keeps the pending record
+900 s (`:44`). No task lists pending requests or reports the status of one
+(`vta-cli-common/src/consent.rs:11-13`; `docs/05-design-notes/approvals-convergence.md:264-269`).
+A device that was offline for the push, or a second owner device added later,
+cannot find a request waiting for it. Expected: a list (for the caller's approver
+sets) or a status read by challenge.
+(b) Read at `ed672fff`, 2026-09-26. Keyring keeps its own inbox, as the browser
+plugin does (`vta-browser-plugin` `packages/core/src/inbound/pending.ts`).
+
+**VTI-Q35 — a VTA does not receive what is addressed to the personas it holds.**
+(a) A community delivers each credential as a `credential-exchange/issue/0.1` to
+the member's persona DID (`vtc-service/src/credentials/delivery.rs:33-109`). The
+VTA holds that persona's keys, but its listener registers only the VTA's own DID
+(`vta-service/src/messaging/service.rs:143-163`), so the deposit goes to whichever
+client authenticates to the mediator as the persona, never to the VTA's credential
+vault. The VTA's own `issue` path, for messages addressed to the VTA, stores with a
+fresh id on every call and without a context
+(`vta-service/src/operations/credential_exchange.rs:71-108`), so a redelivery would
+duplicate it. Expected, either: the VTA receives for the personas it holds and
+stores deposits in the persona's context with the credential's own id; or it is
+stated that the holder's client forwards them with `vault/credentials/receive`.
+(b) Read at `ed672fff`, 2026-09-26. Keyring's plan forwards them (write-through).
+
+**VTI-Q36 — `vault/credentials/receive` stores unscoped by default and overwrites across contexts.**
+(a) Without `contextId`, a caller with exactly one context binds the record to it,
+and any other caller, including an unrestricted admin, stores it unscoped
+(`vta-service/src/trust_tasks/cred_vault.rs:396-417`). An unscoped record is
+readable by every vault reader of the VTA (`vta-vault/src/query.rs:367-372`). The
+spec says an absent `contextId` means the consumer's own context
+(`specs/vault/credentials/receive/0.1/spec.md:81` at trust-tasks-tf `bdae1cf9`).
+A receive with an id that already exists replaces the record
+(`vta-vault/src/storage.rs:40-56`) with no custody check, and resets its lifecycle
+to active (`vta-vault/src/receive.rs:432`), reviving an archived or deleted one.
+The Rust SDK and pnm cannot send `contextId` (`vta-sdk/src/client/vault.rs:297-313`).
+Expected: an absent `contextId` resolves as the spec says or is refused for a
+multi-context caller; a receive does not overwrite a record in a context the
+caller cannot access; the SDK accepts `contextId`.
+(b) Read at `ed672fff`, 2026-09-26. Keyring will always send the persona's context
+and the credential's own id.
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
 | 1.56 | 2026-09-25 | **Upstream cross-check at the pins** (VTI `ed672fff`, affinidi-tdk-rs `ea5af502`, openvtc `ed13d29`, trust-tasks-tf `bdae1cf9`): every open finding and question read against source, each with a dated note. **Resolved at the pin:** VTI-15 (new communities only), VTI-16, VTI-21 and VTI-32 (upstream side; Keyring's is keyring-bifold#139), VTI-22 (as decided), VTI-33, VTI-34, VTI-36; questions Q3 (vti #1671) and Q11 (vti #1665). **Fixed upstream, our re-run owed:** VTI-08 (vti #1526) and VTI-35 (vti #1632, by `cnm did-log install`, with VTI-12). **Partial, still open:** VTI-01 and VTI-11 (documented by #1627), VTI-20 (CLI message only), VTI-23 (mint fixed; export admin-only by design), VTI-09 (Trust Tasks only). **Not confirmed:** VTI-27, and VTI-17/18/28 (no webvh clone is pinned). VTI-44/45/46 stay open, with open upstream PRs noted. VTI-02 declined. **Corrected attributions:** VTI-09 is fixed by vti #1687, not #858; VTI-27's credit to #1567 is not supported; VTI-28's daemon change is #202, not #203. Status lines on VTI-37–41 and 43, VTI-41's superseded relay ruling marked, VTI-24 points to VTI-26, VTI-12's two PRs reconciled, VTI-15's `/v1` lines reconciled, the "Owed by us" list brought up to date, vti #1672 added to the wire changes, and Q2–Q6, Q10, Q11 given their 09-22 answers. Citations moved to the pins, broken anchors fixed, VTI-42–46 and Q30–32 put in order, changelog rows 1.2–1.4 moved into order. Not sent. |
 | 1.55 | 2026-09-25 | **VTI-Q32** (new): the console shows an invitation offer under the OID4VCI link scheme, but its `credential_issuer` is the community DID and it redeems only through `credential-exchange/request`, so a wallet that follows the scheme fails. Read at `ed672fff`; seen on a real iPhone. Keyring will route such offers itself. Not sent. |
 | 1.54 | 2026-09-25 | **VTI-46** (new, Medium): `acl/swap-key` rebuilds the entry from a subset of fields, so a rotation widens a key-restricted grant and drops approver and step-up settings. Read at `ed672fff`. Not sent. |
