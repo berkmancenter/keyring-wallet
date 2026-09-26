@@ -18,7 +18,15 @@ import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -39,6 +47,7 @@ import { agentDisplayName, withAgentName } from './agentName'
 import { CommunityCard } from './CommunityCard'
 import { communityHeadingOf, communityLabelOf, partyLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
+import { SEGMENT_MIN_SCALE, segmentLayout } from './segmentLayout'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
 interface Holdings {
@@ -143,6 +152,20 @@ const VtaAgentHome: React.FC = () => {
     setSegment(next)
   }, [])
   const pendingApprovals = state.approvals.length
+  // One line per label, always: side by side while that stays readable,
+  // stacked when the phone is narrow or the text is large (IN-37).
+  const { width, fontScale } = useWindowDimensions()
+  const segmentLabels = (['communities', 'manage', 'status'] as const).map((key) => t(SEGMENT_LABEL[key]) as string)
+  const segmentsStacked =
+    segmentLayout({
+      width,
+      fontScale,
+      labels: segmentLabels,
+      fontSize: TextTheme.bold.fontSize ?? 18,
+      // page padding 20 × 2, row padding 4 × 2, two gaps of 4
+      chrome: 56,
+      pillPadding: 12,
+    }) === 'stacked'
 
   const styles = StyleSheet.create({
     segments: {
@@ -152,7 +175,11 @@ const VtaAgentHome: React.FC = () => {
       padding: 4,
       gap: 4,
     },
-    segment: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 6 },
+    segmentsStacked: { flexDirection: 'column' },
+    // Stacked, a pill is as tall as its line, not a share of the column.
+    segmentInStack: { flex: 0 },
+    // Every pill the same: only the selected one's colour differs, never its size.
+    segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 6, borderRadius: 6 },
     segmentOn: { backgroundColor: ColorPalette.brand.primary },
     segmentOnText: { color: ColorPalette.grayscale.white },
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -489,17 +516,32 @@ const VtaAgentHome: React.FC = () => {
         <DevicesCard onPress={() => go(Screens.VtaDevices)} />
         {/* Three places, always the same three (IN-20c). Devices stay above
             them, in reach from every one. */}
-        <View style={styles.segments} accessibilityRole="tablist">
+        <View
+          style={[styles.segments, segmentsStacked ? styles.segmentsStacked : undefined]}
+          accessibilityRole="tablist"
+          testID={testIdWithKey('AgentSegments')}
+        >
           {(['communities', 'manage', 'status'] as const).map((key) => (
             <Pressable
               key={key}
-              style={[styles.segment, segment === key ? styles.segmentOn : undefined]}
+              style={[
+                styles.segment,
+                segmentsStacked ? styles.segmentInStack : undefined,
+                segment === key ? styles.segmentOn : undefined,
+              ]}
               onPress={() => chooseSegment(key)}
               accessibilityRole="tab"
               accessibilityState={{ selected: segment === key }}
               testID={testIdWithKey(`AgentSegment_${key}`)}
             >
-              <ThemedText variant="bold" style={segment === key ? styles.segmentOnText : styles.muted}>
+              <ThemedText
+                variant="bold"
+                style={segment === key ? styles.segmentOnText : styles.muted}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={SEGMENT_MIN_SCALE}
+                testID={testIdWithKey(`AgentSegmentLabel_${key}`)}
+              >
                 {t(SEGMENT_LABEL[key])}
               </ThemedText>
             </Pressable>
