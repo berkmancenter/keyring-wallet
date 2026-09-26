@@ -13,6 +13,7 @@ import { TOKENS, useServices } from '../container-api'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { ConnectStackParams } from '../types/navigators'
+import { KeyringLinkError } from '../modules/trust-tasks/module/vtiLinks'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 import { ThemedText } from '../components/texts/ThemedText'
@@ -66,7 +67,14 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
         enableReuseConnections,
         store.preferences.walletName
       )
-    } catch {
+    } catch (e: unknown) {
+      // Ours, and already in words — a used invitation code, an expired link —
+      // said as it is, as the scanner does, instead of "URL not recognized"
+      // for a link Keyring did recognize (keyring-bifold#139 gate).
+      if (e instanceof KeyringLinkError) {
+        setErrorMessage({ title: t('Scan.CodeNotUsable'), message: e.message })
+        return
+      }
       setErrorMessage({ title: t('PasteUrl.ErrorInvalidUrl'), message: t('PasteUrl.ErrorInvalidUrlDescription') })
     }
   }

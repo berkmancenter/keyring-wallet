@@ -18,7 +18,7 @@ import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
-import { TabStackParams, TabStacks } from '../types/navigators'
+import { Stacks, TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
@@ -91,10 +91,14 @@ const TabStack: React.FC = () => {
             await openKeyringLink(
               deepLink,
               agent,
+              // Through the main stack, as the scanner does: navigating to the
+              // tabs pops whatever sits above them, so the screen a link opens
+              // comes to the top. Navigating the tabs alone left it underneath
+              // an open modal, where the person could not see it had worked.
               (destination) =>
                 (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
-                  TabStacks.MyAgentStack,
-                  { screen: MY_AGENT_SCREEN[destination] }
+                  Stacks.TabStack,
+                  { screen: TabStacks.MyAgentStack, params: { screen: MY_AGENT_SCREEN[destination] } }
                 ),
               (notice: KeyringLinkNotice) => {
                 if (notice.kind === 'reading') {

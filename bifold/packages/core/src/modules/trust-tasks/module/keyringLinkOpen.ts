@@ -28,9 +28,10 @@ export async function openKeyringLink(
   navigate: (destination: MyAgentDestination) => void,
   notify: (notice: KeyringLinkNotice) => void
 ): Promise<void> {
-  // Only a did:webvh is resolved over the network; everything else is read
-  // from the link itself and answers at once.
-  if (keyringAgentLinkKind(link) === 'did') notify({ kind: 'reading' })
+  // A did:webvh is resolved, and a community's invitation offer redeemed, over
+  // the network; everything else is read from the link itself and answers at once.
+  const kind = keyringAgentLinkKind(link)
+  if (kind === 'did' || kind === 'invitationOffer') notify({ kind: 'reading' })
   try {
     await routeKeyringAgentLink(link, agent, navigate)
     notify({ kind: 'opened' })

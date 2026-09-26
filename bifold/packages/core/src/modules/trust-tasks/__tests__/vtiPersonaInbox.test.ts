@@ -37,9 +37,15 @@ jest.mock('../module/VtiIdentityStore', () => ({
     listPersonas: async () => [mockPersona],
   })),
 }))
+const mockSaveInvitation = jest.fn(async () => undefined)
 jest.mock('../module/VtiCommunityStore', () => ({
-  GenericRecordsCommunityStore: jest.fn().mockImplementation(() => ({})),
+  GenericRecordsCommunityStore: jest.fn().mockImplementation(() => ({ saveInvitation: mockSaveInvitation })),
 }))
+const mockRedeem = jest.fn()
+jest.mock('../module/vtiInvitationOffer', () => {
+  const actual = jest.requireActual('../module/vtiInvitationOffer')
+  return { ...actual, redeemInvitationOffer: (...a: unknown[]) => mockRedeem(...a) }
+})
 jest.mock('../module/vtiTsp', () => ({ GenericRecordsTspPeerRevisionStore: jest.fn() }))
 const mockReceiveIssue = jest.fn()
 jest.mock('../module/vtiInbox', () => ({ receiveIssue: (...a: unknown[]) => mockReceiveIssue(...a) }))
@@ -161,5 +167,78 @@ describe('startPersonaInbox', () => {
     expect(mockHandlers).toHaveLength(1)
     stop()
     expect(mockHandlers).toHaveLength(0)
+  })
+})
+
+describe("a community admin console's Send: a pushed invitation offer", () => {
+  const OFFER_TYPE = 'https://trusttasks.org/spec/credential-exchange/offer/0.1'
+  const offerFrom = (community: string) => ({
+    type: OFFER_TYPE,
+    from: community,
+    body: {
+      credential_offer: {
+        credential_configuration_ids: ['VIC'],
+        credential_issuer: community,
+        grants: { 'urn:ietf:params:oauth:grant-type:pre-authorized_code': { 'pre-authorized_code': 'pac_2' } },
+      },
+    },
+  })
+  const invitation = { id: 'urn:uuid:vic', communityDid: mockPersona.communityDid, subjectDid: mockPersona.did }
+
+  beforeEach(() => {
+    mockHandlers.length = 0
+    mockAgentState.isConnected = false
+    mockAgentState.status = 'disconnected'
+    mockReceiveIssue.mockReset()
+    mockRedeem.mockReset()
+    mockSaveInvitation.mockClear()
+  })
+
+  async function listening() {
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+    await flush()
+    expect(mockAgentState.isConnected).toBe(true)
+  }
+
+  it('is redeemed as this persona, kept as an invitation, and announced', async () => {
+    await listening()
+    mockRedeem.mockResolvedValue(invitation)
+    const seen: unknown[] = []
+    const sub = DeviceEventEmitter.addListener(VTI_PERSONA_DELIVERIES_EVENT, (e) => seen.push(e))
+    await mockHandlers[0](offerFrom(mockPersona.communityDid))
+    sub.remove()
+    expect(mockRedeem).toHaveBeenCalledWith(
+      agent,
+      { communityDid: mockPersona.communityDid, configurationIds: ['VIC'], preAuthorizedCode: 'pac_2' },
+      mockPersona
+    )
+    expect(mockSaveInvitation).toHaveBeenCalledWith(invitation)
+    expect(seen).toEqual([{ communityDid: mockPersona.communityDid, kinds: ['invitation'] }])
+    expect(mockReceiveIssue).not.toHaveBeenCalled()
+  })
+
+  it('taken twice (a redelivery), the used code is let go, not retried forever', async () => {
+    await listening()
+    const { VtiInvitationOfferError } = jest.requireActual('../module/vtiInvitationOffer')
+    mockRedeem.mockRejectedValue(new VtiInvitationOfferError('used'))
+    await expect(mockHandlers[0](offerFrom(mockPersona.communityDid))).resolves.toBeUndefined()
+    expect(mockSaveInvitation).not.toHaveBeenCalled()
+  })
+
+  it('a community it cannot reach leaves the message for another try', async () => {
+    await listening()
+    const { VtiInvitationOfferError } = jest.requireActual('../module/vtiInvitationOffer')
+    mockRedeem.mockRejectedValue(new VtiInvitationOfferError('unreachable'))
+    await expect(mockHandlers[0](offerFrom(mockPersona.communityDid))).rejects.toMatchObject({ reason: 'unreachable' })
+  })
+
+  it("is not taken from anyone but the community it names, nor for another community's identity", async () => {
+    await listening()
+    // What is not an offer goes on to the issue handler, which takes only issues.
+    mockReceiveIssue.mockResolvedValue([])
+    const spoofed = { ...offerFrom(mockPersona.communityDid), from: 'did:webvh:QmSomeoneElse:x' }
+    await mockHandlers[0](spoofed)
+    await mockHandlers[0](offerFrom('did:webvh:QmOtherCommunity:x'))
+    expect(mockRedeem).not.toHaveBeenCalled()
   })
 })

@@ -15,6 +15,9 @@ jest.mock('../module/VtiCommunityStore', () => ({
   GenericRecordsCommunityStore: jest.fn(() => ({ saveInvitation: jest.fn(async () => undefined) })),
 }))
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+jest.mock('../module/VtiIdentityStore', () => ({
+  GenericRecordsIdentityStore: jest.fn(() => ({ getPersona: async () => undefined })),
+}))
 
 const community = 'did:webvh:QmCommunity:vtc.example.org'
 const agent = {} as never
@@ -63,5 +66,22 @@ describe('a did: code from the camera', () => {
     expect(notices).toEqual([{ kind: 'opened' }])
     expect(navigate).toHaveBeenCalledWith('VtiJoin')
     expect(mockClassify).not.toHaveBeenCalled()
+  })
+})
+
+describe("a community admin console's invitation QR", () => {
+  it('says it is reading while the offer is redeemed, and says why when it cannot be', async () => {
+    const offer = {
+      credential_configuration_ids: ['VIC'],
+      credential_issuer: community,
+      grants: { 'urn:ietf:params:oauth:grant-type:pre-authorized_code': { 'pre-authorized_code': 'pac_3' } },
+    }
+    const { notices, navigate } = await open(
+      `openid-credential-offer://?credential_offer=${encodeURIComponent(JSON.stringify(offer))}`
+    )
+    // No identity for that community on this phone: nothing to redeem it as.
+    expect(notices[0]).toEqual({ kind: 'reading' })
+    expect(notices.at(-1)).toEqual({ kind: 'unusable', message: expect.stringMatching(/I was invited/) })
+    expect(navigate).not.toHaveBeenCalled()
   })
 })

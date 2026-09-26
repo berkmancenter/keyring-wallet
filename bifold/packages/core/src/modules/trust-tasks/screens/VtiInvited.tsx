@@ -16,7 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
@@ -38,6 +38,7 @@ import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 import { communityLinkReturn } from '../module/vtiLinks'
+import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
 
 import { identityShareText, shareIdentity } from './identityShare'
 import { communityLabelOf, communityLabelStartOf } from './communityName'
@@ -145,6 +146,17 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     const timer = setInterval(() => void load(), 3000)
     return () => clearInterval(timer)
   }, [step, load])
+
+  // An invitation also arrives while the person is on another step: a
+  // community admin console's QR scanned from here (the scan comes back to
+  // this screen, already open), or its Send, which the persona inbox takes
+  // and announces. Look again whenever the screen comes back and whenever the
+  // inbox stores something for this community (gate for keyring-bifold#139).
+  const reload = useCallback(() => {
+    void load().catch(() => undefined)
+  }, [load])
+  useFocusEffect(reload)
+  useVtiPersonaDeliveries(reload, communityDid)
 
   const onContinue = useCallback(async () => {
     if (!agent || !vtaDid || !communityDid) return
