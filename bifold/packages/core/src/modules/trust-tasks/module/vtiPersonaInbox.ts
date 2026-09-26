@@ -20,6 +20,7 @@ import type { Agent } from '@credo-ts/core'
 import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
+import { VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
@@ -29,7 +30,7 @@ import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
 
 /** Emitted with `{ communityDid, kinds }` whenever the inbox stores something. */
-export const VTI_PERSONA_DELIVERIES_EVENT = 'vti:persona-deliveries'
+export { VTI_PERSONA_DELIVERIES_EVENT }
 
 export interface PersonaInboxOptions {
   /** Fallback only: a persona is reached through the mediator its own DID document names. */

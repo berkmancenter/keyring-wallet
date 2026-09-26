@@ -42,6 +42,7 @@ import { recordAnswer, recordSent, recordStatus } from './joinSubmission'
 import { joinRequestRefusal, openJoinRequestOf, vtiAgent, type VtiManifest, type VtiVerdict } from './vtiAgent'
 import { checkCredentialStatus, checkStatusEntry, statusEntryOf, type CredentialStatusResult } from './vtiStatusList'
 import { pickOwnVetterGrant, vetterNotEligibleReason } from './vtiGrantState'
+import { emitCommunityChanged } from './communityChanged'
 import {
   VETTER_ROLE,
   buildEligibilityPresentation,
@@ -422,21 +423,24 @@ export class GenericRecordsVettingStore implements VtiVettingStore {
   async listTickets(communityDid: string) {
     return (await this.list<VettingTicket>('ticket')).filter((t) => t.communityDid === communityDid)
   }
-  saveTicket(t: VettingTicket) {
-    return this.put('ticket', t.ticketId, { ...t })
+  async saveTicket(t: VettingTicket) {
+    await this.put('ticket', t.ticketId, { ...t })
+    emitCommunityChanged(t.communityDid, 'ticket')
   }
   /** Newest first — the person in front of the vetter is the latest request. */
   async listDesk() {
     return (await this.list<VettingDeskRequest>('desk')).sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
   }
-  saveDesk(r: VettingDeskRequest) {
-    return this.put('desk', r.requestId, { ...r })
+  async saveDesk(r: VettingDeskRequest) {
+    await this.put('desk', r.requestId, { ...r })
+    emitCommunityChanged(r.communityDid, 'desk')
   }
   async getProfile(communityDid: string) {
     return (await this.list<VettingVetterProfile>('profile')).find((p) => p.communityDid === communityDid)
   }
-  saveProfile(p: VettingVetterProfile) {
-    return this.put('profile', p.communityDid, { ...p })
+  async saveProfile(p: VettingVetterProfile) {
+    await this.put('profile', p.communityDid, { ...p })
+    emitCommunityChanged(p.communityDid, 'profile')
   }
   async clearDesk(communityDid: string) {
     const rs = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'desk' })
@@ -444,12 +448,14 @@ export class GenericRecordsVettingStore implements VtiVettingStore {
       if ((r.content as { communityDid?: string }).communityDid === communityDid)
         await this.agent.genericRecords.delete(r)
     }
+    emitCommunityChanged(communityDid, 'desk')
   }
   async getApplication(communityDid: string) {
     return (await this.list<VettingApplication>('application')).find((a) => a.communityDid === communityDid)
   }
-  saveApplication(a: VettingApplication) {
-    return this.put('application', a.communityDid, { ...a })
+  async saveApplication(a: VettingApplication) {
+    await this.put('application', a.communityDid, { ...a })
+    emitCommunityChanged(a.communityDid, 'application')
   }
   async forget(communityDid: string) {
     const rs = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE })
@@ -457,6 +463,7 @@ export class GenericRecordsVettingStore implements VtiVettingStore {
       const c = r.content as { communityDid?: string }
       if (c.communityDid === communityDid) await this.agent.genericRecords.delete(r)
     }
+    emitCommunityChanged(communityDid, 'forgotten')
   }
 }
 
