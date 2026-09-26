@@ -123,8 +123,15 @@ export function invitationOfferOfMessage(plaintext: {
   body?: unknown
 }): VtiInvitationOffer | undefined {
   if (plaintext.type !== CREDENTIAL_EXCHANGE_OFFER) return undefined
-  const offer = invitationOfferOf((plaintext.body as { credential_offer?: unknown } | undefined)?.credential_offer)
+  // Since vti #1771 a community pushes the offer as a signed Trust Task
+  // document, so the body is the document and the offer is in its payload; a
+  // community on an older release sends the bare payload as the body.
+  const body = (plaintext.body ?? {}) as { payload?: { credential_offer?: unknown }; credential_offer?: unknown }
+  const document = body.payload !== undefined ? (body as { issuer?: unknown }) : undefined
+  const offer = invitationOfferOf(document ? body.payload?.credential_offer : body.credential_offer)
   if (!offer || plaintext.from !== offer.communityDid) return undefined
+  // The document names who issued it; that must be the community that sent it.
+  if (document && document.issuer !== plaintext.from) return undefined
   return offer
 }
 
