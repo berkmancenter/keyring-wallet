@@ -526,6 +526,20 @@ export const applicant = {
         await waitForTestId(d, "JoinMakeIdentity", 30000);
         await tapTestIdByCoordinates(d, "JoinAsContinue");
         await handleBiometricConfirmIfPresent(d);
+        // "Your agent didn't answer. Tap Continue to try again": do what the
+        // screen tells a person, up to twice (a lost reply, VTI-43; 225 final).
+        for (let retry = 1; retry <= 2; retry++) {
+          let erred = false;
+          for (let i = 0; i < 40 && !erred; i++) {
+            if ((await stepIdOf(d, "applicant")) !== null) break;
+            erred = await existsTestId(d, "JoinError", 1500);
+          }
+          if (!erred || !(await existsTestId(d, "JoinAsContinue", 2000))) break;
+          const said = await textOf(d, "JoinError").catch(() => "");
+          console.log(`[e2e] ${d.e2ePlatform}: Join says "${said.slice(0, 80)}" — Continue again (${retry}/2)`);
+          await tapTestIdByCoordinates(d, "JoinAsContinue");
+          await handleBiometricConfirmIfPresent(d);
+        }
         observedAsks = asks.replace(/\s+/g, " ").slice(0, 200);
       } else {
         await openVetting(d);
@@ -542,6 +556,8 @@ export const applicant = {
         await sleep(800);
         const start = await scrollToTestId(d, "VettingStartButton", 4);
         for (let i = 0; i < 30 && !(await start.isEnabled().catch(() => false)); i++) await sleep(2000);
+        // A caller's per-step check (the release gate's one filled button), if given.
+        if (opts.check) await opts.check(d, "applicant, name");
         await tapTestIdByCoordinates(d, "VettingStartButton");
       } else if (at !== "ticket") {
         throw failWith(`the application is already past the ticket step ("${at}") — reset the applicant first`, { stepId: at });
@@ -780,6 +796,8 @@ export const vetter = {
         let ended = false;
         for (const key of ["VettingCodesDiffer", "VettingEndSession"]) {
           if (await byTestId(d, key).isExisting().catch(() => false)) {
+            // Below the fold under the match code on a phone: bring it into view first.
+            await scrollToTestId(d, key, 4).catch(() => undefined);
             await tapTestIdByCoordinates(d, key);
             await sleep(3000);
             ended = true;

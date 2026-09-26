@@ -23,6 +23,7 @@ import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/confi
 import os from "node:os";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
+import { checkVettingStep } from "./lib/filledButtons.js";
 import * as roles from "./lib/keyringRoles.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
@@ -154,6 +155,105 @@ async function unlockToHome(d) {
   }
   await sleep(4000);
 }
+/**
+ * The release gate's §2 after member: the done card, My Agent's "Joined"
+ * without a background/foreground or a wait past 10 s, the community screen,
+ * and Join and "I was invited" after a relaunch. Every miss is collected and
+ * reported together.
+ */
+async function memberEverywhere(d) {
+  const misses = [];
+  const src = async () => d.getPageSource();
+  const seatText = await byTestId(d, "VettingSeatBanner").getText().catch(() => "");
+  if (!(await existsTestId(d, "VettingMemberDone", 5000))) misses.push("no done card (VettingMemberDone)");
+  if (/being vetted/i.test(seatText)) misses.push(`the banner still says "${seatText}"`);
+  if (/Connecting/i.test(await src())) misses.push("a connecting line on the done card");
+  await tapTestIdByCoordinates(d, "VettingGoToMyAgent");
+  const t0 = Date.now();
+  const joined = await existsTestId(d, "AgentJourneyJoined", 10000);
+  const took = Date.now() - t0;
+  await screenshot(d, "vetting-09-my-agent-joined");
+  console.log(`[e2e] ${deviceTag(d)}: My Agent shows Joined: ${joined} after ${took} ms (no background/foreground)`);
+  if (!joined) misses.push("My Agent did not show Joined within 10 s");
+  const row = await scrollToTestId(d, "AgentMembershipRow", 6).catch(() => undefined);
+  if (!row) misses.push("no membership row on My Agent");
+  else {
+    await row.click();
+    if (!(await existsTestId(d, "CommunityMemberSince", 15000))) misses.push("the community screen shows no member-since line");
+    if (await existsTestId(d, "CommunityCriteria", 1500)) misses.push("the community screen still shows its criteria");
+    await screenshot(d, "vetting-10-community-member");
+  }
+  // After a relaunch: My Agent, Join and "I was invited" still say member.
+  const appId = "asml.bkc.harvard.wallet";
+  await d.terminateApp(appId).catch(() => undefined);
+  await sleep(2000);
+  await d.activateApp(appId);
+  await existsTestId(d, "EnterPIN", 120000);
+  await unlockIfLocked(d);
+  await (await waitForTestId(d, "MyAgent", 30000)).click();
+  if (!(await existsTestId(d, "AgentJourneyJoined", 15000))) misses.push("after a relaunch My Agent does not show Joined");
+  for (const [door, id, test, what] of [
+    ["AgentJoinCommunity", "JoinStandingText", (t) => /member/i.test(t), "Join"],
+    ["AgentInvited", "InvitedJoined", () => true, '"I was invited"'],
+  ]) {
+    const el = await scrollToTestId(d, door, 6).catch(() => undefined);
+    if (!el) { misses.push(`no ${what} door after a relaunch`); continue; }
+    await el.click();
+    const shown = await existsTestId(d, id, 20000);
+    const text = shown ? await byTestId(d, id).getText().catch(() => "") : "";
+    await screenshot(d, `vetting-11-${what.replace(/\W/g, "")}-after-relaunch`);
+    console.log(`[e2e] ${deviceTag(d)}: ${what} after a relaunch: ${shown ? `"${text.slice(0, 80)}"` : `no ${id}`}`);
+    if (!shown || !test(text)) misses.push(`${what} does not show the member state after a relaunch`);
+    await (await waitForTestId(d, "MyAgent", 15000)).click();
+    await sleep(1500);
+  }
+  if (misses.length) throw new Error(`${deviceTag(d)}: member state: ${misses.join("; ")}`);
+  console.log(`[e2e] ${deviceTag(d)}: member state everywhere: done card, My Agent Joined, community, and after a relaunch`);
+}
+
+/** Relaunch the vetter's app and come back to the desk: its step must be the same. */
+async function relaunchKeepsDesk(d) {
+  const before = await roles.stepIdOf(d, "vetter");
+  const appId = "asml.bkc.harvard.wallet";
+  await d.terminateApp(appId).catch(() => undefined);
+  await sleep(2000);
+  await d.activateApp(appId);
+  await existsTestId(d, "EnterPIN", 120000);
+  await unlockIfLocked(d);
+  // A first-visit tip may cover the tabs after a relaunch ("Add credentials": Done).
+  const tip = d.e2ePlatform === "ios" ? await d.$('-ios predicate string:label == "Done" AND type == "XCUIElementTypeButton"') : await d.$('//*[@text="Done" or @text="DONE"]');
+  if (await tip.isExisting().catch(() => false)) await tip.click().catch(() => undefined);
+  await openVetting(d);
+  const after = await roles.stepIdOf(d, "vetter");
+  await screenshot(d, "vetting-desk-after-relaunch");
+  console.log(`[e2e] ${deviceTag(d)}: desk across a relaunch: step "${before}" → "${after}"`);
+  if (after !== before) throw new Error(`${deviceTag(d)}: after a relaunch the desk was on "${after}", not "${before}"`);
+}
+
+/** Contacts and back to My Agent: the vetting screen must come back on the same step. */
+async function tabSwitchKeepsStep(d, where) {
+  const before = await roles.stepIdOf(d, "applicant");
+  await (await waitForTestId(d, "Contacts", 15000)).click();
+  await sleep(2000);
+  await (await waitForTestId(d, "MyAgent", 15000)).click();
+  await sleep(2000);
+  // Every tab unmounts when it loses focus (TabStack's unmountOnBlur), so My
+  // Agent comes back at the agent home: the way on is its "Continue your
+  // vetting", and what must have survived is the journey's step.
+  await screenshot(d, "vetting-tab-switch-back");
+  let after = await roles.stepIdOf(d, "applicant");
+  if (after === null) {
+    await openVetting(d);
+    after = await roles.stepIdOf(d, "applicant");
+    await screenshot(d, "vetting-tab-switch-continued");
+  }
+  console.log(`[e2e] ${deviceTag(d)}: tab switch while ${where}: step "${before}" → back through the agent home → "${after}"`);
+  // The statement may land meanwhile and move the step on: that is the one change allowed.
+  if (after !== before && !(before === "checking" && after === "apply")) {
+    throw new Error(`${deviceTag(d)}: after a tab switch while ${where}, the vetting step was "${after}", not "${before}"`);
+  }
+}
+
 async function openVetting(d) {
   // The one-agent screen (keyring-bifold#75) has no operator panel for a
   // linked phone: Vetting opens from the agent home itself — "Vet others"
@@ -244,11 +344,15 @@ try {
   // modes below still stage their admin actions inline; E2E_LEGACY_CEREMONY=1
   // runs the ordinary ceremony that way too, for comparison.
   if (!REFUSAL && process.env.E2E_LEGACY_CEREMONY !== "1") {
-    const o = { log: process.env.E2E_STEP_LOG || path.join(here, "artifacts", `vetting-steps-${Date.now()}.jsonl`) };
+    // The release gate's one filled button, at every step on both phones
+    // (E2E_ONE_FILLED=1; checkVettingStep is a no-op without it).
+    const o = { log: process.env.E2E_STEP_LOG || path.join(here, "artifacts", `vetting-steps-${Date.now()}.jsonl`), check: checkVettingStep };
     console.log(`[e2e] step log: ${o.log}`);
     await roles.vetter.openDesk(vetter, o);
+    await checkVettingStep(vetter, "desk, before a ticket");
     const { value: ticket } = await roles.vetter.issueTicket(vetter, o);
     await screenshot(vetter, "vetting-01-ticket");
+    await checkVettingStep(vetter, "desk, ticket issued");
     await roles.applicant.reset(applicant, { allowInProgress: process.env.E2E_ALLOW_IN_PROGRESS === "1" }, o);
     await roles.applicant.start(
       applicant,
@@ -260,28 +364,47 @@ try {
       },
       o
     );
+    await checkVettingStep(applicant, "applicant, asking a vetter");
     await roles.applicant.request(applicant, { ticketUri: ticket, via: process.env.TICKET_VIA || "field" }, o);
     await roles.applicant.awaitAccepted(applicant, {}, o);
     await screenshot(applicant, "vetting-02-accepted");
+    await checkVettingStep(applicant, "applicant, request accepted");
     await roles.vetter.awaitRequest(vetter, {}, o);
+    await checkVettingStep(vetter, "desk, a request waiting");
     const { value: vetterCode } = await roles.vetter.openSession(vetter, o);
     const { value: applicantCode } = await roles.applicant.readMatchCode(applicant, {}, o);
+    await checkVettingStep(vetter, "desk, matching codes");
+    await checkVettingStep(applicant, "applicant, matching codes");
     console.log(`[e2e] match code vetter=${vetterCode} applicant=${applicantCode}`);
     if (vetterCode !== applicantCode) throw new Error(`match codes differ: ${vetterCode} vs ${applicantCode}`);
     await screenshot(applicant, "vetting-04-match-code");
     await roles.applicant.confirmMatch(applicant, { match: true }, o);
     await roles.vetter.confirmMatch(vetter, { match: true }, o);
+    await checkVettingStep(applicant, "applicant, sending the card");
+    await checkVettingStep(vetter, "desk, waiting for the card");
     const { value: sent } = await roles.applicant.sendCard(applicant, o);
+    await checkVettingStep(applicant, "applicant, waiting for the statement");
     const { value: claim } = await roles.vetter.awaitCard(vetter, {}, o);
+    await checkVettingStep(vetter, "desk, checking the card");
+    // A vetter who relaunches keeps their place: the codes they confirmed and
+    // the card in hand (225 gate: the desk went back to "Compare the codes").
+    if (process.env.E2E_RELAUNCH_DESK === "1") await relaunchKeepsDesk(vetter);
     if (!new RegExp(LEGAL_NAME).test(claim)) throw new Error(`${vetter.e2ePlatform}: unexpected card claim: ${claim}`);
+    // The release gate's §2(c): a tab switch mid-journey, not only a relaunch.
+    // The applicant waits for the statement; away and back, the step stays.
+    if (process.env.E2E_TAB_SWITCH === "1") await tabSwitchKeepsStep(applicant, "waiting for the statement");
     await screenshot(vetter, "vetting-05-card");
     await roles.vetter.attest(vetter, o);
     await screenshot(vetter, "vetting-06-attested");
+    await checkVettingStep(vetter, "desk, statement issued");
     await roles.applicant.awaitStatement(applicant, { cardSentMs: sent.cardSentMs }, o);
     await screenshot(applicant, "vetting-07-checklist");
+    await checkVettingStep(applicant, "applicant, ready to apply");
     const { value: outcome } = await roles.applicant.apply(applicant, {}, o);
+    await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");
     if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);
+    if (process.env.E2E_MEMBER_CHECKS === "1") await memberEverywhere(applicant);
     printSuccess("vti-vetting");
     process.exitCode = 0;
     throw Object.assign(new Error("done"), { done: true });
@@ -353,6 +476,7 @@ try {
   if (clear) { await tapTestIdByCoordinates(vetter, "VettingDeskClearButton"); await sleep(2500); console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`); }
   await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
   await waitForTestId(vetter, "VettingNewTicketButton", 20000);
+  await checkVettingStep(vetter, "desk, before a ticket");
   // Tap-and-verify: publishing the profile adds a line above this button, so
   // the layout can shift between reading its position and tapping it, and the
   // tap then lands on nothing. Retry until a ticket actually appears.
@@ -459,10 +583,12 @@ try {
   await byTestId(applicant, "VettingSeatBanner").click().catch(() => undefined);
   await sleep(800);
   // The button stays disabled until the persona's mediator session is up.
+  await checkVettingStep(applicant, "applicant, name");
   const start = await scrollToTestId(applicant, "VettingStartButton", 4);
   for (let i = 0; i < 30 && !(await start.isEnabled().catch(() => false)); i++) await sleep(2000);
   await tapTestIdByCoordinates(applicant, "VettingStartButton");
   await waitForTestId(applicant, "VettingRequirements", 60000);
+  await checkVettingStep(applicant, "applicant, asking a vetter");
   console.log(`[e2e] ${applicant.e2ePlatform}: ${await textOf(applicant, "VettingRequirements")}`);
   /**
    * Hand the vetter's ticket to the applicant and send the request.
@@ -676,6 +802,7 @@ try {
   const open = await scrollToTestId(vetter, "VettingOpenSessionButton", 6);
   await tapElement(vetter, open);
   const codeEl = await waitForTestId(vetter, "VettingMatchCode", 60000);
+  await checkVettingStep(vetter, "desk, matching codes");
   const vetterCode = ((await codeEl.getAttribute(isIos(vetter) ? "label" : "text")) || "").trim();
   await screenshot(vetter, "vetting-03-session");
 
@@ -734,6 +861,7 @@ try {
   await sleep(1500);
   await handleBiometricConfirmIfPresent(vetter);
   await waitForTestId(vetter, "VettingStatementIssued", 60000);
+  await checkVettingStep(vetter, "desk, statement issued");
   console.log(`[e2e] ${vetter.e2ePlatform}: statement issued`);
   await screenshot(vetter, "vetting-06-attested");
 
