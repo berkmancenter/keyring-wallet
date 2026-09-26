@@ -19,7 +19,7 @@
  * @module trust-tasks/module/communityChanged
  */
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
 import type { VtiHeldCredential } from './VtiCommunityStore'
@@ -76,6 +76,12 @@ export function changeOfHeldCredential(kind: VtiHeldCredential['kind']): Communi
  * stored. Changes that land together call it once, and never after unmount.
  */
 export function useCommunityChanged(refresh: () => void, communityDid?: string): void {
+  // The latest refresh, read when the change is handled — so a screen whose
+  // callback changes between a change and its tick is still refreshed. (The
+  // subscription used to be torn down with the old callback, and a change
+  // already queued was then dropped: the new subscription never saw it.)
+  const latest = useRef(refresh)
+  latest.current = refresh
   useEffect(() => {
     let live = true
     let queued = false
@@ -85,7 +91,7 @@ export function useCommunityChanged(refresh: () => void, communityDid?: string):
       queued = true
       setTimeout(() => {
         queued = false
-        if (live) refresh()
+        if (live) latest.current()
       }, 0)
     }
     const subs = [COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT].map((name) =>
@@ -95,5 +101,5 @@ export function useCommunityChanged(refresh: () => void, communityDid?: string):
       live = false
       subs.forEach((s) => s.remove())
     }
-  }, [refresh, communityDid])
+  }, [communityDid])
 }
