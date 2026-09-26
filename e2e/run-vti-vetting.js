@@ -155,6 +155,30 @@ async function unlockToHome(d) {
   }
   await sleep(4000);
 }
+/** Contacts and back to My Agent: the vetting screen must come back on the same step. */
+async function tabSwitchKeepsStep(d, where) {
+  const before = await roles.stepIdOf(d, "applicant");
+  await (await waitForTestId(d, "Contacts", 15000)).click();
+  await sleep(2000);
+  await (await waitForTestId(d, "MyAgent", 15000)).click();
+  await sleep(2000);
+  // Every tab unmounts when it loses focus (TabStack's unmountOnBlur), so My
+  // Agent comes back at the agent home: the way on is its "Continue your
+  // vetting", and what must have survived is the journey's step.
+  await screenshot(d, "vetting-tab-switch-back");
+  let after = await roles.stepIdOf(d, "applicant");
+  if (after === null) {
+    await openVetting(d);
+    after = await roles.stepIdOf(d, "applicant");
+    await screenshot(d, "vetting-tab-switch-continued");
+  }
+  console.log(`[e2e] ${deviceTag(d)}: tab switch while ${where}: step "${before}" → back through the agent home → "${after}"`);
+  // The statement may land meanwhile and move the step on: that is the one change allowed.
+  if (after !== before && !(before === "checking" && after === "apply")) {
+    throw new Error(`${deviceTag(d)}: after a tab switch while ${where}, the vetting step was "${after}", not "${before}"`);
+  }
+}
+
 async function openVetting(d) {
   // The one-agent screen (keyring-bifold#75) has no operator panel for a
   // linked phone: Vetting opens from the agent home itself — "Vet others"
@@ -245,11 +269,15 @@ try {
   // modes below still stage their admin actions inline; E2E_LEGACY_CEREMONY=1
   // runs the ordinary ceremony that way too, for comparison.
   if (!REFUSAL && process.env.E2E_LEGACY_CEREMONY !== "1") {
-    const o = { log: process.env.E2E_STEP_LOG || path.join(here, "artifacts", `vetting-steps-${Date.now()}.jsonl`) };
+    // The release gate's one filled button, at every step on both phones
+    // (E2E_ONE_FILLED=1; checkVettingStep is a no-op without it).
+    const o = { log: process.env.E2E_STEP_LOG || path.join(here, "artifacts", `vetting-steps-${Date.now()}.jsonl`), check: checkVettingStep };
     console.log(`[e2e] step log: ${o.log}`);
     await roles.vetter.openDesk(vetter, o);
+    await checkVettingStep(vetter, "desk, before a ticket");
     const { value: ticket } = await roles.vetter.issueTicket(vetter, o);
     await screenshot(vetter, "vetting-01-ticket");
+    await checkVettingStep(vetter, "desk, ticket issued");
     await roles.applicant.reset(applicant, { allowInProgress: process.env.E2E_ALLOW_IN_PROGRESS === "1" }, o);
     await roles.applicant.start(
       applicant,
@@ -261,25 +289,39 @@ try {
       },
       o
     );
+    await checkVettingStep(applicant, "applicant, asking a vetter");
     await roles.applicant.request(applicant, { ticketUri: ticket, via: process.env.TICKET_VIA || "field" }, o);
     await roles.applicant.awaitAccepted(applicant, {}, o);
     await screenshot(applicant, "vetting-02-accepted");
+    await checkVettingStep(applicant, "applicant, request accepted");
     await roles.vetter.awaitRequest(vetter, {}, o);
+    await checkVettingStep(vetter, "desk, a request waiting");
     const { value: vetterCode } = await roles.vetter.openSession(vetter, o);
     const { value: applicantCode } = await roles.applicant.readMatchCode(applicant, {}, o);
+    await checkVettingStep(vetter, "desk, matching codes");
+    await checkVettingStep(applicant, "applicant, matching codes");
     console.log(`[e2e] match code vetter=${vetterCode} applicant=${applicantCode}`);
     if (vetterCode !== applicantCode) throw new Error(`match codes differ: ${vetterCode} vs ${applicantCode}`);
     await screenshot(applicant, "vetting-04-match-code");
     await roles.applicant.confirmMatch(applicant, { match: true }, o);
     await roles.vetter.confirmMatch(vetter, { match: true }, o);
+    await checkVettingStep(applicant, "applicant, sending the card");
+    await checkVettingStep(vetter, "desk, waiting for the card");
     const { value: sent } = await roles.applicant.sendCard(applicant, o);
+    await checkVettingStep(applicant, "applicant, waiting for the statement");
     const { value: claim } = await roles.vetter.awaitCard(vetter, {}, o);
+    await checkVettingStep(vetter, "desk, checking the card");
     if (!new RegExp(LEGAL_NAME).test(claim)) throw new Error(`${vetter.e2ePlatform}: unexpected card claim: ${claim}`);
+    // The release gate's §2(c): a tab switch mid-journey, not only a relaunch.
+    // The applicant waits for the statement; away and back, the step stays.
+    if (process.env.E2E_TAB_SWITCH === "1") await tabSwitchKeepsStep(applicant, "waiting for the statement");
     await screenshot(vetter, "vetting-05-card");
     await roles.vetter.attest(vetter, o);
     await screenshot(vetter, "vetting-06-attested");
+    await checkVettingStep(vetter, "desk, statement issued");
     await roles.applicant.awaitStatement(applicant, { cardSentMs: sent.cardSentMs }, o);
     await screenshot(applicant, "vetting-07-checklist");
+    await checkVettingStep(applicant, "applicant, ready to apply");
     const { value: outcome } = await roles.applicant.apply(applicant, {}, o);
     await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");

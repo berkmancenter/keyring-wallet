@@ -542,6 +542,8 @@ export const applicant = {
         await sleep(800);
         const start = await scrollToTestId(d, "VettingStartButton", 4);
         for (let i = 0; i < 30 && !(await start.isEnabled().catch(() => false)); i++) await sleep(2000);
+        // A caller's per-step check (the release gate's one filled button), if given.
+        if (opts.check) await opts.check(d, "applicant, name");
         await tapTestIdByCoordinates(d, "VettingStartButton");
       } else if (at !== "ticket") {
         throw failWith(`the application is already past the ticket step ("${at}") — reset the applicant first`, { stepId: at });
