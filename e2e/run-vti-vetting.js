@@ -258,7 +258,8 @@ async function openVetting(d) {
   // The one-agent screen (keyring-bifold#75) has no operator panel for a
   // linked phone: Vetting opens from the agent home itself — "Vet others"
   // (AgentVetOthers) for a vetter, "Continue your vetting" (AgentContinueVetting)
-  // for an applicant with a request open. Builds before it keep the panel path
+  // for an applicant with a request open, and since keyring-bifold#162 the
+  // community card's "Open the vetting desk". Builds before it keep the panel path
   // below. Measured on the Farm, 2026-09-23: without this the vetter stopped
   // at "the operator panel is not reachable from here".
   await (await waitForTestId(d, "MyAgent", 30000)).click();
@@ -272,6 +273,13 @@ async function openVetting(d) {
         await sleep(1500);
         return;
       }
+    }
+    // Since keyring-bifold#162 a vetter's desk opens from the community card.
+    const card = await roles.tapCardVettingDoor(d);
+    if (card) {
+      console.log(`[e2e] ${deviceTag(d)}: into Vetting from the community card (${card})`);
+      await sleep(1500);
+      return;
     }
     // An older build: the panel, or its door, is what shows.
     if ((await existsTestId(d, "AgentOpenCommunities", 1000)) || (await existsTestId(d, "MyAgentCard", 1000))) break;
