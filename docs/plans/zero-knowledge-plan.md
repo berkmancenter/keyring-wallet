@@ -115,9 +115,10 @@ Three facts specific to a phone bear on it. The first is general; the second and
 Four duties, none of them cryptographic beyond the signature Keyring already makes:
 
 1. **Gate the consequential operation with a hardware-attested step-up.** Vouching for a person is the most consequential thing a member does, and [[VETTING-DESIGN]]'s own target for signing a vetting statement is *"step-up always (passkey / device)"* — a gate its V0 cannot apply, because the client holds the key. Keyring approves the attest step (whatever task name the specification gives it) through the approvals path ([`pnm_cnm_subtask.md`](./openvtc-integration-plan/pnm_cnm_subtask.md) P3) with a Secure Enclave or StrongBox signature and its attestation evidence. This is where Keyring is ahead of the reference clients, and it is Z1's one contribution beyond UI.
-2. **Render what the VTA says, as data.** Proof requests, disclosure previews, checklists and outcomes are the VTA's replies, rendered. A predicate claim is shown as the strongest outcome on the screen, not as a missing value ([[CONSENT-VIEW]]: *"A predicate claim discloses no value at all — that is the whole point"*). The preview comes from the code that will act ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §3.9).
-3. **Carry the ceremony.** The V0 vetting ceremony — ticket, request, session, signed Vetting Card, match code, human check ([[VETTING-DESIGN]] §3) — needs no change for hidden mode: what changes is the artifact the vetter returns and what the VTC checks, neither of which the client composes.
-4. **Keep no ZK state** (under the working assumption of §3.1; D4 would narrow this to the vetter's side only, and note that the phone already borrows persona *signing* keys today, so this is a rule about proving material rather than a general "no secrets on the device"). No ZK secret, rate-limiting token, attestation, tag or proof is persisted on the phone, and none is cached for display. The boundary [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.6 draws ("no local mirror of state a counterparty owns") covers all of it, because the VTA owns it. Idempotence ledger entries for in-flight tasks are the one exception, and they are ids, not ZK material.
+2. **Mark a non-disclosing presentation, without overclaiming.** A credential shown by a proof that reveals nothing deserves to look different from one shown in full, and a badge is the natural device. Two cautions, both from §2.4: a badge must say *nothing was disclosed*, never *verified* or *private* — the cryptography carries disclosure, not assurance, and metadata outside the proof (timing, a thin anonymity set, who the counterparty is) can still identify a person. And it must be visibly distinct from Keyring's existing hardware-attestation badge, which makes an unrelated claim about the device rather than about disclosure. Two badges that look alike would be worse than one.
+3. **Render what the VTA says, as data.** Proof requests, disclosure previews, checklists and outcomes are the VTA's replies, rendered. A predicate claim is shown as the strongest outcome on the screen, not as a missing value ([[CONSENT-VIEW]]: *"A predicate claim discloses no value at all — that is the whole point"*). The preview comes from the code that will act ([`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §3.9).
+4. **Carry the ceremony.** The V0 vetting ceremony — ticket, request, session, signed Vetting Card, match code, human check ([[VETTING-DESIGN]] §3) — needs no change for hidden mode: what changes is the artifact the vetter returns and what the VTC checks, neither of which the client composes.
+5. **Keep no ZK state** (under the working assumption of §3.1; D4 would narrow this to the vetter's side only, and note that the phone already borrows persona *signing* keys today, so this is a rule about proving material rather than a general "no secrets on the device"). No ZK secret, rate-limiting token, attestation, tag or proof is persisted on the phone, and none is cached for display. The boundary [`community_vetting_subtask.md`](./keyring-on-the-vta-farm/community_vetting_subtask.md) §2.6 draws ("no local mirror of state a counterparty owns") covers all of it, because the VTA owns it. Idempotence ledger entries for in-flight tasks are the one exception, and they are ids, not ZK material.
 
 ### 3.3 Track Z1 rests on the member being a VTA persona — but the client, not the VTA, signs for it
 
@@ -143,6 +144,16 @@ This keeps §3.1 and resolves the tension with the vetting subtask's §2.6 witho
 - **The Farm.** [`keyring-on-the-vta-farm.md`](./keyring-on-the-vta-farm.md) targets a Farm-hosted VTA. If one operator hosts both a member's VTA and the community's VTC, hidden mode is void for that member, and Keyring should warn rather than let the vetter believe they are anonymous. Keyring cannot detect operator identity by itself, so this needs a manifest or Farm signal (§8 B5).
   Today the Farm hosts VTAs and the mediator, and the first community VTC runs on a separate operator's stack, so the rule currently holds there.
 - **The local stack.** Our development stack runs VTA, VTC and mediator on one host under one operator. That is fine for testing mechanics. No demonstration on it may describe vetters as anonymous from the community.
+
+### 3.6 Keyring's contract is with the community's declared extension, not with a construction
+
+**Our design rule, and it decides what ZK1 builds.** A specification that standardised *one* zero-knowledge method would freeze a young research area into a wire format, so the likelier shape — and the one we should build to — is that the operation layer stays method-neutral: a community publishes the parameters of whatever scheme it uses in a namespace it controls, marks that namespace as one a client must understand, and the client either honours it or refuses the criterion.
+
+For Keyring that is the better contract anyway, and it changes the work:
+
+- **ZK1's client contract is against the declared extension**, not against a named construction. What the client must do — read the parameters, recognise the mode, gate the attest step, render the outcomes, refuse when it cannot honour the namespace — is identical whichever scheme a community picks.
+- **The plan's §2.2 remains background, not interface.** Naming constructions helps a reader understand the trade-offs; nothing in the client should branch on them.
+- **A second scheme later is additive.** If a community adopts a different construction, Keyring's refusal path is what protects its users in the meantime, which is exactly why §4.1's fail-closed row is a requirement rather than a nicety.
 
 ## 4. Tracks
 
@@ -180,9 +191,18 @@ Two standing constraints are inherited and not re-decided here. Edge-binding ver
 Four more inherited constraints decide what a ZK presentation of our credentials can hide, and each is already measured or tracked:
 
 - **The citation of a Trust Task is a durable correlator.** `taskContext` and `taskDigestMultibase` link every presentation that carries them. Upstream tracks carrying the citation in committed form, opened inside the proof ([cred-spec#58](https://github.com/trustoverip/dtgwg-cred-spec/issues/58), ZKP record 008), and blinding the unsalted, enumerable digest-valued members ([cred-spec#38](https://github.com/trustoverip/dtgwg-cred-spec/issues/38)). The identifier commitment profile ([dtgwg-zkp-spec#11](https://github.com/trustoverip/dtgwg-zkp-spec/pull/11)) covers both. Z2 presents what those settle and invents no blinding of its own.
+- **Salting is optional to produce and mandatory to honour.** A digest-valued member may arrive salted, and a verifier that ignores the salt computes the wrong digest and rejects a valid credential; one that requires a salt rejects an unsalted one. Keyring's read path must accept both and follow whatever the credential carries. This is the read-side half of the enumerable-digest problem below, and it is ours to get right whether or not we ever produce a salt.
 - **The ZK-openable commitment lives with the identifier, not in the signature.** `eddsa-jcs-2022` is the RECOMMENDED credential proof, so the commitment a proof opens is a member of the credential and not a property of the proof (the same record set). This fits §3.4: the device-signed JCS proof stays, and the VTA's ZK half opens members the credential already commits to.
 - **Anything unmapped by `@context` is invisible to `bbs-2023`.** A member with no term definition is absent from the signed RDF graph, so it can be neither signed nor disclosed. An unresolved CURIE is signed verbatim as an IRI with the wrong meaning (`tsp-reference/ref-07c-predicate-coverage`). An unbundled context means a network fetch at verification time (`ref-07d-vocabulary-trust-path`). Keyring's extension members must be termed before a `bbs-2023` half is issued over them.
 - **The VSC input shape.** After [`vsc-migration-plan.md`](./vsc-migration-plan.md) lands, a proof over a witness credential reads `credentialSubject.predicate`, `credentialSubject.object.digestMultibase` (computed without the VRC's top-level `proof`), a top-level `taskContext`, and Keyring's extension members beside `witnessContext`. ZK4 targets that shape, not WD02's `WitnessCredential`.
+
+### 4.2.1 A completion confirmation is a credential, and disclosing one is a choice with a cost
+
+Proof that a trust task completed is moving towards a plain credential: a *confirmation* whose claim is that a named task completed, carrying a digest of the completed task and signed by whoever completed it, **held by the party it concerns and disclosed only when they choose**. Three consequences for this plan, and they pull in opposite directions:
+
+- **It fits our outcome-evidence design rather than displacing it.** [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 keeps outcome evidence on the artifact side of the credential/artifact wall; a confirmation is a credential *about* a completed task rather than a claim smuggled into an unrelated one, so the wall stands.
+- **It carries a durable correlator, so §4.2's first bullet covers it.** A digest of one completed task is the same linking value under a different name: two presentations that include the same confirmation are linkable, whatever else is hidden. Our unlinkability caveat therefore extends to confirmations, and the UI must not treat "disclose the confirmation" as a free extra.
+- **Holder choice is a screen, not a default.** Because disclosure is optional, something has to ask. That belongs with the disclosure consent surface of §3.2, and the honest wording is what it costs: *shows that this task completed, and links this show to any other where you showed it.*
 
 ### 4.3 Z3 — Predicate proofs and uniqueness pseudonyms, watch only
 
@@ -300,6 +320,12 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 - **B4** — Governance acceptance of the trade hidden mode makes. The accountability machinery [[VETTING-DESIGN]] §10.5 describes — lineage, and the cascade review that re-examines everyone a discredited vetter vouched for — cannot work against vetters nobody can name. A community must decide it accepts that, and that decision is not ours. Hidden mode may never be enabled anywhere Keyring runs.
 - **B5** — A signal a client can read that the VTA and VTC operators differ (§3.5). Not designed anywhere yet. Raised as **VTI-Q16** in `docs/VTI_UPSTREAM_FINDINGS.md` (on `main`, `a5f5cab`), which cites only published sources.
 - **B6** — DTG ZKP V1.0 and the BBS audit. Block ZK4.
+
+**Time-bound: what to raise before the operation layer settles.** Three of this plan's needs are client-facing, cheap to add early and expensive to retrofit once other implementers depend on the shapes. None asks for a ZK method to be standardised — §3.6 argues the opposite:
+
+1. **A community must publish enough for a client to warn about a thin anonymity set** (§4.1). A bucketed count of live vetters suffices; without it a client cannot tell a user whether anyone is actually hidden.
+2. **The extension namespace must be markable as one a client has to understand**, so a client that cannot honour it refuses rather than silently collecting named statements (§3.6, §4.1).
+3. **Operator separation needs a signal a client can read** (B5), or §3.5's deployment rule is unenforceable by any client.
 
 ## 9. Review index
 
