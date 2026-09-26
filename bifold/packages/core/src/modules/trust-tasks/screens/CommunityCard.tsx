@@ -20,6 +20,7 @@ import { useCommunityJourney } from '../module/communityJourney'
 import type { VtiMembership } from '../module/VtiCommunityStore'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 
+import { CardKeptRow } from './CardKeptRow'
 import { communityCardModel, type CommunityCardPrimary } from './communityCardModel'
 import { communityHeadingOf } from './communityName'
 import { shareIdentity } from './identityShare'
@@ -134,6 +135,9 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
           </View>
         </View>
       ) : null}
+      {/* The cards themselves, and whether the agent keeps them (226). */}
+      {membership?.vmc ? <CardKeptRow card={membership.vmc} kind="membership" handle={key} /> : null}
+      {membership?.roleVec ? <CardKeptRow card={membership.roleVec} kind="role" handle={key} /> : null}
       {persona ? (
         <View style={styles.row}>
           <Icon name="account-circle-outline" size={20} color={TextTheme.normal.color} />
