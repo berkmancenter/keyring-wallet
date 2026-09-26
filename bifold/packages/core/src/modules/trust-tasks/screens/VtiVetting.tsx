@@ -60,6 +60,7 @@ import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
 import { InWords, sayFailure, type Said } from './plainError'
 import SaidFailure from './SaidFailure'
+import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { pickOwnVetterGrant, type VetterGrantState } from '../module/vtiGrantState'
@@ -119,6 +120,7 @@ export const whenShown = (iso: string, now: Date = new Date()): string => {
 
 const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   const headerHeight = useSafeHeaderHeight()
+  const keyboard = useMeasuredKeyboardOffset(headerHeight)
   const { t } = useTranslation()
   // i18next escapes interpolated values for HTML by default, and React Native
   // renders them as plain text — so a locale date reads "9&#x2F;21&#x2F;26" and a
@@ -679,7 +681,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         edges={['left', 'right']}
         testID={testIdWithKey(`VettingVetterStep_${vetterStep}`)}
       >
-        <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
+        <KeyboardAvoidingView
+          ref={keyboard.ref}
+          onLayout={keyboard.onLayout}
+          style={styles.fill}
+          behavior="padding"
+          keyboardVerticalOffset={keyboard.offset}
+        >
           <KeyboardAwareScrollView {...keyboardAware}>
             {seatBanner('vetter')}
             {standingNotice}
@@ -1096,7 +1104,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       edges={['left', 'right']}
       testID={testIdWithKey(`VettingApplicantStep_${applicantStep}`)}
     >
-      <KeyboardAvoidingView style={styles.fill} behavior="padding" keyboardVerticalOffset={headerHeight}>
+      <KeyboardAvoidingView
+          ref={keyboard.ref}
+          onLayout={keyboard.onLayout}
+          style={styles.fill}
+          behavior="padding"
+          keyboardVerticalOffset={keyboard.offset}
+        >
         <KeyboardAwareScrollView {...keyboardAware}>
           {applicantStep === 'member' ? null : seatBanner('applicant')}
 

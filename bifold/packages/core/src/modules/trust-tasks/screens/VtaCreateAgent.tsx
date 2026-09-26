@@ -49,6 +49,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { DeviceCannotOwn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
 
 import { useSafeHeaderHeight } from './VtaLink'
+import { useMeasuredKeyboardOffset } from './keyboardOffset'
 
 /**
  * A known agent host's website, to open from the intro. Never named on screen:
@@ -98,6 +99,7 @@ const VtaCreateAgent: React.FC = () => {
   const { ColorPalette, TextTheme } = useTheme()
   const { link, agentNames } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const headerHeight = useSafeHeaderHeight()
+  const keyboard = useMeasuredKeyboardOffset(headerHeight)
   const readyName = readyNameOf(link.kind === 'linked' ? link.vtaDid : undefined, agentNames, t)
 
   const [step, setStep] = useState<LocalStep>(addDevice ? 'backupAddress' : 'intro')
@@ -560,7 +562,13 @@ const VtaCreateAgent: React.FC = () => {
       {/* The steps' buttons sit under the page, and on iOS the keyboard covered
           them: a person who pasted the address saw no Continue (225 gate).
           keyboard-controller's view lifts them over it on both platforms. */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={headerHeight}>
+      <KeyboardAvoidingView
+        ref={keyboard.ref}
+        onLayout={keyboard.onLayout}
+        style={{ flex: 1 }}
+        behavior="padding"
+        keyboardVerticalOffset={keyboard.offset}
+      >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {body}
         </ScrollView>
