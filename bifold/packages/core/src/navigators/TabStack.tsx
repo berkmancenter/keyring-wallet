@@ -20,6 +20,7 @@ import { useTheme } from '../contexts/theme'
 import { BifoldError } from '../types/error'
 import { Stacks, TabStackParams, TabStacks } from '../types/navigators'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
+import { isOpenIdCredentialOffer } from '../utils/parsers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
@@ -129,8 +130,11 @@ const TabStack: React.FC = () => {
         return
       }
 
-      // If it's just the general link with no params, set link inactive and do nothing
-      if (deepLink.search(/oob=|c_i=|d_m=|url=/) < 0) {
+      // If it's just the general link with no params, set link inactive and do nothing.
+      // An OpenID credential offer carries none of these: it goes on to the
+      // OpenID flow (an offer whose issuer is a community's DID was already
+      // taken above, as ours).
+      if (deepLink.search(/oob=|c_i=|d_m=|url=/) < 0 && !isOpenIdCredentialOffer(deepLink)) {
         dispatch({
           type: DispatchAction.ACTIVE_DEEP_LINK,
           payload: [undefined],
