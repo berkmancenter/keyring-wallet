@@ -30,6 +30,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import type { VtaLinkFailure } from '../module/vtaLinkMachine'
 
 import { agentDisplayName, agentDisplayNameStart, withAgentName } from './agentName'
+import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
 import { plainError } from './plainError'
 import { shareableKey } from './shareableKey'
@@ -52,6 +53,7 @@ export const useSafeHeaderHeight = (): number => {
 
 const VtaLink: React.FC = () => {
   const headerHeight = useSafeHeaderHeight()
+  const keyboard = useMeasuredKeyboardOffset(headerHeight)
   const { t } = useTranslation()
   const { agent } = useAgent()
   const navigation = useNavigation()
@@ -476,7 +478,13 @@ const VtaLink: React.FC = () => {
           longer resizes the window for the keyboard: the footer stayed behind
           it there. keyboard-controller's view lifts it on both platforms, by
           the keyboard's overlap below the header. */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={headerHeight}>
+      <KeyboardAvoidingView
+        ref={keyboard.ref}
+        onLayout={keyboard.onLayout}
+        style={{ flex: 1 }}
+        behavior="padding"
+        keyboardVerticalOffset={keyboard.offset}
+      >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {body}
         </ScrollView>
