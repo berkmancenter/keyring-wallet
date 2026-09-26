@@ -51,6 +51,15 @@ interface Holdings {
   lapsed: { communityDid: string; grant: Exclude<VetterGrantState, { state: 'active' } | { state: 'none' }> }[]
 }
 
+/** The segments of "Your agent" (IN-20c); the one shown is kept for the session. */
+type AgentSegment = 'communities' | 'manage' | 'status'
+const SEGMENT_LABEL: Record<AgentSegment, string> = {
+  communities: 'MyAgent.Communities',
+  manage: 'VtaLink.SegmentManage',
+  status: 'VtaLink.SegmentStatus',
+}
+let sessionSegment: AgentSegment = 'communities'
+
 /** Every community this phone knows: an identity, a membership or a waiting invitation — each once. */
 export const communitiesHeld = (holdings: Pick<Holdings, 'personas' | 'memberships' | 'invited'>): string[] =>
   Array.from(
@@ -78,7 +87,10 @@ const INTRO_PANELS = ['IntroKeeps', 'IntroAnswers', 'IntroApprove'] as const
  */
 const lastHoldings = new Map<string, Holdings>()
 /** Forget every reading (unlink does; tests start clean with it). */
-export const forgetAgentHoldings = () => lastHoldings.clear()
+export const forgetAgentHoldings = () => {
+  lastHoldings.clear()
+  sessionSegment = 'communities'
+}
 
 const VtaAgentHome: React.FC = () => {
   const { t } = useTranslation()
@@ -125,7 +137,24 @@ const VtaAgentHome: React.FC = () => {
   const shortTask = (uri: string) => uri.replace('https://trusttasks.org/spec/', '')
   const [introPanel, setIntroPanel] = useState(0)
 
+  const [segment, setSegment] = useState<AgentSegment>(sessionSegment)
+  const chooseSegment = useCallback((next: AgentSegment) => {
+    sessionSegment = next
+    setSegment(next)
+  }, [])
+  const pendingApprovals = state.approvals.length
+
   const styles = StyleSheet.create({
+    segments: {
+      flexDirection: 'row',
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderRadius: 8,
+      padding: 4,
+      gap: 4,
+    },
+    segment: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 6 },
+    segmentOn: { backgroundColor: ColorPalette.brand.primary },
+    segmentOnText: { color: ColorPalette.grayscale.white },
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 20, gap: 16 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
@@ -339,7 +368,12 @@ const VtaAgentHome: React.FC = () => {
         testID={testIdWithKey('AgentHome')}
       >
         <View style={styles.card}>
-          <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey('AgentHomeName')}>
+          {/* "Your agent" leads; the name the host gave it is a line under it
+              (IN-20c: the name alone at the top meant little). */}
+          <ThemedText variant="headingThree" accessibilityRole="header" testID={testIdWithKey('AgentHomeTitle')}>
+            {t('MyAgent.Title')}
+          </ThemedText>
+          <ThemedText variant="bold" testID={testIdWithKey('AgentHomeName')}>
             {agentDisplayName(withAgentName(link, state.agentNames), t)}
           </ThemedText>
           <VtaStatusLine connection={link.connection} />
@@ -423,251 +457,294 @@ const VtaAgentHome: React.FC = () => {
             <ThemedText style={styles.link}>{t('VtaLink.WhatIsMyAgent')}</ThemedText>
           </Pressable>
         </View>
-        <DevicesCard onPress={() => go(Screens.VtaDevices)} />
-
-        {/* The vetter role is news, not a step: it shows when an admin grants it. */}
-        {holdings?.vetterFor.map((communityDid) => (
-          <View key={communityDid} style={[styles.card, styles.tip]} testID={testIdWithKey('AgentVetterCard')}>
-            <ThemedText variant="bold">
-              {t('VtaLink.YouCanVet', {
-                community: communityLabelOf(communityDid, t),
-                interpolation: { escapeValue: false },
-              })}
+        {/* Something waits on the person: said on every segment, and one tap
+            from where it is decided (IN-20c). */}
+        {pendingApprovals > 0 ? (
+          <Pressable
+            style={[styles.card, styles.row]}
+            onPress={() => chooseSegment('manage')}
+            accessibilityRole="button"
+            testID={testIdWithKey('AgentApprovalBanner')}
+          >
+            <Icon name="bell-ring-outline" size={22} color={ColorPalette.brand.primary} />
+            <ThemedText variant="bold" style={{ flex: 1 }}>
+              {t('VtaLink.ApprovalsWaiting', { count: pendingApprovals })}
             </ThemedText>
-            <ThemedText style={styles.muted}>{t('VtaLink.YouCanVetBody')}</ThemedText>
-            <Button
-              title={t('VtaLink.OpenDesk')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => go(Screens.VtiVetting)}
-              testID={testIdWithKey('AgentVetOthers')}
-            />
-          </View>
-        ))}
-        {!isVetter && lapsed.length > 0 ? (
-          <View style={styles.card}>
-            {lapsed.map(({ communityDid, grant }) => (
-              <ThemedText key={communityDid} style={styles.muted} testID={testIdWithKey('AgentVetterLapsed')}>
-                {lapsedText(communityDid, grant)}
-              </ThemedText>
-            ))}
-          </View>
+            <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+          </Pressable>
         ) : null}
-
-        {/* Start from what the person wants: two doors, one marked as next. */}
-        {/* Something your agent needs you to allow. It has an expiry and it
-            is the only thing on this screen that is waiting on the person, so
-            it goes above the doors — and it is absent entirely when there is
-            nothing to decide, rather than sitting here saying "no approvals"
-            (report #11: the panel's permanent empty sections were half of why
-            it read as a developer's screen). */}
-        {state.awaitingConsentFor || state.approvals.length > 0 ? (
-          <View style={styles.card} testID={testIdWithKey('AgentApprovals')}>
-            <ThemedText variant="labelTitle">{t('MyAgent.Approvals')}</ThemedText>
-            {state.awaitingConsentFor ? (
-              <View style={styles.row}>
-                <ActivityIndicator color={ColorPalette.brand.primary} />
-                <ThemedText testID={testIdWithKey('AgentAwaitingConsent')}>
-                  {t('MyAgent.AwaitingConsent', {
-                    task: shortTask(state.awaitingConsentFor),
+        <DevicesCard onPress={() => go(Screens.VtaDevices)} />
+        {/* Three places, always the same three (IN-20c). Devices stay above
+            them, in reach from every one. */}
+        <View style={styles.segments} accessibilityRole="tablist">
+          {(['communities', 'manage', 'status'] as const).map((key) => (
+            <Pressable
+              key={key}
+              style={[styles.segment, segment === key ? styles.segmentOn : undefined]}
+              onPress={() => chooseSegment(key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: segment === key }}
+              testID={testIdWithKey(`AgentSegment_${key}`)}
+            >
+              <ThemedText variant="bold" style={segment === key ? styles.segmentOnText : styles.muted}>
+                {t(SEGMENT_LABEL[key])}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        {segment === 'communities' ? (
+          <>
+            {/* The vetter role is news, not a step: it shows when an admin grants it. */}
+            {holdings?.vetterFor.map((communityDid) => (
+              <View key={communityDid} style={[styles.card, styles.tip]} testID={testIdWithKey('AgentVetterCard')}>
+                <ThemedText variant="bold">
+                  {t('VtaLink.YouCanVet', {
+                    community: communityLabelOf(communityDid, t),
                     interpolation: { escapeValue: false },
                   })}
                 </ThemedText>
+                <ThemedText style={styles.muted}>{t('VtaLink.YouCanVetBody')}</ThemedText>
+                <Button
+                  title={t('VtaLink.OpenDesk')}
+                  buttonType={ButtonType.Secondary}
+                  onPress={() => go(Screens.VtiVetting)}
+                  testID={testIdWithKey('AgentVetOthers')}
+                />
+              </View>
+            ))}
+            {!isVetter && lapsed.length > 0 ? (
+              <View style={styles.card}>
+                {lapsed.map(({ communityDid, grant }) => (
+                  <ThemedText key={communityDid} style={styles.muted} testID={testIdWithKey('AgentVetterLapsed')}>
+                    {lapsedText(communityDid, grant)}
+                  </ThemedText>
+                ))}
               </View>
             ) : null}
-            {state.approvals.map((approval) => (
-              <View key={approval.id} testID={testIdWithKey('AgentApprovalCard')}>
-                <ThemedText>
-                  {t('MyAgent.ApprovalAsks', {
-                    requester: partyLabelStartOf(approval.requester, t),
-                    task: shortTask(approval.taskType),
-                    interpolation: { escapeValue: false },
-                  })}
-                </ThemedText>
-                <ThemedText style={styles.muted}>
-                  {t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}
-                </ThemedText>
-                <DidDetails did={approval.requester} testIdStem="AgentApprovalRequester" />
-                {approval.status === 'pending' ? (
-                  <View style={styles.row}>
-                    <Button
-                      title={t('MyAgent.Approve')}
-                      buttonType={ButtonType.Primary}
-                      disabled={deciding !== undefined}
-                      onPress={() => void onDecide(approval.id, 'approve')}
-                      testID={testIdWithKey('ApproveConsentButton')}
-                    />
-                    <Button
-                      title={t('MyAgent.Deny')}
-                      buttonType={ButtonType.Secondary}
-                      disabled={deciding !== undefined}
-                      onPress={() => void onDecide(approval.id, 'deny')}
-                      testID={testIdWithKey('DenyConsentButton')}
-                    />
-                  </View>
-                ) : (
-                  <ThemedText style={styles.muted} testID={testIdWithKey('AgentApprovalDecided')}>
-                    {approval.status === 'approved'
-                      ? t('MyAgent.Approved')
-                      : approval.status === 'denied'
-                        ? t('MyAgent.Denied')
-                        : (approval.error ?? approval.status)}
-                  </ThemedText>
-                )}
-              </View>
-            ))}
-          </View>
-        ) : null}
 
-        <View style={styles.card} testID={testIdWithKey('AgentDoors')}>
-          {/* Each community opens from its row in "what your agent holds"; a
+            {/* Start from what the person wants: two doors, one marked as next. */}
+            <View style={styles.card} testID={testIdWithKey('AgentDoors')}>
+              {/* Each community opens from its row in "what your agent holds"; a
               member meets only the doors here. */}
-          {!isMember ? (
-            <ThemedText variant="headingFour" accessibilityRole="header">
-              {t('VtaLink.WhatBringsYou')}
-            </ThemedText>
-          ) : null}
-          <Pressable
-            style={[styles.door, isMember ? undefined : styles.doorNext]}
-            onPress={() => go(Screens.VtiInvited)}
-            accessibilityRole="button"
-            testID={testIdWithKey('AgentInvited')}
-          >
-            <Icon name="email-open-outline" size={24} color={ColorPalette.brand.primary} />
-            <View style={{ flex: 1 }}>
-              <ThemedText variant="bold">{t('VtaLink.IWasInvited')}</ThemedText>
-              {/* An invitation that has already arrived says so here, named,
+              {!isMember ? (
+                <ThemedText variant="headingFour" accessibilityRole="header">
+                  {t('VtaLink.WhatBringsYou')}
+                </ThemedText>
+              ) : null}
+              <Pressable
+                style={[styles.door, isMember ? undefined : styles.doorNext]}
+                onPress={() => go(Screens.VtiInvited)}
+                accessibilityRole="button"
+                testID={testIdWithKey('AgentInvited')}
+              >
+                <Icon name="email-open-outline" size={24} color={ColorPalette.brand.primary} />
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="bold">{t('VtaLink.IWasInvited')}</ThemedText>
+                  {/* An invitation that has already arrived says so here, named,
                   rather than being listed on a separate screen — the door
                   behind this is what knows how to accept one. */}
-              {holdings?.invited?.length ? (
-                <ThemedText testID={testIdWithKey('AgentInvitationWaiting')}>
-                  {t('VtaLink.InvitationWaiting', {
-                    community: communityLabelOf(holdings.invited[0], t),
+                  {holdings?.invited?.length ? (
+                    <ThemedText testID={testIdWithKey('AgentInvitationWaiting')}>
+                      {t('VtaLink.InvitationWaiting', {
+                        community: communityLabelOf(holdings.invited[0], t),
+                        interpolation: { escapeValue: false },
+                      })}
+                    </ThemedText>
+                  ) : (
+                    <ThemedText style={styles.muted}>{t('VtaLink.IWasInvitedHint')}</ThemedText>
+                  )}
+                </View>
+                <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+              </Pressable>
+              <Pressable
+                style={[styles.door, isMember ? undefined : styles.doorNext]}
+                onPress={() => go(Screens.VtiJoin)}
+                accessibilityRole="button"
+                testID={testIdWithKey('AgentJoinCommunity')}
+              >
+                <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="bold">
+                    {isMember ? t('VtaLink.JoinAnother') : t('VtaLink.WantToJoin')}
+                  </ThemedText>
+                  <ThemedText style={styles.muted}>{t('VtaLink.WantToJoinHint')}</ThemedText>
+                </View>
+                <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
+              </Pressable>
+            </View>
+
+            <View style={styles.card} testID={testIdWithKey('AgentHolds')}>
+              <ThemedText variant="labelTitle">{t('VtaLink.Holds')}</ThemedText>
+              {!holdings ? (
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+              ) : communitiesHeld(holdings).length === 0 ? (
+                <ThemedText style={styles.muted}>{t('VtaLink.HoldsNothing')}</ThemedText>
+              ) : (
+                // One card per community, with what the agent holds for it under
+                // it and at most one next step (IN-20c).
+                communitiesHeld(holdings).map((communityDid) => (
+                  <CommunityCard
+                    key={communityDid}
+                    agent={agent}
+                    communityDid={communityDid}
+                    persona={holdings.personas.find((p) => p.communityDid === communityDid)}
+                    membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
+                    invited={holdings.invited.includes(communityDid)}
+                    vetter={holdings.vetterFor.includes(communityDid)}
+                    onOpen={goToCommunity}
+                    onPrimary={(action, did) => {
+                      // The vetting and invitation screens work on the chosen community.
+                      communityTarget.choose(did)
+                      go(action === 'acceptInvitation' ? Screens.VtiInvited : Screens.VtiVetting)
+                    }}
+                  />
+                ))
+              )}
+              {holdingsError ? (
+                <ThemedText style={styles.muted} testID={testIdWithKey('AgentHoldsStale')}>
+                  {t('VtaLink.HoldsStale')}
+                </ThemedText>
+              ) : null}
+            </View>
+          </>
+        ) : null}
+        {segment === 'manage' ? (
+          <>
+            {/* Something your agent needs you to allow. It has an expiry, so the
+            banner above says so on every segment; here it is decided. It is
+            absent entirely when there is nothing to decide, rather than
+            sitting here saying "no approvals" (report #11). */}
+            {state.awaitingConsentFor || state.approvals.length > 0 ? (
+              <View style={styles.card} testID={testIdWithKey('AgentApprovals')}>
+                <ThemedText variant="labelTitle">{t('MyAgent.Approvals')}</ThemedText>
+                {state.awaitingConsentFor ? (
+                  <View style={styles.row}>
+                    <ActivityIndicator color={ColorPalette.brand.primary} />
+                    <ThemedText testID={testIdWithKey('AgentAwaitingConsent')}>
+                      {t('MyAgent.AwaitingConsent', {
+                        task: shortTask(state.awaitingConsentFor),
+                        interpolation: { escapeValue: false },
+                      })}
+                    </ThemedText>
+                  </View>
+                ) : null}
+                {state.approvals.map((approval) => (
+                  <View key={approval.id} testID={testIdWithKey('AgentApprovalCard')}>
+                    <ThemedText>
+                      {t('MyAgent.ApprovalAsks', {
+                        requester: partyLabelStartOf(approval.requester, t),
+                        task: shortTask(approval.taskType),
+                        interpolation: { escapeValue: false },
+                      })}
+                    </ThemedText>
+                    <ThemedText style={styles.muted}>
+                      {t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}
+                    </ThemedText>
+                    <DidDetails did={approval.requester} testIdStem="AgentApprovalRequester" />
+                    {approval.status === 'pending' ? (
+                      <View style={styles.row}>
+                        <Button
+                          title={t('MyAgent.Approve')}
+                          buttonType={ButtonType.Primary}
+                          disabled={deciding !== undefined}
+                          onPress={() => void onDecide(approval.id, 'approve')}
+                          testID={testIdWithKey('ApproveConsentButton')}
+                        />
+                        <Button
+                          title={t('MyAgent.Deny')}
+                          buttonType={ButtonType.Secondary}
+                          disabled={deciding !== undefined}
+                          onPress={() => void onDecide(approval.id, 'deny')}
+                          testID={testIdWithKey('DenyConsentButton')}
+                        />
+                      </View>
+                    ) : (
+                      <ThemedText style={styles.muted} testID={testIdWithKey('AgentApprovalDecided')}>
+                        {approval.status === 'approved'
+                          ? t('MyAgent.Approved')
+                          : approval.status === 'denied'
+                            ? t('MyAgent.Denied')
+                            : (approval.error ?? approval.status)}
+                      </ThemedText>
+                    )}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <Button
+              title={t('VtaLink.Unlink')}
+              buttonType={ButtonType.Tertiary}
+              onPress={() => setUnlinkOpen(true)}
+              testID={testIdWithKey('AgentUnlink')}
+            />
+            {unlinkOpen ? (
+              <View style={styles.card} testID={testIdWithKey('AgentUnlinkCard')}>
+                <ThemedText variant="labelTitle" accessibilityRole="header" testID={testIdWithKey('AgentUnlinkTitle')}>
+                  {t('VtaLink.UnlinkTitle', {
+                    agent: agentDisplayName(withAgentName(link, state.agentNames), t),
                     interpolation: { escapeValue: false },
                   })}
                 </ThemedText>
+                <ThemedText testID={testIdWithKey('AgentUnlinkBody')}>{t('VtaLink.UnlinkBody')}</ThemedText>
+                <Button
+                  title={t('VtaLink.UnlinkConfirm')}
+                  buttonType={ButtonType.Critical}
+                  onPress={unlink}
+                  testID={testIdWithKey('AgentUnlinkConfirm')}
+                />
+                <Button
+                  title={t('Global.Cancel')}
+                  buttonType={ButtonType.Secondary}
+                  onPress={() => setUnlinkOpen(false)}
+                  testID={testIdWithKey('AgentUnlinkCancel')}
+                />
+              </View>
+            ) : null}
+          </>
+        ) : null}
+        {segment === 'status' ? (
+          <>
+            <View style={styles.card} testID={testIdWithKey('AgentActivity')}>
+              <ThemedText variant="labelTitle">{t('VtaLink.Did')}</ThemedText>
+              {state.activity.length === 0 ? (
+                <ThemedText style={styles.muted}>{t('VtaLink.DidNothing')}</ThemedText>
               ) : (
-                <ThemedText style={styles.muted}>{t('VtaLink.IWasInvitedHint')}</ThemedText>
+                state.activity.slice(0, 6).map((a) => (
+                  <ThemedText key={`${a.at}-${a.kind}`}>
+                    {new Date(a.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {activityText(a)}
+                  </ThemedText>
+                ))
               )}
             </View>
-            <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
-          </Pressable>
-          <Pressable
-            style={[styles.door, isMember ? undefined : styles.doorNext]}
-            onPress={() => go(Screens.VtiJoin)}
-            accessibilityRole="button"
-            testID={testIdWithKey('AgentJoinCommunity')}
-          >
-            <Icon name="account-group-outline" size={24} color={ColorPalette.brand.primary} />
-            <View style={{ flex: 1 }}>
-              <ThemedText variant="bold">{isMember ? t('VtaLink.JoinAnother') : t('VtaLink.WantToJoin')}</ThemedText>
-              <ThemedText style={styles.muted}>{t('VtaLink.WantToJoinHint')}</ThemedText>
+
+            <View style={styles.card}>
+              <Pressable
+                style={styles.row}
+                onPress={() => setDetailsOpen(!detailsOpen)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: detailsOpen }}
+                testID={testIdWithKey('AgentDetailsToggle')}
+              >
+                <Icon name={detailsOpen ? 'chevron-down' : 'chevron-right'} size={20} color={TextTheme.normal.color} />
+                <ThemedText variant="labelTitle">{t('VtaLink.Details')}</ThemedText>
+              </Pressable>
+              {detailsOpen ? (
+                <View testID={testIdWithKey('AgentDetails')}>
+                  <ThemedText style={styles.muted}>{t('VtaLink.DetailsAgent')}</ThemedText>
+                  <ThemedText style={styles.mono} selectable>
+                    {link.vtaDid}
+                  </ThemedText>
+                  <ThemedText style={styles.muted}>{t('VtaLink.DetailsPhoneKey')}</ThemedText>
+                  <ThemedText style={styles.mono} selectable>
+                    {state.managerDid ?? '—'}
+                  </ThemedText>
+                  <ThemedText style={styles.muted}>{t('VtaLink.DetailsLinkedAt')}</ThemedText>
+                  <ThemedText>{new Date(link.linkedAt).toLocaleString()}</ThemedText>
+                </View>
+              ) : null}
             </View>
-            <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
-          </Pressable>
-        </View>
-
-        <View style={styles.card} testID={testIdWithKey('AgentHolds')}>
-          <ThemedText variant="labelTitle">{t('VtaLink.Holds')}</ThemedText>
-          {!holdings ? (
-            <ActivityIndicator color={ColorPalette.brand.primary} />
-          ) : communitiesHeld(holdings).length === 0 ? (
-            <ThemedText style={styles.muted}>{t('VtaLink.HoldsNothing')}</ThemedText>
-          ) : (
-            // One card per community, with what the agent holds for it under
-            // it and at most one next step (IN-20c).
-            communitiesHeld(holdings).map((communityDid) => (
-              <CommunityCard
-                key={communityDid}
-                agent={agent}
-                communityDid={communityDid}
-                persona={holdings.personas.find((p) => p.communityDid === communityDid)}
-                membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
-                invited={holdings.invited.includes(communityDid)}
-                vetter={holdings.vetterFor.includes(communityDid)}
-                onOpen={goToCommunity}
-                onPrimary={(action, did) => {
-                  // The vetting and invitation screens work on the chosen community.
-                  communityTarget.choose(did)
-                  go(action === 'acceptInvitation' ? Screens.VtiInvited : Screens.VtiVetting)
-                }}
-              />
-            ))
-          )}
-          {holdingsError ? (
-            <ThemedText style={styles.muted} testID={testIdWithKey('AgentHoldsStale')}>
-              {t('VtaLink.HoldsStale')}
-            </ThemedText>
-          ) : null}
-        </View>
-
-        <View style={styles.card} testID={testIdWithKey('AgentActivity')}>
-          <ThemedText variant="labelTitle">{t('VtaLink.Did')}</ThemedText>
-          {state.activity.length === 0 ? (
-            <ThemedText style={styles.muted}>{t('VtaLink.DidNothing')}</ThemedText>
-          ) : (
-            state.activity.slice(0, 6).map((a) => (
-              <ThemedText key={`${a.at}-${a.kind}`}>
-                {new Date(a.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {activityText(a)}
-              </ThemedText>
-            ))
-          )}
-        </View>
-
-        <View style={styles.card}>
-          <Pressable
-            style={styles.row}
-            onPress={() => setDetailsOpen(!detailsOpen)}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: detailsOpen }}
-            testID={testIdWithKey('AgentDetailsToggle')}
-          >
-            <Icon name={detailsOpen ? 'chevron-down' : 'chevron-right'} size={20} color={TextTheme.normal.color} />
-            <ThemedText variant="labelTitle">{t('VtaLink.Details')}</ThemedText>
-          </Pressable>
-          {detailsOpen ? (
-            <View testID={testIdWithKey('AgentDetails')}>
-              <ThemedText style={styles.muted}>{t('VtaLink.DetailsAgent')}</ThemedText>
-              <ThemedText style={styles.mono} selectable>
-                {link.vtaDid}
-              </ThemedText>
-              <ThemedText style={styles.muted}>{t('VtaLink.DetailsPhoneKey')}</ThemedText>
-              <ThemedText style={styles.mono} selectable>
-                {state.managerDid ?? '—'}
-              </ThemedText>
-              <ThemedText style={styles.muted}>{t('VtaLink.DetailsLinkedAt')}</ThemedText>
-              <ThemedText>{new Date(link.linkedAt).toLocaleString()}</ThemedText>
-            </View>
-          ) : null}
-        </View>
-
-        <Button
-          title={t('VtaLink.Unlink')}
-          buttonType={ButtonType.Tertiary}
-          onPress={() => setUnlinkOpen(true)}
-          testID={testIdWithKey('AgentUnlink')}
-        />
-        {unlinkOpen ? (
-          <View style={styles.card} testID={testIdWithKey('AgentUnlinkCard')}>
-            <ThemedText variant="labelTitle" accessibilityRole="header" testID={testIdWithKey('AgentUnlinkTitle')}>
-              {t('VtaLink.UnlinkTitle', {
-                agent: agentDisplayName(withAgentName(link, state.agentNames), t),
-                interpolation: { escapeValue: false },
-              })}
-            </ThemedText>
-            <ThemedText testID={testIdWithKey('AgentUnlinkBody')}>{t('VtaLink.UnlinkBody')}</ThemedText>
-            <Button
-              title={t('VtaLink.UnlinkConfirm')}
-              buttonType={ButtonType.Critical}
-              onPress={unlink}
-              testID={testIdWithKey('AgentUnlinkConfirm')}
-            />
-            <Button
-              title={t('Global.Cancel')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => setUnlinkOpen(false)}
-              testID={testIdWithKey('AgentUnlinkCancel')}
-            />
-          </View>
+          </>
         ) : null}
       </ScrollView>
     </SafeAreaView>
