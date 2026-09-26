@@ -49,7 +49,8 @@
     "GotIt": "Got it",
     "Send": "Send",
     "Reset": "Reset",
-    "ViewJSON": "View JSON Details"
+    "ViewJSON": "View JSON Details",
+    "AppName": "Keyring"
   },
   "Date": {
     "ShortFormat": "MMM D",
@@ -150,7 +151,11 @@
     "Title1048": "Proof request problems.",
     "Message1048": "There was a problem with the proof request.",
     "Title1049": "Unable to change PIN.",
-    "Message1049": "There was a problem while attempting to change your PIN."
+    "Message1049": "There was a problem while attempting to change your PIN.",
+    "GenericError": {
+      "Title": "That couldn't be opened",
+      "Message": "Keyring doesn't know what to do with this. Check with whoever gave you the code, or try another one."
+    }
   },
   "SelectionAxs": {
     "RadioChecked": "checked",
@@ -1795,5 +1800,8 @@
     "Added": "Added {{date}}",
     "Details": "Details",
     "CardHint": "The phones and apps that own your agent. Add one, or remove a lost one."
+  },
+  "FullScreenErrorModal": {
+    "PrimaryCTA": "Back to Keyring"
   }
 }
