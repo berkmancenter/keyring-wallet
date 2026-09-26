@@ -1312,6 +1312,7 @@
     "HideTheCode": "Hide the code",
     "JourneyLinked": "Linked",
     "JourneyJoin": "Join",
+    "JourneyJoined": "Joined {{community}}",
     "JourneyMember": "Member",
     "SeatVetter": "You can vet people here",
     "SeatMember": "You are a member",

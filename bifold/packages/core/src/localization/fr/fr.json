@@ -1257,6 +1257,7 @@
     "HideTheCode": "Masquer le code",
     "JourneyLinked": "Lié",
     "JourneyJoin": "Rejoindre",
+    "JourneyJoined": "Rejoint : {{community}}",
     "JourneyMember": "Membre",
     "SeatVetter": "Vous pouvez vérifier des personnes ici",
     "SeatMember": "Vous êtes membre",
