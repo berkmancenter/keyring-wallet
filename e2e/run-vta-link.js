@@ -338,8 +338,17 @@ async function linkManually(driver) {
  * The unlinked key stays on the agent's list (VTI-Q23) — the cleanup removes
  * both links' keys.
  */
+/**
+ * Unlinking sits under the agent screen's Manage segment once it has segments
+ * (IN-20c); on a build without them it is on the page itself.
+ */
+async function openManage(driver) {
+  if (await existsTestId(driver, "AgentSegment_manage", 3000)) await tapTestId(driver, "AgentSegment_manage", 5000);
+}
+
 async function unlinkAndRelink(driver) {
   await openAgentHome(driver);
+  await openManage(driver);
   const unlink = await scrollToTestId(driver, "AgentUnlink", 6).catch(() => undefined);
   if (!unlink) throw new Error('the agent screen has no "Unlink this agent"');
   await unlink.click();
@@ -357,6 +366,7 @@ async function unlinkAndRelink(driver) {
   }
   console.log("[e2e] journey: unlink asks first, naming the agent; Cancel keeps the link");
 
+  await openManage(driver);
   await (await scrollToTestId(driver, "AgentUnlink", 6)).click();
   await tapTestId(driver, "AgentUnlinkConfirm", 10000);
   let onLink = false;
