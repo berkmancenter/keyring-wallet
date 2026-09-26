@@ -16,8 +16,8 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
-import { communityCardKey } from '../screens/CommunityCard'
 import VtaAgentHome, { forgetAgentHoldings, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
+import { communityCardKey } from '../screens/CommunityCard'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The shared navigation mock, with focus under the test's control.
