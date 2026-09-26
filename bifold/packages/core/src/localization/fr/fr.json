@@ -1161,7 +1161,11 @@
     "Leave": "Quitter la communauté",
     "LeaveExplains": "{{community}} vous retire de ses membres, et ce téléphone oublie votre identité, votre carte et votre vérification pour elle. Pour revenir, vous la rejoignez à nouveau avec une nouvelle identité.",
     "LeaveConfirm": "Quitter la communauté",
-    "Stay": "Rester"
+    "Stay": "Rester",
+    "CardNotKeptProof": "Une carte de {{community}} n'a pas pu être vérifiée, Keyring ne l'a donc pas gardée. Demandez à la communauté de la renvoyer.",
+    "CardNotKeptExpired": "Une carte de {{community}} avait déjà expiré, Keyring ne l'a donc pas gardée.",
+    "CardNotKeptNotYetValid": "Une carte de {{community}} n'est pas encore valable, Keyring ne l'a donc pas gardée. Vérifiez la date et l'heure de ce téléphone.",
+    "CardNotKeptRevoked": "{{community}} a retiré une carte qu'elle avait envoyée, Keyring ne l'a donc pas gardée."
   },
   "VtaLink": {
     "GiveKeyHowTitle": "Comment l'admin l'ajoute",

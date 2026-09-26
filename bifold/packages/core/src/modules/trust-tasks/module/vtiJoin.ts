@@ -13,6 +13,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import { DeviceEventEmitter } from 'react-native'
 
 import { parseJoinNeed, recordAnswer, recordSent, recordStatus, type JoinNeed } from './joinSubmission'
 import { vtaAgent } from './vtaAgent'
@@ -25,7 +26,8 @@ import {
 } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { selfRemoveRefusal, vtiAgent, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
-import { receiveIssue } from './vtiInbox'
+import { checkDeliveredCard, deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
+import { receiveIssue, VTI_CARD_REFUSED_EVENT } from './vtiInbox'
 import { checkCredentialStatus } from './vtiStatusList'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 
@@ -105,6 +107,7 @@ export async function joinCommunity(
   const stopInbox = vtiAgent.onInbound(async (plaintext) => {
     await receiveIssue(deps.communityStore, persona.did, plaintext, {
       via,
+      checkCard: deliveredCardCheck(deps.agent),
       onRefused: (item, refusal) =>
         deps.agent.config?.logger?.warn?.(`[VTI] delivered ${item.kind} credential not kept (${refusal})`, {
           from: String(plaintext.from ?? ''),
@@ -139,6 +142,25 @@ export async function joinCommunity(
   try {
     if (verdict.effect === 'allow') {
       membership = membershipFromVerdict(deps.communityDid, persona.did, verdict, via)
+      // The card in the verdict is checked as a delivered one is (vtiDeliveredCheck).
+      // One that does not hold up is not kept; if its status cannot be read now,
+      // the community's own delivery of it (retried until taken) is waited for.
+      if (membership) {
+        const refusal = await checkDeliveredCard(deps.agent, membership.vmc, deps.communityDid).catch((e) => {
+          if (e instanceof VtiCardStatusUnreadable) return 'statusUnreadable' as const
+          throw e
+        })
+        if (refusal) {
+          deps.agent.config?.logger?.warn?.(`[VTI] the membership card in the verdict was not kept (${refusal})`)
+          if (refusal !== 'statusUnreadable')
+            DeviceEventEmitter.emit(VTI_CARD_REFUSED_EVENT, {
+              communityDid: deps.communityDid,
+              kind: 'membership',
+              refusal,
+            })
+          membership = undefined
+        }
+      }
       if (membership) {
         await deps.communityStore.saveMembership(membership)
       } else {

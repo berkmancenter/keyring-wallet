@@ -93,7 +93,9 @@ describe('a statement arriving through an inbox', () => {
 
   it('is not stored by receiveIssue on its own', async () => {
     const w = world()
-    await receiveIssue(w.community as never, signed.applicantDid, w.issue(statement))
+    await receiveIssue(w.community as never, signed.applicantDid, w.issue(statement), {
+      checkCard: async () => undefined,
+    })
     expect(w.held).toHaveLength(0)
   })
 
@@ -101,6 +103,7 @@ describe('a statement arriving through an inbox', () => {
     const w = world()
     await receiveIssue(w.community as never, signed.applicantDid, w.issue(statement), {
       acceptStatement: w.acceptStatement,
+      checkCard: async () => undefined,
     })
     expect(w.held.map((h) => h.credential.id)).toEqual([statement.id])
     expect(w.request()).toMatchObject({ status: 'attested', statementId: statement.id })
@@ -112,6 +115,7 @@ describe('a statement arriving through an inbox', () => {
     const altered = { ...statement, validUntil: '2099-01-01T00:00:00Z' }
     await receiveIssue(w.community as never, signed.applicantDid, w.issue(altered), {
       acceptStatement: w.acceptStatement,
+      checkCard: async () => undefined,
     })
     expect(w.held).toHaveLength(0)
     expect(w.request()).toMatchObject({ status: 'statementRefused', statementRefusal: 'proof' })

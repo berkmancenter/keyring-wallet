@@ -569,7 +569,8 @@ describe('credentials a community delivers, as openvtc handle_credential_issue /
         from,
         body: { credential_response: { credential } },
       } as never,
-      { onRefused: (_item, why) => void refused.push(why) }
+      // Who sent it and who it is for; the card's own check is deliveredCardKept's.
+      { onRefused: (_item, why) => void refused.push(why), checkCard: async () => undefined }
     )
     return { got, stored, refused }
   }
