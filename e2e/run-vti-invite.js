@@ -376,8 +376,12 @@ async function inviteByDoor(d) {
   }
   console.log(`[e2e] ${d.e2ePlatform}: joined through the door — ${screen}, as the community says`);
   if (offerLink) {
-    // The same QR again: its code is spent. Said in words, never a modal.
-    await pasteLinkFromHome(d, offerLink);
+    // The same QR again: its code is spent. Said in words, never the OpenID
+    // error. The paste screen refuses it (its Try Again dialog); that refusal
+    // is the expected answer here, so read what it says instead of failing.
+    await pasteLinkFromHome(d, offerLink).catch((e) => {
+      if (!/refused the pasted link/.test(String(e?.message))) throw e;
+    });
     let said = false;
     for (let i = 0; i < 30 && !said; i++) {
       await sleep(1000);
