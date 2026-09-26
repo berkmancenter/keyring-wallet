@@ -18,7 +18,7 @@ import type { LayoutChangeEvent, View } from 'react-native'
 
 export interface MeasuredKeyboardOffset {
   /** For the KeyboardAvoidingView. */
-  ref: React.RefObject<View>
+  ref: React.RefObject<View | null>
   /** For the KeyboardAvoidingView: re-measures whenever it is laid out. */
   onLayout: (e: LayoutChangeEvent) => void
   /** Where the view's parent starts on screen; `fallback` until measured. */
