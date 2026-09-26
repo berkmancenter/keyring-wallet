@@ -115,9 +115,10 @@ function communityWrite(...args) {
 }
 
 const CONSOLE = INVITE_VIA.startsWith("console-")
-// The raw keys of the OpenID flow's full-screen error, as a build without its
-// words shows them — and the words, as one with them does (keyring-bifold#138).
-const OPENID_ERROR = /Error\.GenericError|FullScreenErrorModal\.PrimaryCTA|Something went wrong/
+// The OpenID flow's full-screen error: its raw keys, as a build without its
+// words shows them, and its words ("That couldn't be opened … Back to
+// Keyring") since keyring-bifold#138.
+const OPENID_ERROR = /Error\.GenericError|FullScreenErrorModal\.PrimaryCTA|Something went wrong|couldn.t be opened|Back to Keyring/
 
 /** Issue an invitation to `personaDid` and deliver it on `channel`, as the console does; returns the offer link for `offer`. */
 function consoleInvite(personaDid, channel) {
