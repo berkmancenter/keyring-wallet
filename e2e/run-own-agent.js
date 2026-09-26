@@ -65,6 +65,7 @@ import { byTestId, dumpSource, ensureAppium, existsTestId, screenshot, scrollToT
 import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent } from "./lib/flows.js";
 import { makeDriver, startDeviceLog, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
+import { deviceKeys } from "./lib/testIdKeys.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TWIN_DIR_SCRIPTS = path.resolve(here, "../scripts/openvtc/own-agent-twin");
@@ -529,9 +530,13 @@ try {
       await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID);
       // Setup's backup step ends on AgentBackupAdded; "Add another device" from
       // My devices goes back to the list, where the new row is the sign.
-      const addedRow = `AgentDevice_${backupTemp.slice(-8)}`;
+      const addedRows = deviceKeys(backupTemp).map((k) => `AgentDevice_${k}`);
+      const addedRow = addedRows.join(" or ");
       for (const until = Date.now() + 60000; ; ) {
-        if ((await existsTestId(owner, "AgentBackupAdded", 1000)) || (await existsTestId(owner, addedRow, 1000))) break;
+        if (await existsTestId(owner, "AgentBackupAdded", 1000)) break;
+        let seen = false;
+        for (const id of addedRows) if (await existsTestId(owner, id, 500)) seen = true;
+        if (seen) break;
         if (await existsTestId(owner, "AgentCreateError", 500)) throw new Error(`adding the backup was refused: ${await textOf(owner, "AgentCreateError")}`);
         if (Date.now() > until) throw new Error(`neither AgentBackupAdded nor ${addedRow} within 60 s`);
       }
@@ -554,21 +559,27 @@ try {
 
     // 7 — the backup removes the first phone: My Agent → Devices → Remove on
     //   the owner's row (a fresh owner confirmation first), and the ACL loses it.
-    //   testIDs agreed with UI/UX: AgentDevices, AgentDevice_<last 8 of the DID>,
-    //   AgentDeviceRemove_<same>, AgentDeviceRemoved.
+    //   testIDs agreed with UI/UX: AgentDevices, AgentDevice_<deviceKey of the DID>,
+    //   AgentDeviceRemove_<same>, AgentDeviceRemoved (deviceKey: lib/testIdKeys.js).
     // The Devices row sits in AgentHome's top card, after the seat line.
     const devicesRow = (await existsTestId(backup, "AgentDevices", 2000)) ? true : await scrollToTestId(backup, "AgentDevices", 4).catch(() => undefined);
     if (!devicesRow) {
       throw new PendingAppStep("removeOwner", "the backup phone has no way to remove another phone — own_agent_subtask.md §4, D3");
     }
-    const tail = ownerKey.slice(-8);
     await tapTestId(backup, "AgentDevices", 15000);
     await waitForTestId(backup, "AgentDeviceList", 30000);
-    const row = await waitForTestId(backup, `AgentDevice_${tail}`, 30000).catch(() => scrollToTestId(backup, `AgentDevice_${tail}`, 4));
+    // This build's handle, else an older build's (the DID's last 8).
+    let tail;
+    let row;
+    for (const k of deviceKeys(ownerKey)) {
+      row = await waitForTestId(backup, `AgentDevice_${k}`, tail ? 5000 : 30000).catch(() => scrollToTestId(backup, `AgentDevice_${k}`, 4).catch(() => undefined));
+      tail = k;
+      if (row) break;
+    }
     if (!row) throw new Error(`the device list shows no row for the owner phone (${tail})`);
     // Release gate §1: "This phone" has no Remove; the other phone has one. Rows are
-    // found by what they say: deviceKey (the DID's last 8) is the same for two
-    // did:peer:2 keys on one mediator, so a row's testID can name two rows.
+    // found by what they say: before keyring-bifold#160 deviceKey was the DID's
+    // last 8, the same for two did:peer:2 keys on one mediator.
     await screenshot(backup, "own-agent-06-devices");
     const android = BACKUP_PLATFORM === "android";
     const txt = android ? "@text" : "@label";
@@ -597,7 +608,7 @@ try {
     console.log(`[e2e] devices: "This phone" Remove buttons=${thisRemoves}; "${otherName}" Remove buttons=${otherRemove.length}`);
     if (thisRemoves !== 0) throw new Error("the device list offers Remove on this phone");
     if (otherRemove.length !== 1) throw new Error(`the other phone's row ("${otherName}") has ${otherRemove.length} Remove buttons, not one`);
-    const mine = backupKey.slice(-8);
+    const mine = deviceKeys(backupKey)[deviceKeys(ownerKey).indexOf(tail)];
     if (mine === tail) console.log(`[e2e] note: this phone and the other phone share deviceKey "${tail}": two rows carry the same testIDs`);
     await otherRemove[0].el.click();
     await answerOwnerPrompt(BACKUP_PLATFORM, process.env.BACKUP_UDID);

@@ -258,7 +258,8 @@ async function openVetting(d) {
   // The one-agent screen (keyring-bifold#75) has no operator panel for a
   // linked phone: Vetting opens from the agent home itself — "Vet others"
   // (AgentVetOthers) for a vetter, "Continue your vetting" (AgentContinueVetting)
-  // for an applicant with a request open. Builds before it keep the panel path
+  // for an applicant with a request open, and since keyring-bifold#162 the
+  // community card's "Open the vetting desk". Builds before it keep the panel path
   // below. Measured on the Farm, 2026-09-23: without this the vetter stopped
   // at "the operator panel is not reachable from here".
   await (await waitForTestId(d, "MyAgent", 30000)).click();
@@ -272,6 +273,13 @@ async function openVetting(d) {
         await sleep(1500);
         return;
       }
+    }
+    // Since keyring-bifold#162 a vetter's desk opens from the community card.
+    const card = await roles.tapCardVettingDoor(d);
+    if (card) {
+      console.log(`[e2e] ${deviceTag(d)}: into Vetting from the community card (${card})`);
+      await sleep(1500);
+      return;
     }
     // An older build: the panel, or its door, is what shows.
     if ((await existsTestId(d, "AgentOpenCommunities", 1000)) || (await existsTestId(d, "MyAgentCard", 1000))) break;
@@ -466,36 +474,19 @@ try {
     if (!published) throw new Error(`${vetter.e2ePlatform}: the profile was not published${err ? ` — ${err}` : ""}`);
     console.log(`[e2e] ${vetter.e2ePlatform}: vetter profile published`);
   }
-  // The desk shows one step at a time: a finished request from an earlier run
-  // sits on its "statement issued" step until the vetter moves on.
-  if (await byTestId(vetter, "VettingVetSomeoneElse").isExisting().catch(() => false)) {
-    await tapTestIdByCoordinates(vetter, "VettingVetSomeoneElse");
-    await sleep(1500);
-  }
-  const clear = await scrollToTestId(vetter, "VettingDeskClearButton", 4).catch(() => undefined);
-  if (clear) { await tapTestIdByCoordinates(vetter, "VettingDeskClearButton"); await sleep(2500); console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`); }
+  // Finished requests from an earlier run: folded under the step on a current
+  // build, the "statement issued" step on an older one. Either way, cleared.
+  if (await roles.clearFinishedRequests(vetter)) console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`);
   await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
   await waitForTestId(vetter, "VettingNewTicketButton", 20000);
   await checkVettingStep(vetter, "desk, before a ticket");
   // Tap-and-verify: publishing the profile adds a line above this button, so
   // the layout can shift between reading its position and tapping it, and the
-  // tap then lands on nothing. Retry until a ticket actually appears.
-  await tapTestIdReliable(
-    vetter,
-    "VettingNewTicketButton",
-    async () => {
-      // The card renders BELOW this button, so a fresh ticket lands off the
-      // bottom of the screen: present in the hierarchy, with children the
-      // dump cannot populate because they were never laid out. Scroll to it
-      // before deciding the tap did nothing.
-      await scrollToTestId(vetter, "VettingTicketLink", 4).catch(() => undefined);
-      return byTestId(vetter, "VettingTicketLink").isExisting().catch(() => false);
-    },
-    { attempts: 4, settleMs: 3000 }
-  );
-  await scrollToTestId(vetter, "VettingTicketLink", 4).catch(() => undefined);
-  await waitForTestId(vetter, "VettingTicketLink", 30000);
-  const issued = (await textOf(vetter, "VettingTicketLink")).trim();
+  // tap then lands on nothing. Retry until the desk says a ticket was cut.
+  await tapTestIdReliable(vetter, "VettingNewTicketButton", () => roles.ticketIssued(vetter), { attempts: 4, settleMs: 3000 });
+  // A ticket just cut: handing it over (Copy link) is the step, not another ticket.
+  await checkVettingStep(vetter, "desk, a ticket cut");
+  const issued = await roles.readTicketLink(vetter);
   // E2E_REFUSAL=bad-ticket: the same ticket with its secret altered. Its id is
   // one the vetter issued, so the vetter answers `vetting/request:invalidTicket`
   // (a wrong CODE is never answered at all, by design — nothing to assert on).

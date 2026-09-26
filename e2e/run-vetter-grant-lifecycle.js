@@ -41,6 +41,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { createSession, ensureAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, scrollToTestId, deviceTag } from "./lib/driver.js";
+import { tapCardVettingDoor } from "./lib/keyringRoles.js";
 import { androidCaps, iosCaps } from "./lib/config.js";
 import { unlockIfLocked, dismissTourIfPresent } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
@@ -177,14 +178,16 @@ async function expectSeat(d, step, want, { waitMs = 90000 } = {}) {
   // STRICT_ARRIVAL=1: a grant must show on its own; opening Vetting is not allowed to help.
   if (!want(live) && process.env.STRICT_ARRIVAL === "1") throw new Error(`${step}: the seat did not move on the open screen: ${JSON.stringify(live)}`);
   // The way into Vetting on either surface: the panel's vetting card, the
-  // agent home's "Continue your vetting" (an applicant) or its desk (a vetter).
+  // agent home's "Continue your vetting" (an applicant) or its desk (a vetter;
+  // since keyring-bifold#162 on the community card, found by what it says).
   const intoVetting =
     (await byTestId(d, "MyAgentVettingRow").isExisting().catch(() => false)) ? "MyAgentVettingRow"
     : (await byTestId(d, "AgentContinueVetting").isExisting().catch(() => false)) ? "AgentContinueVetting"
     : (await byTestId(d, "AgentVetOthers").isExisting().catch(() => false)) ? "AgentVetOthers"
     : undefined;
-  if (!want(live) && intoVetting) {
-    await (await scrollToTestId(d, intoVetting, 4)).click();
+  const byCard = !want(live) && !intoVetting ? await tapCardVettingDoor(d) : undefined;
+  if (!want(live) && (intoVetting || byCard)) {
+    if (intoVetting) await (await scrollToTestId(d, intoVetting, 4)).click();
     await sleep(15000);
     await d.back().catch(() => undefined);
     await sleep(3000);
