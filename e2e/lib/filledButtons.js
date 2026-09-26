@@ -21,6 +21,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { byTestId } from "./driver.js";
 
 /**
  * Share of an image's pixels that are a button's fill: any dark pixel, of any
@@ -78,6 +79,14 @@ export async function buttonsOnScreen(driver) {
   const elements = android
     ? await driver.$$('//*[@clickable="true" and @resource-id!=""]')
     : await driver.$$('//XCUIElementTypeButton[@name!=""]');
+  // A button only partly on screen is judged by whatever covers the rest of
+  // it: a card cut off by the tab bar read as filled from the bar's black
+  // (225 gate, "I want to join" under the fold). Judge only buttons drawn
+  // whole between the top of the window and the top of the tab bar.
+  const tab = byTestId(driver, "MyAgent");
+  const bottom = (await tab.isExisting().catch(() => false))
+    ? (await tab.getLocation()).y
+    : (await driver.getWindowSize()).height;
   const seen = new Map();
   for (const el of elements) {
     if (!(await el.isDisplayed().catch(() => false))) continue;
@@ -86,6 +95,8 @@ export async function buttonsOnScreen(driver) {
     const { width, height } = await el.getSize();
     // Rows and icons are not the step's buttons: a button is wide and short.
     if (width < 120 || height < 30 || height > 200) continue;
+    const { y } = await el.getLocation();
+    if (y < 0 || y + height > bottom) continue;
     const share = fillShareOfPng(await driver.takeElementScreenshot(el.elementId));
     seen.set(id, share);
   }

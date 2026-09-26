@@ -62,7 +62,13 @@ await ensureAppium();
 const driver = await makeDriver({ platform, udid, keepState: true });
 try {
   await driver.activateApp("asml.bkc.harvard.wallet");
-  // A relaunched app opens on its PIN screen.
+  // A relaunched app opens on its PIN screen, but only once its JS has booted:
+  // unlockIfLocked's check is instant, and on a cold start it ran before the
+  // PIN screen mounted (225 gate, iOS sim) — so wait for either the PIN screen
+  // or the tab bar before deciding.
+  for (let waited = 0; waited < 120000; waited += 2000) {
+    if ((await existsTestId(driver, "EnterPIN", 1000)) || (await existsTestId(driver, "MyAgent", 1000))) break;
+  }
   await unlockIfLocked(driver);
   await openAgentHome(driver);
   await must(driver, "AgentHomeTitle", "header");
