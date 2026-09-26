@@ -91,6 +91,35 @@ describe('recognising a community invitation offer', () => {
       invitationOfferOfMessage({ ...pushed, type: 'https://trusttasks.org/spec/credential-exchange/issue/0.1' })
     ).toBeUndefined()
   })
+
+  // vti #1771: a community pushes the offer as a signed Trust Task document
+  // (vtc-service routes/invitations.rs:571-575, `push_document`), in the
+  // binding envelope over DIDComm or in a TSP frame. What reaches the inbox is
+  // the task, typed as itself, whose body is the document with the offer in
+  // its payload (`unwrapBindingEnvelope`).
+  it('takes an offer the community pushes as a signed document', () => {
+    const document = {
+      id: 'urn:uuid:4f3c2b10-6a3e-4c1f-9a51-2f0d4c6b7e81',
+      type: CREDENTIAL_EXCHANGE_OFFER,
+      threadId: 'urn:uuid:9d2a1c4e-0b7f-4e3a-8c55-1a6f0e2b3d47',
+      issuer: COMMUNITY,
+      recipient: PERSONA_DID,
+      issuedAt: '2026-09-27T09:00:00Z',
+      payload: { credential_offer: OFFER },
+      proof: { type: 'DataIntegrityProof', proofPurpose: 'authentication' },
+    }
+    const pushed = { type: CREDENTIAL_EXCHANGE_OFFER, from: COMMUNITY, body: document }
+    expect(invitationOfferOfMessage(pushed)).toEqual({
+      communityDid: COMMUNITY,
+      configurationIds: ['VIC'],
+      preAuthorizedCode: CODE,
+    })
+    // The document is the community's own: one whose issuer is not the sender is not taken.
+    expect(
+      invitationOfferOfMessage({ ...pushed, body: { ...document, issuer: 'did:webvh:QmOther:elsewhere' } })
+    ).toBeUndefined()
+    expect(invitationOfferOfMessage({ ...pushed, from: 'did:webvh:QmOther:elsewhere' })).toBeUndefined()
+  })
 })
 
 describe('redeeming it', () => {
