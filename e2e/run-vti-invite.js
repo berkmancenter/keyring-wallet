@@ -96,8 +96,27 @@ function communityRead(...args) {
   const base = process.env.KEYRING_COMMUNITY_REST || `${env.VTC_URL}/v1`;
   const did = process.env.KEYRING_COMMUNITY_DID || env.VTC_DID;
   const cred = process.env.KEYRING_COMMUNITY_ADMIN_CRED || path.join(stackDir, "vtc-admin-credential.json");
-  const out = execFileSync("node", [ADMIN, base, did, cred, ...args], { encoding: "utf8" });
-  return JSON.parse(out.slice(out.indexOf("\n{") + 1));
+  // A community rate-limits unauthenticated requests per address, and every
+  // admin call signs in afresh, leaving a challenge that counts against a cap
+  // of 10 per admin DID until a sweep clears it (up to ~15 min; vti-common
+  // auth/session.rs count_pending_challenges counts expired ones too). Quick
+  // retries after a 429 each left one more and filled the cap (225 final
+  // heads, lab). So: wait well past the limiter on a 429, twice at most, and
+  // never retry once the cap is full — only time clears it.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const out = execFileSync("node", [ADMIN, base, did, cred, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      return JSON.parse(out.slice(out.indexOf("\n{") + 1));
+    } catch (err) {
+      const said = `${err.stdout ?? ""}${err.stderr ?? ""}${err.message ?? ""}`;
+      if (/too many pending challenges/.test(said)) {
+        throw new Error("the community refuses admin sign-ins: its pending-challenge cap is full; it clears within ~15 min of the last sign-in — wait, do not retry");
+      }
+      if (attempt >= 3 || !/\b429\b|rate_limited/.test(said)) throw err;
+      console.log(`[e2e] community admin API rate-limited: waiting 30 s (${attempt}/2)`);
+      execFileSync("sleep", ["30"]);
+    }
+  }
 }
 
 /** The community's answer for this applicant: member list, then its join requests of every status. */
@@ -265,7 +284,23 @@ async function inviteByDoor(d) {
     console.log(`[e2e] ${d.e2ePlatform}: no DID host — said plainly: "${said}"`);
     return "refused";
   }
-  await waitForTestId(d, "InvitedShare", 180000);
+  // "Your agent didn't answer. Tap Continue to try again": do what the screen
+  // tells a person, up to twice (the lab agent lost its first reply four
+  // times on 09-26 while healthy).
+  for (let retry = 0; ; retry++) {
+    let erred = false;
+    for (const by = Date.now() + 180000; Date.now() < by; ) {
+      if (await existsTestId(d, "InvitedShare", 1500)) break;
+      if ((erred = await existsTestId(d, "InvitedError", 500)) && (await existsTestId(d, "InvitedContinue", 500))) break;
+      erred = false;
+    }
+    if (!erred) break;
+    if (retry >= 2) throw new Error(`"I was invited" still says "${await textOf(d, "InvitedError").catch(() => "")}" after two retries`);
+    console.log(`[e2e] ${d.e2ePlatform}: I was invited says "${(await textOf(d, "InvitedError").catch(() => "")).slice(0, 70)}" — Continue again (${retry + 1}/2)`);
+    await tapTestId(d, "InvitedContinue", 15000);
+    await handleBiometricConfirmIfPresent(d);
+  }
+  await waitForTestId(d, "InvitedShare", 30000);
   await screenshot(d, "vti-invite-door-share");
   await tapTestId(d, "InvitedDetailsToggle", 15000);
   const personaDid = (await textOf(d, "InvitedPersonaDid")).trim();
