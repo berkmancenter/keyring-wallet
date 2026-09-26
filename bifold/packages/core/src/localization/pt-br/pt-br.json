@@ -1220,7 +1220,7 @@
   },
   "Registry": {
     "ListMe": "Incluir meu nome no diretório público de membros de {{community}}",
-    "Note": "Qualquer pessoa pode ver quem está listado. Você não poderá mudar isso no Keyring depois. Para ser removido do diretório, peça ao administrador da comunidade."
+    "Note": "Estar listado não significa aparecer numa página que qualquer pessoa pode navegar. Significa que alguém que já tem o seu identificador pode perguntar a {{community}} se você é membro e receber um sim. Você não poderá mudar isso no Keyring depois. Para deixar de ser listado, peça ao administrador da comunidade."
   },
   "Join": {
     "StandingMember": "Você é membro de {{community}}.",

@@ -6,6 +6,10 @@
  * #1691), but after admission only its admin can change it: no task lets a
  * member withdraw it themselves. The note says so, and says what they can do.
  *
+ * "Listed" is not a browsable page: the community publishes the member's
+ * record to its trust registry, which answers a query about a given DID
+ * (vtc-service registry/mod.rs). The note says that in plain words.
+ *
  * @module trust-tasks/screens/DirectoryConsent
  */
 
@@ -33,10 +37,8 @@ export const DirectoryConsent: React.FC<DirectoryConsentProps> = ({ communityDid
     label: { flex: 1 },
     note: { color: ColorPalette.grayscale.mediumGrey, marginTop: 4 },
   })
-  const question = t('Registry.ListMe', {
-    community: communityLabelOf(communityDid, t),
-    interpolation: { escapeValue: false },
-  })
+  const community = communityLabelOf(communityDid, t)
+  const question = t('Registry.ListMe', { community, interpolation: { escapeValue: false } })
   return (
     <View testID={testIdWithKey('DirectoryConsent')}>
       <View style={styles.row}>
@@ -53,7 +55,7 @@ export const DirectoryConsent: React.FC<DirectoryConsentProps> = ({ communityDid
         />
       </View>
       <ThemedText style={styles.note} testID={testIdWithKey('DirectoryConsentNote')}>
-        {t('Registry.Note')}
+        {t('Registry.Note', { community, interpolation: { escapeValue: false } })}
       </ThemedText>
     </View>
   )
