@@ -191,9 +191,21 @@ function ownerLockSetup(platform, udid) {
  */
 async function keyboardUp(d, shot, buttonId) {
   await screenshot(d, shot);
-  const visible = (await byTestId(d, buttonId).getAttribute("visible").catch(() => "false")) === "true";
-  console.log(`[e2e] keyboard up: ${buttonId} ${visible ? "in view" : "HIDDEN behind the keyboard"}`);
-  if (!visible && process.env.E2E_KEYBOARD_UP === "1") throw new Error(`the keyboard hides ${buttonId}`);
+  // By rectangle, not Appium's "visible": that is true for a button the
+  // keyboard half covers (the first 225 final run passed one that way).
+  const rectOf = async (el) => d.getElementRect(el.elementId);
+  const button = await byTestId(d, buttonId);
+  const keyboard = await d.$("//XCUIElementTypeKeyboard");
+  let covered = "no keyboard";
+  let clear = true;
+  if ((await button.isExisting().catch(() => false)) && (await keyboard.isExisting().catch(() => false))) {
+    const b = await rectOf(button);
+    const k = await rectOf(keyboard);
+    clear = b.y + b.height <= k.y;
+    covered = clear ? `clear by ${k.y - (b.y + b.height)} pt` : `${b.y + b.height - k.y} pt under the keyboard (button ${b.y}–${b.y + b.height}, keyboard from ${k.y})`;
+  }
+  console.log(`[e2e] keyboard up: ${buttonId} ${clear ? "in view" : "HIDDEN"} — ${covered}`);
+  if (!clear && process.env.E2E_KEYBOARD_UP === "1") throw new Error(`the keyboard hides ${buttonId}: ${covered}`);
 }
 
 /** Put known text on the phone's clipboard, so a Copy that does nothing cannot pass. */
