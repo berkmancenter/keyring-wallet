@@ -71,8 +71,6 @@ type LocalStep = 'intro' | 'address' | 'backupAddress' | 'backupCode' | 'ready'
 /** An agent's address, as the Farm shows it after "Create session". */
 export const looksLikeAgentAddress = (text: string): boolean => /^did:webvh:[^\s]+:[^\s]+$/.test(text.trim())
 
-/** The host a did:webvh names: shown until the agent gives its own name. */
-const hostOf = (did: string): string => did.split(':')[3] ?? did
 
 /**
  * What "… is online and belongs to this phone" calls the agent: the name it
@@ -191,7 +189,7 @@ const VtaCreateAgent: React.FC = () => {
     if (!agent) return
     setBusy(true)
     try {
-      await vtaAgent.startCreateAgent(agent, did, hostOf(did))
+      await vtaAgent.startCreateAgent(agent, did, did)
     } catch (e) {
       setError(e instanceof DeviceCannotOwn ? needsScreenLock() : t('CreateAgent.NotConfirmed'))
       return
