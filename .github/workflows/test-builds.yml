@@ -16,7 +16,8 @@ name: Test builds (simulator app + APK)
 
 on:
   push:
-    branches: [main]
+    # TEMPORARY for validating this workflow; removed before merge.
+    branches: [main, ci/test-builds]
     paths-ignore:
       - "docs/**"
       - "**/*.md"
