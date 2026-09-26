@@ -17,6 +17,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import VtaAgentHome, { forgetAgentHoldings, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
+import { communityCardKey } from '../screens/CommunityCard'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 // The shared navigation mock, with focus under the test's control.
@@ -284,7 +285,11 @@ describe('Your agent — after linking', () => {
     mockGrantState.mockResolvedValue({ state: 'active', statusChecked: true })
     const tree = await renderHome([persona, grant])
     expect(tree.getByTestId(testIdWithKey('AgentVetterCard'))).toHaveTextContent(/VtaLink.YouCanVet/)
-    expect(tree.getByTestId(testIdWithKey('AgentVetOthers'))).toBeTruthy()
+    // The desk is the community card's one button; the vetter card no longer repeats it.
+    expect(tree.getByTestId(testIdWithKey(`AgentCommunityPrimary_${communityCardKey(communityDid)}`))).toHaveTextContent(
+      'VtaLink.OpenDesk'
+    )
+    expect(tree.queryByTestId(testIdWithKey('AgentVetOthers'))).toBeNull()
   })
 
   it('a revoked grant says so, and offers no desk', async () => {
@@ -298,7 +303,7 @@ describe('Your agent — after linking', () => {
   // IN-20c: one card per community, with what is held for it and one next step.
   it('a member: one card for the community, opening it, with no next step to take', async () => {
     const tree = await renderHome([persona, membership])
-    const key = communityDid.slice(-8)
+    const key = communityCardKey(communityDid)
     expect(tree.getByTestId(testIdWithKey(`AgentCommunityCard_${key}`))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`))).toHaveTextContent('Join.StandingMember')
     expect(tree.getByTestId(testIdWithKey('AgentMembershipRow'))).toBeTruthy()
@@ -307,7 +312,7 @@ describe('Your agent — after linking', () => {
 
   it('an identity with nothing sent: its card offers to continue the vetting', async () => {
     const tree = await renderHome([persona])
-    const key = communityDid.slice(-8)
+    const key = communityCardKey(communityDid)
     expect(tree.getByTestId(testIdWithKey(`AgentCommunityPrimary_${key}`))).toHaveTextContent('VtaLink.ContinueVetting')
     expect(tree.getByTestId(testIdWithKey('AgentShareIdentity'))).toBeTruthy()
   })

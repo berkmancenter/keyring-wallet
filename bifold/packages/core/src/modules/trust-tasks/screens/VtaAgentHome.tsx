@@ -18,7 +18,15 @@ import { useAgent } from '@bifold/react-hooks'
 import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
@@ -37,8 +45,9 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { DevicesCard } from './DevicesCard'
 import { agentDisplayName, withAgentName } from './agentName'
 import { CommunityCard } from './CommunityCard'
-import { communityLabelOf, partyLabelStartOf } from './communityName'
+import { communityHeadingOf, communityLabelOf, partyLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
+import { SEGMENT_MIN_SCALE, segmentLayout } from './segmentLayout'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
 interface Holdings {
@@ -143,6 +152,20 @@ const VtaAgentHome: React.FC = () => {
     setSegment(next)
   }, [])
   const pendingApprovals = state.approvals.length
+  // One line per label, always: side by side while that stays readable,
+  // stacked when the phone is narrow or the text is large (IN-37).
+  const { width, fontScale } = useWindowDimensions()
+  const segmentLabels = (['communities', 'manage', 'status'] as const).map((key) => t(SEGMENT_LABEL[key]) as string)
+  const segmentsStacked =
+    segmentLayout({
+      width,
+      fontScale,
+      labels: segmentLabels,
+      fontSize: TextTheme.bold.fontSize ?? 18,
+      // page padding 20 × 2, row padding 4 × 2, two gaps of 4
+      chrome: 56,
+      pillPadding: 12,
+    }) === 'stacked'
 
   const styles = StyleSheet.create({
     segments: {
@@ -152,7 +175,11 @@ const VtaAgentHome: React.FC = () => {
       padding: 4,
       gap: 4,
     },
-    segment: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 6 },
+    segmentsStacked: { flexDirection: 'column' },
+    // Stacked, a pill is as tall as its line, not a share of the column.
+    segmentInStack: { flex: 0 },
+    // Every pill the same: only the selected one's colour differs, never its size.
+    segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 6, borderRadius: 6 },
     segmentOn: { backgroundColor: ColorPalette.brand.primary },
     segmentOnText: { color: ColorPalette.grayscale.white },
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -162,7 +189,10 @@ const VtaAgentHome: React.FC = () => {
     muted: { color: ColorPalette.grayscale.mediumGrey },
     mono: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
     strip: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 },
-    stop: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+    // A stop and the chevron before it wrap as one, so a narrow screen never
+    // leaves a '›' alone at the end of a line (Pixel 6, 2026-09-26).
+    stopGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+    stop: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, flexShrink: 1 },
     stopNow: { backgroundColor: ColorPalette.brand.primary },
     stopNowText: { color: ColorPalette.grayscale.white, fontWeight: '700' },
     stopDone: { color: ColorPalette.semantic.success, fontWeight: '700' },
@@ -429,8 +459,11 @@ const VtaAgentHome: React.FC = () => {
                   communityDid
                     ? {
                         key: 'Joined',
+                        // The membership is the community's own answer: a name
+                        // that only a link gave is not qualified here, where
+                        // "(not confirmed …)" read as if the joining were.
                         label: t('VtaLink.JourneyJoined', {
-                          community: communityLabelOf(communityDid, t),
+                          community: communityHeadingOf(communityDid, t, { claim: 'plain' }),
                           interpolation: { escapeValue: false },
                         }),
                         done: true,
@@ -439,7 +472,7 @@ const VtaAgentHome: React.FC = () => {
                     : { key: 'Join', label: t('VtaLink.JourneyJoin'), done: false, now: true },
                   { key: 'Member', label: t('VtaLink.JourneyMember'), done: !!communityDid, now: false },
                 ].map((stop, i) => (
-                  <React.Fragment key={stop.key}>
+                  <View key={stop.key} style={styles.stopGroup} testID={testIdWithKey(`AgentJourneyStop_${stop.key}`)}>
                     {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
                     <View
                       style={[styles.stop, stop.now ? styles.stopNow : undefined]}
@@ -451,7 +484,7 @@ const VtaAgentHome: React.FC = () => {
                         {stop.label}
                       </ThemedText>
                     </View>
-                  </React.Fragment>
+                  </View>
                 ))}
               </View>
             ))}
@@ -483,17 +516,32 @@ const VtaAgentHome: React.FC = () => {
         <DevicesCard onPress={() => go(Screens.VtaDevices)} />
         {/* Three places, always the same three (IN-20c). Devices stay above
             them, in reach from every one. */}
-        <View style={styles.segments} accessibilityRole="tablist">
+        <View
+          style={[styles.segments, segmentsStacked ? styles.segmentsStacked : undefined]}
+          accessibilityRole="tablist"
+          testID={testIdWithKey('AgentSegments')}
+        >
           {(['communities', 'manage', 'status'] as const).map((key) => (
             <Pressable
               key={key}
-              style={[styles.segment, segment === key ? styles.segmentOn : undefined]}
+              style={[
+                styles.segment,
+                segmentsStacked ? styles.segmentInStack : undefined,
+                segment === key ? styles.segmentOn : undefined,
+              ]}
               onPress={() => chooseSegment(key)}
               accessibilityRole="tab"
               accessibilityState={{ selected: segment === key }}
               testID={testIdWithKey(`AgentSegment_${key}`)}
             >
-              <ThemedText variant="bold" style={segment === key ? styles.segmentOnText : styles.muted}>
+              <ThemedText
+                variant="bold"
+                style={segment === key ? styles.segmentOnText : styles.muted}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={SEGMENT_MIN_SCALE}
+                testID={testIdWithKey(`AgentSegmentLabel_${key}`)}
+              >
                 {t(SEGMENT_LABEL[key])}
               </ThemedText>
             </Pressable>
@@ -501,22 +549,18 @@ const VtaAgentHome: React.FC = () => {
         </View>
         {segment === 'communities' ? (
           <>
-            {/* The vetter role is news, not a step: it shows when an admin grants it. */}
+            {/* The vetter role is news, not a step: it shows when an admin grants
+                it. The desk opens from the community's card below — one button,
+                not the same one twice on a vetter's page. */}
             {holdings?.vetterFor.map((communityDid) => (
               <View key={communityDid} style={[styles.card, styles.tip]} testID={testIdWithKey('AgentVetterCard')}>
                 <ThemedText variant="bold">
                   {t('VtaLink.YouCanVet', {
-                    community: communityLabelOf(communityDid, t),
+                    community: communityHeadingOf(communityDid, t),
                     interpolation: { escapeValue: false },
                   })}
                 </ThemedText>
                 <ThemedText style={styles.muted}>{t('VtaLink.YouCanVetBody')}</ThemedText>
-                <Button
-                  title={t('VtaLink.OpenDesk')}
-                  buttonType={ButtonType.Secondary}
-                  onPress={() => go(Screens.VtiVetting)}
-                  testID={testIdWithKey('AgentVetOthers')}
-                />
               </View>
             ))}
             {!isVetter && lapsed.length > 0 ? (
@@ -598,6 +642,7 @@ const VtaAgentHome: React.FC = () => {
                     membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
                     invited={holdings.invited.includes(communityDid)}
                     vetter={holdings.vetterFor.includes(communityDid)}
+                    linkedAt={link.linkedAt}
                     onOpen={goToCommunity}
                     onPrimary={(action, did) => {
                       // The vetting and invitation screens work on the chosen community.

@@ -60,7 +60,7 @@ describe('create my agent: the address comes first', () => {
     expect(start).not.toHaveBeenCalled()
   })
 
-  test("an agent's address makes this phone's owner code, named by the agent's host", async () => {
+  test("an agent's address makes this phone's owner code; the link stores no host as its name", async () => {
     const start = jest.spyOn(vtaAgent, 'startCreateAgent').mockResolvedValue(undefined)
     const tree = show()
     fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
@@ -68,7 +68,7 @@ describe('create my agent: the address comes first', () => {
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('AgentCreateAddressContinue')))
     })
-    expect(start).toHaveBeenCalledWith({}, VTA, 'agents.example')
+    expect(start).toHaveBeenCalledWith({}, VTA, VTA)
   })
 
   test('return on the address field continues: the button may be under the keyboard', async () => {
@@ -79,7 +79,7 @@ describe('create my agent: the address comes first', () => {
     await act(async () => {
       fireEvent(tree.getByTestId(id('AgentCreateAddressInput')), 'submitEditing')
     })
-    expect(start).toHaveBeenCalledWith({}, VTA, 'agents.example')
+    expect(start).toHaveBeenCalledWith({}, VTA, VTA)
   })
 
   test('the steps sit in a view that lifts their buttons over the keyboard', () => {
@@ -231,6 +231,22 @@ describe('setup ends at Ready; another device is added from My devices', () => {
       fireEvent(tree.getByTestId(id('AgentBackupCodeInput')), 'submitEditing')
     })
     expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkBackup', 'CreateAgent.BackupLabel')
+  })
+
+  test('adding a device is titled "Add a device", not "Claim your agent"', () => {
+    linked()
+    asAddDevice()
+    const navigation = useNavigation() as unknown as { setOptions: jest.Mock }
+    navigation.setOptions.mockClear()
+    show()
+    expect(navigation.setOptions).toHaveBeenCalledWith({ title: 'Screens.AddDevice' })
+  })
+
+  test('claiming keeps the stack\'s own title', () => {
+    const navigation = useNavigation() as unknown as { setOptions: jest.Mock }
+    navigation.setOptions.mockClear()
+    show()
+    expect(navigation.setOptions).not.toHaveBeenCalledWith({ title: 'Screens.AddDevice' })
   })
 
   test("this phone's own code is refused in words, and the screen stays", async () => {

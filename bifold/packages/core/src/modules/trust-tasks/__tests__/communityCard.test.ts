@@ -23,6 +23,19 @@ describe('a community card: where the phone stands, and one next step', () => {
     ['turned down', { ...base, join: at('rejected') }, 'Join.StandingRejected', undefined],
     ['removed', { ...base, join: at('removed') }, 'Join.StandingRemoved', undefined],
     ['left', { ...base, join: at('left') }, 'Join.StandingLeft', undefined],
+    // The desk is a vetter's one way in from the home (the vetter card no longer has it).
+    [
+      'a vetter not yet holding the membership',
+      { ...base, join: at('none'), vetter: true },
+      'VtaLink.IdentityFor',
+      'openDesk',
+    ],
+    [
+      'a vetter with an invitation waiting',
+      { ...base, join: at('none'), vetter: true, invited: true },
+      'VtaLink.InvitationWaiting',
+      'acceptInvitation',
+    ],
   ] as const)('%s', (_name, facts, statusKey, primary) => {
     expect(communityCardModel(facts)).toEqual(primary ? { statusKey, primary } : { statusKey })
   })

@@ -7,6 +7,7 @@
  */
 import { render } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -116,5 +117,17 @@ describe('a vetter keeps their place across a relaunch', () => {
   test('the card in but the codes not yet confirmed here: the vetter still compares them', async () => {
     const tree = relaunch([...seatedVetter, cardIn()])
     expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_match'))).toBeTruthy()
+  })
+
+  test('comparing the codes: the answers sit under the code, not under the tab bar', async () => {
+    // On a 6.3" phone (402×874 pt) the 56 pt code wrapped and "Codes match"
+    // fell under the tab bar (225 gate): the code is one line at 40 pt, and
+    // the seat banner keeps its title and badge but drops its sentence.
+    const tree = relaunch([...seatedVetter, cardIn()])
+    const code = await tree.findByTestId(testIdWithKey('VettingMatchCode'))
+    expect(StyleSheet.flatten(code.props.style).fontSize).toBeLessThanOrEqual(40)
+    expect(code.props.numberOfLines).toBe(1)
+    expect(tree.getByTestId(testIdWithKey('VettingRoleBadge'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('VettingSeatHint'))).toBeNull()
   })
 })

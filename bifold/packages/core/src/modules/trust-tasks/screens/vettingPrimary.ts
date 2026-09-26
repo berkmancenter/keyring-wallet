@@ -10,7 +10,12 @@
  * @module trust-tasks/screens/vettingPrimary
  */
 
-export type VetterStep = 'ticket' | 'request' | 'match' | 'waitCard' | 'check' | 'done'
+/**
+ * The desk's steps. 'share' is a ticket cut on this visit and not yet used:
+ * with 'ticket' filling "New ticket" there too, the vetter who had just cut
+ * one was pointed at cutting another rather than at handing it over.
+ */
+export type VetterStep = 'ticket' | 'share' | 'request' | 'match' | 'waitCard' | 'check' | 'done'
 export type ApplicantStep = 'member' | 'name' | 'waiting' | 'match' | 'send' | 'checking' | 'apply' | 'ticket'
 
 /** The testID (stem) of the desk step's one filled button; none while there is only waiting to do. */
@@ -18,6 +23,8 @@ export function deskPrimary(step: VetterStep): string | undefined {
   switch (step) {
     case 'ticket':
       return 'VettingNewTicketButton'
+    case 'share':
+      return 'VettingCopyTicketLink'
     case 'request':
       return 'VettingOpenSessionButton'
     case 'match':

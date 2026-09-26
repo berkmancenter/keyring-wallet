@@ -71,8 +71,6 @@ type LocalStep = 'intro' | 'address' | 'backupAddress' | 'backupCode' | 'ready'
 /** An agent's address, as the Farm shows it after "Create session". */
 export const looksLikeAgentAddress = (text: string): boolean => /^did:webvh:[^\s]+:[^\s]+$/.test(text.trim())
 
-/** The host a did:webvh names: shown until the agent gives its own name. */
-const hostOf = (did: string): string => did.split(':')[3] ?? did
 
 /**
  * What "… is online and belongs to this phone" calls the agent: the name it
@@ -96,6 +94,11 @@ const VtaCreateAgent: React.FC = () => {
   // "Add another device" from My devices opens this screen at the backup
   // step: setup itself no longer offers a backup (decided 2026-09-25).
   const addDevice = Boolean((useRoute().params as { addDevice?: boolean } | undefined)?.addDevice)
+  // The stack titles this screen "Claim your agent"; adding a device is not
+  // claiming one, and its two steps said so under the wrong title (225 gate).
+  useEffect(() => {
+    if (addDevice) navigation.setOptions({ title: t('Screens.AddDevice') })
+  }, [addDevice, navigation, t])
   const { ColorPalette, TextTheme } = useTheme()
   const { link, agentNames } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const headerHeight = useSafeHeaderHeight()
@@ -191,7 +194,7 @@ const VtaCreateAgent: React.FC = () => {
     if (!agent) return
     setBusy(true)
     try {
-      await vtaAgent.startCreateAgent(agent, did, hostOf(did))
+      await vtaAgent.startCreateAgent(agent, did, did)
     } catch (e) {
       setError(e instanceof DeviceCannotOwn ? needsScreenLock() : t('CreateAgent.NotConfirmed'))
       return
