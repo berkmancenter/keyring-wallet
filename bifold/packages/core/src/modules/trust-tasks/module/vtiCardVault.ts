@@ -300,7 +300,7 @@ export function useVtiCardVault(agent: Agent | undefined): void {
           const { status, vtaDid } = vtaAgent.getState()
           if (status !== 'connected' || !vtaDid) break
           const client = vtaAgent.client(agent, vtaDid)
-          const task: VaultTask = (type, payload) => client.task(type, payload)
+          const task: VaultTask = <T>(type: string, payload: Record<string, unknown>) => client.task<T>(type, payload)
           const store = new GenericRecordsCommunityStore(agent)
           const personas = await new GenericRecordsIdentityStore(agent).listPersonas()
           for (const persona of personas.filter((p) => p.vtaDid === vtaDid))

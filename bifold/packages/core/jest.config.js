@@ -71,7 +71,6 @@ module.exports = {
     '<rootDir>/__tests__/helpers/',
     '<rootDir>/__tests__/screens/fixtures',
     '<rootDir>/__tests__/modules/vrc/fixtures',
-    '<rootDir>/src/modules/trust-tasks/__tests__/fixtures/',
   ],
   coveragePathIgnorePatterns: [
     '/node_modules/',

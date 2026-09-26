@@ -28,7 +28,7 @@ import {
   roleCard,
   seedCardVaultState,
   vetterGrantProofSet,
-} from './fixtures/cardVault'
+} from '../../../../__tests__/helpers/cardVault'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 

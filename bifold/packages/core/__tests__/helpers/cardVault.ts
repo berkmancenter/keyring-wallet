@@ -5,9 +5,13 @@
  * whose generic records live in memory, a community store, and a vault that
  * answers as a VTA does.
  */
-import type { VtiCommunityStore, VtiHeldCredential, VtiMembership } from '../../module/VtiCommunityStore'
-import type { VtiPersona } from '../../module/VtiIdentityStore'
-import { seedCardVaultStateForTests, type CardVaultState } from '../../module/vtiCardVault'
+import type {
+  VtiCommunityStore,
+  VtiHeldCredential,
+  VtiMembership,
+} from '../../src/modules/trust-tasks/module/VtiCommunityStore'
+import type { VtiPersona } from '../../src/modules/trust-tasks/module/VtiIdentityStore'
+import { seedCardVaultStateForTests, type CardVaultState } from '../../src/modules/trust-tasks/module/vtiCardVault'
 
 /**
  * Put a card in a vault state for a screen test, without the keep or recover
@@ -89,7 +93,7 @@ export function fakeAgent() {
         void records.push({ id: `r${next++}`, content, tags, createdAt: new Date(Date.now() + next) }),
       update: async (r: { id: string }) => {
         const at = records.findIndex((x) => x.id === r.id)
-        if (at >= 0) records[at] = { ...(r as never), createdAt: records[at].createdAt }
+        if (at >= 0) records[at] = { ...(r as (typeof records)[number]), createdAt: records[at].createdAt }
       },
       delete: async (r: { id: string }) => {
         const at = records.findIndex((x) => x.id === r.id)
