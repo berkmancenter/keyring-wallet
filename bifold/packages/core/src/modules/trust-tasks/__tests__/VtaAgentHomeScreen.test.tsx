@@ -122,7 +122,7 @@ describe('Your agent — after linking', () => {
     expect(tree.queryByTestId(testIdWithKey('AgentApprovalCard'))).toBeNull()
   })
 
-  it('puts an approval above the doors, with what it is and when it expires', async () => {
+  it('says an approval is waiting on every segment, and shows it in Manage with what it is and when it expires', async () => {
     controller.set({
       approvals: [
         {
@@ -135,6 +135,9 @@ describe('Your agent — after linking', () => {
       ],
     })
     const tree = await renderHome([])
+    expect(tree.getByTestId(testIdWithKey('AgentApprovalBanner'))).toHaveTextContent(/VtaLink\.ApprovalsWaiting/)
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentApprovalBanner')))
+    expect(tree.getByTestId(testIdWithKey('AgentSegment_manage')).props.accessibilityState).toEqual({ selected: true })
     const card = tree.getByTestId(testIdWithKey('AgentApprovalCard'))
     // The task, not its URI; the requester short, not entire.
     expect(card).toHaveTextContent(/MyAgent\.ApprovalAsks/)
@@ -224,6 +227,7 @@ describe('Your agent — after linking', () => {
 
     it('forgets the reading on unlink', async () => {
       const first = await renderHome([persona, membership])
+      await act(async () => fireEvent.press(first.getByTestId(testIdWithKey('AgentSegment_manage'))))
       await act(async () => fireEvent.press(first.getByTestId(testIdWithKey('AgentUnlink'))))
       await act(async () => fireEvent.press(first.getByTestId(testIdWithKey('AgentUnlinkConfirm'))))
       first.unmount()
@@ -443,10 +447,50 @@ describe('Your agent — after linking', () => {
     expect(navigate).not.toHaveBeenCalledWith(Screens.MyAgent)
   })
 
+  // IN-20c: the same three places every time, Communities first.
+  it('opens on Communities; Manage and Status hold the rest; devices are in reach from each', async () => {
+    const tree = await renderHome([persona, membership])
+    expect(tree.getByTestId(testIdWithKey('AgentHomeTitle'))).toHaveTextContent('MyAgent.Title')
+    expect(tree.getByTestId(testIdWithKey('AgentHomeName'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('AgentSegment_communities')).props.accessibilityState).toEqual({
+      selected: true,
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentHolds'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('AgentDevices'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('AgentUnlink'))).toBeNull()
+
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentSegment_manage')))
+    expect(tree.getByTestId(testIdWithKey('AgentUnlink'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('AgentHolds'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('AgentDevices'))).toBeTruthy()
+
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentSegment_status')))
+    expect(tree.getByTestId(testIdWithKey('AgentActivity'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('AgentDetailsToggle'))).toBeTruthy()
+    // The agent's identifier stays behind Details.
+    expect(tree.queryByTestId(testIdWithKey('AgentDetails'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('AgentDevices'))).toBeTruthy()
+  })
+
+  it('comes back to the segment the person left it on', async () => {
+    const first = await renderHome([persona, membership])
+    fireEvent.press(first.getByTestId(testIdWithKey('AgentSegment_status')))
+    first.unmount()
+    const again = await renderHome([persona, membership])
+    expect(again.getByTestId(testIdWithKey('AgentSegment_status')).props.accessibilityState).toEqual({ selected: true })
+  })
+
+  it('no approval waiting: no banner', async () => {
+    const tree = await renderHome([])
+    expect(tree.queryByTestId(testIdWithKey('AgentApprovalBanner'))).toBeNull()
+  })
+
   describe('unlinking this agent', () => {
     afterEach(() => jest.restoreAllMocks())
 
     const openCard = async (tree: Awaited<ReturnType<typeof renderHome>>) => {
+      // Unlinking is in Manage (IN-20c).
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('AgentSegment_manage'))))
       await act(async () => {
         fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlink')))
       })
