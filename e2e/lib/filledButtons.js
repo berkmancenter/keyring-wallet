@@ -3,16 +3,8 @@
 // screenshot is measured: a filled button is mostly the brand colour, an
 // outlined one mostly the page with a thin border and its label.
 //
-// THE RULE, from the Keyring theme's button variants (app/src/keyring-theme/
-// theme.ts, Buttons): only two variants are filled — Primary (brand purple
-// #622C62; disabled, the same at 70% over the page, luminance ≈ 0.45) and
-// Critical (red #D8292F, ≈ 0.31). Secondary is outlined (a 2 pt border on the
-// page), Tertiary is text. There is no grey-filled variant: a grey fill is a
-// one-off style override, and it is itself the defect the one-primary change
-// removed (e.g. Withdraw, "Clear finished requests"). So "filled" here means
-// "more than 40% of the button is darker than luminance 0.6" — true of both
-// filled variants in every state, of any off-design fill, and of no outlined
-// or text button (0.08 measured on an outlined one).
+// The rule itself (what counts as filled, which buttons are judged) lives in
+// filledRule.js, so it can be re-proved offline against saved evidence.
 //
 // macOS only (sips turns the PNG into a BMP this reads without dependencies);
 // the gate runs on the Mac. Used by the release gate's "one filled button per
@@ -22,54 +14,28 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { byTestId } from "./driver.js";
+import { fillShareOfBmp, judgeButtons } from "./filledRule.js";
 
-/**
- * Share of an image's pixels that are a button's fill: any dark pixel, of any
- * hue — a grey-filled button is as filled as a purple one. (A first version
- * counted only saturated pixels and read a grey-filled "Clear finished
- * requests" as outlined, passing a screen with two filled buttons: found by
- * running it on a known-bad build before trusting it.)
- */
-export function fillShareOfBmp(buf) {
-  const offset = buf.readUInt32LE(10);
-  const width = buf.readInt32LE(18);
-  const height = Math.abs(buf.readInt32LE(22));
-  const bpp = buf.readUInt16LE(28);
-  if (bpp !== 24 && bpp !== 32) throw new Error(`BMP with ${bpp} bits per pixel`);
-  const step = bpp / 8;
-  const rowBytes = Math.ceil((width * bpp) / 32) * 4;
-  let fill = 0;
-  let total = 0;
-  for (let y = 0; y < height; y += 2) {
-    for (let x = 0; x < width; x += 2) {
-      const i = offset + y * rowBytes + x * step;
-      const b = buf[i] / 255;
-      const g = buf[i + 1] / 255;
-      const r = buf[i + 2] / 255;
-      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      if (luminance < 0.6) fill++;
-      total++;
-    }
-  }
-  return total ? fill / total : 0;
-}
+export { FILLED_SHARE, fillShareOfBmp, judgeButtons } from "./filledRule.js";
 
-/** The brand-fill share of a PNG (base64, as Appium returns it). */
-export function fillShareOfPng(base64) {
+/** A PNG (base64, as Appium returns it) as a BMP buffer. */
+export function bmpOfPng(base64) {
   const dir = mkdtempSync(join(tmpdir(), "filled-"));
   try {
     const png = join(dir, "b.png");
     const bmp = join(dir, "b.bmp");
     writeFileSync(png, Buffer.from(base64, "base64"));
     execFileSync("sips", ["-s", "format", "bmp", png, "--out", bmp], { stdio: "ignore" });
-    return fillShareOfBmp(readFileSync(bmp));
+    return readFileSync(bmp);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
-/** A button more than this much brand fill is drawn filled. */
-export const FILLED_SHARE = 0.4;
+/** The fill share of a PNG (base64, as Appium returns it). */
+export function fillShareOfPng(base64) {
+  return fillShareOfBmp(bmpOfPng(base64));
+}
 
 const testIdOf = (raw) => String(raw ?? "").replace(/^com\.ariesbifold:id\//, "");
 
@@ -79,28 +45,20 @@ export async function buttonsOnScreen(driver) {
   const elements = android
     ? await driver.$$('//*[@clickable="true" and @resource-id!=""]')
     : await driver.$$('//XCUIElementTypeButton[@name!=""]');
-  // A button only partly on screen is judged by whatever covers the rest of
-  // it: a card cut off by the tab bar read as filled from the bar's black
-  // (225 gate, "I want to join" under the fold). Judge only buttons drawn
-  // whole between the top of the window and the top of the tab bar.
   const tab = byTestId(driver, "MyAgent");
-  const bottom = (await tab.isExisting().catch(() => false))
+  const tabTop = (await tab.isExisting().catch(() => false))
     ? (await tab.getLocation()).y
     : (await driver.getWindowSize()).height;
-  const seen = new Map();
+  const buttons = [];
   for (const el of elements) {
     if (!(await el.isDisplayed().catch(() => false))) continue;
     const id = testIdOf(await el.getAttribute(android ? "resource-id" : "name"));
-    if (!id || seen.has(id)) continue;
+    if (!id) continue;
+    const { x, y } = await el.getLocation();
     const { width, height } = await el.getSize();
-    // Rows and icons are not the step's buttons: a button is wide and short.
-    if (width < 120 || height < 30 || height > 200) continue;
-    const { y } = await el.getLocation();
-    if (y < 0 || y + height > bottom) continue;
-    const share = fillShareOfPng(await driver.takeElementScreenshot(el.elementId));
-    seen.set(id, share);
+    buttons.push({ id, x, y, width, height, el });
   }
-  return [...seen.entries()].map(([id, share]) => ({ id, filled: share > FILLED_SHARE, share: Number(share.toFixed(3)) }));
+  return judgeButtons(buttons, tabTop, async (b) => fillShareOfPng(await driver.takeElementScreenshot(b.el.elementId)));
 }
 
 /** The testIDs drawn filled right now. */
