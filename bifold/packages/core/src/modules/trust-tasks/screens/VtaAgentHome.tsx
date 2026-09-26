@@ -37,7 +37,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { DevicesCard } from './DevicesCard'
 import { agentDisplayName, withAgentName } from './agentName'
 import { CommunityCard } from './CommunityCard'
-import { communityLabelOf, partyLabelStartOf } from './communityName'
+import { communityHeadingOf, communityLabelOf, partyLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
@@ -162,7 +162,10 @@ const VtaAgentHome: React.FC = () => {
     muted: { color: ColorPalette.grayscale.mediumGrey },
     mono: { ...TextTheme.normal, fontFamily: 'Menlo', fontSize: 12 },
     strip: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 },
-    stop: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+    // A stop and the chevron before it wrap as one, so a narrow screen never
+    // leaves a '›' alone at the end of a line (Pixel 6, 2026-09-26).
+    stopGroup: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+    stop: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, flexShrink: 1 },
     stopNow: { backgroundColor: ColorPalette.brand.primary },
     stopNowText: { color: ColorPalette.grayscale.white, fontWeight: '700' },
     stopDone: { color: ColorPalette.semantic.success, fontWeight: '700' },
@@ -429,8 +432,11 @@ const VtaAgentHome: React.FC = () => {
                   communityDid
                     ? {
                         key: 'Joined',
+                        // The membership is the community's own answer: a name
+                        // that only a link gave is not qualified here, where
+                        // "(not confirmed …)" read as if the joining were.
                         label: t('VtaLink.JourneyJoined', {
-                          community: communityLabelOf(communityDid, t),
+                          community: communityHeadingOf(communityDid, t, { claim: 'plain' }),
                           interpolation: { escapeValue: false },
                         }),
                         done: true,
@@ -439,7 +445,7 @@ const VtaAgentHome: React.FC = () => {
                     : { key: 'Join', label: t('VtaLink.JourneyJoin'), done: false, now: true },
                   { key: 'Member', label: t('VtaLink.JourneyMember'), done: !!communityDid, now: false },
                 ].map((stop, i) => (
-                  <React.Fragment key={stop.key}>
+                  <View key={stop.key} style={styles.stopGroup} testID={testIdWithKey(`AgentJourneyStop_${stop.key}`)}>
                     {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
                     <View
                       style={[styles.stop, stop.now ? styles.stopNow : undefined]}
@@ -451,7 +457,7 @@ const VtaAgentHome: React.FC = () => {
                         {stop.label}
                       </ThemedText>
                     </View>
-                  </React.Fragment>
+                  </View>
                 ))}
               </View>
             ))}
@@ -501,22 +507,18 @@ const VtaAgentHome: React.FC = () => {
         </View>
         {segment === 'communities' ? (
           <>
-            {/* The vetter role is news, not a step: it shows when an admin grants it. */}
+            {/* The vetter role is news, not a step: it shows when an admin grants
+                it. The desk opens from the community's card below — one button,
+                not the same one twice on a vetter's page. */}
             {holdings?.vetterFor.map((communityDid) => (
               <View key={communityDid} style={[styles.card, styles.tip]} testID={testIdWithKey('AgentVetterCard')}>
                 <ThemedText variant="bold">
                   {t('VtaLink.YouCanVet', {
-                    community: communityLabelOf(communityDid, t),
+                    community: communityHeadingOf(communityDid, t),
                     interpolation: { escapeValue: false },
                   })}
                 </ThemedText>
                 <ThemedText style={styles.muted}>{t('VtaLink.YouCanVetBody')}</ThemedText>
-                <Button
-                  title={t('VtaLink.OpenDesk')}
-                  buttonType={ButtonType.Secondary}
-                  onPress={() => go(Screens.VtiVetting)}
-                  testID={testIdWithKey('AgentVetOthers')}
-                />
               </View>
             ))}
             {!isVetter && lapsed.length > 0 ? (
@@ -598,6 +600,7 @@ const VtaAgentHome: React.FC = () => {
                     membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
                     invited={holdings.invited.includes(communityDid)}
                     vetter={holdings.vetterFor.includes(communityDid)}
+                    linkedAt={link.linkedAt}
                     onOpen={goToCommunity}
                     onPrimary={(action, did) => {
                       // The vetting and invitation screens work on the chosen community.

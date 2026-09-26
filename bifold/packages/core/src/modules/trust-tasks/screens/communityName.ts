@@ -105,6 +105,42 @@ export function communityLabelAnsweredOf(did: string, t: TFunction): string {
   return communityLabelOf(did, t)
 }
 
+/**
+ * The last path segment of a did:webvh — `…:host:keyring-test-vtc` gives
+ * "keyring-test-vtc" — which its operator chose as a readable handle. Never
+ * the host: a DID with no path has no such segment.
+ */
+export function didPathName(did: string): string | undefined {
+  const parts = did.split(':')
+  if (parts[1] !== 'webvh' || parts.length < 5) return undefined
+  try {
+    return decodeURIComponent(parts[parts.length - 1]) || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * What to call a community where several stand side by side — the cards of
+ * "Your agent", one per community — so that two unnamed ones never both read
+ * "a community" (2026-09-26, a vetter holding two).
+ *
+ * As `communityLabelOf` while a name is known. Without one: the DID's path
+ * segment, else "a community" with the end of its SCID (a hash, not a host)
+ * to tell it apart. `claim: 'plain'` drops the "(not confirmed …)" qualifier,
+ * for a line about a membership the community itself issued, where the
+ * qualifier read as if the membership were unconfirmed.
+ */
+export function communityHeadingOf(did: string, t: TFunction, opts: { claim?: 'qualified' | 'plain' } = {}): string {
+  const named = opts.claim === 'plain' ? communityLabelAnsweredOf(did, t) : communityLabelOf(did, t)
+  if (named !== t('Community.Unnamed')) return named
+  const path = didPathName(did)
+  if (path) return path
+  const parts = did.split(':')
+  const ref = (parts[1] === 'webvh' && parts[2] ? parts[2] : did).slice(-6)
+  return t('Community.UnnamedRef', { ref, interpolation: { escapeValue: false } }) as string
+}
+
 /** The same, for where it starts a sentence or stands alone: "An unnamed community (…)". */
 export function communityLabelStartOf(did: string, t: TFunction): string {
   const label = communityLabelOf(did, t)

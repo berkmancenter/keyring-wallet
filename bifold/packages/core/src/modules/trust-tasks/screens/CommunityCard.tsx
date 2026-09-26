@@ -21,7 +21,7 @@ import type { VtiMembership } from '../module/VtiCommunityStore'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 
 import { communityCardModel, type CommunityCardPrimary } from './communityCardModel'
-import { communityLabelOf } from './communityName'
+import { communityHeadingOf } from './communityName'
 import { shareIdentity } from './identityShare'
 
 /** A card's handle for tests and runners: the last 8 characters of the community's DID. */
@@ -34,6 +34,8 @@ export interface CommunityCardProps {
   membership?: VtiMembership
   invited: boolean
   vetter: boolean
+  /** When this phone was linked to the agent, to mark what the agent held before it. */
+  linkedAt?: string
   onOpen: (communityDid: string) => void
   onPrimary: (action: CommunityCardPrimary, communityDid: string) => void
 }
@@ -51,6 +53,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   membership,
   invited,
   vetter,
+  linkedAt,
   onOpen,
   onPrimary,
 }) => {
@@ -61,8 +64,20 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   const join = journey?.join ?? (membership ? { kind: 'member' as const, membership } : undefined)
   const model = communityCardModel({ join, hasIdentity: !!persona, invited, vetter })
   const key = communityCardKey(communityDid)
-  const community = communityLabelOf(communityDid, t)
+  // Named, or at least told apart from the other cards — never a host.
+  const community = communityHeadingOf(communityDid, t)
   const words = (k: string) => t(k, { community, interpolation: { escapeValue: false } })
+  // "You're a member of X (not confirmed by the community)" read as if the
+  // membership were unconfirmed; the community issued it, so the status line
+  // names it plainly. The heading above still says where the name came from.
+  const status = t(model.statusKey, {
+    community:
+      model.statusKey === 'Join.StandingMember' ? communityHeadingOf(communityDid, t, { claim: 'plain' }) : community,
+    interpolation: { escapeValue: false },
+  })
+  // A membership the agent held before this phone was linked to it came with
+  // the agent, not from anything done on this phone.
+  const heldBeforeLink = !!membership && !!linkedAt && Date.parse(membership.grantedAt) < Date.parse(linkedAt)
 
   const styles = StyleSheet.create({
     card: { gap: 8, paddingVertical: 8 },
@@ -82,9 +97,11 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
       >
         <Icon name="account-group-outline" size={22} color={TextTheme.normal.color} />
         <View style={{ flex: 1 }}>
-          <ThemedText variant="bold">{community}</ThemedText>
+          <ThemedText variant="bold" testID={testIdWithKey(`AgentCommunityName_${key}`)}>
+            {community}
+          </ThemedText>
           <ThemedText style={styles.muted} testID={testIdWithKey(`AgentCommunityStatus_${key}`)}>
-            {words(model.statusKey)}
+            {status}
             {vetter && membership ? ` · ${t('Vetting.SeatVetter')}` : ''}
           </ThemedText>
         </View>
@@ -95,15 +112,26 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
       {membership ? (
         <View style={styles.row}>
           <Icon name="card-account-details-outline" size={20} color={TextTheme.normal.color} />
-          <ThemedText style={{ flex: 1 }}>
-            {t('MyAgent.MemberSince', { date: membership.grantedAt.slice(0, 10) })}
-          </ThemedText>
+          <View style={{ flex: 1 }}>
+            <ThemedText testID={testIdWithKey(`AgentMemberSince_${key}`)}>
+              {t('MyAgent.MemberSince', { date: membership.grantedAt.slice(0, 10) })}
+            </ThemedText>
+            {heldBeforeLink ? (
+              <ThemedText style={styles.muted} testID={testIdWithKey(`AgentMemberBeforeLink_${key}`)}>
+                {t('MyAgent.MemberBeforeLink')}
+              </ThemedText>
+            ) : null}
+          </View>
         </View>
       ) : null}
       {persona ? (
         <View style={styles.row}>
           <Icon name="account-circle-outline" size={20} color={TextTheme.normal.color} />
-          <ThemedText style={{ flex: 1 }}>{words('VtaLink.IdentityFor')}</ThemedText>
+          {/* The status line may already say "Your identity for X"; then this
+              row says what the identity is for rather than saying it twice. */}
+          <ThemedText style={{ flex: 1 }}>
+            {model.statusKey === 'VtaLink.IdentityFor' ? t('VtaLink.IdentityShareRow') : words('VtaLink.IdentityFor')}
+          </ThemedText>
           {/* The admin needs this identity to invite it (TestFlight report #3). */}
           <Pressable
             onPress={() => void shareIdentity(t, communityDid, persona.did)}

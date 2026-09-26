@@ -16,6 +16,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { emitCommunityChanged } from '../module/communityChanged'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
+import { communityCardKey } from '../screens/CommunityCard'
 import VtaAgentHome, { forgetAgentHoldings, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -284,7 +285,11 @@ describe('Your agent — after linking', () => {
     mockGrantState.mockResolvedValue({ state: 'active', statusChecked: true })
     const tree = await renderHome([persona, grant])
     expect(tree.getByTestId(testIdWithKey('AgentVetterCard'))).toHaveTextContent(/VtaLink.YouCanVet/)
-    expect(tree.getByTestId(testIdWithKey('AgentVetOthers'))).toBeTruthy()
+    // The desk is the community card's one button; the vetter card no longer repeats it.
+    expect(tree.getByTestId(testIdWithKey(`AgentCommunityPrimary_${communityCardKey(communityDid)}`))).toHaveTextContent(
+      'VtaLink.OpenDesk'
+    )
+    expect(tree.queryByTestId(testIdWithKey('AgentVetOthers'))).toBeNull()
   })
 
   it('a revoked grant says so, and offers no desk', async () => {
