@@ -119,11 +119,17 @@ export async function checkVettingStep(driver, where) {
     // second filled button cannot hide by scrolling away. Being reachable is
     // §6's question; this says when it took a scroll.
     if (expected && !seen.some((b) => b.id === expected)) {
-      const el = await scrollToTestId(driver, expected, 3).catch(() => undefined);
-      if (el) {
-        for (const b of await buttonsOnScreen(driver)) if (b.filled) filledSet.add(b.id);
-        console.log(`[e2e] ${where}: ${expected} was below the fold — judged after one scroll`);
+      // scrollToTestId stops once the button "is displayed", which a half-hidden
+      // one already is; then drag the page up until it is whole on screen.
+      await scrollToTestId(driver, expected, 3).catch(() => undefined);
+      let after = await buttonsOnScreen(driver);
+      let drags = 0;
+      for (; drags < 3 && !after.some((b) => b.id === expected); drags++) {
+        await dragUp(driver);
+        after = await buttonsOnScreen(driver);
       }
+      for (const b of after) if (b.filled) filledSet.add(b.id);
+      console.log(`[e2e] ${where}: ${expected} was below the fold — judged after scrolling (${drags} drag${drags === 1 ? "" : "s"})`);
     }
     const filled = [...filledSet];
     const want = expected ? [expected] : [];
@@ -134,6 +140,28 @@ export async function checkVettingStep(driver, where) {
     }
   }
   throw new Error(`${where} (${last.at.side} ${last.at.step}): filled buttons ${JSON.stringify(last.filled)}, expected ${JSON.stringify(last.want)}`);
+}
+
+/** Drag the page up a fifth of the window. */
+async function dragUp(driver) {
+  const { width, height } = await driver.getWindowSize();
+  const x = Math.round(width / 2);
+  await driver.performActions([
+    {
+      type: "pointer",
+      id: "finger",
+      parameters: { pointerType: "touch" },
+      actions: [
+        { type: "pointerMove", duration: 0, x, y: Math.round(height * 0.6) },
+        { type: "pointerDown", button: 0 },
+        { type: "pause", duration: 100 },
+        { type: "pointerMove", duration: 400, x, y: Math.round(height * 0.4) },
+        { type: "pointerUp", button: 0 },
+      ],
+    },
+  ]);
+  await driver.releaseActions().catch(() => undefined);
+  await sleep(700);
 }
 
 /** The step the vetting screen is on, and the one button that should be filled on it. */

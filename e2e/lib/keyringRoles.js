@@ -526,6 +526,20 @@ export const applicant = {
         await waitForTestId(d, "JoinMakeIdentity", 30000);
         await tapTestIdByCoordinates(d, "JoinAsContinue");
         await handleBiometricConfirmIfPresent(d);
+        // "Your agent didn't answer. Tap Continue to try again": do what the
+        // screen tells a person, up to twice (a lost reply, VTI-43; 225 final).
+        for (let retry = 1; retry <= 2; retry++) {
+          let erred = false;
+          for (let i = 0; i < 40 && !erred; i++) {
+            if ((await stepIdOf(d, "applicant")) !== null) break;
+            erred = await existsTestId(d, "JoinError", 1500);
+          }
+          if (!erred || !(await existsTestId(d, "JoinAsContinue", 2000))) break;
+          const said = await textOf(d, "JoinError").catch(() => "");
+          console.log(`[e2e] ${d.e2ePlatform}: Join says "${said.slice(0, 80)}" — Continue again (${retry}/2)`);
+          await tapTestIdByCoordinates(d, "JoinAsContinue");
+          await handleBiometricConfirmIfPresent(d);
+        }
         observedAsks = asks.replace(/\s+/g, " ").slice(0, 200);
       } else {
         await openVetting(d);
