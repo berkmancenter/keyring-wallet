@@ -24,8 +24,13 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent, type VtaDevice } from '../module/vtaAgent'
 import { deviceRefusalOf } from '../module/vtaOwner'
 
-/** A row's handle for tests: the last 8 characters of the device's DID. */
-export const deviceKey = (did: string): string => did.slice(-8)
+import { didHashKey } from './testIdKey'
+
+/**
+ * A row's handle for tests: {@link didHashKey} of the device's whole DID. Not
+ * its tail: two did:peer:2 keys on one mediator share their last characters.
+ */
+export const deviceKey = (did: string): string => didHashKey(did)
 
 /**
  * What a person calls an admin of their agent. Every admin is listed, not

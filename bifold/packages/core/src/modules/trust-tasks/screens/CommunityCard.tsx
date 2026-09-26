@@ -23,9 +23,19 @@ import type { VtiPersona } from '../module/VtiIdentityStore'
 import { communityCardModel, type CommunityCardPrimary } from './communityCardModel'
 import { communityLabelOf } from './communityName'
 import { shareIdentity } from './identityShare'
+import { didHashKey, didLabelKey } from './testIdKey'
 
-/** A card's handle for tests and runners: the last 8 characters of the community's DID. */
-export const communityCardKey = (communityDid: string): string => communityDid.slice(-8)
+/**
+ * A card's handle for tests and runners: `<label>-<hash>`, where the label is
+ * {@link didLabelKey} (for reading only) and the hash {@link didHashKey} of the
+ * whole DID; just the hash when the label is empty. Not the DID's tail: two
+ * communities on one host share it.
+ */
+export const communityCardKey = (communityDid: string): string => {
+  const label = didLabelKey(communityDid)
+  const hash = didHashKey(communityDid)
+  return label ? `${label}-${hash}` : hash
+}
 
 export interface CommunityCardProps {
   agent?: Agent
