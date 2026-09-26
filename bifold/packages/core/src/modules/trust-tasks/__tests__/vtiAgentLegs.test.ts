@@ -295,9 +295,20 @@ describe('what a community is asked, and how', () => {
     }
   })
 
-  it('leaves a task unsigned when its spec declares no proof', async () => {
-    const { sent } = await askOverDidcomm(MANIFEST, () => ({ type: `${MANIFEST}#response`, body: {} }))
-    expect((sent.body as Record<string, unknown>).proof).toBeUndefined()
+  // vti #1739 and the VTC's spine (step 3a): over DIDComm and TSP a document
+  // must carry a proof by its issuer, who must be the sender, whatever its
+  // spec says about the proof. The manifest's proof is only RECOMMENDED, but
+  // here the transport already names the persona, so a proof discloses
+  // nothing more; the anonymous read is the REST one (vtiManifestRest).
+  it('signs the manifest too when it rides DIDComm, as the persona the transport already names', async () => {
+    const who = 'did:webvh:p:manifest'
+    const { sent } = await askOverDidcomm(MANIFEST, () => ({ type: `${MANIFEST}#response`, body: {} }), who)
+    expect((sent.body as Record<string, unknown>).type).toBe(MANIFEST)
+    expect((sent.body as Record<string, unknown>).proof).toEqual({
+      signer: who,
+      kmsKeyId: 'sig',
+      verificationMethod: `${who}#key-0`,
+    })
   })
 
   it('reads a reply typed as the document, as a VTC sends today', async () => {
