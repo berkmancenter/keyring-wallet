@@ -16,6 +16,7 @@
 // a 177a218 binary). Where a string is the same in both, one citation (ed13d29)
 // stands; 177a218's line is given alongside when it moved.
 
+import { moveDeskTo } from './deskTabs.js';
 import { selectedLine, walkTo } from './listWalk.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -122,8 +123,19 @@ export async function declineStale(tui) {
   return declined;
 }
 
-/** Move the desk to one of its views: Requests, Tickets or Issued (←/→). */
+/**
+ * Move the desk to one of its views: Requests, Tickets or Issued (←/→), by the
+ * view the TUI marks as selected (deskTabs.js). What the view's rows say is
+ * only the fallback, for a screen whose selection cannot be read: on a desk
+ * that kept earlier runs' requests, the rows need not say any of these words
+ * (P1-final3-android, 2026-09-26 16:22Z).
+ */
 export async function deskView(tui, view) {
+  const started = new Date();
+  if (await moveDeskTo(tui, view)) {
+    tui.record(`vetter.view.${view}`, true, started, { value: view, tuiSource: 'deskSelection' });
+    return tui;
+  }
   const marker = { Requests: /No one has asked you|accepted —|session open —|card verified —|statement signed/, Tickets: /You have no tickets out|Read aloud|t: hand out a ticket/, Issued: /You have not signed any vetting statements|signed/ }[view];
   for (let i = 0; i < 3; i++) {
     if (marker.test(tui.screen())) return tui;
