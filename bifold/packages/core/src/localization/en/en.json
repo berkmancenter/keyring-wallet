@@ -1661,6 +1661,7 @@
     "ChecklistLine": "{{held}} of {{needed}} statements",
     "Meets": "meets the published requirements",
     "Member": "You're a member of {{community}}.",
+    "GoToMyAgent": "Go to My Agent",
     "MemberAs": "You're a member of {{community}}, as {{role}}.",
     "Status": {
       "sent": "Request sent",

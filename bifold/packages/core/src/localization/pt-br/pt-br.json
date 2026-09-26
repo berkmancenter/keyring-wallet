@@ -1502,6 +1502,7 @@
     "ChecklistLine": "{{held}} de {{needed}} declarações",
     "Meets": "atende aos requisitos publicados",
     "Member": "Você é membro de {{community}}.",
+    "GoToMyAgent": "Ir para Meu agente",
     "MemberAs": "Você é membro de {{community}}, como {{role}}.",
     "Status": {
       "sent": "Pedido enviado",
