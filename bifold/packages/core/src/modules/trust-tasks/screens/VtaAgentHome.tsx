@@ -31,7 +31,7 @@ import { GenericRecordsCommunityStore, type VtiMembership } from '../module/VtiC
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
-import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
+import { useCommunityChanged } from '../module/communityChanged'
 
 import { DevicesCard } from './DevicesCard'
 import { agentDisplayName, withAgentName } from './agentName'
@@ -200,8 +200,10 @@ const VtaAgentHome: React.FC = () => {
     if (isFocused) void load()
   }, [load, isFocused])
   // A grant, a card or an invitation that arrives while this screen is open
-  // shows without a visit to Vetting: the persona inbox says when it stored one.
-  useVtiPersonaDeliveries(() => void load())
+  // shows without a visit to Vetting — and so does anything this phone stores
+  // itself (a join, a vetting, a leave): the stores say when they write.
+  const loadNow = useCallback(() => void load(), [load])
+  useCommunityChanged(loadNow)
 
   // A revoke sends the phone nothing: the community only flips a bit on its
   // status list. So while this screen shows a vetter's seat, the grants are read
@@ -365,24 +367,41 @@ const VtaAgentHome: React.FC = () => {
               <Icon name="chevron-right" size={22} color={ColorPalette.brand.link} />
             </Pressable>
           ) : null}
-          <View style={styles.strip} testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
-            {[
-              { key: 'Linked', done: true, now: false },
-              { key: 'Join', done: isMember, now: !isMember },
-              { key: 'Member', done: isMember, now: false },
-            ].map((stop, i) => (
-              <React.Fragment key={stop.key}>
-                {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
-                <View
-                  style={[styles.stop, stop.now ? styles.stopNow : undefined]}
-                  accessibilityState={{ selected: stop.now }}
-                >
-                  <ThemedText style={stop.done ? styles.stopDone : stop.now ? styles.stopNowText : styles.muted}>
-                    {stop.done ? '✓ ' : ''}
-                    {t(`VtaLink.Journey${stop.key}`)}
-                  </ThemedText>
-                </View>
-              </React.Fragment>
+          {/* Where the phone is, per community it belongs to: a finished step
+              says so ("Joined", not "Join") and names the community. */}
+          <View testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
+            {(isMember ? (holdings?.memberships ?? []).map((m) => m.communityDid) : [undefined]).map((communityDid) => (
+              <View key={communityDid ?? 'none'} style={styles.strip} testID={testIdWithKey('AgentJourneyRow')}>
+                {[
+                  { key: 'Linked', label: t('VtaLink.JourneyLinked'), done: true, now: false },
+                  communityDid
+                    ? {
+                        key: 'Joined',
+                        label: t('VtaLink.JourneyJoined', {
+                          community: communityLabelOf(communityDid, t),
+                          interpolation: { escapeValue: false },
+                        }),
+                        done: true,
+                        now: false,
+                      }
+                    : { key: 'Join', label: t('VtaLink.JourneyJoin'), done: false, now: true },
+                  { key: 'Member', label: t('VtaLink.JourneyMember'), done: !!communityDid, now: false },
+                ].map((stop, i) => (
+                  <React.Fragment key={stop.key}>
+                    {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
+                    <View
+                      style={[styles.stop, stop.now ? styles.stopNow : undefined]}
+                      accessibilityState={{ selected: stop.now }}
+                      testID={testIdWithKey(`AgentJourney${stop.key}`)}
+                    >
+                      <ThemedText style={stop.done ? styles.stopDone : stop.now ? styles.stopNowText : styles.muted}>
+                        {stop.done ? '✓ ' : ''}
+                        {stop.label}
+                      </ThemedText>
+                    </View>
+                  </React.Fragment>
+                ))}
+              </View>
             ))}
           </View>
           <Pressable

@@ -14,6 +14,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
+import { emitCommunityChanged } from '../module/communityChanged'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import VtaAgentHome, { forgetAgentHoldings, VETTER_RECHECK_MS } from '../screens/VtaAgentHome'
 
@@ -287,6 +288,31 @@ describe('Your agent — after linking', () => {
     const tree = await renderHome([persona, grant])
     expect(tree.getByTestId(testIdWithKey('AgentVetterLapsed'))).toHaveTextContent('VtaLink.VetterRevoked')
     expect(tree.queryByTestId(testIdWithKey('AgentVetOthers'))).toBeNull()
+  })
+
+  // IN-20(a)(b): the ticked stop said "Join" and never named the community.
+  it('a member: the journey says "Joined" and names the community', async () => {
+    const tree = await renderHome([persona, membership])
+    expect(tree.getByTestId(testIdWithKey('AgentJourneyJoined'))).toHaveTextContent('✓ VtaLink.JourneyJoined')
+    expect(tree.queryByTestId(testIdWithKey('AgentJourneyJoin'))).toBeNull()
+  })
+
+  it('not a member yet: the step to take is "Join"', async () => {
+    const tree = await renderHome([persona])
+    expect(tree.getByTestId(testIdWithKey('AgentJourneyJoin'))).toHaveTextContent('VtaLink.JourneyJoin')
+    expect(tree.queryByTestId(testIdWithKey('AgentJourneyJoined'))).toBeNull()
+  })
+
+  it('a membership this phone stores while the screen is open shows at once, with no timer', async () => {
+    const records = [persona]
+    const tree = await renderHome(records)
+    expect(tree.queryByTestId(testIdWithKey('AgentJourneyJoined'))).toBeNull()
+    records.push(membership)
+    await act(async () => {
+      emitCommunityChanged(communityDid, 'membership')
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentJourneyJoined'))).toBeTruthy()
   })
 
   it('a grant that arrives while the screen is open shows without leaving it', async () => {

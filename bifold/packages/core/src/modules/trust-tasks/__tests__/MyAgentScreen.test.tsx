@@ -12,6 +12,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import MyAgent from '../screens/MyAgent'
+import { emitCommunityChanged } from '../module/communityChanged'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 
@@ -188,6 +189,41 @@ describe('My Agent — the connected gate', () => {
     })
     expect(tree.getByTestId(testIdWithKey('MyAgentVettingSeat'))).toHaveTextContent('Vetting.SeatVetter')
     expect(tree.getByTestId(testIdWithKey('MyAgentVettingOpen'))).toHaveTextContent(/Vetting.OpenDesk/)
+  })
+
+  // IN-20(a)(b): a membership reached My Agent only on its 4 s timer, the
+  // persona inbox, or a background/foreground.
+  test('a membership this phone stores shows at once, without waiting for the timer', async () => {
+    const records = [manager, persona]
+    const agent = fakeAgent(records)
+    mockUseAgent.mockReturnValue(agent)
+    connectedTo(agent)
+    const tree = render(
+      <BasicAppContext>
+        <MyAgent config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.queryByTestId(testIdWithKey('MyAgentMembershipCard'))).toBeNull()
+    records.push({
+      tags: { recordType: 'keyring/vti-community', kind: 'membership', key: config.communityDid },
+      content: {
+        communityDid: config.communityDid,
+        personaDid,
+        role: 'member',
+        vmc: {},
+        grantedAt: '2026-09-25T00:00:00Z',
+        via: 'vetting',
+      },
+    })
+    await act(async () => {
+      emitCommunityChanged(config.communityDid, 'membership')
+      // Well short of the 4 s timer.
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('MyAgentMembershipCard'))).toBeTruthy()
   })
 
   test('while connecting, the step is named and nothing else is offered', async () => {
