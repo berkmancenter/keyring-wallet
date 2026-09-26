@@ -198,9 +198,25 @@ describe("the vetter's card check, as vta-sdk verify_card", () => {
 
   it('refuses a card that is not the published shape', async () => {
     await expect(check(await card({ cardVersion: 0 }))).resolves.toMatchObject({ ok: false, code: 'malformed' })
-    await expect(check(await card({ extra: 1 }))).resolves.toMatchObject({ ok: false, code: 'malformed' })
+    await expect(check(await card({ claims: 'Ada' }))).resolves.toMatchObject({ ok: false, code: 'malformed' })
     const { proof: _proof, ...unsigned } = await card()
     await expect(check(unsigned)).resolves.toMatchObject({ ok: false, code: 'malformed' })
+  })
+
+  // Salted credentials are coming (maintainer sync, 2026-09-25): optional salt
+  // members that must be honoured when present. Until the spec defines them,
+  // a card that carries a member Keyring does not know, a salt among them, is
+  // read for the members it does know, and its proof is checked over the card
+  // exactly as it arrived, so the extra member is still covered by the
+  // applicant's signature.
+  it('accepts a card that carries members it does not know, a salt among them', async () => {
+    const salted = await card(
+      { salt: 'u6nH2Qp1xY9sQ0f3mJz7bA', ext: { note: 'from a later version' } },
+      { claims: [{ type: 'name.legal', value: 'Ada Lovelace', provenance: 'selfAsserted', salt: 'k3V9dPq0' } as never] }
+    )
+    await expect(check(salted)).resolves.toEqual({ ok: true })
+    // Still the applicant's: an unknown member changed after signing breaks the proof.
+    await expect(check({ ...salted, salt: 'changed' })).resolves.toMatchObject({ ok: false, code: 'proof' })
   })
 
   it('refuses a window longer than 15 minutes, inverted, ahead by more than 60 s, or over by more than 60 s', async () => {
