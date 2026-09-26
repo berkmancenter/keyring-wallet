@@ -30,6 +30,14 @@ export interface CommunityCardModel {
 }
 
 export function communityCardModel(facts: CommunityCardFacts): CommunityCardModel {
+  const model = standing(facts)
+  // The desk is a standing vetter's one way in from "Your agent" — the vetter
+  // card above no longer repeats it — so it is the card's next step even
+  // before this phone holds the membership.
+  return facts.vetter && model.primary !== 'acceptInvitation' ? { ...model, primary: 'openDesk' } : model
+}
+
+function standing(facts: CommunityCardFacts): CommunityCardModel {
   const kind = facts.join?.kind ?? 'none'
   if (kind === 'member') {
     return { statusKey: 'Join.StandingMember', primary: facts.vetter ? 'openDesk' : undefined }
