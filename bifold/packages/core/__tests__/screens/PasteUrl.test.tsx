@@ -7,6 +7,7 @@ import PasteUrl from '../../src/screens/PasteUrl'
 import { testIdWithKey } from '../../src/utils/testable'
 import { BasicAppContext } from '../helpers/app'
 import * as helpers from '../../src/utils/helpers'
+import { KeyringLinkError } from '../../src/modules/trust-tasks/module/vtiLinks'
 
 const waitTimeMs = 300
 
@@ -93,6 +94,41 @@ describe('PasteUrl Screen', () => {
 
     await waitFor(async () => {
       expect(await tree.queryAllByText('PasteUrl.ErrorInvalidUrl')).toHaveLength(1)
+    })
+  })
+
+  // keyring-bifold#139 gate: a used console invitation QR, pasted, said "URL
+  // not recognized" for a link Keyring did recognize. Ours is said in words.
+  test('a Keyring link that cannot be used says why, not "URL not recognized"', async () => {
+    mockConnectFromScanOrDeepLink.mockRejectedValueOnce(
+      new KeyringLinkError('This invitation has already been used, or the admin replaced it.')
+    )
+    const tree = render(
+      <BasicAppContext>
+        <StoreProvider
+          initialState={{
+            ...defaultState,
+            preferences: { ...defaultState.preferences, enableShareableLink: true },
+          }}
+        >
+          <PasteUrl navigation={navigation as any} route={{} as any} />
+        </StoreProvider>
+      </BasicAppContext>
+    )
+    act(() => {
+      fireEvent.changeText(
+        tree.getByTestId(testIdWithKey('PastedUrl')),
+        'openid-credential-offer://?credential_offer=x'
+      )
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('ScanPastedUrl')))
+      await new Promise((resolve) => setTimeout(resolve, waitTimeMs))
+    })
+    await waitFor(async () => {
+      expect(await tree.queryAllByText('Scan.CodeNotUsable')).toHaveLength(1)
+      expect(await tree.queryAllByText(/already been used/)).toHaveLength(1)
+      expect(await tree.queryAllByText('PasteUrl.ErrorInvalidUrl')).toHaveLength(0)
     })
   })
 
