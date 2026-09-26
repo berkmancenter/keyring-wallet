@@ -339,6 +339,55 @@ describe('I was invited', () => {
     expect(again.tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
   })
 
+  // Android, 2026-09-26 (1 run in 2): the join saves its request as it sends
+  // it; the store announces that, and the screen turned into "Sent — deciding"
+  // mid-join, its Withdraw reading "Withdrawing…" though nobody had tapped it.
+  test('a join in flight stays on the join while its own "sent" is stored, and Withdraw is not "Withdrawing…"', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    let finish: (v: unknown) => void = () => undefined
+    mockJoin.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    // The join's own submission lands in the store while it waits for the answer.
+    mockReadJoinState.mockResolvedValue({ kind: 'sent', submission: {} })
+    await act(async () => {
+      emitCommunityChanged(communityDid, 'submission')
+      jest.advanceTimersByTime(10)
+    })
+    await act(async () => undefined)
+    expect(tree.queryByTestId(testIdWithKey('InvitedPending'))).toBeNull()
+    expect(tree.queryByText('Invited.Withdrawing')).toBeNull()
+    // The community's answer arrives: joined.
+    await act(async () => {
+      finish({ verdict: { effect: 'allow' }, membership: {} })
+    })
+    expect(tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+  })
+
+  test('a membership that arrives after the screen settled on "deciding" moves it to joined', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    // The join's answer was lost; asked where it stands, the community said pending.
+    mockJoin.mockRejectedValue(
+      Object.assign(new Error('vtiAgent: sent vtc/join-requests/submit; the community has not answered yet'), {
+        name: 'VtiSentNoAnswer',
+      })
+    )
+    mockReadJoinState.mockResolvedValue({ kind: 'pending', submission: {} })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('InvitedJoin')))
+    })
+    expect(tree.getByTestId(testIdWithKey('InvitedPending'))).toBeTruthy()
+    // Then the card is delivered and stored.
+    mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid } })
+    await act(async () => {
+      emitCommunityChanged(communityDid, 'membership')
+      jest.advanceTimersByTime(10)
+    })
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+  })
+
   test('a membership stored while the screen is open shows at once, with no poll', async () => {
     const { tree } = await renderInvited([personaRecord, invitationRecord])
     expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()

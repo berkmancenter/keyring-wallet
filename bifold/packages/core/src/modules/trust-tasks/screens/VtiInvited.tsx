@@ -78,6 +78,8 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState<Step>('intro')
   const [busy, setBusy] = useState(false)
+  // Which action is running: a join in flight must not read as a withdrawal.
+  const [busyWith, setBusyWith] = useState<'join' | 'withdraw' | 'other'>()
   // Off unless the person turns it on (VTI-Q14).
   const [listMe, setListMe] = useState(false)
   // What the community still needs, when it answered the join "not yet".
@@ -205,6 +207,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     if (!agent || !vtaDid || !invitation) return
     setError(undefined)
     setBusy(true)
+    setBusyWith('join')
     try {
       const result = await joinCommunity(
         {
@@ -259,6 +262,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       setError(plainError(e))
     } finally {
       setBusy(false)
+      setBusyWith(undefined)
     }
   }, [agent, vtaDid, mediatorDid, invitation, listMe])
 
@@ -269,6 +273,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
     if (!agent || !persona || !communityDid) return
     setError(undefined)
     setBusy(true)
+    setBusyWith('withdraw')
     try {
       await vtiAgent.connect(agent, mediatorDid, {
         persona,
@@ -280,12 +285,13 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
       setError(plainError(e))
     } finally {
       setBusy(false)
+      setBusyWith(undefined)
     }
   }, [agent, persona, mediatorDid, communityDid])
 
   const withdrawButton = (
     <Button
-      title={busy ? t('Invited.Withdrawing') : t('Invited.Withdraw')}
+      title={busyWith === 'withdraw' ? t('Invited.Withdrawing') : t('Invited.Withdraw')}
       buttonType={ButtonType.Tertiary}
       onPress={() => void onWithdraw()}
       disabled={busy || !persona}
@@ -400,10 +406,21 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
         : held?.kind === 'pending' || held?.kind === 'sent'
           ? 'pending'
           : undefined
+  // A membership the phone holds is where the person is, whatever this screen
+  // last showed. Otherwise the screen's own outcome wins; and while a join is
+  // in flight the screen stays on it — the join saves its request as it sends
+  // it, and that "sent" must not turn the screen into "deciding" mid-join
+  // (Android, 2026-09-26: "Sent — deciding" with "Withdrawing…" nobody tapped).
   const current: Step =
-    step === 'joined' || step === 'deferred' || step === 'pending'
-      ? step
-      : (heldStep ?? (invitation ? 'waiting' : step))
+    heldStep === 'joined'
+      ? 'joined'
+      : step === 'joined' || step === 'deferred' || step === 'pending'
+        ? step
+        : busyWith === 'join'
+          ? invitation
+            ? 'waiting'
+            : step
+          : (heldStep ?? (invitation ? 'waiting' : step))
   const shownNeeds = step !== 'deferred' && held?.kind === 'deferred' ? (held.submission.needs ?? []) : needs
 
   switch (current) {
