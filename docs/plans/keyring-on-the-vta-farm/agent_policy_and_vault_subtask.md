@@ -137,6 +137,8 @@ Recorded in `docs/VTI_UPSTREAM_FINDINGS.md`; not sent.
 
 - Store vault cards as **`W3cCredentialRecord`** (V1); the Wallet's provider loads only V1.
 - The Wallet's hide rule keys on the relationship family (`RelationshipCredential`, `RelationshipCard`, `RCardTemplate`, `WitnessCredential`), not on `DTGCredential`: a membership is `["VerifiableCredential","DTGCredential","MembershipCredential"]` and a role `["VerifiableCredential","DTGCredential","EndorsementCredential"]`.
+- The contact rule changes with it. `isPeerVrcCredential` also keys on `DTGCredential`, so an imported membership would list the community in Contacts as an unnamed contact, one per community (measured on a simulator with the real shapes, 2026-09-26). Both predicate changes ship **before** V1 imports anything.
+- Vetting statements are also `EndorsementCredential`s. They are not cards and are never imported; only what the inbox classifies as membership, role or vetter grant is (`classifyCredential`, `vtiInbox.ts`).
 - These cards have no `name`, a bare-DID `issuer`, and `validFrom` without `issuanceDate`: the title and issuer come from the community's published name, and dates from `validFrom`.
 - Dedupe by the VC's `id` (and digest), so a card received and later read back is one card.
 - The rules screen never says a rule is enforced (§3.4). Changing a rule is an owner act (Face ID), as removing a device is.
