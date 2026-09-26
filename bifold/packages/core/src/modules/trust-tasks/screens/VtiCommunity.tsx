@@ -25,7 +25,7 @@ import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
-import { selfRemoveRefusal, vtiAgent, VtiRefusal, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
+import { selfRemoveRefusal, vtiAgent, type VtiManifest, type VtiVerdict } from '../module/vtiAgent'
 import { leaveCommunity } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
@@ -33,7 +33,14 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { useCommunityJourney } from '../module/communityJourney'
 
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
+import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
+
+/** The raw text behind a plain line, for Details: a framework code, else the message. */
+const detailOf = (err: unknown): string => {
+  const code = (err as { code?: unknown } | undefined)?.code
+  return typeof code === 'string' && code ? code : err instanceof Error ? err.message : String(err)
+}
 
 const VtiCommunity: React.FC = () => {
   const { t } = useTranslation()
@@ -59,6 +66,8 @@ const VtiCommunity: React.FC = () => {
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  // The last leave went unanswered: the way on is to try again.
+  const [leaveUnanswered, setLeaveUnanswered] = useState(false)
   // What the community keeps: erased, or a note with no personal details.
   // Erasing is the default — the one that keeps least about the person.
   const [keep, setKeep] = useState<'purge' | 'tombstone'>('purge')
@@ -85,6 +94,9 @@ const VtiCommunity: React.FC = () => {
   const onLeave = useCallback(async () => {
     if (!agent) return
     setLeaving(true)
+    setError(undefined)
+    setRefusalCode(undefined)
+    setLeaveUnanswered(false)
     // The community in words, never its code; capitalised where it starts the sentence.
     const words = (key: string, start = false) =>
       t(key, {
@@ -129,13 +141,18 @@ const VtiCommunity: React.FC = () => {
       })
       navigation.goBack()
     } catch (err) {
+      // Asked twice and still no answer: say so, and offer to try again. The
+      // phone is still a member as far as it knows, and keeps what it holds.
+      const unanswered = err instanceof Error && err.name === 'VtiSentNoAnswer'
       setError(
         selfRemoveRefusal(err) === 'lastAdmin'
           ? words('Community.LeaveLastAdmin')
-          : err instanceof Error
-            ? err.message
-            : String(err)
+          : unanswered
+            ? words('Community.LeaveNoAnswer')
+            : t(plainError(err).line)
       )
+      setRefusalCode(detailOf(err))
+      setLeaveUnanswered(unanswered)
       setLeaving(false)
       setConfirmingLeave(false)
     }
@@ -162,8 +179,8 @@ const VtiCommunity: React.FC = () => {
         if (!cancelled) setManifest(result)
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err))
-          if (err instanceof VtiRefusal) setRefusalCode(err.code)
+          setError(t(plainError(err).line))
+          setRefusalCode(detailOf(err))
         }
       } finally {
         if (!cancelled) setBusy(false)
@@ -173,7 +190,7 @@ const VtiCommunity: React.FC = () => {
     return () => {
       cancelled = true
     }
-  }, [communityDid, agent])
+  }, [communityDid, agent, t])
 
   const onApply = useCallback(async () => {
     if (!manifest) return
@@ -182,12 +199,12 @@ const VtiCommunity: React.FC = () => {
     try {
       setVerdict(await vtiAgent.apply(communityDid, manifest))
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-      if (err instanceof VtiRefusal) setRefusalCode(err.code)
+      setError(t(plainError(err).line))
+      setRefusalCode(detailOf(err))
     } finally {
       setBusy(false)
     }
-  }, [communityDid, manifest])
+  }, [communityDid, manifest, t])
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -375,6 +392,27 @@ const VtiCommunity: React.FC = () => {
               <Text style={styles.buttonText}>{t('Community.Stay')}</Text>
             </Pressable>
           </View>
+        ) : leaveUnanswered ? (
+          // Already confirmed once: trying again sends the same request, with
+          // the same choice of what the community keeps.
+          <Pressable
+            style={[
+              styles.button,
+              { backgroundColor: 'transparent', borderWidth: 1, borderColor: ColorPalette.semantic.error },
+            ]}
+            testID={testIdWithKey('LeaveCommunityRetry')}
+            accessibilityRole="button"
+            disabled={leaving}
+            onPress={() => void onLeave()}
+          >
+            {leaving ? (
+              <ActivityIndicator color={ColorPalette.semantic.error} />
+            ) : (
+              <Text style={[styles.buttonText, { color: ColorPalette.semantic.error }]}>
+                {t('Community.LeaveTryAgain')}
+              </Text>
+            )}
+          </Pressable>
         ) : (
           <Pressable
             style={[

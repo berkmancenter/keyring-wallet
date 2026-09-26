@@ -343,9 +343,19 @@ export async function leaveCommunity(
   // vtiLeave this replaces.)
   let disposition: string = options.disposition ?? 'policydefault'
   let alreadyGone = false
+  const ask = () => vtiAgent.selfRemove(communityDid, { disposition: options.disposition })
   try {
-    const left = await vtiAgent.selfRemove(communityDid, { disposition: options.disposition })
-    disposition = left.disposition
+    try {
+      disposition = (await ask()).disposition
+    } catch (e) {
+      // The answer was lost, not the request: the community may have removed
+      // this member already. Asking again is safe — leaving is what the person
+      // asked for — and it tells us where things stand: a second self-remove
+      // either removes, or is answered "not a member" because the first did.
+      // No answer a second time throws, and nothing is cleared.
+      if (!(e instanceof Error && e.name === 'VtiSentNoAnswer')) throw e
+      disposition = (await ask()).disposition
+    }
   } catch (e) {
     if (selfRemoveRefusal(e) !== 'notMember') throw e
     alreadyGone = true

@@ -75,6 +75,14 @@ describe('the community screen', () => {
     expect(tree.getByTestId(testIdWithKey('CommunityDetailsToggle'))).toBeTruthy()
   })
 
+  it('a community that cannot be read is said in words, not the raw error', async () => {
+    const { vtiAgent: mocked } = jest.requireMock('../module/vtiAgent') as { vtiAgent: { fetchManifest: jest.Mock } }
+    mocked.fetchManifest.mockRejectedValueOnce(new Error('vtiAgent: GET /manifest 503 no available server'))
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('CommunityError'))).not.toHaveTextContent(/vtiAgent|503/)
+  })
+
   it('says a community published no name rather than showing its host as one', () => {
     const tree = show()
     expect(tree.getByTestId(testIdWithKey('CommunityName'))).toHaveTextContent('Join.Unnamed')
@@ -132,6 +140,35 @@ describe('leaving a community (220)', () => {
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityConfirm'))))
     expect(mockLeave).toHaveBeenCalledWith(expect.anything(), communityDid, { disposition: 'tombstone' })
     expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Community.LeftTombstone' }))
+  })
+
+  // Farm, 2026-09-26: the self-remove's answer never came, and the screen
+  // showed "vtiAgent: sent vtc/members/self-remove; …" in red, with no way on.
+  const noAnswer = () =>
+    Object.assign(new Error('vtiAgent: sent vtc/members/self-remove; the community has not answered yet'), {
+      name: 'VtiSentNoAnswer',
+    })
+
+  it('a leave that goes unanswered says so in words, and offers Try again, which leaves', async () => {
+    mockLeave.mockRejectedValueOnce(noAnswer()).mockResolvedValueOnce({ disposition: 'purge', alreadyGone: false })
+    const tree = await openLeave()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityConfirm'))))
+    expect(tree.getByTestId(testIdWithKey('CommunityError'))).toHaveTextContent('Community.LeaveNoAnswer')
+    expect(tree.queryByText(/vtiAgent/)).toBeNull()
+    expect(mockToast).not.toHaveBeenCalled()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityRetry'))))
+    expect(mockLeave).toHaveBeenLastCalledWith(expect.anything(), communityDid, { disposition: 'purge' })
+    expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Community.LeftPurge' }))
+  })
+
+  it('no raw error text reaches the screen; it stays behind Details', async () => {
+    mockLeave.mockRejectedValue(new Error('vtiAgent: something nobody planned for'))
+    const tree = await openLeave()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityConfirm'))))
+    expect(tree.getByTestId(testIdWithKey('CommunityError'))).toHaveTextContent('Errors.Unknown')
+    expect(tree.queryByText(/vtiAgent/)).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('CommunityRefusalDetails'))))
+    expect(tree.getByTestId(testIdWithKey('CommunityRefusalCode'))).toHaveTextContent(/something nobody planned for/)
   })
 
   it('the last admin is told what to do first, in words', async () => {
