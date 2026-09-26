@@ -58,6 +58,8 @@ import { ensurePersonaFor } from '../module/vtiJoin'
 import { pendingVettingTicket } from '../module/vtiLinks'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
+import { InWords, sayFailure, type Said } from './plainError'
+import SaidFailure from './SaidFailure'
 import { openScanner } from './openScanner'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { pickOwnVetterGrant, type VetterGrantState } from '../module/vtiGrantState'
@@ -143,7 +145,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
    */
   const [standing, setStanding] = useState<VetterGrantState>({ state: 'none' })
   const [connected, setConnected] = useState(false)
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<Said>()
   // The community answered that an application is already open (and which).
   const [alreadyOpen, setAlreadyOpen] = useState(false)
   // Off unless the person turns it on (VTI-Q14).
@@ -401,7 +403,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
         })
         setConnected(true)
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
+        setError(sayFailure(e))
       }
     })()
     return () => {
@@ -498,7 +500,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       try {
         await fn()
       } catch (e) {
-        setError(e instanceof VettingTicketError ? ticketWords(e) : e instanceof Error ? e.message : String(e))
+        setError(e instanceof VettingTicketError ? { words: ticketWords(e) } : sayFailure(e))
       } finally {
         setBusy(undefined)
         bump()
@@ -561,11 +563,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
             {busy === 'identity' ? <ActivityIndicator color="#FFFFFF" /> : null}
             <Text style={styles.buttonText}>{t('MyAgent.CreateIdentity')}</Text>
           </Pressable>
-          {error ? (
-            <Text style={styles.error} testID={testIdWithKey('VettingError')}>
-              {error}
-            </Text>
-          ) : null}
+          {error ? <SaidFailure said={error} testID="VettingError" style={styles.error} /> : null}
         </ScrollView>
       </SafeAreaView>
     )
@@ -601,9 +599,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // Android, so the button looked like it did nothing (221).
   const errorLine = error ? (
     <ScrollView style={styles.errorBar} contentContainerStyle={styles.errorBarContent}>
-      <Text style={styles.error} testID={testIdWithKey('VettingError')}>
-        {error}
-      </Text>
+      <SaidFailure said={error} testID="VettingError" style={styles.error} />
     </ScrollView>
   ) : null
 
@@ -1401,8 +1397,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                           // without admitting them is an error.
                           if (verdict.effect === 'requestMore' || verdict.effect === 'refer') return
                           if (verdict.effect !== 'allow')
-                            throw new Error(
-                              `${verdict.effect}${verdict.needs.length ? `: ${verdict.needs.map((need) => needWords(need, t)).join(', ')}` : ''}`
+                            throw new InWords(
+                              verdict.needs.length
+                                ? t('Vetting.ApplyRefusedNeeds', {
+                                    needs: verdict.needs.map((need) => needWords(need, t)).join(', '),
+                                    interpolation: { escapeValue: false },
+                                  })
+                                : t('Vetting.ApplyRefused')
                             )
                           for (let i = 0; i < 20; i++) {
                             const mem = await stores!.community.getMembership(communityDid)
@@ -1462,7 +1463,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                         onPress={() =>
                           run('withdraw', async () => {
                             const outcome = await applicantRef.current!.withdraw()
-                            if (outcome === 'nothingOpen') throw new Error(t('Vetting.WithdrawNothingOpen'))
+                            if (outcome === 'nothingOpen') throw new InWords(t('Vetting.WithdrawNothingOpen'))
                           })
                         }
                       >

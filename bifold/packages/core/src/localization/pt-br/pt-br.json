@@ -1549,6 +1549,8 @@
     "SendAgain": "Enviar minhas declarações de novo",
     "Withdraw": "Retirar minha solicitação",
     "WithdrawNothingOpen": "Não havia solicitação aberta para retirar — você pode se candidatar.",
+    "ApplyRefused": "A comunidade não admitiu você.",
+    "ApplyRefusedNeeds": "A comunidade não admitiu você. Ela pede: {{needs}}.",
     "AlreadyApplied": "Você já tinha se candidatado a esta comunidade — veja em que pé está essa candidatura.",
     "AddWhatTheyAsked": "Adicionar o que pediram"
   },

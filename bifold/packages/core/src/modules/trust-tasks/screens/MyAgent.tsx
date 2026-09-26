@@ -45,6 +45,8 @@ import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { openScanner } from './openScanner'
 import { useChosenCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
+import { sayFailure, type Said } from './plainError'
+import SaidFailure from './SaidFailure'
 
 /** Which seat this phone would take at a vetting: decided by what it holds. */
 type VettingSeat = 'vetter' | 'applicant'
@@ -82,11 +84,11 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const grantCheck = useRef<{ key: string; at: number; vetter: boolean } | undefined>(undefined)
   const [busy, setBusy] = useState<'identity' | 'join'>()
   const [activity, setActivity] = useState<string[]>([])
-  const [holdingError, setHoldingError] = useState<string>()
+  const [holdingError, setHoldingError] = useState<Said>()
   // The primary action: sign in to the VTA, ensure the persona, open the
   // community session. Each step is named while it runs (S3).
   const [connecting, setConnecting] = useState<{ step: string } | undefined>()
-  const [connectError, setConnectError] = useState<string>()
+  const [connectError, setConnectError] = useState<Said>()
   const [managerDid, setManagerDid] = useState<string>()
 
   const refresh = useCallback(async () => {
@@ -167,7 +169,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
       await refresh()
     } catch (error) {
-      setHoldingError(error instanceof Error ? error.message : String(error))
+      setHoldingError(sayFailure(error))
     } finally {
       setBusy(undefined)
     }
@@ -215,7 +217,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
         if (result.membership) setActivity((prev) => [...prev, t('MyAgent.AddedToWallet')])
         await refresh()
       } catch (error) {
-        setHoldingError(error instanceof Error ? error.message : String(error))
+        setHoldingError(sayFailure(error))
       } finally {
         setBusy(undefined)
       }
@@ -303,7 +305,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       // store build names none, and that path could only fail.)
       await refresh()
     } catch (error) {
-      setConnectError(error instanceof Error ? error.message : String(error))
+      setConnectError(sayFailure(error))
     } finally {
       setConnecting(undefined)
     }
@@ -541,11 +543,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 {line}
               </Text>
             ))}
-            {holdingError ? (
-              <Text style={styles.error} testID={testIdWithKey('MyAgentHoldingError')}>
-                {holdingError}
-              </Text>
-            ) : null}
+            {holdingError ? <SaidFailure said={holdingError} testID="MyAgentHoldingError" style={styles.error} /> : null}
           </View>
         </>
       ) : null}
@@ -645,11 +643,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 <Text style={styles.buttonText}>{t('MyAgent.ConnectCommunity')}</Text>
               </Pressable>
             ) : null}
-            {connectError ? (
-              <Text style={styles.error} testID={testIdWithKey('MyAgentError')}>
-                {connectError}
-              </Text>
-            ) : null}
+            {connectError ? <SaidFailure said={connectError} testID="MyAgentError" style={styles.error} /> : null}
           </View>
 
           {holdings}
@@ -668,7 +662,9 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   }
 
   // S1 — not connected (and the failed state, which says why and offers a retry).
-  const failure = connectError ?? (vtaDid ? vta.error : state.error)
+  // The connection's own error is its raw text too: said the same way.
+  const storeError = vtaDid ? vta.error : state.error
+  const failure: Said | undefined = connectError ?? (storeError ? sayFailure(storeError) : undefined)
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -713,11 +709,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
             <Text style={styles.label}>{t('MyAgent.EnrolHint')}</Text>
           </View>
         ) : null}
-        {failure ? (
-          <Text style={styles.error} testID={testIdWithKey('MyAgentError')}>
-            {failure}
-          </Text>
-        ) : null}
+        {failure ? <SaidFailure said={failure} testID="MyAgentError" style={styles.error} /> : null}
         {/* Only when there is an agent to connect to — a linked one or one the
             build names. With neither, "Link your agent" above is the way in,
             and this could only fail. */}
