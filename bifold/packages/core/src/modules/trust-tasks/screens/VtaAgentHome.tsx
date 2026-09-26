@@ -32,10 +32,11 @@ import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdent
 import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
 import { useCommunityChanged } from '../module/communityChanged'
+import { communityTarget } from '../module/vtiCommunityLink'
 
 import { DevicesCard } from './DevicesCard'
 import { agentDisplayName, withAgentName } from './agentName'
-import { shareIdentity } from './identityShare'
+import { CommunityCard } from './CommunityCard'
 import { communityLabelOf, partyLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
@@ -49,6 +50,16 @@ interface Holdings {
   /** Communities where this phone was a vetter and is not now: why, for the person. */
   lapsed: { communityDid: string; grant: Exclude<VetterGrantState, { state: 'active' } | { state: 'none' }> }[]
 }
+
+/** Every community this phone knows: an identity, a membership or a waiting invitation — each once. */
+export const communitiesHeld = (holdings: Pick<Holdings, 'personas' | 'memberships' | 'invited'>): string[] =>
+  Array.from(
+    new Set([
+      ...holdings.memberships.map((m) => m.communityDid),
+      ...holdings.personas.map((p) => p.communityDid),
+      ...holdings.invited,
+    ])
+  )
 
 /**
  * How often an open agent home re-reads a live vetter grant's status, so a
@@ -559,60 +570,28 @@ const VtaAgentHome: React.FC = () => {
           <ThemedText variant="labelTitle">{t('VtaLink.Holds')}</ThemedText>
           {!holdings ? (
             <ActivityIndicator color={ColorPalette.brand.primary} />
-          ) : holdings.personas.length === 0 && holdings.memberships.length === 0 ? (
+          ) : communitiesHeld(holdings).length === 0 ? (
             <ThemedText style={styles.muted}>{t('VtaLink.HoldsNothing')}</ThemedText>
           ) : (
-            <>
-              {holdings.personas.map((p) => (
-                <View key={p.did} style={styles.row}>
-                  <Icon name="account-circle-outline" size={20} color={TextTheme.normal.color} />
-                  <ThemedText style={{ flex: 1 }}>
-                    {t('VtaLink.IdentityFor', {
-                      community: communityLabelOf(p.communityDid, t),
-                      interpolation: { escapeValue: false },
-                    })}
-                  </ThemedText>
-                  {/* The admin needs this identity to invite it (TestFlight report #3). */}
-                  <Pressable
-                    onPress={() => void shareIdentity(t, p.communityDid, p.did)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('VtaLink.ShareIdentity', {
-                      community: communityLabelOf(p.communityDid, t),
-                      interpolation: { escapeValue: false },
-                    })}
-                    hitSlop={12}
-                    testID={testIdWithKey('AgentShareIdentity')}
-                  >
-                    <Icon name="share-variant" size={22} color={ColorPalette.brand.link} />
-                  </Pressable>
-                </View>
-              ))}
-              {holdings.memberships.map((m) => (
-                // Each membership opens its own community. This used to be a
-                // button that went to the operator panel, which was the same
-                // state shown a second way — the whole of report #11.
-                <Pressable
-                  key={m.communityDid}
-                  style={styles.row}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('VtaLink.MemberOf', {
-                    community: communityLabelOf(m.communityDid, t),
-                    interpolation: { escapeValue: false },
-                  })}
-                  testID={testIdWithKey('AgentMembershipRow')}
-                  onPress={() => goToCommunity(m.communityDid)}
-                >
-                  <Icon name="card-account-details-outline" size={20} color={TextTheme.normal.color} />
-                  <ThemedText style={{ flex: 1 }}>
-                    {t('VtaLink.MemberOf', {
-                      community: communityLabelOf(m.communityDid, t),
-                      interpolation: { escapeValue: false },
-                    })}
-                  </ThemedText>
-                  <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
-                </Pressable>
-              ))}
-            </>
+            // One card per community, with what the agent holds for it under
+            // it and at most one next step (IN-20c).
+            communitiesHeld(holdings).map((communityDid) => (
+              <CommunityCard
+                key={communityDid}
+                agent={agent}
+                communityDid={communityDid}
+                persona={holdings.personas.find((p) => p.communityDid === communityDid)}
+                membership={holdings.memberships.find((m) => m.communityDid === communityDid)}
+                invited={holdings.invited.includes(communityDid)}
+                vetter={holdings.vetterFor.includes(communityDid)}
+                onOpen={goToCommunity}
+                onPrimary={(action, did) => {
+                  // The vetting and invitation screens work on the chosen community.
+                  communityTarget.choose(did)
+                  go(action === 'acceptInvitation' ? Screens.VtiInvited : Screens.VtiVetting)
+                }}
+              />
+            ))
           )}
           {holdingsError ? (
             <ThemedText style={styles.muted} testID={testIdWithKey('AgentHoldsStale')}>

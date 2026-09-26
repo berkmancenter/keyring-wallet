@@ -291,6 +291,23 @@ describe('Your agent — after linking', () => {
   })
 
   // IN-20(a)(b): the ticked stop said "Join" and never named the community.
+  // IN-20c: one card per community, with what is held for it and one next step.
+  it('a member: one card for the community, opening it, with no next step to take', async () => {
+    const tree = await renderHome([persona, membership])
+    const key = communityDid.slice(-8)
+    expect(tree.getByTestId(testIdWithKey(`AgentCommunityCard_${key}`))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`))).toHaveTextContent('Join.StandingMember')
+    expect(tree.getByTestId(testIdWithKey('AgentMembershipRow'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey(`AgentCommunityPrimary_${key}`))).toBeNull()
+  })
+
+  it('an identity with nothing sent: its card offers to continue the vetting', async () => {
+    const tree = await renderHome([persona])
+    const key = communityDid.slice(-8)
+    expect(tree.getByTestId(testIdWithKey(`AgentCommunityPrimary_${key}`))).toHaveTextContent('VtaLink.ContinueVetting')
+    expect(tree.getByTestId(testIdWithKey('AgentShareIdentity'))).toBeTruthy()
+  })
+
   it('a member: the journey says "Joined" and names the community', async () => {
     const tree = await renderHome([persona, membership])
     expect(tree.getByTestId(testIdWithKey('AgentJourneyJoined'))).toHaveTextContent('✓ VtaLink.JourneyJoined')
