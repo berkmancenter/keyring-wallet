@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.57 — 2026-09-26.** A living document: every finding here was measured
+**Version 1.58 — 2026-09-26.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -70,6 +70,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-44](#vti-44--vta-sdk-cannot-verify-a-credential-signed-with-a-proof-set) | vta-sdk cannot verify a credential signed with a proof set | **High** | Open, not sent. Found in Phase 2 of the openvtc interop harness (2026-09-25). No fix in the pinned history; an open upstream PR (vti #1752) touches `vetting/mod.rs` and the verifier's resolver argument but not proof sets; not at the pin | lab, `ed672fff` |
 | [VTI-45](#vti-45--vta-sdk-checks-a-trust-task-proof-over-its-own-re-serialisation-not-the-bytes-it-received) | vta-sdk checks a Trust Task proof over its own re-serialisation, not the bytes it received | **High** | Open, not sent. Worked around in Keyring (keyring-bifold#128). No fix in the pinned history; an open upstream PR (vti #1752) changes the verifier's resolver argument but not the re-serialisation; not at the pin | `ed672fff` (card-verify) |
 | [VTI-46](#vti-46--aclswap-key-widens-a-key-restricted-grant-and-drops-approval-settings) | `acl/swap-key` widens a key-restricted grant and drops approval settings | Medium | Open, not sent. Read at `ed672fff`; not seen live. An open upstream PR (vti #1738) rebuilds the entry from the old one; not at the pin, not verified | read at `ed672fff` |
+| [VTI-47](#vti-47--the-vtcs-git-namespace-projector-scans-every-member-every-five-seconds-even-with-no-namespace-bound) | The VTC's git-namespace projector scans every member every five seconds, even with no namespace bound | Low | Open, not sent. Measured on the lab VTC (debug build, `ed672fff`): about 7% CPU while idle. Same code on upstream main (`acd6be09`) | lab, `ed672fff`; read at `acd6be09` |
 
 ## Stack under test
 
@@ -1943,6 +1944,27 @@ An admin who grants a key with any of these, for example through a console, sees
 
 **2026-09-25:** an open upstream PR (vti #1738) rebuilds the entry from the old one; not at the pin, not verified.
 
+### VTI-47 — The VTC's git-namespace projector scans every member every five seconds, even with no namespace bound
+
+(a) **What happens.** A VTC with no git namespace bound still does a full member scan every five seconds. The git-namespace projector ticks every five seconds by default. On each tick it calls `bridge::project_roles`, which first builds `linked_accounts`: it lists every member record and decodes each one from JSON, removed members included. Only after that does it look for a bound namespace. A community that binds none (every community that doesn't use git namespaces) pays for the scan anyway, and the cost grows with its member count.
+
+(b) **Measured** on our lab VTC (`vti-main` debug build at `ed672fff`, up 38 hours), 2026-09-26:
+- `ps` showed 2 h 48 min of CPU over 38 h, about 7% on average. `top` samples showed 6–10% while nothing was using the VTC.
+- A 5-second `sample` put the non-idle stacks in `git_ns::projection::run` → `run_once` → `bridge::project_roles` → `linked_accounts` → `members::storage::list_members` → `serde_json` decoding of each member.
+
+Read at `ed672fff`:
+- `vtc-service/src/git_ns/projection.rs:842` runs the loop on `tokio::time::interval(tick)`; `:771` is `run_once`, which calls `bridge::project_roles(&self.state, false)` on every pass.
+- `vtc-service/src/git_ns/mod.rs:87-88`: `default_tick()` is 5 seconds.
+- `vtc-service/src/git_ns/bridge.rs`: `project_roles` calls `linked_accounts(state)` before it loads the snapshot and filters for bound namespaces. `linked_accounts` iterates `crate::members::list_members` over every record.
+
+The same order is on upstream main at `acd6be09`.
+
+A debug build makes the decoding slower. A release build would cost less but do the same work.
+
+(c) **Expected:** skip the member scan when no namespace is bound, or build `linked_accounts` only once a bound namespace needs it. A longer default tick would also help.
+
+**Local mitigation:** `[git_ns] tick_seconds = 300` in the lab VTC's config (the lab binds no namespace). Effective from the lab VTC's next restart.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -2736,6 +2758,7 @@ and the credential's own id.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
 | 1.56 | 2026-09-25 | **Upstream cross-check at the pins** (VTI `ed672fff`, affinidi-tdk-rs `ea5af502`, openvtc `ed13d29`, trust-tasks-tf `bdae1cf9`): every open finding and question read against source, each with a dated note. **Resolved at the pin:** VTI-15 (new communities only), VTI-16, VTI-21 and VTI-32 (upstream side; Keyring's is keyring-bifold#139), VTI-22 (as decided), VTI-33, VTI-34, VTI-36; questions Q3 (vti #1671) and Q11 (vti #1665). **Fixed upstream, our re-run owed:** VTI-08 (vti #1526) and VTI-35 (vti #1632, by `cnm did-log install`, with VTI-12). **Partial, still open:** VTI-01 and VTI-11 (documented by #1627), VTI-20 (CLI message only), VTI-23 (mint fixed; export admin-only by design), VTI-09 (Trust Tasks only). **Not confirmed:** VTI-27, and VTI-17/18/28 (no webvh clone is pinned). VTI-44/45/46 stay open, with open upstream PRs noted. VTI-02 declined. **Corrected attributions:** VTI-09 is fixed by vti #1687, not #858; VTI-27's credit to #1567 is not supported; VTI-28's daemon change is #202, not #203. Status lines on VTI-37–41 and 43, VTI-41's superseded relay ruling marked, VTI-24 points to VTI-26, VTI-12's two PRs reconciled, VTI-15's `/v1` lines reconciled, the "Owed by us" list brought up to date, vti #1672 added to the wire changes, and Q2–Q6, Q10, Q11 given their 09-22 answers. Citations moved to the pins, broken anchors fixed, VTI-42–46 and Q30–32 put in order, changelog rows 1.2–1.4 moved into order. Not sent. |
 | 1.55 | 2026-09-25 | **VTI-Q32** (new): the console shows an invitation offer under the OID4VCI link scheme, but its `credential_issuer` is the community DID and it redeems only through `credential-exchange/request`, so a wallet that follows the scheme fails. Read at `ed672fff`; seen on a real iPhone. Keyring will route such offers itself. Not sent. |
