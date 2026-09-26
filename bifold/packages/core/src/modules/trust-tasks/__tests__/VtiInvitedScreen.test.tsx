@@ -8,7 +8,7 @@ import Clipboard from '@react-native-clipboard/clipboard'
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
-import { ScrollView } from 'react-native'
+import { DeviceEventEmitter, ScrollView } from 'react-native'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -19,6 +19,7 @@ import { vtaAgent } from '../module/vtaAgent'
 import { VtiRefusal, vtiAgent } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityLinkReturn } from '../module/vtiLinks'
+import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
 import VtiInvited from '../screens/VtiInvited'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -204,6 +205,20 @@ describe('I was invited', () => {
     await act(async () => undefined)
     expect(tree.getByTestId(testIdWithKey('InvitedArrivedBody'))).toHaveTextContent(/^Invited\.ArrivedBody$/)
     manifest.mockRestore()
+  })
+
+  // keyring-bifold#139 gate: a console QR scanned from the "send it" step came
+  // back to this screen, already open, and it went on showing that step.
+  test('an invitation kept while the screen shows another step appears when it is announced', async () => {
+    const { tree, records } = await renderInvited([personaRecord])
+    expect(tree.getByTestId(testIdWithKey('InvitedShare'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('InvitedInvitationCard'))).toBeNull()
+    records.push(invitationRecord)
+    await act(async () => {
+      DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, { communityDid, kinds: ['invitation'] })
+    })
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('InvitedInvitationCard'))).toBeTruthy()
   })
 
   test('the invitation already arrived: Join', async () => {

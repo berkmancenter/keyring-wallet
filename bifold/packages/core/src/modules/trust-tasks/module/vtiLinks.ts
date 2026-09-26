@@ -12,6 +12,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import { DeviceEventEmitter } from 'react-native'
 
 import {
   EnrolmentOfferError,
@@ -35,6 +36,7 @@ import {
   redeemInvitationOffer,
   VtiInvitationOfferError,
 } from './vtiInvitationOffer'
+import { VTI_PERSONA_DELIVERIES_EVENT } from './vtiPersonaInbox'
 import { VettingTicketError } from './vtiVetting'
 
 /**
@@ -83,6 +85,15 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // fails to fetch. So it is answered here, in words.
   if (did) return 'otherDid'
   return undefined
+}
+
+/**
+ * Tell an open "I was invited" that an invitation was kept, as the persona
+ * inbox does for what it stores: a link opened while that screen is already
+ * in front brings no focus change for it to notice.
+ */
+function announceInvitation(communityDid: string | undefined) {
+  DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, { communityDid, kinds: ['invitation'] })
 }
 
 /** Why an invitation offer could not be taken, in the person's words. */
@@ -276,6 +287,7 @@ export async function routeKeyringAgentLink(
       const invitation = parseVtiInvitationLink(trimmed)
       if (invitation.communityDid) communityTarget.set({ communityDid: invitation.communityDid })
       await new GenericRecordsCommunityStore(agent).saveInvitation(invitation)
+      announceInvitation(invitation.communityDid)
       // A linked phone accepts it on "I was invited"; the operator panel,
       // where it used to land, is only for a phone with a build-named agent.
       navigate(vtaAgent.getState().link.kind === 'linked' ? 'VtiInvited' : 'MyAgent')
@@ -295,6 +307,7 @@ export async function routeKeyringAgentLink(
       }
       communityTarget.set({ communityDid: offer.communityDid })
       await new GenericRecordsCommunityStore(agent).saveInvitation(invitation)
+      announceInvitation(offer.communityDid)
       navigate(vtaAgent.getState().link.kind === 'linked' ? 'VtiInvited' : 'MyAgent')
       return
     }
