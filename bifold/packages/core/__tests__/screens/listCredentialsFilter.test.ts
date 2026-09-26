@@ -52,3 +52,39 @@ describe('credentials hidden from the wallet list', () => {
     expect(isRCardTemplate(rcardTemplateTypes)).toBe(true)
   })
 })
+
+/**
+ * A community's cards are DTG credentials too, and they belong in the Wallet
+ * (agent-kept cards, 226). Keyed on DTGCredential, the Wallet hid them and
+ * Contacts listed each community as an unnamed contact; both rules now key on
+ * the relationship family. Shapes as communities issue them (membership and
+ * role cards, and a vetter grant, which is a role).
+ */
+describe("a community's cards", () => {
+  const membershipTypes = ['VerifiableCredential', 'DTGCredential', 'MembershipCredential']
+  const roleTypes = ['VerifiableCredential', 'DTGCredential', 'EndorsementCredential']
+
+  test.each([
+    ['membership', membershipTypes],
+    ['role', roleTypes],
+  ])('a %s card shows in the Wallet and is not a contact', (_label, types) => {
+    expect(isVrcModuleCredential(types)).toBe(false)
+    expect(isVrcModuleCredential({ type: types })).toBe(false)
+    expect(isVrcModuleCredential(JSON.stringify(types))).toBe(false)
+    expect(isPeerVrcCredential(types)).toBe(false)
+    expect(isPeerVrcCredential({ type: types })).toBe(false)
+  })
+
+  test('the relationship family stays hidden, and only a peer VRC is a contact', () => {
+    const family = {
+      VRC: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+      VWC: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
+      'R-Card': ['VerifiableCredential', 'RelationshipCard'],
+      'R-Card template': ['VerifiableCredential', 'RCardTemplate'],
+    }
+    for (const [label, types] of Object.entries(family)) {
+      expect([label, isVrcModuleCredential(types)]).toEqual([label, true])
+      expect([label, isPeerVrcCredential(types)]).toEqual([label, label === 'VRC'])
+    }
+  })
+})

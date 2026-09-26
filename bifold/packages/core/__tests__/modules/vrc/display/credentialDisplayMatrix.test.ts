@@ -345,7 +345,7 @@ describe('Canonical type-detection matrix', () => {
   it('predicates accept type arrays and single strings, not just credential JSON', () => {
     expect(isWitnessCredential(['VerifiableCredential', 'WitnessCredential'])).toBe(true)
     expect(isWitnessCredential('WitnessCredential')).toBe(true)
-    expect(isVrcModuleCredential('["VerifiableCredential","DTGCredential"]')).toBe(true)
+    expect(isVrcModuleCredential('["VerifiableCredential","DTGCredential","RelationshipCredential"]')).toBe(true)
     expect(isDTGCredential(undefined)).toBe(false)
     expect(isDTGCredential({})).toBe(false)
   })
