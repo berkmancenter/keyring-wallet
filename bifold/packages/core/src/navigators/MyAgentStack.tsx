@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 
 import { TOKENS, useServices } from '../container-api'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
+import { agentHomeScreen } from '../modules/trust-tasks/screens/agentHome'
 import { useTheme } from '../contexts/theme'
 import MyAgent from '../modules/trust-tasks/screens/MyAgent'
 import VtiCommunity from '../modules/trust-tasks/screens/VtiCommunity'
@@ -49,7 +50,7 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
    * the redesign, and is deliberately not this.
    */
   const { link } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
-  const landsOn = link.kind === 'linked' ? Screens.VtaAgent : Screens.MyAgent
+  const landsOn = agentHomeScreen(link)
   const theme = useTheme()
   const { t } = useTranslation()
   const defaultStackOptions = useDefaultStackOptions(theme)

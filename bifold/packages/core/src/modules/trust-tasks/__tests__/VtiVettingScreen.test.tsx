@@ -291,7 +291,10 @@ describe('Vetting — one filled button per step', () => {
     const navigation = useNavigation() as unknown as { navigate: jest.Mock }
     navigation.navigate.mockClear()
     fireEvent.press(tree.getByTestId(testIdWithKey('VettingGoToMyAgent')))
-    expect(navigation.navigate).toHaveBeenCalledWith(Screens.MyAgent)
+    // A linked phone's My Agent is the "Your agent" home, never the old panel,
+    // which told a person just admitted "You are being vetted" (225 gate).
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaAgent)
+    expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.MyAgent)
   })
 
   test('asking a vetter: Scan is the step until a link is pasted, then "Use this link" is', async () => {

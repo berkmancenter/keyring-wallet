@@ -60,6 +60,7 @@ import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 
 import { InWords, sayFailure, type Said } from './plainError'
 import SaidFailure from './SaidFailure'
+import { agentHomeScreen } from './agentHome'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -1134,7 +1135,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                 testID={testIdWithKey('VettingGoToMyAgent')}
                 accessibilityRole="button"
                 onPress={() =>
-                  (navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.MyAgent)
+                  (navigation as unknown as { navigate: (name: string) => void }).navigate(agentHomeScreen())
                 }
               >
                 <Text style={look('VettingGoToMyAgent', applicantPrimaryId).text}>{t('Vetting.GoToMyAgent')}</Text>
