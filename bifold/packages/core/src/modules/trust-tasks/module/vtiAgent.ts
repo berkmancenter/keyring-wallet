@@ -24,6 +24,7 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
 
 import { signDocumentProof } from '../documentProof'
+import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import {
   advertisedMediatorDid,
@@ -1150,6 +1151,7 @@ class VtiAgentController {
     // itself. Teaching the target here rather than at each screen means a
     // published name cannot be missed by whichever screen happened to fetch.
     communityTarget.publishedName(communityDid, payload?.branding?.displayName)
+    rememberCommunityName(withAgent, communityDid, payload?.branding?.displayName)
     return {
       communityDid: payload?.communityDid,
       criteria: payload?.criteria ?? [],
@@ -1194,6 +1196,7 @@ class VtiAgentController {
       const payload = body?.payload
       if (!payload?.criteria) return undefined
       communityTarget.publishedName(communityDid, payload.branding?.displayName)
+      rememberCommunityName(agent, communityDid, payload.branding?.displayName)
       return {
         communityDid: payload.communityDid,
         criteria: payload.criteria ?? [],
@@ -1382,6 +1385,12 @@ class VtiAgentController {
 }
 
 export const vtiAgent = new VtiAgentController()
+
+/** Keep a community's published name for the next launch; a failure only costs the name. */
+function rememberCommunityName(agent: Agent | undefined, communityDid: string, name?: string): void {
+  if (!agent || !name?.trim()) return
+  void new GenericRecordsCommunityStore(agent).saveCommunityName(communityDid, name).catch(() => undefined)
+}
 
 /**
  * A path under a community's REST API, from the `VTCRest` endpoint its DID

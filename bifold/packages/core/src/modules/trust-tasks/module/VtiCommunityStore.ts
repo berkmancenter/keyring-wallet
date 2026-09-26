@@ -21,6 +21,7 @@
 import type { Agent } from '@credo-ts/core'
 
 import { changeOfHeldCredential, emitCommunityChanged } from './communityChanged'
+import { getKeyed, listKeyed, putKeyed } from './keyedRecords'
 
 export interface VtiInvitation {
   /** The invitation credential's own id. */
@@ -139,19 +140,13 @@ export function heldCredentialKey(item: Pick<VtiHeldCredential, 'kind' | 'commun
 export class GenericRecordsCommunityStore implements VtiCommunityStore {
   constructor(private readonly agent: Agent) {}
 
-  private async put(kind: string, key: string, content: Record<string, unknown>): Promise<void> {
-    const existing = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind, key })
-    if (existing[0]) {
-      existing[0].content = content
-      await this.agent.genericRecords.update(existing[0])
-      return
-    }
-    await this.agent.genericRecords.save({ content, tags: { recordType: RECORD_TYPE, kind, key } })
+  // One record per key, whoever writes it and however many at once (keyedRecords).
+  private put(kind: string, key: string, content: Record<string, unknown>): Promise<void> {
+    return putKeyed(this.agent, RECORD_TYPE, kind, key, content)
   }
 
-  private async list<T>(kind: string): Promise<T[]> {
-    const records = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind })
-    return records.map((record) => record.content as unknown as T)
+  private list<T>(kind: string): Promise<T[]> {
+    return listKeyed<T>(this.agent, RECORD_TYPE, kind)
   }
 
   listInvitations() {
@@ -164,12 +159,7 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
   }
 
   async getMembership(communityDid: string) {
-    const records = await this.agent.genericRecords.findAllByQuery({
-      recordType: RECORD_TYPE,
-      kind: 'membership',
-      key: communityDid,
-    })
-    return records[0]?.content as unknown as VtiMembership | undefined
+    return getKeyed<VtiMembership>(this.agent, RECORD_TYPE, 'membership', communityDid)
   }
 
   listMemberships() {
@@ -179,6 +169,24 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
   async saveMembership(membership: VtiMembership) {
     await this.put('membership', membership.communityDid, { ...membership })
     emitCommunityChanged(membership.communityDid, 'membership')
+  }
+
+  /**
+   * What a community calls itself, as its manifest last said. Kept so a
+   * relaunch still names it: the name otherwise lived only in memory, and
+   * every community read as unnamed until a join or vetting screen happened
+   * to read its manifest again (IN-26).
+   */
+  async saveCommunityName(communityDid: string, name?: string) {
+    const named = name?.trim()
+    if (!communityDid || !named) return
+    const known = await getKeyed<{ name?: string }>(this.agent, RECORD_TYPE, 'community-name', communityDid)
+    if (known?.name === named) return
+    await this.put('community-name', communityDid, { communityDid, name: named, at: new Date().toISOString() })
+  }
+
+  listCommunityNames() {
+    return this.list<{ communityDid: string; name: string }>('community-name')
   }
 
   async forgetCommunity(communityDid: string) {
@@ -202,21 +210,11 @@ export class GenericRecordsCommunityStore implements VtiCommunityStore {
   }
 
   async getSubmission(communityDid: string) {
-    const records = await this.agent.genericRecords.findAllByQuery({
-      recordType: RECORD_TYPE,
-      kind: 'submission',
-      key: communityDid,
-    })
-    return records[0]?.content as unknown as JoinSubmission | undefined
+    return getKeyed<JoinSubmission>(this.agent, RECORD_TYPE, 'submission', communityDid)
   }
 
   async getDeparture(communityDid: string) {
-    const records = await this.agent.genericRecords.findAllByQuery({
-      recordType: RECORD_TYPE,
-      kind: 'departure',
-      key: communityDid,
-    })
-    return records[0]?.content as unknown as VtiDeparture | undefined
+    return getKeyed<VtiDeparture>(this.agent, RECORD_TYPE, 'departure', communityDid)
   }
 
   async saveDeparture(departure: VtiDeparture) {

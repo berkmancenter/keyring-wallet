@@ -185,11 +185,15 @@ const VtaAgentHome: React.FC = () => {
     if (!agent) return
     try {
       const communities = new GenericRecordsCommunityStore(agent)
-      const [personas, memberships, invitations] = await Promise.all([
+      const [personas, memberships, invitations, names] = await Promise.all([
         new GenericRecordsIdentityStore(agent).listPersonas(),
         communities.listMemberships(),
         communities.listInvitations(),
+        communities.listCommunityNames().catch(() => []),
       ])
+      // Names the communities published, kept from their manifests, so a
+      // relaunch still says what each is called (IN-26).
+      for (const { communityDid, name } of names) communityTarget.publishedName(communityDid, name)
       // An invitation that is waiting for this phone — one issued to an
       // identity it holds, not yet acted on. The panel listed every
       // invitation and said "none" when there were none; here it is a line
@@ -415,7 +419,10 @@ const VtaAgentHome: React.FC = () => {
           {/* Where the phone is, per community it belongs to: a finished step
               says so ("Joined", not "Join") and names the community. */}
           <View testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
-            {(isMember ? (holdings?.memberships ?? []).map((m) => m.communityDid) : [undefined]).map((communityDid) => (
+            {(isMember
+              ? Array.from(new Set((holdings?.memberships ?? []).map((m) => m.communityDid)))
+              : [undefined]
+            ).map((communityDid) => (
               <View key={communityDid ?? 'none'} style={styles.strip} testID={testIdWithKey('AgentJourneyRow')}>
                 {[
                   { key: 'Linked', label: t('VtaLink.JourneyLinked'), done: true, now: false },

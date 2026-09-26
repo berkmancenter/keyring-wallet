@@ -24,10 +24,19 @@ describe('a ticket the app refuses', () => {
   it("another community's: names both, and says using it would show you to them", () => {
     communityTarget.publishedName(ours, 'Keyring Lab Community')
     const words = ticketRefusalWords(new VettingTicketError('otherCommunity', theirs), ours, t)
+    // Theirs published no name: "another community", never its host (IN-26).
     expect(words).toBe(
-      "This ticket is for vetting in an unnamed community (vtc.theirs.example), not Keyring Lab Community. Using it would show your identity to an unnamed community (vtc.theirs.example), so Keyring won't send it."
+      "This ticket is for vetting in another community, not Keyring Lab Community. Using it would show your identity to another community, so Keyring won't send it."
     )
-    expect(words).not.toMatch(/did:/)
+    expect(words).not.toMatch(/did:|vtc\.theirs\.example/)
+  })
+
+  it("another community's that published its name: named", () => {
+    communityTarget.publishedName(ours, 'Keyring Lab Community')
+    communityTarget.publishedName(theirs, 'Their Club')
+    expect(ticketRefusalWords(new VettingTicketError('otherCommunity', theirs), ours, t)).toBe(
+      "This ticket is for vetting in Their Club, not Keyring Lab Community. Using it would show your identity to Their Club, so Keyring won't send it."
+    )
   })
 
   it('unreadable: says so, and nothing more', () => {
