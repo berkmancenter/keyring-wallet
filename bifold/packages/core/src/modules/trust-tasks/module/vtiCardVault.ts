@@ -71,9 +71,16 @@ const KIND = 'card'
 
 const cache = new Map<string, CardVaultState>()
 
-/** A card's vault state; `notYetKept` for one never sent. */
+/** One object for every card never sent, so a snapshot of it is stable (useSyncExternalStore). */
+const NOT_YET_KEPT: CardVaultState = Object.freeze({ state: 'notYetKept' })
+
+/**
+ * A card's vault state; `notYetKept` for one never sent. The same object is
+ * returned until the state changes, so it can be a useSyncExternalStore
+ * snapshot as it is.
+ */
 export function cardVaultStateOf(credentialId: string): CardVaultState {
-  return cache.get(credentialId) ?? { state: 'notYetKept' }
+  return cache.get(credentialId) ?? NOT_YET_KEPT
 }
 
 /** Called whenever a card's vault state changes. Returns the unsubscribe. */
