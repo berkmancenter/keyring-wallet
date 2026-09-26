@@ -60,7 +60,16 @@ export async function launch({ bin, version, dir, profile, role = 'openvtc-vette
     log,
     env: { OPENVTC_THEME: 'dark', OPENVTC_DEBUG_LOG: path.join(dir, `debug-${profile}.log`) },
   }).start(['--unlock-code-file', path.join(dir, 'unlock-code')]);
-  await tui.waitFor('Press [ENTER] to continue', { timeoutMs: 60000, step: 'tui.loaded', source: 'ui/pages/loading/mod.rs:667' });
+  // Loaded = phase 1 complete. The body says "Press [ENTER] to continue" (or
+  // "Press [ENTER] to acknowledge … and continue"), but with many personas the
+  // startup list pushes that line below the 50-row screen (18 did, 2026-09-26),
+  // so the footer's "[ENTER] continue", drawn only once complete and with no
+  // diagnosis, counts too (openvtc ed13d29 ui/pages/loading/mod.rs:652-696).
+  await tui.waitFor(/Press \[ENTER\] to (continue|acknowledge)|\[ENTER\] continue/, {
+    timeoutMs: 120000,
+    step: 'tui.loaded',
+    source: 'ui/pages/loading/mod.rs:652-696',
+  });
   tui.press('Enter');
   await tui.waitFor('Communities', { timeoutMs: 30000, step: 'tui.main' });
   return tui;
