@@ -37,15 +37,30 @@ const known = new Map<string, RevocationRecord>()
 /** Clocks on a phone and a server disagree by seconds. */
 const SKEW_MS = 60 * 1000
 
-/** A card's standing now, from its own dates and the last status read recorded for it. */
+const HELD: CardStanding = Object.freeze({ state: 'held' })
+/** The last answer per card, so the same answer is the same object (a stable useSyncExternalStore snapshot). */
+const answered = new Map<string, CardStanding>()
+
+function same(id: string, standing: CardStanding): CardStanding {
+  const before = answered.get(id)
+  if (before && before.state === standing.state && (before as { at?: string }).at === (standing as { at?: string }).at)
+    return before
+  if (id) answered.set(id, standing)
+  return standing
+}
+
+/**
+ * A card's standing now, from its own dates and the last status read recorded
+ * for it. The same answer is the same object until it changes.
+ */
 export function cardStandingOf(card: Record<string, unknown>, now = Date.now()): CardStanding {
   const id = typeof card.id === 'string' ? card.id : ''
   const revocation = id ? known.get(id) : undefined
-  if (revocation?.revoked) return { state: 'revoked', at: revocation.checkedAt }
+  if (revocation?.revoked) return same(id, { state: 'revoked', at: revocation.checkedAt })
   const until = String(card.validUntil ?? card.expirationDate ?? '')
   const ends = Date.parse(until)
-  if (Number.isFinite(ends) && now > ends + SKEW_MS) return { state: 'expired', at: until }
-  return { state: 'held' }
+  if (Number.isFinite(ends) && now > ends + SKEW_MS) return same(id, { state: 'expired', at: until })
+  return HELD
 }
 
 /** Record a status-list read of a card. A change is announced. */
@@ -77,4 +92,5 @@ export function subscribeCardStanding(onChange: () => void): () => void {
 /** For tests: forget what is known. */
 export function resetCardStanding(): void {
   known.clear()
+  answered.clear()
 }

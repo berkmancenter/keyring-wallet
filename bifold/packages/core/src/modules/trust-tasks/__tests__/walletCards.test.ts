@@ -103,6 +103,16 @@ describe('the Wallet shows the community cards the store holds', () => {
 })
 
 describe('only while the card still stands', () => {
+  it('gives the same object for the same answer, so a screen can use it as a snapshot', async () => {
+    const expired = { ...membershipCard, validUntil: '2026-09-27T08:00:00Z' }
+    expect(cardStandingOf(membershipCard, NOW)).toBe(cardStandingOf(membershipCard, NOW))
+    expect(cardStandingOf(expired, NOW)).toBe(cardStandingOf(expired, NOW))
+    const { agent } = walletAgent()
+    await recordCardRevocation(agent, membershipCard.id, true, '2026-09-27T08:30:00Z')
+    const revoked = cardStandingOf(membershipCard, NOW)
+    expect(cardStandingOf(membershipCard, NOW)).toBe(revoked)
+  })
+
   it('an expired card leaves the Wallet, and a renewed one comes back', async () => {
     const { agent, ids } = walletAgent()
     const expired = { ...membershipCard, validUntil: '2026-09-27T08:00:00Z' }
