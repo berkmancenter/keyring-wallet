@@ -96,6 +96,11 @@ const VtaCreateAgent: React.FC = () => {
   // "Add another device" from My devices opens this screen at the backup
   // step: setup itself no longer offers a backup (decided 2026-09-25).
   const addDevice = Boolean((useRoute().params as { addDevice?: boolean } | undefined)?.addDevice)
+  // The stack titles this screen "Claim your agent"; adding a device is not
+  // claiming one, and its two steps said so under the wrong title (225 gate).
+  useEffect(() => {
+    if (addDevice) navigation.setOptions({ title: t('Screens.AddDevice') })
+  }, [addDevice, navigation, t])
   const { ColorPalette, TextTheme } = useTheme()
   const { link, agentNames } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const headerHeight = useSafeHeaderHeight()

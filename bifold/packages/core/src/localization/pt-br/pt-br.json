@@ -820,6 +820,7 @@
   },
   "Screens": {
     "VtaCreateAgent": "Reivindique seu agente",
+    "AddDevice": "Adicionar um dispositivo",
     "VtaDevices": "Meus dispositivos",
     "Splash": "Splash",
     "Onboarding": "Onboarding",
