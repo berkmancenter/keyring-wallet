@@ -7,15 +7,16 @@
 //   node e2e/scripts/replay-filled.mjs --png shot.png --transcript run.log --batch 1
 //   … [--expect VettingVetSomeoneElse] [--no-clip]
 //
-// --source: an iOS page source, or a log holding one (the last one that
-//   contains --contains, if given). Buttons are its XCUIElementTypeButtons.
+// --source: a page source, or a log holding one (the last one that contains
+//   --contains, if given). iOS: its XCUIElementTypeButtons; Android: its
+//   clickable nodes with a resource-id, in pixels.
 // --transcript: a webdriverio transcript of buttonsOnScreen; batch N is the
 //   buttons measured before the Nth full-screen screenshot (1-based).
 // --expect: the one testID that should be filled (none: a waiting step).
 // --no-clip: judge half-hidden buttons too, as the rule did before 5e6d025.
 // --points-width: the window's width in points, when the evidence does not
 //   say (a transcript with no window-size call); 402 on an iPhone 17 Pro.
-// iOS only, and macOS only (sips).
+// macOS only (sips). --transcript is iOS only.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -48,6 +49,7 @@ function fromSource(text) {
   const sources = text.split(/<\?xml/).slice(1);
   const pick = [...sources].reverse().find((s) => !opt.contains || s.includes(opt.contains));
   if (!pick) throw new Error(`no page source${opt.contains ? ` containing ${opt.contains}` : ""}`);
+  if (/<hierarchy/.test(pick)) return fromAndroidSource(pick);
   const attr = (tag, a) => Number((tag.match(new RegExp(` ${a}="(-?[\\d.]+)"`)) ?? [])[1]);
   const app = pick.match(/<XCUIElementTypeApplication[^>]*>/)?.[0] ?? "";
   const buttons = [...pick.matchAll(/<XCUIElementTypeButton[^>]*>/g)]
@@ -61,6 +63,23 @@ function fromSource(text) {
       height: attr(tag, "height"),
     }));
   return { buttons, windowWidth: attr(app, "width") };
+}
+
+/**
+ * An Android (UiAutomator2) page source, whose tags are class names: the
+ * elements buttonsOnScreen asks for
+ * (clickable, with a resource-id), at their bounds in pixels — scale 1.
+ */
+function fromAndroidSource(pick) {
+  const buttons = [...pick.matchAll(/<[A-Za-z][\w.]* [^>]*\bbounds="[^"]*"[^>]*>/g)]
+    .map(([tag]) => tag)
+    .filter((tag) => / clickable="true"/.test(tag) && / resource-id="[^"]+"/.test(tag))
+    .map((tag) => {
+      const [x1, y1, x2, y2] = (tag.match(/ bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/) ?? []).slice(1).map(Number);
+      return { id: idOf((tag.match(/ resource-id="([^"]+)"/) ?? [])[1]), x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+    });
+  const root = pick.match(/<hierarchy [^>]*\bwidth="(\d+)"/);
+  return { buttons, windowWidth: root ? Number(root[1]) : undefined };
 }
 
 /** Buttons measured before the Nth full-screen screenshot of a transcript. */
