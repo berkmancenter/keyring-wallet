@@ -6,9 +6,11 @@
  */
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useNavigation, useRoute } from '@react-navigation/native'
-import { act, fireEvent, render } from '@testing-library/react-native'
+import type { TFunction } from 'i18next'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 import { Share } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -17,7 +19,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { confirmOwner } from '../module/ownerConfirm'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceActionRefused, DeviceCannotOwn } from '../module/vtaOwner'
-import VtaCreateAgent, { GRANT_POLL_EVERY_MS, GRANT_POLL_WINDOW_MS } from '../screens/VtaCreateAgent'
+import VtaCreateAgent, { GRANT_POLL_EVERY_MS, GRANT_POLL_WINDOW_MS, readyNameOf } from '../screens/VtaCreateAgent'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('../module/ownerConfirm', () => ({
@@ -67,6 +69,27 @@ describe('create my agent: the address comes first', () => {
       fireEvent.press(tree.getByTestId(id('AgentCreateAddressContinue')))
     })
     expect(start).toHaveBeenCalledWith({}, VTA, 'agents.example')
+  })
+
+  test('return on the address field continues: the button may be under the keyboard', async () => {
+    const start = jest.spyOn(vtaAgent, 'startCreateAgent').mockResolvedValue(undefined)
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
+    fireEvent.changeText(tree.getByTestId(id('AgentCreateAddressInput')), VTA)
+    await act(async () => {
+      fireEvent(tree.getByTestId(id('AgentCreateAddressInput')), 'submitEditing')
+    })
+    expect(start).toHaveBeenCalledWith({}, VTA, 'agents.example')
+  })
+
+  test('the steps sit in a view that lifts their buttons over the keyboard', () => {
+    // (The mock draws keyboard-controller's view as a View: find it by its props.)
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentCreateContinue')))
+    const avoiding = tree.UNSAFE_getAllByType(KeyboardAvoidingView).find((v) => v.props.behavior === 'padding')
+    expect(avoiding).toBeTruthy()
+    expect(within(avoiding!).getByTestId(id('AgentCreateAddressInput'))).toBeTruthy()
+    expect(within(avoiding!).getByTestId(id('AgentCreateAddressContinue'))).toBeTruthy()
   })
 
   test('a phone with no screen lock is told how to protect its agent first', async () => {
@@ -196,6 +219,20 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     expect(navigation.goBack).toHaveBeenCalled()
   })
 
+  test('return on the code field adds the device: the button may be under the keyboard', async () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    const add = jest
+      .spyOn(vtaAgent, 'addBackupDevice')
+      .mockResolvedValue({ did: 'did:key:z6MkBackup', role: 'admin', label: 'Backup phone', thisPhone: false })
+    const tree = await toBackupCode()
+    await act(async () => {
+      fireEvent(tree.getByTestId(id('AgentBackupCodeInput')), 'submitEditing')
+    })
+    expect(add).toHaveBeenCalledWith({}, 'did:key:z6MkBackup', 'CreateAgent.BackupLabel')
+  })
+
   test("this phone's own code is refused in words, and the screen stays", async () => {
     linked()
     asAddDevice()
@@ -292,5 +329,19 @@ describe('the phone waits for the agent to admit the code, on its own', () => {
     })
     expect(check.mock.calls).toHaveLength(calls + 1)
     expect(tree.getByTestId(id('AgentCreateWaiting'))).toBeTruthy()
+  })
+})
+
+describe('"Your agent is ready" names the agent, never its host', () => {
+  const t = ((key: string) => (key === 'VtaLink.YourAgentFallback' ? 'your agent' : key)) as unknown as TFunction
+
+  test('by the name it gives itself, once read', () => {
+    expect(readyNameOf(VTA, { [VTA]: { label: 'Alice agent', source: 'agentName' } }, t)).toBe('Alice agent')
+  })
+
+  test('before it gives one, plainly "Your agent": not the host, which is a provider\'s domain', () => {
+    expect(readyNameOf(VTA, {}, t)).toBe('Your agent')
+    expect(readyNameOf(VTA, undefined, t)).toBe('Your agent')
+    expect(readyNameOf(undefined, { [VTA]: { label: 'Alice agent', source: 'agentName' } }, t)).toBe('Your agent')
   })
 })

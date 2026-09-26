@@ -20,6 +20,7 @@ import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
 import React, { useEffect, useState, useSyncExternalStore } from 'react'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
   ActivityIndicator,
@@ -33,6 +34,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -42,8 +44,11 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import QRRenderer from '../../../components/misc/QRRenderer'
 import { confirmOwner, ownerLockKind, type OwnerConfirmFailure, type OwnerLockKind } from '../module/ownerConfirm'
+import type { AgentLabel } from '../module/agentLabel'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceCannotOwn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
+
+import { useSafeHeaderHeight } from './VtaLink'
 
 /**
  * A known agent host's website, to open from the intro. Never named on screen:
@@ -68,6 +73,21 @@ export const looksLikeAgentAddress = (text: string): boolean => /^did:webvh:[^\s
 /** The host a did:webvh names: shown until the agent gives its own name. */
 const hostOf = (did: string): string => did.split(':')[3] ?? did
 
+/**
+ * What "… is online and belongs to this phone" calls the agent: the name it
+ * gives itself, once read, else plainly "Your agent". Never the address's
+ * host: that is the agent host's own domain (225 gate).
+ */
+export function readyNameOf(
+  vtaDid: string | undefined,
+  agentNames: Readonly<Record<string, AgentLabel>> | undefined,
+  t: TFunction
+): string {
+  const own = vtaDid ? agentNames?.[vtaDid]?.label?.trim() : undefined
+  const name = own || (t('VtaLink.YourAgentFallback') as string)
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
 const VtaCreateAgent: React.FC = () => {
   const { t } = useTranslation()
   const { agent } = useAgent()
@@ -76,7 +96,9 @@ const VtaCreateAgent: React.FC = () => {
   // step: setup itself no longer offers a backup (decided 2026-09-25).
   const addDevice = Boolean((useRoute().params as { addDevice?: boolean } | undefined)?.addDevice)
   const { ColorPalette, TextTheme } = useTheme()
-  const { link } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  const { link, agentNames } = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  const headerHeight = useSafeHeaderHeight()
+  const readyName = readyNameOf(link.kind === 'linked' ? link.vtaDid : undefined, agentNames, t)
 
   const [step, setStep] = useState<LocalStep>(addDevice ? 'backupAddress' : 'intro')
   const [address, setAddress] = useState('')
@@ -310,6 +332,11 @@ const VtaCreateAgent: React.FC = () => {
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="did:webvh:…"
+          // The step's button sits below the field; "go" reaches it without it.
+          returnKeyType="go"
+          onSubmitEditing={() => {
+            if (!busy && address.trim()) void onAddressContinue()
+          }}
           testID={testIdWithKey('AgentCreateAddressInput')}
         />
       </View>
@@ -468,6 +495,10 @@ const VtaCreateAgent: React.FC = () => {
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="did:key:z6Mk…"
+          returnKeyType="go"
+          onSubmitEditing={() => {
+            if (!busy && backupCode.trim()) void onAddBackup()
+          }}
           testID={testIdWithKey('AgentBackupCodeInput')}
         />
       </View>
@@ -497,10 +528,7 @@ const VtaCreateAgent: React.FC = () => {
       <View style={styles.card} testID={testIdWithKey('AgentCreateReady')}>
         <ThemedText variant="headingThree">{t('CreateAgent.ReadyTitle')}</ThemedText>
         <ThemedText>
-          {t('CreateAgent.ReadyBody', {
-            label: link.kind === 'linked' ? link.label : hostOf(address),
-            interpolation: { escapeValue: false },
-          })}
+          {t('CreateAgent.ReadyBody', { label: readyName, interpolation: { escapeValue: false } })}
         </ThemedText>
         <ThemedText style={styles.muted} testID={testIdWithKey(backupAdded ? 'AgentBackupAdded' : 'AgentBackupNone')}>
           {backupAdded
@@ -529,10 +557,15 @@ const VtaCreateAgent: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {body}
-      </ScrollView>
-      <View style={styles.actions}>{actions}</View>
+      {/* The steps' buttons sit under the page, and on iOS the keyboard covered
+          them: a person who pasted the address saw no Continue (225 gate).
+          keyboard-controller's view lifts them over it on both platforms. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={headerHeight}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {body}
+        </ScrollView>
+        <View style={styles.actions}>{actions}</View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }

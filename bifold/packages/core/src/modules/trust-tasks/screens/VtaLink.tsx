@@ -42,7 +42,7 @@ export function agentHost(vtaDid: string): string | undefined {
 
 // The header's height, for the keyboard offset; a render without a header
 // (a screen test) has none to report, and throws.
-const useSafeHeaderHeight = (): number => {
+export const useSafeHeaderHeight = (): number => {
   try {
     return useHeaderHeight()
   } catch {
