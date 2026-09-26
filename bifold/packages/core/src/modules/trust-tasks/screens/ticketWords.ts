@@ -8,6 +8,7 @@
 
 import type { TFunction } from 'i18next'
 
+import { communityTarget } from '../module/vtiCommunityLink'
 import type { VettingTicketError } from '../module/vtiVetting'
 
 import { communityLabelOf } from './communityName'
@@ -15,7 +16,13 @@ import { communityLabelOf } from './communityName'
 export function ticketRefusalWords(e: VettingTicketError, communityDid: string | undefined, t: TFunction): string {
   if (e.reason !== 'otherCommunity') return t('Vetting.TicketUnreadable') as string
   return t('Vetting.TicketOtherCommunity', {
-    other: e.ticketCommunityDid ? communityLabelOf(e.ticketCommunityDid, t) : t('Community.Unnamed'),
+    // The other community by its name when it published one; else "another
+    // community". Its host used to tell the two apart here, and a host is
+    // never shown as a name (IN-26); "a community, not <ours>" would not read.
+    other:
+      e.ticketCommunityDid && communityTarget.publishedNameOf(e.ticketCommunityDid)
+        ? communityLabelOf(e.ticketCommunityDid, t)
+        : t('Community.Another'),
     community: communityDid ? communityLabelOf(communityDid, t) : t('Community.Unnamed'),
     interpolation: { escapeValue: false },
   }) as string

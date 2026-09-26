@@ -20,6 +20,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import { getKeyed, listKeyed, putKeyed } from './keyedRecords'
 
 export interface VtiManagerIdentity {
   /** The VTA this identity manages. */
@@ -108,19 +109,13 @@ const RECORD_TYPE = 'keyring/vti-identity'
 export class GenericRecordsIdentityStore implements VtiIdentityStore {
   constructor(private readonly agent: Agent) {}
 
-  private async find<T>(kind: string, key: string): Promise<T | undefined> {
-    const records = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind, key })
-    return records[0]?.content as T | undefined
+  // One record per key, whoever writes it and however many at once (keyedRecords).
+  private find<T>(kind: string, key: string): Promise<T | undefined> {
+    return getKeyed<T>(this.agent, RECORD_TYPE, kind, key)
   }
 
-  private async put(kind: string, key: string, content: Record<string, unknown>): Promise<void> {
-    const existing = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind, key })
-    if (existing[0]) {
-      existing[0].content = content
-      await this.agent.genericRecords.update(existing[0])
-      return
-    }
-    await this.agent.genericRecords.save({ content, tags: { recordType: RECORD_TYPE, kind, key } })
+  private put(kind: string, key: string, content: Record<string, unknown>): Promise<void> {
+    return putKeyed(this.agent, RECORD_TYPE, kind, key, content)
   }
 
   getManager(vtaDid: string) {
@@ -145,8 +140,7 @@ export class GenericRecordsIdentityStore implements VtiIdentityStore {
   }
 
   async listPersonas() {
-    const records = await this.agent.genericRecords.findAllByQuery({ recordType: RECORD_TYPE, kind: 'persona' })
-    return records.map((record) => record.content as unknown as VtiPersona)
+    return listKeyed<VtiPersona>(this.agent, RECORD_TYPE, 'persona')
   }
 
   setPersona(persona: VtiPersona) {

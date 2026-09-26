@@ -47,8 +47,10 @@ describe('a community, named in passing', () => {
     expect(communityLabelOf(webvh, t)).toBe('Keyring Lab Community')
   })
 
-  it('unnamed: said to be unnamed, with its host — the host never poses as a name (#13/#14/#16)', () => {
-    expect(communityLabelOf(webvh, t)).toBe('Community.UnnamedAt(host=vtc.example.org)')
+  it('unnamed: "a community", never its host — a host read as a name and merged communities on one host (IN-26)', () => {
+    const label = communityLabelOf(webvh, t)
+    expect(label).toBe('Community.Unnamed')
+    expect(label).not.toContain('vtc.example.org')
   })
 
   it('unnamed and without a host: words, never the DID', () => {
@@ -59,8 +61,8 @@ describe('a community, named in passing', () => {
 
   it('at the start of a sentence, capitalised', () => {
     const start = communityLabelStartOf(webvh, ((key: string) =>
-      key === 'Community.UnnamedAt' ? 'an unnamed community (x)' : key) as unknown as TFunction)
-    expect(start).toBe('An unnamed community (x)')
+      key === 'Community.Unnamed' ? 'a community' : key) as unknown as TFunction)
+    expect(start).toBe('A community')
   })
 })
 

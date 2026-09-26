@@ -62,11 +62,12 @@ export function communityName(did: string, link?: CommunityLink): CommunityName 
  *
  * In order: the community's own published name; else the name a link claimed
  * for it, said in words to be a claim ("… (not confirmed by the community)"),
- * because anyone can write any name into a link; else "an unnamed community
- * (<host>)". Never a bare host and never a DID (#12). The host still never
- * poses as a name — the reasoning of reports #13, #14 and #16 — because it
- * appears only inside words that say the community is unnamed. The full DID
- * stays behind the community screen's Details.
+ * because anyone can write any name into a link; else "a community". Never a
+ * host and never a DID (#12): the host used to appear as "an unnamed community
+ * (<host>)", which read as a name and made several communities on one host
+ * look like one (IN-26). The name a community published is kept across
+ * launches (`saveCommunityName`), so the fallback is rare. The full DID stays
+ * behind the community screen's Details.
  *
  * Not a hook, so it can be used inside a map; a screen that shows several of
  * these subscribes to `communityTarget` once so a name learned later reaches
@@ -79,10 +80,7 @@ export function communityLabelOf(did: string, t: TFunction): string {
     (l) => l?.communityDid === did && l.name && !l.published
   )?.name
   if (claimed) return t('Community.ClaimedName', { name: claimed, interpolation: { escapeValue: false } }) as string
-  const host = didHost(did)
-  return (
-    host ? t('Community.UnnamedAt', { host, interpolation: { escapeValue: false } }) : t('Community.Unnamed')
-  ) as string
+  return t('Community.Unnamed') as string
 }
 
 /**

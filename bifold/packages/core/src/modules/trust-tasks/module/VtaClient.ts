@@ -309,6 +309,9 @@ export function activeSwapTestHook(): VtaSwapTestHook {
 
 type Probe = { kind: 'live' } | { kind: 'refused'; detail: string } | { kind: 'unknown'; detail: string }
 
+/** Persona mints running now, by VTA and community (see `ensurePersona`). */
+const personasInFlight = new Map<string, Promise<VtiPersona>>()
+
 export class VtaClient {
   private session?: VtiMediatorSession
   private mediator?: VtiMediatorEndpoints
@@ -992,6 +995,24 @@ export class VtaClient {
    * it must; the caller owns disconnecting.
    */
   async ensurePersona(options: { communityDid: string; label?: string; personaBaseUrl?: string }): Promise<VtiPersona> {
+    // One persona per community, however many screens ask at once: a second
+    // caller waits for the first one's answer instead of minting and recording
+    // again (IN-26: several callers each recorded the same persona).
+    const inFlightKey = `${this.vtaDid}|${options.communityDid}`
+    const running = personasInFlight.get(inFlightKey)
+    if (running) return running
+    const work = this.ensurePersonaOnce(options).finally(() => {
+      if (personasInFlight.get(inFlightKey) === work) personasInFlight.delete(inFlightKey)
+    })
+    personasInFlight.set(inFlightKey, work)
+    return work
+  }
+
+  private async ensurePersonaOnce(options: {
+    communityDid: string
+    label?: string
+    personaBaseUrl?: string
+  }): Promise<VtiPersona> {
     const existing = await this.store.getPersona(options.communityDid)
     if (existing?.kmsKeyIds?.keyAgreement && existing.kmsKeyIds.signing) return existing
 
