@@ -7,6 +7,8 @@ import { applicantPrimary, deskPrimary } from '../screens/vettingPrimary'
 describe('the desk: one next action per step', () => {
   test.each([
     ['ticket', 'VettingNewTicketButton'],
+    // A ticket just cut: hand it over, not cut another.
+    ['share', 'VettingCopyTicketLink'],
     ['request', 'VettingOpenSessionButton'],
     ['match', 'VettingCodesMatch'],
     ['waitCard', undefined],

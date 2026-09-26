@@ -19,8 +19,14 @@ import VtiVetting, { requestRef, requestTestKey, whenShown } from '../screens/Vt
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
+import * as grantState from '../module/vtiGrantState'
+import { VtiVetterDesk } from '../module/vtiVetting'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+// The desk's attest asks for a face or fingerprint first; here it is given.
+jest.mock('../../vrc/vrc-biometric', () => ({
+  requestBiometricConfirmationWithUI: jest.fn(async () => ({ success: true })),
+}))
 
 type Setter = { set(next: Record<string, unknown>): void }
 const mockUseAgent = useAgent as jest.Mock
@@ -353,5 +359,192 @@ describe('Vetting — a failure is said in words, the raw text only under Detail
     expect(tree.queryByText(/vtiAgent:|trusttasks\.org/)).toBeNull()
     fireEvent.press(tree.getByTestId(testIdWithKey('VettingErrorDetailsToggle')))
     expect(tree.getByTestId(testIdWithKey('VettingErrorDetail'))).toHaveTextContent(RAW)
+  })
+})
+
+/**
+ * The desk's steps (vettingPrimary): it opens on a new ticket when nothing is
+ * in progress, moves to handing the ticket over once one is cut, and says
+ * "Statement issued" only right after this visit's attest. Before, a desk
+ * whose newest request was attested opened on "Step 5 of 5 · Statement
+ * issued" on every later visit, and "New ticket" stayed the filled button
+ * after the ticket was cut.
+ */
+describe('Vetting — the desk', () => {
+  const grant: Rec = {
+    tags: { recordType: 'keyring/vti-community', kind: 'credential', key: 'urn:uuid:grant' },
+    content: {
+      kind: 'vetter-grant',
+      communityDid,
+      subjectDid: personaDid,
+      credential: { id: 'urn:uuid:grant', issuer: communityDid },
+      receivedAt: '2026-09-23T00:00:00Z',
+    },
+  }
+  const deskRequest = (status: string, extra: Record<string, unknown> = {}): Rec => ({
+    tags: { recordType: 'keyring/vti-vetting', kind: 'desk', key: 'r1' },
+    content: {
+      requestId: 'r1',
+      applicantDid: 'did:key:z6MkApplicant',
+      communityDid,
+      status,
+      receivedAt: '2026-09-25T09:00:00Z',
+      ...extra,
+    },
+  })
+  /** A store that keeps what the screen saves, so a ticket cut is there on the next read. */
+  const keeping = (records: Rec[]) => ({
+    agent: {
+      ...fakeAgent().agent,
+      genericRecords: {
+        findAllByQuery: async (query: Record<string, string>) =>
+          records.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v)),
+        save: async (r: Rec) => {
+          records.push({ tags: r.tags, content: r.content })
+        },
+        update: async () => undefined,
+        delete: async (r: Rec) => {
+          records.splice(records.indexOf(r), 1)
+        },
+      },
+    },
+  })
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+    jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+    // A live grant: the fixture's credential is not one the chooser can check.
+    jest.spyOn(grantState, 'pickOwnVetterGrant').mockImplementation(async (_agent, grants) => ({
+      held: grants[0],
+      state: { state: 'active', statusChecked: true },
+    }))
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  const renderDesk = async (records: Rec[]) => {
+    mockUseAgent.mockReturnValue(keeping(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+
+  const filled = (tree: Awaited<ReturnType<typeof renderDesk>>) =>
+    Array.from(
+      new Set(
+        tree
+          .UNSAFE_queryAllByProps({ accessibilityRole: 'button' })
+          .filter((b) => typeof b.type === 'string' && b.props.testID)
+          .filter((b) => StyleSheet.flatten(b.props.style)?.backgroundColor !== undefined)
+          .map((b) => String(b.props.testID).replace(/^com\.ariesbifold:id\//, ''))
+      )
+    )
+
+  test('only a finished request on the desk: it opens on a new ticket, the finished one folded away', async () => {
+    const tree = await renderDesk([persona, grant, deskRequest('attested')])
+    expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('VettingVetterStep_done'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('VettingVetSomeoneElse'))).toBeNull()
+    expect(filled(tree)).toEqual(['VettingNewTicketButton'])
+
+    // Folded: the count, and nothing else until it is opened.
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle'))).toHaveTextContent(/Vetting\.FinishedRequests/)
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskClearButton'))).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle')))
+    expect(tree.getAllByTestId(testIdWithKey('VettingDeskFinishedRequest'))).toHaveLength(1)
+
+    // Clearing them still works, from inside.
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingDeskClearButton')))
+    })
+    expect(tree.queryByTestId(testIdWithKey('VettingDeskFinishedToggle'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+  })
+
+  test('a ticket just cut: handing it over is the step, and the raw link waits under Details', async () => {
+    const tree = await renderDesk([persona, grant])
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))
+    expect(filled(tree)).toEqual(['VettingNewTicketButton'])
+
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingNewTicketButton')))
+    })
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_share'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VettingTicketCode'))).toBeTruthy()
+    expect(filled(tree)).toEqual(['VettingCopyTicketLink'])
+
+    // The link is one tap away, not on the page.
+    expect(tree.queryByTestId(testIdWithKey('VettingTicketLink'))).toBeNull()
+    expect(tree.queryByText(/^vetting-ticket:/)).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingTicketLinkDetailsToggle')))
+    expect(tree.getByTestId(testIdWithKey('VettingTicketLink'))).toHaveTextContent(/^vetting-ticket:/)
+
+    // Still the step on the next read of the store.
+    await act(async () => {
+      jest.advanceTimersByTime(3100)
+    })
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_share'))).toBeTruthy()
+  })
+
+  test('an open ticket from an earlier visit is not the step: the desk opens on a new ticket', async () => {
+    const earlier: Rec = {
+      tags: { recordType: 'keyring/vti-vetting', kind: 'ticket', key: 'vt-earlier' },
+      content: {
+        ticketId: 'vt-earlier',
+        code: 'ABCD-EFGH',
+        secret: 's',
+        communityDid,
+        usesLeft: 1,
+        expiresAt: '2099-01-01T00:00:00Z',
+        createdAt: '2026-09-25T00:00:00Z',
+      },
+    }
+    const tree = await renderDesk([persona, grant, earlier])
+    expect(await tree.findByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+    expect(filled(tree)).toEqual(['VettingNewTicketButton'])
+  })
+
+  test('attested here: "Statement issued", then Vet someone else goes back to a new ticket', async () => {
+    const records = [
+      persona,
+      grant,
+      deskRequest('cardReceived', {
+        matchConfirmedAt: '2026-09-25T09:01:00Z',
+        session: {
+          documentId: 'urn:uuid:session',
+          challenge: 'c',
+          domain: communityDid,
+          requiredClaims: ['name.legal'],
+          method: 'inPerson',
+          expiresAt: '2099-01-01T00:00:00Z',
+          matchCode: 'PBWW-HACW',
+        },
+        card: { claims: [{ type: 'name.legal', value: 'Gate Applicant' }] },
+      }),
+    ]
+    jest.spyOn(VtiVetterDesk.prototype, 'attest').mockImplementation(async () => {
+      records[2].content.status = 'attested'
+      return undefined as never
+    })
+    const tree = await renderDesk(records)
+    await tree.findByTestId(testIdWithKey('VettingVetterStep_check'))
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VettingAttestButton')))
+    })
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_done'))).toBeTruthy()
+    expect(filled(tree)).toEqual(['VettingVetSomeoneElse'])
+
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingVetSomeoneElse')))
+    expect(tree.getByTestId(testIdWithKey('VettingVetterStep_ticket'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VettingDeskFinishedToggle'))).toBeTruthy()
   })
 })

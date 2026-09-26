@@ -186,11 +186,20 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   // iPad: past ~240 pt it only gets harder to fit in another camera's frame.
   const ticketQrSize = Math.min(240, width - 80)
   const [linkCopied, setLinkCopied] = useState(false)
-  // Which sessions this person has confirmed the match code for, and which
-  // finished requests they have moved on from — what they answered on this
-  // screen, not protocol state.
+  // Which sessions this person has confirmed the match code for — what they
+  // answered on this screen, not protocol state.
   const [matchConfirmed, setMatchConfirmed] = useState<Record<string, true>>({})
-  const [doneDismissed, setDoneDismissed] = useState<Record<string, true>>({})
+  /**
+   * The desk's "Statement issued" and "share this ticket" steps are this
+   * visit's, held here rather than read from the store: a desk that derived
+   * "done" from the newest stored request opened every later visit on the
+   * last finished vetting (Step 5 of 5) instead of on a new ticket.
+   */
+  const [justAttested, setJustAttested] = useState<string>()
+  const [issuedTicketId, setIssuedTicketId] = useState<string>()
+  // The raw ticket link and the finished requests: both one tap away, not on the page.
+  const [ticketLinkShown, setTicketLinkShown] = useState(false)
+  const [finishedOpen, setFinishedOpen] = useState(false)
 
   // A ticket scanned or pasted anywhere lands here (vtiLinks): fill it in.
   // The applicant still asks for vetting themselves.
@@ -363,8 +372,12 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
       ? { button: styles.button, text: styles.buttonText, spinner: '#FFFFFF' }
       : { button: styles.buttonSecondary, text: styles.buttonSecondaryText, spinner: ColorPalette.brand.primary }
 
-  /** The seat banner: who this phone is at the vetting, in three lines. */
-  const seatBanner = (which: 'vetter' | 'applicant') => (
+  /**
+   * The seat banner: who this phone is at the vetting, in three lines. Brief
+   * (title and badge, no sentence) on the match step, where the sentence
+   * pushed "Codes match" under the tab bar on a 6.3" phone.
+   */
+  const seatBanner = (which: 'vetter' | 'applicant', brief = false) => (
     <View style={styles.seat} testID={testIdWithKey('VettingSeatBanner')} accessibilityRole="header">
       <View style={styles.row}>
         <Icon name={which === 'vetter' ? 'account-check' : 'account-search'} size={28} color="#FFFFFF" />
@@ -377,9 +390,11 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           {which === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}
         </Text>
       </View>
-      <Text style={styles.seatText}>
-        {which === 'vetter' ? t('Vetting.SeatVetterHint') : t('Vetting.SeatApplicantHint')}
-      </Text>
+      {brief ? null : (
+        <Text style={styles.seatText} testID={testIdWithKey('VettingSeatHint')}>
+          {which === 'vetter' ? t('Vetting.SeatVetterHint') : t('Vetting.SeatApplicantHint')}
+        </Text>
+      )}
     </View>
   )
 
@@ -606,14 +621,24 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     </ScrollView>
   ) : null
 
-  /** The full-screen match code, answered on both phones (plan §5.3–5.4). */
+  /**
+   * The match code, answered on both phones (plan §5.3–5.4). Sized so the
+   * answers sit on screen under it: at 56 pt the code wrapped to two lines and
+   * "Codes match" fell under the tab bar on a 6.3" phone (402×874 pt).
+   */
   const matchStep = (code: string, question: string, onMatch: () => void, onDiffer: () => void) => (
     <View
-      style={[styles.card, { alignItems: 'center', paddingVertical: 32 }]}
+      style={[styles.card, { alignItems: 'center', paddingVertical: 16 }]}
       testID={testIdWithKey('VettingMatchStep')}
     >
       <Text style={styles.label}>{t('Vetting.MatchCodeHint')}</Text>
-      <Text style={[styles.code, { fontSize: 56 }]} testID={testIdWithKey('VettingMatchCode')} selectable>
+      <Text
+        style={[styles.code, { fontSize: 40, paddingVertical: 4 }]}
+        testID={testIdWithKey('VettingMatchCode')}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        selectable
+      >
         {code}
       </Text>
       <Text style={[styles.value, { textAlign: 'center' }]}>{question}</Text>
@@ -660,7 +685,14 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
   if (grant) {
     // The desk lists requests newest first; the one in progress is the step.
     const current = desk.find((r) => r.status !== 'attested' && r.status !== 'declined')
-    const latest = desk[0]
+    // Only a statement signed on this visit is "done"; older ones are finished
+    // requests, listed folded away under the step.
+    const attestedHere = justAttested
+      ? desk.find((r) => r.requestId === justAttested && r.status === 'attested')
+      : undefined
+    const finished = desk.filter((r) => r.status === 'attested' || r.status === 'declined')
+    const liveTickets = tickets.filter((x) => x.usesLeft > 0)
+    const freshTicket = issuedTicketId ? liveTickets.find((x) => x.ticketId === issuedTicketId) : undefined
     const vetterStep: VetterStep = current
       ? current.status === 'accepted'
         ? 'request'
@@ -669,12 +701,16 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           : current.status === 'cardReceived'
             ? 'check'
             : 'waitCard'
-      : latest?.status === 'attested' && !doneDismissed[latest.requestId]
+      : attestedHere
         ? 'done'
-        : 'ticket'
-    const stepNumber = { ticket: 1, request: 2, match: 3, waitCard: 3, check: 4, done: 5 }[vetterStep]
+        : freshTicket
+          ? 'share'
+          : 'ticket'
+    const stepNumber = { ticket: 1, share: 1, request: 2, match: 3, waitCard: 3, check: 4, done: 5 }[vetterStep]
     const deskPrimaryId = deskPrimary(vetterStep)
-    const request = vetterStep === 'done' ? latest : current
+    const request = vetterStep === 'done' ? attestedHere : current
+    // The ticket on show: the one just cut, else the newest still open.
+    const shownTicket = freshTicket ?? liveTickets.slice(-1)[0]
 
     return (
       <SafeAreaView
@@ -690,13 +726,13 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           keyboardVerticalOffset={keyboard.offset}
         >
           <KeyboardAwareScrollView {...keyboardAware}>
-            {seatBanner('vetter')}
+            {seatBanner('vetter', vetterStep === 'match')}
             {standingNotice}
             <Text style={styles.value} testID={testIdWithKey('VettingYouVetFor')}>
               {tp('Vetting.YouVetFor', { community: communityLabelOf(persona.communityDid, t) })}
             </Text>
 
-            {vetterStep === 'ticket' ? (
+            {vetterStep === 'ticket' || vetterStep === 'share' ? (
               <>
                 {stepHeader(stepNumber, 5, t('Vetting.DeskStep1'))}
                 {/* A ticket is the invitation to begin: handing one out with no
@@ -710,47 +746,70 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                   accessibilityRole="button"
                   disabled={!!busy || !canVet}
                   accessibilityState={{ disabled: !!busy || !canVet }}
-                  onPress={() => run('ticket', () => deskRef.current!.issueTicket())}
+                  onPress={() =>
+                    run('ticket', async () => {
+                      const cut = await deskRef.current!.issueTicket()
+                      // On screen now, not on the next read of the store: the
+                      // step moves to handing it over.
+                      setTickets((ts) => [...ts.filter((x) => x.ticketId !== cut.ticketId), cut])
+                      setIssuedTicketId(cut.ticketId)
+                      setLinkCopied(false)
+                      setTicketLinkShown(false)
+                    })
+                  }
                 >
                   {busy === 'ticket' ? (
                     <ActivityIndicator color={look('VettingNewTicketButton', deskPrimaryId).spinner} />
                   ) : null}
                   <Text style={look('VettingNewTicketButton', deskPrimaryId).text}>{t('Vetting.NewTicket')}</Text>
                 </Pressable>
-                {tickets
-                  .filter((x) => x.usesLeft > 0)
-                  .slice(-1)
-                  .map((x) => (
-                    <View key={x.ticketId} style={styles.card} testID={testIdWithKey('VettingTicketCard')}>
-                      <Text style={styles.label}>{t('Vetting.ReadAloud')}</Text>
-                      <Text style={styles.code} testID={testIdWithKey('VettingTicketCode')}>
-                        {x.code}
-                      </Text>
-                      <Text style={styles.label}>{t('Vetting.OrScan')}</Text>
-                      <View style={{ alignItems: 'center' }} testID={testIdWithKey('VettingTicketQr')}>
-                        <QRRenderer value={x.link} size={ticketQrSize} />
-                      </View>
-                      <Pressable
-                        style={look('VettingCopyTicketLink').button}
-                        testID={testIdWithKey('VettingCopyTicketLink')}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          Clipboard.setString(x.link)
-                          setLinkCopied(true)
-                        }}
-                      >
-                        <Text style={look('VettingCopyTicketLink').text}>
-                          {linkCopied ? t('Vetting.LinkCopied') : t('Vetting.CopyLink')}
+                {shownTicket
+                  ? [shownTicket].map((x) => (
+                      <View key={x.ticketId} style={styles.card} testID={testIdWithKey('VettingTicketCard')}>
+                        <Text style={styles.label}>{t('Vetting.ReadAloud')}</Text>
+                        <Text style={styles.code} testID={testIdWithKey('VettingTicketCode')}>
+                          {x.code}
                         </Text>
-                      </Pressable>
-                      <Text style={styles.mono} testID={testIdWithKey('VettingTicketLink')} selectable>
-                        {x.link}
-                      </Text>
-                      <Text style={styles.label}>
-                        {tp('Vetting.TicketValid', { uses: x.usesLeft, until: x.expiresAt.slice(0, 10) })}
-                      </Text>
-                    </View>
-                  ))}
+                        <Text style={styles.label}>{t('Vetting.OrScan')}</Text>
+                        <View style={{ alignItems: 'center' }} testID={testIdWithKey('VettingTicketQr')}>
+                          <QRRenderer value={x.link} size={ticketQrSize} />
+                        </View>
+                        <Pressable
+                          style={look('VettingCopyTicketLink', deskPrimaryId).button}
+                          testID={testIdWithKey('VettingCopyTicketLink')}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            Clipboard.setString(x.link)
+                            setLinkCopied(true)
+                          }}
+                        >
+                          <Text style={look('VettingCopyTicketLink', deskPrimaryId).text}>
+                            {linkCopied ? t('Vetting.LinkCopied') : t('Vetting.CopyLink')}
+                          </Text>
+                        </Pressable>
+                        {/* The raw vetting-ticket: text is for whoever needs it,
+                          not something to read: one tap away. */}
+                        <Pressable
+                          onPress={() => setTicketLinkShown((was) => !was)}
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: ticketLinkShown }}
+                          testID={testIdWithKey('VettingTicketLinkDetailsToggle')}
+                        >
+                          <Text style={styles.label}>
+                            {ticketLinkShown ? t('Vetting.HideTicketLink') : t('Vetting.ShowTicketLink')}
+                          </Text>
+                        </Pressable>
+                        {ticketLinkShown ? (
+                          <Text style={styles.mono} testID={testIdWithKey('VettingTicketLink')} selectable>
+                            {x.link}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.label}>
+                          {tp('Vetting.TicketValid', { uses: x.usesLeft, until: x.expiresAt.slice(0, 10) })}
+                        </Text>
+                      </View>
+                    ))
+                  : null}
                 <Text style={styles.value} testID={testIdWithKey('VettingDeskEmpty')}>
                   {t('Vetting.DeskEmpty')}
                 </Text>
@@ -894,6 +953,9 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                             claimsVerified: ['name.legal'],
                             livenessConfirmed: true,
                           })
+                          // Straight to "Statement issued", not on the next read.
+                          setDesk(await stores!.vetting.listDesk())
+                          setJustAttested(request.requestId)
                         })
                       }
                     >
@@ -934,7 +996,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                       style={look('VettingVetSomeoneElse', deskPrimaryId).button}
                       testID={testIdWithKey('VettingVetSomeoneElse')}
                       accessibilityRole="button"
-                      onPress={() => setDoneDismissed((d) => ({ ...d, [request.requestId]: true }))}
+                      onPress={() => setJustAttested(undefined)}
                     >
                       <Text style={look('VettingVetSomeoneElse', deskPrimaryId).text}>
                         {t('Vetting.VetSomeoneElse')}
@@ -945,21 +1007,54 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
               </View>
             ) : null}
 
-            {desk.length > 0 && (vetterStep === 'ticket' || vetterStep === 'done') ? (
-              <Pressable
-                style={look('VettingDeskClearButton').button}
-                testID={testIdWithKey('VettingDeskClearButton')}
-                accessibilityRole="button"
-                disabled={!!busy}
-                onPress={() =>
-                  run('clear', async () => {
-                    await stores!.vetting.clearDesk(persona.communityDid)
-                    setDesk([])
-                  })
-                }
-              >
-                <Text style={look('VettingDeskClearButton').text}>{t('Vetting.ClearDesk')}</Text>
-              </Pressable>
+            {finished.length > 0 && (vetterStep === 'ticket' || vetterStep === 'share' || vetterStep === 'done') ? (
+              // Finished requests are history, not the step: folded under it,
+              // with the way to clear them inside.
+              <View style={{ gap: 12 }} testID={testIdWithKey('VettingDeskFinished')}>
+                <Pressable
+                  style={styles.row}
+                  onPress={() => setFinishedOpen((was) => !was)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: finishedOpen }}
+                  testID={testIdWithKey('VettingDeskFinishedToggle')}
+                >
+                  <Icon
+                    name={finishedOpen ? 'chevron-down' : 'chevron-right'}
+                    size={22}
+                    color={ColorPalette.brand.primary}
+                  />
+                  <Text style={styles.value}>{tp('Vetting.FinishedRequests', { count: finished.length })}</Text>
+                </Pressable>
+                {finishedOpen ? (
+                  <>
+                    {finished.map((r) => (
+                      <View key={r.requestId} style={styles.card} testID={testIdWithKey('VettingDeskFinishedRequest')}>
+                        <Text style={styles.label}>
+                          {/* Status.attested is the applicant's "Statement received". */}
+                          {r.status === 'attested' ? t('Vetting.StatementIssued') : t(`Vetting.Status.${r.status}`)} ·{' '}
+                          {whenShown(r.receivedAt)}
+                        </Text>
+                      </View>
+                    ))}
+                    <Pressable
+                      style={look('VettingDeskClearButton').button}
+                      testID={testIdWithKey('VettingDeskClearButton')}
+                      accessibilityRole="button"
+                      disabled={!!busy}
+                      onPress={() =>
+                        run('clear', async () => {
+                          await stores!.vetting.clearDesk(persona.communityDid)
+                          setDesk([])
+                          setJustAttested(undefined)
+                          setFinishedOpen(false)
+                        })
+                      }
+                    >
+                      <Text style={look('VettingDeskClearButton').text}>{t('Vetting.ClearDesk')}</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+              </View>
             ) : null}
           </KeyboardAwareScrollView>
           {errorLine}
@@ -1113,7 +1208,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
           keyboardVerticalOffset={keyboard.offset}
         >
         <KeyboardAwareScrollView {...keyboardAware}>
-          {applicantStep === 'member' ? null : seatBanner('applicant')}
+          {applicantStep === 'member' ? null : seatBanner('applicant', applicantStep === 'match')}
 
           {applicantStep === 'member' ? (
             <View style={styles.card} testID={testIdWithKey('VettingMemberDone')}>
