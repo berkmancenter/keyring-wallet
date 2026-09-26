@@ -894,6 +894,7 @@
   },
   "Screens": {
     "VtaCreateAgent": "Revendiquer votre agent",
+    "AddDevice": "Ajouter un appareil",
     "VtaDevices": "Mes appareils",
     "Splash": "Page de garde",
     "Onboarding": "Inscription",
