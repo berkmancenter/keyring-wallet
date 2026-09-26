@@ -1087,7 +1087,8 @@
     "CardNotKeptProof": "Um cartão de {{community}} não pôde ser verificado, então o Keyring não o guardou. Peça à comunidade que o envie de novo.",
     "CardNotKeptExpired": "Um cartão de {{community}} já tinha expirado, então o Keyring não o guardou.",
     "CardNotKeptNotYetValid": "Um cartão de {{community}} ainda não é válido, então o Keyring não o guardou. Verifique se a data e a hora deste telefone estão certas.",
-    "CardNotKeptRevoked": "{{community}} retirou um cartão que tinha enviado, então o Keyring não o guardou."
+    "CardNotKeptRevoked": "{{community}} retirou um cartão que tinha enviado, então o Keyring não o guardou.",
+    "RemovedReason": "Motivo informado: {{reason}}"
   },
   "VtaLink": {
     "GiveKeyHowTitle": "Como o admin adiciona",

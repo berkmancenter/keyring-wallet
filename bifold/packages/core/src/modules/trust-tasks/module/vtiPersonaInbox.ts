@@ -24,6 +24,7 @@ import { VTI_PERSONA_DELIVERIES_EVENT, VTI_PERSONA_KEYS_HELD_EVENT } from './com
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { deliveredCardCheck } from './vtiDeliveredCheck'
+import { receiveCommunityNotice, REMOVAL_NOTICE, SUBMIT_RECEIPT } from './vtiCommunityNotices'
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
 import { invitationOfferOfMessage, redeemInvitationOffer, VtiInvitationOfferError } from './vtiInvitationOffer'
 import { vtiAgent } from './vtiAgent'
@@ -72,6 +73,17 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     // it as a different identity (a join as a new persona, a community
     // connect), and what arrives then is not this persona's to store.
     if (!target || vtiAgent.getState().did !== target.did) return
+    // The community removed this persona, or received its join request: applied
+    // once checked (vtiCommunityNotices), and nothing else to do with it.
+    if (message.type === REMOVAL_NOTICE || message.type === SUBMIT_RECEIPT) {
+      return receiveCommunityNotice(agent, community, target.did, message).then((outcome) => {
+        if (outcome === 'removed' || outcome === 'acknowledged')
+          DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, {
+            communityDid: target.communityDid,
+            kinds: [outcome],
+          })
+      })
+    }
     // A community admin console's Send: an offer of the invitation, redeemed
     // here for the invitation itself, which "I was invited" then joins with.
     const offer = invitationOfferOfMessage(message)

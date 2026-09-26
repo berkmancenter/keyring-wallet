@@ -34,6 +34,7 @@ import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
 import '../modules/trust-tasks/screens/communityCardDisplay'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
+import { useVtiRemovedNotice } from '../modules/trust-tasks/screens/removedNotice'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
 
@@ -89,6 +90,8 @@ const TabStack: React.FC = () => {
     [agent, linkOnline]
   )
   useAgentPresence(presencePort)
+  // A community's removal notice is said in plain words when it arrives.
+  useVtiRemovedNotice()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18

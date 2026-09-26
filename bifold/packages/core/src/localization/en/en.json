@@ -1243,7 +1243,8 @@
     "CardNotKeptProof": "A card from {{community}} didn't check out, so Keyring didn't keep it. Ask the community to send it again.",
     "CardNotKeptExpired": "A card from {{community}} had already expired, so Keyring didn't keep it.",
     "CardNotKeptNotYetValid": "A card from {{community}} isn't valid yet, so Keyring didn't keep it. Check that this phone's date and time are right.",
-    "CardNotKeptRevoked": "{{community}} has withdrawn a card it sent, so Keyring didn't keep it."
+    "CardNotKeptRevoked": "{{community}} has withdrawn a card it sent, so Keyring didn't keep it.",
+    "RemovedReason": "The reason given: {{reason}}"
   },
   "VtaLink": {
     "GiveKeyHowTitle": "How the admin adds it",
