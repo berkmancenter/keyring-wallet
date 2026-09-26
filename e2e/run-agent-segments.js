@@ -21,6 +21,7 @@
 import { ensureAppium, stopAppium, tapTestId, existsTestId, scrollToTestId, screenshot, sleep, waitForTestId } from "./lib/driver.js";
 import { buttonsOnScreen } from "./lib/filledButtons.js";
 import { makeDriver } from "./lib/keyringRoles.js";
+import { unlockIfLocked } from "./lib/flows.js";
 
 const platform = process.env.PLATFORM ?? "android";
 const person = process.env.PERSON ?? "person";
@@ -61,6 +62,8 @@ await ensureAppium();
 const driver = await makeDriver({ platform, udid, keepState: true });
 try {
   await driver.activateApp("asml.bkc.harvard.wallet");
+  // A relaunched app opens on its PIN screen.
+  await unlockIfLocked(driver);
   await openAgentHome(driver);
   await must(driver, "AgentHomeTitle", "header");
   await must(driver, "AgentHomeName", "header");

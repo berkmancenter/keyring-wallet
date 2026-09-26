@@ -3,6 +3,17 @@
 // screenshot is measured: a filled button is mostly the brand colour, an
 // outlined one mostly the page with a thin border and its label.
 //
+// THE RULE, from the Keyring theme's button variants (app/src/keyring-theme/
+// theme.ts, Buttons): only two variants are filled — Primary (brand purple
+// #622C62; disabled, the same at 70% over the page, luminance ≈ 0.45) and
+// Critical (red #D8292F, ≈ 0.31). Secondary is outlined (a 2 pt border on the
+// page), Tertiary is text. There is no grey-filled variant: a grey fill is a
+// one-off style override, and it is itself the defect the one-primary change
+// removed (e.g. Withdraw, "Clear finished requests"). So "filled" here means
+// "more than 40% of the button is darker than luminance 0.6" — true of both
+// filled variants in every state, of any off-design fill, and of no outlined
+// or text button (0.08 measured on an outlined one).
+//
 // macOS only (sips turns the PNG into a BMP this reads without dependencies);
 // the gate runs on the Mac. Used by the release gate's "one filled button per
 // step" check (docs: next-release gate §2, §3).
@@ -11,7 +22,13 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** Share of an image's pixels that are the brand fill: dark and saturated. */
+/**
+ * Share of an image's pixels that are a button's fill: any dark pixel, of any
+ * hue — a grey-filled button is as filled as a purple one. (A first version
+ * counted only saturated pixels and read a grey-filled "Clear finished
+ * requests" as outlined, passing a screen with two filled buttons: found by
+ * running it on a known-bad build before trusting it.)
+ */
 export function fillShareOfBmp(buf) {
   const offset = buf.readUInt32LE(10);
   const width = buf.readInt32LE(18);
@@ -28,10 +45,8 @@ export function fillShareOfBmp(buf) {
       const b = buf[i] / 255;
       const g = buf[i + 1] / 255;
       const r = buf[i + 2] / 255;
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
       const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      if (luminance < 0.5 && max - min > 0.15) fill++;
+      if (luminance < 0.6) fill++;
       total++;
     }
   }
@@ -72,9 +87,9 @@ export async function buttonsOnScreen(driver) {
     // Rows and icons are not the step's buttons: a button is wide and short.
     if (width < 120 || height < 30 || height > 200) continue;
     const share = fillShareOfPng(await driver.takeElementScreenshot(el.elementId));
-    seen.set(id, share > FILLED_SHARE);
+    seen.set(id, share);
   }
-  return [...seen.entries()].map(([id, filled]) => ({ id, filled }));
+  return [...seen.entries()].map(([id, share]) => ({ id, filled: share > FILLED_SHARE, share: Number(share.toFixed(3)) }));
 }
 
 /** The testIDs drawn filled right now. */
