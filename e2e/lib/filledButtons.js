@@ -84,6 +84,8 @@ export async function assertOneFilled(driver, expected, where) {
 
 const DESK_PRIMARY = {
   ticket: "VettingNewTicketButton",
+  // A ticket just cut and not yet used: hand it over.
+  share: "VettingCopyTicketLink",
   request: "VettingOpenSessionButton",
   match: "VettingCodesMatch",
   waitCard: undefined,
