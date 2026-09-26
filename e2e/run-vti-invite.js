@@ -71,6 +71,11 @@ const textOf = async (driver, key) =>
 // ~6 KB invitation (VTI-32) — it is pasted into the scanner instead.
 const IOS_UDID = process.env.IOS_UDID || "";
 const INVITE_VIA = process.env.INVITE_VIA || "my-agent";
+// INVITE_OPEN=os (console-qr only): the offers are opened by the system, as the
+// phone's camera app opens a QR (simctl openurl / adb am start), instead of
+// scanned in Keyring. Needs a build that claims openid-credential-offer.
+const OPEN_BY_OS = process.env.INVITE_OPEN === "os";
+const openOffer = (d, url) => (OPEN_BY_OS ? openLink(url) : pasteLinkFromHome(d, url));
 const EXPECT_INVITED_ERROR = process.env.EXPECT_INVITED_ERROR || "";
 const EXPECT_JOIN = process.env.EXPECT_JOIN || "member";
 const ADMIN = path.resolve(here, "../tsp-reference/ref-20-local-vetting/vtc-admin.mjs");
@@ -282,8 +287,8 @@ async function inviteByDoor(d) {
         grants: { "urn:ietf:params:oauth:grant-type:pre-authorized_code": { "pre-authorized_code": "decoy" } },
       })
     )}`
-    // Scanned in the app, as a person scans a QR.
-    await pasteLinkFromHome(d, decoy);
+    // Scanned in the app, as a person scans a QR (or opened by the system).
+    await openOffer(d, decoy);
     let stuck = false;
     for (let i = 0; i < 20 && !stuck; i++) {
       await sleep(3000);
@@ -304,8 +309,8 @@ async function inviteByDoor(d) {
     await screenshot(d, "vti-invite-console-qr-popped");
     if (!popped) throw new Error("a link opened over the OpenID error did not come to the top");
     console.log(`[e2e] ${d.e2ePlatform}: a keyring:// link opened over the OpenID error came to the top; the error is gone`);
-    console.log(`[e2e] console QR offer link: ${offerLink.length} chars, scanned in the app`);
-    await pasteLinkFromHome(d, offerLink);
+    console.log(`[e2e] console QR offer link: ${offerLink.length} chars, ${OPEN_BY_OS ? "opened by the system" : "scanned in the app"}`);
+    await openOffer(d, offerLink);
   } else {
     const out = execFileSync("bash", [INVITE, personaDid, "member"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
     const link = /INVITATION_LINK=(\S+)/.exec(out)?.[1];
@@ -379,7 +384,7 @@ async function inviteByDoor(d) {
     // The same QR again: its code is spent. Said in words, never the OpenID
     // error. The paste screen refuses it (its Try Again dialog); that refusal
     // is the expected answer here, so read what it says instead of failing.
-    await pasteLinkFromHome(d, offerLink).catch((e) => {
+    await openOffer(d, offerLink).catch((e) => {
       if (!/refused the pasted link/.test(String(e?.message))) throw e;
     });
     let said = false;
