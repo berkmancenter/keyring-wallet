@@ -17,6 +17,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { VtiRefusal, vtiAgent } from '../module/vtiAgent'
+import { emitCommunityChanged } from '../module/communityChanged'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { communityLinkReturn } from '../module/vtiLinks'
 import { VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
@@ -90,6 +91,9 @@ describe('I was invited', () => {
     jest.useFakeTimers()
     mockEnsurePersona.mockReset()
     mockJoin.mockReset()
+    // Nothing stored about the community until a test says otherwise.
+    mockReadJoinState.mockReset()
+    mockReadJoinState.mockResolvedValue({ kind: 'none' })
     const setString = Clipboard.setString as jest.Mock
     setString.mockClear()
     const controller = vtaAgent as unknown as Setter
@@ -216,6 +220,22 @@ describe('I was invited', () => {
     records.push(invitationRecord)
     await act(async () => {
       DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, { communityDid, kinds: ['invitation'] })
+      // Changes that land together refresh once, on the next tick.
+      jest.advanceTimersByTime(10)
+    })
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('InvitedInvitationCard'))).toBeTruthy()
+  })
+
+  // The same, when the invitation is kept from a link or a console QR: the
+  // store announces what it keeps, so there is no second event to send.
+  test('an invitation a link keeps while the screen is open appears through the store', async () => {
+    const { tree, records } = await renderInvited([personaRecord])
+    expect(tree.queryByTestId(testIdWithKey('InvitedInvitationCard'))).toBeNull()
+    records.push(invitationRecord)
+    await act(async () => {
+      emitCommunityChanged(communityDid, 'invitation')
+      jest.advanceTimersByTime(10)
     })
     await act(async () => undefined)
     expect(tree.getByTestId(testIdWithKey('InvitedInvitationCard'))).toBeTruthy()
@@ -306,6 +326,30 @@ describe('I was invited', () => {
     expect(tree.getByTestId(testIdWithKey('InvitedJoin'))).toBeTruthy()
     connect.mockRestore()
     withdraw.mockRestore()
+  })
+
+  // The journey-state audit (G): "joined" lived only in the screen, so leaving
+  // and coming back showed a member the start of the invitation again.
+  test('a member who comes back (or the screen remounts) sees that they joined', async () => {
+    mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid } })
+    const first = await renderInvited([personaRecord])
+    expect(first.tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+    first.tree.unmount()
+    const again = await renderInvited([personaRecord])
+    expect(again.tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+  })
+
+  test('a membership stored while the screen is open shows at once, with no poll', async () => {
+    const { tree } = await renderInvited([personaRecord, invitationRecord])
+    expect(tree.queryByTestId(testIdWithKey('InvitedJoined'))).toBeNull()
+    mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid } })
+    await act(async () => {
+      emitCommunityChanged(communityDid, 'membership')
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('InvitedJoined'))).toBeTruthy()
+    // Only what the phone stored was read: nothing asked the community.
+    expect(mockReadJoinState).toHaveBeenLastCalledWith(expect.anything(), communityDid, { poll: false })
   })
 
   test('referred to a person: says the community is deciding', async () => {

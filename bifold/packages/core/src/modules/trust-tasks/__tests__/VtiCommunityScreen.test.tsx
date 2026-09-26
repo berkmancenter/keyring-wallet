@@ -43,6 +43,12 @@ jest.mock('../module/VtiIdentityStore', () => ({
   },
 }))
 
+// Where the phone stands with the community (the journey), set per test.
+let mockJourney: unknown = undefined
+jest.mock('../module/communityJourney', () => ({
+  useCommunityJourney: () => ({ journey: mockJourney, refresh: jest.fn() }),
+}))
+
 const communityDid = 'did:webvh:QmUsH14W1foRZyP9v7LtfxwFy7qWgzNBLSzhWhbMQeMPJB:keyring-vti-vtc.ngrok.app'
 
 const show = () => {
@@ -111,7 +117,9 @@ describe('leaving a community (220)', () => {
     mockLeave.mockResolvedValue({ disposition: 'purge', alreadyGone: false })
     const tree = await openLeave()
     expect(tree.getByTestId(testIdWithKey('LeaveCommunityConfirmCard'))).toHaveTextContent(/Community\.LeaveExplains/)
-    expect(tree.getByTestId(testIdWithKey('LeaveCommunityPurge')).props.accessibilityState).toMatchObject({ selected: true })
+    expect(tree.getByTestId(testIdWithKey('LeaveCommunityPurge')).props.accessibilityState).toMatchObject({
+      selected: true,
+    })
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityConfirm'))))
     expect(mockLeave).toHaveBeenCalledWith(expect.anything(), communityDid, { disposition: 'purge' })
     expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ text1: 'Community.LeftPurge' }))
@@ -132,5 +140,44 @@ describe('leaving a community (220)', () => {
     await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('LeaveCommunityConfirm'))))
     expect(tree.getByTestId(testIdWithKey('CommunityError'))).toHaveTextContent('Community.LeaveLastAdmin')
     expect(mockToast).not.toHaveBeenCalled()
+  })
+})
+
+/** A member is not asked to apply (the journey-state audit, E). */
+describe('the community screen, for a member', () => {
+  const membership = { communityDid, role: 'member', grantedAt: '2026-09-23T20:04:44Z' }
+  beforeEach(() => communityTarget.clear())
+  afterEach(() => {
+    mockJourney = undefined
+  })
+
+  it('says they are a member, since when, with no criteria and no Apply', async () => {
+    mockJourney = { join: { kind: 'member', membership }, vetterGrant: { state: 'none' } }
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('CommunityMember'))).toHaveTextContent(/Join\.StandingMember/)
+    expect(tree.getByTestId(testIdWithKey('CommunityMemberSince'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('CommunityCriteria'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('ApplyToCommunityButton'))).toBeNull()
+    expect(tree.queryByTestId(testIdWithKey('CommunityOpenDesk'))).toBeNull()
+  })
+
+  it('a member who vets here is offered their desk', async () => {
+    mockJourney = {
+      join: { kind: 'member', membership },
+      vetterGrant: { state: 'active', statusChecked: true },
+    }
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.getByTestId(testIdWithKey('CommunityOpenDesk'))).toBeTruthy()
+  })
+
+  it('someone not yet a member still sees what is asked, and Apply', async () => {
+    mockJourney = { join: { kind: 'none' }, vetterGrant: { state: 'none' } }
+    const tree = show()
+    await act(async () => undefined)
+    expect(tree.queryByTestId(testIdWithKey('CommunityMember'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('CommunityCriteria'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('ApplyToCommunityButton'))).toBeTruthy()
   })
 })

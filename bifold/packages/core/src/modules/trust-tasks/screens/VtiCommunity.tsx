@@ -29,6 +29,9 @@ import { selfRemoveRefusal, vtiAgent, VtiRefusal, type VtiManifest, type VtiVerd
 import { leaveCommunity } from '../module/vtiJoin'
 import { GenericRecordsVettingStore } from '../module/vtiVetting'
 
+import { communityTarget } from '../module/vtiCommunityLink'
+import { useCommunityJourney } from '../module/communityJourney'
+
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
 import { useCommunityCalled } from './useCommunity'
 
@@ -48,6 +51,10 @@ const VtiCommunity: React.FC = () => {
   const [showDetails, setShowDetails] = useState(false)
   const { agent } = useAgent()
   const navigation = useNavigation()
+  // Where this phone stands with the community: a member is not asked to apply.
+  const { journey } = useCommunityJourney(agent, communityDid)
+  const membership = journey?.join.kind === 'member' ? journey.join.membership : undefined
+  const vetsHere = journey?.vetterGrant.state === 'active'
   // Leaving cannot be undone from the phone, so it asks once, in place, with
   // buttons that say what each does (plan §4.3).
   const [confirmingLeave, setConfirmingLeave] = useState(false)
@@ -213,9 +220,41 @@ const VtiCommunity: React.FC = () => {
           ) : null}
         </View>
 
-        <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.WhatIsAsked')}</Text>
-        {busy && !manifest ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-        {manifest ? (
+        {membership ? (
+          <View style={styles.card} testID={testIdWithKey('CommunityMember')}>
+            <View style={styles.row}>
+              <Icon name="check-circle" size={24} color={ColorPalette.semantic.success} />
+              <Text style={[styles.value, { flex: 1 }]}>
+                {t('Join.StandingMember', {
+                  community: communityLabelOf(communityDid, t),
+                  interpolation: { escapeValue: false },
+                })}
+              </Text>
+            </View>
+            <Text style={styles.label} testID={testIdWithKey('CommunityMemberSince')}>
+              {t('MyAgent.MemberSince', { date: membership.grantedAt.slice(0, 10) })}
+            </Text>
+            {vetsHere ? (
+              <Pressable
+                style={styles.button}
+                testID={testIdWithKey('CommunityOpenDesk')}
+                accessibilityRole="button"
+                onPress={() => {
+                  communityTarget.choose(communityDid)
+                  ;(navigation as unknown as { navigate: (name: string) => void }).navigate(Screens.VtiVetting)
+                }}
+              >
+                <Text style={styles.buttonText}>{t('Vetting.OpenDesk')}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {membership ? null : (
+          <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.WhatIsAsked')}</Text>
+        )}
+        {busy && !manifest && !membership ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
+        {manifest && !membership ? (
           <View style={styles.card} testID={testIdWithKey('CommunityCriteria')}>
             {manifest.criteria.map((criterion, index) => (
               <View style={styles.row} key={criterion.id ?? String(index)}>
@@ -267,7 +306,7 @@ const VtiCommunity: React.FC = () => {
           </View>
         ) : null}
 
-        {manifest && !verdict ? (
+        {manifest && !verdict && !membership ? (
           <Pressable
             style={styles.button}
             testID={testIdWithKey('ApplyToCommunityButton')}
