@@ -1,6 +1,6 @@
 # The agent keeps the rules and the cards — approval rules and the credential vault
 
-**Status:** Proposal for review. Not a commitment to implement. Target: the release after the one frozen on 2026-09-25 (226 or later); plan only, no code yet.
+**Status:** Proposal for review. Not a commitment to implement. **226 builds the vault half only (§4, phases V1–V2). Approval rules (§2–3, phases A1–A2) are held, not built**: on a hosted agent enforcement is off and its owner cannot turn it on (measured 2026-09-26; see the companion's F5), so rules set from the phone would do nothing. They resume if the host enables enforcement or upstream exposes it (VTI-Q33).
 **Parent:** [`keyring-on-the-vta-farm.md`](../keyring-on-the-vta-farm.md). This subtask carries two owner features of **F3 — The everyday interface (L1)**: the owner chooses what the agent may do without them, and the agent keeps the person's community credentials.
 **Siblings:** [`own_agent_subtask.md`](./own_agent_subtask.md) makes the phone the agent's owner; this subtask builds on that owner. [`community_vetting_subtask.md`](./community_vetting_subtask.md) is where the credentials kept here come from.
 **Reasoning:** [`2026-09-26-cd.md`](./2026-09-26-cd.md) — the protocol facts, read at the pins with citations, and the positions taken on each choice below.
@@ -155,12 +155,12 @@ The phone stores every membership, role and vetter grant it receives in the vaul
 A second owner phone, and a reinstalled phone, get the cards from the agent (§4.2).
 **Gate:** after V1 on phone A, a fresh phone B claimed onto the same agent shows the same cards; a reader entry in another context sees none of them.
 
-### A1 — Read the rules, answer requests
+### A1 — Read the rules, answer requests (held)
 
 The rules screen reads and shows the groups (§2.4) with the enforcement caveat (§3.4); pending requests come from the local inbox (§3.2).
 **Gate:** lab twin (`carol`) with `policy.enforcement = true`: a rule set by `pnm approvals require` shows on the phone; a gated `acl/grant` from phone B raises a request on phone A, approved with Face ID, and the grant completes.
 
-### A2 — Change the rules from the phone
+### A2 — Change the rules from the phone (held)
 
 Writes rules and keeps `owners` current (§2.3, §2.5).
 **Gate:** conformance vectors (Keyring's row = vta-sdk's `synthesize_rego` output, both ways) in CI; on the twin, a group switched on from the phone gates the next matching task; after a device swap-key, `owners` names the new DID. On the Farm: one read of whether enforcement is on, recorded (VTI-Q33).
