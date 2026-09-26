@@ -23,6 +23,7 @@ import { androidCaps, iosCaps, iosDeviceCaps, TEST_ID_PREFIX } from "./lib/confi
 import os from "node:os";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
+import { checkVettingStep } from "./lib/filledButtons.js";
 import * as roles from "./lib/keyringRoles.js";
 import { holdCriteriaLock } from "./lib/criteriaLock.js";
 import { execFileSync } from "node:child_process";
@@ -280,6 +281,7 @@ try {
     await roles.applicant.awaitStatement(applicant, { cardSentMs: sent.cardSentMs }, o);
     await screenshot(applicant, "vetting-07-checklist");
     const { value: outcome } = await roles.applicant.apply(applicant, {}, o);
+    await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");
     if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);
     printSuccess("vti-vetting");
@@ -353,6 +355,7 @@ try {
   if (clear) { await tapTestIdByCoordinates(vetter, "VettingDeskClearButton"); await sleep(2500); console.log(`[e2e] ${vetter.e2ePlatform}: desk cleared`); }
   await scrollToTestId(vetter, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
   await waitForTestId(vetter, "VettingNewTicketButton", 20000);
+  await checkVettingStep(vetter, "desk, before a ticket");
   // Tap-and-verify: publishing the profile adds a line above this button, so
   // the layout can shift between reading its position and tapping it, and the
   // tap then lands on nothing. Retry until a ticket actually appears.
@@ -459,10 +462,12 @@ try {
   await byTestId(applicant, "VettingSeatBanner").click().catch(() => undefined);
   await sleep(800);
   // The button stays disabled until the persona's mediator session is up.
+  await checkVettingStep(applicant, "applicant, name");
   const start = await scrollToTestId(applicant, "VettingStartButton", 4);
   for (let i = 0; i < 30 && !(await start.isEnabled().catch(() => false)); i++) await sleep(2000);
   await tapTestIdByCoordinates(applicant, "VettingStartButton");
   await waitForTestId(applicant, "VettingRequirements", 60000);
+  await checkVettingStep(applicant, "applicant, asking a vetter");
   console.log(`[e2e] ${applicant.e2ePlatform}: ${await textOf(applicant, "VettingRequirements")}`);
   /**
    * Hand the vetter's ticket to the applicant and send the request.
@@ -676,6 +681,7 @@ try {
   const open = await scrollToTestId(vetter, "VettingOpenSessionButton", 6);
   await tapElement(vetter, open);
   const codeEl = await waitForTestId(vetter, "VettingMatchCode", 60000);
+  await checkVettingStep(vetter, "desk, matching codes");
   const vetterCode = ((await codeEl.getAttribute(isIos(vetter) ? "label" : "text")) || "").trim();
   await screenshot(vetter, "vetting-03-session");
 
@@ -734,6 +740,7 @@ try {
   await sleep(1500);
   await handleBiometricConfirmIfPresent(vetter);
   await waitForTestId(vetter, "VettingStatementIssued", 60000);
+  await checkVettingStep(vetter, "desk, statement issued");
   console.log(`[e2e] ${vetter.e2ePlatform}: statement issued`);
   await screenshot(vetter, "vetting-06-attested");
 
