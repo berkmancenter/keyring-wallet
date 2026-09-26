@@ -1643,6 +1643,8 @@
     "SendAgain": "Renvoyer mes attestations",
     "Withdraw": "Retirer ma demande",
     "WithdrawNothingOpen": "Aucune demande ouverte à retirer — vous pouvez postuler.",
+    "ApplyRefused": "La communauté ne vous a pas admis.",
+    "ApplyRefusedNeeds": "La communauté ne vous a pas admis. Elle demande : {{needs}}.",
     "AlreadyApplied": "Vous aviez déjà postulé à cette communauté — voici où en est cette candidature.",
     "AddWhatTheyAsked": "Ajouter ce qu’ils ont demandé"
   },

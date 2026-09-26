@@ -129,6 +129,12 @@ export interface VettingDeskRequest {
   card?: Record<string, unknown>
   statementId?: string
   /**
+   * When this vetter compared the match codes and said they match. Kept on the
+   * record, not only on screen: a relaunch after the card had arrived sent the
+   * desk back to "Compare the codes" (225 gate).
+   */
+  matchConfirmedAt?: string
+  /**
    * The `threadId` of the request exchange — the request document's own
    * `threadId`, or its `id` when it carried none (SPEC §4.9) — which every
    * document of the session this request opens names as `parentThreadId`
@@ -165,6 +171,8 @@ export interface VettingApplicationRequest {
   sentAt?: string
   /** When this phone sent its card on the request's session. */
   cardSentAt?: string
+  /** When this person said the match codes match: kept, so a relaunch keeps the step (225 gate). */
+  matchConfirmedAt?: string
   status: 'sent' | 'accepted' | 'refused' | 'session' | 'cardSent' | 'attested' | 'declined' | 'statementRefused'
   refusalCode?: string
   /** Whether the vetter's eligibility presentation verified (vtiEligibility). */
@@ -1215,15 +1223,13 @@ export class VtiVetterDesk {
       now,
     })
     if (!verdict.ok) return refuse(verdict.code, verdict.detail)
-    await this.store.saveDesk({
-      ...desk,
+    await this.patchDesk(desk.requestId, () => ({
       card: card as Record<string, unknown>,
       status: 'cardReceived',
       cardRefusal: undefined,
       cardRefusalDetail: undefined,
       cardRefusedAt: undefined,
-    })
-    this.onChange?.()
+    }))
   }
 
   /** The human check, then the statement — never automatic, signed as the member persona. */
@@ -1293,6 +1299,36 @@ export class VtiVetterDesk {
     await this.store.saveDesk(desk)
     this.onChange?.()
     return desk
+  }
+
+  /**
+   * The vetter says the codes match. Kept on the request, so the desk keeps its
+   * place across a relaunch.
+   */
+  async confirmMatch(requestId: string): Promise<void> {
+    await this.patchDesk(requestId, (desk) => (desk.matchConfirmedAt ? undefined : { matchConfirmedAt: new Date().toISOString() }))
+  }
+
+  /**
+   * One desk write at a time, each on the record as it stands then: the card
+   * arriving and the vetter confirming the codes both write this record, and
+   * a write from a stale read would drop the other's (a confirmation saved
+   * over the card, or the card over the confirmation).
+   */
+  private writing: Promise<unknown> = Promise.resolve()
+  private patchDesk(
+    requestId: string,
+    patchOf: (desk: VettingDeskRequest) => Partial<VettingDeskRequest> | undefined
+  ): Promise<void> {
+    const write = this.writing.then(async () => {
+      const desk = (await this.store.listDesk()).find((r) => r.requestId === requestId)
+      const patch = desk ? patchOf(desk) : undefined
+      if (!desk || !patch) return
+      await this.store.saveDesk({ ...desk, ...patch })
+      this.onChange?.()
+    })
+    this.writing = write.catch(() => undefined)
+    return write
   }
 
   async decline(requestId: string, message?: string): Promise<void> {
@@ -1503,6 +1539,11 @@ export class VtiApplicant {
     await this.store.saveApplication(application)
     this.onChange?.()
     return request
+  }
+
+  /** This person says the codes match: kept, so a relaunch keeps the step. */
+  async confirmMatch(vetterDid: string): Promise<void> {
+    await this.update(vetterDid, { matchConfirmedAt: new Date().toISOString() })
   }
 
   private async update(vetterDid: string, patch: Partial<VettingApplicationRequest>): Promise<void> {

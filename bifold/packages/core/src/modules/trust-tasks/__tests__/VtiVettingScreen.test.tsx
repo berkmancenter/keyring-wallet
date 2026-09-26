@@ -17,6 +17,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import VtiVetting, { requestRef, requestTestKey, whenShown } from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
+import { vtiAgent } from '../module/vtiAgent'
 import { resolveVtaDid } from '../module/vtaLinkMachine'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -317,5 +318,37 @@ describe('Vetting — one filled button per step', () => {
     } as never)
     fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), other)
     expect(filled(tree)).toEqual(['VettingScanTicketButton'])
+  })
+})
+
+describe('Vetting — a failure is said in words, the raw text only under Details (225 gate)', () => {
+  // What the 225 gate's applicant saw on this screen, verbatim, plus a task URI.
+  const RAW =
+    'vtiAgent: sent vtc/join-requests/manifest; the community has not answered yet https://trusttasks.org/spec/vtc/join-requests/manifest/1.0'
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  test("the persona's session failing to connect shows a sentence, not the agent's message", async () => {
+    jest.spyOn(vtiAgent, 'connect').mockRejectedValue(new Error(RAW))
+    mockUseAgent.mockReturnValue(withRecords([persona, membership('member')]))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    const line = await tree.findByTestId(testIdWithKey('VettingError'))
+    expect(line).toHaveTextContent('Errors.SentNoAnswer')
+    expect(tree.queryByText(/vtiAgent:|trusttasks\.org/)).toBeNull()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingErrorDetailsToggle')))
+    expect(tree.getByTestId(testIdWithKey('VettingErrorDetail'))).toHaveTextContent(RAW)
   })
 })

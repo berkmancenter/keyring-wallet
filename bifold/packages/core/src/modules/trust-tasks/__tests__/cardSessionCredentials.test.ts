@@ -274,7 +274,10 @@ function memoryStore(init: { application?: VettingApplication; desk?: VettingDes
 }
 
 describe("the vetter's desk records why a card was refused", () => {
-  const deskWith = (expiresAt = new Date(Date.now() + VETTING_SESSION_MS).toISOString()) => {
+  const deskWith = (
+    expiresAt = new Date(Date.now() + VETTING_SESSION_MS).toISOString(),
+    wrap: (store: VtiVettingStore) => VtiVettingStore = (store) => store
+  ) => {
     const { store, state } = memoryStore({
       desk: [
         {
@@ -296,14 +299,50 @@ describe("the vetter's desk records why a card was refused", () => {
         },
       ],
     })
-    const desk = new VtiVetterDesk(vetter.agent as never, vetter.persona(community.did) as never, store, {} as never)
+    const desk = new VtiVetterDesk(vetter.agent as never, vetter.persona(community.did) as never, wrap(store), {} as never)
     const inbound = (m: unknown) => (desk as unknown as { inbound(m: unknown): Promise<void> }).inbound(m)
-    return { inbound, state }
+    return { inbound, state, desk }
   }
   const cardMessage = async (c: Record<string, unknown>) => {
     const type = `${VETTING.session}#response`
     return message(type, applicantKey.did, await document(type, applicantKey, vetter.did, { card: c }, SESSION_ID))
   }
+
+  // The vetter's "codes match" is kept on the request, so a relaunch keeps the
+  // desk's place (225 gate: after one, a desk holding the card was back at
+  // "Compare the codes"). It and the card write the same record: neither may
+  // drop the other, whichever lands first.
+  it("keeps both the card and the vetter's codes-match when they land together", async () => {
+    // The worst order: the vetter confirms while the card is being checked,
+    // after the card's handler has read the request and before it saves.
+    let armed = false
+    const hook: { confirm?: () => Promise<void> } = {}
+    const { inbound, state, desk } = deskWith(undefined, (store) => ({
+      ...store,
+      listDesk: async () => {
+        const rows = await store.listDesk()
+        if (armed) {
+          armed = false
+          await hook.confirm!()
+        }
+        return rows
+      },
+    }))
+    hook.confirm = () => desk.confirmMatch('r')
+    const cardIn = await cardMessage(await card())
+    armed = true
+    await inbound(cardIn)
+    expect(state.desk[0]).toMatchObject({ status: 'cardReceived' })
+    expect(state.desk[0].matchConfirmedAt).toEqual(expect.any(String))
+  })
+
+  it("keeps the vetter's codes-match when the card arrives after it", async () => {
+    const { inbound, state, desk } = deskWith()
+    await desk.confirmMatch('r')
+    await inbound(await cardMessage(await card()))
+    expect(state.desk[0]).toMatchObject({ status: 'cardReceived' })
+    expect(state.desk[0].matchConfirmedAt).toEqual(expect.any(String))
+  })
 
   it('takes a good card', async () => {
     const { inbound, state } = deskWith()

@@ -90,3 +90,34 @@ export function plainError(error: unknown): PlainError {
   // text and calling it an explanation; the text is still one tap away.
   return { line: 'Errors.Unknown', detail, retry: true }
 }
+
+/**
+ * A failure whose message is already the person's words (a translated
+ * sentence): shown as it is, with nothing kept behind Details. Everything
+ * else a screen catches is ours, and goes through `plainError`.
+ */
+export class InWords extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'InWords'
+  }
+}
+
+/**
+ * What a screen shows for a failure: a sentence — the key of one (`key`),
+ * or words already said (`words`) — and the original text for Details
+ * (none for words already said). `SaidFailure` renders it, translating at
+ * render, so a catch needs no `t`.
+ */
+export interface Said {
+  key?: string
+  words?: string
+  detail?: string
+}
+
+/** The one way a screen turns a caught failure into what it shows (225 gate). */
+export function sayFailure(error: unknown): Said {
+  if (error instanceof InWords) return { words: error.message }
+  const plain = plainError(error)
+  return { key: plain.line, detail: plain.detail }
+}

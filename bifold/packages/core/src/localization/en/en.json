@@ -1708,6 +1708,8 @@
     "SendAgain": "Send my statements again",
     "Withdraw": "Withdraw my application",
     "WithdrawNothingOpen": "There was no open application to withdraw — you can apply.",
+    "ApplyRefused": "The community did not admit you.",
+    "ApplyRefusedNeeds": "The community did not admit you. It asks for: {{needs}}.",
     "AlreadyApplied": "You'd already applied to this community — here is where that application stands.",
     "AddWhatTheyAsked": "Add what they asked for"
   },
