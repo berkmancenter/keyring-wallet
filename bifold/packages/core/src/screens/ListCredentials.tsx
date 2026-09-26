@@ -84,15 +84,15 @@ const ListCredentials: React.FC = () => {
     return true
   })
 
-  // Helper function to check if credential should be hidden from wallet view
-  // This includes DTGCredential (RelationshipCredential) and RCardTemplate
+  // Helper function to check if credential should be hidden from wallet view:
+  // the relationship family (VRCs, VWCs, R-Cards and the R-Card template).
+  // A community's membership and role cards are DTG credentials too, and are shown.
   const shouldHideFromWallet = (credential: GenericCredentialExchangeRecord): boolean => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cred = credential as any
 
       // Credential types that must never appear in the wallet list:
-      // - DTGCredential: Relationship credentials (shown in Contacts)
       // - RelationshipCredential: Peer VRC exchanges (shown in Contacts)
       // - WitnessCredential: VWCs (surface as the witness badge on a contact)
       // - RCardTemplate: Self-issued business card (internal use only)

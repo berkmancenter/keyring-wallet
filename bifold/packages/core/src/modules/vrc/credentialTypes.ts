@@ -74,27 +74,32 @@ export function isWitnessCredential(input: CredentialTypeInput): boolean {
 }
 
 /**
- * A peer-exchanged VRC — DTG family but NOT a witness credential.
- * (VWCs also carry DTGCredential in their type array, so bare isDTGCredential
- * over-matches when looking for the relationship credential itself.)
+ * A peer-exchanged VRC: a RelationshipCredential that is not a witness's.
+ *
+ * Not "any DTGCredential": a community's cards are DTG credentials too — a
+ * membership is ["VerifiableCredential","DTGCredential","MembershipCredential"],
+ * a role ["VerifiableCredential","DTGCredential","EndorsementCredential"] — and
+ * keyed on DTGCredential each would list its community in Contacts as an
+ * unnamed contact (measured on a simulator with the real shapes, 2026-09-26).
  */
 export function isPeerVrcCredential(input: CredentialTypeInput): boolean {
-  return isDTGCredential(input) && !isWitnessCredential(input)
+  return isRelationshipCredential(input) && !isWitnessCredential(input)
 }
 
 /**
  * Any credential belonging to the VRC module's surfaces (Contacts, R-Card
- * management) rather than the generic wallet credential list:
- * DTGCredential, RelationshipCredential, WitnessCredential, RCardTemplate,
- * RelationshipCard.
- * Used to filter these out of generic credential lists.
+ * management) rather than the generic wallet credential list: the
+ * relationship family — RelationshipCredential, WitnessCredential,
+ * RCardTemplate, RelationshipCard. Used to filter these out of generic
+ * credential lists.
+ *
+ * Keyed on the family, not on DTGCredential: a community's membership and
+ * role cards are DTG credentials that belong IN the Wallet (agent-kept cards,
+ * 226), and keyed on DTGCredential they were hidden with the VRCs.
  */
 export function isVrcModuleCredential(input: CredentialTypeInput): boolean {
   return (
-    isDTGCredential(input) ||
     isRelationshipCredential(input) ||
-    // A VWC also carries DTGCredential, so this is already covered — named
-    // explicitly so the set does not depend on that overlap holding.
     isWitnessCredential(input) ||
     isRCardTemplate(input) ||
     hasCredentialTypeName(input, RELATIONSHIP_CARD_TYPE)
