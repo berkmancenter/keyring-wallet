@@ -225,7 +225,6 @@ jobs:
         with:
           distribution: "zulu"
           java-version: 17
-          cache: "gradle"
 
       - name: Build bifold packages
         working-directory: bifold
@@ -282,7 +281,11 @@ jobs:
           set -euo pipefail
           npx react-native bundle --platform android --dev false --reset-cache \
             --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
-          cd android && ./gradlew assembleRelease --stacktrace
+          # As the staging build does: no restored Gradle caches (a restored cache
+          # left the libraries' codegen folders missing, so CMake failed), and the
+          # same Gradle tasks.
+          rm -rf ~/.gradle/caches ~/.gradle/daemon 2>/dev/null || true
+          cd android && ./gradlew bundleRelease assembleRelease --stacktrace
 
       - name: Package the APK and its manifest
         run: |
