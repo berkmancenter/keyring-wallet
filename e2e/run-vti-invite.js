@@ -24,10 +24,13 @@
  *   - console-push: "Send" (channel message). Nothing is opened on the phone;
  *     the invitation must arrive in the flow by itself.
  *   - console-qr: "QR offer" (channel offer), an openid-credential-offer:// link
- *     with the community's DID as issuer. It is opened while an ordinary OpenID
- *     offer's full-screen error is up (the state a person was stuck in on
- *     2026-09-25), and "I was invited" must come to the top. After the join
- *     the same link is opened again: the used code must be explained in words,
+ *     with the community's DID as issuer, scanned in Keyring (the app claims no
+ *     openid-credential-offer scheme from the OS, so a person scans it in the
+ *     app, as on 2026-09-25). First the state a person was stuck in that night:
+ *     an ordinary OpenID offer scanned in the app ends on the OpenID flow's
+ *     full-screen error, and a keyring:// link opened from outside must then
+ *     come to the top over it. Then the console QR is scanned → Join. After
+ *     the join it is scanned again: the used code must be explained in words,
  *     never a modal.
  *
  * EXPECT_JOIN=member|deferred|pending|rejected (default member): what the join
@@ -279,7 +282,8 @@ async function inviteByDoor(d) {
         grants: { "urn:ietf:params:oauth:grant-type:pre-authorized_code": { "pre-authorized_code": "decoy" } },
       })
     )}`
-    await openLink(decoy);
+    // Scanned in the app, as a person scans a QR.
+    await pasteLinkFromHome(d, decoy);
     let stuck = false;
     for (let i = 0; i < 20 && !stuck; i++) {
       await sleep(3000);
@@ -288,8 +292,20 @@ async function inviteByDoor(d) {
     await screenshot(d, "vti-invite-console-qr-modal");
     if (!stuck) throw new Error("the OpenID offer's error never came up; nothing to prove the pop against");
     console.log(`[e2e] ${d.e2ePlatform}: the OpenID flow's full-screen error is up`);
-    console.log(`[e2e] console QR offer link: ${offerLink.length} chars`);
-    await openLink(offerLink);
+    // A link from outside while it is up, as the invitation link a person
+    // AirDropped that night: its screen must come to the top, the error gone.
+    const community = process.env.KEYRING_COMMUNITY_DID;
+    await openLink(`keyring://vti/community?d=${encodeURIComponent(community)}`);
+    let popped = false;
+    for (const until = Date.now() + 60000; Date.now() < until && !popped; ) {
+      await sleep(2000);
+      popped = (await pageHas(d, /id\/Join[A-Z]/)) && !(await pageHas(d, OPENID_ERROR));
+    }
+    await screenshot(d, "vti-invite-console-qr-popped");
+    if (!popped) throw new Error("a link opened over the OpenID error did not come to the top");
+    console.log(`[e2e] ${d.e2ePlatform}: a keyring:// link opened over the OpenID error came to the top; the error is gone`);
+    console.log(`[e2e] console QR offer link: ${offerLink.length} chars, scanned in the app`);
+    await pasteLinkFromHome(d, offerLink);
   } else {
     const out = execFileSync("bash", [INVITE, personaDid, "member"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
     const link = /INVITATION_LINK=(\S+)/.exec(out)?.[1];
@@ -299,16 +315,15 @@ async function inviteByDoor(d) {
   }
 
   if (INVITE_VIA === "console-qr") {
-    // The link must bring its screen to the top, over the modal: the card is
-    // there without anyone touching the phone, and the error is gone.
+    // The scan opens "I was invited" with the invitation, and never the OpenID flow.
     const until = Date.now() + 60000;
     let top = false;
     while (Date.now() < until && !top) {
       top = (await existsTestId(d, "InvitedInvitationCard", 3000)) && !(await pageHas(d, OPENID_ERROR));
     }
-    await screenshot(d, "vti-invite-console-qr-top");
-    if (!top) throw new Error('"Your invitation arrived" did not come to the top over the OpenID error');
-    console.log(`[e2e] ${d.e2ePlatform}: the console QR opened "Your invitation arrived" on top; the error is gone`);
+    await screenshot(d, "vti-invite-console-qr-arrived");
+    if (!top) throw new Error('scanning the console QR did not open "Your invitation arrived"');
+    console.log(`[e2e] ${d.e2ePlatform}: the console QR, scanned, opened "Your invitation arrived"; no OpenID error`);
   }
 
   // The flow picks the invitation up wherever the person left it.
@@ -362,7 +377,7 @@ async function inviteByDoor(d) {
   console.log(`[e2e] ${d.e2ePlatform}: joined through the door — ${screen}, as the community says`);
   if (offerLink) {
     // The same QR again: its code is spent. Said in words, never a modal.
-    await openLink(offerLink);
+    await pasteLinkFromHome(d, offerLink);
     let said = false;
     for (let i = 0; i < 30 && !said; i++) {
       await sleep(1000);
