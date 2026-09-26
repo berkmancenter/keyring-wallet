@@ -53,12 +53,17 @@ export async function readCommunityJourney(
   options: { poll?: boolean; readers?: Partial<CommunityJourneyReaders> } = {}
 ): Promise<CommunityJourney> {
   const readers = { ...defaultJourneyReaders, ...options.readers }
+  // A reader that throws before it returns a promise is caught the same way.
+  const attempt = <T>(read: () => Promise<T>, fallback: T): Promise<T> =>
+    Promise.resolve()
+      .then(read)
+      .catch(() => fallback)
   const [join, application, vetterGrant] = await Promise.all([
-    readers
-      .join(agent, communityDid, { poll: options.poll ?? false })
-      .catch((): CommunityJoinState => ({ kind: 'none' })),
-    readers.application(agent, communityDid).catch(() => undefined),
-    readers.vetterGrant(agent, communityDid).catch((): VetterGrantState => ({ state: 'none' })),
+    attempt<CommunityJoinState>(() => readers.join(agent, communityDid, { poll: options.poll ?? false }), {
+      kind: 'none',
+    }),
+    attempt<VettingApplication | undefined>(() => readers.application(agent, communityDid), undefined),
+    attempt<VetterGrantState>(() => readers.vetterGrant(agent, communityDid), { state: 'none' }),
   ])
   return { join, application, vetterGrant }
 }
