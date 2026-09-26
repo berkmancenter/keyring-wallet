@@ -20,6 +20,14 @@
  *                   PENDING: not implemented in the app yet (throws)
  *                   ACL: the owner phone's key is gone, the backup's remains
  *
+ * Also checked on the way (the release gate's §1): the empty state is saved
+ * (screenshot + page source) for scripts/replay-filled.mjs; Copy puts exactly
+ * the code shown on the clipboard; Share opens the system sheet; with the
+ * keyboard up the step's button is in view (E2E_KEYBOARD_UP); and on the
+ * backup's device list "This phone" has no Remove while the other phone has
+ * one. The app moves on by itself once the agent admits a code, so the admit
+ * and connect checks accept a phone that is already past them.
+ *
  * The screens of §7 do not exist yet. Where a new screen's testID is not on the
  * phone, the step drives today's "Link without a QR code" machinery instead and
  * says so; each such place carries a `TODO(own-agent §7)` naming the future
@@ -38,6 +46,8 @@
  *   E2E_FRESH_INSTALL=1         install the app fresh (default: drive what is
  *                               installed, noReset; a phone with no wallet is
  *                               onboarded, a phone already linked is refused)
+ *   E2E_KEYBOARD_UP=1           fail when the keyboard hides a step's button
+ *                               (iOS; recorded with a screenshot either way)
  *   E2E_ACL_CLEANUP=always|never   default: reset.sh after a pass, keep the
  *                               rows as evidence after a failure
  *   TWIN_ENV=~/vti-stack/carol/twin.env
@@ -174,6 +184,23 @@ function ownerLockSetup(platform, udid) {
 }
 
 /** Answer the owner prompt if one comes up within `ms`: the PIN on Android, a face match on iOS. */
+/**
+ * With the keyboard up, is the step's button in view? Recorded always, with a
+ * screenshot; E2E_KEYBOARD_UP=1 makes it a failure (builds before
+ * keyring-bifold#151 hid it on iOS).
+ */
+async function keyboardUp(d, shot, buttonId) {
+  await screenshot(d, shot);
+  const visible = (await byTestId(d, buttonId).getAttribute("visible").catch(() => "false")) === "true";
+  console.log(`[e2e] keyboard up: ${buttonId} ${visible ? "in view" : "HIDDEN behind the keyboard"}`);
+  if (!visible && process.env.E2E_KEYBOARD_UP === "1") throw new Error(`the keyboard hides ${buttonId}`);
+}
+
+/** Put known text on the phone's clipboard, so a Copy that does nothing cannot pass. */
+async function setClipboardText(d, text) {
+  await d.setClipboard(Buffer.from(text).toString("base64"), "plaintext").catch(() => undefined);
+}
+
 async function answerOwnerPrompt(platform, udid, ms = 20000) {
   if (!udid) return;
   const until = Date.now() + ms;
@@ -241,12 +268,23 @@ async function addressThenCode(d, { owner }) {
   //   AgentCreateScanAddress) → AgentCreateAddressContinue → AgentCreateOwnerCode
   //   → AgentCreateShowCode → AgentCreateOwnerDid. Errors: AgentCreateError.
   if (owner && (await existsTestId(d, "AgentCreate", 2000))) {
+    // Release gate §1: the empty state, for replay-filled ("Claim your agent" is its one filled button).
+    await sleep(1500);
+    await screenshot(d, "own-agent-00-claim");
+    await dumpSource(d, "own-agent-00-claim");
     await tapTestId(d, "AgentCreate", 15000);
     await waitForTestId(d, "AgentCreateIntro", 15000);
     await tapTestId(d, "AgentCreateContinue", 15000);
     const addressField = (await existsTestId(d, "AgentCreateAddressInput", 5000)) ? "AgentCreateAddressInput" : "AgentCreateAddress";
     await (await waitForTestId(d, addressField, 15000)).setValue(AGENT_DID);
-    await tapTestId(d, "AgentCreateAddressContinue", 15000);
+    // The keyboard is up on iOS here: the step's button must still be in view
+    // (it was not before keyring-bifold#151). Return runs the step since then.
+    if (OWNER_PLATFORM === "ios") {
+      await keyboardUp(d, "own-agent-00b-address-keyboard", "AgentCreateAddressContinue");
+      await (await waitForTestId(d, addressField, 5000)).addValue("\n");
+      await sleep(1500);
+    }
+    if (await existsTestId(d, "AgentCreateAddressContinue", 1000)) await tapTestId(d, "AgentCreateAddressContinue", 15000);
     if (await existsTestId(d, "AgentCreateError", 3000)) throw new Error(`address refused: ${await textOf(d, "AgentCreateError")}`);
     await waitForTestId(d, "AgentCreateOwnerCode", 60000);
     await handleBiometricConfirmIfPresent(d); // making the code asks for Face ID (§3)
@@ -256,7 +294,37 @@ async function addressThenCode(d, { owner }) {
       await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID);
     }
     await waitForTestId(d, "AgentCreateOwnerDid", 15000);
-    return (await textOf(d, "AgentCreateOwnerDid")).trim();
+    const shown = (await textOf(d, "AgentCreateOwnerDid")).trim();
+    // Release gate §1: Copy puts exactly the code shown on the clipboard; Share opens the system sheet.
+    await setClipboardText(d, "gate-before-copy");
+    await tapTestId(d, "AgentCreateCopyCode", 15000);
+    await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID, 4000);
+    await sleep(1500);
+    const copied = Buffer.from(await d.getClipboard("plaintext"), "base64").toString("utf8").trim();
+    console.log(`[e2e] copy: clipboard ${copied === shown ? "EQUALS" : "DIFFERS FROM"} the code shown (${copied.slice(0, 24)}…)`);
+    if (copied !== shown) throw new Error(`Copy put "${copied.slice(0, 40)}" on the clipboard, not the code shown`);
+    await tapTestId(d, "AgentCreateShareCode", 15000);
+    await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID, 4000);
+    await sleep(2500);
+    await screenshot(d, "own-agent-01b-share-sheet");
+    const sheet = await d.getPageSource();
+    const sheetUp = OWNER_PLATFORM === "android" ? /com\.android\.intentresolver|android:id\/resolver|chooser/i.test(sheet) : /ActivityListView|XCUIElementTypeCollectionView[^>]*/.test(sheet) && /Copy|Close/.test(sheet);
+    console.log(`[e2e] share: system sheet ${sheetUp ? "open" : "NOT FOUND"}`);
+    if (!sheetUp) throw new Error("Share did not open the system share sheet");
+    if (OWNER_PLATFORM === "android") await d.back();
+    else {
+      // The iOS sheet has no Close: a person taps the dimmed page above it.
+      const { width, height } = await d.getWindowSize();
+      await d.performActions([{ type: "pointer", id: "tap", parameters: { pointerType: "touch" }, actions: [
+        { type: "pointerMove", duration: 0, x: Math.round(width / 2), y: Math.round(height * 0.12) },
+        { type: "pointerDown", button: 0 }, { type: "pause", duration: 80 }, { type: "pointerUp", button: 0 } ] }]);
+      await d.releaseActions().catch(() => undefined);
+    }
+    await sleep(1500);
+    const still = /ActivityListView|Save to Files/.test(await d.getPageSource());
+    if (still) throw new Error("the share sheet did not close");
+    await waitForTestId(d, "AgentCreateOwnerDid", 15000);
+    return shown;
   }
   console.log(`[e2e] ${owner ? "owner" : "backup"}: ${owner ? "no AgentCreate on this build — " : ""}today's "Link without a QR code"`);
   // TODO(own-agent §7): backup path = LinkYourAgentButton ("I already have one
@@ -295,7 +363,16 @@ async function connect(d, who) {
   // With auto-detect (AgentCreateWaiting) the screen moves on by itself once
   // the agent admits the code; the manual "check now" is only a nudge, and it
   // no longer asks for Face ID (the Copy/Share did, once per visit).
-  const waiting = await existsTestId(d, "AgentCreateWaiting", 2000);
+  // The app watches for the admit and moves on by itself, so by the time this
+  // looks it may be waiting, mid-swap, or already done: poll for any of them.
+  let waiting = false;
+  for (const by = Date.now() + 60000; Date.now() < by; ) {
+    if (await existsTestId(d, "AgentBackup", 700)) return "AgentBackup";
+    if (await existsTestId(d, "AgentCreateReady", 700)) return "AgentCreateReady";
+    if (await existsTestId(d, "AgentCreateError", 300)) throw new Error(`${who}: ${await textOf(d, "AgentCreateError")}`);
+    waiting = await existsTestId(d, "AgentCreateWaiting", 700);
+    if (waiting || (await existsTestId(d, "AgentCreateConnect", 300)) || (await existsTestId(d, "VtaLinkCheckGrant", 300))) break;
+  }
   if (waiting || (await existsTestId(d, "AgentCreateConnect", 1000))) {
     if (!waiting) {
       await tapTestId(d, "AgentCreateConnect", 15000);
@@ -364,7 +441,17 @@ try {
 
   // 2 — the Farm stand-in: the pasted Admin DID becomes an unrestricted admin.
   console.log(sh("admit-owner.sh", [ownerTemp]));
-  const admitted = execFileSync("bash", [path.join(TWIN_DIR_SCRIPTS, "show-acl.sh"), "--owner", ownerTemp], { encoding: "utf8", env: twinEnv });
+  // The app watches for the admit and swaps at once: on a fast phone the
+  // temporary key is already gone when this reads the ACL (225 gate, iOS
+  // owner). A long-term owner row the temporary key created proves the admit too.
+  let admitted;
+  try {
+    admitted = execFileSync("bash", [path.join(TWIN_DIR_SCRIPTS, "show-acl.sh"), "--owner", ownerTemp], { encoding: "utf8", env: twinEnv });
+  } catch (err) {
+    const swapped = acl().find((e) => e.createdBy === ownerTemp && isOwnerRow(e));
+    if (!swapped) throw err;
+    admitted = `admitted, and already swapped by the app: ${swapped.subject.slice(0, 32)}… created by the temporary key`;
+  }
   step("admit", { acl: admitted.trim() });
 
   // 3 — connect: sign in as that key, swap onto the long-term key.
@@ -421,7 +508,12 @@ try {
       if (await existsTestId(owner, "AgentBackupNext", 1000)) await tapTestId(owner, "AgentBackupNext", 15000);
       // A simulator cannot scan the other phone: paste its code (the screen offers paste, §7 step 5.3).
       await (await waitForTestId(owner, "AgentBackupCodeInput", 15000)).setValue(backupTemp);
-      await tapTestId(owner, "AgentBackupAdd", 15000);
+      if (OWNER_PLATFORM === "ios") {
+        await keyboardUp(owner, "own-agent-05b-backup-code-keyboard", "AgentBackupAdd");
+        await (await waitForTestId(owner, "AgentBackupCodeInput", 5000)).addValue("\n");
+        await sleep(1500);
+      }
+      if (await existsTestId(owner, "AgentBackupAdd", 1000)) await tapTestId(owner, "AgentBackupAdd", 15000);
       await answerOwnerPrompt(OWNER_PLATFORM, process.env.OWNER_UDID);
       // Setup's backup step ends on AgentBackupAdded; "Add another device" from
       // My devices goes back to the list, where the new row is the sign.
@@ -462,7 +554,40 @@ try {
     await waitForTestId(backup, "AgentDeviceList", 30000);
     const row = await waitForTestId(backup, `AgentDevice_${tail}`, 30000).catch(() => scrollToTestId(backup, `AgentDevice_${tail}`, 4));
     if (!row) throw new Error(`the device list shows no row for the owner phone (${tail})`);
-    await tapTestId(backup, `AgentDeviceRemove_${tail}`, 15000);
+    // Release gate §1: "This phone" has no Remove; the other phone has one. Rows are
+    // found by what they say: deviceKey (the DID's last 8) is the same for two
+    // did:peer:2 keys on one mediator, so a row's testID can name two rows.
+    await screenshot(backup, "own-agent-06-devices");
+    const android = BACKUP_PLATFORM === "android";
+    const txt = android ? "@text" : "@label";
+    const idAttr = android ? "@resource-id" : "@name";
+    // Android flattens a row: its texts and buttons are siblings of the row
+    // view, inside its bounds. So rows are matched to what they hold by geometry.
+    const rectOf = async (el) => ({ ...(await el.getLocation()), ...(await el.getSize()) });
+    const inside = (r, p) => { const cx = p.x + p.width / 2, cy = p.y + p.height / 2; return cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height; };
+    const rows = [];
+    for (const el of await backup.$$(`//*[starts-with(${idAttr},"com.ariesbifold:id/AgentDevice_")]`)) rows.push(await rectOf(el));
+    const removes = [];
+    for (const el of await backup.$$(`//*[starts-with(${idAttr},"com.ariesbifold:id/AgentDeviceRemove_")]`)) removes.push({ el, r: await rectOf(el) });
+    const rowWith = async (words) => {
+      const t = await backup.$(`//*[${txt}="${words}"]`);
+      if (!(await t.isExisting())) return undefined;
+      const tr = await rectOf(t);
+      return rows.find((r) => inside(r, tr));
+    };
+    const thisRow = await rowWith("This phone");
+    if (!thisRow) throw new Error('the device list has no "This phone" row');
+    const otherName = `Keyring — ${OWNER_PLATFORM === "ios" ? "iPhone 17 Pro" : "sdk_gphone64_arm64"}`;
+    const otherRow = await rowWith(otherName);
+    if (!otherRow) throw new Error(`the device list has no "${otherName}" row`);
+    const thisRemoves = removes.filter((b) => inside(thisRow, b.r)).length;
+    const otherRemove = removes.filter((b) => inside(otherRow, b.r));
+    console.log(`[e2e] devices: "This phone" Remove buttons=${thisRemoves}; "${otherName}" Remove buttons=${otherRemove.length}`);
+    if (thisRemoves !== 0) throw new Error("the device list offers Remove on this phone");
+    if (otherRemove.length !== 1) throw new Error(`the other phone's row ("${otherName}") has ${otherRemove.length} Remove buttons, not one`);
+    const mine = backupKey.slice(-8);
+    if (mine === tail) console.log(`[e2e] note: this phone and the other phone share deviceKey "${tail}": two rows carry the same testIDs`);
+    await otherRemove[0].el.click();
     await answerOwnerPrompt(BACKUP_PLATFORM, process.env.BACKUP_UDID);
     for (const until = Date.now() + 60000; ; ) {
       if (await existsTestId(backup, "AgentDeviceRemoved", 1500)) break;
