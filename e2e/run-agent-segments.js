@@ -102,7 +102,7 @@ async function cards(driver) {
     await screenshot(driver, `segments-${person}-card-${key}`);
     const mine = judged.find((b) => b.id === primary);
     if (!mine) throw new Error(`card ${key}: its next step never came whole above the tab bar`);
-    const others = judged.filter((b) => b.filled && !b.id.startsWith("AgentCommunityPrimary_")).map((b) => b.id);
+    const others = judged.filter((b) => b.filled && !b.id.startsWith("AgentCommunityPrimary_") && !b.id.startsWith("AgentSegment_")).map((b) => b.id);
     console.log(`[e2e] segments ${person}/card ${key}: next step ${mine.filled ? "filled" : "OUTLINED"} (${mine.share}); other filled ${JSON.stringify(others)}`);
     if (!mine.filled) throw new Error(`card ${key}: its next step is not drawn filled (share ${mine.share})`);
     if (others.length) throw new Error(`card ${key}: filled beside its next step: ${JSON.stringify(others)}`);
@@ -114,7 +114,9 @@ async function cards(driver) {
 async function segment(driver, key) {
   await tapTestId(driver, `AgentSegment_${key}`, 10000);
   await must(driver, "AgentDevices", key);
-  const buttons = await buttonsOnScreen(driver);
+  // The selected segment is drawn filled: it says which segment is open, it
+  // is not a step's action (the first Android walk counted it).
+  const buttons = (await buttonsOnScreen(driver)).filter((b) => !b.id.startsWith("AgentSegment_"));
   const filled = buttons.filter((b) => b.filled).map((b) => b.id);
   console.log(`[e2e] segments ${person}/${key}: filled ${JSON.stringify(filled)}`);
   await screenshot(driver, `segments-${person}-${key}`);

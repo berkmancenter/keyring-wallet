@@ -155,6 +155,62 @@ async function unlockToHome(d) {
   }
   await sleep(4000);
 }
+/**
+ * The release gate's §2 after member: the done card, My Agent's "Joined"
+ * without a background/foreground or a wait past 10 s, the community screen,
+ * and Join and "I was invited" after a relaunch. Every miss is collected and
+ * reported together.
+ */
+async function memberEverywhere(d) {
+  const misses = [];
+  const src = async () => d.getPageSource();
+  const seatText = await byTestId(d, "VettingSeatBanner").getText().catch(() => "");
+  if (!(await existsTestId(d, "VettingMemberDone", 5000))) misses.push("no done card (VettingMemberDone)");
+  if (/being vetted/i.test(seatText)) misses.push(`the banner still says "${seatText}"`);
+  if (/Connecting/i.test(await src())) misses.push("a connecting line on the done card");
+  await tapTestIdByCoordinates(d, "VettingGoToMyAgent");
+  const t0 = Date.now();
+  const joined = await existsTestId(d, "AgentJourneyJoined", 10000);
+  const took = Date.now() - t0;
+  await screenshot(d, "vetting-09-my-agent-joined");
+  console.log(`[e2e] ${deviceTag(d)}: My Agent shows Joined: ${joined} after ${took} ms (no background/foreground)`);
+  if (!joined) misses.push("My Agent did not show Joined within 10 s");
+  const row = await scrollToTestId(d, "AgentMembershipRow", 6).catch(() => undefined);
+  if (!row) misses.push("no membership row on My Agent");
+  else {
+    await row.click();
+    if (!(await existsTestId(d, "CommunityMemberSince", 15000))) misses.push("the community screen shows no member-since line");
+    if (await existsTestId(d, "CommunityCriteria", 1500)) misses.push("the community screen still shows its criteria");
+    await screenshot(d, "vetting-10-community-member");
+  }
+  // After a relaunch: My Agent, Join and "I was invited" still say member.
+  const appId = "asml.bkc.harvard.wallet";
+  await d.terminateApp(appId).catch(() => undefined);
+  await sleep(2000);
+  await d.activateApp(appId);
+  await existsTestId(d, "EnterPIN", 120000);
+  await unlockIfLocked(d);
+  await (await waitForTestId(d, "MyAgent", 30000)).click();
+  if (!(await existsTestId(d, "AgentJourneyJoined", 15000))) misses.push("after a relaunch My Agent does not show Joined");
+  for (const [door, id, test, what] of [
+    ["AgentJoinCommunity", "JoinStandingText", (t) => /member/i.test(t), "Join"],
+    ["AgentInvited", "InvitedJoined", () => true, '"I was invited"'],
+  ]) {
+    const el = await scrollToTestId(d, door, 6).catch(() => undefined);
+    if (!el) { misses.push(`no ${what} door after a relaunch`); continue; }
+    await el.click();
+    const shown = await existsTestId(d, id, 20000);
+    const text = shown ? await byTestId(d, id).getText().catch(() => "") : "";
+    await screenshot(d, `vetting-11-${what.replace(/\W/g, "")}-after-relaunch`);
+    console.log(`[e2e] ${deviceTag(d)}: ${what} after a relaunch: ${shown ? `"${text.slice(0, 80)}"` : `no ${id}`}`);
+    if (!shown || !test(text)) misses.push(`${what} does not show the member state after a relaunch`);
+    await (await waitForTestId(d, "MyAgent", 15000)).click();
+    await sleep(1500);
+  }
+  if (misses.length) throw new Error(`${deviceTag(d)}: member state: ${misses.join("; ")}`);
+  console.log(`[e2e] ${deviceTag(d)}: member state everywhere: done card, My Agent Joined, community, and after a relaunch`);
+}
+
 /** Relaunch the vetter's app and come back to the desk: its step must be the same. */
 async function relaunchKeepsDesk(d) {
   const before = await roles.stepIdOf(d, "vetter");
@@ -348,6 +404,7 @@ try {
     await checkVettingStep(applicant, "applicant, member");
     await screenshot(applicant, "vetting-08-member");
     if (outcome !== "member") throw new Error(`${applicant.e2ePlatform}: after Apply the screen says "${outcome}", not member`);
+    if (process.env.E2E_MEMBER_CHECKS === "1") await memberEverywhere(applicant);
     printSuccess("vti-vetting");
     process.exitCode = 0;
     throw Object.assign(new Error("done"), { done: true });
