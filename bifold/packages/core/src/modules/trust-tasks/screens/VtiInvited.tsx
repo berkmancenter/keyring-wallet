@@ -16,7 +16,7 @@
 
 import { useAgent } from '@bifold/react-hooks'
 import Clipboard from '@react-native-clipboard/clipboard'
-import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
@@ -32,13 +32,14 @@ import { testIdWithKey } from '../../../utils/testable'
 import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 import { GenericRecordsCommunityStore, type VtiInvitation } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { useCommunityChanged } from '../module/communityChanged'
+import { useCommunityJourney } from '../module/communityJourney'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { openJoinRequestOf, vtiAgent } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
 import { ensurePersonaFor, joinCommunity, readJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 import { communityLinkReturn } from '../module/vtiLinks'
-import { useVtiPersonaDeliveries } from '../module/vtiPersonaInbox'
 
 import { identityShareText, shareIdentity } from './identityShare'
 import { communityLabelOf, communityLabelStartOf } from './communityName'
@@ -65,6 +66,10 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const { ColorPalette, TextTheme } = useTheme()
   const { width } = useWindowDimensions()
   const communityDid = useCommunityDid(config?.communityDid)
+  // What this phone has stored about the community: a member who comes back
+  // (or remounts) sees that they joined, not the start of the invitation.
+  const { journey } = useCommunityJourney(agent, communityDid)
+  const held = journey?.join
   const mediatorDid = config?.mediatorDid
   const vtaDid = useVtaDid(config?.vtaDid)
 
@@ -155,8 +160,14 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
   const reload = useCallback(() => {
     void load().catch(() => undefined)
   }, [load])
-  useFocusEffect(reload)
-  useVtiPersonaDeliveries(reload, communityDid)
+  // One mechanism with the rest of the journey: once each time the screen is
+  // shown, and whenever the phone stores something for this community (the
+  // store announces a kept invitation, as the persona inbox does a delivery).
+  const focused = useIsFocused()
+  useEffect(() => {
+    if (focused) reload()
+  }, [focused, reload])
+  useCommunityChanged(reload, communityDid)
 
   const onContinue = useCallback(async () => {
     if (!agent || !vtaDid || !communityDid) return
@@ -379,8 +390,21 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
 
   // An invitation for this identity is the next thing to act on, whatever step
   // the person left the screen at.
+  // What the phone has stored wins over the screen's own start: joined,
+  // deferred or sent is where the person is, however they came back here.
+  const heldStep: Step | undefined =
+    held?.kind === 'member'
+      ? 'joined'
+      : held?.kind === 'deferred'
+        ? 'deferred'
+        : held?.kind === 'pending' || held?.kind === 'sent'
+          ? 'pending'
+          : undefined
   const current: Step =
-    step === 'joined' || step === 'deferred' || step === 'pending' ? step : invitation ? 'waiting' : step
+    step === 'joined' || step === 'deferred' || step === 'pending'
+      ? step
+      : (heldStep ?? (invitation ? 'waiting' : step))
+  const shownNeeds = step !== 'deferred' && held?.kind === 'deferred' ? (held.submission.needs ?? []) : needs
 
   switch (current) {
     case 'intro':
@@ -563,7 +587,7 @@ const VtiInvited: React.FC<VtiInvitedProps> = ({ config }) => {
             {t('Invited.DeferredTitle', { community, interpolation: { escapeValue: false } })}
           </ThemedText>
           <ThemedText>{t('Invited.DeferredBody', { community, interpolation: { escapeValue: false } })}</ThemedText>
-          {needs.map((need, i) => (
+          {shownNeeds.map((need, i) => (
             <ThemedText key={i} testID={testIdWithKey('InvitedDeferredNeed')}>
               {'• '}
               {needWords(need, t)}

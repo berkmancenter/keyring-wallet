@@ -14,6 +14,7 @@ import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
+import { emitCommunityChanged } from '../module/communityChanged'
 import { communityTarget } from '../module/vtiCommunityLink'
 import VtiJoin, { asksFrom } from '../screens/VtiJoin'
 
@@ -272,6 +273,19 @@ describe('I want to join a community', () => {
       return tree
     }
     afterEach(() => mockReadJoinState.mockResolvedValue({ kind: 'none' }))
+
+    // The journey-state audit (F): the standing was read once, on mount.
+    it('a membership stored while the screen is open shows at once, with no poll', async () => {
+      const tree = await standAt({ kind: 'none' })
+      expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+      mockReadJoinState.mockResolvedValue({ kind: 'member', membership: {} })
+      await act(async () => {
+        emitCommunityChanged(linked, 'membership')
+        jest.advanceTimersByTime(10)
+      })
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
+      expect(mockReadJoinState).toHaveBeenLastCalledWith(expect.anything(), linked, { poll: false })
+    })
 
     it('a member: Open, not Join', async () => {
       const navigation = useNavigation() as unknown as { navigate: jest.Mock }

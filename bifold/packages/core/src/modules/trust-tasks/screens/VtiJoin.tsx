@@ -15,7 +15,7 @@
  */
 
 import { useAgent } from '@bifold/react-hooks'
-import { useNavigation } from '@react-navigation/native'
+import { useIsFocused, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native'
@@ -31,6 +31,7 @@ import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
 import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
 import { vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
+import { useCommunityChanged } from '../module/communityChanged'
 import { ensurePersonaFor, readJoinState, type CommunityJoinState } from '../module/vtiJoin'
 import { joinSeed } from '../module/vtiJoinSeed'
 
@@ -178,10 +179,17 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     }
   }, [communityDid, agent])
 
+  // A different community starts from nothing; the same one keeps what it showed.
   useEffect(() => {
     setStanding(undefined)
     setAgain(false)
-    if (!agent || !communityDid) return
+  }, [communityDid])
+
+  // Read each time the screen comes into view, not only when it first mounts:
+  // a join finished elsewhere (the invited screen, the vetting) shows here.
+  const focused = useIsFocused()
+  useEffect(() => {
+    if (!agent || !communityDid || !focused) return
     let live = true
     void (async () => {
       const held = await readJoinState(agent, communityDid, { poll: false })
@@ -194,7 +202,16 @@ const VtiJoin: React.FC<VtiJoinProps> = ({ config }) => {
     return () => {
       live = false
     }
-  }, [agent, communityDid, config?.mediatorDid])
+  }, [agent, communityDid, config?.mediatorDid, focused])
+
+  // And whenever this phone stores something about the community, at once.
+  const rereadHeld = useCallback(() => {
+    if (!agent || !communityDid) return
+    void readJoinState(agent, communityDid, { poll: false })
+      .then(setStanding)
+      .catch(() => undefined)
+  }, [agent, communityDid])
+  useCommunityChanged(rereadHeld, communityDid)
 
   const onCheckAgain = useCallback(async () => {
     if (!agent || !communityDid) return
