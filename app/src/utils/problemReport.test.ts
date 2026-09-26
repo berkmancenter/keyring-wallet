@@ -1,3 +1,7 @@
+import * as Sharing from 'expo-sharing'
+import { Platform, Share } from 'react-native'
+import { writeFile } from 'react-native-fs'
+
 import {
   clearLogBuffer,
   getRecentLogLines,
@@ -8,7 +12,13 @@ import {
   recordLogLine,
   shortenOpaqueTokens,
 } from './logBuffer'
-import { buildProblemReport, errorChain, ReportEnvironment } from './problemReport'
+import { buildProblemReport, errorChain, ReportEnvironment, shareReport } from './problemReport'
+
+jest.mock('react-native-fs', () => ({ CachesDirectoryPath: '/cache', writeFile: jest.fn(async () => undefined) }))
+jest.mock('expo-sharing', () => ({
+  isAvailableAsync: jest.fn(async () => true),
+  shareAsync: jest.fn(async () => undefined),
+}))
 
 const env: ReportEnvironment = {
   app: 'KeyRing',
@@ -154,5 +164,59 @@ describe('opaque token shortening', () => {
 
     expect(line).toContain('more chars')
     expect(line.length).toBeLessThan(LOG_LINE_MAX_LENGTH + 100)
+  })
+})
+
+describe('sharing the report (IN-15)', () => {
+  // A full log: Android's text share could not carry it, so it goes as a file.
+  const fullLog = () => {
+    for (let i = 1; i <= LOG_BUFFER_CAPACITY; i++) recordLogLine('debug', [`line ${i}`])
+  }
+  const input = { referenceCode: 'KR-TEST-1', title: 'Feedback from Settings' }
+  const originalOS = Platform.OS
+
+  beforeEach(() => {
+    clearLogBuffer()
+    jest.clearAllMocks()
+    jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' })
+  })
+  afterEach(() => {
+    Platform.OS = originalOS
+  })
+
+  it('Android: the whole log goes as a .txt file, not as text', async () => {
+    Platform.OS = 'android'
+    fullLog()
+    await shareReport(input, env)
+    const [path, written] = (writeFile as jest.Mock).mock.calls[0]
+    expect(path).toBe('/cache/keyring-report-KR-TEST-1.txt')
+    expect(written).toContain('line 1\n')
+    expect(written).toContain(`line ${LOG_BUFFER_CAPACITY}`)
+    expect(Sharing.shareAsync).toHaveBeenCalledWith('file:///cache/keyring-report-KR-TEST-1.txt', {
+      mimeType: 'text/plain',
+      dialogTitle: expect.stringContaining('KR-TEST-1'),
+    })
+    expect(Share.share).not.toHaveBeenCalled()
+  })
+
+  it('Android with no way to hand over a file: the newest lines as text, as email does', async () => {
+    Platform.OS = 'android'
+    ;(Sharing.isAvailableAsync as jest.Mock).mockResolvedValueOnce(false)
+    fullLog()
+    await shareReport(input, env)
+    expect(Sharing.shareAsync).not.toHaveBeenCalled()
+    const { message } = (Share.share as jest.Mock).mock.calls[0][0]
+    expect(message).toContain(`line ${LOG_BUFFER_CAPACITY}`)
+    expect(message).not.toContain('line 1\n')
+  })
+
+  it('iOS: the file, through the system share sheet, as before', async () => {
+    Platform.OS = 'ios'
+    await shareReport(input, env)
+    expect(Share.share).toHaveBeenCalledWith({
+      url: 'file:///cache/keyring-report-KR-TEST-1.txt',
+      title: expect.stringContaining('KR-TEST-1'),
+    })
+    expect(Sharing.shareAsync).not.toHaveBeenCalled()
   })
 })

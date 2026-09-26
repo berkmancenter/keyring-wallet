@@ -4,6 +4,7 @@
  * the tester send it by email or through the share sheet. Nothing is sent
  * anywhere unless the tester chooses to.
  */
+import * as Sharing from 'expo-sharing'
 import { Alert, Linking, Platform, Share } from 'react-native'
 import Config from 'react-native-config'
 import {
@@ -97,14 +98,26 @@ const emailReport = async (to: string, input: ProblemReportInput, env: ReportEnv
   await Linking.openURL(url)
 }
 
-const shareReport = async (input: ProblemReportInput, env: ReportEnvironment) => {
+/**
+ * The report goes as a .txt file on both platforms. Android's share sheet used
+ * to get it as text: the whole log in one Intent extra, which is more than the
+ * system passes between apps, so the sheet never opened, and email cut it to
+ * 150 lines (IN-15). A file carries all of it, to any app that takes one.
+ */
+export const shareReport = async (input: ProblemReportInput, env: ReportEnvironment): Promise<void> => {
   const text = buildProblemReport(input, env, getRecentLogLines())
+  const path = `${CachesDirectoryPath}/keyring-report-${input.referenceCode}.txt`
+  await writeFile(path, text, 'utf8')
   if (Platform.OS === 'ios') {
-    const path = `${CachesDirectoryPath}/keyring-report-${input.referenceCode}.txt`
-    await writeFile(path, text, 'utf8')
     await Share.share({ url: `file://${path}`, title: reportSubject(input, env) })
+  } else if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(`file://${path}`, { mimeType: 'text/plain', dialogTitle: reportSubject(input, env) })
   } else {
-    await Share.share({ title: reportSubject(input, env), message: text })
+    // No way to hand over a file: the newest lines as text, as email does.
+    await Share.share({
+      title: reportSubject(input, env),
+      message: buildProblemReport(input, env, getRecentLogLines(), EMAIL_LOG_LINES),
+    })
   }
 }
 
