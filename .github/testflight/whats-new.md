@@ -6,13 +6,14 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Vetting with a vetter who uses the openvtc app now works: Keyring accepts their statement instead of silently ignoring it. If a vetter already sent you a statement that never arrived, ask them to send it again.
-• Your Keyring can now vet someone who uses the openvtc app, all the way to their membership.
-• Fixes an occasional failure (about 1 or 2 in 1,000 requests) that could show as a failed link, a "doesn't know why" error, or a vetting step that never moved on.
-• Joining no longer gets stuck on "idempotency key reused for a different request" after a first attempt that didn't finish; tapping again now works, including on phones already stuck.
-• After you ask to join, Keyring shows where your request stands (joined, waiting for vetting, or pending) instead of saying the community didn't answer, and you can withdraw a waiting request.
-• Linking your agent recovers on its own if an answer is lost or the connection stalls, and a failed link now says why under Details.
-• When Keyring refuses something a vetter or community sent, it says why in plain words.
-• Tapping a vetter's ticket link (for example in Signal) opens it in Keyring.
-• Problem reports now keep about an hour of history instead of a few minutes.
-• Known issue: once you've asked a vetter, you can't cancel that request from your phone yet; the vetter can decline it.
+• Claim your agent: take ownership of your existing agent from your phone, no computer needed. It connects by itself. Add a backup phone or remove a lost one under My devices.
+• "Your agent" is reorganised into Communities, Manage and Status. Each community gets a card showing where you stand and one clear next step, and a banner shows when an approval is waiting for you.
+• Invitations from a community's admin console now work: sent to your phone, scanned in the app, or opened with the phone's Camera.
+• Joining and vetting screens update by themselves and show one clear next step. After vetting you see "You're a member", and the vetter's desk keeps its place if the app is closed.
+• Leaving a community that's slow to answer checks back and finishes, or offers Try again.
+• Each community appears once and keeps its name after a restart. Duplicate memberships from an interrupted join are cleaned up.
+• Errors are in plain words, with the technical detail behind "Details". Paste now says what it read.
+• Screens stay above the keyboard when you type or paste a code.
+• The demo collector card and approval demo are gone; contacts show the regular list.
+• Known issues: the add-a-device screens are still titled "Claim your agent", and the vetting desk opens on your last finished request (tap "Clear finished requests" to start a new one).
+• Update over your current version; there's no need to reinstall.
