@@ -16,10 +16,7 @@ import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { cardVaultStateOf, subscribeCardVault } from '../module/vtiCardVault'
 
-/**
- * A card's vault state as a plain string, so the snapshot is stable between
- * renders (`cardVaultStateOf` answers a fresh object for a card never sent).
- */
+/** A card's vault state as one string: what the row's words and icon key on. */
 export type CardKeptKey = 'kept' | 'pending' | 'notYetKept' | 'cannotKeep:proofSet' | 'cannotKeep:refusedByAgent'
 
 export function cardKeptKeyOf(credentialId: string): CardKeptKey {
