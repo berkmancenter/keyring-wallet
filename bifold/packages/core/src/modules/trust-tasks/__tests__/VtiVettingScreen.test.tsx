@@ -6,9 +6,11 @@
 import { useNavigation } from '@react-navigation/native'
 import { render, act, fireEvent, within } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 
 import { useAgent } from '@bifold/react-hooks'
+import { encodeTicketUri } from '@bifold/trust-tasks'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { Screens } from '../../../types/navigators'
@@ -144,41 +146,39 @@ describe('Vetting — the agent it works with', () => {
  * Admitted: the line says so, never "already" — which read as an error to an
  * applicant admitted seconds before (Farm vetting run, 2026-09-23).
  */
-describe('Vetting — a member', () => {
-  const communityDid = storeConfig.communityDid
-  const personaDid = 'did:webvh:example:persona'
-  type Rec = { tags: Record<string, string>; content: Record<string, unknown> }
-  const persona: Rec = {
-    tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: communityDid },
-    content: {
-      communityDid,
-      vtaDid: linkedVtaDid,
-      did: personaDid,
-      contextId: 'vta',
-      vtaKeyIds: { signing: 's', keyAgreement: 'k' },
-      kmsKeyIds: { signing: 'ks', keyAgreement: 'kk' },
-      createdAt: '2026-09-23T00:00:00Z',
+const communityDid = storeConfig.communityDid
+const personaDid = 'did:webvh:example:persona'
+type Rec = { tags: Record<string, string>; content: Record<string, unknown> }
+const persona: Rec = {
+  tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: communityDid },
+  content: {
+    communityDid,
+    vtaDid: linkedVtaDid,
+    did: personaDid,
+    contextId: 'vta',
+    vtaKeyIds: { signing: 's', keyAgreement: 'k' },
+    kmsKeyIds: { signing: 'ks', keyAgreement: 'kk' },
+    createdAt: '2026-09-23T00:00:00Z',
+  },
+}
+const membership = (role: string): Rec => ({
+  tags: { recordType: 'keyring/vti-community', kind: 'membership', key: communityDid },
+  content: { communityDid, personaDid, role, vmc: {}, grantedAt: '2026-09-23T20:04:44Z', via: 'vetting' },
+})
+const withRecords = (records: Rec[]) => ({
+  agent: {
+    ...fakeAgent().agent,
+    genericRecords: {
+      findAllByQuery: async (query: Record<string, string>) =>
+        records.filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v)).map((r) => ({ ...r, id: 'r' })),
+      save: async () => undefined,
+      update: async () => undefined,
+      delete: async () => undefined,
     },
-  }
-  const membership = (role: string): Rec => ({
-    tags: { recordType: 'keyring/vti-community', kind: 'membership', key: communityDid },
-    content: { communityDid, personaDid, role, vmc: {}, grantedAt: '2026-09-23T20:04:44Z', via: 'vetting' },
-  })
-  const withRecords = (records: Rec[]) => ({
-    agent: {
-      ...fakeAgent().agent,
-      genericRecords: {
-        findAllByQuery: async (query: Record<string, string>) =>
-          records
-            .filter((r) => Object.entries(query).every(([k, v]) => r.tags[k] === v))
-            .map((r) => ({ ...r, id: 'r' })),
-        save: async () => undefined,
-        update: async () => undefined,
-        delete: async () => undefined,
-      },
-    },
-  })
+  },
+})
 
+describe('Vetting — a member', () => {
   beforeEach(() => {
     jest.useFakeTimers()
     setVta({ link: linked })
@@ -227,5 +227,95 @@ describe('Vetting — a member', () => {
   test('a role that says more than member is named', async () => {
     const tree = await renderAs('vetter')
     expect(await tree.findByTestId(testIdWithKey('VettingAlreadyMember'))).toHaveTextContent('Vetting.MemberAs')
+  })
+})
+
+/**
+ * One filled button per step: the next thing to do. Everything else on the
+ * step is outlined (IN-16, IN-18 and the desk with three filled buttons).
+ */
+describe('Vetting — one filled button per step', () => {
+  const application: Rec = {
+    tags: { recordType: 'keyring/vti-vetting', kind: 'application', key: communityDid },
+    content: {
+      communityDid,
+      joinDid: personaDid,
+      minStatements: 1,
+      requiredClaims: ['name.legal'],
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: 'salt',
+      claims: { 'name.legal': 'Ada Lovelace' },
+      requests: [],
+      startedAt: '2026-09-25T00:00:00Z',
+    },
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    setVta({ link: linked })
+  })
+  afterEach(() => jest.useRealTimers())
+
+  const renderWith = async (records: Rec[]) => {
+    mockUseAgent.mockReturnValue(withRecords(records))
+    const tree = render(
+      <BasicAppContext>
+        <VtiVetting config={storeConfig} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(50)
+    })
+    return tree
+  }
+
+  /** The testIDs of the buttons drawn filled. */
+  const filled = (tree: Awaited<ReturnType<typeof renderWith>>) =>
+    Array.from(
+      new Set(
+        tree
+          .UNSAFE_queryAllByProps({ accessibilityRole: 'button' })
+          .filter((b) => typeof b.type === 'string' && b.props.testID)
+          .filter((b) => StyleSheet.flatten(b.props.style)?.backgroundColor !== undefined)
+          .map((b) => String(b.props.testID).replace(/^com\.ariesbifold:id\//, ''))
+      )
+    )
+
+  test('a member: a done card with one way on, and no "being vetted" banner', async () => {
+    const tree = await renderWith([persona, membership('member')])
+    await tree.findByTestId(testIdWithKey('VettingMemberDone'))
+    expect(tree.queryByTestId(testIdWithKey('VettingSeatBanner'))).toBeNull()
+    expect(filled(tree)).toEqual(['VettingGoToMyAgent'])
+
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    fireEvent.press(tree.getByTestId(testIdWithKey('VettingGoToMyAgent')))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.MyAgent)
+  })
+
+  test('asking a vetter: Scan is the step until a link is pasted, then "Use this link" is', async () => {
+    const tree = await renderWith([persona, application])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    expect(filled(tree)).toEqual(['VettingScanTicketButton'])
+
+    const ticket = encodeTicketUri({
+      community: communityDid,
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), ticket)
+    expect(filled(tree)).toEqual(['VettingRequestButton'])
+  })
+
+  test('a link for another community does not become the step', async () => {
+    const tree = await renderWith([persona, application])
+    await tree.findByTestId(testIdWithKey('VettingApplicantStep_ticket'))
+    const other = encodeTicketUri({
+      community: 'did:webvh:example:another-community',
+      vetter: 'did:webvh:example:vetter',
+      presentation: { code: { code: 'ABCD-EFGH' } },
+    } as never)
+    fireEvent.changeText(tree.getByTestId(testIdWithKey('VettingTicketInput')), other)
+    expect(filled(tree)).toEqual(['VettingScanTicketButton'])
   })
 })

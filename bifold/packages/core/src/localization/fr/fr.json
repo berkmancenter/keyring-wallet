@@ -1592,6 +1592,7 @@
     "ChecklistLine": "{{held}} déclaration(s) sur {{needed}}",
     "Meets": "répond aux exigences publiées",
     "Member": "Vous êtes membre de {{community}}.",
+    "GoToMyAgent": "Aller à Mon agent",
     "MemberAs": "Vous êtes membre de {{community}}, en tant que {{role}}.",
     "Status": {
       "sent": "Demande envoyée",
