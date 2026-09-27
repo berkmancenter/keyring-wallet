@@ -3,6 +3,8 @@
  * W3C copy of each card the store holds and that still stands, made and
  * removed by one reconcile, so the two cannot drift.
  */
+import { W3cCredentialRecord } from '@credo-ts/core'
+
 import { cardStandingOf, recordCardRevocation, resetCardStanding } from '../module/vtiCardStanding'
 import { syncCardsToWallet } from '../module/vtiWalletCards'
 
@@ -14,34 +16,41 @@ import {
   membershipCard,
   PERSONA_DID,
   roleCard,
+  vetterGrantProofSet,
 } from '../../../../__tests__/helpers/cardVault'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
 const NOW = Date.parse('2026-09-27T09:00:00Z')
+const grantHeld = {
+  kind: 'vetter-grant' as const,
+  communityDid: COMMUNITY,
+  subjectDid: PERSONA_DID,
+  credential: vetterGrantProofSet,
+  receivedAt: '2026-09-26T09:05:00Z',
+}
 
-/** An agent whose W3C records live in memory beside its generic records. */
+/** An agent whose W3C records (real W3cCredentialRecords) live in memory beside its generic records. */
 function walletAgent(seed: Record<string, unknown>[] = []) {
   const { agent } = fakeAgent()
-  let next = 0
-  const records: { id: string; firstCredential: Record<string, unknown> }[] = seed.map((vc) => ({
-    id: `w${next++}`,
-    firstCredential: vc,
-  }))
+  const records: W3cCredentialRecord[] = seed.map(
+    (vc) => new W3cCredentialRecord({ credentialInstances: [{ credential: vc as never }] })
+  )
   ;(agent as unknown as Record<string, unknown>).w3cCredentials = {
     getAll: async () => [...records],
-    store: async ({ record }: { record: { credentialInstances: { credential: Record<string, unknown> }[] } }) => {
+    store: async ({ record }: { record: W3cCredentialRecord }) => {
       // Yield first, as a real store does, so two reconciles can interleave if unlocked.
       await new Promise((resolve) => setTimeout(resolve, 0))
-      records.push({ id: `w${next++}`, firstCredential: record.credentialInstances[0].credential })
+      records.push(record)
     },
     deleteById: async (id: string) => {
       const at = records.findIndex((r) => r.id === id)
       if (at >= 0) records.splice(at, 1)
     },
   }
-  const ids = () => records.map((r) => r.firstCredential.id).sort()
-  return { agent, records, ids }
+  const raw = (r: W3cCredentialRecord) => r.credentialInstances[0].credential as unknown as Record<string, unknown>
+  const ids = () => records.map((r) => raw(r).id as string).sort()
+  return { agent, records, ids, raw }
 }
 
 const peerVrc = {
@@ -98,7 +107,29 @@ describe('the Wallet shows the community cards the store holds', () => {
     const { store } = fakeCommunityStore({ memberships: [{ ...membership, vmc: renewed, roleVec: undefined }] })
     const done = await syncCardsToWallet(agent, store, { now: NOW })
     expect(done.replaced).toEqual([membershipCard.id])
-    expect(records.map((r) => r.firstCredential.validUntil)).toEqual(['2026-11-26T09:00:00Z'])
+    expect(
+      records.map((r) => (r.credentialInstances[0].credential as unknown as { validUntil: string }).validUntil)
+    ).toEqual(['2026-11-26T09:00:00Z'])
+  })
+})
+
+describe('what the Wallet itself reads', () => {
+  it("stores copies the Wallet's JSON-LD reader accepts, a proof set among them", async () => {
+    const { agent, records } = walletAgent()
+    const { store } = fakeCommunityStore({ memberships: [membership], held: [grantHeld] })
+    await syncCardsToWallet(agent, store, { now: NOW })
+    expect(records).toHaveLength(3)
+    // What the Wallet's list does with every record (W3cJsonLdVerifiableCredential validation).
+    for (const r of records) expect(() => r.firstCredential).not.toThrow()
+  })
+
+  it('does not copy a card the Wallet could not read, and does not try again and again', async () => {
+    const { agent, ids } = walletAgent()
+    const unreadable = { ...membershipCard, proof: { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022' } }
+    const { store } = fakeCommunityStore({ memberships: [{ ...membership, vmc: unreadable, roleVec: undefined }] })
+    await syncCardsToWallet(agent, store, { now: NOW })
+    await syncCardsToWallet(agent, store, { now: NOW })
+    expect(ids()).toEqual([])
   })
 })
 
