@@ -47,7 +47,7 @@ test("wallet: native projects, dependencies, patches, config and assets are nati
 });
 
 test("wallet: developer and lab tooling under scripts/ is not a build input", () => {
-  for (const p of ["scripts/openvtc/own-agent-twin/lib.sh", "scripts/openvtc/setup-external.mjs", "scripts/demo.js", "scripts/local-mediator.js", "scripts/quickstart.sh", "scripts/check-commit-signing.sh"]) {
+  for (const p of ["scripts/openvtc/own-agent-twin/lib.sh", "scripts/openvtc/setup-external.mjs", "scripts/ci/js-only.mjs", "scripts/ci/js-swap.sh", "scripts/demo.js", "scripts/local-mediator.js", "scripts/quickstart.sh", "scripts/check-commit-signing.sh"]) {
     assert.equal(w(p), "none", p);
   }
 });
