@@ -30,8 +30,13 @@ const grantHeld = {
   receivedAt: '2026-09-26T09:05:00Z',
 }
 
-/** An agent whose W3C records (real W3cCredentialRecords) live in memory beside its generic records. */
-function walletAgent(seed: Record<string, unknown>[] = []) {
+/**
+ * An agent whose W3C records (real W3cCredentialRecords) live in memory beside its generic records.
+ * `refuse` makes `store` throw for a credential the way Credo's does when JSON-LD expansion cannot
+ * load a context (seen on a device, 226: an unpublished DTG context), which the in-memory store
+ * otherwise never does.
+ */
+function walletAgent(seed: Record<string, unknown>[] = [], refuse: (vc: Record<string, unknown>) => boolean = () => false) {
   const { agent } = fakeAgent()
   const records: W3cCredentialRecord[] = seed.map(
     (vc) => new W3cCredentialRecord({ credentialInstances: [{ credential: vc as never }] })
@@ -41,6 +46,8 @@ function walletAgent(seed: Record<string, unknown>[] = []) {
     store: async ({ record }: { record: W3cCredentialRecord }) => {
       // Yield first, as a real store does, so two reconciles can interleave if unlocked.
       await new Promise((resolve) => setTimeout(resolve, 0))
+      if (refuse(record.credentialInstances[0].credential as unknown as Record<string, unknown>))
+        throw new Error('Dereferencing a URL did not result in a valid JSON-LD object')
       records.push(record)
     },
     deleteById: async (id: string) => {
@@ -121,6 +128,40 @@ describe('what the Wallet itself reads', () => {
     expect(records).toHaveLength(3)
     // What the Wallet's list does with every record (W3cJsonLdVerifiableCredential validation).
     for (const r of records) expect(() => r.firstCredential).not.toThrow()
+  })
+
+  it('a card the Wallet cannot store does not stop the others', async () => {
+    const refused = (vc: Record<string, unknown>) => vc.id === membershipCard.id
+    const { agent, ids } = walletAgent([], refused)
+    const { store } = fakeCommunityStore({ memberships: [membership], held: [grantHeld] })
+    const done = await syncCardsToWallet(agent, store, { now: NOW }).catch((e) => e as Error)
+    expect(done).toMatchObject({ failed: [membershipCard.id] })
+    expect(ids()).toEqual([roleCard.id, vetterGrantProofSet.id].sort())
+    // Tried again at the next reconcile: a context the device could not load may load later.
+    const again = await syncCardsToWallet(agent, store, { now: NOW }).catch((e) => e as Error)
+    expect(again).toMatchObject({ failed: [membershipCard.id] })
+  })
+
+  it('keeps the old copy when its renewal cannot be stored', async () => {
+    const renewed = { ...membershipCard, validUntil: '2026-11-26T09:00:00Z' }
+    const { agent, records } = walletAgent([membershipCard], (vc) => vc.validUntil === renewed.validUntil)
+    const { store } = fakeCommunityStore({ memberships: [{ ...membership, vmc: renewed, roleVec: undefined }] })
+    const done = await syncCardsToWallet(agent, store, { now: NOW }).catch((e) => e as Error)
+    expect(done).toMatchObject({ replaced: [], failed: [membershipCard.id] })
+    expect(records.map((r) => (r.credentialInstances[0].credential as unknown as { id: string }).id)).toEqual([
+      membershipCard.id,
+    ])
+  })
+
+  it('ends with one copy when a replace stopped between storing the new copy and deleting the old', async () => {
+    const renewed = { ...membershipCard, validUntil: '2026-11-26T09:00:00Z' }
+    const { agent, records } = walletAgent([membershipCard, renewed])
+    const { store } = fakeCommunityStore({ memberships: [{ ...membership, vmc: renewed, roleVec: undefined }] })
+    const done = await syncCardsToWallet(agent, store, { now: NOW })
+    expect(done).toMatchObject({ added: [], replaced: [], removed: [membershipCard.id], failed: [] })
+    expect(
+      records.map((r) => (r.credentialInstances[0].credential as unknown as { validUntil: string }).validUntil)
+    ).toEqual(['2026-11-26T09:00:00Z'])
   })
 
   it('does not copy a card the Wallet could not read, and does not try again and again', async () => {
