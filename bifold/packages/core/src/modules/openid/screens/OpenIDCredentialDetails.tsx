@@ -26,6 +26,11 @@ import ScreenLayout from '../../../layout/ScreenLayout'
 import OpenIDCredentialCard from '../components/OpenIDCredentialCard'
 import { OpenIDCredentialRecord } from '../credentialRecord'
 import { credentialRegistry } from '../refresh/registry'
+import {
+  CommunityCardDetails,
+  communityCardOf,
+  openCommunityFrom,
+} from '../../trust-tasks/screens/CommunityCardDetails'
 
 export enum OpenIDCredScreenMode {
   offer,
@@ -208,7 +213,16 @@ const OpenIDCredentialDetails: React.FC<OpenIDCredentialDetailsProps> = ({ navig
             </Text>
           </Text>
         </View>
-        <RecordRemove onRemove={toggleDeclineModalVisible} />
+        {/* A community's card is the community's, kept in step with it: it is
+            given up by leaving the community, not removed here (226). */}
+        {communityCardOf(credentialDisplay.credential) ? (
+          <CommunityCardDetails
+            card={credentialDisplay.credential as unknown as Record<string, unknown>}
+            onOpenCommunity={(did) => openCommunityFrom(navigation, did)}
+          />
+        ) : (
+          <RecordRemove onRemove={toggleDeclineModalVisible} />
+        )}
       </View>
     )
   }

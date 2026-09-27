@@ -28,6 +28,8 @@ import { MY_AGENT_SCREEN, keyringAgentLinkKind } from '../modules/trust-tasks/mo
 import { openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
 import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
+// How a community's card reads in the Wallet (registers itself on import).
+import '../modules/trust-tasks/screens/communityCardDisplay'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'

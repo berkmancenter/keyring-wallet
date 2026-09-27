@@ -136,8 +136,12 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         </View>
       ) : null}
       {/* The cards themselves, and whether the agent keeps them (226). */}
-      {membership?.vmc ? <CardKeptRow card={membership.vmc} kind="membership" handle={key} /> : null}
-      {membership?.roleVec ? <CardKeptRow card={membership.roleVec} kind="role" handle={key} /> : null}
+      {membership?.vmc ? (
+        <CardKeptRow card={membership.vmc} kind="membership" handle={key} community={community} />
+      ) : null}
+      {membership?.roleVec ? (
+        <CardKeptRow card={membership.roleVec} kind="role" handle={key} community={community} />
+      ) : null}
       {persona ? (
         <View style={styles.row}>
           <Icon name="account-circle-outline" size={20} color={TextTheme.normal.color} />
