@@ -43,12 +43,13 @@ const TEST = /(^|\/)(__tests__|__mocks__|__fixtures__|test|tests|e2e)\/|\.(test|
 const DOC = /\.(md|mdx|txt|html|pdf)$|(^|\/)docs?\//i;
 
 /**
- * Scripts that never touch a build: developer and lab tooling. Every other
+ * Scripts that never touch a build: developer and lab tooling, and the CI
+ * checks themselves (scripts/ci). Every other
  * script under scripts/ counts as native, and so does any new one: the install
  * hooks (ensure-bifold-ready, fix-portal-symlinks), the build-number bump,
  * TestFlight and the signing helpers all change what gets built.
  */
-const DEV_SCRIPTS = /^scripts\/(openvtc\/|demo\.js$|local-mediator\.js$|mediator-lifecycle\.js$|quickstart\.sh$|check-commit-signing\.sh$)/
+const DEV_SCRIPTS = /^scripts\/(openvtc\/|ci\/|demo\.js$|local-mediator\.js$|mediator-lifecycle\.js$|quickstart\.sh$|check-commit-signing\.sh$)/
 /** The scripts that are build inputs, for the fingerprint. */
 const BUILD_SCRIPTS = [
   "scripts/ensure-bifold-ready.js",
