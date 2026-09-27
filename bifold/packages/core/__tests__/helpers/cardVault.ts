@@ -45,8 +45,26 @@ const base = (id: string, type: string, subject: Record<string, unknown>, proof:
   credentialSubject: { id: PERSONA_DID, ...subject },
   proof,
 })
-const oneProof = { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022', proofPurpose: 'assertionMethod' }
-const proofSet = [oneProof, { type: 'DataIntegrityProof', cryptosuite: 'mldsa44-jcs-2024' }]
+/** Proofs as a VTC signs them (vtc-service credentials/signer.rs): what the Wallet's JSON-LD reader accepts. */
+const oneProof = {
+  type: 'DataIntegrityProof',
+  cryptosuite: 'eddsa-jcs-2022',
+  proofPurpose: 'assertionMethod',
+  verificationMethod: `${COMMUNITY}#key-0`,
+  created: '2026-09-26T09:00:00Z',
+  proofValue: 'z3FXQqFwbZxKBxGxqFpCDabcM5gTnBqXxqZ4nY8qGvLmM9Q4aXcR2p7nDtWsVbJ6kHfEoYuLiTzRyNmPqWxCvBnA',
+}
+const proofSet = [
+  oneProof,
+  {
+    type: 'DataIntegrityProof',
+    cryptosuite: 'mldsa44-jcs-2024',
+    proofPurpose: 'assertionMethod',
+    verificationMethod: `${COMMUNITY}#key-pq`,
+    created: '2026-09-26T09:00:00Z',
+    proofValue: 'z2PqMldsaSignaturePlaceholderForTheFixtureOnly',
+  },
+]
 
 /** A community's membership card: the agent can keep it. */
 export const membershipCard = base(

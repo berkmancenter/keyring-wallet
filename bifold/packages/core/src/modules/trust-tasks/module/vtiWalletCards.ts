@@ -67,11 +67,33 @@ async function heldCards(store: VtiCommunityStore, now: number): Promise<Map<str
   return held
 }
 
+/**
+ * A record's credential as it was stored. Read raw rather than through
+ * `firstCredential`, which validates it as a JSON-LD credential and throws on
+ * one it does not accept: a copy that could not be read back would be taken
+ * for missing and stored again on every run.
+ */
 const jsonOf = (record: W3cCredentialRecord): Json | undefined => {
+  const raw = record.credentialInstances?.[0]?.credential as unknown
+  if (raw && typeof raw === 'object') return raw as Json
   try {
     return JsonTransformer.toJSON(record.firstCredential) as Json
   } catch {
     return undefined
+  }
+}
+
+/**
+ * Whether the Wallet can show a card: it reads each record's `firstCredential`
+ * (W3cJsonLdVerifiableCredential validation), which refuses, for instance, a
+ * proof with no `verificationMethod`. A card it cannot read is not copied, so
+ * it can never break the Wallet; it stays on the community card.
+ */
+function walletCanRead(vc: Json): boolean {
+  try {
+    return Boolean(new W3cCredentialRecord({ credentialInstances: [{ credential: vc as never }] }).firstCredential)
+  } catch {
+    return false
   }
 }
 
@@ -115,14 +137,20 @@ export function syncCardsToWallet(
       seen.add(id)
       if (!sameCard(vc, want)) {
         await agent.w3cCredentials.deleteById(record.id)
-        await agent.w3cCredentials.store({
-          record: new W3cCredentialRecord({ credentialInstances: [{ credential: want as never }] }),
-        })
-        done.replaced.push(id)
+        if (walletCanRead(want)) {
+          await agent.w3cCredentials.store({
+            record: new W3cCredentialRecord({ credentialInstances: [{ credential: want as never }] }),
+          })
+          done.replaced.push(id)
+        } else done.removed.push(id)
       }
     }
     for (const [id, vc] of held) {
       if (seen.has(id)) continue
+      if (!walletCanRead(vc)) {
+        agent.config?.logger?.warn?.(`[VTI] a community card the Wallet cannot read is not shown there (${id})`)
+        continue
+      }
       await agent.w3cCredentials.store({
         record: new W3cCredentialRecord({ credentialInstances: [{ credential: vc as never }] }),
       })
