@@ -148,7 +148,10 @@ jobs:
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
 
       # Release configuration for the simulator: the JavaScript is bundled into
-      # the app as in a store build, and nothing is signed.
+      # the app as in a store build. Signed ad hoc ("-", no certificate): with
+      # signing disabled Xcode leaves out the simulator entitlements, and without
+      # application-identifier the simulator keychain refuses every read, so the
+      # app cannot even onboard.
       - name: Build for the simulator
         working-directory: app/ios
         run: |
@@ -160,7 +163,8 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath xbuild \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
             build | tail -40
 
       - name: Package the app and its manifest
@@ -168,6 +172,14 @@ jobs:
           set -euo pipefail
           app=$(find app/ios/xbuild/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
           test -n "$app" || { echo "::error::no .app produced"; exit 1; }
+          exe=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")
+          # The simulator embeds entitlements as a plist in __TEXT,__entitlements;
+          # otool prints it as little-endian 32-bit words, so swap each word back.
+          ents=$(otool -arch arm64 -X -s __TEXT __entitlements "$app/$exe" \
+            | awk '{for(i=2;i<=NF;i++){w=$i; printf "%s%s%s%s", substr(w,7,2),substr(w,5,2),substr(w,3,2),substr(w,1,2)}}' \
+            | xxd -r -p || true)
+          echo "$ents" | grep -q application-identifier \
+            || { echo "::error::the simulator app carries no application-identifier entitlement: its keychain would refuse every read"; exit 1; }
           bundle_sha=$(shasum -a 256 "$app/main.jsbundle" | cut -c1-12)
           mkdir -p out
           (cd "$(dirname "$app")" && zip -qry "$GITHUB_WORKSPACE/out/keyring-sim.zip" "$(basename "$app")")
