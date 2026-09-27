@@ -294,7 +294,7 @@ jobs:
           test -n "$apk" || { echo "::error::no APK produced"; exit 1; }
           mkdir -p out
           cp "$apk" out/keyring-release-test.apk
-          bundle_sha=$(sha256sum app/android/app/src/main/assets/index.android.bundle | cut -c1-12)
+          bundle_sha=$(unzip -p out/keyring-release-test.apk assets/index.android.bundle | sha256sum | cut -c1-12)
           apk_sha=$(sha256sum out/keyring-release-test.apk | cut -c1-12)
           cat > out/manifest.txt <<EOF
           platform=android
