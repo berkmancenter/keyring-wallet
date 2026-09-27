@@ -23,6 +23,29 @@ import { CACHED_SECURITY_CONTEXTS } from './types/cachedSecurityContexts'
 import { CREDENTIALS_V2_CONTEXT_URL, CREDENTIALS_V2_CONTEXT_DOCUMENT } from '@bifold/vrc-contexts'
 
 /**
+ * The context community cards name (VTC-issued membership, role and vetter
+ * cards): `https://firstperson.network/credentials/dtg/v1`. Upstream does not
+ * publish it. The URL answers 404 with an HTML page (checked 2026-09-27), and
+ * no copy exists in the upstream sources (verifiable-trust-infrastructure
+ * ed672fff, openvtc ed13d29, dtgwg-cred-spec b89f389, dtg-credentials 0.9.1 and
+ * 0.11.0), which sign with JCS and never dereference it.
+ *
+ * Credo expands every JSON-LD credential when it stores one
+ * (W3cCredentialService.storeCredential → getExpandedTypesForCredential), so
+ * with no document here no community card can be stored for the Wallet
+ * (226, found on a device: "Dereferencing a URL did not result in a valid
+ * JSON-LD object").
+ *
+ * Until upstream publishes it, it stands in as an EMPTY context. It defines no
+ * terms, so the DTG terms expand under VCDM 2.0's issuer-dependent `@vocab`,
+ * which is what VCDM 2.0 specifies for terms no context defines. The cards'
+ * JCS proofs do not depend on any of this. Replace it with upstream's document,
+ * byte for byte, once one exists.
+ */
+export const DTG_CREDENTIALS_V1_CONTEXT_URL = 'https://firstperson.network/credentials/dtg/v1'
+export const DTG_CREDENTIALS_V1_STAND_IN: Record<string, unknown> = Object.freeze({ '@context': {} })
+
+/**
  * Maps verification method types to their required JSON-LD contexts
  */
 const VERIFICATION_METHOD_CONTEXTS: Record<string, string[]> = {
@@ -118,6 +141,9 @@ export function createVrcDocumentLoader(agentContext: AgentContext) {
     }
 
     // Handle custom VRC context URLs
+    if (normalizedUrl === DTG_CREDENTIALS_V1_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: DTG_CREDENTIALS_V1_STAND_IN }
+    }
     if (url === DTG_CONTEXT_URL) {
       return { contextUrl: null, documentUrl: url, document: DTG_CONTEXT_DOCUMENT }
     }
