@@ -37,8 +37,18 @@ test("wallet: native projects, dependencies, patches, config and assets are nati
     "app/src/assets/img/logo.png",
     "app/src/assets/fonts/Inter.ttf",
     "scripts/ensure-bifold-ready.js",
+    "scripts/fix-portal-symlinks.js",
+    "scripts/bump_ios_build.sh",
+    "scripts/testflight/upload.sh",
+    "scripts/some-new-script.sh",
   ]) {
     assert.equal(w(p), "native", p);
+  }
+});
+
+test("wallet: developer and lab tooling under scripts/ is not a build input", () => {
+  for (const p of ["scripts/openvtc/own-agent-twin/lib.sh", "scripts/openvtc/setup-external.mjs", "scripts/demo.js", "scripts/local-mediator.js", "scripts/quickstart.sh", "scripts/check-commit-signing.sh"]) {
+    assert.equal(w(p), "none", p);
   }
 });
 
@@ -117,6 +127,15 @@ history("a .env-only change: full; no .env evidence: full", () => {
   assert.equal(judge({ ...same, env: { base: env.base, head: "f".repeat(64) } }).verdict, VERDICT.FULL);
   assert.equal(judge({ ...same, env: {} }).verdict, VERDICT.FULL);
   assert.equal(judge({ ...same, env }).verdict, VERDICT.NO_APP_CHANGE);
+});
+
+history("226: the #171 stack on the 225 wallet is JS-only; wallet main is full only for #219's native change", () => {
+  const same = { ...repos, bifoldBase: "280e7e0b", bifoldHead: "2de341e9", env };
+  assert.equal(judge({ ...same, base: "335fbc9", head: "335fbc9" }).verdict, VERDICT.JS_ONLY);
+  const toMain = judge({ ...same, base: "335fbc9", head: "f98317a6" });
+  assert.equal(toMain.verdict, VERDICT.FULL);
+  // Only #219's Xcode project, not the lab tooling that changed alongside it.
+  assert.deepEqual(toMain.files.filter((f) => f.cls === "native").map((f) => f.path), ["app/ios/AriesBifold.xcodeproj/project.pbxproj"]);
 });
 
 history("wallet #212 (e2e only): no app change", () => {

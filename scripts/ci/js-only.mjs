@@ -42,6 +42,25 @@ const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|json)$/i;
 const TEST = /(^|\/)(__tests__|__mocks__|__fixtures__|test|tests|e2e)\/|\.(test|spec)\.[cm]?[jt]sx?$|\.snap$/;
 const DOC = /\.(md|mdx|txt|html|pdf)$|(^|\/)docs?\//i;
 
+/**
+ * Scripts that never touch a build: developer and lab tooling. Every other
+ * script under scripts/ counts as native, and so does any new one: the install
+ * hooks (ensure-bifold-ready, fix-portal-symlinks), the build-number bump,
+ * TestFlight and the signing helpers all change what gets built.
+ */
+const DEV_SCRIPTS = /^scripts\/(openvtc\/|demo\.js$|local-mediator\.js$|mediator-lifecycle\.js$|quickstart\.sh$|check-commit-signing\.sh$)/
+/** The scripts that are build inputs, for the fingerprint. */
+const BUILD_SCRIPTS = [
+  "scripts/ensure-bifold-ready.js",
+  "scripts/fix-portal-symlinks.js",
+  "scripts/verify-bifold-linking.js",
+  "scripts/bump_ios_build.sh",
+  "scripts/testflight",
+  "scripts/makekc.sh",
+  "scripts/makepp.sh",
+  "scripts/gpublish",
+];
+
 /** bifold packages the app does not bundle (servers, reference suites, tooling). */
 export const SERVER_ONLY = new Set(["mediator-server", "witness-server", "vrc-reference", "vrc-shared"]);
 /** Files in a package directory that make it native, or change how it is linked. */
@@ -58,6 +77,7 @@ export function classifyWalletPath(p) {
   if (/(^|\/)package\.json$|^yarn\.lock$|^\.yarnrc\.yml$|^\.yarn\//.test(p)) return { cls: "native", why: "dependencies (may add or change native code)" };
   if (p.startsWith("app/patches/")) return { cls: "native", why: "dependency patch" };
   if (/^app\/(react-native\.config\.js|app\.json)$/.test(p)) return { cls: "native", why: "native linking / app registration" };
+  if (DEV_SCRIPTS.test(p)) return { cls: "none", why: "developer tooling, not a build input" };
   if (p.startsWith("scripts/")) return { cls: "native", why: "install/build scripts" };
   if (ASSET_EXT.test(p) && p.startsWith("app/")) return { cls: "native", why: "bundled asset: compiled into Android res/" };
   if (p.startsWith("e2e/") || p.startsWith("docs/") || p.startsWith(".github/") || p.startsWith(".husky/") || p.startsWith("tsp-reference/")) return { cls: "none", why: "not in the app" };
@@ -127,7 +147,7 @@ export function bifoldPackages(bifoldRepo, commit) {
 /** Every native input at one wallet commit (and its bifold pin), as object hashes. */
 export function nativeInputs(walletRepo, bifoldRepo, commit, pin) {
   const inputs = {};
-  for (const p of ["app/ios", "app/android", "package.json", "app/package.json", "yarn.lock", ".yarnrc.yml", ".yarn/patches", "app/patches", "app/react-native.config.js", "app/app.json", "scripts"]) {
+  for (const p of ["app/ios", "app/android", "package.json", "app/package.json", "yarn.lock", ".yarnrc.yml", ".yarn/patches", "app/patches", "app/react-native.config.js", "app/app.json", ...BUILD_SCRIPTS]) {
     inputs[`wallet:${p}`] = objectAt(walletRepo, commit, p);
   }
   for (const line of git(walletRepo, "ls-tree", "-r", commit, "app/").split("\n")) {
