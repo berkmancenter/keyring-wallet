@@ -34,6 +34,7 @@
  */
 import { readFileSync } from "node:fs";
 import { generateDidKeyHolder, signDocument, base58encode } from "./di-proof.mjs";
+import { withRetryAfter } from "./retry-after.mjs";
 
 const TASK = {
   challenge: "https://trusttasks.org/spec/auth/challenge/0.1",
@@ -104,24 +105,28 @@ function holderFromCredential(path) {
   return holder;
 }
 
+/** One call; a 429 from the VTC's limiter is retried after the wait it names (retry-after.mjs). */
 async function call(base, task, path, { method = "GET", body, token } = {}) {
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      "content-type": "application/json",
-      "Trust-Task": task,
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  const { status, body: parsed } = await withRetryAfter(async () => {
+    const res = await fetch(`${base}${path}`, {
+      method,
+      headers: {
+        "content-type": "application/json",
+        "Trust-Task": task,
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const text = await res.text();
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = text;
+    }
+    return { status: res.status, headers: res.headers, body: json };
   });
-  const text = await res.text();
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    parsed = text;
-  }
-  return { status: res.status, body: parsed };
+  return { status, body: parsed };
 }
 
 /**
