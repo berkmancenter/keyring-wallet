@@ -20,6 +20,7 @@ import {
 } from '../../../../__tests__/helpers/cardVault'
 import { testIdWithKey } from '../../../utils/testable'
 import { getCredentialForDisplay } from '../../openid/display'
+import { isPeerVrcCredential, isVrcModuleCredential } from '../../vrc/credentialTypes'
 import { recordCardRevocation, resetCardStanding } from '../module/vtiCardStanding'
 import { resetCardVaultCache } from '../module/vtiCardVault'
 import { communityTarget } from '../module/vtiCommunityLink'
@@ -108,6 +109,15 @@ describe('a community card as the Wallet reads it', () => {
     expect(communityCardDisplay(roleCard, t)!.name).toBe('Community.CardRoleIn(community=keyring-test-vtc,role=member)')
     expect(communityCardDisplay(vetterGrant, t)!.name).toBe('Community.CardVetterFor(community=keyring-test-vtc)')
     expect(communityCardDisplay(vetterGrant, t)!.attributes?.['Community.CardRole']).toBe('vetter')
+  })
+
+  it('is shown in the Wallet at all, and is not a contact (#169 in this tree)', () => {
+    // The Wallet hides the relationship family and Contacts lists peer VRCs;
+    // keyed on DTGCredential (before #169) the mirrored copies were hidden.
+    for (const card of [membershipCard, roleCard, vetterGrant]) {
+      expect(isVrcModuleCredential(card)).toBe(false)
+      expect(isPeerVrcCredential(card)).toBe(false)
+    }
   })
 
   it('leaves every other credential to the generic display', () => {
