@@ -153,6 +153,17 @@ describe('what the Wallet itself reads', () => {
     ])
   })
 
+  it('ends with one copy when a replace stopped between storing the new copy and deleting the old', async () => {
+    const renewed = { ...membershipCard, validUntil: '2026-11-26T09:00:00Z' }
+    const { agent, records } = walletAgent([membershipCard, renewed])
+    const { store } = fakeCommunityStore({ memberships: [{ ...membership, vmc: renewed, roleVec: undefined }] })
+    const done = await syncCardsToWallet(agent, store, { now: NOW })
+    expect(done).toMatchObject({ added: [], replaced: [], removed: [membershipCard.id], failed: [] })
+    expect(
+      records.map((r) => (r.credentialInstances[0].credential as unknown as { validUntil: string }).validUntil)
+    ).toEqual(['2026-11-26T09:00:00Z'])
+  })
+
   it('does not copy a card the Wallet could not read, and does not try again and again', async () => {
     const { agent, ids } = walletAgent()
     const unreadable = { ...membershipCard, proof: { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022' } }
