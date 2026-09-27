@@ -11,6 +11,7 @@
  */
 import "./lib/cli-guard.js";
 import { createSession, ensureAppium, stopAppium, sleep, waitForTestId, byTestId, existsTestId } from "./lib/driver.js";
+import { tapCardVettingDoor } from "./lib/keyringRoles.js";
 import { iosCaps } from "./lib/config.js";
 import { unlockIfLocked, openMyAgentSurface } from "./lib/flows.js";
 
@@ -46,8 +47,9 @@ try {
     let key;
     for (const k of into) if (!key && (await byTestId(driver, k).isExisting().catch(() => false))) key = k;
     const row = await byTestId(driver, key ?? "MyAgentVettingRow");
-    if (await row.isExisting().catch(() => false)) {
-      await row.click();
+    // Since keyring-bifold#162 a vetter's desk opens from the community card.
+    const opened = (await row.isExisting().catch(() => false)) ? (await row.click(), true) : !!(await tapCardVettingDoor(driver));
+    if (opened) {
       await sleep(4000);
       for (const k of ["VettingYouVetFor", "VettingNewTicketButton", "VettingRoleBadge", "VettingStandingNotice"]) {
         if (await existsTestId(driver, k, 1500)) console.log(`${k}: ${(await textOf(driver, k)).slice(0, 110)}`);

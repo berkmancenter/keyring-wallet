@@ -35,6 +35,7 @@ import {
 } from "./driver.js";
 import { androidCaps, iosCaps, TEST_ID_PREFIX } from "./config.js";
 import { handleBiometricConfirmIfPresent, leaveCommunityInApp, openMyAgentPanel, pasteLinkFromHome, unlockIfLocked } from "./flows.js";
+import { cardPrimaryIds, VETTING_DOOR_WORDS } from "./testIdKeys.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ARTIFACTS = path.resolve(here, "../artifacts");
@@ -442,6 +443,24 @@ export async function openLinkViaOs(d, uri) {
   await sleep(2500);
 }
 
+/**
+ * The community card's button into Vetting ("Open the vetting desk",
+ * "Continue your vetting"), found by what it says: since keyring-bifold#162
+ * it is a vetter's only door on the agent home. Returns its testID, tapped,
+ * or undefined when no card offers one.
+ */
+export async function tapCardVettingDoor(d) {
+  await scrollToTestId(d, "AgentHolds", 6).catch(() => undefined);
+  for (const id of cardPrimaryIds(await d.getPageSource())) {
+    const el = await scrollToTestId(d, id, 4).catch(() => undefined);
+    if (!el) continue;
+    if (!VETTING_DOOR_WORDS.test(await textOf(d, id).catch(() => ""))) continue;
+    await el.click();
+    return id;
+  }
+  return undefined;
+}
+
 /** From anywhere after unlock, into Vetting. */
 async function openVetting(d) {
   await (await waitForTestId(d, "MyAgent", 30000)).click();
@@ -454,6 +473,11 @@ async function openVetting(d) {
         await sleep(1500);
         return door;
       }
+    }
+    const card = await tapCardVettingDoor(d);
+    if (card) {
+      await sleep(1500);
+      return card;
     }
     if ((await existsTestId(d, "AgentOpenCommunities", 1000)) || (await existsTestId(d, "MyAgentCard", 1000))) break;
     await sleep(2000);
@@ -783,6 +807,62 @@ export const applicant = {
 
 // ---------------------------------------------------------------- vetter
 
+/**
+ * Clear the desk's finished requests, on any build. Since the desk opens on a
+ * new ticket, finished requests sit folded under the step
+ * (VettingDeskFinishedToggle) with "Clear finished requests" inside; a build
+ * before that shows the last one as "Statement issued" with "Vet someone else"
+ * and the clear button on the page. Each is tapped only when present. Returns
+ * whether anything was cleared.
+ */
+export async function clearFinishedRequests(d) {
+  if (await byTestId(d, "VettingVetSomeoneElse").isExisting().catch(() => false)) {
+    await tapTestIdByCoordinates(d, "VettingVetSomeoneElse");
+    await sleep(1500);
+  }
+  const fold = await scrollToTestId(d, "VettingDeskFinishedToggle", 4).catch(() => undefined);
+  if (fold) {
+    await tapTestIdByCoordinates(d, "VettingDeskFinishedToggle");
+    await sleep(1000);
+  }
+  const clear = await scrollToTestId(d, "VettingDeskClearButton", 4).catch(() => undefined);
+  if (!clear) return false;
+  await tapTestIdByCoordinates(d, "VettingDeskClearButton");
+  await sleep(2500);
+  return true;
+}
+
+/**
+ * Whether a tap on "New ticket" cut one: the desk moves to handing it over
+ * (VettingVetterStep_share). A build before that step shows the link itself.
+ * Not "the ticket card is there": an open ticket from an earlier visit shows
+ * one too, and a retry on that would cut a second ticket.
+ */
+export async function ticketIssued(d) {
+  if ((await stepIdOf(d, "vetter")) === "share") return true;
+  // The card renders below the button, off the bottom of the screen: scroll to
+  // it before deciding the tap did nothing (older builds).
+  await scrollToTestId(d, "VettingTicketLink", 4).catch(() => undefined);
+  return byTestId(d, "VettingTicketLink").isExisting().catch(() => false);
+}
+
+/**
+ * The `vetting-ticket:` link of the ticket just cut, as the QR carries it. The
+ * raw link sits under the card's Details toggle, closed after every cut, so
+ * one tap opens it (a tap on an open one would close it; the app resets it on
+ * each cut). A build before the toggle shows the link directly.
+ */
+export async function readTicketLink(d) {
+  const toggle = await scrollToTestId(d, "VettingTicketLinkDetailsToggle", 4).catch(() => undefined);
+  if (toggle) {
+    await tapTestIdByCoordinates(d, "VettingTicketLinkDetailsToggle");
+    await sleep(800);
+  }
+  await scrollToTestId(d, "VettingTicketLink", 4).catch(() => undefined);
+  await waitForTestId(d, "VettingTicketLink", 30000);
+  return (await textOf(d, "VettingTicketLink")).trim();
+}
+
 export const vetter = {
   /**
    * Into the vetter's desk, ready for a new ticket: ends a session an earlier
@@ -820,15 +900,7 @@ export const vetter = {
           settleMs: 30000,
         });
       }
-      if (await byTestId(d, "VettingVetSomeoneElse").isExisting().catch(() => false)) {
-        await tapTestIdByCoordinates(d, "VettingVetSomeoneElse");
-        await sleep(1500);
-      }
-      const clear = await scrollToTestId(d, "VettingDeskClearButton", 4).catch(() => undefined);
-      if (clear) {
-        await tapTestIdByCoordinates(d, "VettingDeskClearButton");
-        await sleep(2500);
-      }
+      await clearFinishedRequests(d);
       await awaitStep(d, "vetter", "ticket", 30000);
       const youVetFor = await textOf(d, "VettingYouVetFor").catch(() => "");
       return { observed: { youVetFor } };
@@ -840,17 +912,8 @@ export const vetter = {
     return runStep(d, "vetter", "issueTicket", opts, async () => {
       await scrollToTestId(d, "VettingNewTicketButton", 6, { direction: "up" }).catch(() => undefined);
       await waitForTestId(d, "VettingNewTicketButton", 20000);
-      await tapTestIdReliable(
-        d,
-        "VettingNewTicketButton",
-        async () => {
-          await scrollToTestId(d, "VettingTicketLink", 4).catch(() => undefined);
-          return byTestId(d, "VettingTicketLink").isExisting().catch(() => false);
-        },
-        { attempts: 4, settleMs: 3000 }
-      );
-      await scrollToTestId(d, "VettingTicketLink", 4).catch(() => undefined);
-      const link = (await textOf(d, "VettingTicketLink")).trim();
+      await tapTestIdReliable(d, "VettingNewTicketButton", () => ticketIssued(d), { attempts: 4, settleMs: 3000 });
+      const link = await readTicketLink(d);
       if (!link.startsWith("vetting-ticket:")) throw failWith(`no ticket link on the desk: "${link.slice(0, 60)}"`, { ticketLink: link });
       await scrollToTestId(d, "VettingTicketCode", 4, { direction: "up" }).catch(() => undefined);
       const code = (await textOf(d, "VettingTicketCode").catch(() => "")).trim();
