@@ -87,6 +87,24 @@ const PLAIN = 'application/didcomm-plain+json'
 const WS_APP_SUBPROTOCOL = 'didcomm'
 
 const nowSec = () => Math.floor(Date.now() / 1000)
+
+/**
+ * How long the mediator may hold a forward for its recipient: 30 minutes.
+ *
+ * A community's VTC only listens. When it misses one live push it collects its
+ * inbox again at its next reconnect, about every 12 minutes, so a forward has
+ * to outlive that catch-up. At 5 minutes the mediator's expiry sweep dropped a
+ * missed message first: on the lab on 2026-09-27 a vetting Apply was stored,
+ * never collected, and dropped 300 s later, and the applicant saw no outcome.
+ */
+const FORWARD_EXPIRY_SECS = 30 * 60
+
+/**
+ * Messages to the mediator itself (authenticate, live delivery, delivery
+ * requests, acknowledgements) are answered at once; a short life keeps a stale
+ * one from being acted on later.
+ */
+const MEDIATOR_REQUEST_EXPIRY_SECS = 5 * 60
 const isPickup = (type: unknown) => typeof type === 'string' && type.startsWith(PICKUP_PROTOCOL)
 
 interface DeliveryMessage {
@@ -447,7 +465,7 @@ export class VtiMediatorSession {
       from: this.identity.did,
       to: [this.mediator.did],
       created_time: nowSec(),
-      expires_time: nowSec() + 300,
+      expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
       body: { challenge, session_id: sessionId },
     }
     const response = await fetch(this.mediator.authEndpoint, {
@@ -579,7 +597,7 @@ export class VtiMediatorSession {
       from: this.identity.did,
       to: [this.mediator.did],
       created_time: nowSec(),
-      expires_time: nowSec() + 300,
+      expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
       return_route: 'all',
       body: { live_delivery: true },
     })
@@ -615,7 +633,7 @@ export class VtiMediatorSession {
       from: this.identity.did,
       to: [this.mediator.did],
       created_time: nowSec(),
-      expires_time: nowSec() + 300,
+      expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
       return_route: 'all',
       body: { recipient_did: this.identity.did, limit: 20 },
     })
@@ -770,7 +788,7 @@ export class VtiMediatorSession {
       from: this.identity.did,
       to: [this.mediator.did],
       created_time: nowSec(),
-      expires_time: nowSec() + 300,
+      expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
       return_route: 'all',
       body: { message_id_list: messageIds },
     })
@@ -942,7 +960,7 @@ export class VtiMediatorSession {
       from: this.identity.did,
       to: [this.mediator.did],
       created_time: nowSec(),
-      expires_time: nowSec() + 300,
+      expires_time: nowSec() + FORWARD_EXPIRY_SECS,
       body: { next },
       attachments: [{ id: utils.uuid(), data: { json: inner } }],
     })
