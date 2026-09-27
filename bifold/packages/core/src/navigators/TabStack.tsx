@@ -27,6 +27,7 @@ import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind } from '../modules/trust-tasks/module/vtiLinks'
 import { openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
+import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
 import { useVtiPersonaInbox } from '../modules/trust-tasks/module/vtiPersonaInbox'
 import { useVtiRefusedCardNotice } from '../modules/trust-tasks/screens/refusedCardNotice'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
@@ -69,6 +70,8 @@ const TabStack: React.FC = () => {
   useVtiPersonaInbox(agent, { mediatorDid: vti?.mediatorDid, communityDid: inboxCommunityDid, onError: onInboxError })
   // Each persona's cards are kept by its agent too, so a new phone can get them back (226).
   useVtiCardVault(agent)
+  // …and shown in the Wallet while they stand, copied from the community store.
+  useVtiWalletCards(agent)
   // A delivered card the inbox did not keep is said in plain words.
   useVtiRefusedCardNotice()
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()

@@ -26,6 +26,7 @@ import {
 } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { selfRemoveRefusal, vtiAgent, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
+import { recordCardRevocation } from './vtiCardStanding'
 import { checkDeliveredCard, deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { receiveIssue, VTI_CARD_REFUSED_EVENT } from './vtiInbox'
 import { checkCredentialStatus } from './vtiStatusList'
@@ -259,6 +260,12 @@ export async function readJoinState(
       options.cardStatus ??
       (async (m: VtiMembership) => {
         const result = await checkCredentialStatus(agent, m.vmc, communityDid)
+        // What the list said is kept, so the Wallet and the screens can say
+        // where the card stands without reading it again (vtiCardStanding).
+        if (result.state === 'ok' || result.state === 'revoked' || result.state === 'none')
+          await recordCardRevocation(agent, String(m.vmc.id ?? ''), result.state === 'revoked', result.checkedAt).catch(
+            () => undefined
+          )
         return result.state === 'revoked' ? { revoked: true, at: result.checkedAt } : { revoked: false }
       })
     const card = await cardStatus(membership).catch(() => ({ revoked: false, at: undefined }))
