@@ -38,11 +38,16 @@ export function communityCardOf(vc: unknown): { communityDid: string; kind: stri
 
 type Navigate = { navigate: (name: string, params?: object) => void }
 
-/** Open a community's screen from anywhere, through the tabs (as links do). */
+/**
+ * Open a community's screen from anywhere, through the tabs (as links do).
+ * `initial: false` keeps the My Agent stack's own first screen ("Your agent")
+ * under it: without it the community screen became the stack's only route, and
+ * the My Agent tab was stuck there with no way back (226 candidate 3, a device).
+ */
 export const openCommunityFrom = (navigation: unknown, communityDid: string): void =>
   (navigation as Navigate).navigate(Stacks.TabStack, {
     screen: TabStacks.MyAgentStack,
-    params: { screen: Screens.VtiCommunity, params: { communityDid } },
+    params: { screen: Screens.VtiCommunity, params: { communityDid }, initial: false },
   })
 
 export const CommunityCardDetails: React.FC<{
