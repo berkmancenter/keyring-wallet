@@ -31,11 +31,16 @@ import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentit
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
 import {
+  clearThisDeviceWake,
   listAgentDevices,
   registerThisDevice,
   removeAgentDevice,
   renameThisDevice,
+  setThisDeviceWake,
   type AgentDevice,
+  type PushPlatform,
+  type WakeChannel,
+  type WakeHandle,
 } from './vtaDevices'
 import {
   agentVersion,
@@ -1065,6 +1070,30 @@ export class VtaAgentController {
     const vtaDid = this.agentAddress()
     if (!vtaDid) return undefined
     return this.signedIn(agent, vtaDid)
+  }
+
+  /**
+   * Tell this phone's agent how to wake it: the handle a push gateway gave for
+   * its push token (push notifications plan §4.4). The agent provisions the
+   * gateway itself; the phone signs nothing there.
+   */
+  async setThisDeviceWake(
+    agent: Agent,
+    wake: WakeHandle,
+    opts: { pushPlatform?: PushPlatform; suggestedTriggers?: string[] } = {}
+  ): Promise<WakeChannel> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    return setThisDeviceWake(client, wake, opts).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /** Stop this phone's agent waking it: sent before the phone unlinks (plan §8). */
+  async clearThisDeviceWake(agent: Agent): Promise<WakeChannel> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    return clearThisDeviceWake(client).catch((error: unknown) => {
+      throw this.refused(error)
+    })
   }
 
   /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */
