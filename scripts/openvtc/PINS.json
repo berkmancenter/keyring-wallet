@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-25",
+  "updated": "2026-09-28",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -99,10 +99,10 @@
     },
     "dtgwg-cred-spec": {
       "url": "https://github.com/trustoverip/dtgwg-cred-spec.git",
-      "sha": "b89f389",
-      "commitDate": "2026-08-12",
-      "pinnedOn": "2026-08-18",
-      "why": "Seeded for the locality plan: the VWC schema half (witnessContext, taskContext, digest) could not be verified locally. HEAD at #14 — digest REQUIRED; #18 (taskDigestMultibase on the credential) still open.",
+      "sha": "94af2d8",
+      "commitDate": "2026-09-28",
+      "pinnedOn": "2026-09-28",
+      "why": "Aligning VSC/VRC credential vocabulary with upstream this session (#64 namespace decision, #65 issue-ref cleanup, #68 issuerScope REQUIRED already consumed via direct origin/main fetches); advancing the stale 2026-08-18 pin to origin/main so the reference corpus reflects the same spec state this work already targets.",
       "watch": [
         "spec/body.md",
         "spec/terms-definitions/",
