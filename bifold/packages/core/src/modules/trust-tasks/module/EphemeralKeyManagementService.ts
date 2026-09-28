@@ -46,6 +46,7 @@ export { EPHEMERAL_KMS_BACKEND }
 type AskarKmsInternals = {
   backend: string
   withSession: <T>(agentContext: AgentContext, callback: (session: Session) => Promise<T>) => Promise<T>
+  fetchAskarKey: (agentContext: AgentContext, keyId: string) => Promise<{ key: Key } | null>
 }
 
 export class EphemeralKeyManagementService implements Kms.KeyManagementService {
@@ -53,12 +54,25 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   public readonly backend = EPHEMERAL_KMS_BACKEND
 
   private readonly askar = new AskarKeyManagementService()
+  /** The wallet's store, read for keys this backend does not hold. */
+  private readonly wallet = new AskarKeyManagementService()
   private store?: Promise<Store>
 
   public constructor() {
     const inner = this.askar as unknown as AskarKmsInternals
     inner.backend = EPHEMERAL_KMS_BACKEND
     inner.withSession = (_agentContext, callback) => this.withSession(callback)
+    // An operation claimed here can need a key that lives in the wallet's
+    // store: DIDComm v2 authcrypt (ECDH-1PU) derives from the persona's key AND
+    // a one-off key the envelope created with an unnamed createKey, which the
+    // wallet's store took; Askar reads both from the backend doing the
+    // encrypt. So a key not held here is read from the wallet's store — never
+    // one of ours, which is either here or not loaded yet.
+    const walletFetch = (this.wallet as unknown as AskarKmsInternals).fetchAskarKey.bind(this.wallet)
+    const memoryFetch = inner.fetchAskarKey.bind(inner)
+    inner.fetchAskarKey = async (agentContext, keyId) =>
+      (this.store ? await memoryFetch(agentContext, keyId) : null) ??
+      (isInMemoryKeyId(keyId) ? null : await walletFetch(agentContext, keyId))
   }
 
   public isOperationSupported(agentContext: AgentContext, operation: Kms.KmsOperation): boolean {
@@ -84,8 +98,9 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   }
 
   public getPublicKey(agentContext: AgentContext, keyId: string) {
-    // Nothing held yet: say so without opening a store just to look.
-    if (!this.store) return Promise.resolve(null)
+    // Only our own keys are found here — a wallet key is the wallet's to
+    // answer, and nothing is held until a key arrives.
+    if (!this.store || !isInMemoryKeyId(keyId)) return Promise.resolve(null)
     return this.askar.getPublicKey(agentContext, keyId)
   }
 

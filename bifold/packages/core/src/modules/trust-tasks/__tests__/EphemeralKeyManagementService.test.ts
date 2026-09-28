@@ -37,6 +37,11 @@ jest.mock('@credo-ts/askar', () => ({
     public isOperationSupported() {
       return true
     }
+    public async fetchAskarKey(ctx: unknown, keyId: string) {
+      return this.withSession
+        ? this.withSession(ctx, async (s) => (s as { fetchKey: (o: { name: string }) => Promise<unknown> }).fetchKey({ name: keyId }))
+        : null
+    }
     public async getPublicKey(ctx: unknown, keyId: string) {
       return this.withSession!(ctx, async (s) =>
         (await (s as { fetchKey: (o: { name: string }) => Promise<unknown> }).fetchKey({ name: keyId })) ? { kid: keyId } : null
