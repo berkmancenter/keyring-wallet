@@ -25,6 +25,8 @@ Today Keyring departs from that in one place. When it mints a persona, it export
 - After linking, the phone registers itself with `device/register/0.2`: a display name the person can read ("Sam's iPhone") and the platform.
 - It then sends `device/heartbeat/0.2` while it runs, so other devices can see when it was last seen.
 - The per-install device key is kept in its own "this device only" keychain item. A backup restored onto another phone therefore can't act as the old device; it links as a new one. The rest of the local wallet data (contacts, profiles) restores as before.
+  - Today the device key is made in the wallet's key store (`VtiMediatorTransport.ts` `createVtiClientDid`, `agent.kms.createKey`). That store's own key is kept with `ACCESSIBLE.ALWAYS` when biometrics are off (`services/keychain.ts`), which travels with a backup.
+  - So the device key moves out of the wallet's key store into a separate `WHEN_UNLOCKED_THIS_DEVICE_ONLY` keychain item, with a small signer for it. Size: medium.
 - If the old phone is at hand, it can grant the new one. If it isn't, the new phone links through the same page an operator uses for a first link. No new recovery channel is added in this release.
 
 ### B. See your devices and remove an old one
