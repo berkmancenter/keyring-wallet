@@ -1100,8 +1100,8 @@ export class VtaClient {
   }
 
   /** Borrow one of the VTA's keys into the wallet's KMS; returns the KMS key id. */
-  async borrowKey(vtaKeyId: string): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519' }> {
+  async borrowKey(vtaKeyId: string): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519'; publicKeyMultibase: string }> {
     const exported = await this.task<VtaExportedKey>(VTA_TASK.keysExportSecret, { keyId: vtaKeyId })
-    return importVtaKey(this.agent, exported)
+    return { ...(await importVtaKey(this.agent, exported)), publicKeyMultibase: exported.publicKeyMultibase }
   }
 }

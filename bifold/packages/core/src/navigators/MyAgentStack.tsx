@@ -15,6 +15,7 @@ import EditRCard from '../modules/vrc/screens/EditRCard'
 import VtaAgentHome from '../modules/trust-tasks/screens/VtaAgentHome'
 import VtaCreateAgent from '../modules/trust-tasks/screens/VtaCreateAgent'
 import VtaDevices from '../modules/trust-tasks/screens/VtaDevices'
+import VtaNewPhoneOffer from '../modules/trust-tasks/screens/VtaNewPhoneOffer'
 import VtaLink from '../modules/trust-tasks/screens/VtaLink'
 import VtiVetting from '../modules/trust-tasks/screens/VtiVetting'
 import { MyAgentStackParams, Screens } from '../types/navigators'
@@ -89,6 +90,11 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.VtaDevices}
         component={VtaDevices}
         options={{ title: t('Screens.VtaDevices'), ...ScreenOptionsDictionary[Screens.VtaDevices] }}
+      />
+      <Stack.Screen
+        name={Screens.VtaNewPhoneOffer}
+        component={VtaNewPhoneOffer}
+        options={{ title: t('Screens.VtaNewPhoneOffer'), ...ScreenOptionsDictionary[Screens.VtaNewPhoneOffer] }}
       />
       {/* The real profile editor, so Join as can create a profile and come back to it. */}
       <Stack.Screen

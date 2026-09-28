@@ -1,11 +1,14 @@
 /**
- * The devices that run your agent (own_agent_subtask.md §4): this phone and
- * its backups, each by name, with Remove on the others. The way back in after
- * a lost phone: the backup opens this list and removes the lost one.
+ * The devices that run your agent (own_agent_subtask.md §4;
+ * new-phone-new-device-plan.md §B): this phone first, then the others, each
+ * with its name, what it is and when it was last seen. The way back in after
+ * a lost phone: another device opens this list and removes the lost one.
  *
  * Remove is an owner act: the controller asks for Face ID first and sends
- * nothing without it. This phone is never offered for removal (and the agent
- * refuses it anyway). Refusals are worded by reason, beside the list.
+ * nothing without it. Removing cuts the device's access (and, for a
+ * registered phone, asks it to erase its copy), and it leaves the list. This
+ * phone is never offered for removal, only renamed. Refusals are worded by
+ * reason, beside the list.
  *
  * @module trust-tasks/screens/VtaDevices
  */
@@ -13,7 +16,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import React, { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Platform, ScrollView, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
@@ -21,9 +24,14 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
-import { vtaAgent, type VtaDevice } from '../module/vtaAgent'
+import { vtaAgent } from '../module/vtaAgent'
+import type { AgentDevice } from '../module/vtaDevices'
 import { deviceRefusalOf } from '../module/vtaOwner'
 
+import { DeviceNamePrompt } from './DeviceNamePrompt'
+import { DeviceRow } from './DeviceRow'
+import { LostPhoneCard, type RotationSupport } from './LostPhoneCard'
+import { deviceViewOf } from './deviceWords'
 import { didHashKey } from './testIdKey'
 
 /**
@@ -32,63 +40,56 @@ import { didHashKey } from './testIdKey'
  */
 export const deviceKey = (did: string): string => didHashKey(did)
 
+export { deviceNameKey } from './deviceWords'
+
 /**
- * What a person calls an admin of their agent. Every admin is listed, not
- * only Keyring phones: the label when there is one (Keyring's own rows read
- * "Keyring — <device name>"; the browser plugin's "browser-plugin …" reads as
- * "Browser plugin"), otherwise a plain fallback by the kind of key. Never the
- * DID: that sits behind Details.
+ * A device action's refusal in words: a cancelled Face ID says nothing, no
+ * screen lock says how to set one, and the agent's refusals by reason.
  */
-export const deviceNameKey = (device: Pick<VtaDevice, 'did' | 'label'>): { key?: string; label?: string } => {
-  const label = device.label?.trim()
-  if (label && /browser[- ]plugin/i.test(label)) return { key: 'Devices.BrowserPlugin' }
-  if (label) return { label }
-  if (device.did.startsWith('did:key:')) return { key: 'Devices.AComputer' }
-  if (device.did.startsWith('did:peer:')) return { key: 'Devices.AKeyringPhone' }
-  return { key: 'Devices.Unnamed' }
+export const deviceErrorWords = (e: unknown, t: (key: string) => string): string | undefined => {
+  if (e instanceof Error && e.name === 'OwnerNotConfirmed') {
+    const reason = (e as { reason?: string }).reason
+    return reason === 'cancelled'
+      ? undefined
+      : reason === 'unavailable'
+        ? t(Platform.OS === 'ios' ? 'CreateAgent.NeedsScreenLockIos' : 'CreateAgent.NeedsScreenLockAndroid')
+        : t('CreateAgent.NotConfirmed')
+  }
+  return t(`CreateAgent.Device.${deviceRefusalOf(e).reason}`)
 }
+
+/** This phone first; the rest in the agent's order. */
+const thisPhoneFirst = (devices: AgentDevice[]): AgentDevice[] => [
+  ...devices.filter((d) => d.isThisPhone),
+  ...devices.filter((d) => !d.isThisPhone),
+]
 
 const VtaDevices: React.FC = () => {
   const { t } = useTranslation()
   const { agent } = useAgent()
   const { ColorPalette } = useTheme()
-  const [devices, setDevices] = useState<VtaDevice[] | undefined>()
+  const [devices, setDevices] = useState<AgentDevice[] | undefined>()
   const [error, setError] = useState<string | undefined>()
   const [removed, setRemoved] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
-  const [detailsOf, setDetailsOf] = useState<string | undefined>()
+  const [renaming, setRenaming] = useState(false)
+  const [rotation, setRotation] = useState<RotationSupport | undefined>()
   const navigation = useNavigation()
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
     content: { padding: 20, gap: 16 },
-    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
-    row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
     error: { color: ColorPalette.semantic.error },
     muted: { color: ColorPalette.grayscale.mediumGrey },
-    key: { fontFamily: 'Menlo', fontSize: 12, color: ColorPalette.grayscale.mediumGrey },
   })
 
-  const wordsFor = useCallback(
-    (e: unknown): string | undefined => {
-      if (e instanceof Error && e.name === 'OwnerNotConfirmed') {
-        const reason = (e as { reason?: string }).reason
-        return reason === 'cancelled'
-          ? undefined
-          : reason === 'unavailable'
-            ? t(Platform.OS === 'ios' ? 'CreateAgent.NeedsScreenLockIos' : 'CreateAgent.NeedsScreenLockAndroid')
-            : t('CreateAgent.NotConfirmed')
-      }
-      return t(`CreateAgent.Device.${deviceRefusalOf(e).reason}`)
-    },
-    [t]
-  )
+  const wordsFor = useCallback((e: unknown) => deviceErrorWords(e, t), [t])
 
   const load = useCallback(async () => {
     if (!agent) return
     setError(undefined)
     try {
-      setDevices(await vtaAgent.listDevices(agent))
+      setDevices(thisPhoneFirst(await vtaAgent.agentDevices(agent)))
     } catch (e) {
       setError(wordsFor(e))
     }
@@ -97,30 +98,45 @@ const VtaDevices: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       void load()
-    }, [load])
+      if (agent) void vtaAgent.canRotatePersonaKeys(agent).then(setRotation)
+    }, [load, agent])
   )
 
-  const nameOf = (device: VtaDevice): string => {
-    const { key, label } = deviceNameKey(device)
-    return label ?? t(key ?? 'Devices.Unnamed')
+  /**
+   * A lost phone's second step (new-phone-new-device-plan.md §D): every
+   * identity's keys, behind one owner check. Identities that could not be
+   * changed, or changed but not yet published, are said, and the button
+   * stays to try again.
+   */
+  const onRotate = async (): Promise<string | void> => {
+    if (!agent) return
+    const { unpublished, failed } = await vtaAgent.rotateAllPersonaKeys(agent)
+    if (failed.length > 0)
+      throw Object.assign(new Error('some identities were not changed'), { partial: failed.length })
+    // Changed on the agent (the lost phone can't use the old keys any more),
+    // but DID hosts serve cached documents for a few minutes: calm, expected,
+    // and never pressed again, which would change the keys a second time.
+    if (unpublished.length > 0) return t('AgentKeys.RotateUnpublished')
   }
+  const rotateWords = (e: unknown): string | undefined =>
+    e && typeof e === 'object' && 'partial' in e
+      ? t('AgentKeys.RotatePartial', { count: (e as { partial: number }).partial })
+      : deviceErrorWords(e, t)
 
-  const addedOn = (device: VtaDevice): string | undefined => {
-    const createdAt = device.createdAt
-    const when = createdAt ? new Date(createdAt) : undefined
-    return when && !Number.isNaN(when.getTime())
-      ? t('Devices.Added', { date: when.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) })
-      : undefined
-  }
-
-  const onRemove = async (device: VtaDevice) => {
+  const onRemove = async (device: AgentDevice) => {
     if (!agent) return
     setError(undefined)
     setRemoved(undefined)
     setBusy(device.did)
     try {
-      await vtaAgent.removeDevice(agent, device.did)
-      setRemoved(nameOf(device))
+      const { mode } = await vtaAgent.removeAgentDevice(agent, device)
+      const name = deviceViewOf(device, t).name
+      setRemoved(
+        t(mode === 'wiped' ? 'Devices.RemovedWiped' : 'Devices.Removed', {
+          device: name,
+          interpolation: { escapeValue: false },
+        })
+      )
       await load()
     } catch (e) {
       setError(wordsFor(e))
@@ -128,6 +144,23 @@ const VtaDevices: React.FC = () => {
       setBusy(undefined)
     }
   }
+
+  const onRename = async (name: string) => {
+    if (!agent) return
+    setError(undefined)
+    setBusy('rename')
+    try {
+      await vtaAgent.renameThisDevice(agent, name)
+      setRenaming(false)
+      await load()
+    } catch (e) {
+      setError(wordsFor(e))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const here = devices?.find((d) => d.isThisPhone)
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
@@ -143,56 +176,39 @@ const VtaDevices: React.FC = () => {
           }
           testID={testIdWithKey('AgentDeviceAdd')}
         />
-        {removed ? (
-          <ThemedText testID={testIdWithKey('AgentDeviceRemoved')}>
-            {t('Devices.Removed', { device: removed, interpolation: { escapeValue: false } })}
-          </ThemedText>
-        ) : null}
+        {removed ? <ThemedText testID={testIdWithKey('AgentDeviceRemoved')}>{removed}</ThemedText> : null}
         {error ? (
           <ThemedText style={styles.error} testID={testIdWithKey('AgentDeviceError')}>
             {error}
           </ThemedText>
         ) : null}
         {devices === undefined && !error ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
+        {renaming && here ? (
+          <DeviceNamePrompt
+            initial={deviceViewOf(here, t).name}
+            onSave={(name) => void onRename(name)}
+            busy={busy === 'rename'}
+          />
+        ) : null}
         {devices?.map((device) => (
-          <View key={device.did} style={styles.card} testID={testIdWithKey(`AgentDevice_${deviceKey(device.did)}`)}>
-            <View style={styles.row}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <ThemedText variant="bold">{device.thisPhone ? t('Devices.ThisPhone') : nameOf(device)}</ThemedText>
-                {addedOn(device) ? <ThemedText style={styles.muted}>{addedOn(device)}</ThemedText> : null}
-              </View>
-              {device.thisPhone ? null : (
-                <Button
-                  title={t('Devices.Remove')}
-                  buttonType={ButtonType.Secondary}
-                  onPress={() => onRemove(device)}
-                  disabled={busy !== undefined}
-                  testID={testIdWithKey(`AgentDeviceRemove_${deviceKey(device.did)}`)}
-                >
-                  {busy === device.did ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-                </Button>
-              )}
-            </View>
-            <Pressable
-              onPress={() => setDetailsOf(detailsOf === device.did ? undefined : device.did)}
-              accessibilityRole="button"
-              accessibilityState={{ expanded: detailsOf === device.did }}
-              testID={testIdWithKey(`AgentDeviceDetails_${deviceKey(device.did)}`)}
-            >
-              <ThemedText style={styles.muted}>{t('Devices.Details')}</ThemedText>
-            </Pressable>
-            {detailsOf === device.did ? (
-              <ThemedText
-                style={styles.key}
-                selectable
-                testID={testIdWithKey(`AgentDeviceDid_${deviceKey(device.did)}`)}
-              >
-                {device.did}
-              </ThemedText>
-            ) : null}
-          </View>
+          <DeviceRow
+            key={device.did}
+            device={deviceViewOf(device, t)}
+            onRemove={() => void onRemove(device)}
+            onRename={() => setRenaming(true)}
+            busy={busy === device.did}
+            disabled={busy !== undefined}
+          />
         ))}
-        {devices?.length === 1 ? <ThemedText style={styles.muted}>{t('Devices.OnlyThisPhone')}</ThemedText> : null}
+        {/* Also when only this phone is left: a lost phone that never
+            registered is gone from the list once revoked, and its keys
+            still want changing. */}
+        {devices ? <LostPhoneCard rotation={rotation} onRotate={onRotate} errorOf={rotateWords} /> : null}
+        {devices?.length === 1 ? (
+          <ThemedText style={styles.muted} testID={testIdWithKey('AgentDeviceOnlyThis')}>
+            {t('Devices.OnlyThisPhone')}
+          </ThemedText>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   )
