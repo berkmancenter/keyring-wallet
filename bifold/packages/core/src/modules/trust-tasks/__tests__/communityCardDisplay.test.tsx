@@ -105,10 +105,25 @@ describe('a community card as the Wallet reads it', () => {
     })
   })
 
-  it('a role card and a vetter grant say which role', () => {
-    expect(communityCardDisplay(roleCard, t)!.name).toBe('Community.CardRoleIn(community=keyring-test-vtc,role=member)')
+  it('a role card and a vetter grant say which role, in words rather than the raw role', () => {
+    expect(communityCardDisplay(roleCard, t)!.name).toBe(
+      'Community.CardRoleIn(community=keyring-test-vtc,role=Community.RoleMember)'
+    )
     expect(communityCardDisplay(vetterGrant, t)!.name).toBe('Community.CardVetterFor(community=keyring-test-vtc)')
-    expect(communityCardDisplay(vetterGrant, t)!.attributes?.['Community.CardRole']).toBe('vetter')
+    expect(communityCardDisplay(vetterGrant, t)!.attributes?.['Community.CardRole']).toBe('Community.RoleVetter')
+  })
+
+  it('reads a community\'s own role as words: "custom:senior-vetter" is "Senior vetter"', () => {
+    const custom = {
+      ...roleCard,
+      credentialSubject: {
+        ...(roleCard.credentialSubject as Record<string, unknown>),
+        endorsement: { type: 'CommunityRole', role: 'custom:senior-vetter', communityDid: COMMUNITY },
+      },
+    }
+    const d = communityCardDisplay(custom, t)!
+    expect(d.name).toBe('Community.CardRoleIn(community=keyring-test-vtc,role=Senior vetter)')
+    expect(d.attributes?.['Community.CardRole']).toBe('Senior vetter')
   })
 
   it('is shown in the Wallet at all, and is not a contact (#169 in this tree)', () => {
