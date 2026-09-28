@@ -261,6 +261,9 @@ export class VtaAgentController {
   private reconnectAttempt = 0
   private retryTimer?: ReturnType<typeof setTimeout>
   private reconnecting = false
+  private opening?: { client: VtaClient; done: Promise<void> }
+  /** The VTA whose client an unlock just retired; its replacement opens quietly. */
+  private handedOver?: string
   /** Identities whose keys moved into memory in this run; their stored copies go at the next (plan part E). */
   private readonly switchedThisRun = new Set<string>()
   /** Agents whose name is being read, or was read, in this app run. */
@@ -366,8 +369,12 @@ export class VtaAgentController {
       onInbound: (plaintext) => this.inbound(plaintext),
       onConsentPending: ({ taskType }) => this.set({ awaitingConsentFor: taskType }),
     })
+    // The client replaced for the agent an unlock handed over keeps what the
+    // screen shows: the new session opens quietly behind it.
+    const handedOver = (this.current?.agent !== agent ? this.current?.vtaDid : undefined) ?? this.handedOver
+    this.handedOver = undefined
     this.current = { client, vtaDid, store: identityStore, agent }
-    this.set({ vtaDid, status: 'disconnected', approvals: [] })
+    if (handedOver !== vtaDid) this.set({ vtaDid, status: 'disconnected', approvals: [] })
     return client
   }
 
@@ -382,19 +389,32 @@ export class VtaAgentController {
         this.set({ status: 'connected', managerDid: client.managerDid, error: undefined })
       return
     }
-    this.set({ status: 'connecting', error: undefined })
+    // One session per client: a screen asking while the app reopens it after
+    // an unlock waits for that one instead of opening a second.
+    if (this.opening?.client === client) return this.opening.done
+    // A session reopened behind a connected screen (after an unlock, or a
+    // drop) does not take the screen over with "Signing in".
+    if (this.state.status !== 'connected') this.set({ status: 'connecting', error: undefined })
+    const done = (async () => {
+      try {
+        await client.connect()
+        // Say hello to the VTA so it caches a reply route for this DID. Without a
+        // round-trip the VTA has never seen this approver and drops a consent
+        // request to it as "no mediator route" (VTI-24). whoami is the cheapest
+        // authenticated call and is what makes the approver reachable.
+        await client.whoAmI().catch(() => undefined)
+        this.set({ status: 'connected', managerDid: client.managerDid })
+        this.learnAgentName(client, vtaDid)
+      } catch (error) {
+        this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
+        throw error
+      }
+    })()
+    this.opening = { client, done }
     try {
-      await client.connect()
-      // Say hello to the VTA so it caches a reply route for this DID. Without a
-      // round-trip the VTA has never seen this approver and drops a consent
-      // request to it as "no mediator route" (VTI-24). whoami is the cheapest
-      // authenticated call and is what makes the approver reachable.
-      await client.whoAmI().catch(() => undefined)
-      this.set({ status: 'connected', managerDid: client.managerDid })
-      this.learnAgentName(client, vtaDid)
-    } catch (error) {
-      this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
-      throw error
+      await done
+    } finally {
+      if (this.opening?.done === done) this.opening = undefined
     }
   }
 
@@ -442,22 +462,27 @@ export class VtaAgentController {
    * The app handed over its agent again after an unlock (#10): locking shut the
    * agent down and dropped every identity's in-memory keys, and unlocking
    * either restarted the same agent or built a new one — both happen. The
-   * session belonged to the agent before the lock, so it is closed and the link
-   * counts as dropped; reconnecting opens a session on the agent now in use,
-   * and that session fetches every identity's keys into its memory. Without
-   * this the link still read "online", nothing reconnected, and no identity
-   * could sign or message until the app was killed.
+   * session belonged to the agent before the lock, so it is closed, and a
+   * session is opened on the agent now in use, which fetches every identity's
+   * keys into its memory. Without this nothing reconnected, and no identity
+   * could sign or message until the app was killed. Unlocking is the commonest
+   * thing a person does, so a link that was online stays shown online while
+   * this happens; only a reopen that fails counts as a drop.
    */
   private async adoptAgent(agent: Agent): Promise<void> {
+    const before = this.agent
     this.agent = agent
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined
     const previous = this.current
-    this.current = undefined
-    await previous?.client.disconnect().catch(() => undefined)
-    if (this.state.link.kind !== 'linked') return
-    this.dispatch({ type: 'sessionDropped', reason: 'the app started a new agent', now: this.now() })
-    await this.ensureOnline(agent)
+    // A screen may already have built a client for a NEW agent (its effects
+    // can run first): that one is current, not a leftover, and is kept.
+    if (previous && !(previous.agent === agent && before !== agent)) {
+      this.current = undefined
+      this.handedOver = previous.vtaDid
+      await previous.client.disconnect().catch(() => undefined)
+    }
+    await this.ensureOnline(agent, { reopen: true })
   }
 
   /** A scanned or pasted enrolment offer: ask the person before anything is minted. */
@@ -1157,11 +1182,13 @@ export class VtaAgentController {
    * Bring a linked phone back online: now, when the app returns to the
    * foreground or the network changes, and on a backoff after a drop.
    */
-  async ensureOnline(given: Agent): Promise<void> {
+  async ensureOnline(given: Agent, options: { reopen?: boolean } = {}): Promise<void> {
     // A retry scheduled before the app replaced its agent still carries the old one.
     const agent = this.agent ?? given
     const link = this.state.link
-    if (link.kind !== 'linked' || link.connection.kind === 'online' || this.reconnecting) return
+    if (link.kind !== 'linked' || this.reconnecting) return
+    // Online already, unless the session it was online on is gone (reopen).
+    if (link.connection.kind === 'online' && !options.reopen) return
     this.reconnecting = true
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined

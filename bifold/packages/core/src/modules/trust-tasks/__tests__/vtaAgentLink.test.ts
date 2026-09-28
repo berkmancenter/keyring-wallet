@@ -441,6 +441,56 @@ describe('when the app replaces its agent (an unlock after a lock builds a new o
     expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
   })
 
+  /** Unlocking is the commonest thing a person does: it must not flash "Signing in" or "offline". */
+  it('keeps the link shown online and connected while the new session opens, and opens only one', async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    const agentA = { tag: 'A' } as never
+    const agentB = { tag: 'B' } as never
+    await vta.restore(agentA)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().status).toBe('connected')
+    const seen: string[] = []
+    const stop = vta.subscribe(() => seen.push(`${vta.getState().status}/${(vta.getState().link as { connection?: { kind: string } }).connection?.kind}`))
+    mockClient.connect.mockClear()
+    let open!: () => void
+    mockClient.connect.mockImplementationOnce(() => new Promise<undefined>((resolve) => (open = () => resolve(undefined))))
+
+    // The screen's own effect asks for a session while the unlock reopens one.
+    const restoring = vta.restore(agentB)
+    await new Promise((resolve) => setImmediate(resolve))
+    const screen = vta.connect(agentB, offer.vta)
+    open()
+    await Promise.all([restoring, screen])
+    await new Promise((resolve) => setImmediate(resolve))
+    stop()
+
+    expect(mockClient.connect).toHaveBeenCalledTimes(1)
+    expect(seen.every((s) => s === 'connected/online')).toBe(true)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  })
+
+  it('counts a reopen that fails as a drop, and retries', async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    await vta.restore({ tag: 'A' } as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    mockClient.connect.mockRejectedValueOnce(new Error('mediator unreachable'))
+
+    await vta.restore({ tag: 'B' } as never)
+
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'reconnecting' } })
+    await vta.unlink({ tag: 'B' } as never)
+  })
+
   it('never hands out a client built for another agent', async () => {
     const vta = new VtaAgentController()
     vta.configure({
