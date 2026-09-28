@@ -1868,7 +1868,9 @@
     "MovedBody": "This phone no longer keeps its own copy of your identities' keys; your agent signs for you. Copies already on old backups or other phones can't be recalled. To make them useless, change your agent's keys in My devices.",
     "MovedOk": "OK",
     "MovedDevices": "My devices",
-    "Moving": "Moving your keys to your agent…"
+    "Moving": "Moving your keys to your agent…",
+    "RotatePartial_one": "{{count}} of your identities couldn't be changed. Try again.",
+    "RotatePartial_other": "{{count}} of your identities couldn't be changed. Try again."
   },
   "FullScreenErrorModal": {
     "PrimaryCTA": "Back to Keyring"

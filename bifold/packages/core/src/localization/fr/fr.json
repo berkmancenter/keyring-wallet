@@ -1803,6 +1803,8 @@
     "MovedBody": "Ce téléphone ne garde plus sa propre copie des clés de vos identités ; votre agent signe pour vous. Les copies déjà présentes sur d'anciennes sauvegardes ou d'autres téléphones ne peuvent pas être rappelées. Pour les rendre inutiles, changez les clés de votre agent dans Mes appareils.",
     "MovedOk": "OK",
     "MovedDevices": "Mes appareils",
-    "Moving": "Transfert de vos clés vers votre agent…"
+    "Moving": "Transfert de vos clés vers votre agent…",
+    "RotatePartial_one": "{{count}} de vos identités n'a pas pu être changée. Réessayez.",
+    "RotatePartial_other": "{{count}} de vos identités n'ont pas pu être changées. Réessayez."
   }
 }

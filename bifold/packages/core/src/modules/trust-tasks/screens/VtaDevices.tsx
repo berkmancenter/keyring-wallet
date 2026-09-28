@@ -31,6 +31,7 @@ import { deviceRefusalOf } from '../module/vtaOwner'
 
 import { DeviceNamePrompt } from './DeviceNamePrompt'
 import { DeviceRow } from './DeviceRow'
+import { LostPhoneCard, type RotationSupport } from './LostPhoneCard'
 import { deviceViewOf } from './deviceWords'
 import { didHashKey } from './testIdKey'
 
@@ -73,6 +74,7 @@ const VtaDevices: React.FC = () => {
   const [removed, setRemoved] = useState<string | undefined>()
   const [busy, setBusy] = useState<string | undefined>()
   const [renaming, setRenaming] = useState(false)
+  const [rotation, setRotation] = useState<RotationSupport | undefined>()
   const navigation = useNavigation()
 
   const styles = StyleSheet.create({
@@ -97,8 +99,25 @@ const VtaDevices: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       void load()
-    }, [load])
+      if (agent) void vtaAgent.canRotatePersonaKeys(agent).then(setRotation)
+    }, [load, agent])
   )
+
+  /**
+   * A lost phone's second step (new-phone-new-device-plan.md §D): every
+   * identity's keys, behind one owner check. Identities that could not be
+   * changed are said, and the button stays to try again.
+   */
+  const onRotate = async () => {
+    if (!agent) return
+    const { failed } = await vtaAgent.rotateAllPersonaKeys(agent)
+    if (failed.length > 0)
+      throw Object.assign(new Error('some identities were not changed'), { partial: failed.length })
+  }
+  const rotateWords = (e: unknown): string | undefined =>
+    e && typeof e === 'object' && 'partial' in e
+      ? t('AgentKeys.RotatePartial', { count: (e as { partial: number }).partial })
+      : deviceErrorWords(e, t)
 
   const onRemove = async (device: AgentDevice) => {
     if (!agent) return
@@ -177,6 +196,10 @@ const VtaDevices: React.FC = () => {
             disabled={busy !== undefined}
           />
         ))}
+        {/* Also when only this phone is left: a lost phone that never
+            registered is gone from the list once revoked, and its keys
+            still want changing. */}
+        {devices ? <LostPhoneCard rotation={rotation} onRotate={onRotate} errorOf={rotateWords} /> : null}
         {devices?.length === 1 ? (
           <ThemedText style={styles.muted} testID={testIdWithKey('AgentDeviceOnlyThis')}>
             {t('Devices.OnlyThisPhone')}

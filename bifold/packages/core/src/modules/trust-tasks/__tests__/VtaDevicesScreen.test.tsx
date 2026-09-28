@@ -63,6 +63,7 @@ beforeEach(() => {
   // Run the focus effect once, as a screen coming into view would, and keep it.
   ;(useFocusEffect as jest.Mock).mockImplementation((effect: () => void) => require('react').useEffect(effect, []))
   ;(useAgent as jest.Mock).mockReturnValue({ agent: {} })
+  jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('unknown')
 })
 
 describe('your devices', () => {
@@ -186,5 +187,49 @@ describe('your devices', () => {
     jest.spyOn(vtaAgent, 'agentDevices').mockRejectedValue(new DeviceActionRefused('noAnswer'))
     const tree = await show()
     expect(tree.getByTestId(id('AgentDeviceError'))).toHaveTextContent('CreateAgent.Device.noAnswer')
+  })
+
+  test('a lost phone: remove it, then change the keys, offered when the agent can do it safely', async () => {
+    jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([thisPhone, oldPhone])
+    jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('yes')
+    const rotate = jest
+      .spyOn(vtaAgent, 'rotateAllPersonaKeys')
+      .mockResolvedValue({ rotated: ['did:webvh:a'], failed: [] })
+    const tree = await show()
+    expect(tree.getByTestId(id('LostPhone'))).toHaveTextContent(/AgentKeys\.LostStep2/)
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('LostPhoneRotate')))
+    })
+    expect(rotate).toHaveBeenCalledWith({})
+    expect(tree.getByTestId(id('LostPhoneState'))).toHaveTextContent('AgentKeys.Rotated')
+  })
+
+  test('identities whose keys could not be changed are said, and the button stays to try again', async () => {
+    jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([thisPhone, oldPhone])
+    jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('yes')
+    jest
+      .spyOn(vtaAgent, 'rotateAllPersonaKeys')
+      .mockResolvedValue({ rotated: ['did:webvh:a'], failed: [{ did: 'did:webvh:b', reason: 'noAnswer' }] })
+    const tree = await show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('LostPhoneRotate')))
+    })
+    expect(tree.getByTestId(id('LostPhoneState'))).toHaveTextContent('AgentKeys.RotatePartial')
+    expect(tree.getByTestId(id('LostPhoneRotate'))).toBeTruthy()
+  })
+
+  test('an agent too old for a safe change: words, no button', async () => {
+    jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([thisPhone, oldPhone])
+    jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('agentTooOld')
+    const tree = await show()
+    expect(tree.queryByTestId(id('LostPhoneRotate'))).toBeNull()
+    expect(tree.getByTestId(id('LostPhoneState'))).toHaveTextContent('AgentKeys.RotateTooOld')
+  })
+
+  test('the lost-phone card stays once the lost one is gone from the list', async () => {
+    jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([thisPhone])
+    jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('yes')
+    const tree = await show()
+    expect(tree.getByTestId(id('LostPhoneRotate'))).toBeTruthy()
   })
 })

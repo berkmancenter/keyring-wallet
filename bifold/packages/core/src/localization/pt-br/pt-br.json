@@ -1709,7 +1709,9 @@
     "MovedBody": "Este celular não guarda mais sua própria cópia das chaves das suas identidades; seu agente assina por você. Cópias que já estão em backups antigos ou outros celulares não podem ser recolhidas. Para torná-las inúteis, troque as chaves do seu agente em Meus dispositivos.",
     "MovedOk": "OK",
     "MovedDevices": "Meus dispositivos",
-    "Moving": "Movendo suas chaves para o seu agente…"
+    "Moving": "Movendo suas chaves para o seu agente…",
+    "RotatePartial_one": "{{count}} das suas identidades não pôde ser trocada. Tente de novo.",
+    "RotatePartial_other": "{{count}} das suas identidades não puderam ser trocadas. Tente de novo."
   },
   "FullScreenErrorModal": {
     "PrimaryCTA": "Voltar ao Keyring"
