@@ -121,4 +121,22 @@ describe('mapCredentialTypeToCard', () => {
       }),
     ])
   })
+  // A W3C card with no logo image showed "U" on its tile for every issuer:
+  // the W3C path never gave the card a logo text, so Card11 fell back to it.
+  test("gives a W3C card without a logo its issuer's name for the tile letter, as AnonCreds cards get", async () => {
+    mockGetCredentialForDisplay.mockReturnValue({
+      id: 'credential-id',
+      display: { issuer: { name: 'Keyring Lab Community' }, name: 'Member of Keyring Lab Community' },
+      metadata: { type: 'MembershipCredential' },
+      credentialSubject: {},
+    })
+    const result = await mapCredentialTypeToCard({
+      credential: Object.create(W3cCredentialRecord.prototype),
+      bundleResolver: { getBrandingOverlayType: () => BrandingOverlayType.Branding10 } as any,
+      colorPalette: {} as any,
+      unknownIssuerName: 'Unknown Contact',
+      brandingOverlay: { brandingOverlay: {}, bundle: {} } as any,
+    })
+    expect(result?.branding.logoText).toBe('Keyring Lab Community')
+  })
 })
