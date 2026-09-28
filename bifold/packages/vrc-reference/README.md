@@ -22,6 +22,12 @@ This demo implements:
 | **VP**    | Verifiable Presentation - A VRC wrapped with a challenge/domain for submission             |
 | **VWC**   | Verifiable Witness Credential - Attestation from a Witness that it observed a VRC exchange |
 
+> The wire shape a VWC uses is a name, not a type string, as of the VSC
+> migration (`docs/plans/vsc-migration-plan.md`): the witness server can emit
+> either the legacy WD02 `WitnessCredential` shape (still the default) or a
+> `dtg:witnessed` VSC — see `bifold/packages/witness-server/README.md`'s
+> "Witness Credential (VWC) Structure" section for both.
+
 ---
 
 ## Prerequisites

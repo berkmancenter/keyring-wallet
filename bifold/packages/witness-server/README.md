@@ -657,6 +657,20 @@ The Witness issues credentials that attest to having observed the VRC exchange:
 
 **Note:** `event` is only included if `WITNESS_EVENT_NAME` is configured.
 
+**This is the `wd02` shape, the default.** As of the VSC migration
+(`docs/plans/vsc-migration-plan.md`), `buildWitnessCredentialJson` can also
+emit a `dtg:witnessed` VSC shape — `type: ["VerifiableCredential",
+"DTGCredential", "StatementCredential"]`, the digest moved and recomputed as
+`credentialSubject.object.digestMultibase` (a different digest, not just a
+re-encoding — it excludes the referenced VRC's own `proof`), `taskContext` at
+the top level rather than nested in `credentialSubject`, and the extension
+members (`hardwareAttestationIncluded`, `locality*`, `parties`) hoisted to be
+siblings of `witnessContext` rather than nested inside it. Selected by the
+`WITNESS_CREDENTIAL_SHAPE=wd02|vsc` config value, **defaulting to `wd02`** —
+no live behavior has changed. See `WitnessService.ts`'s shape branch,
+`@bifold/dtg-vocab` (the predicate accept-list), and `@bifold/vrc-contexts`
+(the new JSON-LD terms) for the implementation.
+
 ## Verification Checks
 
 The Witness performs three verification checks on each submitted presentation:
