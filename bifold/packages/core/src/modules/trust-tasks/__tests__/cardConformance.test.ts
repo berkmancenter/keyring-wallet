@@ -216,9 +216,11 @@ describe('a Vetting Card from the shipping code, really signed', () => {
     expect(String(issue.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
     await expect(verifyDocumentProof(vetter.agent as never, issue, vetter.did)).resolves.toBe(true)
     expect(sentOptions).toMatchObject({ thid: desk.session!.documentId })
-    const statement = ((issue.payload as Record<string, unknown>).credential_response as {
-      credential: Record<string, unknown>
-    }).credential
+    const statement = (
+      (issue.payload as Record<string, unknown>).credential_response as {
+        credential: Record<string, unknown>
+      }
+    ).credential
     // Two ids: the document's, and the statement's own, which a vetter names to
     // withdraw it (vetting/session/0.1 spec.md "The session's name").
     expect(String(statement.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
@@ -490,9 +492,11 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
     // that document with its task digest (vetting/session/0.1 spec.md "The
     // session's name": taskContext MUST, taskDigestMultibase SHOULD).
     const sessionDocument = produced.find((p) => p.name === 'vetting-session')!.document
-    const issued = ((produced.at(-1)!.document.payload as Record<string, unknown>).credential_response as {
-      credential: Record<string, unknown>
-    }).credential
+    const issued = (
+      (produced.at(-1)!.document.payload as Record<string, unknown>).credential_response as {
+        credential: Record<string, unknown>
+      }
+    ).credential
     expect(issued).toMatchObject({
       taskContext: sessionDocument.id,
       taskDigestMultibase: taskDigestMultibase(sessionDocument),

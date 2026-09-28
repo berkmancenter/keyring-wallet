@@ -298,7 +298,12 @@ describe("the vetter's desk records why a card was refused", () => {
         },
       ],
     })
-    const desk = new VtiVetterDesk(vetter.agent as never, vetter.persona(community.did) as never, wrap(store), {} as never)
+    const desk = new VtiVetterDesk(
+      vetter.agent as never,
+      vetter.persona(community.did) as never,
+      wrap(store),
+      {} as never
+    )
     const inbound = (m: unknown) => (desk as unknown as { inbound(m: unknown): Promise<void> }).inbound(m)
     return { inbound, state, desk }
   }
@@ -896,9 +901,11 @@ describe("the vetter's statement delivery", () => {
     await expect(verifyDocumentProof(vetter.agent as never, doc, vetter.did)).resolves.toBe(true)
     // `statement_in`: the statement under payload.credential_response.credential,
     // with its own id, the session it names and that session's task digest.
-    const credential = ((doc.payload as Record<string, unknown>).credential_response as {
-      credential: Record<string, unknown>
-    }).credential
+    const credential = (
+      (doc.payload as Record<string, unknown>).credential_response as {
+        credential: Record<string, unknown>
+      }
+    ).credential
     expect(String(credential.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
     expect(credential.id).not.toBe(doc.id)
     expect(credential).toMatchObject({
