@@ -76,6 +76,16 @@ export const deviceNameKey = (device: { did: string; label?: string }): { key?: 
   return { key: 'Devices.Unnamed' }
 }
 
+/**
+ * A name a person can read: one with a letter or a digit in it, in any
+ * script. A lone icon glyph (a plugin's displayName seen on a lab agent)
+ * falls back to the plain names.
+ */
+const readable = (name: string | undefined): string | undefined => {
+  const trimmed = name?.trim()
+  return trimmed && /[\p{L}\p{N}]/u.test(trimmed) ? trimmed : undefined
+}
+
 /** What the row needs from the agent's device record (vtaDevices.ts `AgentDevice`). */
 export interface AgentDeviceLike {
   did: string
@@ -102,7 +112,7 @@ export const deviceViewOf = (device: AgentDeviceLike, t: Translate): DeviceView 
   const { key, label } = deviceNameKey(device)
   return {
     did: device.did,
-    name: device.displayName?.trim() || label || t(key ?? 'Devices.Unnamed'),
+    name: readable(device.displayName) ?? label ?? t(key ?? 'Devices.Unnamed'),
     ...(device.platform ? { platform: device.platform } : {}),
     ...(device.lastSeenAt ? { lastSeenAt: device.lastSeenAt } : {}),
     status: deviceStatusOf(device),

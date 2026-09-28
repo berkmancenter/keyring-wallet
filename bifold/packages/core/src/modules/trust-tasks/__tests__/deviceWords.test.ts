@@ -108,6 +108,20 @@ describe('a device as its row shows it', () => {
     })
   })
 
+  test('a registered name with no letter or digit (a lone icon glyph) falls back to the plain names', () => {
+    const glyph = deviceViewOf({ ...base, did: 'did:key:z6Mk2', source: 'registered', displayName: '\u{F088F}' }, t)
+    expect(glyph.name).toBe('Devices.AComputer')
+    const labelled = deviceViewOf(
+      { ...base, did: 'did:key:z6Mk3', source: 'registered', displayName: ' ★ ', label: 'Ada’s laptop' },
+      t
+    )
+    expect(labelled.name).toBe('Ada’s laptop')
+    // Any letter or digit is a name, in any script.
+    expect(
+      deviceViewOf({ ...base, did: 'did:key:z6Mk4', source: 'registered', displayName: 'Téléphone 2' }, t).name
+    ).toBe('Téléphone 2')
+  })
+
   test('this phone and a removed phone', () => {
     expect(deviceViewOf({ ...base, did: 'did:peer:2.X', source: 'registered', isThisPhone: true }, t).thisPhone).toBe(
       true
