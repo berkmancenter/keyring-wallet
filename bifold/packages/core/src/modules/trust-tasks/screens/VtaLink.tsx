@@ -409,7 +409,7 @@ const VtaLink: React.FC = () => {
       // refused "not in ACL"), and a bare refusal can happen innocently. So it
       // never erases itself: the person chooses, nothing preselected. A positive
       // wipe signal changes the words, not the choice (226).
-      const wiped = 'cause' in link && link.cause === 'wiped'
+      const wiped = link.cause === 'wiped'
       body = (
         <View style={styles.card}>
           <ThemedText variant="headingThree" accessibilityRole="header">
