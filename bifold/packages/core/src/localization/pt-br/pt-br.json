@@ -1719,8 +1719,7 @@
     "Moving": "Movendo suas chaves para o seu agente…",
     "RotatePartial_one": "{{count}} das suas identidades não pôde ser trocada. Tente de novo.",
     "RotatePartial_other": "{{count}} das suas identidades não puderam ser trocadas. Tente de novo.",
-    "RotateUnpublished_one": "Seu agente trocou as chaves, mas ainda não as publicou, então outras pessoas talvez não consigam verificar {{count}} das suas identidades por enquanto. Tente de novo mais tarde.",
-    "RotateUnpublished_other": "Seu agente trocou as chaves, mas ainda não as publicou, então outras pessoas talvez não consigam verificar {{count}} das suas identidades por enquanto. Tente de novo mais tarde."
+    "RotateUnpublished": "Suas novas chaves estão salvas. Pode levar alguns minutos para que todos as vejam."
   },
   "FullScreenErrorModal": {
     "PrimaryCTA": "Voltar ao Keyring"

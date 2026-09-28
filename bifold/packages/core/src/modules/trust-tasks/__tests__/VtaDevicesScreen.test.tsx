@@ -205,13 +205,11 @@ describe('your devices', () => {
   test('identities whose keys could not be changed are said, and the button stays to try again', async () => {
     jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([thisPhone, oldPhone])
     jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('yes')
-    jest
-      .spyOn(vtaAgent, 'rotateAllPersonaKeys')
-      .mockResolvedValue({
-        rotated: ['did:webvh:a'],
-        unpublished: [],
-        failed: [{ did: 'did:webvh:b', reason: 'noAnswer' }],
-      })
+    jest.spyOn(vtaAgent, 'rotateAllPersonaKeys').mockResolvedValue({
+      rotated: ['did:webvh:a'],
+      unpublished: [],
+      failed: [{ did: 'did:webvh:b', reason: 'noAnswer' }],
+    })
     const tree = await show()
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('LostPhoneRotate')))
@@ -220,7 +218,7 @@ describe('your devices', () => {
     expect(tree.getByTestId(id('LostPhoneRotate'))).toBeTruthy()
   })
 
-  test('keys changed but not yet published are never "Done": said plainly, and the button stays for later', async () => {
+  test('keys changed but not yet served are said to take a few minutes, and are never changed a second time', async () => {
     jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([thisPhone, oldPhone])
     jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('yes')
     jest
@@ -230,9 +228,11 @@ describe('your devices', () => {
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('LostPhoneRotate')))
     })
+    // The DID host serves the new keys a few minutes later (it caches); another
+    // press would change them again, so there is no button to press.
     expect(tree.getByTestId(id('LostPhoneState'))).toHaveTextContent('AgentKeys.RotateUnpublished')
     expect(tree.getByTestId(id('LostPhoneState'))).not.toHaveTextContent('AgentKeys.Rotated')
-    expect(tree.getByTestId(id('LostPhoneRotate'))).toBeTruthy()
+    expect(tree.queryByTestId(id('LostPhoneRotate'))).toBeNull()
   })
 
   test('an agent too old for a safe change: words, no button', async () => {

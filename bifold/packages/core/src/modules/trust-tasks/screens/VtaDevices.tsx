@@ -108,26 +108,20 @@ const VtaDevices: React.FC = () => {
    * changed, or changed but not yet published, are said, and the button
    * stays to try again.
    */
-  const onRotate = async () => {
+  const onRotate = async (): Promise<string | void> => {
     if (!agent) return
     const { unpublished, failed } = await vtaAgent.rotateAllPersonaKeys(agent)
     if (failed.length > 0)
       throw Object.assign(new Error('some identities were not changed'), { partial: failed.length })
-    // Changed on the agent, but its host doesn't serve the new keys yet: others
-    // may still check the old ones, so it is never "Done" (lab O9).
-    if (unpublished.length > 0) {
-      throw Object.assign(new Error('some new keys are not published yet'), { unpublished: unpublished.length })
-    }
+    // Changed on the agent (the lost phone can't use the old keys any more),
+    // but DID hosts serve cached documents for a few minutes: calm, expected,
+    // and never pressed again, which would change the keys a second time.
+    if (unpublished.length > 0) return t('AgentKeys.RotateUnpublished')
   }
-  const rotateWords = (e: unknown): string | undefined => {
-    if (e && typeof e === 'object' && 'partial' in e) {
-      return t('AgentKeys.RotatePartial', { count: (e as { partial: number }).partial })
-    }
-    if (e && typeof e === 'object' && 'unpublished' in e) {
-      return t('AgentKeys.RotateUnpublished', { count: (e as { unpublished: number }).unpublished })
-    }
-    return deviceErrorWords(e, t)
-  }
+  const rotateWords = (e: unknown): string | undefined =>
+    e && typeof e === 'object' && 'partial' in e
+      ? t('AgentKeys.RotatePartial', { count: (e as { partial: number }).partial })
+      : deviceErrorWords(e, t)
 
   const onRemove = async (device: AgentDevice) => {
     if (!agent) return

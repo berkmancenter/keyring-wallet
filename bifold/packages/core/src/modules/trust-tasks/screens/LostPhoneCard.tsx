@@ -22,7 +22,8 @@ export type RotationSupport = 'yes' | 'agentTooOld' | 'unknown'
 export const LostPhoneCard: React.FC<{
   /** Undefined while Keyring is still asking the agent. */
   rotation?: RotationSupport
-  onRotate: () => Promise<void>
+  /** Resolves with calm words when the change is made but not seen by everyone yet. */
+  onRotate: () => Promise<string | void>
   /** Words for a refusal; undefined says nothing (a cancelled confirmation). */
   errorOf: (e: unknown) => string | undefined
 }> = ({ rotation, onRotate, errorOf }) => {
@@ -30,6 +31,7 @@ export const LostPhoneCard: React.FC<{
   const { ColorPalette } = useTheme()
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
+  const [note, setNote] = useState<string | undefined>()
   const [error, setError] = useState<string | undefined>()
 
   const styles = StyleSheet.create({
@@ -41,7 +43,8 @@ export const LostPhoneCard: React.FC<{
     setError(undefined)
     setBusy(true)
     try {
-      await onRotate()
+      const said = await onRotate()
+      if (said) setNote(said)
       setDone(true)
     } catch (e) {
       setError(errorOf(e))
@@ -51,7 +54,7 @@ export const LostPhoneCard: React.FC<{
   }
 
   const state = done
-    ? t('AgentKeys.Rotated')
+    ? (note ?? t('AgentKeys.Rotated'))
     : (error ??
       (rotation === 'agentTooOld'
         ? t('AgentKeys.RotateTooOld')

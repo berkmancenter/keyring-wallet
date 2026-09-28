@@ -5,6 +5,7 @@
  */
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
@@ -44,6 +45,27 @@ describe('a lost phone', () => {
     })
     expect(onRotate).toHaveBeenCalledTimes(1)
     expect(tree.getByTestId(id('LostPhoneState'))).toHaveTextContent('AgentKeys.Rotated')
+    expect(tree.queryByTestId(id('LostPhoneRotate'))).toBeNull()
+  })
+
+  test('a change made but not yet seen by everyone is said calmly, as done, with no button', async () => {
+    const tree = card({ onRotate: jest.fn().mockResolvedValue('Saved; a few minutes for everyone') })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('LostPhoneRotate')))
+    })
+    const state = tree.getByTestId(id('LostPhoneState'))
+    expect(state).toHaveTextContent('Saved; a few minutes for everyone')
+    // Not in the refusal's colour.
+    const refused = card({ onRotate: jest.fn().mockRejectedValue(new Error('no')), errorOf: () => 'Agent said no' })
+    await act(async () => {
+      fireEvent.press(refused.getAllByTestId(id('LostPhoneRotate'))[0])
+    })
+    const colorOf = (el: { props: { style?: unknown } }) => StyleSheet.flatten(el.props.style as never)?.color
+    const refusedState = refused
+      .getAllByTestId(id('LostPhoneState'))
+      .find((el) => /Agent said no/.test(String(el.props.children)))
+    expect(refusedState).toBeTruthy()
+    expect(colorOf(state)).not.toBe(colorOf(refusedState!))
     expect(tree.queryByTestId(id('LostPhoneRotate'))).toBeNull()
   })
 

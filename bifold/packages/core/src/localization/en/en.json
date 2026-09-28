@@ -1878,8 +1878,7 @@
     "Moving": "Moving your keys to your agent…",
     "RotatePartial_one": "{{count}} of your identities couldn't be changed. Try again.",
     "RotatePartial_other": "{{count}} of your identities couldn't be changed. Try again.",
-    "RotateUnpublished_one": "Your agent changed the keys, but hasn't published them yet, so others may not be able to check {{count}} of your identities for now. Try again later.",
-    "RotateUnpublished_other": "Your agent changed the keys, but hasn't published them yet, so others may not be able to check {{count}} of your identities for now. Try again later."
+    "RotateUnpublished": "Your new keys are saved. It can take a few minutes for everyone to see them."
   },
   "FullScreenErrorModal": {
     "PrimaryCTA": "Back to Keyring"
