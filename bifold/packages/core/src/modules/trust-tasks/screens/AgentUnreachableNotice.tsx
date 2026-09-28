@@ -1,8 +1,10 @@
 /**
- * A signing step while the agent is away (new-phone-new-device-plan.md §C,
- * "Offline"): the persona's keys stay in the agent, so a step that signs
- * waits for it. Nothing is queued; the step's own button is disabled while
- * this shows, and it carries on once the agent is back.
+ * A step that needs a persona's keys while the agent is away
+ * (new-phone-new-device-plan.md §C, "Offline"): the keys stay with the agent
+ * and this phone borrows them only while the app is open, so a step that
+ * signs or decrypts before they are borrowed waits for it. Nothing is
+ * queued; the step's own button is disabled while this shows, and it
+ * carries on once the agent is back.
  *
  * @module trust-tasks/screens/AgentUnreachableNotice
  */
