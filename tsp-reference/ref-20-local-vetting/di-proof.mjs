@@ -69,20 +69,26 @@ export function generateDidKeyHolder(secretKeyHex) {
  * sha256(JCS(document without proof)), ed25519-signed, multibase(base58btc).
  * Returns `{...doc, proof}` — works equally for a Trust Task envelope
  * (`{id,type,payload,issuer,recipient,issuedAt}`) or a bare W3C VC.
+ *
+ * `options.proofPurpose` defaults to `assertionMethod` (an attestation, a VC);
+ * a request a party sends on its own behalf is `authentication` (vta-sdk
+ * `trust_task_sign.rs` `sign_in_place_with`, VTI-KEY-022/106).
+ * `options.created` defaults to now.
  */
-export function signDocument(doc, holder) {
+export function signDocument(doc, holder, options = {}) {
   const proofConfig = {
     type: "DataIntegrityProof",
     cryptosuite: "eddsa-jcs-2022",
-    created: new Date().toISOString(),
+    created: options.created ?? new Date().toISOString(),
     verificationMethod: holder.verificationMethod,
-    proofPurpose: "assertionMethod",
+    proofPurpose: options.proofPurpose ?? "assertionMethod",
   };
   const configHash = sha256(new TextEncoder().encode(canonicalize(proofConfig)));
-  const documentHash = sha256(new TextEncoder().encode(canonicalize(doc)));
+  const { proof: _ignored, ...unsigned } = doc;
+  const documentHash = sha256(new TextEncoder().encode(canonicalize(unsigned)));
   const signedInput = new Uint8Array(configHash.length + documentHash.length);
   signedInput.set(configHash, 0);
   signedInput.set(documentHash, configHash.length);
   const signature = ed25519.sign(signedInput, holder.privateKey);
-  return { ...doc, proof: { ...proofConfig, proofValue: "z" + base58encode(signature) } };
+  return { ...unsigned, proof: { ...proofConfig, proofValue: "z" + base58encode(signature) } };
 }
