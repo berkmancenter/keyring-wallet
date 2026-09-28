@@ -248,7 +248,9 @@ export class VtaAgentController {
     activity: [],
   }
   private listeners = new Set<Listener>()
-  private current?: { client: VtaClient; vtaDid: string; store: VtiIdentityStore }
+  private current?: { client: VtaClient; vtaDid: string; store: VtiIdentityStore; agent: Agent }
+  /** The agent the app handed over at restore; the app builds a new one after every lock. */
+  private agent?: Agent
   /** A grant check's question still open after it gave up waiting (GRANT_HOLD_MS). */
   private heldAnswer?: { vtaDid: string; answer: Promise<unknown>; until: number }
   private deps: VtaAgentDeps = {}
@@ -347,7 +349,9 @@ export class VtaAgentController {
 
   /** The one client for this VTA; created on first use, kept for the app's life. */
   client(agent: Agent, vtaDid: string, store?: VtiIdentityStore): VtaClient {
-    if (this.current?.vtaDid === vtaDid) return this.current.client
+    // Never a client built for another agent: after a lock the app makes a new
+    // one, and the old one's in-memory keys and session are gone with it.
+    if (this.current?.vtaDid === vtaDid && this.current.agent === agent) return this.current.client
     const identityStore = store ?? this.identityStore(agent)
     const client = new VtaClient(agent, vtaDid, identityStore, {
       onError: (error) => {
@@ -362,7 +366,7 @@ export class VtaAgentController {
       onInbound: (plaintext) => this.inbound(plaintext),
       onConsentPending: ({ taskType }) => this.set({ awaitingConsentFor: taskType }),
     })
-    this.current = { client, vtaDid, store: identityStore }
+    this.current = { client, vtaDid, store: identityStore, agent }
     this.set({ vtaDid, status: 'disconnected', approvals: [] })
     return client
   }
@@ -417,14 +421,39 @@ export class VtaAgentController {
    * offline and reconnects on its own; nothing live is restored.
    */
   async restore(agent: Agent): Promise<void> {
-    if (this.restored) return
+    if (this.restored) {
+      if (agent !== this.agent) await this.adoptAgent(agent)
+      return
+    }
     this.restored = true
+    this.agent = agent
     const link = await this.linkStore(agent)
       .get()
       .catch(() => undefined)
     this.dispatch({ type: 'restored', link, now: this.now() })
     this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true })
     if (link) void this.ensureOnline(agent)
+  }
+
+  /**
+   * The app replaced its agent — unlocking after a lock builds a new one, and
+   * locking dropped every identity's in-memory keys with the old (#10). The
+   * session belonged to the old agent, so it is closed and the link counts as
+   * dropped; reconnecting on the new agent opens a session, and that session
+   * fetches every identity's keys into the new agent's memory. Without this the
+   * link still read "online", nothing reconnected, and no identity could sign
+   * or message until the app was killed.
+   */
+  private async adoptAgent(agent: Agent): Promise<void> {
+    this.agent = agent
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    const previous = this.current
+    this.current = undefined
+    await previous?.client.disconnect().catch(() => undefined)
+    if (this.state.link.kind !== 'linked') return
+    this.dispatch({ type: 'sessionDropped', reason: 'the app started a new agent', now: this.now() })
+    await this.ensureOnline(agent)
   }
 
   /** A scanned or pasted enrolment offer: ask the person before anything is minted. */
@@ -1124,7 +1153,9 @@ export class VtaAgentController {
    * Bring a linked phone back online: now, when the app returns to the
    * foreground or the network changes, and on a backoff after a drop.
    */
-  async ensureOnline(agent: Agent): Promise<void> {
+  async ensureOnline(given: Agent): Promise<void> {
+    // A retry scheduled before the app replaced its agent still carries the old one.
+    const agent = this.agent ?? given
     const link = this.state.link
     if (link.kind !== 'linked' || link.connection.kind === 'online' || this.reconnecting) return
     this.reconnecting = true
