@@ -246,6 +246,54 @@ describe('redeeming it', () => {
     ).rejects.toMatchObject({ reason })
   })
 
+  // The community's HTTP routes sit behind a per-address limiter that answers
+  // 429 with Retry-After. On the lab upgraded to VTI main (2026-09-28) a
+  // redeem met it and the person was told the community "didn't hand over the
+  // invitation" — as if the invitation were broken, when it only had to wait.
+  function answeringInTurn(...answers: { status: number; retryAfter?: string; body?: unknown }[]) {
+    const calls: string[] = []
+    const fetchFn = jest.fn(async (url: string) => {
+      const a = answers[Math.min(calls.length, answers.length - 1)]
+      calls.push(url)
+      return {
+        status: a.status,
+        ok: a.status >= 200 && a.status < 300,
+        headers: new Headers(a.retryAfter ? { 'retry-after': a.retryAfter } : {}),
+        json: async () => a.body ?? {},
+      } as Response
+    })
+    return { calls, fetch: fetchFn as unknown as typeof fetch }
+  }
+
+  it('waits as the community asks when it is busy, then asks once more', async () => {
+    const waits: number[] = []
+    const { calls, fetch } = answeringInTurn(
+      { status: 429, retryAfter: '2' },
+      { status: 200, body: { credential_response: { credential: VIC } } }
+    )
+    const invitation = await redeemInvitationOffer(agentWith('https://vtc.example/v1'), offer, persona, {
+      fetch,
+      now: () => NOW,
+      sleep: async (ms: number) => void waits.push(ms),
+    } as never)
+    expect(invitation.credential).toEqual(VIC)
+    expect(calls).toHaveLength(2)
+    expect(waits).toEqual([2000])
+  })
+
+  it('says the community is busy, not that the invitation failed, when it stays busy', async () => {
+    const { calls, fetch } = answeringInTurn({ status: 429, retryAfter: '1' })
+    await expect(
+      redeemInvitationOffer(agentWith('https://vtc.example/v1'), offer, persona, {
+        fetch,
+        now: () => NOW,
+        sleep: async () => undefined,
+      } as never)
+    ).rejects.toMatchObject({ reason: 'busy' })
+    expect(calls).toHaveLength(2)
+    expect(invitationOfferMessage(new VtiInvitationOfferError('busy' as never))).toMatch(/busy right now/)
+  })
+
   it('refuses without the invited identity, before asking', async () => {
     const { calls, fetch } = answering(200, {})
     await expect(
