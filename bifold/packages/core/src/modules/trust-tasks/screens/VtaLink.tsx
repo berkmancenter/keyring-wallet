@@ -16,7 +16,7 @@ import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native'
+import { ActivityIndicator, Platform, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -30,6 +30,8 @@ import { vtaAgent } from '../module/vtaAgent'
 import type { VtaLinkFailure } from '../module/vtaLinkMachine'
 
 import { agentDisplayName, agentDisplayNameStart, withAgentName } from './agentName'
+import { DeviceNameField } from './DeviceNamePrompt'
+import { defaultNameOf } from './deviceWords'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
 import { plainError } from './plainError'
@@ -129,15 +131,31 @@ const VtaLink: React.FC = () => {
     openScanner(navigation)
   }, [navigation])
 
-  const onDone = useCallback(() => {
-    // The agent screen, where the first-link introduction plays once. The
+  const defaultName = defaultNameOf(Platform.OS, new Date(), t)
+  const [deviceName, setDeviceName] = useState(defaultName)
+  const [naming, setNaming] = useState(false)
+
+  const onDone = useCallback(async () => {
+    // Name this phone on the agent (new-phone-new-device-plan.md §A): the name
+    // the person's other devices show. A refusal doesn't hold them up; the
+    // presence loop registers the default later, and My devices can rename.
+    setNaming(true)
+    try {
+      if (agent) await vtaAgent.registerThisDevice(agent, deviceName.trim() || defaultName)
+    } catch {
+      // Linked all the same.
+    } finally {
+      setNaming(false)
+    }
+    // The one-time offer, which goes on to the agent screen (where the
+    // first-link introduction plays once) when there is no other phone. The
     // stack is set rather than pushed: pushed on top, "Linked ✓" stayed
     // underneath and came back on every return to the tab; and a link begun
     // from the scanner can open this screen as the stack's only route. It is
     // the only route: a linked phone has no operator panel to go back to.
     const stack = navigation as unknown as { reset: (state: { index: number; routes: { name: string }[] }) => void }
-    stack.reset({ index: 0, routes: [{ name: Screens.VtaAgent }] })
-  }, [navigation])
+    stack.reset({ index: 0, routes: [{ name: Screens.VtaNewPhoneOffer }] })
+  }, [agent, deviceName, defaultName, navigation])
 
   const failureText = (failure?: VtaLinkFailure) => {
     switch (failure?.reason) {
@@ -348,15 +366,19 @@ const VtaLink: React.FC = () => {
           <ThemedText testID={testIdWithKey('VtaLinkLinkedBody')}>
             {t('VtaLink.LinkedBody', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
+          <DeviceNameField value={deviceName} onChange={setDeviceName} onSubmit={() => void onDone()} />
         </View>
       )
       actions = (
         <Button
           title={t('VtaLink.Continue')}
           buttonType={ButtonType.Primary}
-          onPress={onDone}
+          onPress={() => void onDone()}
+          disabled={naming}
           testID={testIdWithKey('VtaLinkContinue')}
-        />
+        >
+          {naming ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+        </Button>
       )
       break
 

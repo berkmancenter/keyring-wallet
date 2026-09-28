@@ -18,18 +18,18 @@ import { testIdWithKey } from '../../../utils/testable'
 /** Long enough for "Sam's work phone (old)", short enough to fit a row. */
 const NAME_LIMIT = 40
 
-export const DeviceNamePrompt: React.FC<{ initial: string; onSave: (name: string) => void; busy?: boolean }> = ({
-  initial,
-  onSave,
-  busy,
+/**
+ * The name field alone, for a screen whose own button saves it (the link
+ * screen's Continue): one filled button per step.
+ */
+export const DeviceNameField: React.FC<{ value: string; onChange: (name: string) => void; onSubmit?: () => void }> = ({
+  value,
+  onChange,
+  onSubmit,
 }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
-  const [name, setName] = useState(initial)
-  const trimmed = name.trim()
-
   const styles = StyleSheet.create({
-    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
     muted: { color: ColorPalette.grayscale.mediumGrey },
     input: {
       ...TextTheme.normal,
@@ -40,6 +40,37 @@ export const DeviceNamePrompt: React.FC<{ initial: string; onSave: (name: string
       minHeight: 48,
     },
   })
+  return (
+    <View style={{ gap: 8 }}>
+      <ThemedText variant="bold">{t('Devices.NameTitle')}</ThemedText>
+      <ThemedText style={styles.muted}>{t('Devices.NameHint')}</ThemedText>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChange}
+        maxLength={NAME_LIMIT}
+        returnKeyType="done"
+        onSubmitEditing={onSubmit}
+        accessibilityLabel={t('Devices.NameTitle')}
+        testID={testIdWithKey('DeviceNameInput')}
+      />
+    </View>
+  )
+}
+
+export const DeviceNamePrompt: React.FC<{ initial: string; onSave: (name: string) => void; busy?: boolean }> = ({
+  initial,
+  onSave,
+  busy,
+}) => {
+  const { t } = useTranslation()
+  const { ColorPalette } = useTheme()
+  const [name, setName] = useState(initial)
+  const trimmed = name.trim()
+
+  const styles = StyleSheet.create({
+    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 8 },
+  })
 
   const save = () => {
     if (trimmed && !busy) onSave(trimmed)
@@ -47,18 +78,7 @@ export const DeviceNamePrompt: React.FC<{ initial: string; onSave: (name: string
 
   return (
     <View style={styles.card}>
-      <ThemedText variant="bold">{t('Devices.NameTitle')}</ThemedText>
-      <ThemedText style={styles.muted}>{t('Devices.NameHint')}</ThemedText>
-      <TextInput
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-        maxLength={NAME_LIMIT}
-        returnKeyType="done"
-        onSubmitEditing={save}
-        accessibilityLabel={t('Devices.NameTitle')}
-        testID={testIdWithKey('DeviceNameInput')}
-      />
+      <DeviceNameField value={name} onChange={setName} onSubmit={save} />
       <Button
         title={t('Devices.NameSave')}
         buttonType={ButtonType.Primary}
