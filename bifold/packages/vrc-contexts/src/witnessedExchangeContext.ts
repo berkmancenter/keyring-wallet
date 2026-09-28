@@ -36,6 +36,14 @@ export const WITNESSED_EXCHANGE_CONTEXT_DOCUMENT = {
     // V1) — nothing has issued under this type yet, so no legacy blast radius.
     StatementCredential: 'https://registry.trustoverip.org/dtg/credentials#StatementCredential',
 
+    // issuerScope (cred-spec #68, merged 2026-09-28): a top-level, REQUIRED
+    // string on every DTG credential declaring the issuer's own correlation
+    // scope (pairwise/directed/public). Plain string term, no @type -- byte-
+    // identical to the real, now-merged dtgwg-vsc-registry v1 context. Only
+    // the vsc shape emits it (WitnessService.ts); wd02 is frozen legacy byte
+    // form and does not track this new requirement.
+    issuerScope: 'https://registry.trustoverip.org/dtg/credentials#issuerScope',
+
     // VSC predicate (plan D2): an absolute IRI naming the statement's meaning,
     // e.g. one of @bifold/dtg-vocab's PREDICATE_WITNESSED/PREDICATE_ENDORSES.
     // @type: @id so the value itself is treated as an IRI, never expanded as

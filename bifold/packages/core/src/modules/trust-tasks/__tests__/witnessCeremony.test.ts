@@ -418,11 +418,18 @@ describe('runWitnessSession', () => {
       proof: { type: 'DataIntegrityProof', proofValue: 'zvrc' },
     }
 
-    function vscVwc(overrides: { predicate?: string; subjectId?: string; digestMultibase?: string } = {}) {
+    function vscVwc(
+      overrides: { predicate?: string; subjectId?: string; digestMultibase?: string; issuerScope?: string } = {}
+    ) {
       return {
         '@context': ['https://www.w3.org/ns/credentials/v2'],
         type: ['VerifiableCredential', 'DTGCredential', 'StatementCredential'],
         issuer: 'did:example:witness',
+        // issuerScope (cred-spec #68): REQUIRED on every DTG credential as of
+        // 2026-09-28. 'directed' is the dtg:witnessed profile's own stated
+        // minimum. Overridable so a test can specifically exercise the
+        // issuerScope check itself (missing/invalid/narrower-than-minimum).
+        issuerScope: overrides.issuerScope ?? 'directed',
         credentialSubject: {
           id: overrides.subjectId ?? referencedVrc.issuer,
           predicate: overrides.predicate ?? DTG_PREDICATE_WITNESSED,
@@ -518,6 +525,48 @@ describe('runWitnessSession', () => {
 
       expect(storedCredentials).toHaveLength(1)
       expect(outcome.subjectBinding.checked).toBe(false) // legacy fixture carries no digest either
+    })
+
+    test('issuerScope (cred-spec #68): a VSC-shaped VWC missing issuerScope is refused', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const vwc = vscVwc() as Record<string, unknown>
+      delete vwc.issuerScope
+      const witness = makeWitness(withVsc(vwc))
+
+      await expect(runWitnessSession(agent, { ...baseOptions(witness, []), referencedVrc })).rejects.toThrow(
+        'VWC issuerScope rejected'
+      )
+      expect(storedCredentials).toHaveLength(0)
+    })
+
+    test('issuerScope: pairwise is narrower than the dtg:witnessed profile\'s directed minimum, and is refused', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness(withVsc(vscVwc({ issuerScope: 'pairwise' })))
+
+      await expect(runWitnessSession(agent, { ...baseOptions(witness, []), referencedVrc })).rejects.toThrow(
+        'VWC issuerScope rejected'
+      )
+      expect(storedCredentials).toHaveLength(0)
+    })
+
+    test('issuerScope: public is broader than the directed minimum and is accepted', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness(withVsc(vscVwc({ issuerScope: 'public' })))
+
+      const outcome = await runWitnessSession(agent, { ...baseOptions(witness, []), referencedVrc })
+
+      expect(outcome.issuerScope).toEqual({ applicable: true, ok: true })
+      expect(storedCredentials).toHaveLength(1)
+    })
+
+    test('issuerScope: a legacy WD02 VWC (no predicate at all) is not subject to this check — it predates the property', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness()
+
+      const outcome = await runWitnessSession(agent, baseOptions(witness, []))
+
+      expect(outcome.issuerScope).toEqual({ applicable: false, ok: true })
+      expect(storedCredentials).toHaveLength(1)
     })
   })
 })

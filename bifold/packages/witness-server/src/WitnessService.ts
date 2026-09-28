@@ -367,6 +367,14 @@ export function buildWitnessCredentialJson(
       id: vwcId,
       type: ['VerifiableCredential', 'DTGCredential', 'StatementCredential'],
       issuer: issuerDid,
+      // issuerScope (cred-spec #68, merged 2026-09-28, REQUIRED on every DTG
+      // credential): the dtg:witnessed profile's own stated minimum is
+      // 'directed' -- the spec's worked examples use 'public' for witness
+      // services generally ("a party that must be findable"), but that
+      // asserts a deployment fact (this witness's DID is broadly, not just
+      // narrowly, findable) this plan does not verify. 'directed' is the
+      // safe, always-conforming floor (plan §9 Q8 -- not decided here).
+      issuerScope: 'directed',
       validFrom: issuedTimestamp,
       validUntil: expirationTimestamp,
       credentialSubject: {

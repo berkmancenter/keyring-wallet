@@ -139,6 +139,44 @@ export function checkPredicateAcceptance(vwc: Record<string, unknown>): Predicat
   return { applicable: true, ok: result.ok, reason: result.ok ? undefined : result.reason }
 }
 
+/**
+ * issuerScope (cred-spec #68, merged 2026-09-28): REQUIRED, top-level, one of
+ * pairwise/directed/public, on every DTG credential. "Verifiers MUST reject a
+ * credential whose issuerScope is missing or invalid." The dtg:witnessed
+ * profile's own stated minimum is `directed`. A legacy WD02 VWC predates this
+ * property entirely -- this check does not apply to it (`applicable: false`),
+ * not a pass, same convention as checkPredicateAcceptance above.
+ */
+const ISSUER_SCOPE_ORDER = ['pairwise', 'directed', 'public'] as const
+type IssuerScope = (typeof ISSUER_SCOPE_ORDER)[number]
+
+export interface IssuerScopeCheck {
+  applicable: boolean
+  ok: boolean
+  reason?: string
+}
+
+export function checkIssuerScope(vwc: Record<string, unknown>, minimum: IssuerScope = 'directed'): IssuerScopeCheck {
+  const subject = subjectOf(vwc)
+  const predicate = subject?.predicate
+  if (typeof predicate !== 'string') return { applicable: false, ok: true }
+
+  const issuerScope = (vwc as { issuerScope?: unknown }).issuerScope
+  if (typeof issuerScope !== 'string' || !ISSUER_SCOPE_ORDER.includes(issuerScope as IssuerScope)) {
+    return { applicable: true, ok: false, reason: `issuerScope is missing or invalid: ${JSON.stringify(issuerScope)}` }
+  }
+  const declared = ISSUER_SCOPE_ORDER.indexOf(issuerScope as IssuerScope)
+  const required = ISSUER_SCOPE_ORDER.indexOf(minimum)
+  if (declared < required) {
+    return {
+      applicable: true,
+      ok: false,
+      reason: `issuerScope "${issuerScope}" is narrower than this profile's stated minimum "${minimum}"`,
+    }
+  }
+  return { applicable: true, ok: true }
+}
+
 export interface WitnessSessionOutcome {
   /** The session document's id — the VWC's taskContext. */
   sessionId: string
@@ -146,6 +184,8 @@ export interface WitnessSessionOutcome {
   vwc: Record<string, unknown>
   /** D6: whether the VWC is bound to a specific, identified edge (not just an opaque digest). */
   subjectBinding: SubjectBinding
+  /** issuerScope (cred-spec #68): whether the VWC's issuerScope is present, valid, and at least the profile's stated minimum. */
+  issuerScope: IssuerScopeCheck
   /** Present only when this session actually ran the locality leg (offered + a sensor directive arrived). */
   locality?: { transcriptProduced: boolean }
 }
@@ -361,6 +401,15 @@ export async function runWitnessSession(
     throw new Error(`VWC predicate rejected: ${predicateAcceptance.reason}`)
   }
 
+  // ---- issuerScope (cred-spec #68, §6 V3 follow-up) ------------------------
+  // REQUIRED on every DTG credential as of 2026-09-28; the dtg:witnessed
+  // profile's own stated minimum is `directed`. Does not apply to a legacy
+  // WD02 VWC, which predates this property.
+  const issuerScopeCheck = checkIssuerScope(vwc)
+  if (issuerScopeCheck.applicable && !issuerScopeCheck.ok) {
+    throw new Error(`VWC issuerScope rejected: ${issuerScopeCheck.reason}`)
+  }
+
   // ---- D6: subject binding (plan §3 D6, §3.2, §6 V3) -----------------------
   // Checked whenever the referenced VRC is in hand. Having none is
   // conforming — an opaque hash, not an identified edge (cred-spec C5) — but
@@ -429,6 +478,7 @@ export async function runWitnessSession(
     sessionId,
     vwc,
     subjectBinding,
+    issuerScope: issuerScopeCheck,
     locality: directive ? { transcriptProduced: transcript !== null } : undefined,
   }
 }

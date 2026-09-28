@@ -165,6 +165,29 @@ describe('VSC members added for the migration — expanded-IRI checks, not quad 
     })
   })
 
+  test('issuerScope (cred-spec #68, top-level, not inside credentialSubject) expands to the exact intended IRI', async () => {
+    const doc = { ...vscShape('https://registry.trustoverip.org/dtg/vsc/witnessed/1'), issuerScope: 'directed' }
+    const [expanded] = await jsonld.expand(doc as never, { documentLoader } as never)
+
+    expect((expanded['https://registry.trustoverip.org/dtg/credentials#issuerScope'] as never[])[0]).toEqual({
+      '@value': 'directed',
+    })
+  })
+
+  test('deleting the issuerScope term drops it to zero quads — the guard guards', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { issuerScope: _removed, ...contextWithoutIssuerScope } = CTX
+    const doc = {
+      '@context': [CREDENTIALS_V2_CONTEXT_URL, contextWithoutIssuerScope],
+      type: ['VerifiableCredential', 'StatementCredential'],
+      issuerScope: 'directed',
+      credentialSubject: { id: 'did:key:zSubject' },
+    }
+    const [expanded] = await jsonld.expand(doc as never, { documentLoader } as never)
+    expect(expanded['https://registry.trustoverip.org/dtg/credentials#issuerScope']).toBeUndefined()
+    expect(expanded['issuerScope']).toBeUndefined()
+  })
+
   test('object.digestMultibase is inherited from the protected credentials/v2 base context, not redefined here — expands to security#digestMultibase', async () => {
     const doc = vscShape('https://registry.trustoverip.org/dtg/vsc/witnessed/1')
     const [expanded] = await jsonld.expand(doc as never, { documentLoader } as never)
