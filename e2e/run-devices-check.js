@@ -216,7 +216,7 @@ try {
     let row = before.find((r) => r.key === key);
     if (!row) {
       // Android's page source holds only what is on screen: bring the row in.
-      await scrollToTestId(driver, `AgentDevice_${key}`, 12).catch(() => undefined);
+      await scrollToTestId(driver, `AgentDevice_${key}`, 40).catch(() => undefined);
       row = (await readRows(driver)).find((r) => r.key === key);
     }
     if (!row) throw new Error(`no row for ${did} (key ${key})`);
@@ -224,7 +224,10 @@ try {
     if (!row.remove) throw new Error(`the row for ${did} offers no Remove`);
     undoLock = ownerLockSetup();
     await stayUnlocked(driver);
-    if (!(await existsTestId(driver, `AgentDeviceRemove_${key}`, 2000))) await scrollToTestId(driver, `AgentDeviceRemove_${key}`, 12);
+    // Until it is on screen, not merely present: iOS's source holds rows off
+    // screen too, so "exists" said yes to a row 8 screens down (#10 re-run).
+    // scrollToTestId returns at once when the button is already displayed.
+    await scrollToTestId(driver, `AgentDeviceRemove_${key}`, 40);
     await tapTestId(driver, `AgentDeviceRemove_${key}`, 15000);
     await answerOwnerPrompt();
     for (const until = Date.now() + 90000; ; await sleep(1000)) {
