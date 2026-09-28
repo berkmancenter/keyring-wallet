@@ -46,7 +46,7 @@ import QRRenderer from '../../../components/misc/QRRenderer'
 import { confirmOwner, ownerLockKind, type OwnerConfirmFailure, type OwnerLockKind } from '../module/ownerConfirm'
 import type { AgentLabel } from '../module/agentLabel'
 import { vtaAgent } from '../module/vtaAgent'
-import { DeviceCannotOwn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
+import { DeviceCannotOwn, deviceCodeIn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
 
 import { useSafeHeaderHeight } from './VtaLink'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
@@ -166,7 +166,8 @@ const VtaCreateAgent: React.FC = () => {
     setError(undefined)
     setBusy(true)
     try {
-      const device = await vtaAgent.addBackupDevice(agent, backupCode.trim(), t('CreateAgent.BackupLabel'))
+      const code = deviceCodeIn(backupCode) ?? backupCode.trim()
+      const device = await vtaAgent.addBackupDevice(agent, code, t('CreateAgent.BackupLabel'))
       setBackupAdded(device.label ?? t('CreateAgent.BackupLabel'))
       // Back to My devices, which reads the list again on focus.
       if (addDevice) navigation.goBack()
@@ -514,7 +515,10 @@ const VtaCreateAgent: React.FC = () => {
         <Button
           title={t('CreateAgent.Paste')}
           buttonType={ButtonType.Secondary}
-          onPress={async () => setBackupCode((await Clipboard.getString()).trim())}
+          onPress={async () => {
+            const pasted = await Clipboard.getString()
+            setBackupCode(deviceCodeIn(pasted) ?? pasted.trim())
+          }}
           testID={testIdWithKey('AgentBackupPasteCode')}
         />
         <Button
