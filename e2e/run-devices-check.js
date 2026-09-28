@@ -25,6 +25,7 @@ import { execFileSync } from "node:child_process";
 
 import { dumpSource, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
 import { makeDriver, textOf, unlockToHome } from "./lib/keyringRoles.js";
+import { unlockIfLocked } from "./lib/flows.js";
 import { deviceKey } from "./lib/testIdKeys.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
 
@@ -33,8 +34,6 @@ const UDID = process.env.UDID;
 const ACTION = process.env.ACTION || "list";
 const OWNER_PIN = process.env.OWNER_PIN || "1111";
 const ID = PLATFORM === "android" ? "@resource-id" : "@name";
-const TEXT = PLATFORM === "android" ? "//android.widget.TextView" : "//XCUIElementTypeStaticText";
-const TEXT_OF = PLATFORM === "android" ? "text" : "label";
 
 if (!UDID) throw new Error("UDID is required: the simulator's udid or the emulator's serial");
 if (!["list", "rename", "remove"].includes(ACTION)) throw new Error(`ACTION must be list, rename or remove, not ${ACTION}`);
@@ -76,13 +75,39 @@ async function answerOwnerPrompt(ms = 20000) {
   }
 }
 
-const rectOf = async (el) => ({ ...(await el.getLocation()), ...(await el.getSize()) });
 const inside = (r, p) => {
   const cx = p.x + p.width / 2;
   const cy = p.y + p.height / 2;
   return cx >= r.x && cx <= r.x + r.width && cy >= r.y && cy <= r.y + r.height;
 };
-const idOf = async (el) => String(await el.getAttribute(PLATFORM === "android" ? "resource-id" : "name")).replace(/^.*?:id\//, "");
+const unescape = (v) => v.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#10;/g, "\n").replace(/&amp;/g, "&");
+
+/**
+ * Every element of one page source, with its id, words and rectangle. One
+ * source read, not a call per element: a runner agent lists dozens of
+ * devices, and reading them one by one took minutes, long enough for the app
+ * to lock itself mid-read (the #10 lab check, 04:35Z).
+ */
+function elementsOf(source) {
+  const out = [];
+  for (const m of source.matchAll(/<([A-Za-z.]+)\s([^>]*?)\/?>/g)) {
+    const attrs = {};
+    for (const a of m[2].matchAll(/([\w-]+)="([^"]*)"/g)) attrs[a[1]] = unescape(a[2]);
+    let r;
+    if (attrs.bounds) {
+      const b = attrs.bounds.match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/);
+      if (b) r = { x: +b[1], y: +b[2], width: b[3] - b[1], height: b[4] - b[2] };
+    } else if (attrs.x !== undefined) {
+      r = { x: +attrs.x, y: +attrs.y, width: +attrs.width, height: +attrs.height };
+    }
+    if (!r) continue;
+    const id = (PLATFORM === "android" ? attrs["resource-id"] : attrs.name) || "";
+    const words = (PLATFORM === "android" ? attrs.text : attrs.label) || "";
+    const isText = PLATFORM === "android" ? m[1].endsWith("TextView") : m[1] === "XCUIElementTypeStaticText";
+    out.push({ id: id.replace(/^.*?:id\//, ""), words, isText, r });
+  }
+  return out;
+}
 
 /**
  * Every row as it reads. Android flattens a row (its texts are siblings of the
@@ -90,32 +115,24 @@ const idOf = async (el) => String(await el.getAttribute(PLATFORM === "android" ?
  * geometry, on both platforms alike.
  */
 async function readRows(d) {
-  const rows = [];
-  for (const el of await d.$$(`//*[starts-with(${ID},"com.ariesbifold:id/AgentDevice_")]`)) {
-    rows.push({ key: (await idOf(el)).replace("AgentDevice_", ""), r: await rectOf(el), texts: [], remove: false, rename: false, state: undefined });
-  }
-  for (const t of await d.$$(TEXT)) {
-    const words = (await t.getAttribute(TEXT_OF)) || "";
-    if (!words.trim()) continue;
-    const r = await rectOf(t);
-    const row = rows.find((x) => inside(x.r, r));
-    if (row && !row.texts.includes(words)) row.texts.push(words);
-  }
-  for (const b of await d.$$(`//*[starts-with(${ID},"com.ariesbifold:id/AgentDeviceRemove_")]`)) {
-    const r = await rectOf(b);
-    const row = rows.find((x) => inside(x.r, r));
-    if (row) row.remove = true;
-  }
-  for (const b of await d.$$(`//*[starts-with(${ID},"com.ariesbifold:id/AgentDeviceState_")]`)) {
-    const key = (await idOf(b)).replace("AgentDeviceState_", "");
-    const row = rows.find((x) => x.key === key);
-    if (row) row.state = (await b.getAttribute(TEXT_OF)) || (await textOf(d, `AgentDeviceState_${key}`).catch(() => ""));
-  }
-  const rename = await d.$(`//*[${ID}="com.ariesbifold:id/AgentDeviceRename"]`);
-  if (await rename.isExisting()) {
-    const r = await rectOf(rename);
-    const row = rows.find((x) => inside(x.r, r));
-    if (row) row.rename = true;
+  const els = elementsOf(await d.getPageSource());
+  const rows = els
+    .filter((e) => e.id.startsWith("AgentDevice_"))
+    .map((e) => ({ key: e.id.replace("AgentDevice_", ""), r: e.r, texts: [], remove: false, rename: false, state: undefined }));
+  for (const e of els) {
+    if (e.id.startsWith("AgentDeviceRemove_")) {
+      const row = rows.find((x) => inside(x.r, e.r));
+      if (row) row.remove = true;
+    } else if (e.id === "AgentDeviceRename") {
+      const row = rows.find((x) => inside(x.r, e.r));
+      if (row) row.rename = true;
+    } else if (e.id.startsWith("AgentDeviceState_")) {
+      const row = rows.find((x) => x.key === e.id.replace("AgentDeviceState_", ""));
+      if (row && e.words) row.state = e.words;
+    } else if (e.isText && e.words.trim()) {
+      const row = rows.find((x) => inside(x.r, e.r));
+      if (row && !row.texts.includes(e.words)) row.texts.push(e.words);
+    }
   }
   return rows.map(({ key, texts, remove, rename, state }) => {
     // The row's first text is its name; the about line holds "·" or "This phone".
@@ -123,6 +140,14 @@ async function readRows(d) {
     const about = rest.find((t) => /·|This phone|Seen|Last seen/.test(t));
     return { key, name, about, state, remove, rename };
   });
+}
+
+/** The app locks itself after a while untouched: unlock it and come back to My devices. */
+async function stayUnlocked(d) {
+  if (!(await existsTestId(d, "EnterPIN", 500))) return;
+  console.log("[devices] the app locked itself — unlocking");
+  await unlockIfLocked(d);
+  await waitForTestId(d, "AgentDeviceList", 30000);
 }
 
 async function openDevices(d) {
@@ -142,6 +167,7 @@ async function openDevices(d) {
 }
 
 async function report(d, label) {
+  await stayUnlocked(d);
   const rows = await readRows(d);
   for (const r of rows) {
     console.log(`[devices] ${label} ${r.key}: "${r.name}" · about="${r.about ?? ""}" · state="${r.state ?? ""}" · remove=${r.remove} rename=${r.rename}`);
@@ -167,6 +193,7 @@ try {
   if (ACTION === "rename") {
     const name = process.env.NAME;
     if (!name) throw new Error("ACTION=rename needs NAME");
+    await stayUnlocked(driver);
     await tapTestId(driver, "AgentDeviceRename", 15000);
     const input = await waitForTestId(driver, "DeviceNameInput", 15000);
     await input.clearValue();
@@ -186,11 +213,18 @@ try {
     const did = process.env.TARGET_DID;
     if (!did) throw new Error("ACTION=remove needs TARGET_DID");
     const key = deviceKey(did);
-    const row = before.find((r) => r.key === key);
+    let row = before.find((r) => r.key === key);
+    if (!row) {
+      // Android's page source holds only what is on screen: bring the row in.
+      await scrollToTestId(driver, `AgentDevice_${key}`, 12).catch(() => undefined);
+      row = (await readRows(driver)).find((r) => r.key === key);
+    }
     if (!row) throw new Error(`no row for ${did} (key ${key})`);
     if (row.rename) throw new Error("TARGET_DID is this phone: it is never removed here");
     if (!row.remove) throw new Error(`the row for ${did} offers no Remove`);
     undoLock = ownerLockSetup();
+    await stayUnlocked(driver);
+    if (!(await existsTestId(driver, `AgentDeviceRemove_${key}`, 2000))) await scrollToTestId(driver, `AgentDeviceRemove_${key}`, 12);
     await tapTestId(driver, `AgentDeviceRemove_${key}`, 15000);
     await answerOwnerPrompt();
     for (const until = Date.now() + 90000; ; await sleep(1000)) {
