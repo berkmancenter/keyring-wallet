@@ -52,6 +52,14 @@ test("wallet: developer and lab tooling under scripts/ is not a build input", ()
   }
 });
 
+test("wallet: the e2e harness is not in the app, its own package files included", () => {
+  for (const p of ["e2e/package.json", "e2e/package-lock.json", "e2e/run-lock-probe.mjs", "e2e/lib/driver.js", "e2e/README.md"]) {
+    assert.equal(w(p), "none", p);
+  }
+  // Only e2e/ at the root: the app's own package.json stays native.
+  assert.equal(w("app/package.json"), "native");
+});
+
 test("wallet: anything unrecognised is native (doubt → full build)", () => {
   assert.equal(w("app/some-new-config.yaml"), "native");
   assert.equal(w("Gemfile"), "native");
