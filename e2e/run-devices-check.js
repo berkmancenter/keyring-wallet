@@ -9,7 +9,10 @@
  *   PLATFORM=ios|android UDID=<sim udid or emulator serial> ACTION=list \
  *     [APPIUM_PORT=…] node run-devices-check.js
  *   ACTION=rename NAME="Sam's phone"          renames this phone
- *   ACTION=remove TARGET_DID=<the other DID>  removes that device (never this phone)
+ *   ACTION=remove TARGET_DID=<the other DID>  removes that device (never this phone);
+ *                 or TARGET_NAME=<its row name> when the DID isn't to hand
+ *   ACTION=erase                              on a REMOVED phone: its "no longer linked"
+ *                                             screen, then Erase this phone's copy
  *   ACTION=rotate                             changes the keys of the identities this phone made (the
  *                                             lost-phone card); ROTATE_ALLOW_UNPUBLISHED=1 passes keys
  *                                             changed but not yet served (a DID host's cache: always
@@ -40,7 +43,7 @@ const OWNER_PIN = process.env.OWNER_PIN || "1111";
 const ID = PLATFORM === "android" ? "@resource-id" : "@name";
 
 if (!UDID) throw new Error("UDID is required: the simulator's udid or the emulator's serial");
-if (!["list", "rename", "remove", "rotate"].includes(ACTION)) throw new Error(`ACTION must be list, rename, remove or rotate, not ${ACTION}`);
+if (!["list", "rename", "remove", "rotate", "erase"].includes(ACTION)) throw new Error(`ACTION must be list, rename, remove, rotate or erase, not ${ACTION}`);
 
 const adb = (...args) => execFileSync("adb", ["-s", UDID, ...args], { encoding: "utf8" });
 
@@ -173,6 +176,8 @@ async function openDevices(d) {
 async function report(d, label) {
   await stayUnlocked(d);
   const rows = await readRows(d);
+  const sibling = await existsTestId(d, "SiblingNotice", 500);
+  console.log(`[devices] ${label}: "also open as you" notice ${sibling ? "SHOWN" : "not shown"}`);
   for (const r of rows) {
     console.log(`[devices] ${label} ${r.key}: "${r.name}" · about="${r.about ?? ""}" · state="${r.state ?? ""}" · remove=${r.remove} rename=${r.rename}`);
   }
@@ -188,6 +193,34 @@ const lap = (what) => console.log(`[devices] ${what}: ${((Date.now() - t0) / 100
 try {
   await ensureAppium();
   driver = await makeDriver({ platform: PLATFORM, udid: UDID, keepState: true });
+  if (ACTION === "erase") {
+    // A removed phone: its next call to the agent is refused, and My Agent
+    // says it is no longer linked, with Erase and Link again of equal weight.
+    await unlockToHome(driver);
+    await tapTestId(driver, "MyAgent", 15000).catch(() => undefined);
+    for (const until = Date.now() + 120000; !(await existsTestId(driver, "VtaLinkErase", 2000)); ) {
+      if (await existsTestId(driver, "AgentDevices", 500)) {
+        await tapTestId(driver, "AgentDevices", 5000).catch(() => undefined);
+        await sleep(3000);
+        await tapTestId(driver, "MyAgent", 5000).catch(() => undefined);
+      }
+      if (Date.now() > until) throw new Error("the removed phone never showed its no-longer-linked screen within 120 s");
+    }
+    console.log(`[devices] removed phone: "${await textOf(driver, "VtaLinkError")}"`);
+    const both = (await existsTestId(driver, "VtaLinkErase", 500)) && (await existsTestId(driver, "VtaLinkScanAgain", 500));
+    if (!both) throw new Error("the removed phone must offer Erase and Link again");
+    await screenshot(driver, `devices-removed-${PLATFORM}`);
+    lap("removed screen");
+    await tapTestId(driver, "VtaLinkErase", 15000);
+    console.log(`[devices] erase explains: "${await textOf(driver, "VtaLinkEraseWhat")}"`);
+    await tapTestId(driver, "VtaLinkEraseConfirm", 15000);
+    await waitForTestId(driver, "VtaLinkErased", 60000);
+    console.log(`[devices] erased: "${await textOf(driver, "VtaLinkErased")}"`);
+    await screenshot(driver, `devices-erased-${PLATFORM}`);
+    lap("erase");
+    printSuccess("MY DEVICES — erase");
+    process.exitCode = 0;
+  } else {
   await openDevices(driver);
   lap("open My devices");
   const before = await report(driver, "before");
@@ -215,15 +248,21 @@ try {
 
   if (ACTION === "remove") {
     const did = process.env.TARGET_DID;
-    if (!did) throw new Error("ACTION=remove needs TARGET_DID");
-    const key = deviceKey(did);
+    const byName = process.env.TARGET_NAME;
+    if (!did && !byName) throw new Error("ACTION=remove needs TARGET_DID or TARGET_NAME");
+    let key = did ? deviceKey(did) : before.find((r) => r.name === byName && !r.rename)?.key;
+    if (!key && byName) {
+      await scrollToTestId(driver, "LostPhone", 40).catch(() => undefined);
+      key = (await readRows(driver)).find((r) => r.name === byName && !r.rename)?.key;
+    }
+    if (!key) throw new Error(`no other device named "${byName}"`);
     let row = before.find((r) => r.key === key);
     if (!row) {
       // Android's page source holds only what is on screen: bring the row in.
       await scrollToTestId(driver, `AgentDevice_${key}`, 40).catch(() => undefined);
       row = (await readRows(driver)).find((r) => r.key === key);
     }
-    if (!row) throw new Error(`no row for ${did} (key ${key})`);
+    if (!row) throw new Error(`no row for ${did ?? byName} (key ${key})`);
     if (row.rename) throw new Error("TARGET_DID is this phone: it is never removed here");
     if (!row.remove) throw new Error(`the row for ${did} offers no Remove`);
     undoLock = ownerLockSetup();
@@ -289,6 +328,7 @@ try {
   lap("done");
   printSuccess(`MY DEVICES — ${ACTION}`);
   process.exitCode = 0;
+  }
 } catch (err) {
   process.exitCode = 1;
   console.error(err);
