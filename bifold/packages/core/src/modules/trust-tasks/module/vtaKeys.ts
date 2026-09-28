@@ -19,7 +19,7 @@
  */
 
 import type { Agent } from '@credo-ts/core'
-import { TypedArrayEncoder } from '@credo-ts/core'
+import { Kms, TypedArrayEncoder } from '@credo-ts/core'
 
 /** What `keys/export-secret/0.1` returns. */
 export interface VtaExportedKey {
@@ -79,11 +79,7 @@ export async function importVtaKey(
   if (pub.curve !== priv.curve) {
     throw new Error(`vtaKeys: public (${pub.curve}) and private (${priv.curve}) halves disagree`)
   }
-  if (into) {
-    await Promise.resolve()
-      .then(() => agent.kms.deleteKey({ keyId: into.keyId, backend: into.backend }))
-      .catch(() => false)
-  }
+  if (into) await deleteHeldCopy(agent, into.backend, into.keyId)
   const imported = await agent.kms.importKey({
     ...(into ? { backend: into.backend } : {}),
     privateJwk: {
@@ -126,8 +122,25 @@ export function isInMemoryKeyId(keyId: string): boolean {
  * deletes from its first backend unless told which). Never throws.
  */
 export async function forgetKeyCopy(agent: Agent, keyId: string): Promise<void> {
-  const backend = isInMemoryKeyId(keyId) ? EPHEMERAL_KMS_BACKEND : undefined
+  if (isInMemoryKeyId(keyId)) return deleteHeldCopy(agent, EPHEMERAL_KMS_BACKEND, keyId)
   await Promise.resolve()
-    .then(() => agent.kms.deleteKey({ keyId, ...(backend ? { backend } : {}) }))
+    .then(() => agent.kms.deleteKey({ keyId }))
+    .catch(() => undefined)
+}
+
+/**
+ * Delete from a named backend directly: the in-memory backend declines
+ * `deleteKey` as an operation (so an unnamed delete of a wallet key never
+ * lands there), and Credo checks that even when the backend is named.
+ * Never throws.
+ */
+async function deleteHeldCopy(agent: Agent, backend: string, keyId: string): Promise<void> {
+  await Promise.resolve()
+    .then(() => {
+      const config = agent.dependencyManager?.resolve?.(Kms.KeyManagementModuleConfig)
+      const kms = config?.backends.find((b) => b.backend === backend)
+      if (kms) return kms.deleteKey(agent.context, { keyId })
+      return agent.kms.deleteKey({ keyId, backend })
+    })
     .catch(() => undefined)
 }

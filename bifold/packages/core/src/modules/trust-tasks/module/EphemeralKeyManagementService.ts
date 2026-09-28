@@ -12,11 +12,18 @@
  * A second KMS backend, `ephemeral`: Credo's own Askar KMS run against a
  * private in-memory Askar store instead of the wallet's, so every operation —
  * signing, key agreement, DIDComm encryption — is exactly the one the wallet
- * uses. Credo finds the backend for a sign, encrypt or decrypt from the key id
- * alone (`KeyManagementApi` asks each backend for the key), so code that signs
- * by key id is unchanged. It never takes a key it was not named for: creating
- * keys is left to the wallet's store, and a key is imported here only when the
- * import names this backend.
+ * uses.
+ *
+ * It goes FIRST in the agent's backends, and claims only operations that name
+ * one of its own keys (ids from `inMemoryKeyId`, prefix `vta-copy:`). First,
+ * because Credo routes an encrypt or decrypt whose key is a key agreement to
+ * the first backend that supports it, never by the key's id (credo-ts core
+ * 0.6.3 `KeyManagementApi.encrypt`/`decrypt` → `getKms(undefined, op)`); last,
+ * a persona's DIDComm v2 session asked the wallet's store for an in-memory key
+ * and failed. Everything that does not name an in-memory key — creating keys,
+ * importing the wallet's own, deleting, random bytes — it declines, so it
+ * falls through to the wallet's store as before. Signing is routed by key id
+ * already (Credo asks each backend for the key), and finds it here.
  *
  * {@link dropInMemoryKeys} empties it; the app does so whenever it locks.
  *
@@ -26,7 +33,7 @@ import { AskarKeyManagementService } from '@credo-ts/askar'
 import { Kms, type Agent, type AgentContext } from '@credo-ts/core'
 import { KdfMethod, Store, StoreKeyMethod, type Key, type Session } from '@openwallet-foundation/askar-shared'
 
-import { EPHEMERAL_KMS_BACKEND } from './vtaKeys'
+import { EPHEMERAL_KMS_BACKEND, isInMemoryKeyId } from './vtaKeys'
 
 export { EPHEMERAL_KMS_BACKEND }
 
@@ -55,8 +62,24 @@ export class EphemeralKeyManagementService implements Kms.KeyManagementService {
   }
 
   public isOperationSupported(agentContext: AgentContext, operation: Kms.KmsOperation): boolean {
-    // Creating a key is the wallet's; this backend only holds copies it is handed.
-    if (operation.operation === 'createKey') return false
+    switch (operation.operation) {
+      case 'importKey':
+        // Only a copy named for memory; the wallet's own imports go past.
+        if (!isInMemoryKeyId(String((operation.privateJwk as { kid?: unknown }).kid ?? ''))) return false
+        break
+      case 'encrypt':
+      case 'decrypt':
+        // Credo routes these by backend order, not key id: claim only our keys.
+        if (!isInMemoryKeyId(String((operation.keyAgreement as { keyId?: unknown } | undefined)?.keyId ?? ''))) return false
+        break
+      case 'sign':
+      case 'verify':
+        // Routed by key id: Credo asks for the key, and only ours are here.
+        break
+      default:
+        // createKey, deleteKey, randomBytes: the wallet's.
+        return false
+    }
     return this.askar.isOperationSupported(agentContext, operation)
   }
 

@@ -82,11 +82,12 @@ export function getAgentModules({
     }),
     kms: new Kms.KeyManagementModule({
       backends: [
+        // Persona key copies, held in memory only (#10). First: Credo routes a
+        // key-agreement encrypt/decrypt to the first backend that supports it,
+        // and this one claims only operations naming its own keys.
+        new EphemeralKeyManagementService(),
         new AskarKeyManagementService(),
         new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
-        // Persona key copies, held in memory only (#10): last, so nothing
-        // lands here unless an import names it.
-        new EphemeralKeyManagementService(),
       ],
       defaultBackend: 'askar',
     }),

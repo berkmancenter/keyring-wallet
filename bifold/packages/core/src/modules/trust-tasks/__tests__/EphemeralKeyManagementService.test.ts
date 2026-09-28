@@ -63,12 +63,26 @@ beforeEach(() => {
 })
 
 describe('the in-memory key backend', () => {
-  it('is named for the in-memory copies, and never creates keys of its own', () => {
+  it('is named for the in-memory copies, and claims only operations on its own keys', () => {
     const kms = new EphemeralKeyManagementService()
     expect(kms.backend).toBe('ephemeral')
     expect((kms as unknown as { askar: { backend: string } }).askar.backend).toBe('ephemeral')
-    expect(kms.isOperationSupported(ctx, { operation: 'createKey' } as never)).toBe(false)
-    expect(kms.isOperationSupported(ctx, { operation: 'sign' } as never)).toBe(true)
+    const supports = (op: object) => kms.isOperationSupported(ctx, op as never)
+    // The wallet's: new keys, its own imports, deletes, random bytes.
+    expect(supports({ operation: 'createKey' })).toBe(false)
+    expect(supports({ operation: 'importKey', privateJwk: { kid: '3f1c-wallet-uuid' } })).toBe(false)
+    expect(supports({ operation: 'importKey', privateJwk: {} })).toBe(false)
+    expect(supports({ operation: 'deleteKey' })).toBe(false)
+    expect(supports({ operation: 'randomBytes' })).toBe(false)
+    // Ours: a copy imported for memory, and key agreement with one of our keys —
+    // which Credo routes by backend order, so it must be claimed here.
+    expect(supports({ operation: 'importKey', privateJwk: { kid: 'vta-copy:agent:persona#key-1' } })).toBe(true)
+    expect(supports({ operation: 'decrypt', keyAgreement: { keyId: 'vta-copy:agent:persona#key-1' } })).toBe(true)
+    expect(supports({ operation: 'encrypt', keyAgreement: { keyId: 'vta-copy:agent:persona#key-1' } })).toBe(true)
+    expect(supports({ operation: 'decrypt', keyAgreement: { keyId: 'wallet-connection-key' } })).toBe(false)
+    expect(supports({ operation: 'encrypt', keyAgreement: {} })).toBe(false)
+    // Signing is routed by key id; only our keys are found here.
+    expect(supports({ operation: 'sign' })).toBe(true)
   })
 
   it('opens no store until a key arrives, and then an in-memory one', async () => {
