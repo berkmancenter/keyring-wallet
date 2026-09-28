@@ -12,6 +12,7 @@
 
 import type { Agent } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { Platform } from 'react-native'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
@@ -872,6 +873,24 @@ export class VtaAgentController {
     return removeAgentDevice(client, { ...device, isThisPhone: false }).catch((error: unknown) => {
       throw this.refused(error)
     })
+  }
+
+  /**
+   * Register this phone on its agent with the name the person chose (#10). The
+   * agent refuses a second registration, so a phone already registered — by
+   * the presence loop with the default name, say — gets the chosen name by a
+   * heartbeat instead: either way the agent ends with this name.
+   */
+  async registerThisDevice(agent: Agent, displayName: string): Promise<void> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    const claimed = await registerThisDevice(client, { displayName, platform: Platform.OS }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    if (claimed === 'alreadyRegistered') {
+      await renameThisDevice(client, displayName).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+    }
   }
 
   /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */

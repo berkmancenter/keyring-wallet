@@ -148,20 +148,22 @@ export async function removeAgentDevice(
 /**
  * Claim this phone's device binding. The agent refuses a second claim for the
  * same DID (`device/register:alreadyRegistered`), which means it is already
- * registered — the name is corrected on a heartbeat instead.
+ * registered; the answer says which, so a caller can correct the name on a
+ * heartbeat instead.
  */
 export async function registerThisDevice(
   port: AgentDevicePort,
   opts: { displayName: string; platform: string }
-): Promise<void> {
+): Promise<'registered' | 'alreadyRegistered'> {
   try {
     await port.task(AGENT_DEVICE_TASK.register, {
       consumerKind: { kind: 'companion', formFactor: 'mobile' },
       displayName: opts.displayName,
       platform: opts.platform,
     })
+    return 'registered'
   } catch (e) {
-    if (e instanceof VtiRefusal && e.code.includes('alreadyRegistered')) return
+    if (e instanceof VtiRefusal && e.code.includes('alreadyRegistered')) return 'alreadyRegistered'
     throw e
   }
 }
