@@ -139,7 +139,7 @@ log "every VTA can mint a served persona"
 for n in alice community bob; do
   home="$STACK_DIR/pnm-$n"
   [ -d "$home" ] || continue
-  servers=$(PNM_HOME="$home" "$VTI_SRC/target/debug/pnm" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c "did:webvh" || true)
+  servers=$(PNM_HOME="$home" "${PNM_BIN:-$HOME/vti-stack/bin/pnm}" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c "did:webvh" || true)
   if [ "${servers:-0}" -gt 0 ]; then ok "$n has a DID host registered"; else bad "$n has NO DID host registered — persona mints will not resolve (pnm did-mgmt servers add --id dids --did \$DIDS_DID)"; fi
 done
 

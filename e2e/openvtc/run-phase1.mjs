@@ -17,6 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -61,6 +62,9 @@ const { values: a } = parseArgs({
 });
 const memberSource = { vtcBase: a['vtc-base'], communityDid: a['community-did'], adminCredential: a['admin-credential'] };
 if (!['android', 'ios'].includes(a.platform)) throw new Error('--platform android|ios');
+// The signed build at its stable path (scripts/openvtc/sign-lab-tool.sh): an ad hoc
+// openvtc build re-prompts the Keychain for its profile on every rebuild.
+a['openvtc-bin'] ??= path.join(os.homedir(), 'vti-stack/bin/openvtc');
 for (const k of ['label', 'expect', 'apk', 'openvtc-bin', 'openvtc-version', 'fixture-dir', 'profile']) if (!a[k]) throw new Error(`--${k} is required`);
 if (!['red', 'green'].includes(a.expect)) throw new Error('--expect red|green');
 

@@ -53,7 +53,7 @@ if [ "$MODE" != online ] && [ -z "$PORT" ]; then
 fi
 
 if [ "$MODE" = online ]; then
-  PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
+  PNM="${PNM_BIN:-$HOME/vti-stack/bin/pnm}"   # signed, stable (sign-lab-tool.sh)
   # PNM_HOME only when the caller set it: pnm since VTI main reads it as its
   # config and session home, and an empty default dir breaks it.
   [ -n "${PNM_HOME:-}" ] && export PNM_HOME

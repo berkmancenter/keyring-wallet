@@ -30,7 +30,9 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const PNM = process.env.PNM_BIN || path.join(os.homedir(), "Documents/vti-main/target/debug/pnm");
+// The signed build at its stable path (scripts/openvtc/sign-lab-tool.sh): an ad hoc
+// target/debug/pnm re-prompts the Keychain on every rebuild.
+const PNM = process.env.PNM_BIN || path.join(os.homedir(), "vti-stack/bin/pnm");
 // Every call goes through the slug's machine-wide lock: one pnm slug is one
 // admin DID, and the mediator keeps one live socket per DID. See the script.
 const PNM_LOCKED = fileURLToPath(new URL("../../scripts/openvtc/pnm-locked", import.meta.url));
