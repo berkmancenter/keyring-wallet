@@ -48,8 +48,9 @@ function pnm(slug, pnmHome, args) {
     try {
       return execFileSync(PNM_LOCKED, ["--vta", slug, ...args], {
         encoding: "utf8",
-        // PNM_HOME is inert (pnm 0.19.0 never reads it); kept for older callers.
-        env: { ...process.env, PNM_BIN: PNM, PNM_HOME: pnmHome },
+        // PNM_HOME only when a caller names one: pnm since VTI main reads it as
+        // its config and session home (pnm 0.19.0 ignored it).
+        env: { ...process.env, PNM_BIN: PNM, ...(pnmHome ? { PNM_HOME: pnmHome } : {}) },
         // pnm prints its banner on stderr; keep it out of the run's log.
         stdio: ["ignore", "pipe", "pipe"],
         // The lock may wait for another session's call first (PNM_LOCK_WAIT).
@@ -119,7 +120,7 @@ export function removeRunKeys({ slug, pnmHome, before, tempDid, failed = false, 
     const keep = mode === "never" || (failed && mode !== "always");
     if (keep) {
       log(`[acl] keeping ${mine.length} entr${mine.length === 1 ? "y" : "ies"} from this ${failed ? "failed " : ""}run, as evidence. To remove them:`);
-      for (const e of mine) log(`  PNM_HOME=${pnmHome} ${PNM} --vta ${slug} acl delete '${e.subject}'`);
+      for (const e of mine) log(`  ${pnmHome ? `PNM_HOME=${pnmHome} ` : ''}${PNM} --vta ${slug} acl delete '${e.subject}'`);
       return;
     }
     for (const e of mine) {

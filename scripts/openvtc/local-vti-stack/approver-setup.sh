@@ -12,7 +12,8 @@
 set -euo pipefail
 STACK_DIR="${STACK_DIR:-$HOME/vti-stack}"
 VTA_SLUG="${VTA_SLUG:-${RUNNER_VTA:-bob}}"
-export PNM_HOME="${PNM_HOME:-$STACK_DIR/pnm-$VTA_SLUG}"
+# PNM_HOME only when set (pnm since VTI main reads it as its config home).
+[ -n "${PNM_HOME:-}" ] && export PNM_HOME
 PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
 SET="${APPROVER_SET:-keyring-approvers}"
 TASK_DEFAULT="https://trusttasks.org/spec/keys/export-secret/0.1"
