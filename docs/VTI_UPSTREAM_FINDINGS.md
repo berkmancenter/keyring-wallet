@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.61 — 2026-09-28.** A living document: every finding here was measured
+**Version 1.62 — 2026-09-28.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -76,6 +76,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-50](#vti-50--a-listen-only-vtc-loses-a-missed-live-push-once-the-message-expires) | A listen-only VTC loses a missed live push once the message expires | Medium | Open, not sent. Measured on the lab 2026-09-27: 2 of 854 messages expired uncollected. Keyring's half (a 5-minute forward expiry) is fixed in keyring-bifold #172 | lab, VTI `63d4c0ca`, tdk `6712fef2` |
 | [VTI-51](#vti-51--after-a-mediator-outage-vta-and-vtc-try-to-reconnect-once-then-stay-offline) | After a mediator outage, VTA and VTC try to reconnect once, then stay offline | High | Open, not sent. Measured on the lab 2026-09-27 22:07Z: all three services stayed offline 2+ h until restarted | lab, VTI `63d4c0ca`, tdk `6712fef2` |
 | [VTI-52](#vti-52--a-reply-stored-for-a-connected-client-is-not-pushed-on-its-live-session) | A reply stored for a connected client is not pushed on its live session | Medium | Candidate, not sent. Measured on the lab 2026-09-28 (tdk `55580615`): a VTA's `acl/swap-key` reply was stored but never pushed on the requester's live session, twice; live pushes that did happen took ~0.7 s. |
+| [VTI-53](#vti-53--a-push-gateway-provision-bundle-has-no-installer-and-pnm-bootstrap-open-destroys-it) | A push-gateway provision bundle has no installer, and `pnm bootstrap open` destroys it | Medium | Candidate, not sent. Read from source at VTI `2240aa7e` and vti-push-gateway `e542a9d7`; deliberately not run, because running it destroys the keys. |
 
 ## Stack under test
 
@@ -2053,6 +2054,18 @@ Where a push did happen on this mediator, it was not immediate: on a phone's ses
 
 (d) **Not claimed.** A phone link that stalled on the same lab turned out to be the client's own sign-in (not this finding); it passed on a repeat on the same mediator. The same clients on tdk `6712fef2` showed no missed push, but on too few runs to call it a regression.
 
+### VTI-53 — A push-gateway provision bundle has no installer, and `pnm bootstrap open` destroys it
+
+*Candidate.* Read from source at VTI `2240aa7e` and vti-push-gateway `e542a9d7` (2026-09-28). Deliberately **not** run: running it destroys the keys.
+
+(a) **What happens.** The gateway README says to provision its identity with `pnm bootstrap provision-integration --template push-gateway …` and then open the bundle into the identity file `{did, signing, keyAgreement, mediator}` (vti-push-gateway README.md ~79-81, `src/identity.rs:1-17`). No tool in either repository writes that file: the gateway has no import subcommand (`src/main.rs:86-95`). The obvious tool, `pnm bootstrap open`, calls `open_armored_bundle` (`vta-cli-common/src/sealed_consumer.rs:186`), which runs `consume_secret` (`:198`, zero-overwrite and delete of the single-use seed) straight after decrypting. For a `TemplateBootstrap` payload it then only prints a summary ending "Install via the provision-integration flow on the integration host." (`pnm-cli/src/bootstrap.rs:204-229`), and `--out` is valid only for `AdminCredential` and `ContextProvision`. The variant that keeps the secret, `open_armored_bundle_keeping_secret` (`sealed_consumer.rs:204`), is private.
+
+(b) **Consequence.** An operator who follows the gateway README with pnm loses the gateway's keys irrecoverably and must re-provision. VTI's own docs say the install step is integration-specific and belongs to the integration's own setup wizard (`docs/02-vta/provision-integration.md`, Phase 3). The mediator has one (affinidi-tdk-rs `mediator-setup`); the push gateway has none.
+
+(c) **Expected, their call:** an installer on the gateway side (for example `vti-push-gateway import-bundle`), or `pnm bootstrap open --install-identity <path>` for template payloads; at the least, `bootstrap open` should not consume a seed when it writes nothing.
+
+(d) **Our workaround:** a converter that opens the bundle with vta-sdk's documented `open_bundle` (`provision-integration.md`, "Open a bundle"), keeps the seed, and writes the identity file at mode 0600 (wallet PR #241). Its measured result is still to come.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -2848,6 +2861,7 @@ and the credential's own id.
 | --- | --- | --- |
 | 1.60 | 2026-09-28 | **VTI-49** (new, Medium), **VTI-50** (new, Medium), **VTI-51** (new, High), from the lab upgraded to VTI main on 2026-09-27. VTI-08, VTI-09, VTI-23 and VTI-27 marked *upstream says fixed* (8ef95235, 24f2d355); the re-measure is pending on a lab at main. |
 | 1.61 | 2026-09-28 | Lab on upstream main (VTI `2240aa7e`, webvh `1f2221a`, tdk mediator `55580615`). **VTI-09** resolved and **VTI-27** resolved in code (live TSP 403 seen; a DIDComm-path check still owed), read at `2240aa7e`. **VTI-23** unchanged. **VTI-08** live re-run still owed. **VTI-52** (new candidate, Medium): a reply stored for a connected client is not pushed on its live session, twice, on the new mediator. |
+| 1.62 | 2026-09-28 | **VTI-53** (new candidate, Medium): a push-gateway provision bundle has no installer, and `pnm bootstrap open` consumes its single-use seed while writing nothing, so following the gateway README destroys the keys. Read from source, not run. |
 | 1.59 | 2026-09-27 | **VTI-48** (new, Medium): the DTG JSON-LD context that every community card names (`https://firstperson.network/credentials/dtg/v1`) answers 404, so a JSON-LD wallet cannot store the cards. Keyring serves an empty stand-in until it is published. |
 | 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
