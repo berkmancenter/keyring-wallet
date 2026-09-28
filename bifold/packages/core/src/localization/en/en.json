@@ -1024,7 +1024,8 @@
     "Join": "Join a community",
     "VtaCreateAgent": "Claim your agent",
     "AddDevice": "Add a device",
-    "VtaDevices": "My devices"
+    "VtaDevices": "My devices",
+    "VtaNewPhoneOffer": "Your other phones"
   },
   "Loading": {
     "TakingTooLong": "This is taking longer than usual. You can return to home or continue waiting.",

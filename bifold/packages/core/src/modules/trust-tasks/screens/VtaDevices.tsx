@@ -42,6 +42,22 @@ export const deviceKey = (did: string): string => didHashKey(did)
 
 export { deviceNameKey } from './deviceWords'
 
+/**
+ * A device action's refusal in words: a cancelled Face ID says nothing, no
+ * screen lock says how to set one, and the agent's refusals by reason.
+ */
+export const deviceErrorWords = (e: unknown, t: (key: string) => string): string | undefined => {
+  if (e instanceof Error && e.name === 'OwnerNotConfirmed') {
+    const reason = (e as { reason?: string }).reason
+    return reason === 'cancelled'
+      ? undefined
+      : reason === 'unavailable'
+        ? t(Platform.OS === 'ios' ? 'CreateAgent.NeedsScreenLockIos' : 'CreateAgent.NeedsScreenLockAndroid')
+        : t('CreateAgent.NotConfirmed')
+  }
+  return t(`CreateAgent.Device.${deviceRefusalOf(e).reason}`)
+}
+
 /** This phone first; the rest in the agent's order. */
 const thisPhoneFirst = (devices: AgentDevice[]): AgentDevice[] => [
   ...devices.filter((d) => d.isThisPhone),
@@ -66,20 +82,7 @@ const VtaDevices: React.FC = () => {
     muted: { color: ColorPalette.grayscale.mediumGrey },
   })
 
-  const wordsFor = useCallback(
-    (e: unknown): string | undefined => {
-      if (e instanceof Error && e.name === 'OwnerNotConfirmed') {
-        const reason = (e as { reason?: string }).reason
-        return reason === 'cancelled'
-          ? undefined
-          : reason === 'unavailable'
-            ? t(Platform.OS === 'ios' ? 'CreateAgent.NeedsScreenLockIos' : 'CreateAgent.NeedsScreenLockAndroid')
-            : t('CreateAgent.NotConfirmed')
-      }
-      return t(`CreateAgent.Device.${deviceRefusalOf(e).reason}`)
-    },
-    [t]
-  )
+  const wordsFor = useCallback((e: unknown) => deviceErrorWords(e, t), [t])
 
   const load = useCallback(async () => {
     if (!agent) return

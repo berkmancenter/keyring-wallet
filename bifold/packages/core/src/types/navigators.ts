@@ -82,6 +82,7 @@ export enum Screens {
   VtaLink = 'Link your agent',
   VtaCreateAgent = 'Claim your agent',
   VtaDevices = 'Your devices',
+  VtaNewPhoneOffer = 'Your other phones',
   VtaAgent = 'Your agent',
   VtiInvited = 'Invited',
   VtiJoin = 'Join',
@@ -152,6 +153,7 @@ export type MyAgentStackParams = {
   [Screens.VtiInvited]: undefined
   [Screens.VtaCreateAgent]: { addDevice?: boolean } | undefined
   [Screens.VtaDevices]: undefined
+  [Screens.VtaNewPhoneOffer]: undefined
   [Screens.VtiJoin]: undefined
   [Screens.EditRCard]: { profileId: string } | undefined
 }
