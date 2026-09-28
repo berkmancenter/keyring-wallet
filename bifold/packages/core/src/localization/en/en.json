@@ -1812,7 +1812,7 @@
     "ReadyBody": "{{label}} is online and belongs to this phone.",
     "JoinCommunity": "Join a community",
     "BackupScanThis": "Scan this with your other phone",
-    "BackupScanThisBody": "On the other phone, open Keyring, go to My Agent, choose I already have one — link it, then Link without a QR code, and scan this.",
+    "BackupScanThisBody": "On the other phone, open Keyring, go to My Agent, choose I already have one — link it, then Scan a link code, and scan the code above.",
     "BackupNowScan": "Now scan the code it shows",
     "BackupNowScanBody": "The other phone now shows its code. Scan it, or copy it on that phone and paste it here.",
     "AddBackup": "Add as backup",
