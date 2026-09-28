@@ -48,12 +48,11 @@ import { DidKey, TypedArrayEncoder } from '@credo-ts/core'
 // eslint-disable-next-line import/order
 import { ed25519 } from '@noble/curves/ed25519.js'
 // eslint-disable-next-line import/order
-import { digestMultibase, signDocumentProof } from '@bifold/trust-tasks'
+import { digestMultibase, signDocumentProof, verifyDocumentProof } from '@bifold/trust-tasks'
 
 // eslint-disable-next-line import/order
 import {
   LEGACY_ERROR_03_UNTIL,
-  LEGACY_STATEMENT_DOCUMENT_UNTIL,
   MAX_CARD_VALIDITY_MS,
   VETTING,
   VETTING_SESSION_MS,
@@ -844,11 +843,17 @@ describe("an approver's consent decision", () => {
 })
 
 // ---------------------------------------------------------------------------
-// 11. The statement's delivery: a bare body, as the VTC and openvtc send one
+// 11. The statement's delivery: a signed Trust Task document, as openvtc sends one
 // ---------------------------------------------------------------------------
 
 describe("the vetter's statement delivery", () => {
-  it('puts credential_response.credential at the top of the DIDComm body (vtc-service delivery.rs:128-141)', async () => {
+  /**
+   * openvtc b52dc28 (#392) opens a statement delivery as a Trust Task document
+   * (vetting/wire.rs:218-240 `open`) and refused Keyring's bare body as
+   * "malformed vetting document: missing field `id`" (226 gate, TUI P2,
+   * 17:41:17Z). Its own sender is wire.rs:188-205 `credential_delivery`.
+   */
+  it("sends a signed Trust Task document that openvtc's open accepts, the statement under payload", async () => {
     sent.length = 0
     const c = await card()
     const { store } = memoryStore({
@@ -869,6 +874,7 @@ describe("the vetter's statement delivery", () => {
             method: 'inPerson',
             expiresAt: new Date(Date.now() + VETTING_SESSION_MS).toISOString(),
             matchCode: 'ABCD-1234',
+            taskDigestMultibase: 'zQmSessionDocumentDigest',
           },
         },
       ],
@@ -877,15 +883,36 @@ describe("the vetter's statement delivery", () => {
     await desk.attest('r', { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true })
     const delivery = sent.at(-1)!
     expect(delivery.type).toBe(CREDENTIAL_EXCHANGE_ISSUE)
-    expect(Object.keys(delivery.body)).toEqual(['credential_response'])
-    const credential = (delivery.body.credential_response as { credential: Record<string, unknown> }).credential
-    expect(credential).toMatchObject({ issuer: vetter.did, taskContext: SESSION_ID })
+    const doc = delivery.body
+    // What `open` requires: a Trust Task (an `id` first of all), its type the
+    // message's, its issuer the sender, a proof by that issuer.
+    expect(String(doc.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
+    expect(doc).toMatchObject({
+      type: CREDENTIAL_EXCHANGE_ISSUE,
+      issuer: vetter.did,
+      recipient: applicantKey.did,
+      threadId: SESSION_ID,
+    })
+    await expect(verifyDocumentProof(vetter.agent as never, doc, vetter.did)).resolves.toBe(true)
+    // `statement_in`: the statement under payload.credential_response.credential,
+    // with its own id, the session it names and that session's task digest.
+    const credential = ((doc.payload as Record<string, unknown>).credential_response as {
+      credential: Record<string, unknown>
+    }).credential
+    expect(String(credential.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
+    expect(credential.id).not.toBe(doc.id)
+    expect(credential).toMatchObject({
+      issuer: vetter.did,
+      taskContext: SESSION_ID,
+      taskDigestMultibase: 'zQmSessionDocumentDigest',
+    })
+    await expect(verifyDocumentProof(vetter.agent as never, credential, vetter.did)).resolves.toBe(true)
     expect(delivery.options).toMatchObject({ thid: SESSION_ID })
   })
 
-  it('a statement in the old document shape is read until its removal date, and not after', async () => {
-    const cutoff = Date.parse(`${LEGACY_STATEMENT_DOCUMENT_UNTIL}T00:00:00Z`)
-    const read = async (at: number) => {
+  it('a statement is read in the signed document openvtc sends, at any date, and in the bare body older vetters sent', async () => {
+    const later = Date.parse('2027-06-01T00:00:00Z')
+    const read = async (at: number, shape: 'document' | 'bare') => {
       const c = await card()
       const { store, state } = memoryStore({
         application: applicationWith({
@@ -931,14 +958,17 @@ describe("the vetter's statement delivery", () => {
           id: uuid(),
           type: CREDENTIAL_EXCHANGE_ISSUE,
           from: vetter.did,
-          body: { payload: { credential_response: { credential: statement } } },
+          body:
+            shape === 'document'
+              ? { payload: { credential_response: { credential: statement } } }
+              : { credential_response: { credential: statement } },
         } as never)
       } finally {
         spy.mockRestore()
       }
       return state.application!.requests[0]
     }
-    expect(await read(cutoff - 86400000)).toMatchObject({ status: 'attested' })
-    expect(await read(cutoff + 1000)).toMatchObject({ status: 'cardSent' })
+    expect(await read(later, 'document')).toMatchObject({ status: 'attested' })
+    expect(await read(later, 'bare')).toMatchObject({ status: 'attested' })
   })
 })

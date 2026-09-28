@@ -110,7 +110,7 @@ jobs:
             done < "$RUNNER_TEMP/tasks.tsv"
             echo "vta-sdk verified $count Trust Task documents"
             # A list that came out short means a producer was dropped, not passed.
-            test "$count" -ge 22
+            test "$count" -ge 23
           done
 
       # What was refused, byte for byte: every document both runs wrote.
