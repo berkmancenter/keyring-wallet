@@ -131,6 +131,18 @@ export function looksLikeDid(value: string): boolean {
   return /^did:[a-z0-9]+:\S+$/.test(value)
 }
 
+/**
+ * The device code in whatever was pasted (IN-52): the other phone's Share
+ * sends a sentence with the code on its own line, and a paste can carry
+ * whitespace. One code, found once or written twice, is taken; none, or two
+ * different ones, is undefined — then the text is checked as it is, and a
+ * person hears "That isn't a device code".
+ */
+export function deviceCodeIn(text: string): string | undefined {
+  const found = new Set((text.match(/did:[a-z0-9]+:[^\s"'<>]+/g) ?? []).map((code) => code.replace(/[.,;:)\]]+$/, '')))
+  return found.size === 1 ? [...found][0] : undefined
+}
+
 /** The VTA's refusal of a sender it holds no live grant for (VtaClient's NOT_ON_ACL). */
 const NOT_ON_ACL = /not in (the )?ACL|ACL entry expired/i
 /** `delete_acl`'s self-delete refusal (vta-service operations/acl.rs:792-796). */

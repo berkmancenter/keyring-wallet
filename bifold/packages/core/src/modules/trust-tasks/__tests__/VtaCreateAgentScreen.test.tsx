@@ -242,6 +242,27 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     expect(navigation.goBack).toHaveBeenCalled()
   })
 
+  // IN-52: the other phone's Share sends a sentence with the code on its own
+  // line; pasted whole, it was refused as "That isn't a device code".
+  test('a pasted message with the code in it adds the code, not the message', async () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    const add = jest
+      .spyOn(vtaAgent, 'addBackupDevice')
+      .mockResolvedValue({ did: 'did:peer:2.Vz6MkOther', role: 'admin', label: 'Backup phone', thisPhone: false })
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentBackupNext')))
+    fireEvent.changeText(
+      tree.getByTestId(id('AgentBackupCodeInput')),
+      'Add this code to agents.example so my phone can use it:\n\ndid:peer:2.Vz6MkOther\n'
+    )
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('AgentBackupAdd')))
+    })
+    expect(add).toHaveBeenCalledWith({}, 'did:peer:2.Vz6MkOther', 'CreateAgent.BackupLabel')
+  })
+
   test('return on the code field adds the device: the button may be under the keyboard', async () => {
     linked()
     asAddDevice()
