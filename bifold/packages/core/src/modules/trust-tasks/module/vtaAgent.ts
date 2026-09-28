@@ -984,16 +984,24 @@ export class VtaAgentController {
    * identity the agent refuses and answers each outcome, worded as a
    * {@link DeviceRefusalReason}.
    */
-  async rotateAllPersonaKeys(
-    agent: Agent
-  ): Promise<{ rotated: string[]; failed: { did: string; reason: DeviceRefusalReason }[] }> {
+  async rotateAllPersonaKeys(agent: Agent): Promise<{
+    rotated: string[]
+    unpublished: string[]
+    failed: { did: string; reason: DeviceRefusalReason }[]
+  }> {
     const vtaDid = this.linkedAgent()
     await this.confirmOwner("Replace your identities' keys")
     const client = await this.signedIn(agent, vtaDid)
     const store = this.identityStore(agent)
     const personas = (await store.listPersonas()).filter((p) => p.vtaDid === vtaDid)
-    const { rotated, failed } = await rotateEachPersona(client, store, personas)
-    return { rotated, failed: failed.map(({ did, error }) => ({ did, reason: this.refused(error).reason })) }
+    const { rotated, unpublished, failed } = await rotateEachPersona(client, store, personas, (did, keys) =>
+      resolvesWithKeys(agent, did, keys)
+    )
+    return {
+      rotated,
+      unpublished,
+      failed: failed.map(({ did, error }) => ({ did, reason: this.refused(error).reason })),
+    }
   }
 
   /** The agent this phone is linked to, or a refusal a screen words as "no agent yet". */
@@ -1159,3 +1167,20 @@ function deviceFrom(entry: VtaAclEntry, mine: string[]): VtaDevice {
 }
 
 export const vtaAgent = new VtaAgentController()
+
+/**
+ * Whether `did` resolves, fresh from its host, with every key in `keys` — asked
+ * a few times, since a DID host may serve an update a moment after it takes it.
+ */
+async function resolvesWithKeys(agent: Agent, did: string, keys: string[], attempts = 3, delayMs = 3000) {
+  if (keys.length === 0) return false
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+    const result = await agent.dids.resolve(did, { useCache: false, persistInCache: false }).catch(() => undefined)
+    const published = new Set(
+      (result?.didDocument?.verificationMethod ?? []).map((m) => m.publicKeyMultibase).filter(Boolean)
+    )
+    if (keys.every((k) => published.has(k))) return true
+  }
+  return false
+}

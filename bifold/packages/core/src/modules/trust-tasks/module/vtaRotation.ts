@@ -57,7 +57,7 @@ export async function agentVersion(
 /** What rotation needs from the agent client. A VtaClient satisfies it. */
 export interface RotationPort {
   task<T = unknown>(type: string, payload: Record<string, unknown>): Promise<T>
-  borrowKey(vtaKeyId: string): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519' }>
+  borrowKey(vtaKeyId: string): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519'; publicKeyMultibase?: string }>
 }
 
 /**
@@ -65,13 +65,14 @@ export interface RotationPort {
  * key ids for this phone and save them on the persona. Until signing moves to
  * the agent this phone still signs and decrypts with copies, and the old ones
  * stop working the moment the agent rotates. A refusal leaves the persona as
- * it was.
+ * it was. Answers the new public keys, so a caller can check they were
+ * published.
  */
 export async function rotatePersonaKeys(
   port: RotationPort,
   store: { setPersona(persona: VtiPersona): Promise<void> },
   persona: VtiPersona
-): Promise<VtiPersona> {
+): Promise<{ persona: VtiPersona; publicKeys: string[] }> {
   await port.task(ROTATE_KEYS_TASK, { did: persona.did, label: 'Keys rotated from Keyring after a lost phone' })
   const [keyAgreement, signing] = await Promise.all([
     port.borrowKey(persona.vtaKeyIds.keyAgreement),
@@ -82,29 +83,44 @@ export async function rotatePersonaKeys(
     kmsKeyIds: { keyAgreement: keyAgreement.keyId, signing: signing.keyId },
   }
   await store.setPersona(rotated)
-  return rotated
+  const publicKeys = [keyAgreement.publicKeyMultibase, signing.publicKeyMultibase].filter((k): k is string => !!k)
+  return { persona: rotated, publicKeys }
 }
+
+/**
+ * Whether `did` now resolves with every one of `publicKeys`. The agent writes
+ * the new DID log, but peers see it only once the DID host serves it — on a
+ * host whose serving side missed the update the persona would sign with keys
+ * nobody can find — so a rotation is not reported done until it resolves.
+ */
+export type PublishedCheck = (did: string, publicKeys: string[]) => Promise<boolean>
 
 /**
  * Rotate each of `personas` in turn — one at a time, so the agent never has
  * two updates in flight — carrying on past a refusal so one identity the agent
- * will not rotate does not strand the rest. Answers which were rotated and
- * which failed, with the error for each.
+ * will not rotate does not strand the rest. `rotated` resolve with their new
+ * keys; `unpublished` were rotated on the agent but do not resolve with the
+ * new keys yet; `failed` were refused, with the error.
  */
 export async function rotateEachPersona(
   port: RotationPort,
   store: { setPersona(persona: VtiPersona): Promise<void> },
-  personas: VtiPersona[]
-): Promise<{ rotated: string[]; failed: { did: string; error: unknown }[] }> {
+  personas: VtiPersona[],
+  isPublished?: PublishedCheck
+): Promise<{ rotated: string[]; unpublished: string[]; failed: { did: string; error: unknown }[] }> {
   const rotated: string[] = []
+  const unpublished: string[] = []
   const failed: { did: string; error: unknown }[] = []
   for (const persona of personas) {
+    let publicKeys: string[]
     try {
-      await rotatePersonaKeys(port, store, persona)
-      rotated.push(persona.did)
+      publicKeys = (await rotatePersonaKeys(port, store, persona)).publicKeys
     } catch (error) {
       failed.push({ did: persona.did, error })
+      continue
     }
+    const published = isPublished ? await isPublished(persona.did, publicKeys).catch(() => false) : true
+    ;(published ? rotated : unpublished).push(persona.did)
   }
-  return { rotated, failed }
+  return { rotated, unpublished, failed }
 }
