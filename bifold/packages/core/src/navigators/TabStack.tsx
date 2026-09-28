@@ -2,7 +2,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { useNavigation } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useCallback, useEffect } from 'react'
+import React, { useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppState, Text, useWindowDimensions, View, StyleSheet, DeviceEventEmitter } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -23,6 +23,7 @@ import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { isOpenIdCredentialOffer } from '../utils/parsers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
+import { useAgentPresence } from '../modules/trust-tasks/module/vtaPresence'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind } from '../modules/trust-tasks/module/vtiLinks'
 import { openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
@@ -65,6 +66,10 @@ const TabStack: React.FC = () => {
   // The community a link chose (else the build's suggestion) gets the inbox.
   const inboxCommunityDid = useChosenCommunityDid(vti?.communityDid)
   useVtiPersonaInbox(agent, { mediatorDid: vti?.mediatorDid, communityDid: inboxCommunityDid, onError: onInboxError })
+  // This phone tells its agent it is here, from unlock (#10): registered once,
+  // a heartbeat every five minutes, and SIBLING_SEEN when another device acts as it.
+  const presencePort = useMemo(() => (agent ? () => vtaAgent.presencePort(agent) : undefined), [agent])
+  useAgentPresence(presencePort)
   const navigation = useNavigation<StackNavigationProp<TabStackParams>>()
   const { fontScale } = useWindowDimensions()
   const showLabels = fontScale * TabTheme.tabBarTextStyle.fontSize < 18
