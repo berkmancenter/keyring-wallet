@@ -31,11 +31,16 @@ describe("the app's key-management backends", () => {
     for (const required of REQUIRED_KMS_BACKENDS) expect(registered).toContain(required)
   })
 
-  test('keep new keys in the wallet store: askar first and the default, the in-memory one last', () => {
+  test('the in-memory backend first, so key-agreement for a borrowed key reaches it; askar the default for everything else', () => {
+    // Credo routes key-agreement encrypt/decrypt to the FIRST backend that
+    // supports the operation, not by key id: with the in-memory backend last,
+    // a persona's DIDComm packing went to askar, which has no copy of the key
+    // (lab, 09-28). It claims only its own key ids, so everything else still
+    // falls through to askar, the default, and new keys stay in the wallet.
     const kms = kmsOf()
     const registered = kms.backends.map((b) => b.backend)
-    expect(registered[0]).toBe('askar')
+    expect(registered[0]).toBe('ephemeral')
+    expect(registered).toContain('askar')
     expect(kms.defaultBackend.backend).toBe('askar')
-    expect(registered[registered.length - 1]).toBe('ephemeral')
   })
 })

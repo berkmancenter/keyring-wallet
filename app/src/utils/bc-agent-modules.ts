@@ -84,12 +84,14 @@ export function getBCAgentModules({
     }),
     kms: new Kms.KeyManagementModule({
       backends: [
+        // Persona keys borrowed from the agent for this session, never stored
+        // (#10). First: Credo routes key-agreement encrypt/decrypt to the first
+        // backend that supports it, not by key id. It claims only its own
+        // ("vta-copy:") keys, so everything else falls through to askar, the
+        // default, and new keys stay in the wallet store.
+        new BifoldCore.EphemeralKeyManagementService(),
         new AskarKeyManagementService(),
         new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
-        // Persona keys borrowed from the agent for this session, never stored
-        // (#10). Last: Credo gives an unnamed create or import to the first
-        // capable backend, and new keys stay in the wallet store.
-        new BifoldCore.EphemeralKeyManagementService(),
       ],
       defaultBackend: 'askar',
     }),
