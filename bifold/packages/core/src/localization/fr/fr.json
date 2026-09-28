@@ -1222,6 +1222,8 @@
     "LinkYourAgentHelp": "Pas de code ? Liez sans — saisissez l’adresse de votre agent, et son admin ajoute ce téléphone.",
     "StatusOnline": "En ligne",
     "StatusConnecting": "Connexion à votre agent…",
+    "AgentDidNotAnswer": "Votre agent n'a pas répondu. Vérifiez votre connexion, puis réessayez.",
+    "TryAgainNow": "Réessayer",
     "StatusReconnecting": "Reconnexion…",
     "StatusOfflineSince": "Hors ligne depuis {{time}}",
     "WithoutQr": "Relier sans code QR",

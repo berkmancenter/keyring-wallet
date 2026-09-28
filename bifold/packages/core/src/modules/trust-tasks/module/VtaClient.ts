@@ -246,6 +246,24 @@ export class PersonaHostMissing extends Error {
  * VTA could not be asked. Both keys stay recorded — either may be the live one
  * — and the next connect asks again.
  */
+/**
+ * The key swap went through — the agent holds the new key and the phone has
+ * recorded it — but signing in as the new key failed. Not a failed link: the
+ * sign-in is the ordinary one from here, and is retried (the 227 iOS link
+ * failure, where it stalled after the mediator's authenticate).
+ */
+export class SwapDoneSignInFailed extends Error {
+  constructor(
+    readonly newDid: string,
+    readonly cause: unknown
+  ) {
+    super(
+      `${LOG_PREFIX} key swap done; signing in as the new key failed: ${cause instanceof Error ? cause.message : String(cause)}`
+    )
+    this.name = 'SwapDoneSignInFailed'
+  }
+}
+
 export class ManagerKeyUnresolved extends Error {
   constructor(
     readonly vtaDid: string,
@@ -768,7 +786,12 @@ export class VtaClient {
       stage: 'permanent',
     })
     await this.disconnect()
-    await this.connect()
+    try {
+      await this.connect()
+    } catch (error) {
+      // The swap is done and recorded; only signing in as the new key failed.
+      throw new SwapDoneSignInFailed(next, error)
+    }
     return next
   }
 

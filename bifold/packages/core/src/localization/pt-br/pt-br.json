@@ -1128,6 +1128,8 @@
     "LinkYourAgentHelp": "Sem código? Vincule sem ele — informe o endereço do seu agente, e o admin dele adiciona este telefone.",
     "StatusOnline": "Online",
     "StatusConnecting": "Conectando ao seu agente…",
+    "AgentDidNotAnswer": "Seu agente não respondeu. Verifique sua conexão e tente de novo.",
+    "TryAgainNow": "Tentar de novo",
     "StatusReconnecting": "Reconectando…",
     "StatusOfflineSince": "Offline desde {{time}}",
     "WithoutQr": "Vincular sem código QR",

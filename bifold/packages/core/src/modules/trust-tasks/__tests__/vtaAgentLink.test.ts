@@ -1,6 +1,6 @@
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
-import { GRANT_HOLD_MS, SESSION_CONNECT_DEADLINE_MS, VtaAgentController } from '../module/vtaAgent'
+import { GRANT_HOLD_MS, MAX_RECONNECT_TRIES, SESSION_CONNECT_DEADLINE_MS, VtaAgentController } from '../module/vtaAgent'
 import { EnrolmentError } from '../module/vtaEnrolment'
 
 // The controller runs the whole link — submit, wait for the admin, sign in as
@@ -22,6 +22,7 @@ const mockClient = {
 jest.mock('../module/VtaClient', () => ({
   VTA_TASK: jest.requireActual('../module/VtaClient').VTA_TASK,
   ManagerKeyUnresolved: jest.requireActual('../module/VtaClient').ManagerKeyUnresolved,
+  SwapDoneSignInFailed: jest.requireActual('../module/VtaClient').SwapDoneSignInFailed,
   VtaClient: jest.fn(() => mockClient),
   resolveVtaMediator: jest.fn(async () => ({ did: 'did:peer:2.mediator' })),
 }))
@@ -130,6 +131,33 @@ describe('linking through the controller', () => {
     expect(saved).toEqual([])
   })
 
+  // The 227 iOS link failure: the agent took the swap and the phone stored the
+  // new key, but signing in as it stalled — and the whole link was reported as
+  // failed. The swap is done; only the sign-in is outstanding, and that is the
+  // ordinary one, retried.
+  it('a swap that went through but whose new sign-in failed is a link, reconnecting, not a failure', async () => {
+    jest.useFakeTimers()
+    try {
+      const { SwapDoneSignInFailed } = jest.requireActual('../module/VtaClient')
+      mockClient.rotateManagerKey.mockImplementationOnce(async () => {
+        throw new SwapDoneSignInFailed('did:peer:2.permanent', new Error('the mediator authenticate did not answer'))
+      })
+      const { vta, current } = controller()
+      vta.scanOffer(offer)
+      const before = mockClient.connect.mock.calls.length
+      await vta.confirmOffer({} as never)
+      await jest.advanceTimersByTimeAsync(2_000)
+      // Linked, not failed; remembered, since the agent holds this phone's new key…
+      expect(vta.getState().link).toMatchObject({ kind: 'linked', vtaDid: offer.vta })
+      expect(current()).toMatchObject({ vtaDid: offer.vta })
+      // …and it signed in again by itself, and is online.
+      expect(mockClient.connect.mock.calls.length).toBeGreaterThan(before + 1)
+      expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('a rotation that fails leaves the phone unlinked, not half-linked', async () => {
     mockClient.rotateManagerKey.mockImplementationOnce(async () => {
       throw new Error('acl/swap-key refused')
@@ -170,6 +198,51 @@ describe('a linked phone after a restart', () => {
       expect(mockClient.connect).toHaveBeenCalledTimes(2)
       expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
     } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  // A reconnect that can never succeed must not loop for ever out of sight:
+  // after its tries, it stops and the agent screen says so, with Try again.
+  it('stops after its tries and says so; Try again starts afresh', async () => {
+    jest.useFakeTimers()
+    try {
+      mockClient.connect.mockImplementation(async () => {
+        throw new Error('the mediator authenticate did not answer within 15000 ms')
+      })
+      const { vta } = controller({ linked })
+      await vta.restore({} as never)
+      await jest.advanceTimersByTimeAsync(10 * 60_000)
+      expect(mockClient.connect).toHaveBeenCalledTimes(1 + MAX_RECONNECT_TRIES)
+      expect(vta.getState().reconnectGaveUp).toBe(true)
+      // Nothing more by itself…
+      await jest.advanceTimersByTimeAsync(10 * 60_000)
+      expect(mockClient.connect).toHaveBeenCalledTimes(1 + MAX_RECONNECT_TRIES)
+      // …until the person asks; this time the agent answers.
+      mockClient.connect.mockImplementation(async () => undefined)
+      await vta.tryAgainNow({} as never)
+      expect(vta.getState().reconnectGaveUp).toBe(false)
+      expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  // The #183 lesson: tries must never stack into parallel sign-ins.
+  it('never runs two sign-ins at once: Try again and an unlock wait on the one in flight', async () => {
+    jest.useFakeTimers()
+    try {
+      mockClient.connect.mockImplementation(() => new Promise<undefined>(() => undefined))
+      const { vta } = controller({ linked })
+      await vta.restore({} as never)
+      await jest.advanceTimersByTimeAsync(1_000)
+      void vta.tryAgainNow({} as never)
+      void vta.tryAgainNow({} as never)
+      void vta.restore({ tag: 'unlocked' } as never)
+      await jest.advanceTimersByTimeAsync(5_000)
+      expect(mockClient.connect).toHaveBeenCalledTimes(1)
+    } finally {
+      mockClient.connect.mockImplementation(async () => undefined)
       jest.useRealTimers()
     }
   })

@@ -113,3 +113,41 @@ describe('VtiMediatorSession — a refused cached token', () => {
     expect(logins.count).toBe(1)
   })
 })
+
+// IN-53 / the 227 iOS link failure: the new key's authenticate was answered by
+// the mediator in 3 ms, but the phone never went on to open its socket — the
+// POST rode a pooled keep-alive connection that iOS never finished (as on
+// 08-18, where Credo's own POSTs died the same way). The login had no bound, so
+// the sign-in waited for ever. Each login step is now bounded and, on a stall,
+// aborted and tried again, which goes out on a fresh connection.
+describe('a login step that never answers', () => {
+  it('is given up on and tried again, and the session starts', async () => {
+    const accepts = ['fresh']
+    const opened: string[] = []
+    global.WebSocket = fakeWebSocketClass(accepts, opened) as never
+    let authenticateCalls = 0
+    global.fetch = ((url: string, init?: { signal?: AbortSignal }) => {
+      if (String(url).endsWith('/challenge')) {
+        return Promise.resolve({
+          status: 200,
+          text: async () => JSON.stringify({ data: { challenge: 'c', session_id: 's' } }),
+        })
+      }
+      authenticateCalls += 1
+      if (authenticateCalls === 1) {
+        // Answered at the mediator, never at the phone: only an abort ends it.
+        return new Promise((_, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))
+          )
+        })
+      }
+      return Promise.resolve({ status: 200, json: async () => ({ data: { access_token: 'fresh' } }) })
+    }) as never
+    const session = new VtiMediatorSession(agent, identity, mediator, { loginStepTimeoutMs: 50 })
+    await session.start()
+    expect(authenticateCalls).toBe(2)
+    expect(opened).toEqual(['fresh'])
+    await session.stop()
+  })
+})

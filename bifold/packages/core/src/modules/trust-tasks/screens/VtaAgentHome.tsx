@@ -432,6 +432,20 @@ const VtaAgentHome: React.FC = () => {
             {agentDisplayName(withAgentName(link, state.agentNames), t)}
           </ThemedText>
           <VtaStatusLine connection={link.connection} now={now} />
+          {state.reconnectGaveUp ? (
+            // Reconnecting stopped after its tries: said, with the way on, never a silent loop.
+            <View style={{ gap: 8 }} testID={testIdWithKey('AgentGaveUp')}>
+              <ThemedText style={{ color: ColorPalette.semantic.error }}>{t('VtaLink.AgentDidNotAnswer')}</ThemedText>
+              <Button
+                title={t('VtaLink.TryAgainNow')}
+                buttonType={ButtonType.Primary}
+                onPress={() => {
+                  if (agent) void vtaAgent.tryAgainNow(agent)
+                }}
+                testID={testIdWithKey('AgentTryAgain')}
+              />
+            </View>
+          ) : null}
           {/* What this phone is here, in one line and one place.
               A reader used to infer the seat from which cards were on screen,
               which is how `run-vetter-grant-lifecycle` ended up waiting for an

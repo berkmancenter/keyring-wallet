@@ -81,6 +81,8 @@ const RESYNC_DEBOUNCE_MS = 1000
  * 30 s connect deadline a grant check allows (vtaAgent GRANT_CONNECT_DEADLINE_MS).
  */
 export const SOCKET_OPEN_TIMEOUT_MS = 8000
+/** How long one login step (challenge, authenticate) may take before it is aborted and tried again. */
+export const LOGIN_STEP_TIMEOUT_MS = 15000
 const SOCKET_OPEN_TIMEOUT = 'socket did not open'
 const isOpenTimeout = (error: unknown) => error instanceof Error && error.message.includes(SOCKET_OPEN_TIMEOUT)
 const PLAIN = 'application/didcomm-plain+json'
@@ -396,6 +398,8 @@ export class VtiMediatorSession {
     private readonly mediator: VtiMediatorEndpoints,
     private readonly options: {
       onError?: (error: Error) => void
+      /** Bound on each login step (challenge, authenticate), for tests; see {@link LOGIN_STEP_TIMEOUT_MS}. */
+      loginStepTimeoutMs?: number
       /**
        * A message addressed to this client, already decrypted. Set it to read
        * what a VTA or a VTC answers: Credo has no handler registered for Trust
@@ -431,17 +435,46 @@ export class VtiMediatorSession {
     })
   }
 
+  /**
+   * One login step, bounded: past the deadline the request is aborted and the
+   * step fails as a stall (never "refused", so `ensureAccessToken` tries again,
+   * on a fresh connection). Measured on iOS at the 227 gate: the mediator
+   * answered a new key's authenticate in 3 ms and the phone never went on to
+   * open its socket — the POST rode a pooled keep-alive connection that never
+   * completed (the class of the 08-18 finding, where Credo's own POSTs died on
+   * stale pooled sockets). Unbounded, that sign-in waited for ever.
+   */
+  private async loginStep<T>(what: string, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const ms = this.options.loginStepTimeoutMs ?? LOGIN_STEP_TIMEOUT_MS
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(new Error(`${LOG_PREFIX} ${what} did not answer within ${ms} ms`))
+      }, ms)
+    })
+    try {
+      return await Promise.race([run(controller.signal), late])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   /** `POST /challenge` → authenticate → JWT. */
   private async login(): Promise<string> {
-    const challengeResponse = await fetch(`${this.mediator.authEndpoint}/challenge`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ did: this.identity.did }),
-    })
     // Read as text first: a tunnel in front of the mediator can answer with a
     // page instead of JSON (measured on iOS as "Unexpected character: R"), and
     // the status plus the first line say what happened where a parse error would not.
-    const challengeText = await challengeResponse.text()
+    const { challengeResponse, challengeText } = await this.loginStep('the mediator challenge', async (signal) => {
+      const answer = await fetch(`${this.mediator.authEndpoint}/challenge`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ did: this.identity.did }),
+        signal,
+      })
+      return { challengeResponse: answer, challengeText: await answer.text() }
+    })
     let challengeBody: { data?: { challenge?: string; session_id?: string }; sessionId?: string } = {}
     try {
       challengeBody = JSON.parse(challengeText)
@@ -468,12 +501,19 @@ export class VtiMediatorSession {
       expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
       body: { challenge, session_id: sessionId },
     }
-    const response = await fetch(this.mediator.authEndpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(await this.packForMediator(authenticate)),
+    const packed = JSON.stringify(await this.packForMediator(authenticate))
+    const { response, body } = await this.loginStep('the mediator authenticate', async (signal) => {
+      const answer = await fetch(this.mediator.authEndpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: packed,
+        signal,
+      })
+      return {
+        response: answer,
+        body: (await answer.json().catch(() => ({}))) as { data?: { access_token?: string } },
+      }
     })
-    const body = (await response.json().catch(() => ({}))) as { data?: { access_token?: string } }
     const token = body?.data?.access_token
     if (!token) {
       throw new Error(`${LOG_PREFIX} authenticate refused (${response.status}): ${JSON.stringify(body).slice(0, 200)}`)
