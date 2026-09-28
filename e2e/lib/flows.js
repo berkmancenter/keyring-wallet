@@ -2461,11 +2461,23 @@ export async function openMyAgentPanel(driver) {
  * Older builds, and agents with no other phone, go straight on; answers
  * whether the offer showed.
  */
-export async function passNewPhoneOfferIfShown(driver, timeout = 12000) {
-  if (!(await existsTestId(driver, "OfferDone", timeout))) return false;
+export async function passNewPhoneOfferIfShown(driver, timeout = 20000) {
+  // The screen, not its Done: with several phones listed, Done is below the
+  // fold, and Android only sees what is on screen (a runner agent lists many).
+  if (!(await existsTestId(driver, "NewPhoneOffer", timeout))) return false;
+  // It loads the agent's list first, and moves on by itself when there is no
+  // other phone: wait for its first row, or for it to go.
+  const idAttr = driver.e2ePlatform === "android" ? "@resource-id" : "@name";
+  for (const until = Date.now() + 60000; ; await sleep(1000)) {
+    if (!(await existsTestId(driver, "NewPhoneOffer", 500))) return false;
+    if ((await driver.$$(`//*[starts-with(${idAttr},"${TEST_ID_PREFIX}OfferDevice_")]`)).length > 0) break;
+    if (await existsTestId(driver, "OfferDone", 300)) break;
+    if (Date.now() > until) throw new Error("the new-phone offer never showed its phones within 60 s");
+  }
   console.log(
     `[e2e] ${driver.e2ePlatform}: the new-phone offer is up — keeping every phone (Done)`
   );
+  if (!(await existsTestId(driver, "OfferDone", 2000))) await scrollToTestId(driver, "OfferDone", 12);
   await tapTestId(driver, "OfferDone", 15000);
   return true;
 }
