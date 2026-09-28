@@ -20,7 +20,9 @@ function world(opts: { otherSeenAt?: () => string | undefined; registered?: bool
     task: async <T>(type: string, payload: Record<string, unknown>) => {
       sent.push({ type, payload })
       if (type === AGENT_DEVICE_TASK.register) {
-        if (registered) throw new VtiRefusal('device/register:alreadyRegistered', 'already registered')
+        // As the agent says it over a trust task: a generic conflict code, the reason in the words.
+        if (registered)
+          throw new VtiRefusal('conflict', 'device/register:alreadyRegistered — a DeviceBinding already exists')
         registered = true
         return {} as T
       }
@@ -67,6 +69,27 @@ describe('telling the agent this phone is here', () => {
     expect(w.count(AGENT_DEVICE_TASK.register)).toBe(1)
     expect(w.sent.find((s) => s.type === AGENT_DEVICE_TASK.register)?.payload.displayName).toBe('iPhone · added 28 Sep')
     expect(w.count(AGENT_DEVICE_TASK.heartbeat)).toBe(2)
+  })
+
+  it('beats even when the agent refuses the claim for another reason', async () => {
+    const sent: string[] = []
+    const presence = new AgentPresence({
+      port: async () => ({
+        managerDid: ME,
+        task: async <T>(type: string) => {
+          sent.push(type)
+          if (type === AGENT_DEVICE_TASK.register) throw new VtiRefusal('invalid', 'displayName too long')
+          if (type === AGENT_DEVICE_TASK.aclList) return { entries: [] } as T
+          if (type === AGENT_DEVICE_TASK.list) return { devices: [] } as T
+          return {} as T
+        },
+      }),
+      platform: 'ios',
+      now: () => new Date(T0),
+      onSiblingSeen: () => undefined,
+    })
+    await presence.tick()
+    expect(sent).toContain(AGENT_DEVICE_TASK.heartbeat)
   })
 
   it('never renames a phone that is already registered', async () => {

@@ -68,11 +68,17 @@ export class AgentPresence {
       if (!port) return
       const now = this.deps.now?.() ?? new Date()
       if (!this.registered) {
-        await registerThisDevice(port, {
-          displayName: defaultDeviceName(this.deps.platform, now),
-          platform: this.deps.platform,
-        })
-        this.registered = true
+        // A failed claim does not stop the beat: a phone the agent already
+        // knows still has to say it is here.
+        try {
+          await registerThisDevice(port, {
+            displayName: defaultDeviceName(this.deps.platform, now),
+            platform: this.deps.platform,
+          })
+          this.registered = true
+        } catch (e) {
+          this.deps.log?.(`[VTA] registering this phone with its agent: ${(e as Error)?.message ?? e}`)
+        }
       }
       await heartbeat(port)
       const live = liveSiblings(await listAgentDevices(port), now)
