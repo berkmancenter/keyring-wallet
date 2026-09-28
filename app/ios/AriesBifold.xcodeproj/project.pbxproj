@@ -373,7 +373,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/zsh;
-			shellScript = "set -e\n\n../node_modules/react-native/scripts/react-native-xcode.sh\n";
+			shellScript = "set -e\n\n# Write the JS source map outside the app. With a map, hermesc keeps the\n# bytecode's debug info in it instead of in main.jsbundle: ~12.7 MB less in\n# the app, no build-machine path inside it, and the bundle no longer\n# depends on where it was built (as on Android).\nexport SOURCEMAP_FILE=\"$DERIVED_FILE_DIR/main.jsbundle.map\"\n\n../node_modules/react-native/scripts/react-native-xcode.sh\n";
 		};
 		1BC411DB87B5A949793F4FC1 /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;

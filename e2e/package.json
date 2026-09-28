@@ -43,7 +43,8 @@
     "agent-connect": "node run-agent-connect.js",
     "agent-connect:ios": "PLATFORM=ios node run-agent-connect.js",
     "my-agent": "node run-my-agent.js",
-    "my-agent:ios": "PLATFORM=ios node run-my-agent.js"
+    "my-agent:ios": "PLATFORM=ios node run-my-agent.js",
+    "lock-probe": "node run-lock-probe.mjs"
   },
   "dependencies": {
     "@xterm/headless": "^6.0.0",
