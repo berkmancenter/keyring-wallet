@@ -47,6 +47,8 @@ const mockVta = {
   /** Hold these task types for consent until `consentGranted` is true. */
   consentFor: new Set<string>(),
   consentGranted: false,
+  /** A session start that never finishes: an agent that cannot be reached (IN-53). */
+  startHangs: false,
   /** Members a newer VTA might add to every list entry — ignored by the phone. */
   extraEntryMembers: {} as Record<string, unknown>,
 }
@@ -120,6 +122,7 @@ jest.mock('../module/VtiMediatorTransport', () => ({
       return this.record.open
     }
     async start() {
+      if (mockVta.startHangs) await new Promise(() => undefined)
       this.record.open = true
     }
     async stop() {
@@ -352,6 +355,7 @@ beforeEach(() => {
   mockVta.refuseNext = new Map()
   mockVta.consentFor = new Set()
   mockVta.consentGranted = false
+  mockVta.startHangs = false
   mockVta.extraEntryMembers = {}
   mockSessions.length = 0
   mockMinted = []
@@ -486,6 +490,19 @@ describe('adding a backup device', () => {
       createdBy: PHONE,
     })
     expect(mockVta.acl.get(BACKUP)).toMatchObject({ role: 'admin' })
+  })
+
+  // IN-53 (226, a Farm-hosted agent): the session to the agent never came back,
+  // and "Add as backup" spun for minutes with nothing listed. Past its deadline
+  // the add gives up in words the screen already has ("didn't answer").
+  it('gives up with "didn\'t answer" when the agent cannot be reached, instead of waiting forever', async () => {
+    const { vta } = await linkedPhone({ confirmOwner: confirmed(), ownerActDeadlineMs: 50 } as never)
+    for (const session of mockSessions) session.open = false
+    mockVta.startHangs = true
+    const failure = await vta.addBackupDevice(agent, BACKUP, 'Pixel 8').catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(DeviceActionRefused)
+    expect((failure as DeviceActionRefused).reason).toBe('noAnswer')
+    expect(sentOf(ACL_GRANT)).toEqual([])
   })
 
   it.each(['cancelled', 'failed', 'unavailable'] as const)(
