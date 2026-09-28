@@ -18,6 +18,8 @@
 import { useEffect } from 'react'
 import { DeviceEventEmitter, Platform } from 'react-native'
 
+import type { VtaLinkState } from './vtaLinkMachine'
+
 import {
   defaultDeviceName,
   heartbeat,
@@ -28,6 +30,15 @@ import {
   type AgentDevice,
   type AgentDevicePort,
 } from './vtaDevices'
+
+/**
+ * Whether the phone's link to its agent is up: linked, with a session online.
+ * Presence runs only then, and starts over — beating at once — each time it
+ * comes up.
+ */
+export function isLinkOnline(link: VtaLinkState): boolean {
+  return link.kind === 'linked' && link.connection.kind === 'online'
+}
 
 /** Emitted with the {@link AgentDevice} when another device starts acting as this agent. */
 export const SIBLING_SEEN_EVENT = 'keyring/agent-sibling-seen'
