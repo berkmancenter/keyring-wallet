@@ -1780,7 +1780,11 @@
     "SiblingOne": "{{device}} est aussi ouvert en votre nom. Tant que les deux sont ouverts, les messages peuvent n'arriver que sur l'un d'eux.",
     "SiblingMany": "{{count}} autres appareils sont aussi ouverts en votre nom ({{devices}}). Tant qu'ils sont ouverts, les messages peuvent n'arriver que sur l'un d'eux.",
     "SiblingOpen": "Mes appareils",
-    "SiblingDismiss": "OK"
+    "SiblingDismiss": "OK",
+    "DefaultName": "{{platform}} · ajouté le {{date}}",
+    "ShortIos": "iPhone",
+    "ShortAndroid": "Android",
+    "ShortPhone": "Téléphone"
   },
   "AgentKeys": {
     "LostTitle": "Téléphone perdu ?",

@@ -2,7 +2,7 @@
  * The words on a device row (new-phone-new-device-plan.md §B): when it was
  * last seen, what it is, and where a removal stands.
  */
-import { deviceStatusOf, lastSeenOf, platformKeyOf } from '../screens/deviceWords'
+import { defaultNameOf, deviceStatusOf, deviceViewOf, lastSeenOf, platformKeyOf } from '../screens/deviceWords'
 
 const NOW = new Date('2026-09-28T12:00:00Z')
 const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString()
@@ -61,5 +61,75 @@ describe('where a removal stands', () => {
     expect(deviceStatusOf({ accessRevoked: false, wipePending: true })).toBe('removedErasePending')
     expect(deviceStatusOf({ accessRevoked: false, wipePending: false, wipedAt: ago(HOUR) })).toBe('removedErasePending')
     expect(deviceStatusOf({ accessRevoked: true, wipePending: false })).toBe('removedErasePending')
+  })
+})
+
+describe('a device as its row shows it', () => {
+  const t = (key: string, opts?: Record<string, unknown>) => (opts ? `${key} ${JSON.stringify(opts)}` : key)
+  const base = { accessRevoked: false, wipePending: false, isThisPhone: false }
+
+  test('a registered phone: its registered name, platform, last seen', () => {
+    const view = deviceViewOf(
+      {
+        ...base,
+        did: 'did:peer:2.Vz6MkA',
+        source: 'registered',
+        kind: 'keyring',
+        displayName: 'Sam’s iPhone',
+        label: 'Keyring — old label',
+        platform: 'ios',
+        lastSeenAt: '2026-09-28T11:00:00Z',
+      },
+      t
+    )
+    expect(view).toEqual({
+      did: 'did:peer:2.Vz6MkA',
+      name: 'Sam’s iPhone',
+      platform: 'ios',
+      lastSeenAt: '2026-09-28T11:00:00Z',
+      status: 'active',
+      thisPhone: false,
+      phone: true,
+    })
+  })
+
+  test('an admin that never registered keeps today’s plain names', () => {
+    expect(
+      deviceViewOf({ ...base, did: 'did:key:z6Mk1', source: 'aclOnly', label: 'browser-plugin x' }, t)
+    ).toMatchObject({
+      name: 'Devices.BrowserPlugin',
+      phone: false,
+    })
+    expect(deviceViewOf({ ...base, did: 'did:key:z6Mk1', source: 'aclOnly' }, t).name).toBe('Devices.AComputer')
+    // A Keyring phone from before registration is still a phone.
+    expect(deviceViewOf({ ...base, did: 'did:peer:2.Vz6MkOld', source: 'aclOnly' }, t)).toMatchObject({
+      name: 'Devices.AKeyringPhone',
+      phone: true,
+    })
+  })
+
+  test('this phone and a removed phone', () => {
+    expect(deviceViewOf({ ...base, did: 'did:peer:2.X', source: 'registered', isThisPhone: true }, t).thisPhone).toBe(
+      true
+    )
+    expect(
+      deviceViewOf({ ...base, did: 'did:peer:2.Y', source: 'registered', accessRevoked: true, wipePending: true }, t)
+        .status
+    ).toBe('removedErasePending')
+  })
+})
+
+describe('the default name', () => {
+  const t = (key: string, opts?: Record<string, unknown>) => (opts ? `${key} ${JSON.stringify(opts)}` : key)
+
+  test('short and dated, in the person’s language: the platform and the day it was added', () => {
+    const name = defaultNameOf('ios', new Date('2026-09-28T12:00:00Z'), t)
+    expect(name).toMatch(/^Devices\.DefaultName /)
+    expect(name).toContain('"platform":"Devices.ShortIos"')
+    expect(name).toMatch(/"date":"[^"]*28[^"]*"/)
+  })
+
+  test('an unknown platform is just a phone', () => {
+    expect(defaultNameOf('linux', new Date('2026-09-28T12:00:00Z'), t)).toContain('"platform":"Devices.ShortPhone"')
   })
 })

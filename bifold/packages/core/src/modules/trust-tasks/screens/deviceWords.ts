@@ -6,6 +6,8 @@
  * @module trust-tasks/screens/deviceWords
  */
 
+import type { DeviceView } from './DeviceRow'
+
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
@@ -57,3 +59,66 @@ export const deviceStatusOf = (device: {
   wipePending: boolean
   wipedAt?: string
 }): DeviceStatus => (device.accessRevoked || device.wipePending || device.wipedAt ? 'removedErasePending' : 'active')
+
+/**
+ * What a person calls an admin of their agent. Every admin is listed, not
+ * only Keyring phones: the label when there is one (Keyring's own rows read
+ * "Keyring — <device name>"; the browser plugin's "browser-plugin …" reads as
+ * "Browser plugin"), otherwise a plain fallback by the kind of key. Never the
+ * DID: that sits behind Details.
+ */
+export const deviceNameKey = (device: { did: string; label?: string }): { key?: string; label?: string } => {
+  const label = device.label?.trim()
+  if (label && /browser[- ]plugin/i.test(label)) return { key: 'Devices.BrowserPlugin' }
+  if (label) return { label }
+  if (device.did.startsWith('did:key:')) return { key: 'Devices.AComputer' }
+  if (device.did.startsWith('did:peer:')) return { key: 'Devices.AKeyringPhone' }
+  return { key: 'Devices.Unnamed' }
+}
+
+/** What the row needs from the agent's device record (vtaDevices.ts `AgentDevice`). */
+export interface AgentDeviceLike {
+  did: string
+  source: 'registered' | 'aclOnly'
+  isThisPhone: boolean
+  label?: string
+  displayName?: string
+  platform?: string
+  lastSeenAt?: string
+  wipedAt?: string
+  accessRevoked: boolean
+  wipePending: boolean
+  kind?: 'keyring'
+}
+
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
+/**
+ * A device as its row shows it: the name it registered, else today's plain
+ * names ({@link deviceNameKey}); a phone when it registered as Keyring, or is
+ * a Keyring phone from before registration (a did:peer key).
+ */
+export const deviceViewOf = (device: AgentDeviceLike, t: Translate): DeviceView => {
+  const { key, label } = deviceNameKey(device)
+  return {
+    did: device.did,
+    name: device.displayName?.trim() || label || t(key ?? 'Devices.Unnamed'),
+    ...(device.platform ? { platform: device.platform } : {}),
+    ...(device.lastSeenAt ? { lastSeenAt: device.lastSeenAt } : {}),
+    status: deviceStatusOf(device),
+    thisPhone: device.isThisPhone,
+    phone: device.kind === 'keyring' || device.did.startsWith('did:peer:'),
+  }
+}
+
+/** The short dated default name, "iPhone · added 28 Sep", in the person's language. */
+export const defaultNameOf = (platform: string | undefined, addedAt: Date, t: Translate): string => {
+  const kind = platform?.toLowerCase()
+  return t('Devices.DefaultName', {
+    platform: t(
+      kind === 'ios' ? 'Devices.ShortIos' : kind === 'android' ? 'Devices.ShortAndroid' : 'Devices.ShortPhone'
+    ),
+    date: addedAt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }),
+    interpolation: { escapeValue: false },
+  })
+}

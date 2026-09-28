@@ -24,6 +24,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent, type VtaDevice } from '../module/vtaAgent'
 import { deviceRefusalOf } from '../module/vtaOwner'
 
+import { deviceNameKey } from './deviceWords'
 import { didHashKey } from './testIdKey'
 
 /**
@@ -32,21 +33,7 @@ import { didHashKey } from './testIdKey'
  */
 export const deviceKey = (did: string): string => didHashKey(did)
 
-/**
- * What a person calls an admin of their agent. Every admin is listed, not
- * only Keyring phones: the label when there is one (Keyring's own rows read
- * "Keyring — <device name>"; the browser plugin's "browser-plugin …" reads as
- * "Browser plugin"), otherwise a plain fallback by the kind of key. Never the
- * DID: that sits behind Details.
- */
-export const deviceNameKey = (device: Pick<VtaDevice, 'did' | 'label'>): { key?: string; label?: string } => {
-  const label = device.label?.trim()
-  if (label && /browser[- ]plugin/i.test(label)) return { key: 'Devices.BrowserPlugin' }
-  if (label) return { label }
-  if (device.did.startsWith('did:key:')) return { key: 'Devices.AComputer' }
-  if (device.did.startsWith('did:peer:')) return { key: 'Devices.AKeyringPhone' }
-  return { key: 'Devices.Unnamed' }
-}
+export { deviceNameKey } from './deviceWords'
 
 const VtaDevices: React.FC = () => {
   const { t } = useTranslation()

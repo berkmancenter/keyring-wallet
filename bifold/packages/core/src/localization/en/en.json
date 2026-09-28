@@ -1845,7 +1845,11 @@
     "SiblingOne": "{{device}} is also open as you. While both are open, messages may reach only one of them.",
     "SiblingMany": "{{count}} other devices are also open as you ({{devices}}). While they're open, messages may reach only one of them.",
     "SiblingOpen": "My devices",
-    "SiblingDismiss": "OK"
+    "SiblingDismiss": "OK",
+    "DefaultName": "{{platform}} · added {{date}}",
+    "ShortIos": "iPhone",
+    "ShortAndroid": "Android",
+    "ShortPhone": "Phone"
   },
   "AgentKeys": {
     "LostTitle": "Lost a phone?",
