@@ -2288,6 +2288,20 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@bifold/dtg-vocab@workspace:packages/dtg-vocab":
+  version: 0.0.0-use.local
+  resolution: "@bifold/dtg-vocab@workspace:packages/dtg-vocab"
+  dependencies:
+    "@types/jest": "npm:^29.5.0"
+    "@types/node": "npm:^20.0.0"
+    ajv: "npm:^8.17.1"
+    jest: "npm:^29.5.0"
+    rimraf: "npm:~5.0.10"
+    ts-jest: "npm:^29.1.0"
+    typescript: "npm:~5.5.4"
+  languageName: unknown
+  linkType: soft
+
 "@bifold/mediator-server@workspace:packages/mediator-server":
   version: 0.0.0-use.local
   resolution: "@bifold/mediator-server@workspace:packages/mediator-server"
