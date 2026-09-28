@@ -9,6 +9,13 @@
  *   PLATFORMS=android,ios node run-vrc-exchange.js
  *   PLATFORMS=android,android ANDROID_AVD2=<second-avd> node run-vrc-exchange.js
  *
+ * If PLATFORMS is unset and this is run from a real terminal with 2+ AVDs
+ * available, it prompts for the pairing (and, if android+android, which
+ * second AVD) instead of silently defaulting — set PLATFORMS to skip the
+ * prompt. Without a TTY (CI, an agent) there is no prompt and an unset
+ * PLATFORMS falls back to android,ios — even if ANDROID_AVD2 is set, which
+ * alone does not select android,android. Set PLATFORMS=android,android there.
+ *
  * Requires: hosted mediator/witness reachable (baked into the app via app/.env),
  * appium with uiautomator2 + xcuitest drivers, built .apk/.app (see lib/config.js).
  */
@@ -28,23 +35,26 @@ import {
   completeOnboarding,
   showRelationshipInvitation,
 } from "./lib/flows.js";
-import { androidCaps, ANDROID_AVD2 } from "./lib/config.js";
+import { androidCaps, ANDROID_AVD, ANDROID_AVD2 } from "./lib/config.js";
+import { resolveEmulatorPlatforms, listAndroidAvds, resolveSecondAvd } from "./lib/devicePairingPrompt.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 
-const platforms = (process.env.PLATFORMS || "android,ios")
-  .split(",")
-  .map((s) => s.trim());
+const platforms = await resolveEmulatorPlatforms();
 if (platforms.length !== 2) {
   console.error("PLATFORMS must list exactly two entries, e.g. android,ios");
   process.exit(1);
 }
 const bothAndroid = platforms[0] === "android" && platforms[1] === "android";
-if (bothAndroid && !ANDROID_AVD2) {
-  console.error(
-    "PLATFORMS=android,android needs a second AVD — set ANDROID_AVD2 " +
-      "(two emulators can't share one AVD; see e2e/README.md)"
-  );
-  process.exit(1);
+let androidAvd2 = ANDROID_AVD2;
+if (bothAndroid && !androidAvd2) {
+  androidAvd2 = await resolveSecondAvd(listAndroidAvds(), ANDROID_AVD);
+  if (!androidAvd2) {
+    console.error(
+      "PLATFORMS=android,android needs a second AVD — set ANDROID_AVD2 " +
+        "(two emulators can't share one AVD; see e2e/README.md)"
+    );
+    process.exit(1);
+  }
 }
 
 let a, b;
@@ -56,7 +66,7 @@ try {
   a = await createSession(platforms[0]);
   b = await createSession(
     platforms[1],
-    bothAndroid ? androidCaps(ANDROID_AVD2) : undefined
+    bothAndroid ? androidCaps(androidAvd2) : undefined
   );
 
   await Promise.all([

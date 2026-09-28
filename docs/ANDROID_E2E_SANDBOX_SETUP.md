@@ -1,6 +1,6 @@
 # Running Android-only E2E from a claude-pod Sandbox
 
-The Android e2e flow (`vrc-exchange:android-only`, two AVDs instead of an
+The Android e2e flow (`PLATFORMS=android,android` on `vrc-exchange`, two AVDs instead of an
 Android + iOS pair) drives real emulators through Appium/adb. A `claude-pod`
 sandbox container can't run any of that natively — this doc records what's
 missing, why, and how to bridge a host's existing Android setup into the pod
@@ -73,7 +73,7 @@ unzip -q /tmp/platform-tools.zip -d /opt
 export PATH="/opt/platform-tools:$PATH"
 export ANDROID_ADB_SERVER_PORT=5037
 
-cd e2e && PLATFORMS=android,android npm run vrc-exchange:android-only
+cd e2e && PLATFORMS=android,android npm run vrc-exchange
 ```
 
 ### Caveat: don't let a local adb daemon win the port
@@ -96,4 +96,4 @@ of a real daemon.
 | adb server | host | `HOST_SERVICES` forward on `:5037` + `adb` client in pod |
 | Appium server | host | `HOST_SERVICES` forward on `:4723` |
 | metro | host | `adb reverse tcp:8081 tcp:8081`, set up via the forwarded adb server |
-| e2e test runner (`vrc-exchange:android-only`) | pod | — |
+| e2e test runner (`vrc-exchange`) | pod | — |

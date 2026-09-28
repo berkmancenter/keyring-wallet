@@ -2,128 +2,91 @@
  * Two-wallet VRC exchange on REAL DEVICES (attended) — proves hardware
  * attestation + biometric-confirmed signing end to end:
  *
- *   fresh install on a physical Android phone (USB) + physical iPhone →
- *   onboarding → invitation → bidirectional VRC exchange where each side
- *   signs with its hardware key (TEE / App Attest) and each receiver
- *   chain-validates the peer's evidence (Google roots / Apple roots).
- *   The run FAILS unless BOTH offer screens show evidence was at least
- *   attempted (the "Secure Exchange" / AttestationVerified banner, or the
- *   "Hardware Verification Issue" / AttestationWarning banner — the latter
- *   is tolerated since it reflects the PHYSICAL DEVICE's attestation root
- *   cert validity, not the app's flow; see docs/HARDWARE_ATTESTATION_FLOW.md
- *   "Known limitations" #5). Only a banner missing entirely fails the run.
+ *   fresh install on a physical Android phone (USB) + a second physical
+ *   device (an iPhone by default, or a second Android phone) → onboarding →
+ *   invitation → bidirectional VRC exchange where each side signs with its
+ *   hardware key (TEE / App Attest) and each receiver chain-validates the
+ *   peer's evidence (Google roots / Apple roots). The run FAILS unless BOTH
+ *   offer screens show evidence was at least attempted (the "Secure
+ *   Exchange" / AttestationVerified banner, or the "Hardware Verification
+ *   Issue" / AttestationWarning banner — the latter is tolerated since it
+ *   reflects the PHYSICAL DEVICE's attestation root cert validity, not the
+ *   app's flow; see docs/HARDWARE_ATTESTATION_FLOW.md "Known limitations"
+ *   #5). Only a banner missing entirely fails the run.
  *
  * ATTENDED: a human operator must satisfy the OS biometric/PIN prompts —
  * watch the console for the "OPERATOR: authenticate on ..." banners
  * (roughly twice per device: once per issuance direction).
  *
- * Usage:
- *   npm run vrc-exchange:devices        (or: yarn e2e:vrc:devices from repo root)
+ * Usage: yarn e2e:vrc:devices from repo root (or npm run vrc-exchange:devices
+ * from here), one script for every real-device pairing this flow supports —
+ * there is no separate `:android-only` yarn command:
  *
- * Env overrides: ANDROID_UDID, IOS_UDID, IOS_TEAM_ID, IOS_DEVICE_APP, ANDROID_APK.
+ *   yarn e2e:vrc:devices                                   # android + iPhone (default)
+ *
+ *   DEVICE_PLATFORMS=android,android yarn e2e:vrc:devices  — two physical
+ *   Android phones instead of an Android + iPhone pair. No macOS/Xcode
+ *   needed. Two PHYSICAL phones are required, not emulators: the whole point
+ *   of this test is hardware-attested signing (TEE-backed keys +
+ *   BiometricPrompt on both sides), and emulators cannot do hardware
+ *   attestation (see e2e/README.md) — an emulator pair would silently fall
+ *   back to a plain, unattested exchange. Both phones connected over USB are
+ *   auto-detected; if more or fewer than two are found, set ANDROID_UDID and
+ *   ANDROID_UDID2 to pick them explicitly (`adb devices` lists connected
+ *   serials).
+ *
+ *   DEVICE_PLATFORMS=android,android E2E_DIDCOMM_V2=1 yarn e2e:vrc:devices —
+ *   the same two-physical-phone hardware attestation, but the connection is
+ *   DIDComm v2 (OOB 2.0, did:peer:2, Coordinate Mediation 2.0 + Pickup 4.0)
+ *   instead of the default v1 connection. Physical phones can't reach
+ *   10.0.2.2, so the mediator needs tunnel mode (`yarn mediator --didcomm-v2`,
+ *   no --endpoint, requires cloudflared), and the Android debug APK must be
+ *   rebuilt (`cd app/android && ./gradlew :app:assembleDebug`) after that
+ *   mediator run writes app/.env — restarting Metro alone does not pick up a
+ *   new MEDIATOR_V2_URL, since react-native-config bakes it into the native
+ *   BuildConfig at Gradle build time, not at bundle time (see e2e/README.md
+ *   and the mediator-server README's "Which --endpoint" section).
+ *
+ * Env overrides: DEVICE_PLATFORMS, E2E_DIDCOMM_V2, ANDROID_UDID, ANDROID_UDID2
+ * (android,android only), IOS_UDID, IOS_TEAM_ID, IOS_DEVICE_APP, ANDROID_APK.
+ * If DEVICE_PLATFORMS is unset and this is run from a real terminal with
+ * more than one pairing physically attached (e.g. 2 Android phones + an
+ * iPhone), it prompts interactively instead of guessing — set the env var
+ * to skip the prompt (required for CI/scripted runs; it's used automatically
+ * whenever stdin isn't a TTY).
  * Prerequisites + build commands: see e2e/README.md ("Real devices").
  */
 import "./lib/cli-guard.js";
-import { execSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import net from "node:net";
+import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
 
-import {
-  createSession,
-  ensureAppium,
-  stopAppium,
-  screenshot,
-  dumpSource,
-  sleep,
-} from "./lib/driver.js";
-import {
-  acceptInvitationViaPaste,
-  acceptRelationshipProposalOnEitherSide,
-  assertSecureExchangeBadge,
-  assertTrustTaskExchangeMarkers,
-  assertVrcReceived,
-  completeOnboarding,
-  enableHardwareAttestation,
-  showRelationshipInvitation,
-} from "./lib/flows.js";
+import { createSession } from "./lib/driver.js";
 import {
   ANDROID_APK,
-  ANDROID_UDID,
   IOS_DEVICE_APP,
-  IOS_UDID,
   androidDeviceCaps,
   iosDeviceCaps,
 } from "./lib/config.js";
-import { printSuccess, printFailure } from "./lib/banner.js";
+import { detectAndroidUdid, detectIosUdid, detectTwoAndroidUdids } from "./lib/deviceDiscovery.js";
+import { resolveDevicePlatforms } from "./lib/devicePairingPrompt.js";
+import {
+  runDeviceExchange,
+  dumpAndroidAttestationLogs,
+  dumpIosAttestationLogs,
+} from "./lib/deviceExchangeFlow.js";
 
-// ---------- device discovery ----------
+// ---------- platform selection ----------
 
-function detectAndroidUdid() {
-  if (ANDROID_UDID) return ANDROID_UDID;
-  const out = execSync("adb devices").toString();
-  const physical = out
-    .split("\n")
-    .slice(1)
-    .map((l) => l.trim().split(/\s+/))
-    .filter(([id, state]) => id && state === "device" && !id.startsWith("emulator-"))
-    .map(([id]) => id);
-  if (physical.length !== 1) {
-    throw new Error(
-      `expected exactly one physical android device (found: ${physical.join(", ") || "none"}). ` +
-        `Set ANDROID_UDID to pick one.`
-    );
-  }
-  return physical[0];
-}
-
-function detectIosUdid() {
-  if (IOS_UDID) return IOS_UDID;
-  // Prefer CoreDevice "connected" tunnel state; fall back to USB presence via
-  // idevice_id / xctrace when the tunnel briefly reports "disconnected"
-  // (common after sleep / cable reattach, even though the phone is usable).
-  execSync("xcrun devicectl list devices --json-output /tmp/e2e-devicectl.json", {
-    stdio: "ignore",
-  });
-  const json = JSON.parse(readFileSync("/tmp/e2e-devicectl.json", "utf8"));
-  const iphones = (json.result?.devices || [])
-    .filter((d) => d.hardwareProperties?.deviceType === "iPhone")
-    .map((d) => ({
-      name: d.deviceProperties?.name,
-      udid: d.hardwareProperties?.udid,
-      tunnel: d.connectionProperties?.tunnelState,
-    }));
-  let candidates = iphones.filter((d) => d.tunnel === "connected");
-  if (candidates.length === 0) {
-    let usb = [];
-    try {
-      usb = execSync("idevice_id -l").toString().trim().split(/\n/).filter(Boolean);
-    } catch {
-      /* libimobiledevice may be missing */
-    }
-    if (usb.length === 0) {
-      try {
-        const xt = execSync("xcrun xctrace list devices").toString();
-        // only the "Devices" section (before Offline / Simulators)
-        const live = xt.split("== Devices Offline ==")[0] || xt;
-        usb = [...live.matchAll(/\(([0-9A-F-]{25,})\)/g)].map((m) => m[1]);
-      } catch {
-        /* ignore */
-      }
-    }
-    candidates = iphones.filter((d) => usb.includes(d.udid));
-  }
-  if (candidates.length !== 1) {
-    throw new Error(
-      `expected exactly one connected iPhone (found: ${candidates.map((d) => d.name).join(", ") || "none"}). ` +
-        `Set IOS_UDID to pick one.`
-    );
-  }
-  console.log(
-    `[e2e] iPhone detected: ${candidates[0].name} (${candidates[0].udid}` +
-      `${candidates[0].tunnel !== "connected" ? `, tunnel=${candidates[0].tunnel}` : ""})`
+const platforms = await resolveDevicePlatforms();
+if (platforms.length !== 2 || platforms[0] !== "android" || (platforms[1] !== "android" && platforms[1] !== "ios")) {
+  console.error(
+    'DEVICE_PLATFORMS must be "android,ios" (default) or "android,android" — ' +
+      "wallet A is always the physical Android phone; a two-iPhone pairing isn't supported by this runner."
   );
-  return candidates[0].udid;
+  process.exit(1);
 }
+const bothAndroid = platforms[1] === "android";
+const useDidCommV2 = process.env.E2E_DIDCOMM_V2 === "1";
 
 // ---------- preflight ----------
 
@@ -133,198 +96,58 @@ function preflight() {
       `Android APK not found: ${ANDROID_APK}\n  Build it: cd app/android && ./gradlew assembleDebug`
     );
   }
-  if (!existsSync(IOS_DEVICE_APP)) {
+  if (!bothAndroid && !existsSync(IOS_DEVICE_APP)) {
     throw new Error(
       `iOS device build not found: ${IOS_DEVICE_APP}\n  Build it (see e2e/README.md "Real devices" for the full command).`
     );
   }
 }
 
-function portInUse(port) {
-  return new Promise((resolve) => {
-    const sock = net.connect(port, "127.0.0.1");
-    sock.once("connect", () => (sock.destroy(), resolve(true)));
-    sock.once("error", () => resolve(false));
-  });
-}
-
-let metroProc;
-async function ensureMetro() {
-  // the Android debug APK loads JS from metro on this machine via `adb reverse`
-  if (await portInUse(8081)) {
-    console.log("[e2e] metro already running on :8081");
-    return;
-  }
-  console.log("[e2e] starting metro (yarn start in app/)…");
-  metroProc = spawn("yarn", ["start"], {
-    cwd: new URL("../app", import.meta.url).pathname,
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-  for (let i = 0; i < 60; i++) {
-    if (await portInUse(8081)) return;
-    await sleep(1000);
-  }
-  throw new Error("metro did not start within 60s");
-}
-
-// ---------- attestation log evidence ----------
-
-function dumpAndroidAttestationLogs(udid) {
-  try {
-    mkdirSync("artifacts", { recursive: true });
-    const raw = execSync(`adb -s ${udid} logcat -d`, {
-      maxBuffer: 64 * 1024 * 1024,
-    }).toString();
-    const lines = raw
-      .split("\n")
-      .filter((l) => /VRC:|Attestation|BiometricSignature|GoogleAttestation/i.test(l));
-    const file = `artifacts/attestation-logcat-${Date.now()}.txt`;
-    writeFileSync(file, lines.join("\n"));
-    console.log(`[e2e] android attestation log lines saved: ${file} (${lines.length} lines)`);
-
-    // Extract slim issued-credential JSON dumps (PEMs already omitted in-app).
-    let n = 0;
-    for (const line of raw.split("\n")) {
-      const marker = "[VRC:IssuedCredentialJSON]";
-      const idx = line.indexOf(marker);
-      if (idx < 0) continue;
-      const payload = line.slice(idx + marker.length).trim();
-      // payload: side=… exchange=… record=… {json}
-      const jsonStart = payload.indexOf("{");
-      if (jsonStart < 0) continue;
-      const meta = payload.slice(0, jsonStart).trim();
-      const side = (meta.match(/side=(\w+)/) || [])[1] || "unknown";
-      try {
-        const obj = JSON.parse(payload.slice(jsonStart));
-        const types = (obj.type || []).join("-") || "credential";
-        const out = `artifacts/issued-credential-${side}-${types}-${Date.now()}-${n++}.json`;
-        writeFileSync(out, JSON.stringify(obj, null, 2));
-        console.log(`[e2e] issued credential dump: ${out}`);
-        if (obj.proof) {
-          console.log(
-            `[e2e]   proof.type=${obj.proof.type} proofPurpose=${obj.proof.proofPurpose}`
-          );
-        }
-      } catch (e) {
-        console.warn(`[e2e] could not parse IssuedCredentialJSON: ${e.message}`);
-      }
-    }
-  } catch (e) {
-    console.warn(`[e2e] logcat capture failed (non-fatal): ${e.message}`);
-  }
-}
-
-async function dumpIosAttestationLogs(driver) {
-  try {
-    const logs = await driver.getLogs("syslog");
-    const lines = logs
-      .map((l) => (typeof l === "string" ? l : l.message || ""))
-      .filter((l) => /VRC:|Attestation|AppAttest/i.test(l));
-    mkdirSync("artifacts", { recursive: true });
-    const file = `artifacts/attestation-syslog-${Date.now()}.txt`;
-    writeFileSync(file, lines.join("\n"));
-    console.log(`[e2e] ios attestation log lines saved: ${file} (${lines.length} lines)`);
-  } catch (e) {
-    console.warn(`[e2e] ios syslog capture failed (non-fatal): ${e.message}`);
-  }
-}
-
 // ---------- run ----------
 
-let android, ios;
-try {
-  preflight();
-  const androidUdid = detectAndroidUdid();
-  const iosUdid = detectIosUdid();
-  console.log(`[e2e] android device: ${androidUdid}`);
+preflight();
 
+let udidA, udidB;
+if (bothAndroid) {
+  ({ a: udidA, b: udidB } = detectTwoAndroidUdids());
+  console.log(`[e2e] android devices: ${udidA}, ${udidB}`);
+  for (const udid of [udidA, udidB]) {
+    try {
+      execSync(`adb -s ${udid} logcat -c`);
+    } catch {
+      /* non-fatal */
+    }
+  }
+  console.log("[e2e] cleared android logcat");
+} else {
+  udidA = detectAndroidUdid();
+  udidB = detectIosUdid();
+  console.log(`[e2e] android device: ${udidA}`);
   try {
-    execSync(`adb -s ${androidUdid} logcat -c`);
+    execSync(`adb -s ${udidA} logcat -c`);
     console.log("[e2e] cleared android logcat");
   } catch {
     /* non-fatal */
   }
-
-  await ensureMetro();
-  await ensureAppium();
-
-  console.log(
-    "\n[e2e] ATTENDED RUN — keep both phones unlocked and within reach.\n" +
-      "[e2e] A relationship proposal appears on one phone (auto-accepted); then\n" +
-      "[e2e] satisfy the BIOMETRIC prompt on EACH phone when the OPERATOR banner\n" +
-      "[e2e] appears in this console.\n"
-  );
-
-  android = await createSession("android", androidDeviceCaps(androidUdid));
-  ios = await createSession("ios", iosDeviceCaps(iosUdid));
-
-  await Promise.all([
-    completeOnboarding(android, { firstName: "Alice", lastName: "Anderson" }),
-    completeOnboarding(ios, { firstName: "Bob", lastName: "Baker" }),
-  ]);
-
-  // Hardware attestation is OFF by default — without it no evidence is
-  // attached and the Secure Exchange banner can never show.
-  await Promise.all([
-    enableHardwareAttestation(android),
-    enableHardwareAttestation(ios),
-  ]);
-
-  const invitationUrl = await showRelationshipInvitation(android);
-  await acceptInvitationViaPaste(ios, invitationUrl);
-
-  // v4 consent: one bottom-sheet on the non-proposer wallet, no per-credential
-  // offers — both signed VRCs then flow automatically as trust tasks. The
-  // biometric prompts fire during the signed delivery that follows consent.
-  await acceptRelationshipProposalOnEitherSide(android, ios);
-
-  await Promise.all([
-    assertVrcReceived(android, "Bob Baker"),
-    assertVrcReceived(ios, "Alice Anderson"),
-  ]);
-
-  // The crypto gates, from Android's run-scoped logcat (no-op on iOS —
-  // Android's log covers both directions of the exchange).
-  await Promise.all([
-    assertTrustTaskExchangeMarkers(android),
-    assertTrustTaskExchangeMarkers(ios),
-  ]);
-
-  // Each receiver REQUIRES the Secure Exchange badge (peer evidence
-  // chain-validated on-device) — the device-attestation gate this test exists
-  // to prove.
-  await assertSecureExchangeBadge(android, "Bob Baker");
-  await assertSecureExchangeBadge(ios, "Alice Anderson");
-
-  printSuccess("vrc-exchange:devices");
-  process.exitCode = 0;
-
-  dumpAndroidAttestationLogs(androidUdid);
-  await dumpIosAttestationLogs(ios);
-} catch (err) {
-  printFailure("vrc-exchange:devices", err);
-  for (const d of [android, ios].filter(Boolean)) {
-    try {
-      await screenshot(d, "failure");
-      await dumpSource(d, "failure");
-    } catch {
-      /* session may be dead */
-    }
-  }
-  try {
-    dumpAndroidAttestationLogs(detectAndroidUdid());
-  } catch {
-    /* best-effort */
-  }
-  process.exitCode = 1;
-} finally {
-  for (const d of [android, ios].filter(Boolean)) {
-    try {
-      await d.deleteSession();
-    } catch {
-      /* already gone */
-    }
-  }
-  if (metroProc) metroProc.kill("SIGTERM");
-  stopAppium();
 }
+
+const name = `vrc-exchange:devices (${platforms.join(",")}${useDidCommV2 ? " didcomm-v2" : ""})`;
+
+await runDeviceExchange({
+  detectDevices: () => ({ a: udidA, b: udidB }),
+  createSessionA: (udid) => createSession("android", androidDeviceCaps(udid)),
+  createSessionB: bothAndroid
+    ? (udid) => createSession("android", androidDeviceCaps(udid))
+    : (udid) => createSession("ios", iosDeviceCaps(udid)),
+  // android-only: both udids are android, dump both. android+ios: only udidA
+  // is android — an iOS udid isn't reachable via `adb logcat`.
+  dumpAttestationLogs: bothAndroid
+    ? (udids) => dumpAndroidAttestationLogs(udids)
+    : () => dumpAndroidAttestationLogs([udidA]),
+  // iOS syslog dump only applies (and is only attempted, on success) for the
+  // android+iPhone pairing.
+  dumpIosLogs: bothAndroid ? undefined : (driver) => dumpIosAttestationLogs(driver),
+  name,
+  useDidCommV2,
+  platforms,
+});
