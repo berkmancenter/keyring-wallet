@@ -12,6 +12,7 @@
 - **[[VETTING-DESIGN]]** — `docs/design/vetting-process.md` in `OpenVTC/openvtc` (DRAFT v3): §1 non-goals, §10.5 accountability, §14.2 V2 scope, D7/D14/D19.
 - **[[VTI-CRED-ARCH]]** — `docs/05-design-notes/vti-credential-architecture.md` in VTI, present at our pin `187ad9cd`: D4 and §4, proof formats.
 - **[[AGENT-STATE]]** — *The Agent Is the State: UIs That Keep Nothing*, `ic3.software/blog/the-agent-is-the-state`.
+- **[[ZKP-SPEC]]** — `trustoverip/dtgwg-zkp-spec` (public; `spec/body.md`, status *"Proposed · 2026-08-25"*): the Accessibility Considerations section on proving cost and mediated proving, and open PR #11 on key profiles.
 - **[[W39]]** — *Week 39 OpenVTC report*, `docs.fpp.storm.ws/week-39-openvtc-report.html` (public, read 2026-09-27): hidden vetting implemented on unmerged `zkp-pcs` branches in both repositories, *"proving runs on the client side (via the community app), while verification occurs server-side"*, a proof *"about 1.3 KB, and milliseconds to check"*, and the library *"a research artefact and unaudited"*.
 - **[[ZKP-TF]]** — `trustoverip/dtgwg-zkp-tf` (DTG ZKP V1.0, working draft targeted at IIW #43, Nov 2026) and its evidence lab `mitchuski/dtgwg-zkp-mage`.
 - **[[CONSENT-VIEW]]** — `packages/core/src/persona/consent-view.ts` in `vta-browser-plugin` at `9643c57` (not at `89d70c4`): how upstream's own client renders a predicate claim.
@@ -126,7 +127,27 @@ Two further facts settle it for a *proving* key specifically:
 - **The agent already holds prover secrets, and never exports them.** BBS pseudonym material — the holder's `prover_nym` and `secret_prover_blind` — is persisted inside the VTA's own vault under reserved tags and the presentation is derived there (`vta-vault/src/bbs.rs:265-272,322-328`; `vta-vault/src/model.rs:38-42`). A ZK proving key in the vault is the shape the ecosystem already ships, not a new idea.
 - **An exported key cannot be gated by a step-up, at all.** `keys/export-secret` is gated by capability, context scope and audit — and by nothing else: there is no assurance tier and no freshness check on it anywhere. So if the proving secret is exported to the phone, the agent cannot require a human approval before a proof is made; the only gate left is the app's own UI, which is exactly the gate an attacker with the app does not face. **That directly contradicts §3.2's first duty**, which is the one thing Keyring brings that the reference clients do not.
 
-**Conclusion, and it is ours:** the proving key belongs in the VTA, non-exportable, with the agent proving on request — for the applicant as well as the vetter. Not because keys should live in agents as a matter of taste, but because the hardware-attested step-up we are building is unenforceable on an exported key, and because the two reasons the terminal client borrows (key agreement, signing as a persona) do not apply to a proof.
+**Conclusion:** the proving key belongs in the VTA, non-exportable, with the agent proving on request — not because keys should live in agents as a matter of taste, but because the hardware-attested step-up we are building is unenforceable on an exported key, and because the two reasons the terminal client borrows (key agreement, signing as a persona) do not apply to a proof. That is the **default**, and §3.1.2 says why it cannot be the only path.
+
+### 3.1.2 Both paths ship: the agent by default, the phone by the holder's choice
+
+**Decided 2026-09-28.** Keyring offers agent-side proving as the default and an on-phone path for a holder who chooses it. Two reasons, one external and one ours:
+
+- **The specification refuses a delegation-only client.** *"Mediated proving, where a holder delegates proving to an agent, … MUST NOT be the only path available to a holder"* ([[ZKP-SPEC]], Accessibility Considerations). The surrounding rationale is proving cost on constrained devices and not excluding holders; read with the sentence, the concern is that a holder is never *forced* to delegate. A client offering only the agent path would be the thing that sentence forbids.
+- **Delegation is a trust choice, and it is not ours to make for someone.** Agent-side proving means the agent can compute what the holder proves. Our own §3.5 accepts that trust for the vetter; a holder who does not accept it should still be able to participate.
+
+**What each path costs, stated so the UI can say it honestly:**
+
+| | Agent proves (default) | Phone proves (opt-in) |
+|---|---|---|
+| Hardware-attested approval before a proof | **Yes** — the gate of §3.2 duty 1 | **No.** Nothing on the agent side can gate a proof made locally; the only gate is the app's own |
+| Unattended duties (a vetter's allowance schedule, one record of what was spent) | Kept | **Not possible on a phone** (§3.1), so this path is for the applicant's side only |
+| Who can compute the holder's proofs | The agent's operator, as well as the holder | The holder alone |
+| Cost to build | A `prove` task we do not yet have | A prover shipped in the app (`ref-03d` says the curve layer runs on Hermes) |
+
+**Revisit when [[ZKP-SPEC]] settles**, and note its status: the sentence quoted above sits in a section the document itself marks *informative*, so its normative force is unclear as written (§8, an ask rather than a workaround). We implement both paths regardless, because the accessibility argument holds on its own.
+
+**Where our hardware keys fit.** A Secure Enclave or StrongBox key is not usable as a proving key on any of these curves (§2.3). [[ZKP-SPEC]] PR #11 points such keys at **issuance-time attestation** opened at presentation, conditioned on an identifier's declared key profile, rather than at in-proof derivation. So Keyring's hardware story attaches where it can — at issuance and at approval — not inside the proof, on either path.
 
 ### 3.2 What Keyring does
 
@@ -236,6 +257,7 @@ This covers Groth16 predicate proofs with scoped nullifiers (personhood, livenes
 | C4 | Named and hidden vetting never mix in one criterion, or one vetter can be counted twice | Ours (§4.1) |
 | C5 | Anything a vetter sends anonymously goes from a fresh identifier, never the member DID or the session DID | Ours (§4.1) |
 | C6 | *"Implementations SHOULD make ZKP presentation the default behavior so that users obtain privacy preservation without having to opt in"* | DTG Core Credentials, as quoted in [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 |
+| C6 -- b | Mediated (agent-side) proving *"MUST NOT be the only path available to a holder"* ([[ZKP-SPEC]], in a section marked informative — see §8) | [[ZKP-SPEC]] |
 | C6a | The construction's library is *"a research artefact and unaudited"* ([[W39]]). No community with real members should rely on it before an independent review, the same gate [[VTI-CRED-ARCH]] D4 sets for BBS | [[W39]]; ours by analogy |
 | C7 | Holders need no BLS key to derive a BBS disclosure; only durable `did:webvh` issuers mint BBS credentials; BBS is gated on an independent audit | [[VTI-CRED-ARCH]] D4, §4 |
 | C8 | *"Do not build a second copy of anything the agent already is"* | [[AGENT-STATE]] |
@@ -318,7 +340,7 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 **Not decided (ours):**
 
 - **D2** — §3.4: BBS issuer key custody (R-DID or VTA `did:webvh`) and post-issuance proof addition. Blocks ZK4.
-- **D4** — §3.1: does the **applicant's** proof run in the VTA or on the phone? **Recommended: the VTA, non-exportable key, agent proves on request** (§3.1.1 — an exported proving key cannot be gated by a step-up, and the agent already holds BBS prover secrets this way). The open part is no longer which is better but whether upstream will offer a prove-as-persona task; their built branch proves client-side. The borrowed-keys answer still matters, because a policy that lets borrowed keys persist would make the exported path tempting for the wrong reason. What else decides it: whether the published task family puts the applicant's engine behind the agent at all (note that the applicant is the party that *aggregates* the attestations into one proof at submission, so whoever holds that role holds the aggregation too); whether an offline or poor-connectivity submission is a requirement we accept; and the cost of a second proving stack in the app measured against `ref-03d`'s numbers. Does not block ZK0–ZK3, and ZK1's client contract is the same either way; it must be settled before ZK2's scope is fixed.
+- **D4 — decided 2026-09-28, and no longer open.** Agent-side proving is the default (non-exportable VTA-held key, agent proves on request); an on-phone path ships alongside it for holders who choose it (§3.1.1, §3.1.2). Revisit when [[ZKP-SPEC]] settles. What remains outstanding is upstream-side, not a decision of ours: whether a prove-as-persona task over non-exportable keys will exist (their built branch proves client-side), and: whether the published task family puts the applicant's engine behind the agent at all (note that the applicant is the party that *aggregates* the attestations into one proof at submission, so whoever holds that role holds the aggregation too); whether an offline or poor-connectivity submission is a requirement we accept; and the cost of a second proving stack in the app measured against `ref-03d`'s numbers. Does not block ZK0–ZK3, and ZK1's client contract is the same either way; it must be settled before ZK2's scope is fixed.
 - **D3** — whether Keyring pursues the vetter role at all, or stays applicant-only in hidden mode. The table in §4.1 assumes both. Blocks ZK3's scope.
 
 **Watch triggers** — the concrete artifacts whose appearance unblocks something, so a blocked item is noticed when it moves rather than rediscovered:
