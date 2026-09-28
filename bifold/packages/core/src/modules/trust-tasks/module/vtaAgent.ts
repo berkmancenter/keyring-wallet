@@ -12,6 +12,7 @@
 
 import type { Agent } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { Platform } from 'react-native'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
@@ -24,9 +25,24 @@ import {
   type VtaAclEntry,
   type VtaConsentRequest,
 } from './VtaClient'
+import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
+import {
+  listAgentDevices,
+  registerThisDevice,
+  removeAgentDevice,
+  renameThisDevice,
+  type AgentDevice,
+} from './vtaDevices'
+import {
+  agentVersion,
+  rotateEachPersona,
+  rotatePersonaKeys,
+  rotationSupport,
+  type RotationSupport,
+} from './vtaRotation'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 import {
@@ -38,6 +54,7 @@ import {
   looksLikeDid,
   type ConfirmOwner,
   type DeviceCanOwn,
+  type DeviceRefusalReason,
 } from './vtaOwner'
 
 export interface VtiApproval extends VtaConsentRequest {
@@ -108,6 +125,7 @@ export interface VtaAgentDeps {
   fetch?: typeof fetch
   linkStore?: (agent: Agent) => VtaLinkStore
   identityStore?: (agent: Agent) => VtiIdentityStore
+  communityStore?: (agent: Agent) => Pick<VtiCommunityStore, 'forgetCommunity'>
   enrol?: {
     submit: typeof submitEnrolment
     waitForGrant: typeof waitForGrant
@@ -270,6 +288,10 @@ export class VtaAgentController {
 
   private identityStore(agent: Agent) {
     return this.deps.identityStore?.(agent) ?? new GenericRecordsIdentityStore(agent)
+  }
+
+  private communityStore(agent: Agent) {
+    return this.deps.communityStore?.(agent) ?? new GenericRecordsCommunityStore(agent)
   }
 
   private now() {
@@ -459,6 +481,35 @@ export class VtaAgentController {
     })
     this.dispatch({ type: 'unlinked' })
     this.note('unlinked')
+  }
+
+  /**
+   * The person chose to erase this phone's copy of its agent (#10), after the
+   * agent stopped accepting it — or at any time. Only this phone's data for
+   * that agent goes: for each identity this phone minted through it, the
+   * borrowed key copies, the identity record, and the community's membership,
+   * invitations and delivered credentials; then everything {@link unlink}
+   * forgets. Contacts, DIDComm connections and the wallet's own credentials
+   * stay. The agent holds every identity's keys, so linking again (or another
+   * device) loses nothing. Never erases on its own: a refusal alone may be a
+   * mistake or a restore, so the person decides. Never throws; a record that
+   * fails to go is left, and the phone is unlinked either way.
+   */
+  async eraseThisPhonesCopy(agent: Agent): Promise<void> {
+    const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    if (vtaDid) {
+      const identities = this.identityStore(agent)
+      const communities = this.communityStore(agent)
+      const personas = await identities.listPersonas().catch(() => [])
+      for (const persona of personas.filter((p) => p.vtaDid === vtaDid)) {
+        for (const keyId of Object.values(persona.kmsKeyIds ?? {})) {
+          if (keyId) await agent.kms.deleteKey({ keyId }).catch(() => undefined)
+        }
+        await communities.forgetCommunity(persona.communityDid).catch(() => undefined)
+        await identities.forgetPersona(persona.communityDid).catch(() => undefined)
+      }
+    }
+    await this.unlink(agent)
   }
 
   /**
@@ -841,6 +892,118 @@ export class VtaAgentController {
     })
   }
 
+  /**
+   * Every device that runs this agent with its device binding where it has one
+   * (#10, {@link listAgentDevices}), this phone's own keys marked. Signs in if
+   * it must. Refuses with {@link DeviceActionRefused}.
+   */
+  async agentDevices(agent: Agent): Promise<AgentDevice[]> {
+    const vtaDid = this.linkedAgent()
+    const client = await this.signedIn(agent, vtaDid)
+    const mine = await this.phoneKeys(agent, vtaDid)
+    const devices = await listAgentDevices(client).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    return devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+  }
+
+  /**
+   * Remove a device from this agent (#10, {@link removeAgentDevice}): a
+   * registered device is wiped and then revoked, one with no binding revoked. Never this phone,
+   * refused before anything is asked; the person confirms first and nothing is
+   * sent without it.
+   */
+  async removeAgentDevice(agent: Agent, device: AgentDevice): Promise<{ mode: 'wiped' | 'revoked' }> {
+    const vtaDid = this.linkedAgent()
+    if ((await this.phoneKeys(agent, vtaDid)).includes(device.did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Remove a device from your agent')
+    const client = await this.signedIn(agent, vtaDid)
+    if ((await this.phoneKeys(agent, vtaDid)).includes(device.did)) throw new DeviceActionRefused('thisPhone')
+    return removeAgentDevice(client, { ...device, isThisPhone: false }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Register this phone on its agent with the name the person chose (#10). The
+   * agent refuses a second registration, so a phone already registered — by
+   * the presence loop with the default name, say — gets the chosen name by a
+   * heartbeat instead: either way the agent ends with this name.
+   */
+  async registerThisDevice(agent: Agent, displayName: string): Promise<void> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    const claimed = await registerThisDevice(client, { displayName, platform: Platform.OS }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    if (claimed === 'alreadyRegistered') {
+      await renameThisDevice(client, displayName).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+    }
+  }
+
+  /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */
+  async renameThisDevice(agent: Agent, displayName: string): Promise<void> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    await renameThisDevice(client, displayName).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Whether rotating a persona's keys is safe on this agent (#10, lost phone):
+   * `yes` from vta-service 0.43.0, `unknown` when the agent does not say or
+   * reports 0.42.x, `agentTooOld` before that. Never throws.
+   */
+  async canRotatePersonaKeys(agent: Agent): Promise<RotationSupport> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return 'unknown'
+    return rotationSupport(await agentVersion(agent, vtaDid))
+  }
+
+  /**
+   * Rotate one persona's keys on the agent after a lost phone (#10), then take
+   * fresh copies for this phone. The person confirms first; nothing is sent
+   * without it.
+   */
+  async rotatePersonaKeys(agent: Agent, personaDid: string): Promise<void> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner("Replace this identity's keys")
+    const client = await this.signedIn(agent, vtaDid)
+    const store = this.identityStore(agent)
+    const persona = (await store.listPersonas()).find((p) => p.did === personaDid)
+    if (!persona) throw new DeviceActionRefused('failed', `no persona ${personaDid} on this phone`)
+    await rotatePersonaKeys(client, store, persona).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Rotate the keys of every identity this phone holds on the linked agent,
+   * behind one owner check rather than one per identity. Carries on past an
+   * identity the agent refuses and answers each outcome, worded as a
+   * {@link DeviceRefusalReason}.
+   */
+  async rotateAllPersonaKeys(agent: Agent): Promise<{
+    rotated: string[]
+    unpublished: string[]
+    failed: { did: string; reason: DeviceRefusalReason }[]
+  }> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner("Replace your identities' keys")
+    const client = await this.signedIn(agent, vtaDid)
+    const store = this.identityStore(agent)
+    const personas = (await store.listPersonas()).filter((p) => p.vtaDid === vtaDid)
+    const { rotated, unpublished, failed } = await rotateEachPersona(client, store, personas, (did, keys) =>
+      resolvesWithKeys(agent, did, keys)
+    )
+    return {
+      rotated,
+      unpublished,
+      failed: failed.map(({ did, error }) => ({ did, reason: this.refused(error).reason })),
+    }
+  }
+
   /** The agent this phone is linked to, or a refusal a screen words as "no agent yet". */
   private linkedAgent(): string {
     const vtaDid = this.agentAddress()
@@ -1004,3 +1167,20 @@ function deviceFrom(entry: VtaAclEntry, mine: string[]): VtaDevice {
 }
 
 export const vtaAgent = new VtaAgentController()
+
+/**
+ * Whether `did` resolves, fresh from its host, with every key in `keys` — asked
+ * a few times, since a DID host may serve an update a moment after it takes it.
+ */
+async function resolvesWithKeys(agent: Agent, did: string, keys: string[], attempts = 3, delayMs = 3000) {
+  if (keys.length === 0) return false
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+    const result = await agent.dids.resolve(did, { useCache: false, persistInCache: false }).catch(() => undefined)
+    const published = new Set(
+      (result?.didDocument?.verificationMethod ?? []).map((m) => m.publicKeyMultibase).filter(Boolean)
+    )
+    if (keys.every((k) => published.has(k))) return true
+  }
+  return false
+}

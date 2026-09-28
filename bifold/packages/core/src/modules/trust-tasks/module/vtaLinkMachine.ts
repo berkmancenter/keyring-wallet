@@ -48,7 +48,20 @@ export type VtaLinkState =
   | ({ kind: 'showingKey'; did: string; checking: boolean; notYet?: boolean; noAnswer?: boolean } & VtaIdentityOfAgent)
   | ({ kind: 'linking'; step: 'connecting' | 'rotating' } & VtaIdentityOfAgent)
   | ({ kind: 'linked'; linkedAt: string; connection: VtaConnection } & VtaIdentityOfAgent)
-  | ({ kind: 'revoked'; reason: string } & VtaIdentityOfAgent)
+  | ({ kind: 'revoked'; reason: string; cause: RevocationCause } & VtaIdentityOfAgent)
+
+/**
+ * Why the agent stopped accepting this phone. `wiped` only when the agent said
+ * so ("device has been wiped", which it answers a wiped device signing in over
+ * REST); anything else — no longer on its access list, which is also what a
+ * removed phone hears once its entry is revoked — is `notInAcl`. Neither erases
+ * anything by itself: the person chooses (#10).
+ */
+export type RevocationCause = 'wiped' | 'notInAcl'
+
+export function revocationCause(reason: string): RevocationCause {
+  return /has been wiped/i.test(reason) ? 'wiped' : 'notInAcl'
+}
 
 /** Why a link attempt ended, in a form a screen can word for a person. */
 export interface VtaLinkFailure {
@@ -203,7 +216,13 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
 
     case 'accessRevoked':
       return state.kind === 'linked' || state.kind === 'linking'
-        ? { kind: 'revoked', vtaDid: state.vtaDid, label: state.label, reason: event.reason }
+        ? {
+            kind: 'revoked',
+            vtaDid: state.vtaDid,
+            label: state.label,
+            reason: event.reason,
+            cause: revocationCause(event.reason),
+          }
         : state
 
     case 'relink':

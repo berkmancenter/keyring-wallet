@@ -16,7 +16,7 @@ import { useHeaderHeight } from '@react-navigation/elements'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import React, { useCallback, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native'
+import { ActivityIndicator, Platform, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
@@ -30,6 +30,8 @@ import { vtaAgent } from '../module/vtaAgent'
 import type { VtaLinkFailure } from '../module/vtaLinkMachine'
 
 import { agentDisplayName, agentDisplayNameStart, withAgentName } from './agentName'
+import { DeviceNameField } from './DeviceNamePrompt'
+import { defaultNameOf } from './deviceWords'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
 import { plainError } from './plainError'
@@ -88,6 +90,9 @@ const VtaLink: React.FC = () => {
       paddingVertical: 12,
     },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    // Two choices of equal weight, side by side.
+    pair: { flexDirection: 'row', gap: 12 },
+    pairItem: { flex: 1 },
     actions: { padding: 20, gap: 12 },
     error: { color: ColorPalette.semantic.error },
     muted: { color: ColorPalette.grayscale.mediumGrey },
@@ -129,15 +134,50 @@ const VtaLink: React.FC = () => {
     openScanner(navigation)
   }, [navigation])
 
-  const onDone = useCallback(() => {
-    // The agent screen, where the first-link introduction plays once. The
+  const defaultName = defaultNameOf(Platform.OS, new Date(), t)
+  const [deviceName, setDeviceName] = useState(defaultName)
+  const [naming, setNaming] = useState(false)
+  const [confirmErase, setConfirmErase] = useState(false)
+  const [erasing, setErasing] = useState(false)
+  const [erased, setErased] = useState(false)
+  const [eraseError, setEraseError] = useState<string | undefined>()
+
+  const onErase = useCallback(async () => {
+    if (!agent) return
+    setEraseError(undefined)
+    setErasing(true)
+    try {
+      await vtaAgent.eraseThisPhonesCopy(agent)
+      setConfirmErase(false)
+      setErased(true)
+    } catch (e) {
+      setEraseError(t(plainError(e).line))
+    } finally {
+      setErasing(false)
+    }
+  }, [agent, t])
+
+  const onDone = useCallback(async () => {
+    // Name this phone on the agent (new-phone-new-device-plan.md §A): the name
+    // the person's other devices show. A refusal doesn't hold them up; the
+    // presence loop registers the default later, and My devices can rename.
+    setNaming(true)
+    try {
+      if (agent) await vtaAgent.registerThisDevice(agent, deviceName.trim() || defaultName)
+    } catch {
+      // Linked all the same.
+    } finally {
+      setNaming(false)
+    }
+    // The one-time offer, which goes on to the agent screen (where the
+    // first-link introduction plays once) when there is no other phone. The
     // stack is set rather than pushed: pushed on top, "Linked ✓" stayed
     // underneath and came back on every return to the tab; and a link begun
     // from the scanner can open this screen as the stack's only route. It is
     // the only route: a linked phone has no operator panel to go back to.
     const stack = navigation as unknown as { reset: (state: { index: number; routes: { name: string }[] }) => void }
-    stack.reset({ index: 0, routes: [{ name: Screens.VtaAgent }] })
-  }, [navigation])
+    stack.reset({ index: 0, routes: [{ name: Screens.VtaNewPhoneOffer }] })
+  }, [agent, deviceName, defaultName, navigation])
 
   const failureText = (failure?: VtaLinkFailure) => {
     switch (failure?.reason) {
@@ -348,42 +388,101 @@ const VtaLink: React.FC = () => {
           <ThemedText testID={testIdWithKey('VtaLinkLinkedBody')}>
             {t('VtaLink.LinkedBody', { label: agentDisplayName(link, t), interpolation: { escapeValue: false } })}
           </ThemedText>
+          <DeviceNameField value={deviceName} onChange={setDeviceName} onSubmit={() => void onDone()} />
         </View>
       )
       actions = (
         <Button
           title={t('VtaLink.Continue')}
           buttonType={ButtonType.Primary}
-          onPress={onDone}
+          onPress={() => void onDone()}
+          disabled={naming}
           testID={testIdWithKey('VtaLinkContinue')}
-        />
+        >
+          {naming ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+        </Button>
       )
       break
 
-    case 'revoked':
+    case 'revoked': {
+      // A removed phone can't learn over TSP that it was wiped (its next call is
+      // refused "not in ACL"), and a bare refusal can happen innocently. So it
+      // never erases itself: the person chooses, nothing preselected. A positive
+      // wipe signal changes the words, not the choice (226).
+      const wiped = link.cause === 'wiped'
       body = (
         <View style={styles.card}>
           <ThemedText variant="headingThree" accessibilityRole="header">
             {t('VtaLink.RevokedTitle')}
           </ThemedText>
           <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkError')}>
-            {t('VtaLink.RevokedBody', { label: agentDisplayNameStart(link, t), interpolation: { escapeValue: false } })}
+            {t(wiped ? 'VtaLink.RevokedBodyWiped' : 'VtaLink.RevokedBody', {
+              label: agentDisplayNameStart(link, t),
+              interpolation: { escapeValue: false },
+            })}
           </ThemedText>
+          {confirmErase ? (
+            <ThemedText testID={testIdWithKey('VtaLinkEraseWhat')}>{t('VtaLink.RevokedEraseWhat')}</ThemedText>
+          ) : null}
+          {eraseError ? (
+            <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkEraseError')}>
+              {eraseError}
+            </ThemedText>
+          ) : null}
         </View>
       )
-      actions = (
-        <Button
-          title={t('VtaLink.ScanAgain')}
-          buttonType={ButtonType.Primary}
-          onPress={onScanAgain}
-          testID={testIdWithKey('VtaLinkScanAgain')}
-        />
+      actions = confirmErase ? (
+        <View style={styles.pair}>
+          <View style={styles.pairItem}>
+            <Button
+              title={t('VtaLink.RevokedEraseKeep')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => setConfirmErase(false)}
+              disabled={erasing}
+              testID={testIdWithKey('VtaLinkEraseKeep')}
+            />
+          </View>
+          <View style={styles.pairItem}>
+            <Button
+              title={t('VtaLink.RevokedEraseConfirm')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => void onErase()}
+              disabled={erasing}
+              testID={testIdWithKey('VtaLinkEraseConfirm')}
+            >
+              {erasing ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
+            </Button>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.pair}>
+          <View style={styles.pairItem}>
+            <Button
+              title={t('VtaLink.RevokedErase')}
+              buttonType={ButtonType.Secondary}
+              onPress={() => setConfirmErase(true)}
+              testID={testIdWithKey('VtaLinkErase')}
+            />
+          </View>
+          <View style={styles.pairItem}>
+            <Button
+              title={t('VtaLink.RevokedLinkAgain')}
+              buttonType={ButtonType.Secondary}
+              onPress={onScanAgain}
+              testID={testIdWithKey('VtaLinkScanAgain')}
+            />
+          </View>
+        </View>
       )
       break
+    }
 
     case 'notLinked':
       body = (
         <>
+          {erased ? (
+            <ThemedText testID={testIdWithKey('VtaLinkErased')}>{t('VtaLink.RevokedErased')}</ThemedText>
+          ) : null}
           <View style={styles.card}>
             <ThemedText variant="headingThree" accessibilityRole="header">
               {link.lastError ? t('VtaLink.FailedTitle') : t('VtaLink.NothingToLink')}
