@@ -4,7 +4,7 @@
  * The routing is vtiLinks' own; only the network lookup is faked.
  */
 import { communityTarget } from '../module/vtiCommunityLink'
-import { openKeyringLink, type KeyringLinkNotice } from '../module/keyringLinkOpen'
+import { linkNoticeToast, openKeyringLink, UNUSABLE_TOAST_MS, type KeyringLinkNotice } from '../module/keyringLinkOpen'
 
 const mockClassify = jest.fn()
 jest.mock('../module/classifyDid', () => ({
@@ -83,5 +83,39 @@ describe("a community admin console's invitation QR", () => {
     expect(notices[0]).toEqual({ kind: 'reading' })
     expect(notices.at(-1)).toEqual({ kind: 'unusable', message: expect.stringMatching(/I was invited/) })
     expect(navigate).not.toHaveBeenCalled()
+  })
+})
+
+describe('what the person sees for a notice', () => {
+  const t = ((key: string) => key) as never
+
+  // A code the camera opened that cannot be used ("The community is busy right
+  // now. Try again in a minute.") left the screen before it could be read after
+  // the switch back from the Camera app (226 gate §4). It stays long enough to
+  // read two lines, and a tap dismisses it sooner.
+  it('keeps a "cannot use this code" message up for 12 s, dismissable by a tap', () => {
+    const toast = linkNoticeToast(
+      { kind: 'unusable', message: 'The community is busy right now. Try again in a minute.' },
+      t
+    )
+    expect(toast).toMatchObject({
+      type: 'warn',
+      text1: 'Scan.CodeNotUsable',
+      text2: 'The community is busy right now. Try again in a minute.',
+      visibilityTime: UNUSABLE_TOAST_MS,
+      position: 'bottom',
+    })
+    expect(UNUSABLE_TOAST_MS).toBeGreaterThanOrEqual(12_000)
+    expect(typeof (toast as { onPress?: unknown }).onPress).toBe('function')
+  })
+
+  it('says it could not read the code when there is no reason, shows "reading" while it looks, and hides once opened', () => {
+    expect(linkNoticeToast({ kind: 'unusable' }, t)).toMatchObject({ text2: 'Scan.CodeNotRead' })
+    expect(linkNoticeToast({ kind: 'reading' }, t)).toMatchObject({
+      type: 'info',
+      text1: 'Scan.ReadingCode',
+      visibilityTime: 15_000,
+    })
+    expect(linkNoticeToast({ kind: 'opened' }, t)).toBe('hide')
   })
 })
