@@ -50,7 +50,7 @@ import os from "node:os";
 
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
-import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
@@ -328,6 +328,7 @@ async function linkManually(driver) {
   if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
   console.log("[e2e] the temporary key is no longer in the ACL");
   await tapTestId(driver, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(driver);
   return temporaryDid;
 }
 
@@ -943,6 +944,7 @@ try {
   console.log("[e2e] the temporary key is no longer in the ACL");
 
   await tapTestId(driver, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(driver);
   await checkAgentScreen(driver);
   if (JOURNEY) await testerJourney(driver);
 

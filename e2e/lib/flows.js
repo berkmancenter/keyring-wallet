@@ -2452,3 +2452,20 @@ export async function openMyAgentPanel(driver) {
   await sleep(2500)
   return "agent-home"
 }
+
+/**
+ * After "Linked ✓" → Continue, a build with #10 names this phone and opens the
+ * one-time offer when the agent lists another Keyring phone (keyring-bifold
+ * #174). Pass it with Done, which keeps every phone: never Remove. A runner
+ * agent's other phones can be a peer's live run, and Remove would wipe them.
+ * Older builds, and agents with no other phone, go straight on; answers
+ * whether the offer showed.
+ */
+export async function passNewPhoneOfferIfShown(driver, timeout = 12000) {
+  if (!(await existsTestId(driver, "OfferDone", timeout))) return false;
+  console.log(
+    `[e2e] ${driver.e2ePlatform}: the new-phone offer is up — keeping every phone (Done)`
+  );
+  await tapTestId(driver, "OfferDone", 15000);
+  return true;
+}
