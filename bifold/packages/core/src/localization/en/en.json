@@ -1284,6 +1284,8 @@
     "LinkYourAgentHelp": "No code? Link without one — enter your agent’s address, and its admin adds this phone.",
     "StatusOnline": "Online",
     "StatusConnecting": "Connecting to your agent…",
+    "AgentDidNotAnswer": "Your agent didn't answer. Check your connection, then try again.",
+    "TryAgainNow": "Try again",
     "StatusReconnecting": "Reconnecting…",
     "StatusOfflineSince": "Offline since {{time}}",
     "WithoutQr": "Link without a QR code",

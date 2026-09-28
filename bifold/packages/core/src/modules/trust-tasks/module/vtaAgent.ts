@@ -19,6 +19,7 @@ import type { EnrolmentOffer } from '@bifold/trust-tasks'
 import type { AgentLabel } from './agentLabel'
 import {
   ManagerKeyUnresolved,
+  SwapDoneSignInFailed,
   VTA_TASK,
   VtaClient,
   resolveVtaMediator,
@@ -83,6 +84,12 @@ export interface VtaAgentState {
   link: VtaLinkState
   /** Whether the first-link introduction has been seen (plan §4.1). */
   introSeen: boolean
+  /**
+   * Reconnecting stopped after {@link MAX_RECONNECT_TRIES} tries in a row: the
+   * agent screen says the agent didn't answer, with Try again (`tryAgainNow`),
+   * instead of a loop out of sight. Cleared by any sign-in that works.
+   */
+  reconnectGaveUp?: boolean
   /** What the agent did, newest first, in this session — the agent screen's "What your agent did". */
   activity: VtaActivity[]
   /**
@@ -213,6 +220,8 @@ export const SESSION_CONNECT_DEADLINE_MS = 30000
  * grant's own reply wait is 30 s once sent, and signing in comes before it.
  */
 export const OWNER_ACT_DEADLINE_MS = 45000
+/** Reconnect tries in a row (1 s, 2 s, 4 s, 8 s, 16 s apart) before the agent screen says it didn't answer. */
+export const MAX_RECONNECT_TRIES = 5
 
 /** Matches VtaClient's own "no answer in time" — a silence, not a refusal. */
 const NO_ANSWER = /the VTA did not answer/
@@ -710,7 +719,9 @@ export class VtaAgentController {
       try {
         await client.rotateManagerKey()
       } catch (error) {
-        if (!(await this.swapStillOpen(error, identities, vtaDid))) {
+        // Swapped, but the new key's sign-in failed: linked, and it reconnects (below).
+        const swapDone = error instanceof SwapDoneSignInFailed
+        if (!swapDone && !(await this.swapStillOpen(error, identities, vtaDid))) {
           // Settled on the VTA's word that the swap never happened (or it was
           // refused outright): the attempt failed, as before, and is forgotten.
           await links.clear().catch(() => undefined)
@@ -1230,6 +1241,7 @@ export class VtaAgentController {
     try {
       await this.signInWithin(agent, link.vtaDid)
       this.reconnectAttempt = 0
+      if (this.state.reconnectGaveUp) this.set({ reconnectGaveUp: false })
       this.dispatch({ type: 'sessionOpened' })
       void this.holdPersonaKeys(agent, link.vtaDid)
     } catch (error) {
@@ -1290,9 +1302,22 @@ export class VtaAgentController {
     }
   }
 
+  /** "Try again" after reconnecting stopped: a fresh set of tries, starting now. */
+  async tryAgainNow(agent: Agent): Promise<void> {
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    this.reconnectAttempt = 0
+    this.set({ reconnectGaveUp: false })
+    await this.ensureOnline(agent)
+  }
+
   private scheduleReconnect(agent: Agent) {
     if (this.retryTimer || this.state.link.kind !== 'linked') return
     const attempt = ++this.reconnectAttempt
+    if (attempt > MAX_RECONNECT_TRIES) {
+      this.set({ reconnectGaveUp: true })
+      return
+    }
     const delay = reconnectDelayMs(attempt - 1)
     this.dispatch({ type: 'retryScheduled', attempt, nextRetryAt: this.now() + delay })
     this.retryTimer = setTimeout(() => {
