@@ -28,7 +28,13 @@ import {
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
-import { listAgentDevices, removeAgentDevice, renameThisDevice, type AgentDevice } from './vtaDevices'
+import {
+  listAgentDevices,
+  registerThisDevice,
+  removeAgentDevice,
+  renameThisDevice,
+  type AgentDevice,
+} from './vtaDevices'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 import {
