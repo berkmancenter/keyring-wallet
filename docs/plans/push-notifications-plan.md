@@ -27,13 +27,16 @@ that later carries message notifications.
   push-woken phone.
 - The `binding/push/0.1` note in the
   [OpenVTC integration plan](./openvtc-integration-plan.md) describes the same
-  doorbell. Whether this plan implements that binding is open (§9).
+  doorbell, and this plan implements it. The gateway is that binding's
+  implementation: vti-push-gateway `e542a9d7`, `README.md` line 4 cites
+  [`binding/push/0.1`](https://trusttasks.org/binding/push/0.1), and the phone
+  and agent sides of §4.1 follow it.
 
 **Reviews.** See [`push-notifications-plan/`](./push-notifications-plan/):
 
 | Companion | Contents |
 |---|---|
-| [2026-09-28-al.md](./push-notifications-plan/2026-09-28-al.md) | The review of the first draft (2026-09-26), and the decisions of 2026-09-28: which v2 mediator, iPhone phase scope, no mailbox swap, test isolation, hosting. Also the superseded positions: a bundled Credo mediator, silent-push-only iPhone, "simulators cannot receive pushes", and two earlier cost figures |
+| [2026-09-28-al.md](./push-notifications-plan/2026-09-28-al.md) | The review of the first draft (2026-09-26), and the decisions of 2026-09-28: which v2 mediator, iPhone phase scope, no mailbox swap, test isolation, hosting. Also the superseded positions: a bundled Credo mediator, silent-push-only iPhone, "simulators cannot receive pushes", and two earlier cost figures. Its Part 3 answers the review below: the register path (F2), the background handler (F3), the gateway pin move to `e542a9d7`, unregister, and `binding/push/0.1` |
 | [2026-09-28-bam.md](./push-notifications-plan/2026-09-28-bam.md) | The review of the plan against the code it lands in: the lock behaviour, the registration anchor, background execution, iOS signing, the test app ID, the dormant-code scope, Firebase compatibility, privacy metadata, and the testing and coverage requirements |
 
 ---
@@ -62,7 +65,7 @@ reason, Credo's own mediator push path is not used (§5.2).
 **How the gateway receives wake-ups.** At the pinned commit the gateway does not
 listen for DIDComm. With a provisioned identity it connects **out** to its
 mediator and processes the `push/*` messages waiting there
-(vti-push-gateway `33bc8052`, `README.md`, "DIDComm transport (preferred)").
+(vti-push-gateway `e542a9d7`, `README.md`, "TSP and DIDComm transports").
 So it needs no public inbound port for DIDComm. It keeps one HTTPS endpoint,
 for the HTTPS transport and for registrations that don't use DIDComm.
 
@@ -125,7 +128,7 @@ technique, and it arrives after a force-quit. **iPhone ships Phases 1 and 2
 together.** Android ships on Phase 1: a high-priority FCM data message that
 shows a notification reaches a backgrounded app.
 
-The gateway at `33bc8052` sends only contentless pushes. That is upstream's
+The gateway at `e542a9d7` sends only contentless pushes. That is upstream's
 rule, and generic fixed text arguably fits it. The Phase 2 change is proposed
 upstream, but Keyring may have to carry it as its own patch (§8).
 
@@ -151,10 +154,10 @@ commit with the sign-off trailer last (root `CLAUDE.md`).
 | 1.2 | Remove the inherited BC Wallet push code. In `app/`: `src/utils/PushNotificationsHelper.ts` (it calls `agent.modules.pushNotificationsFcm`, which `bc-agent-modules.ts` does not register), the commented references in `src/hooks/useBCAgentSetup.ts` and `container-imp.ts`, and the `UserDeniedPushNotifications` and `DeviceToken` keys in `src/store.tsx`. In `bifold/`, as its own commit: the `usePushNotifications` preference (`contexts/store.tsx`, `reducers/store.ts`) and the `TogglePushNotifications` screen with its commented Settings entry. The no-op handlers in `app/App.tsx` stay as the starting point for 1.6 | No code path registers a token with the mediator. A repo-wide search for `PushNotificationsHelper`, `pushNotificationsFcm`, `DeviceToken` and `usePushNotifications` finds no live code, and a test or search gate fails if `pushNotificationsFcm` reappears |
 | 1.3 | iOS push entitlement (`aps-environment`, absent from `AriesBifold.entitlements` today), a push-enabled App ID and signing profile; the test app ID first (§6). Confirm that `remote-notification` is set in `Info.plist` (it is), and review the unused `audio` and `voip` modes: `voip` implies PushKit obligations that App Review checks | A test build on a real iPhone obtains an APNs device token. The `audio` and `voip` modes are removed or their use is justified in writing. A sandbox push reaches an iOS simulator (§6) |
 | 1.4 | Notification library, Android notification channel, and permission prompts. The copy is owned by the UI plan | Denying permission leaves the app fully usable; granting it shows a test notification on both platforms. A sandbox push reaches an Android emulator with Google Play services (§6) |
-| 1.5a | Record the registration decisions, each with a citation to the pinned gateway README: who receives `push/register`; the transport; the message shapes; who derives the wake handle and what binds it to the agent's DID; and whether the handle reaches the agent inside an extension of the existing `device/register/0.1` (`bifold/packages/core/src/modules/trust-tasks/module/vtaDevices.ts`) or a separate message. Upstream's answer is to extend `device/register`, `push/wake`, `task-consent/*` or `confirm/request` before drafting anything new (`docs/VTI_UPSTREAM_FINDINGS.md:1809`); the wake-up binding cited at `docs/VTI_UPSTREAM_FINDINGS.md:866` is cross-checked. If the answer includes a new client in `bifold/`, it is a submodule change, and a new `@bifold/*` package carries the four wiring entries listed in the root `CLAUDE.md` | The decisions are written into this section with citations, and §9's registration question is closed. The phone reaches the gateway by the transport named there; the plan does not assume a DIDComm v2 client in the wallet unless 1.5a names one, since the wallet's mailbox is the v1 mediator (§5.2) and the gateway's HTTPS endpoint (§1) needs no v2 stack |
-| 1.5 | Registration, as part of registering the phone as a device of the person's agent, by the path 1.5a records. The phone sends `push/register` (platform token and the agent's DID) and gets back a wake handle. The agent then sends `push/provision` for that handle, naming the allowed triggers (vti-push-gateway `33bc8052`, `README.md`, "API"). The token is re-registered when it changes. On unlink or revoke, the agent stops waking the handle; that stop is authoritative, and the app dropping its token is best effort, since a wiped phone cannot do it | After registering, the agent can wake the phone. After a revoke, no wake reaches the phone. A token refreshed while the phone is offline is re-registered on next launch. The gateway at the pin has no unregister verb, so a stale handle stays in its store until it's cleaned up (§8) |
+| 1.5a | Add `device/set-wake/0.2` to the agent-device client in `bifold/` (`packages/core/src/modules/trust-tasks/module/vtaDevices.ts`, beside `registerThisDevice`, over the same agent port), as its own submodule commit. Add the `push/register` HTTPS client in `app/`: it is specific to the gateway, so it is not a `@bifold/*` package and needs none of the four wiring entries | The new task is covered by unit tests in `bifold/packages/core` (request shape, a clearing call with no `wakeHandle`, a refusal). The `app/` client is covered by unit tests against a stubbed gateway (success, `permissionDenied`, `taskFailed`) |
+| 1.5 | Registration, by the path in §4.4: after `device/register`, the phone sends `push/register` to the gateway over HTTPS, receives the gateway-made wake handle, and conveys it to its agent with `device/set-wake/0.2`. The agent provisions the gateway. On a token change the phone registers again and sends the new handle. On unlink or revoke, the agent clears the device's wake channel; that is authoritative, and the app dropping its token is best effort, since a wiped phone cannot do it | After registering, the agent can wake the phone. After a revoke, no wake reaches the phone. A token refreshed while the phone is offline is re-registered on next launch. Unit tests cover register, refresh (including while offline) and clear. The test agent's log shows its provision reached the gateway, because a failed provision is never reported to the phone (§4.4) |
 | 1.6 | Wake handling per §2: the background and killed-app handlers show the generic notification and never open the agent, start pickup or read the wallet; the foreground handler shows nothing; tapping opens the approval after unlocking | Unit tests cover the handler in each app state, a handler with auto-lock disabled, and a handler with a missing or refused permission. On a real device: background, closed, and a tap from each show the generic text and land on the approval. The attended runs use `yarn e2e:vrc:devices` or its single-device equivalent, so the iPhone criterion is reproducible |
-| 1.7 | The gateway image is built on a CI runner and hosted (§5) | The image builds from `33bc8052` on CI. A first run with the gateway's test sender registers a handle and "delivers" a wake with no Apple or Google keys. The rate-limit settings of §5.1 are set, with a test that the package's configuration carries them |
+| 1.7 | The gateway image is built on a CI runner and hosted (§5) | The image builds from `e542a9d7` on CI. A first run with the gateway's test sender registers a handle and "delivers" a wake with no Apple or Google keys. The rate-limit settings of §5.1 are set, with a test that the package's configuration carries them |
 | 1.8 | End to end: a VTA sends a wake and the phone shows the notification | Measured on a real Android phone and, with Phase 2, a real iPhone. Timings are recorded per step. The failure-mode matrix of §6.1 passes |
 
 ### 4.2 Phase 2 steps and acceptance criteria
@@ -173,13 +176,80 @@ commit with the sign-off trailer last (root `CLAUDE.md`).
 | 3.3 | Gateway: one wake per burst per phone (collapsing), with a per-phone cap | A burst produces one wake at the gateway's metrics |
 | 3.4 | A setting to turn message notifications on or off, off by default until tested at scale | The setting persists, and off means no message wake-ups are requested |
 
+### 4.4 Registration and authorisation
+
+Registration uses two Trust Tasks that already exist, and no new one. This is
+upstream's documented end-to-end path: "device `push/register` → gateway →
+handle → `device/set-wake` → VTA → `push/provision` → gateway" (VTI `2240aa7e`,
+`docs/05-design-notes/mobile-agent-architecture.md:561`). It also follows
+upstream's advice to extend existing tasks before drafting new ones
+(`docs/VTI_UPSTREAM_FINDINGS.md:1809`).
+
+1. **The phone registers with the gateway.**
+   - It sends `push/register/0.2`, with
+     `{ registration: { platform, token, topic }, controllerVtaDid }`, to the
+     gateway's `POST /trust-tasks` over HTTPS (gateway `README.md:108,202-206`).
+   - Registration is the one anonymous task, so it carries no proof
+     (`README.md:126`).
+   - HTTPS is the transport because it needs no DIDComm v2 or TSP client in
+     the wallet. It is also the only transport where anonymous registration
+     is rate-limited per source: "per peer IP over HTTPS; the TSP and DIDComm
+     paths have no trustworthy anonymous source" (`README.md`, "Who can spend
+     the record").
+2. **The gateway makes the handle.** It is 32 random bytes in base58
+   (`src/api.rs:178-182`), created on registration (`api.rs:384`) and returned
+   as `{ wakeHandle: { gateway, handle } }` (`api.rs:403`). Nothing in the
+   handle derives from the token or the person, and the agent never sees the
+   token. With an identity file set, `wakeHandle.gateway` is the gateway's DID
+   (`README.md`, `GATEWAY_IDENTITY_FILE`). That matters, because the VTA wakes
+   only a gateway named by a DID (VTI `vta-service/src/trust_tasks/step_up.rs`,
+   `trigger_gateway_wake`: "URL gateway → HTTPS path (follow-up)").
+3. **The phone gives the handle to its agent.**
+   - It sends `device/set-wake/0.2`, with
+     `{ wakeHandle, pushPlatform?, suggestedTriggers? }` → `{ pushCapable, triggerPolicy? }`.
+     The proof is required (`mobile-agent-architecture.md:550-555`).
+   - The handle rides this separate task, not an extension of
+     `device/register`. `set-wake` exists for exactly this.
+   - `0.2` because `0.1` is deprecated. The VTA "still accepts 0.1 during the
+     migration window but it will be removed in a future release", and the
+     `0.2` bump changed no values (VTI `vta-sdk/src/trust_tasks.rs:212-219`).
+     Both reach the same handler (`vta-service/src/trust_tasks/wire_v0_2.rs:122-127`).
+   - In Phase 1 the phone suggests no triggers, so the allowlist is the agent
+     alone. Phase 3 suggests the messaging server's DID.
+4. **The agent provisions the gateway.**
+   - On a successful `set-wake` the VTA sends a signed `push/provision` with
+     the handle's allowlist (`vta-service/src/trust_tasks/device.rs:150-197`,
+     `provision_gateway`).
+   - The send is spawned and best effort: a failure is logged at the agent and
+     never reaches the phone.
+   - `set-wake` with no `wakeHandle` "clears the channel"
+     (`mobile-agent-architecture.md:553-554`). That is how unlink and revoke
+     stop wakes, even when the phone has been wiped.
+5. **Wakes and provisions are signed documents.**
+   - The gateway authorises `push/provision` and `push/wake` only by an
+     `eddsa-jcs-2022` Data Integrity proof with `proofPurpose: authentication`,
+     made by the document's `issuer`.
+   - The document names this gateway as `recipient`, its `issuedAt` is within
+     5 minutes, and its `id` has not been accepted before. No transport identity
+     or HTTP header authorises anything (gateway `README.md`, "Authentication").
+   - `push/provision` must come from the handle's `controllerVtaDid`, and
+     `push/wake` from a DID on its allowlist.
+   - VTA `2240aa7e` signs both that way (`step_up.rs`, `trigger_gateway_wake`
+     and `sign_outbound_request`). The phone signs nothing at the gateway.
+
+**The bifold change.** `vtaDevices.ts` carries `device/register`, `heartbeat`,
+`list` and `wipe` (`:30-34`), and no `set-wake`. Step 1.5a adds it. The rest of
+that file's device tasks are also `0.1` and on the same deprecation list (VTI
+`vta-service/src/deprecation.rs:662-684`). Moving them is a wire-name change
+outside this plan.
+
 ## 5. Server package
 
 A Docker Compose package, `deploy/keyring-messaging/`, sets up the server.
 
 ### 5.1 Contents
 
-- **vti-push-gateway**, built from source at `33bc8052`. There is no published
+- **vti-push-gateway**, built from source at `e542a9d7`. There is no published
   upstream image. The build is multi-stage Rust, runs as a non-root user, and
   mounts secrets read-only. It runs on a CI runner, not on the host.
 - **Caddy** for HTTPS, with automatic Let's Encrypt certificates, for one
@@ -197,6 +267,20 @@ The gateway limits HTTP requests per client IP. Behind Caddy every phone
 arrives from Caddy's address, so the package raises `GATEWAY_HTTP_PER_SEC` and
 `GATEWAY_HTTP_BURST` from their defaults (10 a second, burst 40). The
 gateway's per-DID and registration limits still apply.
+
+`GATEWAY_ALLOWED_CONTROLLERS` lists the agents (controller VTAs) the gateway
+serves.
+- A `push/register` naming any other `controllerVtaDid` is refused with
+  `permissionDenied`, and so is a provision by a controller no longer on the
+  list (gateway `src/api.rs:366-374`; `README.md`, "Which controllers are
+  served").
+- The list holds exact DIDs: "No patterns: a DID-method or host pattern would
+  admit every DID anyone can mint under that method or host"
+  (`src/controllers.rs:9-15`).
+- Unset serves nothing. `*` is an explicit open mode, which logs a warning at
+  startup and keeps every other bound.
+- In the local test (§6) the list is the dedicated test agent's DID. The
+  production value is not decided (§5.4).
 
 ### 5.2 What the package leaves out, and why
 
@@ -217,10 +301,18 @@ DIDComm service endpoint. The gateway reaches its mediator from outside, so
 `URL` is **the mediator's DID** (a mediated DIDComm v2 service) and
 `ROUTING_KEYS` stays empty.
 
+The gateway also serves `push/*` over TSP on the same mediator connection. At
+startup it warns unless its DID document carries
+`{ "id": "{DID}#tsp", "type": "TSPTransport", "serviceEndpoint": "<mediator DID>" }`
+(gateway `README.md`, "TSP and DIDComm transports"). The DID is minted with the
+template's `SERVICE_TSP` variable set, or the entry is added afterwards with the
+VTA's `dids edit`.
+
 At the pinned commit the command is
 `pnm bootstrap provision-integration --template push-gateway --var URL=<mediator DID>`,
 and the sealed bundle is opened into the gateway's identity file
-(vti-push-gateway `33bc8052`, `src/identity.rs` module docs). That file holds:
+(vti-push-gateway `e542a9d7`, `README.md`, "Identity is provisioned like any
+integration"; `src/identity.rs` module docs). That file holds:
 - the gateway's DID;
 - its Ed25519 signing key (`#key-0`) and X25519 key-agreement key (`#key-1`),
   as `privateKeyMultibase`;
@@ -252,6 +344,19 @@ waiting on the collaborator who offered hosting. If it's a server the project
 doesn't operate, the APNs key and the FCM service account live there. Who can
 read `secrets/` and the backups is then agreed before the keys are handed
 over.
+
+**Not decided: which agents a shared gateway serves.** Each Keyring user has
+their own agent, so each has a different controller DID. A production gateway
+either:
+- lists every user's agent DID in `GATEWAY_ALLOWED_CONTROLLERS`. That is exact
+  match only (§5.1), so each new user means a configuration change; or
+- runs the open mode `*`. Its bounds still hold: at most 4096 live handles per
+  controller, a handle no agent provisions is dropped after an hour, and
+  per-issuer and per-handle record budgets apply (gateway `README.md`, "Who can
+  spend the record").
+
+This is waiting on the collaborator who offered hosting, together with where the
+gateway runs.
 
 ## 6. Testing in isolation
 
@@ -298,10 +403,23 @@ at a time, and the two platforms do not run together.
 ### 6.1 Failure-mode matrix
 
 Wake delivery is exercised for each of these, with the expected result recorded
-in the test: permission denied; token missing; gateway unreachable; handle
-unknown; stale token; app force-quit; device wiped. Denied permission and a
-missing token leave the app usable; an unknown handle or stale token is
-refused by the gateway and does not reach the agent as a delivery.
+in the test:
+- permission denied;
+- token missing;
+- gateway unreachable;
+- handle unknown;
+- stale token;
+- app force-quit;
+- device wiped;
+- the agent not on `GATEWAY_ALLOWED_CONTROLLERS` (register refused with
+  `permissionDenied`);
+- the agent's provision lost. It is best effort (§4.4), so the phone registers
+  but can't be woken, and the agent's log shows why;
+- another device removed, then its wake triggered (§8).
+
+Denied permission and a missing token leave the app usable. An unknown handle
+or a stale token is refused by the gateway, and it doesn't reach the agent as a
+delivery.
 
 ## 7. Cost
 
@@ -337,11 +455,14 @@ Phase 3 stays inside these limits by design:
   until the person opens the app. They wake the phone once upstream's agents
   and messaging server send wake-ups for them (3.2), and Keyring is ready for
   that.
-- **The pin must follow the agents.** Upstream draft PR #32 on vti-push-gateway
-  changes how agents authenticate to the gateway, and agents don't sign those
-  calls yet. The package pins `33bc8052`, the commit before that change. When
-  the hosted agents move to the new authentication, the pin moves with them,
-  or the gateway starts refusing their wake-ups.
+- **The pin must follow the agents.**
+  - The gateway authorises provisions and wakes only by the signed-document
+    rule of §4.4 (vti-push-gateway PR #32, merged 2026-09-26).
+  - The package pins `e542a9d7`, which carries it, because the agents it
+    serves (VTI `2240aa7e`) sign that way.
+  - A gateway older than PR #32 refuses those documents. An agent older than
+    that PR can't reach this one.
+  - The pin moves only together with the agents the gateway serves.
 - **The Phase 2 patch may stay Keyring's** (§3).
 - **The shared mediator is a dependency.** The gateway needs a `did:webvh` and
   an account on the shared DIDComm v2 mediator, and agents must be able to
@@ -362,22 +483,29 @@ Phase 3 stays inside these limits by design:
   agent-side stop is what ends its wakes.
 - **Push tokens are stored in clear text** in the gateway's store. Its volume
   and backups are protected like credentials.
-- **No unregister.** The gateway's API at the pin has `push/register`,
-  `push/provision` and `push/wake` only. A revoked phone's handle and token stay
-  in the store; they are harmless once no trigger uses them, but they are still
-  a stored token. Whether re-provisioning the handle with no allowed triggers
-  is accepted is untested.
+- **No unregister at the gateway, so removal is Keyring's job.**
+  - The gateway's API has `push/register`, `push/provision` and `push/wake`
+    only. A revoked phone's handle and token stay in its store: harmless once
+    no trigger uses them, but still a stored token. A provisioned handle is
+    never swept.
+  - Keyring's device-removal flow therefore ends a removed device's wakes at
+    the agent:
+    - **Removing this phone:** it sends `device/set-wake/0.2` with no
+      `wakeHandle` (clearing its channel) before it unlinks, then drops its
+      token. It registers a fresh handle if it is linked again.
+    - **Removing another device:** `set-wake` acts only on the caller's own
+      device. VTI's `device/disable` and `device/wipe` mark the binding without
+      clearing its wake channel (VTI `vta-service/src/operations/device.rs:342-436`;
+      only `set-wake` clears it, `:471`). So whether a disabled or wiped device
+      can still be woken is unverified. Step 1.8's matrix includes "remove
+      another device, then trigger its wake". If the agent still wakes it, that
+      is recorded as an upstream finding.
 
 ## 9. Open questions
 
-- **Registration path (step 1.5a).** Who receives `push/register`, over which
-  transport, and who derives the handle. The gateway's HTTPS endpoint is the
-  leading transport because it needs no DIDComm v2 client in the wallet. Whether
-  the handle rides an extension of `device/register/0.1` follows upstream's
-  answer at `docs/VTI_UPSTREAM_FINDINGS.md:1809`. Not decided; whether it needs
-  a change in `bifold/` follows from the answer.
-- **The `binding/push/0.1` note.** Whether this plan implements the binding the
-  OpenVTC integration plan describes.
+- **Which agents a shared gateway serves** (§5.4), and **where it runs**. Both
+  are waiting on the collaborator who offered hosting.
 
-Upstream sources read: vti-push-gateway `33bc8052` and upstream VTI `ed672fff`.
-The app facts are from `main` at `fa5c70e`.
+Upstream sources read: vti-push-gateway `e542a9d7` (and `33bc8052`, the first
+draft's pin) and upstream VTI `2240aa7e`. The app facts are from `main` at
+`fa5c70e` and `bifold` at `b8768fd3`.
