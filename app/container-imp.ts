@@ -40,8 +40,6 @@ import { DependencyContainer } from 'tsyringe'
 import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
 import useBCAgentSetup from '@/hooks/useBCAgentSetup'
 import { offerFeedbackReport } from '@/utils/problemReport'
-// DISABLED: Push notifications disabled — no server backend yet
-// import { activate, deactivate, setup, status } from '@utils/PushNotificationsHelper'
 import { expirationOverrideInMinutes } from '@utils/expiration'
 import BCLogger from '@utils/logger'
 import AddCredentialButton from './src/keyring-theme/components/AddCredentialButton'
@@ -252,18 +250,6 @@ export class AppContainer implements Container {
       showDetailsInfo: true,
       contactHideList: ['BCAttestationService'],
       proofTemplateBaseUrl: Config.PROOF_TEMPLATE_URL,
-      // DISABLED: Push notifications disabled — no server backend yet
-      // enablePushNotifications: {
-      //   status: status,
-      //   setup: setup,
-      //   toggle: async (state: boolean, agent: Agent) => {
-      //     if (state) {
-      //       await activate(agent)
-      //     } else {
-      //       await deactivate(agent)
-      //     }
-      //   },
-      // },
       appUpdateConfig: {
         appleAppStoreUrl,
         googlePlayStoreUrl,
