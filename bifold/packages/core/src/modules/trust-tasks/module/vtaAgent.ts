@@ -942,6 +942,17 @@ export class VtaAgentController {
     }
   }
 
+  /**
+   * A signed-in client for the presence loop (#10, `vtaPresence`) while this
+   * phone is linked; undefined when it is not. Refuses like any other call when
+   * the agent cannot be reached — the loop logs that and tries again.
+   */
+  async presencePort(agent: Agent): Promise<VtaClient | undefined> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return undefined
+    return this.signedIn(agent, vtaDid)
+  }
+
   /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */
   async renameThisDevice(agent: Agent, displayName: string): Promise<void> {
     const client = await this.signedIn(agent, this.linkedAgent())

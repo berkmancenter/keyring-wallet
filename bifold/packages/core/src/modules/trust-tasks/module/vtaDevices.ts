@@ -182,7 +182,10 @@ export async function registerThisDevice(
     })
     return 'registered'
   } catch (e) {
-    if (e instanceof VtiRefusal && e.code.includes('alreadyRegistered')) return 'alreadyRegistered'
+    // Over a trust task the agent sends a conflict with a generic code and the
+    // reason in its words ("device/register:alreadyRegistered — …", vta-service
+    // operations/device.rs), so both are read.
+    if (e instanceof VtiRefusal && /alreadyRegistered/.test(`${e.code} ${e.message}`)) return 'alreadyRegistered'
     throw e
   }
 }
