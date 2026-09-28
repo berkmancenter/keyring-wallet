@@ -421,8 +421,11 @@ export class VtaAgentController {
    * offline and reconnects on its own; nothing live is restored.
    */
   async restore(agent: Agent): Promise<void> {
+    // Called again only when the app hands over its agent anew: after every
+    // unlock (the app shut its agent down at the lock, dropping every
+    // identity's in-memory keys, and restarted it or built a new one).
     if (this.restored) {
-      if (agent !== this.agent) await this.adoptAgent(agent)
+      await this.adoptAgent(agent)
       return
     }
     this.restored = true
@@ -436,13 +439,14 @@ export class VtaAgentController {
   }
 
   /**
-   * The app replaced its agent — unlocking after a lock builds a new one, and
-   * locking dropped every identity's in-memory keys with the old (#10). The
-   * session belonged to the old agent, so it is closed and the link counts as
-   * dropped; reconnecting on the new agent opens a session, and that session
-   * fetches every identity's keys into the new agent's memory. Without this the
-   * link still read "online", nothing reconnected, and no identity could sign
-   * or message until the app was killed.
+   * The app handed over its agent again after an unlock (#10): locking shut the
+   * agent down and dropped every identity's in-memory keys, and unlocking
+   * either restarted the same agent or built a new one — both happen. The
+   * session belonged to the agent before the lock, so it is closed and the link
+   * counts as dropped; reconnecting opens a session on the agent now in use,
+   * and that session fetches every identity's keys into its memory. Without
+   * this the link still read "online", nothing reconnected, and no identity
+   * could sign or message until the app was killed.
    */
   private async adoptAgent(agent: Agent): Promise<void> {
     this.agent = agent
