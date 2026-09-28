@@ -101,6 +101,28 @@ describe('the offer after a new phone links', () => {
     wentToAgent()
   })
 
+  test('only phones that registered as Keyring are offered; other admins stay on My devices', async () => {
+    const oldAclPhone = device('did:peer:2.Vz6MkAclOnly000000003', {
+      source: 'aclOnly',
+      kind: undefined,
+      label: 'keyring-admin',
+    })
+    const computer = device('did:key:z6MkComputer', { source: 'aclOnly', kind: undefined })
+    jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([THIS, OLD, oldAclPhone, computer])
+    const tree = await show()
+    expect(tree.getByTestId(id(`OfferDevice_${deviceKey(OLD.did)}`))).toBeTruthy()
+    expect(tree.queryByTestId(id(`OfferDevice_${deviceKey(oldAclPhone.did)}`))).toBeNull()
+    expect(tree.queryByTestId(id(`OfferDevice_${deviceKey(computer.did)}`))).toBeNull()
+  })
+
+  test('with only admins that never registered, there is nothing to offer: on to the agent', async () => {
+    jest
+      .spyOn(vtaAgent, 'agentDevices')
+      .mockResolvedValue([THIS, device('did:peer:2.Vz6MkAclOnly000000003', { source: 'aclOnly', kind: undefined })])
+    await show()
+    wentToAgent()
+  })
+
   test('if the list cannot be read, it does not hold the person up: on to the agent', async () => {
     jest.spyOn(vtaAgent, 'agentDevices').mockRejectedValue(new DeviceActionRefused('noAnswer'))
     await show()

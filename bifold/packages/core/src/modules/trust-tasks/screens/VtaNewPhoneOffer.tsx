@@ -1,9 +1,9 @@
 /**
  * The one-time offer after a new phone links (new-phone-new-device-plan.md
- * §B): the agent's other phones, each with Keep and Remove as equal choices,
- * then on to the agent. It never holds the person up: with no other phone,
- * or a list the agent won't give, it goes straight on. My devices stays the
- * place to change this later.
+ * §B): the agent's other registered phones, each with Keep and Remove as
+ * equal choices, then on to the agent. It never holds the person up: with no
+ * other phone, or a list the agent won't give, it goes straight on. My
+ * devices stays the place to change this later.
  *
  * @module trust-tasks/screens/VtaNewPhoneOffer
  */
@@ -23,6 +23,15 @@ import type { AgentDevice } from '../module/vtaDevices'
 import { deviceViewOf } from './deviceWords'
 import { NewPhoneOffer } from './NewPhoneOffer'
 import { deviceErrorWords } from './VtaDevices'
+
+/**
+ * What the offer lists: this phone and the phones that registered as Keyring
+ * (openvtc offers from its device registry too). Admins that never registered
+ * (a computer, the browser plugin, a harness key) stay on My devices; an old
+ * Keyring phone registers itself once it updates, and is offered from then on.
+ */
+const offered = (devices: AgentDevice[]): AgentDevice[] =>
+  devices.filter((d) => d.isThisPhone || (d.source === 'registered' && d.kind === 'keyring'))
 
 const VtaNewPhoneOffer: React.FC = () => {
   const { t } = useTranslation()
@@ -49,9 +58,10 @@ const VtaNewPhoneOffer: React.FC = () => {
       .agentDevices(agent)
       .then((list) => {
         if (!live) return
-        const views = list.map((d) => deviceViewOf(d, t))
+        const mine = offered(list)
+        const views = mine.map((d) => deviceViewOf(d, t))
         if (!views.some((v) => v.phone && !v.thisPhone && v.status === 'active')) onDone()
-        else setDevices(list)
+        else setDevices(mine)
       })
       .catch(() => {
         if (live) onDone()
