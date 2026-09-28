@@ -14,13 +14,27 @@ that later carries message notifications.
 - The gateway's DIDComm identity and its mediator come from the VTI stack that
   the [OpenVTC integration plan](./openvtc-integration-plan.md) covers.
 - The [release flow](./release-flow-plan.md) is unchanged. The push-enabled
-  signing profile is a new credential it carries.
+  signing profile is a new credential it carries, and the notification service
+  extension's profile is a second one. The release flow's signing step handles
+  one profile today, so accepting two is a dependency (§8).
+- [`docs/VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md) (`:866`,
+  `:1809`) holds upstream's device and wake-up answers. Step 1.5 and the pin
+  rule in §8 follow that log's discipline of separating what was measured from
+  what was read from source.
+- [`message-protection-plan.md`](./message-protection-plan.md) covers the
+  pickup loop, the deaf-socket problem and the mediator's queue expiry (7 days
+  by default). Together they bound how long a queued message waits for a
+  push-woken phone.
+- The `binding/push/0.1` note in the
+  [OpenVTC integration plan](./openvtc-integration-plan.md) describes the same
+  doorbell. Whether this plan implements that binding is open (§9).
 
 **Reviews.** See [`push-notifications-plan/`](./push-notifications-plan/):
 
 | Companion | Contents |
 |---|---|
 | [2026-09-28-al.md](./push-notifications-plan/2026-09-28-al.md) | The review of the first draft (2026-09-26), and the decisions of 2026-09-28: which v2 mediator, iPhone phase scope, no mailbox swap, test isolation, hosting. Also the superseded positions: a bundled Credo mediator, silent-push-only iPhone, "simulators cannot receive pushes", and two earlier cost figures |
+| [2026-09-28-bam.md](./push-notifications-plan/2026-09-28-bam.md) | The review of the plan against the code it lands in: the lock behaviour, the registration anchor, background execution, iOS signing, the test app ID, the dormant-code scope, Firebase compatibility, privacy metadata, and the testing and coverage requirements |
 
 ---
 
@@ -35,7 +49,7 @@ them. A push says only "go check your mailbox".
    The agent never sees the phone's platform push token.
 3. The gateway holds Keyring's APNs and FCM credentials. It sends a push that
    carries no content. Apple and Google learn only that a Keyring push went to
-   this phone at this time.
+   this phone at this time (§8 lists the timing metadata that remains).
 4. The phone shows a notification it composes itself. It loads the details from
    the agent over Keyring's own encrypted channel.
 
@@ -57,19 +71,38 @@ for the HTTPS transport and for registrations that don't use DIDComm.
 Keyring's wallet is locked by the person's PIN or biometrics. A phone woken in
 the background cannot open it, and the design does not weaken that.
 
+**How the lock behaves.** The lock is a timeout, 5 minutes by default and set by
+the person (`autoLockTime`, `0` meaning never)
+(`bifold/packages/core/src/constants.ts` `defaultAutoLockTime`;
+`contexts/store.tsx`). It is evaluated only when the app returns to the
+foreground (`contexts/activity.tsx`, the `background -> active` transition);
+backgrounding clears the inactivity timer. So nothing locks the wallet while the
+process sleeps, and a process that was just backgrounded still holds an unlocked
+wallet. A killed process holds no wallet state at all. The lock state is
+therefore not a predicate a background handler can rely on.
+
+**The background handler never opens the agent.** Whatever the lock state, a
+push that arrives while the app is not in the foreground produces the generic
+notification and nothing else. The handler does not open an agent, start message
+pickup or read the wallet. A named notification needs the agent open, which
+means either a key the handler can use while the wallet is locked or a fetch
+inside the few seconds an operating system gives a background handler (about 30
+seconds on iPhone, and Android limits high-priority messages that show no
+notification). The first is the second way into the wallet that this design
+rules out. The second makes the text depend on a fetch that can fail, and a
+person's approval cannot.
+
 | App state when the push arrives | What the person sees |
 | --- | --- |
-| Locked, or closed | A generic notification: "An approval is waiting in Keyring". Tapping it opens Keyring; after unlocking, the request is on screen |
-| In the background and unlocked | The phone fetches the request and names it in the notification |
+| Closed, or in the background (locked or not) | A generic notification: "An approval is waiting in Keyring". Tapping it opens Keyring; after unlocking, the request is on screen |
+| In the foreground | No push is sent for a request the open app already receives; a push that still arrives is not shown as a notification |
 
 Signal's notification extension can read message content because it holds a
-separate notification key. Keyring has no such key and does not add one: a key
-the extension could use while the wallet is locked would be a second way into
-the wallet.
+separate notification key. Keyring has no such key and does not add one.
 
-The wallet locks itself shortly after the app goes to the background. So the
-generic text is the usual case, not a fallback, and test plans treat it as
-expected behaviour.
+The generic text is the only text, not a fallback, and test plans treat it as
+expected behaviour. The person's auto-lock setting changes nothing about what
+the notification says.
 
 ## 3. iPhone needs a visible push
 
@@ -106,23 +139,30 @@ upstream, but Keyring may have to carry it as its own patch (§8).
 
 ### 4.1 Phase 1 steps and acceptance criteria
 
+**Gates.** Every step ends with `cd app && TZ=GMT yarn jest`, root
+`yarn typecheck` and `yarn lint` passing. A step that changes `bifold/` also
+passes `cd bifold/packages/core && yarn test`, and lands as its own submodule
+commit with the sign-off trailer last (root `CLAUDE.md`).
+
 | # | Step | Done when |
 | --- | --- | --- |
-| 1.1 | Keyring's own Firebase project replaces the inherited BC Government one (`bc-wallet-mobile` in `app/android/app/google-services.json`) | The test build's `google-services.json` names the Keyring project; FCM issues a token on an Android device |
-| 1.2 | Remove the inherited BC Wallet push helper (`app/src/utils/PushNotificationsHelper.ts`, today commented out in `useBCAgentSetup.ts` and `container-imp.ts`) | No code path registers a token with the mediator; `yarn lint`, `yarn typecheck` and `yarn test` pass |
-| 1.3 | iOS push entitlement (`aps-environment`), the Remote notification background mode, and a push-enabled signing profile; the test app ID first (§6) | A test build on a real iPhone obtains an APNs device token |
-| 1.4 | Notification library, Android notification channel, and permission prompts. The copy is owned by the UI plan | Denying permission leaves the app fully usable; granting it shows a test notification on both platforms |
-| 1.5 | Registration, as part of registering the phone as a device of the person's agent. The phone sends `push/register` (platform token and the agent's DID) and gets back a wake handle. The agent then sends `push/provision` for that handle, naming the allowed triggers (vti-push-gateway `33bc8052`, `README.md`, "API"). The token is re-registered when it changes. On unlink or revoke, the agent stops waking the handle and the app drops its token | After registering, the agent can wake the phone. After a revoke, no wake reaches the phone. The gateway at the pin has no unregister verb, so a stale handle stays in its store until it's cleaned up (§8) |
-| 1.6 | Wake handling: generic notification when locked; fetch and name when unlocked; tapping opens the approval | All four cases pass on a real device: locked + background, locked + closed, unlocked + background, and a tap from each |
-| 1.7 | The gateway image is built on a CI runner and hosted (§5) | The image builds from `33bc8052` on CI. A first run with the gateway's test sender registers a handle and "delivers" a wake with no Apple or Google keys |
-| 1.8 | End to end: a VTA sends a wake and the phone shows the notification | Measured on a real Android phone and, with Phase 2, a real iPhone. Timings are recorded per step |
+| 1.0 | A test variant of both apps, without changing the release configuration (§6): an Xcode configuration and scheme with its own bundle ID; an Android `productFlavor` (or Gradle property override) with its own application ID; a second `google-services.json` and a `GoogleService-Info.plist`, selected per variant | The test variant installs beside the release app. The release build's bundle ID, application ID and Firebase project are byte for byte unchanged |
+| 1.1 | Keyring's own Firebase project replaces the inherited BC Government one (`bc-wallet-mobile` in `app/android/app/google-services.json`) | The test build's `google-services.json` names the Keyring project, and the plan records which of its values are committed. The Firebase BoM and the RNFirebase version resolve to a compatible pair, which is recorded (`app/package.json` has `~21.14.0`; `app/android/app/build.gradle` pins `firebase-bom:26.8.0`). FCM issues a token on an Android device, and a foreground and a background message are received on a New Architecture build (`newArchEnabled=true`) |
+| 1.2 | Remove the inherited BC Wallet push code. In `app/`: `src/utils/PushNotificationsHelper.ts` (it calls `agent.modules.pushNotificationsFcm`, which `bc-agent-modules.ts` does not register), the commented references in `src/hooks/useBCAgentSetup.ts` and `container-imp.ts`, and the `UserDeniedPushNotifications` and `DeviceToken` keys in `src/store.tsx`. In `bifold/`, as its own commit: the `usePushNotifications` preference (`contexts/store.tsx`, `reducers/store.ts`) and the `TogglePushNotifications` screen with its commented Settings entry. The no-op handlers in `app/App.tsx` stay as the starting point for 1.6 | No code path registers a token with the mediator. A repo-wide search for `PushNotificationsHelper`, `pushNotificationsFcm`, `DeviceToken` and `usePushNotifications` finds no live code, and a test or search gate fails if `pushNotificationsFcm` reappears |
+| 1.3 | iOS push entitlement (`aps-environment`, absent from `AriesBifold.entitlements` today), a push-enabled App ID and signing profile; the test app ID first (§6). Confirm that `remote-notification` is set in `Info.plist` (it is), and review the unused `audio` and `voip` modes: `voip` implies PushKit obligations that App Review checks | A test build on a real iPhone obtains an APNs device token. The `audio` and `voip` modes are removed or their use is justified in writing. A sandbox push reaches an iOS simulator (§6) |
+| 1.4 | Notification library, Android notification channel, and permission prompts. The copy is owned by the UI plan | Denying permission leaves the app fully usable; granting it shows a test notification on both platforms. A sandbox push reaches an Android emulator with Google Play services (§6) |
+| 1.5a | Record the registration decisions, each with a citation to the pinned gateway README: who receives `push/register`; the transport; the message shapes; who derives the wake handle and what binds it to the agent's DID; and whether the handle reaches the agent inside an extension of the existing `device/register/0.1` (`bifold/packages/core/src/modules/trust-tasks/module/vtaDevices.ts`) or a separate message. Upstream's answer is to extend `device/register`, `push/wake`, `task-consent/*` or `confirm/request` before drafting anything new (`docs/VTI_UPSTREAM_FINDINGS.md:1809`); the wake-up binding cited at `docs/VTI_UPSTREAM_FINDINGS.md:866` is cross-checked. If the answer includes a new client in `bifold/`, it is a submodule change, and a new `@bifold/*` package carries the four wiring entries listed in the root `CLAUDE.md` | The decisions are written into this section with citations, and §9's registration question is closed. The phone reaches the gateway by the transport named there; the plan does not assume a DIDComm v2 client in the wallet unless 1.5a names one, since the wallet's mailbox is the v1 mediator (§5.2) and the gateway's HTTPS endpoint (§1) needs no v2 stack |
+| 1.5 | Registration, as part of registering the phone as a device of the person's agent, by the path 1.5a records. The phone sends `push/register` (platform token and the agent's DID) and gets back a wake handle. The agent then sends `push/provision` for that handle, naming the allowed triggers (vti-push-gateway `33bc8052`, `README.md`, "API"). The token is re-registered when it changes. On unlink or revoke, the agent stops waking the handle; that stop is authoritative, and the app dropping its token is best effort, since a wiped phone cannot do it | After registering, the agent can wake the phone. After a revoke, no wake reaches the phone. A token refreshed while the phone is offline is re-registered on next launch. The gateway at the pin has no unregister verb, so a stale handle stays in its store until it's cleaned up (§8) |
+| 1.6 | Wake handling per §2: the background and killed-app handlers show the generic notification and never open the agent, start pickup or read the wallet; the foreground handler shows nothing; tapping opens the approval after unlocking | Unit tests cover the handler in each app state, a handler with auto-lock disabled, and a handler with a missing or refused permission. On a real device: background, closed, and a tap from each show the generic text and land on the approval. The attended runs use `yarn e2e:vrc:devices` or its single-device equivalent, so the iPhone criterion is reproducible |
+| 1.7 | The gateway image is built on a CI runner and hosted (§5) | The image builds from `33bc8052` on CI. A first run with the gateway's test sender registers a handle and "delivers" a wake with no Apple or Google keys. The rate-limit settings of §5.1 are set, with a test that the package's configuration carries them |
+| 1.8 | End to end: a VTA sends a wake and the phone shows the notification | Measured on a real Android phone and, with Phase 2, a real iPhone. Timings are recorded per step. The failure-mode matrix of §6.1 passes |
 
 ### 4.2 Phase 2 steps and acceptance criteria
 
 | # | Step | Done when |
 | --- | --- | --- |
-| 2.1 | Gateway change: a visible `mutable-content` push with fixed generic text and no server address | The push payload holds only the fixed text and flags. A patch against the pinned commit is carried in the package |
-| 2.2 | iOS notification service extension, with its own app ID and signing profile | After a force-quit, a wake still shows the generic notification on a real iPhone |
+| 2.1 | Gateway change: a visible `mutable-content` push with fixed generic text and no server address | The push payload holds only the fixed text and flags. A patch against the pinned commit is carried in the package, with a gateway-side test that the payload holds only the fixed text and flags |
+| 2.2 | iOS notification service extension: a new Xcode target and bundle ID (`asml.bkc.harvard.wallet.<ext>`), an App ID with push, a signing profile, a Podfile target entry so the extension links without the app's pods and builds against the same Firebase `modular_headers` setup (`app/ios/Podfile`), and a second profile secret alongside `BUILD_PROVISION_PROFILE_BASE64` in `.github/workflows/staging.yaml` | After a force-quit, a wake still shows the generic notification on a real iPhone, attended, on `yarn e2e:vrc:devices`. The extension builds in CI with both profiles. The release flow's signing step accepts two profiles (§8) |
 
 ### 4.3 Phase 3 steps and acceptance criteria
 
@@ -219,7 +259,9 @@ Push is tested apart from the release app and from the rest of the project's
 test infrastructure, until it works end to end on a real device:
 
 - **A separate app ID**, `asml.bkc.harvard.wallet.pushtest`, with a matching
-  Android application ID. It has its own development provisioning profile and
+  Android application ID, built by the variant step 1.0 creates. The project has
+  no switch for it today: both bundle and application IDs are literals and there
+  are no flavors. It has its own development provisioning profile and
   its own entry in the Keyring Firebase project. The release app ID's
   capabilities, its signing profile (the `BUILD_PROVISION_PROFILE_BASE64`
   secret) and the committed `google-services.json` stay unchanged until the
@@ -244,8 +286,22 @@ test infrastructure, until it works end to end on a real device:
   - Register → wake → notify runs there. Force-quit, Low Power Mode and the
     release build are tested on real phones.
 
-  This hasn't been measured on the project's machines yet: step 1.7's first run
-  checks it.
+  This hasn't been measured on the project's machines yet. Steps 1.3 and 1.4
+  check it, because they have Apple and Google keys and a test build; step 1.7's
+  test sender does not reach APNs or FCM.
+
+The automated tier is a script of the gateway stack, not part of `e2e/`, until
+the flow is proven; the attended real-phone tier runs on `yarn e2e:vrc:devices`.
+The shared machine has real memory limits, so emulators and simulators run one
+at a time, and the two platforms do not run together.
+
+### 6.1 Failure-mode matrix
+
+Wake delivery is exercised for each of these, with the expected result recorded
+in the test: permission denied; token missing; gateway unreachable; handle
+unknown; stale token; app force-quit; device wiped. Denied permission and a
+missing token leave the app usable; an unknown handle or stale token is
+refused by the gateway and does not reach the agent as a delivery.
 
 ## 7. Cost
 
@@ -291,6 +347,19 @@ Phase 3 stays inside these limits by design:
   an account on the shared DIDComm v2 mediator, and agents must be able to
   reach it. Until the hosted stack can create DIDs, the gateway lives on the
   local lab (§6).
+- **The release flow must accept two signing profiles.** Its signing step
+  handles one profile today (`.github/workflows/staging.yaml`). Phase 2's
+  notification service extension needs a second (2.2). Until that lands, the
+  extension builds only on the test variant.
+- **Timing is observable.** The gateway, APNs and FCM see when each wake goes
+  out, and that correlates with the agent's activity. Wakes set `apns-collapse-id`
+  and the FCM `collapse_key`, because an empty push carries no `thread-id` and
+  the platform would not otherwise deduplicate repeated wakes; the FCM limits in
+  §7 bound this.
+- **A token can go stale unseen.** A token refreshed or revoked while the phone
+  cannot reach the gateway leaves the gateway waking a dead token until the app
+  next launches and re-registers (1.5). A wiped phone never re-registers, so the
+  agent-side stop is what ends its wakes.
 - **Push tokens are stored in clear text** in the gateway's store. Its volume
   and backups are protected like credentials.
 - **No unregister.** The gateway's API at the pin has `push/register`,
@@ -298,6 +367,17 @@ Phase 3 stays inside these limits by design:
   in the store; they are harmless once no trigger uses them, but they are still
   a stored token. Whether re-provisioning the handle with no allowed triggers
   is accepted is untested.
+
+## 9. Open questions
+
+- **Registration path (step 1.5a).** Who receives `push/register`, over which
+  transport, and who derives the handle. The gateway's HTTPS endpoint is the
+  leading transport because it needs no DIDComm v2 client in the wallet. Whether
+  the handle rides an extension of `device/register/0.1` follows upstream's
+  answer at `docs/VTI_UPSTREAM_FINDINGS.md:1809`. Not decided; whether it needs
+  a change in `bifold/` follows from the answer.
+- **The `binding/push/0.1` note.** Whether this plan implements the binding the
+  OpenVTC integration plan describes.
 
 Upstream sources read: vti-push-gateway `33bc8052` and upstream VTI `ed672fff`.
 The app facts are from `main` at `fa5c70e`.
