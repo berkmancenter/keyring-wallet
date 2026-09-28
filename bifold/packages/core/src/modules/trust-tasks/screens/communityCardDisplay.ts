@@ -25,6 +25,27 @@ import { communityHeadingOf } from './communityName'
 const day = (iso: unknown): string | undefined =>
   typeof iso === 'string' && !Number.isNaN(Date.parse(iso)) ? iso.slice(0, 10) : undefined
 
+/** Roles every community has, worded by the app; any other role is the community's own. */
+const ROLE_WORDS: Record<string, string> = {
+  admin: 'Community.RoleAdmin',
+  member: 'Community.RoleMember',
+  vetter: 'Community.RoleVetter',
+}
+
+/**
+ * A role as a person reads it. Upstream matches roles with or without the
+ * `custom:` prefix (vta-sdk protocols/vetting.rs `role_matches`), so the
+ * prefix is not part of the name: "custom:senior-vetter" reads "Senior vetter".
+ */
+export function roleWords(role: string, t: TFunction): string {
+  const bare = role.replace(/^custom:/, '')
+  const key = ROLE_WORDS[bare]
+  const known: unknown = key ? t(key) : undefined
+  if (typeof known === 'string') return known
+  const words = bare.replace(/[-_]+/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : role
+}
+
 /** The display of a community card, or undefined for any other credential. */
 export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction): W3cDisplayOverride | undefined {
   if (!isCommunityCard(vc)) return undefined
@@ -34,7 +55,7 @@ export function communityCardDisplay(vc: Record<string, unknown>, t: TFunction):
   const endorsement = (vc.credentialSubject as Record<string, unknown> | undefined)?.endorsement as
     | Record<string, unknown>
     | undefined
-  const role = typeof endorsement?.role === 'string' ? endorsement.role : undefined
+  const role = typeof endorsement?.role === 'string' && endorsement.role ? roleWords(endorsement.role, t) : undefined
   const words = (key: string, extra: Record<string, unknown> = {}) =>
     t(key, { community, ...extra, interpolation: { escapeValue: false } }) as string
 

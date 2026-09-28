@@ -287,6 +287,8 @@ const mapW3CCredToCard = (
       primaryBg: brandingOverlay?.brandingOverlay?.primaryBackgroundColor ?? opts.credentialCardPlaceholderBackground,
       secondaryBg: brandingOverlay?.brandingOverlay?.secondaryBackgroundColor,
       logo1x1Uri: brandingOverlay?.brandingOverlay?.logo,
+      // The tile's letter when there is no logo, as AnonCreds cards get it: the issuer's name.
+      logoText: credentialDisplay.display.issuer?.name || undefined,
       backgroundSliceUri: brandingOverlay?.brandingOverlay?.backgroundImageSlice,
       backgroundFullUri: brandingOverlay?.brandingOverlay?.backgroundImage,
       preferredTextColor: undefined,
