@@ -35,6 +35,7 @@ import { defaultNameOf } from './deviceWords'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 import { openScanner } from './openScanner'
 import { plainError } from './plainError'
+import { clearJustErased, ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { shareableKey } from './shareableKey'
 
 /** The agent's host, for people: the domain inside a did:webvh, else the label alone. */
@@ -90,9 +91,6 @@ const VtaLink: React.FC = () => {
       paddingVertical: 12,
     },
     row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    // Two choices of equal weight, side by side.
-    pair: { flexDirection: 'row', gap: 12 },
-    pairItem: { flex: 1 },
     actions: { padding: 20, gap: 12 },
     error: { color: ColorPalette.semantic.error },
     muted: { color: ColorPalette.grayscale.mediumGrey },
@@ -137,27 +135,8 @@ const VtaLink: React.FC = () => {
   const defaultName = defaultNameOf(Platform.OS, new Date(), t)
   const [deviceName, setDeviceName] = useState(defaultName)
   const [naming, setNaming] = useState(false)
-  const [confirmErase, setConfirmErase] = useState(false)
-  const [erasing, setErasing] = useState(false)
-  const [erased, setErased] = useState(false)
-  const [eraseError, setEraseError] = useState<string | undefined>()
-
-  const onErase = useCallback(async () => {
-    if (!agent) return
-    setEraseError(undefined)
-    setErasing(true)
-    try {
-      await vtaAgent.eraseThisPhonesCopy(agent)
-      setConfirmErase(false)
-      setErased(true)
-    } catch (e) {
-      setEraseError(t(plainError(e).line))
-    } finally {
-      setErasing(false)
-    }
-  }, [agent, t])
-
   const onDone = useCallback(async () => {
+    clearJustErased()
     // Name this phone on the agent (new-phone-new-device-plan.md §A): the name
     // the person's other devices show. A refusal doesn't hold them up; the
     // presence loop registers the default later, and My devices can rename.
@@ -404,85 +383,17 @@ const VtaLink: React.FC = () => {
       )
       break
 
-    case 'revoked': {
-      // A removed phone can't learn over TSP that it was wiped (its next call is
-      // refused "not in ACL"), and a bare refusal can happen innocently. So it
-      // never erases itself: the person chooses, nothing preselected. A positive
-      // wipe signal changes the words, not the choice (226).
-      const wiped = link.cause === 'wiped'
-      body = (
-        <View style={styles.card}>
-          <ThemedText variant="headingThree" accessibilityRole="header">
-            {t('VtaLink.RevokedTitle')}
-          </ThemedText>
-          <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkError')}>
-            {t(wiped ? 'VtaLink.RevokedBodyWiped' : 'VtaLink.RevokedBody', {
-              label: agentDisplayNameStart(link, t),
-              interpolation: { escapeValue: false },
-            })}
-          </ThemedText>
-          {confirmErase ? (
-            <ThemedText testID={testIdWithKey('VtaLinkEraseWhat')}>{t('VtaLink.RevokedEraseWhat')}</ThemedText>
-          ) : null}
-          {eraseError ? (
-            <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkEraseError')}>
-              {eraseError}
-            </ThemedText>
-          ) : null}
-        </View>
-      )
-      actions = confirmErase ? (
-        <View style={styles.pair}>
-          <View style={styles.pairItem}>
-            <Button
-              title={t('VtaLink.RevokedEraseKeep')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => setConfirmErase(false)}
-              disabled={erasing}
-              testID={testIdWithKey('VtaLinkEraseKeep')}
-            />
-          </View>
-          <View style={styles.pairItem}>
-            <Button
-              title={t('VtaLink.RevokedEraseConfirm')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => void onErase()}
-              disabled={erasing}
-              testID={testIdWithKey('VtaLinkEraseConfirm')}
-            >
-              {erasing ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-            </Button>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.pair}>
-          <View style={styles.pairItem}>
-            <Button
-              title={t('VtaLink.RevokedErase')}
-              buttonType={ButtonType.Secondary}
-              onPress={() => setConfirmErase(true)}
-              testID={testIdWithKey('VtaLinkErase')}
-            />
-          </View>
-          <View style={styles.pairItem}>
-            <Button
-              title={t('VtaLink.RevokedLinkAgain')}
-              buttonType={ButtonType.Secondary}
-              onPress={onScanAgain}
-              testID={testIdWithKey('VtaLinkScanAgain')}
-            />
-          </View>
-        </View>
-      )
+    case 'revoked':
+      // The same card My Agent's landings show: a removed phone is told so
+      // wherever it lands (RemovedPhoneCard).
+      body = <RemovedPhoneCard link={link} />
+      actions = null
       break
-    }
 
     case 'notLinked':
       body = (
         <>
-          {erased ? (
-            <ThemedText testID={testIdWithKey('VtaLinkErased')}>{t('VtaLink.RevokedErased')}</ThemedText>
-          ) : null}
+          <ErasedNotice />
           <View style={styles.card}>
             <ThemedText variant="headingThree" accessibilityRole="header">
               {link.lastError ? t('VtaLink.FailedTitle') : t('VtaLink.NothingToLink')}
