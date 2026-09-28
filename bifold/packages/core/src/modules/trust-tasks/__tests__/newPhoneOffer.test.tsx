@@ -3,7 +3,7 @@
  * §B): the person's other phones, each with Keep and Remove as equal choices.
  * Nothing is preselected and nothing is removed without a press.
  */
-import { act, fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
@@ -100,6 +100,13 @@ describe('the offer on a new phone', () => {
       fireEvent.press(tree.getByTestId(id(`OfferRemove_${deviceKey(A.did)}`)))
     })
     expect(tree.queryByTestId(id('OfferError'))).toBeNull()
+  })
+
+  test('Done stays in reach below the list, outside what scrolls, however many phones', () => {
+    const many = Array.from({ length: 30 }, (_, n) => phone(n + 1))
+    const tree = offer({ devices: [THIS, ...many] })
+    expect(within(tree.getByTestId(id('OfferList'))).queryByTestId(id('OfferDone'))).toBeNull()
+    expect(tree.getByTestId(id('OfferDone'))).toBeTruthy()
   })
 
   test('Done leaves at any point, with every phone kept that was not removed', () => {

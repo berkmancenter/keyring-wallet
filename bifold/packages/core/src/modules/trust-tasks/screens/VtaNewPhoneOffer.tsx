@@ -11,7 +11,7 @@ import { useAgent } from '@bifold/react-hooks'
 import { useNavigation } from '@react-navigation/native'
 import React, { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native'
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useTheme } from '../../../contexts/theme'
@@ -42,7 +42,8 @@ const VtaNewPhoneOffer: React.FC = () => {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
-    content: { padding: 20, gap: 16 },
+    screen: { flex: 1 },
+    loading: { padding: 20 },
   })
 
   const onDone = useCallback(() => {
@@ -79,9 +80,9 @@ const VtaNewPhoneOffer: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('NewPhoneOffer')}>
+      <View style={styles.screen} testID={testIdWithKey('NewPhoneOffer')}>
         {devices === undefined ? (
-          <ActivityIndicator color={ColorPalette.brand.primary} />
+          <ActivityIndicator style={styles.loading} color={ColorPalette.brand.primary} />
         ) : (
           <NewPhoneOffer
             devices={devices.map((d) => deviceViewOf(d, t))}
@@ -90,7 +91,7 @@ const VtaNewPhoneOffer: React.FC = () => {
             onDone={onDone}
           />
         )}
-      </ScrollView>
+      </View>
     </SafeAreaView>
   )
 }

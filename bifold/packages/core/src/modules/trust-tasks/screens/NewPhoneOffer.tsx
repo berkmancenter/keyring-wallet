@@ -3,13 +3,14 @@
  * §B): the person's other phones, each with Keep and Remove as equal choices,
  * as openvtc offers and never preselects. Nothing is removed without a press,
  * and Done leaves at any point with the rest kept. My devices stays the place
- * to change this later.
+ * to change this later. Done sits in a footer below the list, in reach
+ * however many phones the agent has.
  *
  * @module trust-tasks/screens/NewPhoneOffer
  */
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native'
 
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
@@ -38,7 +39,9 @@ export const NewPhoneOffer: React.FC<{
   const others = devices.filter((d) => d.phone && !d.thisPhone && d.status === 'active')
 
   const styles = StyleSheet.create({
-    content: { gap: 16 },
+    screen: { flex: 1 },
+    content: { padding: 20, gap: 16 },
+    footer: { paddingHorizontal: 20, paddingVertical: 12, gap: 8 },
     card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 8, padding: 16, gap: 12 },
     actions: { flexDirection: 'row', gap: 12 },
     action: { flex: 1 },
@@ -60,65 +63,70 @@ export const NewPhoneOffer: React.FC<{
   }
 
   return (
-    <View style={styles.content}>
-      <ThemedText variant="headingThree" accessibilityRole="header">
-        {t('Devices.OfferTitle')}
-      </ThemedText>
-      <ThemedText>{t('Devices.OfferBody')}</ThemedText>
-      {error ? (
-        <ThemedText style={styles.error} testID={testIdWithKey('OfferError')}>
-          {error}
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content} testID={testIdWithKey('OfferList')}>
+        <ThemedText variant="headingThree" accessibilityRole="header">
+          {t('Devices.OfferTitle')}
         </ThemedText>
-      ) : null}
-      {others.map((device) => {
-        const key = didHashKey(device.did)
-        const choice = choices[device.did]
-        const platformKey = platformKeyOf(device.platform)
-        return (
-          <View key={device.did} style={styles.card} testID={testIdWithKey(`OfferDevice_${key}`)}>
-            <View style={{ gap: 2 }}>
-              <ThemedText variant="bold">{device.name}</ThemedText>
-              {platformKey ? <ThemedText style={styles.muted}>{t(platformKey)}</ThemedText> : null}
-            </View>
-            {choice ? (
-              <ThemedText testID={testIdWithKey(`OfferChoice_${key}`)}>
-                {t(choice === 'kept' ? 'Devices.OfferKept' : 'Devices.RemovedErasePending')}
-              </ThemedText>
-            ) : (
-              <View style={styles.actions}>
-                <View style={styles.action}>
-                  <Button
-                    title={t('Devices.OfferKeep')}
-                    buttonType={ButtonType.Secondary}
-                    onPress={() => setChoices((c) => ({ ...c, [device.did]: 'kept' }))}
-                    disabled={busy !== undefined}
-                    testID={testIdWithKey(`OfferKeep_${key}`)}
-                  />
-                </View>
-                <View style={styles.action}>
-                  <Button
-                    title={t('Devices.OfferRemove')}
-                    buttonType={ButtonType.Secondary}
-                    onPress={() => void remove(device.did)}
-                    disabled={busy !== undefined}
-                    testID={testIdWithKey(`OfferRemove_${key}`)}
-                  >
-                    {busy === device.did ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
-                  </Button>
-                </View>
+        <ThemedText>{t('Devices.OfferBody')}</ThemedText>
+        {error ? (
+          <ThemedText style={styles.error} testID={testIdWithKey('OfferError')}>
+            {error}
+          </ThemedText>
+        ) : null}
+        {others.map((device) => {
+          const key = didHashKey(device.did)
+          const choice = choices[device.did]
+          const platformKey = platformKeyOf(device.platform)
+          return (
+            <View key={device.did} style={styles.card} testID={testIdWithKey(`OfferDevice_${key}`)}>
+              <View style={{ gap: 2 }}>
+                <ThemedText variant="bold">{device.name}</ThemedText>
+                {platformKey ? <ThemedText style={styles.muted}>{t(platformKey)}</ThemedText> : null}
               </View>
-            )}
-          </View>
-        )
-      })}
-      <ThemedText style={styles.muted}>{t('Devices.OfferLater')}</ThemedText>
-      <Button
-        title={t('Devices.OfferDone')}
-        buttonType={ButtonType.Primary}
-        onPress={onDone}
-        disabled={busy !== undefined}
-        testID={testIdWithKey('OfferDone')}
-      />
+              {choice ? (
+                <ThemedText testID={testIdWithKey(`OfferChoice_${key}`)}>
+                  {t(choice === 'kept' ? 'Devices.OfferKept' : 'Devices.RemovedErasePending')}
+                </ThemedText>
+              ) : (
+                <View style={styles.actions}>
+                  <View style={styles.action}>
+                    <Button
+                      title={t('Devices.OfferKeep')}
+                      buttonType={ButtonType.Secondary}
+                      onPress={() => setChoices((c) => ({ ...c, [device.did]: 'kept' }))}
+                      disabled={busy !== undefined}
+                      testID={testIdWithKey(`OfferKeep_${key}`)}
+                    />
+                  </View>
+                  <View style={styles.action}>
+                    <Button
+                      title={t('Devices.OfferRemove')}
+                      buttonType={ButtonType.Secondary}
+                      onPress={() => void remove(device.did)}
+                      disabled={busy !== undefined}
+                      testID={testIdWithKey(`OfferRemove_${key}`)}
+                    >
+                      {busy === device.did ? <ActivityIndicator color={ColorPalette.brand.primary} /> : null}
+                    </Button>
+                  </View>
+                </View>
+              )}
+            </View>
+          )
+        })}
+      </ScrollView>
+      {/* Done stays in reach below the list, however many phones it holds. */}
+      <View style={styles.footer}>
+        <ThemedText style={styles.muted}>{t('Devices.OfferLater')}</ThemedText>
+        <Button
+          title={t('Devices.OfferDone')}
+          buttonType={ButtonType.Primary}
+          onPress={onDone}
+          disabled={busy !== undefined}
+          testID={testIdWithKey('OfferDone')}
+        />
+      </View>
     </View>
   )
 }
