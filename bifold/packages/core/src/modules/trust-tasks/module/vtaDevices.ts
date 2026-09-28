@@ -81,7 +81,9 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v 
 export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevice[]> {
   const [aclAnswer, listAnswer] = await Promise.all([
     port.task<{ entries?: unknown }>(AGENT_DEVICE_TASK.aclList, {}),
-    port.task<{ devices?: unknown }>(AGENT_DEVICE_TASK.list, {}),
+    // Wiped and disabled bindings are left out unless asked for, and a removed
+    // device must stay listed as removed rather than fall back to a bare ACL row.
+    port.task<{ devices?: unknown }>(AGENT_DEVICE_TASK.list, { includeWiped: true, includeDisabled: true }),
   ])
   const entries = (Array.isArray(aclAnswer?.entries) ? aclAnswer.entries : []) as Json[]
   const rows = (Array.isArray(listAnswer?.devices) ? listAnswer.devices : []) as Json[]

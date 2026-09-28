@@ -87,7 +87,13 @@ describe('the devices that run your agent', () => {
 
   it('keeps a wiped device listed, with its access gone and the wipe pending', async () => {
     const wiped = [bindings[0], { ...bindings[1], wipedAt: '2026-09-28T09:55:00Z' }]
-    const { port } = fakeAgent({ [AGENT_DEVICE_TASK.list]: () => ({ devices: wiped }) })
+    // As the agent does (vta-service operations/device.rs:239-244): a wiped or
+    // disabled binding is left out unless the request asks for it.
+    const { port } = fakeAgent({
+      [AGENT_DEVICE_TASK.list]: (payload) => ({
+        devices: wiped.filter((b) => payload.includeWiped === true || !('wipedAt' in b)),
+      }),
+    })
     const old = (await listAgentDevices(port)).find((d) => d.did === OLD_PHONE)
     expect(old).toMatchObject({ accessRevoked: true, wipePending: true, wipedAt: '2026-09-28T09:55:00Z' })
   })
