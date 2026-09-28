@@ -35,6 +35,13 @@ import {
   renameThisDevice,
   type AgentDevice,
 } from './vtaDevices'
+import {
+  agentVersion,
+  rotateEachPersona,
+  rotatePersonaKeys,
+  rotationSupport,
+  type RotationSupport,
+} from './vtaRotation'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 import {
@@ -46,6 +53,7 @@ import {
   looksLikeDid,
   type ConfirmOwner,
   type DeviceCanOwn,
+  type DeviceRefusalReason,
 } from './vtaOwner'
 
 export interface VtiApproval extends VtaConsentRequest {
@@ -905,6 +913,52 @@ export class VtaAgentController {
     await renameThisDevice(client, displayName).catch((error: unknown) => {
       throw this.refused(error)
     })
+  }
+
+  /**
+   * Whether rotating a persona's keys is safe on this agent (#10, lost phone):
+   * `yes` from vta-service 0.43.0, `unknown` when the agent does not say or
+   * reports 0.42.x, `agentTooOld` before that. Never throws.
+   */
+  async canRotatePersonaKeys(agent: Agent): Promise<RotationSupport> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return 'unknown'
+    return rotationSupport(await agentVersion(agent, vtaDid))
+  }
+
+  /**
+   * Rotate one persona's keys on the agent after a lost phone (#10), then take
+   * fresh copies for this phone. The person confirms first; nothing is sent
+   * without it.
+   */
+  async rotatePersonaKeys(agent: Agent, personaDid: string): Promise<void> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner("Replace this identity's keys")
+    const client = await this.signedIn(agent, vtaDid)
+    const store = this.identityStore(agent)
+    const persona = (await store.listPersonas()).find((p) => p.did === personaDid)
+    if (!persona) throw new DeviceActionRefused('failed', `no persona ${personaDid} on this phone`)
+    await rotatePersonaKeys(client, store, persona).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Rotate the keys of every identity this phone holds on the linked agent,
+   * behind one owner check rather than one per identity. Carries on past an
+   * identity the agent refuses and answers each outcome, worded as a
+   * {@link DeviceRefusalReason}.
+   */
+  async rotateAllPersonaKeys(
+    agent: Agent
+  ): Promise<{ rotated: string[]; failed: { did: string; reason: DeviceRefusalReason }[] }> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner("Replace your identities' keys")
+    const client = await this.signedIn(agent, vtaDid)
+    const store = this.identityStore(agent)
+    const personas = (await store.listPersonas()).filter((p) => p.vtaDid === vtaDid)
+    const { rotated, failed } = await rotateEachPersona(client, store, personas)
+    return { rotated, failed: failed.map(({ did, error }) => ({ did, reason: this.refused(error).reason })) }
   }
 
   /** The agent this phone is linked to, or a refusal a screen words as "no agent yet". */
