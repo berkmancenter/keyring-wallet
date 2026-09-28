@@ -35,6 +35,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { DevicesCard } from './DevicesCard'
+import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { vtaAgent } from '../module/vtaAgent'
 import { vtiAgent } from '../module/vtiAgent'
 import { ownVetterGrantState } from '../module/vtiGrantState'
@@ -543,7 +544,9 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 {line}
               </Text>
             ))}
-            {holdingError ? <SaidFailure said={holdingError} testID="MyAgentHoldingError" style={styles.error} /> : null}
+            {holdingError ? (
+              <SaidFailure said={holdingError} testID="MyAgentHoldingError" style={styles.error} />
+            ) : null}
           </View>
         </>
       ) : null}
@@ -670,7 +673,10 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={{ ...TextTheme.headingThree, color: TextTheme.normal.color }}>{t('MyAgent.Title')}</Text>
         <Text style={styles.value}>{t('MyAgent.WhatItIs')}</Text>
-        {vta.link.kind !== 'linked' ? (
+        {/* A removed phone is told so here, where it lands, not only behind "Link your agent". */}
+        {vta.link.kind === 'revoked' ? <RemovedPhoneCard link={vta.link} /> : null}
+        {vta.link.kind !== 'linked' && vta.link.kind !== 'revoked' ? <ErasedNotice /> : null}
+        {vta.link.kind !== 'linked' && vta.link.kind !== 'revoked' ? (
           <View style={styles.card} testID={testIdWithKey('MyAgentLinkCard')}>
             <Text style={styles.value}>{t('VtaLink.LinkYourAgentHint')}</Text>
             {/* A tester with no agent page at hand should learn where a code

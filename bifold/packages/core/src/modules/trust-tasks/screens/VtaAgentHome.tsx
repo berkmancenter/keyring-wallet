@@ -43,6 +43,7 @@ import { useCommunityChanged } from '../module/communityChanged'
 import { communityTarget } from '../module/vtiCommunityLink'
 
 import { DevicesCard } from './DevicesCard'
+import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { agentDisplayName, withAgentName } from './agentName'
 import { CommunityCard } from './CommunityCard'
 import { communityHeadingOf, communityLabelOf, partyLabelStartOf } from './communityName'
@@ -180,7 +181,14 @@ const VtaAgentHome: React.FC = () => {
     // Stacked, a pill is as tall as its line, not a share of the column.
     segmentInStack: { flex: 0 },
     // Every pill the same: only the selected one's colour differs, never its size.
-    segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 6, borderRadius: 6 },
+    segment: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 6,
+      borderRadius: 6,
+    },
     segmentOn: { backgroundColor: ColorPalette.brand.primary },
     segmentOnText: { color: ColorPalette.grayscale.white },
     container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
@@ -319,10 +327,22 @@ const VtaAgentHome: React.FC = () => {
       communityDid,
     })
 
+  // A removed phone is told so here, where it lands, not only behind "Link your agent".
+  if (link.kind === 'revoked') {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
+        <View style={styles.content}>
+          <RemovedPhoneCard link={link} />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
   if (link.kind !== 'linked') {
     return (
       <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
         <View style={styles.content}>
+          <ErasedNotice />
           <ThemedText>{t('VtaLink.NothingToLink')}</ThemedText>
           <Button
             title={t('VtaLink.LinkYourAgent')}
