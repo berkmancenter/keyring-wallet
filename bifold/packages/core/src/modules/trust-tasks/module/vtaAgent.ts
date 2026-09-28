@@ -795,8 +795,8 @@ export class VtaAgentController {
    * into their own console — upstream's Grant access form, or the Farm's
    * admin-DID step. Nothing is submitted anywhere by the phone.
    */
-  async startManualLink(agent: Agent, vtaDid: string, label: string): Promise<void> {
-    return this.beginManualLink(agent, vtaDid, label, false)
+  async startManualLink(agent: Agent, vtaDid: string, label: string, opts: { via?: 'scan' } = {}): Promise<void> {
+    return this.beginManualLink(agent, vtaDid, label, false, opts.via)
   }
 
   /**
@@ -816,7 +816,13 @@ export class VtaAgentController {
     return this.beginManualLink(agent, vtaDid, label, true)
   }
 
-  private async beginManualLink(agent: Agent, vtaDid: string, label: string, owner: boolean): Promise<void> {
+  private async beginManualLink(
+    agent: Agent,
+    vtaDid: string,
+    label: string,
+    owner: boolean,
+    via?: 'scan'
+  ): Promise<void> {
     if (this.state.link.kind !== 'notLinked') return
     this.ownerFor = owner ? vtaDid : undefined
     const token = ++this.attemptToken
@@ -835,7 +841,7 @@ export class VtaAgentController {
         stage: 'temporary',
       })
       if (token !== this.attemptToken) return
-      this.dispatch({ type: 'keyShown', vtaDid, label, did })
+      this.dispatch({ type: 'keyShown', vtaDid, label, did, ...(via ? { via } : {}) })
     } catch (error) {
       if (token !== this.attemptToken) return
       const detail = error instanceof Error ? error.message : String(error)
