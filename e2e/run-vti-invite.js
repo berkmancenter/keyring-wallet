@@ -423,13 +423,31 @@ async function inviteByDoor(d) {
     await openOffer(d, offerLink).catch((e) => {
       if (!/refused the pasted link/.test(String(e?.message))) throw e;
     });
-    let said = false;
-    for (let i = 0; i < 30 && !said; i++) {
-      await sleep(1000);
-      said = await pageHas(d, /already been used/);
+    // The answer is a toast (8 s): read it every 500 ms. A community that is
+    // rate-limiting redeems (the lab's shared per-address limit under a gate's
+    // burst) answers "busy" after the app's own retry — the truth, not a
+    // failure: record it, wait out the limit, and reopen once expecting "used".
+    const readAnswer = async () => {
+      for (let i = 0; i < 60; i++) {
+        await sleep(500);
+        if (await pageHas(d, /already been used/)) return "used";
+        if (await pageHas(d, /community is busy/i)) return "busy";
+      }
+      return undefined;
+    };
+    let answer = await readAnswer();
+    if (answer === "busy") {
+      console.log(`[e2e] ${d.e2ePlatform}: the used QR's first reopen said the community is busy (its rate limit) — waiting 65 s, then reopening once`);
+      await screenshot(d, "vti-invite-console-qr-used-busy");
+      await sleep(65000);
+      await openOffer(d, offerLink).catch((e) => {
+        if (!/refused the pasted link/.test(String(e?.message))) throw e;
+      });
+      answer = await readAnswer();
     }
     await screenshot(d, "vti-invite-console-qr-used");
-    if (!said) throw new Error("opening the used QR again did not say it was used");
+    const said = answer === "used";
+    if (!said) throw new Error(`opening the used QR again did not say it was used (${answer ?? "no answer read"})`);
     if (await pageHas(d, OPENID_ERROR)) throw new Error("opening the used QR again brought up the OpenID error");
     console.log(`[e2e] ${d.e2ePlatform}: the used QR is explained in words ("already been used"), no modal`);
   }

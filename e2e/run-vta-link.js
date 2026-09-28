@@ -50,7 +50,7 @@ import os from "node:os";
 
 import { createSession, ensureAppium, stopAppium, screenshot, dumpSource, sleep, waitForTestId, byTestId, tapTestId, existsTestId, scrollToTestId } from "./lib/driver.js";
 import { TEST_ID_PREFIX, androidCaps, iosCaps, iosDeviceCaps } from "./lib/config.js";
-import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown, pasteLinkFromHome, pasteLinkOnScanScreen, restartApp, unlockIfLocked } from "./lib/flows.js";
 import { printSuccess, printFailure } from "./lib/banner.js";
 import { listAcl, ownedBy, removeRunKeys, snapshotAcl, vtaInventory } from "./lib/aclCleanup.js";
 import { assertNoDidShown, assertQrTabSaysWhatItIs, assertSettingsReads } from "./lib/gateChecks.js";
@@ -328,6 +328,7 @@ async function linkManually(driver) {
   if (aclDids().includes(temporaryDid)) throw new Error(`the temporary key ${temporaryDid} is still in the ACL`);
   console.log("[e2e] the temporary key is no longer in the ACL");
   await tapTestId(driver, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(driver);
   return temporaryDid;
 }
 
@@ -431,6 +432,8 @@ async function testerJourney(driver) {
   // I want to join a community (Door 2): the suggested community, what it
   // asks, the identity for it, then vetting — as the linked agent.
   await openAgentHome(driver);
+  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  await scrollToTestId(driver, "AgentJoinCommunity", 8);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
   // What the build's suggestion is called. A community that has published no
   // name must not be offered by its hostname dressed up as one — the default
@@ -659,8 +662,13 @@ async function testerJourney(driver) {
     console.log("[e2e] journey: SKIPPED the one-agent-screen checks — this build has no AgentSeat (before keyring-bifold#75)");
   }
 
-  // "A different community": the scanner, with its paste-link button.
+  // "A different community": the scanner, with its paste-link button. The
+  // doors sit in the Communities segment, below an applicant's vetting card:
+  // choose the segment and scroll to them (the #10 lab run tapped blind and
+  // timed out on an applicant's screen).
   await openAgentHome(driver);
+  if (await existsTestId(driver, "AgentSegment_communities", 3000)) await tapTestId(driver, "AgentSegment_communities", 5000);
+  await scrollToTestId(driver, "AgentJoinCommunity", 8);
   await tapTestId(driver, "AgentJoinCommunity", 15000);
   await tapTestId(driver, "JoinScanCommunity", 15000).catch(async () => {
     // A community already chosen by a link opens on what it asks; go back one.
@@ -943,6 +951,7 @@ try {
   console.log("[e2e] the temporary key is no longer in the ACL");
 
   await tapTestId(driver, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(driver);
   await checkAgentScreen(driver);
   if (JOURNEY) await testerJourney(driver);
 

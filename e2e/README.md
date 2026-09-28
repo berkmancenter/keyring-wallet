@@ -863,6 +863,30 @@ ANDROID_AVD2=<second-avd> yarn e2e:credential-exchange-query
 ANDROID_UDID2=<second-device-udid> yarn e2e:credential-exchange-query
 ```
 
+## Real lock and unlock (`lock-probe`) — every release gate, both platforms
+
+Locking shuts the wallet's agent down and drops every identity's in-memory
+keys; unlocking restarts it or builds a new one. A build that does not hand
+that agent to the VTA link still looks fine, and the persona's inbox is no
+longer picked up until the app is killed. Every other run relaunches the app,
+which builds everything fresh and hides this, so the gate runs a real lock:
+
+```sh
+PLATFORM=ios UDID=<sim udid> APPIUM_PORT=4761 \
+  MEDIATOR_LOG=~/vti-stack/logs/mediator.log PERSONA_MATCH=<persona DID's SCID> \
+  npm run lock-probe
+```
+
+The phone must already be linked, with a persona. The probe unlocks, sends the
+app to the background for `BACKGROUND_S` (330 s, past the default 5-minute
+auto-lock), checks the PIN screen came back, unlocks, and stays for
+`LINGER_S` (90 s). With the lab mediator's log it decides:
+`LOCK_PROBE PASS` when the persona picks up within `PICKUP_S` (30 s) of the
+unlock, and it lists the persona's mediator events one per line, each with its
+own time. On the Farm (no log on this machine) it prints the marks and
+`UNDECIDED`; read the mediator's log for the window after `UNLOCKED`.
+Exit: 0 pass, 2 did not lock, 3 no pickup, 4 undecided, 1 the run failed.
+
 ## Troubleshooting
 
 - **Isolating the witness-connect step**: `node debug-witness-connect.js` (run

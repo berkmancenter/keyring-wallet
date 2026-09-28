@@ -62,7 +62,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { byTestId, dumpSource, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId, waitForTestId } from "./lib/driver.js";
-import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent } from "./lib/flows.js";
+import { completeOnboarding, dismissTourIfPresent, handleBiometricConfirmIfPresent, passNewPhoneOfferIfShown } from "./lib/flows.js";
 import { makeDriver, startDeviceLog, textOf, unlockToHome } from "./lib/keyringRoles.js";
 import { printFailure, printSuccess } from "./lib/banner.js";
 import { deviceKeys } from "./lib/testIdKeys.js";
@@ -408,6 +408,7 @@ async function connect(d, who) {
   await waitForTestId(d, "VtaLinkDone", 180000);
   await screenshot(d, `own-agent-${who}-linked`);
   await tapTestId(d, "VtaLinkContinue", 15000);
+  await passNewPhoneOfferIfShown(d);
   if (await existsTestId(d, "AgentIntro", 15000)) for (let i = 0; i < 3; i++) await tapTestId(d, "AgentIntroNext", 15000);
   await waitForTestId(d, "AgentHome", 30000);
   return "AgentHome";

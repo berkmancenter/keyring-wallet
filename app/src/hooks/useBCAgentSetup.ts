@@ -33,6 +33,7 @@ import Config from 'react-native-config'
 import { CachesDirectoryPath } from 'react-native-fs'
 // DISABLED: Push notifications disabled — no server backend yet
 // import { activate } from '@/utils/PushNotificationsHelper'
+import { shutdownAgent } from '@/utils/agentShutdown'
 import { getBCAgentModules } from '@/utils/bc-agent-modules'
 import { BCState, BCLocalStorageKeys } from '@/store'
 
@@ -387,7 +388,7 @@ const useBCAgentSetup = () => {
   const shutdownAndClearAgentIfExists = useCallback(async () => {
     if (agent) {
       try {
-        await agent.shutdown()
+        await shutdownAgent(agent)
       } catch (error) {
         logger.error(`Error shutting down agent with shutdownAndClearAgentIfExists: ${error}`)
       } finally {
