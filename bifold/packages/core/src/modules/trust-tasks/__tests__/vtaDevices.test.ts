@@ -87,21 +87,40 @@ describe('the devices that run your agent', () => {
 
   it('keeps a wiped device listed, with its access gone and the wipe pending', async () => {
     const wiped = [bindings[0], { ...bindings[1], wipedAt: '2026-09-28T09:55:00Z' }]
-    const { port } = fakeAgent({ [AGENT_DEVICE_TASK.list]: () => ({ devices: wiped }) })
+    // As the agent does (vta-service operations/device.rs:239-244): a wiped or
+    // disabled binding is left out unless the request asks for it.
+    const { port } = fakeAgent({
+      [AGENT_DEVICE_TASK.list]: (payload) => ({
+        devices: wiped.filter((b) => payload.includeWiped === true || !('wipedAt' in b)),
+      }),
+    })
     const old = (await listAgentDevices(port)).find((d) => d.did === OLD_PHONE)
     expect(old).toMatchObject({ accessRevoked: true, wipePending: true, wipedAt: '2026-09-28T09:55:00Z' })
   })
 })
 
 describe('removing one', () => {
-  it('wipes a registered device, which keeps it listed and stops it at login', async () => {
+  it('wipes a registered device, then revokes it, since the agent checks a wipe only at REST sign-in', async () => {
     const { port, sent } = fakeAgent()
     const [, old] = await listAgentDevices(port)
     await expect(removeAgentDevice(port, old)).resolves.toEqual({ mode: 'wiped' })
+    const types = sent.map((s) => s.type).filter((t) => t === AGENT_DEVICE_TASK.wipe || t === AGENT_DEVICE_TASK.aclRevoke)
+    expect(types).toEqual([AGENT_DEVICE_TASK.wipe, AGENT_DEVICE_TASK.aclRevoke])
     const wipe = sent.find((s) => s.type === AGENT_DEVICE_TASK.wipe)
     expect(wipe?.payload).toMatchObject({ deviceId: 'dev-old', scope: 'cache-and-keys' })
     expect(typeof wipe?.payload.reason).toBe('string')
-    expect(sent.some((s) => s.type === AGENT_DEVICE_TASK.aclRevoke)).toBe(false)
+    expect(sent.find((s) => s.type === AGENT_DEVICE_TASK.aclRevoke)?.payload).toEqual({ subject: OLD_PHONE })
+  })
+
+  it('still revokes when the agent refuses the wipe', async () => {
+    const { port, sent } = fakeAgent({
+      [AGENT_DEVICE_TASK.wipe]: () => {
+        throw new Error('wipe refused')
+      },
+    })
+    const [, old] = await listAgentDevices(port)
+    await expect(removeAgentDevice(port, old)).resolves.toEqual({ mode: 'revoked' })
+    expect(sent.find((s) => s.type === AGENT_DEVICE_TASK.aclRevoke)?.payload).toEqual({ subject: OLD_PHONE })
   })
 
   it('revokes a device that never registered, which leaves the list', async () => {
