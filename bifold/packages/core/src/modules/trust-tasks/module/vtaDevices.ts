@@ -27,11 +27,18 @@
 
 import { VtiRefusal } from './vtiAgent'
 
+/**
+ * The device tasks at 0.2: upstream deprecated 0.1 ("will be removed in a
+ * future release", vta-sdk trust_tasks.rs at VTI 2240aa7e). 0.2 is the same
+ * shape with camelCase enum values on the wire; of what this phone sends, only
+ * wipe's `scope` changes (`cacheAndKeys`). Agents accept 0.2 since VTI #303
+ * (2026-06). acl/list and acl/revoke are not deprecated.
+ */
 export const AGENT_DEVICE_TASK = {
-  register: 'https://trusttasks.org/spec/device/register/0.1',
-  heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.1',
-  list: 'https://trusttasks.org/spec/device/list/0.1',
-  wipe: 'https://trusttasks.org/spec/device/wipe/0.1',
+  register: 'https://trusttasks.org/spec/device/register/0.2',
+  heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
+  list: 'https://trusttasks.org/spec/device/list/0.2',
+  wipe: 'https://trusttasks.org/spec/device/wipe/0.2',
   aclList: 'https://trusttasks.org/spec/acl/list/0.1',
   aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
 } as const
@@ -152,7 +159,7 @@ export async function removeAgentDevice(
     wiped = await port
       .task(AGENT_DEVICE_TASK.wipe, {
         deviceId: device.deviceId,
-        scope: 'cache-and-keys',
+        scope: 'cacheAndKeys',
         reason: 'Removed from the agent by its owner in Keyring',
       })
       .then(
