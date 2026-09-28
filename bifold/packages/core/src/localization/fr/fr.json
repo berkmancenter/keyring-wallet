@@ -1781,5 +1781,23 @@
     "SiblingMany": "{{count}} autres appareils sont aussi ouverts en votre nom ({{devices}}). Tant qu'ils sont ouverts, les messages peuvent n'arriver que sur l'un d'eux.",
     "SiblingOpen": "Mes appareils",
     "SiblingDismiss": "OK"
+  },
+  "AgentKeys": {
+    "LostTitle": "Téléphone perdu ?",
+    "LostStep1": "1. Retirez-le ci-dessus. Il ne peut plus utiliser votre agent.",
+    "LostStep2": "2. Changez les clés de votre agent, pour que toute copie gardée par le téléphone perdu cesse de fonctionner. Vos contacts et communautés continuent de fonctionner.",
+    "Rotate": "Changer les clés de mon agent",
+    "Rotating": "Changement des clés de votre agent…",
+    "Rotated": "C'est fait. Aucune copie sur le téléphone perdu ne fonctionne plus.",
+    "RotateTooOld": "Votre agent doit être mis à jour avant que Keyring puisse changer ses clés. Demandez à la personne qui gère votre agent.",
+    "RotateUnknown": "Keyring ne peut pas encore savoir si votre agent peut changer ses clés sans risque. Demandez à la personne qui gère votre agent avant d'y compter.",
+    "SignsForYou": "Votre agent signe pour vous. Les clés de vos identités restent dans votre agent, jamais sur ce téléphone.",
+    "Unreachable": "Cette étape demande une signature de votre agent, qui est injoignable pour le moment. Rien n'est perdu : reprenez quand il est de retour.",
+    "TryAgain": "Réessayer",
+    "MovedTitle": "Vos clés restent désormais dans votre agent",
+    "MovedBody": "Ce téléphone ne garde plus sa propre copie des clés de vos identités ; votre agent signe pour vous. Les copies déjà présentes sur d'anciennes sauvegardes ou d'autres téléphones ne peuvent pas être rappelées. Pour les rendre inutiles, changez les clés de votre agent dans Mes appareils.",
+    "MovedOk": "OK",
+    "MovedDevices": "Mes appareils",
+    "Moving": "Transfert de vos clés vers votre agent…"
   }
 }

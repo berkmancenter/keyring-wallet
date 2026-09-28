@@ -1847,6 +1847,24 @@
     "SiblingOpen": "My devices",
     "SiblingDismiss": "OK"
   },
+  "AgentKeys": {
+    "LostTitle": "Lost a phone?",
+    "LostStep1": "1. Remove it above. It can't use your agent from then on.",
+    "LostStep2": "2. Change your agent's keys, so any copy the lost phone kept stops working. Your contacts and communities keep working.",
+    "Rotate": "Change my agent's keys",
+    "Rotating": "Changing your agent's keys…",
+    "Rotated": "Done. Any copy on the lost phone no longer works.",
+    "RotateTooOld": "Your agent needs an update before Keyring can change its keys. Ask whoever runs your agent.",
+    "RotateUnknown": "Keyring can't tell yet whether your agent can change its keys safely. Ask whoever runs your agent before relying on it.",
+    "SignsForYou": "Your agent signs for you. Your identities' keys stay in your agent, never on this phone.",
+    "Unreachable": "This step needs your agent to sign, and it can't be reached right now. Nothing is lost: carry on once it's back.",
+    "TryAgain": "Try again",
+    "MovedTitle": "Your keys now stay in your agent",
+    "MovedBody": "This phone no longer keeps its own copy of your identities' keys; your agent signs for you. Copies already on old backups or other phones can't be recalled. To make them useless, change your agent's keys in My devices.",
+    "MovedOk": "OK",
+    "MovedDevices": "My devices",
+    "Moving": "Moving your keys to your agent…"
+  },
   "FullScreenErrorModal": {
     "PrimaryCTA": "Back to Keyring"
   }
