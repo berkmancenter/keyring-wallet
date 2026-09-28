@@ -11,6 +11,7 @@ import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 import { Share } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
+import QRCode from 'react-native-qrcode-svg'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -185,6 +186,28 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     })
   const asAddDevice = () => (useRoute as jest.Mock).mockReturnValue({ params: { addDevice: true } })
   afterEach(() => (useRoute as jest.Mock).mockReturnValue({ params: {} }))
+
+  // IN-50 (226, Galaxy S25+): on a tall phone with large text, heading + words
+  // + a code as wide as the screen ran under the Next bar. The code's bottom
+  // rows and one finder square were hidden, so no camera could read it.
+  test('Add another device: the whole code fits in the space on screen, with a quiet zone around it', () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    const tree = show()
+    const layout = (height: number) => ({ nativeEvent: { layout: { x: 0, y: 0, width: 400, height } } })
+    act(() => {
+      fireEvent(tree.getByTestId(id('AgentCreateScroll')), 'layout', layout(420))
+      fireEvent(tree.getByTestId(id('AgentBackupScanThisHeading')), 'layout', layout(70))
+    })
+    const code = tree.UNSAFE_getByType(QRCode).props as { size: number; quietZone?: number }
+    const quiet = code.quietZone ?? 0
+    expect(quiet).toBeGreaterThanOrEqual(16)
+    // Screen padding 20 + card padding 16 on each side, the heading and the gap under it.
+    expect(code.size + 2 * quiet).toBeLessThanOrEqual(420 - 2 * 20 - 2 * 16 - 70 - 8)
+    // The words say the path that works, and nothing that contradicts it.
+    expect(tree.getByTestId(id('AgentBackupAddressQr'))).toHaveTextContent(/CreateAgent\.BackupScanThisBody/)
+  })
 
   test('once linked, setup goes straight to Ready: no backup step', () => {
     linked()
