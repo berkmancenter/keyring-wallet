@@ -12,7 +12,8 @@
  *   ACTION=remove TARGET_DID=<the other DID>  removes that device (never this phone)
  *   ACTION=rotate                             changes the keys of the identities this phone made (the
  *                                             lost-phone card); ROTATE_ALLOW_UNPUBLISHED=1 passes keys
- *                                             changed but not yet served by the DID host
+ *                                             changed but not yet served (a DID host's cache: always
+ *                                             on the lab, for a few minutes after a change)
  *
  * Drives the installed app as it is (never installs or resets). Each action
  * lists the rows after it. A line per row, then one `DEVICES_JSON {…}` line:
@@ -273,12 +274,13 @@ try {
     console.log(`[devices] lost-phone card: "${said}"`);
     lap("rotate");
     await screenshot(driver, `devices-rotate-${PLATFORM}`);
-    if (/not published|hasn't published|pas encore publiées|ainda não as publicou/i.test(said)) {
-      // Changed on the agent, not yet served by its DID host (lab O9). The
-      // card must not say Done; the run reports it as its own outcome, and
-      // passes only when ROTATE_ALLOW_UNPUBLISHED=1 says that is expected.
-      console.log("[devices] ROTATED BUT NOT PUBLISHED — the agent changed the keys; its DID host does not serve them yet");
-      if (process.env.ROTATE_ALLOW_UNPUBLISHED !== "1") throw new Error(`the new keys are not published: "${said}"`);
+    if (/new keys are saved|nouvelles clés sont enregistrées|novas chaves estão salvas/i.test(said)) {
+      // Changed on the agent; DID hosts serve cached documents for a few
+      // minutes, so the card says so calmly (lab: 300 s cache). Reported as
+      // its own outcome; it passes only when ROTATE_ALLOW_UNPUBLISHED=1 says a
+      // cached host is expected, which on the lab it always is.
+      console.log("[devices] ROTATED, NOT YET SEEN BY EVERYONE — the agent changed the keys; the DID host still serves the cached document");
+      if (process.env.ROTATE_ALLOW_UNPUBLISHED !== "1") throw new Error(`the new keys are not served yet: "${said}"`);
     } else if (!/^Done\./.test(said)) {
       throw new Error(`the key change did not finish for every identity: "${said}"`);
     }
