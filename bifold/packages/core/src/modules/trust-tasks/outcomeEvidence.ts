@@ -37,6 +37,20 @@ import { taskCitationOf } from './taskCitation'
 const LOG_PREFIX = '[TrustTasks:Evidence]'
 const ERROR_TYPE_MARKER = '/trust-task-error/'
 
+/*
+ * `taskContext` dual-read (docs/plans/vsc-migration-plan.md §6 V4, D4):
+ * WD02 already REQUIRES `taskContext` at the credential's top level, sibling
+ * of `credentialSubject` — this codebase had been reading it out of
+ * `credentialSubject` instead, a standing conformance bug independent of the
+ * VSC migration (Alberto's 2026-09-17 review, finding A5). VSC shape emits it
+ * at the top level too (D4), so both shapes read the same way.
+ *
+ * This segment added a local `readTaskContext` for that. Main has since landed
+ * the same dual-read as `taskCitationOf` in ./taskCitation, which also covers
+ * `taskDigestMultibase` — so the local helper is dropped here in favour of it
+ * rather than keeping two implementations of one rule.
+ */
+
 /** A `taskContext`-bearing credential with its matching outcome evidence. */
 export interface VwcPresentationBundle {
   /** The signed Verifiable Presentation wrapping the VWC. */
@@ -226,6 +240,8 @@ export async function verifyVwcPresentationBundle(
 
   // 3–7. The pairing checklist.
   // Top level (DTG Credentials v1's witnessed/1) or in the subject (before it).
+  // taskCitationOf dual-reads BOTH members; the migration's inline version read
+  // taskDigestMultibase from the subject only, which segment #220 then fixed.
   const citation = taskCitationOf(vwc)
   const taskContext = citation.taskContext ?? ''
   const taskDigest = citation.taskDigestMultibase ?? ''

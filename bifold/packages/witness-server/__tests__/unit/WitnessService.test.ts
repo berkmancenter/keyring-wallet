@@ -40,6 +40,8 @@ import {
   assertSupportedMediatorPickupStrategy,
   SUPPORTED_MEDIATOR_PICKUP_STRATEGY,
 } from '@bifold/vrc-shared'
+import { taskDigestMultibase, digestMultibase, digestBytesEqual } from '@bifold/trust-tasks'
+import { DTG_PREDICATE_WITNESSED } from '@bifold/dtg-vocab'
 
 describe('WitnessService - SessionData', () => {
   /**
@@ -355,10 +357,10 @@ describe('WitnessService - VWC Building', () => {
       expect(vwc.type).toContain('WitnessCredential')
     })
 
-    it('should have the witness as issuer, as an { id, name } object (not a bare string)', () => {
+    it('should have the witness as issuer, as a bare string (VSC migration plan §6 V4: both WD02 and WD 0.4.0 require a string; {id, name} was a real divergence, ref-07e Act 4)', () => {
       const vwc = buildVwc(legacyVrc)
 
-      expect(vwc.issuer).toEqual({ id: witnessIssuerDid, name: witnessName })
+      expect(vwc.issuer).toEqual(witnessIssuerDid)
     })
 
     it('should reference VRC issuer in credentialSubject.id', () => {
@@ -529,6 +531,142 @@ describe('WitnessService - VWC Building', () => {
       const bobSender = 'conn-bob'
       const bobRecipient = participants.find((id) => id !== bobSender)
       expect(bobRecipient).toBe('conn-alice')
+    })
+  })
+
+  describe('VSC shape (docs/plans/vsc-migration-plan.md §6 V4)', () => {
+    it('defaults to wd02 shape when `shape` is omitted — no behavior change for existing callers', () => {
+      const withoutShape = buildVwc(vc20DiVrc)
+      const explicitWd02 = buildVwc(vc20DiVrc, { shape: 'wd02' })
+
+      // id is a fresh urn:uuid per call — exclude it, compare everything else.
+      const { id: _id1, ...withoutShapeRest } = withoutShape
+      const { id: _id2, ...explicitWd02Rest } = explicitWd02
+      expect(withoutShapeRest).toEqual(explicitWd02Rest)
+      expect(withoutShape.type).toContain('WitnessCredential')
+    })
+
+    it('emits StatementCredential as the only concrete DTGCredential subtype (D1)', () => {
+      const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+      expect(vwc.type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    })
+
+    it('emits credentialSubject.predicate as the real dtg:witnessed IRI (D2)', () => {
+      const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+      expect(vwc.credentialSubject.predicate).toBe(DTG_PREDICATE_WITNESSED)
+    })
+
+    it('always emits VC 2.0 form, even for a legacy 1.1 VRC — VSC has no legacy-1.1 shape', () => {
+      const vwc = buildVwc(legacyVrc, { shape: 'vsc' })
+
+      expect(vwc['@context'][0]).toBe(CREDENTIALS_V2_CONTEXT_URL)
+      expect(vwc.validFrom).toBeDefined()
+      expect(vwc.issuanceDate).toBeUndefined()
+    })
+
+    it('emits issuer as a bare string, same as wd02 (the fix is unconditional, not shape-gated)', () => {
+      const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+      expect(vwc.issuer).toBe(witnessIssuerDid)
+    })
+
+    describe('object.digestMultibase (D3 — three breaks, not a re-encoding)', () => {
+      it('is computed via taskDigestMultibase, over the VRC EXCLUDING its own top-level proof', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+        expect(vwc.credentialSubject.object.digestMultibase).toBe(taskDigestMultibase(vc20DiVrc))
+      })
+
+      it('differs from a digest computed over the PROOFED VRC — the coverage change a naive transcoder would miss', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+        const proofedDigest = digestMultibase(vc20DiVrc) // includes proof — the wrong document per D3's third break
+
+        expect(vwc.credentialSubject.object.digestMultibase).not.toBe(proofedDigest)
+      })
+
+      it('does not carry the legacy sha256:hex `digest` member at all', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+        expect(vwc.credentialSubject.digest).toBeUndefined()
+      })
+    })
+
+    describe('witnessContext keeps only the profile-defined three members (§3.5)', () => {
+      it('carries event/sessionId/method and nothing else, even with hardware attestation and locality present', () => {
+        const localityAssertion = {
+          localityConfirmed: true,
+          localityMethod: 'ble-gatt' as const,
+          localityVenue: 'EthDenver',
+        }
+        const vwc = buildVwc(
+          { ...vc20DiVrc, evidence: [{ type: ['HardwareAttestation'] }] },
+          { shape: 'vsc', eventName: 'EthDenver 2026', localityAssertion }
+        )
+
+        expect(Object.keys(vwc.credentialSubject.witnessContext).sort()).toEqual(['event', 'method', 'sessionId'])
+      })
+    })
+
+    describe('extension members hoisted to credentialSubject, siblings of witnessContext (§3.5)', () => {
+      it('places hardwareAttestationIncluded as a credentialSubject sibling, not nested in witnessContext', () => {
+        const vwc = buildVwc({ ...vc20DiVrc, evidence: [{ type: ['HardwareAttestation'] }] }, { shape: 'vsc' })
+
+        expect(vwc.credentialSubject.hardwareAttestationIncluded).toBe(true)
+        expect(vwc.credentialSubject.witnessContext.hardwareAttestationIncluded).toBeUndefined()
+      })
+
+      it('places the flat locality* members (Trust Task ceremony) as credentialSubject siblings', () => {
+        const localityAssertion = {
+          localityConfirmed: true,
+          localityMethod: 'ble-gatt' as const,
+          localityVenue: 'EthDenver',
+        }
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc', localityAssertion })
+
+        expect(vwc.credentialSubject.localityConfirmed).toBe(true)
+        expect(vwc.credentialSubject.localityVenue).toBe('EthDenver')
+        expect(vwc.credentialSubject.witnessContext.localityConfirmed).toBeUndefined()
+      })
+
+      it('places the legacy nested localityVerification as a credentialSubject sibling too', () => {
+        const localityEvidence = { type: 'ble', confirmed: true } as unknown as LocalityEvidence
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc', localityEvidence })
+
+        expect(vwc.credentialSubject.localityVerification).toEqual(localityEvidence)
+        expect(vwc.credentialSubject.witnessContext.localityVerification).toBeUndefined()
+      })
+    })
+
+    describe('D6 subject binding, checked against real minted output', () => {
+      // These re-derive the same primitives witnessCeremony.ts's checkSubjectBinding
+      // (plan §6 V3, @bifold/core) uses — @bifold/trust-tasks, which this package
+      // already depends on — rather than importing @bifold/core, which pulls in
+      // React Native and is the wrong direction for a Node service to depend on.
+      // This is the round-trip check available at this architectural boundary:
+      // real minted output, checked with the real shared primitives, just not a
+      // call into core's own function.
+      it('the minted VSC satisfies D6 against the real VRC it references', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+
+        expect(vwc.credentialSubject.id).toBe(vc20DiVrc.issuer)
+        expect(digestBytesEqual(vwc.credentialSubject.object.digestMultibase, taskDigestMultibase(vc20DiVrc))).toBe(
+          true
+        )
+      })
+
+      it('a VSC whose subject is NOT the referenced VRC issuer fails D6 — the case D6 exists to catch', () => {
+        const vwc = buildVwc(vc20DiVrc, { shape: 'vsc' })
+        const tampered = { ...vwc, credentialSubject: { ...vwc.credentialSubject, id: 'did:peer:0zmallory' } }
+
+        expect(tampered.credentialSubject.id).not.toBe(vc20DiVrc.issuer)
+        // The digest half still reproduces — D6 is two independent checks,
+        // and a subject swap alone must still be caught.
+        expect(
+          digestBytesEqual(tampered.credentialSubject.object.digestMultibase, taskDigestMultibase(vc20DiVrc))
+        ).toBe(true)
+      })
     })
   })
 })

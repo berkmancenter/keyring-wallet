@@ -201,6 +201,20 @@ export interface WitnessServerConfig {
   localityVenueClaim?: string
 
   /**
+   * VSC migration (docs/plans/vsc-migration-plan.md §6 V4): which VWC wire
+   * shape this witness emits.
+   *   wd02 — the current, deployed WitnessCredential shape. DEFAULT: this
+   *          witness changes nothing about its output until an operator
+   *          opts in.
+   *   vsc  — the WD 0.4.0 dtg:witnessed StatementCredential shape (D1-D8,
+   *          plan §3).
+   * Defaults to 'wd02' until plan §7.1's upstream personhood.rego question
+   * is closed. Flipping this default is a deployment decision, not a code
+   * change — see plan §9 Q1.
+   */
+  credentialShape: 'wd02' | 'vsc'
+
+  /**
    * Whether to retain basic message records in the wallet after processing.
    * When false (default), messages are deleted after being processed to preserve user privacy.
    * When true, all messages are retained in the wallet for debugging/audit purposes.
@@ -397,6 +411,10 @@ export function loadConfig(): WitnessServerConfig {
     rawLocalityPolicy === 'off' || rawLocalityPolicy === 'required' ? rawLocalityPolicy : 'offered'
   const localityVenueClaim = process.env.WITNESS_LOCALITY_VENUE_CLAIM
 
+  // VSC migration (plan §6 V4) — wd02 | vsc, default wd02.
+  const rawCredentialShape = process.env.WITNESS_CREDENTIAL_SHAPE
+  const credentialShape: WitnessServerConfig['credentialShape'] = rawCredentialShape === 'vsc' ? 'vsc' : 'wd02'
+
   // Message Retention Configuration
   const retainMessages = process.env.WITNESS_RETAIN_MESSAGES === 'true' // Default: false (delete after processing)
 
@@ -474,6 +492,7 @@ export function loadConfig(): WitnessServerConfig {
     reportingEnabled,
     localityVerificationRequired,
     localityPolicy,
+    credentialShape,
     localityVenueClaim,
     retainMessages,
     llmEnabled,
@@ -526,6 +545,7 @@ export const defaultConfig: WitnessServerConfig = {
   localityVerificationRequired: true,
   localityPolicy: 'offered',
   localityVenueClaim: undefined,
+  credentialShape: 'wd02',
   retainMessages: false,
   llmEnabled: false,
   llmProvider: 'anthropic',

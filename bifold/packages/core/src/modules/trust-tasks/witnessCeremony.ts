@@ -340,6 +340,8 @@ export async function runWitnessSession(
   }
   // The citation sits at the top level in a witnessed/1 VWC (DTG Credentials
   // v1) and in the subject before it: either binds the session the same way.
+  // Same dual-read the migration added inline here (plan §6 V4, D4, finding
+  // A5); main's taskCitationOf is the factored form and covers the digest too.
   const { taskContext, taskDigestMultibase: taskDigest } = taskCitationOf(vwc)
   if (taskContext !== sessionId) {
     throw new Error(`VWC taskContext ${taskContext ?? 'absent'} does not name this session (${sessionId})`)

@@ -2560,6 +2560,7 @@ __metadata:
   dependencies:
     "@abandonware/noble": "npm:^1.9.2-26"
     "@bifold/credo-tsp-adapter": "workspace:*"
+    "@bifold/dtg-vocab": "workspace:*"
     "@bifold/trust-tasks": "workspace:*"
     "@bifold/vrc-contexts": "workspace:*"
     "@bifold/vrc-shared": "workspace:*"

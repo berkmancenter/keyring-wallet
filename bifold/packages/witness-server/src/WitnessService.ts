@@ -94,6 +94,8 @@ import {
   jcsCanonicalize,
 } from '@bifold/vrc-contexts'
 import { DataIntegritySuiteModule, demoDocumentLoader, getMirroredJsonLdProofOptions } from '@bifold/vrc-shared'
+import { taskDigestMultibase } from '@bifold/trust-tasks'
+import { DTG_PREDICATE_WITNESSED } from '@bifold/dtg-vocab'
 
 // Import vcLibraries for debugging JSON-LD canonicalization
 import { vcLibraries } from '@credo-ts/core'
@@ -211,6 +213,18 @@ export function checkVrcFreshness(
  * SHA-256 digest of the VRC over its JCS (RFC 8785) canonical form, so any
  * implementation can recompute the same digest from the same JSON data
  * regardless of key order or serializer.
+ *
+ * VSC migration (docs/plans/vsc-migration-plan.md §6 V4): the plan's own
+ * text says this function "is deleted, and replaced by taskDigestMultibase"
+ * — true for the eventual, fully cut-over end state, but NOT while the
+ * `WITNESS_CREDENTIAL_SHAPE=wd02|vsc` flag exists. `wd02` shape must stay
+ * byte-for-byte what it always was (that IS the flag's whole safety
+ * property), which means this exact legacy algorithm — sha256:hex, over the
+ * PROOFED VRC — has to stay available for that branch. `vsc` shape uses
+ * `taskDigestMultibase` instead, which is a genuinely different digest of a
+ * genuinely different document, not a re-encoding (plan §3.1's third
+ * break). Deleting this function is the right call once `wd02` shape itself
+ * is retired, not before.
  */
 export function computeVrcDigest(vrcJson: unknown): string {
   return 'sha256:' + createHash('sha256').update(jcsCanonicalize(vrcJson)).digest('hex')
@@ -233,6 +247,12 @@ export interface WitnessCredentialBuildContext {
    * explicit state (§7.1 rule 5), not something this function infers.
    */
   localityAssertion?: LocalityAssertion
+  /**
+   * VSC migration (docs/plans/vsc-migration-plan.md §6 V4): which wire shape
+   * to emit. Defaults to `'wd02'` when omitted, so every existing call site
+   * that doesn't pass this keeps its exact current behavior.
+   */
+  shape?: 'wd02' | 'vsc'
 }
 
 /**
@@ -249,8 +269,28 @@ export function buildWitnessCredentialJson(
   observedPresentation: any,
   buildContext: WitnessCredentialBuildContext
 ): any {
-  const { issuerDid, witnessName, sessionId, verificationMethod, eventName, localityEvidence, localityAssertion } =
-    buildContext
+  const {
+    issuerDid,
+    // VSC migration (plan §6 V4): `issuer` becomes a bare string in BOTH
+    // shapes (both WD02 and WD 0.4.0 require a string; ref-07e found
+    // Keyring emitting `{id, name}` as a real divergence against
+    // `dtg-credentials` 0.7.0). There is no spec-conforming home left for
+    // the witness's display name inside the credential — it is captured
+    // here, deliberately unused, so a future reader sees the decision
+    // rather than a silently dropped parameter. Known consequence, not
+    // resolved here: `witnessCredentialUtils.ts`'s `issuerValue.name`
+    // extraction falls back to the generic 'Witness' label for any VWC
+    // built after this change; recovering a witness's display name (e.g.
+    // resolving it from the issuer DID document) is a separate product
+    // decision.
+    witnessName: _witnessName,
+    sessionId,
+    verificationMethod,
+    eventName,
+    localityEvidence,
+    localityAssertion,
+    shape = 'wd02',
+  } = buildContext
 
   const vwcId = `urn:uuid:${utils.uuid()}`
 
@@ -261,11 +301,92 @@ export function buildWitnessCredentialJson(
     throw new Error('No VRC found in presentation')
   }
 
-  const digest = computeVrcDigest(vrcJson)
+  const hasHardwareAttestationEvidence = Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0
 
   const vrcIssuer = typeof vrcJson.issuer === 'string' ? vrcJson.issuer : vrcJson.issuer?.id || 'unknown'
 
-  const hasHardwareAttestationEvidence = Array.isArray(vrcJson.evidence) && vrcJson.evidence.length > 0
+  // Backdate validFrom, exactly as the wallet already does when it builds a VRC
+  // ("Backdate issuance to tolerate clock skew between issuer and holder
+  // devices — the holder rejects credentials whose issuanceDate is in its
+  // future", vrc-manager.buildVrcCredential). The witness never got the same
+  // treatment, and it is the one issuer whose credential is verified within a
+  // second of being signed, so it is the most exposed:
+  //   "The current date time (…54.965Z) is before validFrom (…55.261Z)"
+  // — a 296 ms miss observed on device 2026-08-30. The holder's
+  // outcome-evidence self-check then failed and it withheld its witness-share,
+  // so the peer never received a VWC about them and their contact showed no
+  // witness badge. It presented as intermittent and platform-specific; it was
+  // neither, just clock skew.
+  //
+  // Safe: the credential attests an exchange that has already happened, and
+  // validUntil still runs from now. CLOCK_SKEW_ALLOWANCE_MS is the same
+  // allowance the freshness window above is already built around.
+  const issuedTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
+  const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
+
+  if (shape === 'vsc') {
+    // VSC migration (plan §6 V4). D1: type is StatementCredential, no other
+    // concrete DTGCredential subtype. D2: predicate is the real dtg:witnessed
+    // IRI (@bifold/dtg-vocab). D3: object.digestMultibase, computed over the
+    // VRC EXCLUDING its own top-level proof (taskDigestMultibase) — a
+    // different digest of a different document than wd02's `digest`, not a
+    // re-encoding of it (plan §3.1's third break). §3.5: witnessContext keeps
+    // only the profile's three members (event, sessionId, method);
+    // hardwareAttestationIncluded/localityVerification/locality* become
+    // siblings of witnessContext, inside credentialSubject, under the
+    // Keyring namespace @bifold/vrc-contexts already defines for them.
+    //
+    // VSC is inherently a VC 2.0 / WD 0.4.0 concept, so this branch always
+    // emits VC 2.0 form regardless of the observed VRC's version — there is
+    // no "legacy 1.1 VSC".
+    //
+    // KNOWN GAP, not closed here: D7 wants the credential's own @context to
+    // include the real spec context IRI (@bifold/dtg-vocab's DTG_CONTEXT_URL,
+    // https://registry.trustoverip.org/dtg/context/v1). This package has no
+    // document-loader entry mapping that URL to a document yet — V2
+    // (@bifold/vrc-contexts) added the new terms to the EXISTING
+    // WITNESSED_EXCHANGE_CONTEXT_URL/DOCUMENT instead, which resolves
+    // correctly for our own verifier but does not literally match the spec's
+    // context IRI. Closing this is a V2 follow-up (map DTG_CONTEXT_URL to a
+    // document matching the real cred-spec context), not something this V4
+    // pass changes, since it was out of this task's scope (vrc-contexts).
+    const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
+
+    const witnessContext: Record<string, any> = {
+      sessionId,
+      method: verificationMethod,
+    }
+    if (eventName) {
+      witnessContext.event = eventName
+    }
+
+    return {
+      '@context': vrcUsesDi
+        ? [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL]
+        : [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+      id: vwcId,
+      type: ['VerifiableCredential', 'DTGCredential', 'StatementCredential'],
+      issuer: issuerDid,
+      validFrom: issuedTimestamp,
+      validUntil: expirationTimestamp,
+      credentialSubject: {
+        id: vrcIssuer,
+        predicate: DTG_PREDICATE_WITNESSED,
+        object: {
+          digestMultibase: taskDigestMultibase(vrcJson),
+        },
+        witnessContext,
+        hardwareAttestationIncluded: hasHardwareAttestationEvidence,
+        ...(localityEvidence ? { localityVerification: localityEvidence } : {}),
+        ...(localityAssertion ?? {}),
+      },
+    }
+  }
+
+  // wd02 (default): byte-for-byte the pre-migration shape, MINUS the issuer
+  // fix above, which applies unconditionally (plan §6 V4) since it is an
+  // independent bug fix, not part of the shape choice.
+  const digest = computeVrcDigest(vrcJson)
 
   // Build witnessContext according to spec (event, sessionId, method - no domain/timestamp)
   const witnessContext: Record<string, any> = {
@@ -296,24 +417,6 @@ export function buildWitnessCredentialJson(
   const vrcContexts: unknown[] = Array.isArray(vrcJson['@context']) ? vrcJson['@context'] : [vrcJson['@context']]
   const vrcIsVc20 = vrcContexts[0] === CREDENTIALS_V2_CONTEXT_URL
   const vrcUsesDi = getMirroredJsonLdProofOptions(vrcJson.proof).proofType === 'DataIntegrityProof'
-  // Backdate validFrom, exactly as the wallet already does when it builds a VRC
-  // ("Backdate issuance to tolerate clock skew between issuer and holder
-  // devices — the holder rejects credentials whose issuanceDate is in its
-  // future", vrc-manager.buildVrcCredential). The witness never got the same
-  // treatment, and it is the one issuer whose credential is verified within a
-  // second of being signed, so it is the most exposed:
-  //   "The current date time (…54.965Z) is before validFrom (…55.261Z)"
-  // — a 296 ms miss observed on device 2026-08-30. The holder's
-  // outcome-evidence self-check then failed and it withheld its witness-share,
-  // so the peer never received a VWC about them and their contact showed no
-  // witness badge. It presented as intermittent and platform-specific; it was
-  // neither, just clock skew.
-  //
-  // Safe: the credential attests an exchange that has already happened, and
-  // validUntil still runs from now. CLOCK_SKEW_ALLOWANCE_MS is the same
-  // allowance the freshness window above is already built around.
-  const issuedTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
-  const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
 
   if (vrcIsVc20) {
     // On the 2018 path the Ed25519 suite context must be present at build
@@ -326,10 +429,7 @@ export function buildWitnessCredentialJson(
         : [CREDENTIALS_V2_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
       id: vwcId,
       type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-      issuer: {
-        id: issuerDid,
-        name: witnessName,
-      },
+      issuer: issuerDid,
       validFrom: issuedTimestamp,
       validUntil: expirationTimestamp,
       credentialSubject: {
@@ -344,10 +444,7 @@ export function buildWitnessCredentialJson(
     '@context': ['https://www.w3.org/2018/credentials/v1', WITNESSED_EXCHANGE_CONTEXT_URL],
     id: vwcId,
     type: ['VerifiableCredential', 'DTGCredential', 'WitnessCredential'],
-    issuer: {
-      id: issuerDid,
-      name: witnessName,
-    },
+    issuer: issuerDid,
     issuanceDate: issuedTimestamp,
     // W3C VC v1 expirationDate and validUntil - set to current time + 7 days
     expirationDate: expirationTimestamp,
@@ -664,6 +761,7 @@ export class WitnessService {
       localityPolicy: this.config.localityPolicy,
       venueClaim: this.config.localityVenueClaim,
       localityProvider: this.taskLocalityProvider,
+      credentialShape: this.config.credentialShape,
       getIssuer: async () => {
         await this.ensureDedicatedIssuerDid()
         if (!this.issuerDid || !this.issuerVerificationMethodId) {
@@ -680,6 +778,7 @@ export class WitnessService {
           verificationMethod: this.config.verificationMethod,
           eventName: this.config.eventName,
           localityAssertion,
+          shape: this.config.credentialShape,
         })
       },
       vrcHardwareAttestationPublicKey: (presentation) => extractVrcHardwareAttestationPublicKey(presentation),

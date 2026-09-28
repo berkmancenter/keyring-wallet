@@ -73,6 +73,33 @@ import { loadTrustTaskRuntime } from './runtime'
 /** Which carriage a request arrived on — a reply always goes back the same way. */
 type Carriage = 'didcomm-v1' | 'didcomm-v2' | 'tsp'
 
+/**
+ * VSC migration (docs/plans/vsc-migration-plan.md §6 V4, D4): where
+ * `taskContext` goes on the credential being issued. `vsc` shape moves it to
+ * the top level, sibling of `credentialSubject`. `wd02` shape keeps its
+ * current (nested-in-credentialSubject) placement unchanged — that
+ * placement is itself a standing WD02-conformance bug (Alberto's 2026-09-17
+ * review, finding A5), but fixing wd02's OWN emission is out of scope for
+ * this migration; only the read sites got the dual-read fix.
+ *
+ * Extracted as a pure function specifically so it has direct unit test
+ * coverage — `WitnessTaskSessions` as a whole has none (it needs a live
+ * Credo agent to exercise meaningfully), so this is the coverage available
+ * at this boundary for the one piece of new logic V4 adds here.
+ */
+export function placeTaskContext(
+  vwcJson: Record<string, unknown>,
+  subject: Record<string, unknown>,
+  sessionId: string,
+  credentialShape: 'wd02' | 'vsc' | undefined
+): void {
+  if (credentialShape === 'vsc') {
+    vwcJson.taskContext = sessionId
+  } else {
+    subject.taskContext = sessionId
+  }
+}
+
 const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
 const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
 const DISCOVERY_TYPE = 'https://trusttasks.org/spec/trust-task-discovery/0.1'
@@ -114,6 +141,16 @@ export interface WitnessTaskHost {
   /** The witness's claim about itself — plan §7.1's `localityVenue`, unverified in v1 (§11-Q4). */
   venueClaim?: string
   localityProvider?: TaskLocalityProvider
+  /**
+   * VSC migration (docs/plans/vsc-migration-plan.md §6 V4): which VWC wire
+   * shape `buildVwcJson` produces. Defaults to `'wd02'` if omitted. Needed
+   * here (not only inside `buildVwcJson`) because D4 moves `taskContext` to
+   * the credential's top level, sibling of `credentialSubject`, in `vsc`
+   * shape — a placement decision this class makes when it attaches
+   * `taskContext` after `buildVwcJson` returns, not something `buildVwcJson`
+   * itself controls.
+   */
+  credentialShape?: 'wd02' | 'vsc'
   getIssuer(): Promise<{ did: string; verificationMethodId: string }>
   buildVwcJson(
     presentation: Record<string, unknown>,
@@ -589,8 +626,8 @@ export class WitnessTaskSessions {
         const vwcJson = this.host.buildVwcJson(vpJson, session.sessionId, localityAssertion)
         const subject = (vwcJson.credentialSubject ?? {}) as Record<string, unknown>
         subject.parties = session.parties
-        subject.taskContext = session.sessionId
         subject.taskDigestMultibase = taskDigestMultibase(session.sessionDoc)
+        placeTaskContext(vwcJson, subject, session.sessionId, this.host.credentialShape)
         vwcJson.credentialSubject = subject
 
         // Sign it, mirroring the observed VRC's proof family.
