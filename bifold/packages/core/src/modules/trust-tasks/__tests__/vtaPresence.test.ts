@@ -4,7 +4,7 @@
  * device starts acting as the same agent.
  */
 import { AGENT_DEVICE_TASK, type AgentDevicePort } from '../module/vtaDevices'
-import { AgentPresence } from '../module/vtaPresence'
+import { AgentPresence, isLinkOnline } from '../module/vtaPresence'
 import { VtiRefusal } from '../module/vtiAgent'
 
 const ME = 'did:peer:2.this-phone'
@@ -110,5 +110,15 @@ describe('another device acting as the same agent', () => {
     otherSeen = T0 + 25 * 60_000
     await w.presence.tick()
     expect(w.seen).toEqual([OTHER, OTHER])
+  })
+})
+
+describe('when presence runs', () => {
+  const agent = { vtaDid: 'did:webvh:QmAgent:agent.example', label: 'agent' }
+  it('only while the link is up', () => {
+    expect(isLinkOnline({ kind: 'notLinked' })).toBe(false)
+    expect(isLinkOnline({ kind: 'linked', ...agent, linkedAt: 't', connection: { kind: 'offline', since: 1 } } as never)).toBe(false)
+    expect(isLinkOnline({ kind: 'linked', ...agent, linkedAt: 't', connection: { kind: 'online' } } as never)).toBe(true)
+    expect(isLinkOnline({ kind: 'revoked', ...agent, reason: 'x', cause: 'notInAcl' } as never)).toBe(false)
   })
 })
