@@ -185,7 +185,12 @@ export function scrapeTicketUri(screen) {
 export function panelRows(screen) {
   return screen.split('\n').map((l) => {
     const a = l.indexOf('║');
-    const b = l.lastIndexOf('║');
+    // A list longer than the panel draws its scrollbar on the right border:
+    // the thumb (█) replaces that row's ║. Without this the row fell through
+    // to the menu-column parser and read as a menu item (226 gate, P2: "16
+    // personas" read as "* Communities" once the applicant had 16 personas).
+    let b = l.lastIndexOf('║');
+    if (a >= 0 && b <= a) b = l.lastIndexOf('█');
     return (a >= 0 && b > a ? l.slice(a + 1, b) : l.replace(/^.*?│/, '').replace(/│.*$/, '')).trim();
   });
 }
