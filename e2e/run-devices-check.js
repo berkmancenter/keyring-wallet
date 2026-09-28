@@ -10,6 +10,7 @@
  *     [APPIUM_PORT=…] node run-devices-check.js
  *   ACTION=rename NAME="Sam's phone"          renames this phone
  *   ACTION=remove TARGET_DID=<the other DID>  removes that device (never this phone)
+ *   ACTION=rotate                             changes every identity's keys (the lost-phone card)
  *
  * Drives the installed app as it is (never installs or resets). Each action
  * lists the rows after it. A line per row, then one `DEVICES_JSON {…}` line:
@@ -36,7 +37,7 @@ const OWNER_PIN = process.env.OWNER_PIN || "1111";
 const ID = PLATFORM === "android" ? "@resource-id" : "@name";
 
 if (!UDID) throw new Error("UDID is required: the simulator's udid or the emulator's serial");
-if (!["list", "rename", "remove"].includes(ACTION)) throw new Error(`ACTION must be list, rename or remove, not ${ACTION}`);
+if (!["list", "rename", "remove", "rotate"].includes(ACTION)) throw new Error(`ACTION must be list, rename, remove or rotate, not ${ACTION}`);
 
 const adb = (...args) => execFileSync("adb", ["-s", UDID, ...args], { encoding: "utf8" });
 
@@ -245,6 +246,32 @@ try {
         : "[devices] the removed device is no longer listed (revoked, never registered)"
     );
     if (gone && (!gone.state || gone.remove)) throw new Error("a removed device still listed must say so, and offer no Remove");
+  }
+
+  if (ACTION === "rotate") {
+    // The lost-phone card, under the list: offered only when the agent keeps
+    // key ids through a change; one owner check covers every identity.
+    await stayUnlocked(driver);
+    await scrollToTestId(driver, "LostPhone", 40);
+    if (!(await existsTestId(driver, "LostPhoneRotate", 3000))) {
+      const said = await textOf(driver, "LostPhoneState").catch(() => "");
+      throw new Error(`the lost-phone card offers no key change: "${said}"`);
+    }
+    undoLock = ownerLockSetup();
+    await scrollToTestId(driver, "LostPhoneRotate", 6);
+    await tapTestId(driver, "LostPhoneRotate", 15000);
+    await answerOwnerPrompt();
+    let said = "";
+    for (const until = Date.now() + 180000; ; await sleep(1500)) {
+      said = await textOf(driver, "LostPhoneState").catch(() => "");
+      const busy = await existsTestId(driver, "LostPhoneRotate", 300).then(async (b) => b && !(await textOf(driver, "LostPhoneRotate").catch(() => "")).match(/Change my/i));
+      if (said && !busy) break;
+      if (Date.now() > until) throw new Error("the key change never finished within 180 s");
+    }
+    console.log(`[devices] lost-phone card: "${said}"`);
+    lap("rotate");
+    await screenshot(driver, `devices-rotate-${PLATFORM}`);
+    if (!/^Done\./.test(said)) throw new Error(`the key change did not finish for every identity: "${said}"`);
   }
 
   lap("done");
