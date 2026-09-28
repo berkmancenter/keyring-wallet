@@ -51,7 +51,7 @@ export function loadConfig(env = process.env) {
     vtaDidSource,
     label: env.ENROL_LABEL || 'Keyring lab agent (alice)',
     offerTtl: Number(env.OFFER_TTL ?? 300),
-    pnmBin: env.PNM_BIN || path.join(home, 'Documents/vti-main/target/debug/pnm'),
+    pnmBin: env.PNM_BIN || path.join(home, 'vti-stack/bin/pnm'), // signed, stable (sign-lab-tool.sh)
     // Only when set: pnm since VTI main reads PNM_HOME as its config home.
     pnmHome: env.PNM_HOME || undefined,
     vtaSlug: env.VTA_SLUG || 'alice',

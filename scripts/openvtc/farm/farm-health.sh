@@ -9,7 +9,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # pnm through the slug's lock, so this never drops a gate's pnm call (one slug =
 # one admin DID = one mediator socket; see ../pnm-locked).
-export PNM_BIN="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
+export PNM_BIN="${PNM_BIN:-$HOME/vti-stack/bin/pnm}"   # signed, stable (sign-lab-tool.sh)
 PNM="$HERE/../pnm-locked"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 fails=0

@@ -62,7 +62,8 @@ const PAGE_DIR = path.resolve(here, "../scripts/openvtc/local-vti-stack/enrol-pa
 // 8191: the runners' page (bob). 8190 is the page for a person's own agent.
 const ENROL_PORT = process.env.ENROL_PORT || "8191";
 const ENROL_URL = process.env.ENROL_URL || `http://localhost:${ENROL_PORT}`;
-const PNM = process.env.PNM_BIN || path.join(os.homedir(), "Documents/vti-main/target/debug/pnm");
+// The signed build at its stable path (scripts/openvtc/sign-lab-tool.sh).
+const PNM = process.env.PNM_BIN || path.join(os.homedir(), "vti-stack/bin/pnm");
 // The runners' own lab agent. Never "alice": that is the agent a person's
 // TestFlight install is linked to, and runs against it show up on their phone.
 const VTA_SLUG = process.env.RUNNER_VTA || process.env.VTA_SLUG || "bob";
