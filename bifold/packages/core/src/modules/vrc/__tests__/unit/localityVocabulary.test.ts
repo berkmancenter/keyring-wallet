@@ -188,6 +188,36 @@ describe('VSC members added for the migration — expanded-IRI checks, not quad 
     expect(expanded['issuerScope']).toBeUndefined()
   })
 
+  test('witnessName (credentialSubject sibling, restored witness display name) expands to its own IRI, distinct from name', async () => {
+    const base = vscShape('https://registry.trustoverip.org/dtg/vsc/witnessed/1')
+    const doc = { ...base, credentialSubject: { ...base.credentialSubject, witnessName: 'Test Witness' } }
+    const [expanded] = await jsonld.expand(doc as never, { documentLoader } as never)
+    const subject = (expanded['https://www.w3.org/2018/credentials#credentialSubject'] as never[])[0] as Record<
+      string,
+      unknown
+    >
+    expect((subject['https://trustoverip.org/credentials/witnessed-exchange#witnessName'] as never[])[0]).toEqual({
+      '@value': 'Test Witness',
+    })
+    expect(subject['https://schema.org/name']).toBeUndefined()
+  })
+
+  test('deleting the witnessName term drops it to zero quads — the guard guards', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { witnessName: _removed, ...contextWithoutWitnessName } = CTX
+    const doc = {
+      '@context': [CREDENTIALS_V2_CONTEXT_URL, contextWithoutWitnessName],
+      type: ['VerifiableCredential', 'StatementCredential'],
+      credentialSubject: { id: 'did:key:zSubject', witnessName: 'Test Witness' },
+    }
+    const [expanded] = await jsonld.expand(doc as never, { documentLoader } as never)
+    const subject = (expanded['https://www.w3.org/2018/credentials#credentialSubject'] as never[])[0] as
+      | Record<string, unknown>
+      | undefined
+    expect(subject?.['https://trustoverip.org/credentials/witnessed-exchange#witnessName']).toBeUndefined()
+    expect(subject?.['witnessName']).toBeUndefined()
+  })
+
   test('object.digestMultibase is inherited from the protected credentials/v2 base context, not redefined here — expands to security#digestMultibase', async () => {
     const doc = vscShape('https://registry.trustoverip.org/dtg/vsc/witnessed/1')
     const [expanded] = await jsonld.expand(doc as never, { documentLoader } as never)

@@ -367,6 +367,12 @@ describe('WitnessService - VWC Building', () => {
       expect(buildVwc(legacyVrc).credentialSubject.id).toBe(vrcIssuer)
     })
 
+    it('restores the witness display name as credentialSubject.witnessName, in both wd02 forms and vsc (§Predicate Profiles point 5)', () => {
+      expect(buildVwc(legacyVrc).credentialSubject.witnessName).toBe(witnessName)
+      expect(buildVwc(vc20Vrc).credentialSubject.witnessName).toBe(witnessName)
+      expect(buildVwc(vc20DiVrc, { shape: 'vsc' }).credentialSubject.witnessName).toBe(witnessName)
+    })
+
     it('should unwrap an issuer object on the VRC to its id', () => {
       const vwc = buildVwc({ ...legacyVrc, issuer: { id: vrcIssuer, name: 'Alice' } })
 

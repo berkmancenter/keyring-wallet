@@ -274,16 +274,17 @@ export function buildWitnessCredentialJson(
     // VSC migration (plan §6 V4): `issuer` becomes a bare string in BOTH
     // shapes (both WD02 and WD 0.4.0 require a string; ref-07e found
     // Keyring emitting `{id, name}` as a real divergence against
-    // `dtg-credentials` 0.7.0). There is no spec-conforming home left for
-    // the witness's display name inside the credential — it is captured
-    // here, deliberately unused, so a future reader sees the decision
-    // rather than a silently dropped parameter. Known consequence, not
-    // resolved here: `witnessCredentialUtils.ts`'s `issuerValue.name`
-    // extraction falls back to the generic 'Witness' label for any VWC
-    // built after this change; recovering a witness's display name (e.g.
-    // resolving it from the issuer DID document) is a separate product
-    // decision.
-    witnessName: _witnessName,
+    // `dtg-credentials` 0.7.0), which left no spec-conforming home for the
+    // witness's display name on `issuer` itself. Restored as
+    // `credentialSubject.witnessName` instead — a distinct term, hoisted as
+    // a sibling of `witnessContext` (see the `vsc` branch below), sanctioned
+    // by cred-spec's §Predicate Profiles point 5 ("a verifier MUST ignore
+    // additional members a profile does not define"). Emitted in both
+    // shapes: this is a second, independent addition to `wd02`'s otherwise
+    // byte-for-byte pre-migration output, same footing as the `issuer` fix
+    // above — a real bug fix (a witness name with nowhere spec-conforming to
+    // live was a real product regression), not part of the shape choice.
+    witnessName,
     sessionId,
     verificationMethod,
     eventName,
@@ -384,6 +385,7 @@ export function buildWitnessCredentialJson(
           digestMultibase: taskDigestMultibase(vrcJson),
         },
         witnessContext,
+        witnessName,
         hardwareAttestationIncluded: hasHardwareAttestationEvidence,
         ...(localityEvidence ? { localityVerification: localityEvidence } : {}),
         ...(localityAssertion ?? {}),
@@ -392,8 +394,9 @@ export function buildWitnessCredentialJson(
   }
 
   // wd02 (default): byte-for-byte the pre-migration shape, MINUS the issuer
-  // fix above, which applies unconditionally (plan §6 V4) since it is an
-  // independent bug fix, not part of the shape choice.
+  // fix above and the credentialSubject.witnessName addition below, both of
+  // which apply unconditionally (plan §6 V4) since they are independent bug
+  // fixes, not part of the shape choice.
   const digest = computeVrcDigest(vrcJson)
 
   // Build witnessContext according to spec (event, sessionId, method - no domain/timestamp)
@@ -444,6 +447,7 @@ export function buildWitnessCredentialJson(
         id: vrcIssuer,
         digest: digest,
         witnessContext,
+        witnessName,
       },
     }
   }
@@ -461,6 +465,7 @@ export function buildWitnessCredentialJson(
       id: vrcIssuer,
       digest: digest,
       witnessContext,
+      witnessName,
     },
   }
 }

@@ -309,6 +309,27 @@ describe('witnessCredentialUtils', () => {
         expect(result?.witnessName).toBe('Witness')
       })
 
+      it('should prefer credentialSubject.witnessName over a legacy issuer.name object', () => {
+        const mockCredential = {
+          id: 'credential-witness-name-precedence',
+          encoded: {
+            type: ['VerifiableCredential', 'WitnessCredential'],
+            issuer: {
+              id: 'did:example:witness-server',
+              name: 'Stale Legacy Name',
+            },
+            credentialSubject: {
+              id: 'did:example:subject',
+              witnessName: 'Current Witness Name',
+            },
+          },
+        } as unknown as W3cCredentialRecord
+
+        const result = extractWitnessInfo(mockCredential)
+
+        expect(result?.witnessName).toBe('Current Witness Name')
+      })
+
       it('should return null when issuer is missing entirely', () => {
         const mockCredential = {
           id: 'credential-no-issuer',

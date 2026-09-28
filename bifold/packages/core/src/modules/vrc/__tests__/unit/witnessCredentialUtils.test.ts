@@ -231,6 +231,27 @@ describe('witnessCredentialUtils', () => {
       })
     })
 
+    it('should prefer credentialSubject.witnessName (spec-conforming home) over legacy issuer.name', () => {
+      const mockCredential = {
+        id: 'credential-witness-name',
+        encoded: {
+          type: ['VerifiableCredential', 'StatementCredential'],
+          issuer: 'did:example:witness',
+          credentialSubject: {
+            id: 'did:example:subject',
+            witnessName: 'VSC Witness Server',
+            witnessContext: {
+              sessionId: 'session-abc-123',
+            },
+          },
+        },
+      } as unknown as W3cCredentialRecord
+
+      const result = extractWitnessInfo(mockCredential)
+
+      expect(result?.witnessName).toBe('VSC Witness Server')
+    })
+
     it('should handle issuer as string instead of object', () => {
       const mockCredential = {
         id: 'credential-456',

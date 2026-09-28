@@ -249,18 +249,21 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
 
     // Extract issuer (witness DID)
     let witnessDid: string
-    let witnessName: string | undefined
+    // Legacy fallback only: pre-VSC-migration VWCs carried `issuer: { id, name }`
+    // before the spec required a bare string (ref-07e Act 4). Superseded by
+    // credentialSubject.witnessName below, which is the spec-conforming home
+    // for the display name (§Predicate Profiles point 5's ignorable-extras
+    // clause) — kept here only for any VWC signed before that change existed.
+    let issuerObjectName: string | undefined
 
     if ('issuer' in rawCredential) {
       const issuerValue = rawCredential.issuer
 
       if (typeof issuerValue === 'string') {
         witnessDid = issuerValue
-        // Fallback: derive a short name from the DID for display
-        witnessName = 'Witness'
       } else if (issuerValue && typeof issuerValue === 'object' && 'id' in issuerValue) {
         witnessDid = issuerValue.id
-        witnessName = issuerValue.name || 'Witness'
+        issuerObjectName = issuerValue.name
       } else {
         return null
       }
@@ -275,6 +278,7 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
     let localityVerification: LocalityVerification | undefined
     let locality: LocalityStatus | undefined
     let hardwareAttestationIncluded: boolean | undefined
+    let witnessNameFromSubject: string | undefined
 
     if ('credentialSubject' in rawCredential) {
       let credentialSubject = rawCredential.credentialSubject
@@ -285,6 +289,13 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
       }
 
       if (credentialSubject && typeof credentialSubject === 'object') {
+        // Spec-conforming home for the witness's display name (added as a
+        // credentialSubject sibling of witnessContext, same pattern as
+        // hardwareAttestationIncluded/locality* — see WitnessService.ts).
+        if ('witnessName' in credentialSubject && typeof (credentialSubject as any).witnessName === 'string') {
+          witnessNameFromSubject = (credentialSubject as any).witnessName
+        }
+
         // Check for hardwareAttestationIncluded directly in credentialSubject first
         if ('hardwareAttestationIncluded' in credentialSubject) {
           hardwareAttestationIncluded = credentialSubject.hardwareAttestationIncluded === true
@@ -398,7 +409,7 @@ export function extractWitnessInfo(vwc: W3cCredentialRecord): WitnessRecord | nu
       method,
       sessionId,
       witnessDid,
-      witnessName,
+      witnessName: witnessNameFromSubject || issuerObjectName || 'Witness',
       issuanceDate,
       credentialId: vwc.id,
       localityVerification,

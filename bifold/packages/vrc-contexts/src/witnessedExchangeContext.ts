@@ -84,6 +84,21 @@ export const WITNESSED_EXCHANGE_CONTEXT_DOCUMENT = {
     // differently — acceptable: VWCs expire after 7 days.)
     name: 'https://schema.org/name',
 
+    // Witness display name (VSC migration follow-up): `issuer` became a bare
+    // string (ref-07e Act 4 — both WD02 and WD 0.4.0 require it), which left
+    // no spec-conforming home for a human-readable witness name inside the
+    // credential. A distinct term, not a reuse of `name` above: `name` is
+    // scoped to the issuer object in legacy v1.1 VWCs, and credentialSubject's
+    // `id` is the VRC issuer being witnessed, not the witness — reusing `name`
+    // here would assert the wrong RDF subject's name. Sanctioned as an
+    // additional credentialSubject member by cred-spec's §Predicate Profiles
+    // point 5 ("a verifier MUST ignore additional members a profile does not
+    // define"); hoisted as a sibling of witnessContext, not nested inside it,
+    // same reasoning as hardwareAttestationIncluded/locality* below (§3.5:
+    // avoids future DTG-registry schema collision inside witnessContext, and
+    // nesting costs BBS-2023 selective-disclosure granularity).
+    witnessName: 'https://trustoverip.org/credentials/witnessed-exchange#witnessName',
+
     // WitnessContext object (used in credentialSubject) - no @type so it accepts nested object
     witnessContext: 'https://trustoverip.org/credentials/witnessed-exchange#witnessContext',
     sessionId: 'https://trustoverip.org/credentials/witnessed-exchange#sessionId',
