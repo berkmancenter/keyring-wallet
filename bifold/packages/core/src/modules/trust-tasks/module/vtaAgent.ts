@@ -12,6 +12,7 @@
 
 import type { Agent } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { Platform } from 'react-native'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
@@ -27,6 +28,13 @@ import {
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
+import {
+  listAgentDevices,
+  registerThisDevice,
+  removeAgentDevice,
+  renameThisDevice,
+  type AgentDevice,
+} from './vtaDevices'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 import {
@@ -837,6 +845,64 @@ export class VtaAgentController {
     const client = await this.signedIn(agent, vtaDid)
     if ((await this.phoneKeys(agent, vtaDid)).includes(did)) throw new DeviceActionRefused('thisPhone')
     await client.revokeSubject(did).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Every device that runs this agent with its device binding where it has one
+   * (#10, {@link listAgentDevices}), this phone's own keys marked. Signs in if
+   * it must. Refuses with {@link DeviceActionRefused}.
+   */
+  async agentDevices(agent: Agent): Promise<AgentDevice[]> {
+    const vtaDid = this.linkedAgent()
+    const client = await this.signedIn(agent, vtaDid)
+    const mine = await this.phoneKeys(agent, vtaDid)
+    const devices = await listAgentDevices(client).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    return devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+  }
+
+  /**
+   * Remove a device from this agent (#10, {@link removeAgentDevice}): a
+   * registered device is wiped and then revoked, one with no binding revoked. Never this phone,
+   * refused before anything is asked; the person confirms first and nothing is
+   * sent without it.
+   */
+  async removeAgentDevice(agent: Agent, device: AgentDevice): Promise<{ mode: 'wiped' | 'revoked' }> {
+    const vtaDid = this.linkedAgent()
+    if ((await this.phoneKeys(agent, vtaDid)).includes(device.did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Remove a device from your agent')
+    const client = await this.signedIn(agent, vtaDid)
+    if ((await this.phoneKeys(agent, vtaDid)).includes(device.did)) throw new DeviceActionRefused('thisPhone')
+    return removeAgentDevice(client, { ...device, isThisPhone: false }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Register this phone on its agent with the name the person chose (#10). The
+   * agent refuses a second registration, so a phone already registered — by
+   * the presence loop with the default name, say — gets the chosen name by a
+   * heartbeat instead: either way the agent ends with this name.
+   */
+  async registerThisDevice(agent: Agent, displayName: string): Promise<void> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    const claimed = await registerThisDevice(client, { displayName, platform: Platform.OS }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    if (claimed === 'alreadyRegistered') {
+      await renameThisDevice(client, displayName).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+    }
+  }
+
+  /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */
+  async renameThisDevice(agent: Agent, displayName: string): Promise<void> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    await renameThisDevice(client, displayName).catch((error: unknown) => {
       throw this.refused(error)
     })
   }
