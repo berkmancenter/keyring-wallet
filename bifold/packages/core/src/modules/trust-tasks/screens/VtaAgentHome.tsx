@@ -47,6 +47,7 @@ import { agentDisplayName, withAgentName } from './agentName'
 import { CommunityCard } from './CommunityCard'
 import { communityHeadingOf, communityLabelOf, partyLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
+import { GetCardsFromAgent } from './GetCardsFromAgent'
 import { SEGMENT_MIN_SCALE, segmentLayout } from './segmentLayout'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
 
@@ -723,6 +724,9 @@ const VtaAgentHome: React.FC = () => {
                 ))}
               </View>
             ) : null}
+
+            {/* The cards the agent keeps, back on this phone (226). */}
+            {agent && holdings ? <GetCardsFromAgent agent={agent} personas={holdings.personas} /> : null}
 
             <Button
               title={t('VtaLink.Unlink')}

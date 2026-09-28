@@ -23,6 +23,7 @@ import { DeviceEventEmitter } from 'react-native'
 import { VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
+import { deliveredCardCheck } from './vtiDeliveredCheck'
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
 import { invitationOfferOfMessage, redeemInvitationOffer, VtiInvitationOfferError } from './vtiInvitationOffer'
 import { vtiAgent } from './vtiAgent'
@@ -79,7 +80,11 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
       agent.config?.logger?.warn?.(`[VTI] delivered ${item.kind} credential not kept (${refusal})`, {
         from: String(message.from ?? ''),
       })
-    return receiveIssue(community, target.did, message, { acceptStatement, onRefused }).then(
+    return receiveIssue(community, target.did, message, {
+      acceptStatement,
+      onRefused,
+      checkCard: deliveredCardCheck(agent),
+    }).then(
       (got: VtiReceivedCredential[]) => {
         if (got.length) {
           DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, {

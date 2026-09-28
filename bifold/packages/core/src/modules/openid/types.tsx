@@ -31,8 +31,13 @@ export type W3cCredentialSubjectJson = {
 export type W3cCredentialJson = {
   type: Array<string>
   issuer: W3cIssuerJson
-  issuanceDate: string
+  /** VCDM 1.1; a VCDM 2.0 credential has `validFrom` instead. */
+  issuanceDate?: string
   expiryDate?: string
+  /** VCDM 2.0 */
+  validFrom?: string
+  /** VCDM 2.0 */
+  validUntil?: string
   credentialSubject: W3cCredentialSubjectJson | W3cCredentialSubjectJson[]
 }
 

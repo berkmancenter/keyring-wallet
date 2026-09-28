@@ -16,8 +16,17 @@
  */
 
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { DeviceEventEmitter } from 'react-native'
 
 import type { VtiCommunityStore, VtiMembership } from './VtiCommunityStore'
+import type { VtiCardCheckRefusal, VtiDeliveredCardCheck } from './vtiDeliveredCheck'
+
+/**
+ * A delivered card was not kept because it did not hold up (see
+ * `vtiDeliveredCheck`): `{ communityDid, kind, refusal }`, for a notice in
+ * plain words (`useVtiRefusedCardNotice`).
+ */
+export const VTI_CARD_REFUSED_EVENT = 'vti:card-refused'
 
 export const CREDENTIAL_EXCHANGE_ISSUE = 'https://trusttasks.org/spec/credential-exchange/issue/0.1'
 export const IDENTITY_VETTING_ENDORSEMENT_TYPE = 'https://firstperson.network/endorsements/identity-vetting/0.1'
@@ -91,7 +100,7 @@ export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCred
 
 /**
  * Why a credential a community delivered was not kept — openvtc's checks on a
- * delivered credential, all of them on who sent it and who it is for:
+ * delivered credential. First, who sent it and who it is for:
  *
  * - `issuerNotSender` — its `issuer` is not the transport-authenticated sender
  *   (`handle_credential_issue`, openvtc-core messaging.rs:889-900);
@@ -101,11 +110,11 @@ export function classifyCredential(vc: Record<string, unknown>): VtiReceivedCred
  * - `subject` — it names no subject, or not this persona (messaging.rs:901-914,
  *   inbound.rs:850).
  *
- * Its proof is not checked, as openvtc does not check it (inbound.rs:827-833):
- * it proves nothing the authenticated sender does not, and every party it is
- * later presented to verifies it. The spec requires no more of the holder.
+ * Then whether the card itself holds up (`vtiDeliveredCheck`, as openvtc
+ * checks every issued credential since #380): `proof`, `notYetValid`,
+ * `expired`, `revoked`. Until then Keyring kept a card on the sender alone.
  */
-export type VtiCredentialRefusal = 'issuerNotSender' | 'notFromCommunity' | 'subject'
+export type VtiCredentialRefusal = 'issuerNotSender' | 'notFromCommunity' | 'subject' | VtiCardCheckRefusal
 
 /** Whether a delivered credential may be kept, and if not why: see `VtiCredentialRefusal`. */
 export function credentialRefusal(
@@ -142,7 +151,13 @@ export async function receiveIssue(
     acceptStatement?: (plaintext: DidCommV2PlaintextMessage) => Promise<void>
     /** Told of each credential not kept, and why — for the log. */
     onRefused?: (item: VtiReceivedCredential, refusal: VtiCredentialRefusal) => void
-  } = {}
+    /**
+     * Checks a card before it is kept (`deliveredCardCheck(agent)`). Required,
+     * so no caller can keep a card unchecked. It may throw to leave the
+     * delivery for redelivery (a status list that cannot be read now).
+     */
+    checkCard: VtiDeliveredCardCheck
+  }
 ): Promise<VtiReceivedCredential[]> {
   const body = plaintext.body as { type?: string } | undefined
   const isIssue = plaintext.type === CREDENTIAL_EXCHANGE_ISSUE || body?.type === CREDENTIAL_EXCHANGE_ISSUE
@@ -167,6 +182,13 @@ export async function receiveIssue(
     const refusal = credentialRefusal(item, sender, personaDid)
     if (refusal) {
       options.onRefused?.(item, refusal)
+      continue
+    }
+    // The sender is the community the card names; now the card itself.
+    const checked = await options.checkCard(item.credential, sender)
+    if (checked) {
+      options.onRefused?.(item, checked)
+      DeviceEventEmitter.emit(VTI_CARD_REFUSED_EVENT, { communityDid: item.communityDid, kind: item.kind, refusal: checked })
       continue
     }
     kept.push(item)

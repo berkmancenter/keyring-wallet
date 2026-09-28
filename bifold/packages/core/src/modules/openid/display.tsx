@@ -318,6 +318,43 @@ function getCredentialAttributeOrder(openId4VcMetadata?: OpenId4VcCredentialMeta
   return openId4VcMetadata?.credential.order
 }
 
+/**
+ * How a kind of W3C credential reads in the Wallet, supplied by the module that
+ * knows it. A credential with no OpenID4VCI metadata and no `name` otherwise
+ * reads as its last type ("Membership Credential") from an issuer "Unknown".
+ * Fields left out keep the generic display.
+ */
+export interface W3cDisplayOverride {
+  name?: string
+  issuerName?: string
+  /** What the details list shows, in place of the raw credential subject. */
+  attributes?: Record<string, string>
+}
+
+type W3cDisplayOverrideFn = (credential: W3cCredentialJson) => W3cDisplayOverride | undefined
+const w3cDisplayOverrides: W3cDisplayOverrideFn[] = []
+
+/** Register a display for a kind of W3C credential; the first that answers wins. Returns the unregister. */
+export function registerW3cDisplayOverride(fn: W3cDisplayOverrideFn): () => void {
+  w3cDisplayOverrides.push(fn)
+  return () => {
+    const i = w3cDisplayOverrides.indexOf(fn)
+    if (i >= 0) w3cDisplayOverrides.splice(i, 1)
+  }
+}
+
+const w3cDisplayOverrideFor = (credential: W3cCredentialJson): W3cDisplayOverride | undefined => {
+  for (const fn of w3cDisplayOverrides) {
+    try {
+      const o = fn(credential)
+      if (o) return o
+    } catch {
+      // A display that cannot read the credential leaves the generic one.
+    }
+  }
+  return undefined
+}
+
 export function getCredentialForDisplay(credentialRecord: OpenIDCredentialRecord): W3cCredentialDisplay {
   if (credentialRecord instanceof SdJwtVcRecord) {
     const { disclosures, jwt } = decodeSdJwtSync(credentialRecord.firstCredential.compact, (data, alg) =>
@@ -391,16 +428,26 @@ export function getCredentialForDisplay(credentialRecord: OpenIDCredentialRecord
   ) as W3cCredentialJson
 
   const openId4VcMetadata = getOpenId4VcCredentialMetadata(credentialRecord)
+  const override = w3cDisplayOverrideFor(credential)
   const issuerDisplay = getW3cIssuerDisplay(credential, openId4VcMetadata)
+  if (override?.issuerName) issuerDisplay.name = override.issuerName
   const credentialDisplay = getW3cCredentialDisplay(credential, openId4VcMetadata)
+  if (override?.name) credentialDisplay.name = override.name
 
   // to be implimented later support credential with multiple subjects
-  const credentialAttributes = Array.isArray(credential.credentialSubject)
-    ? (credential.credentialSubject[0] ?? {})
-    : credential.credentialSubject
+  const credentialAttributes =
+    override?.attributes ??
+    (Array.isArray(credential.credentialSubject)
+      ? (credential.credentialSubject[0] ?? {})
+      : credential.credentialSubject)
 
-  // Extract issuer id from credential
-  const issuerId = credential.issuer.id
+  // Extract issuer id from credential (VCDM allows the issuer as a bare id)
+  const issuerId = typeof credential.issuer === 'string' ? credential.issuer : credential.issuer.id
+
+  // VCDM 1.1 dates, else VCDM 2.0's: a 2.0 credential has no issuanceDate, and
+  // reading it gave an Invalid Date.
+  const issued = credential.issuanceDate ?? credential.validFrom
+  const until = credential.expiryDate ?? credential.validUntil
 
   // Extract holder/subject id from credential subject
   const holderId = Array.isArray(credential.credentialSubject)
@@ -420,13 +467,13 @@ export function getCredentialForDisplay(credentialRecord: OpenIDCredentialRecord
       holder: holderId,
       issuer: issuerId,
       type: credential.type[credential.type.length - 1],
-      issuedAt: formatDate(new Date(credential.issuanceDate)),
-      validUntil: credential.expiryDate ? formatDate(new Date(credential.expiryDate)) : undefined,
+      issuedAt: issued ? formatDate(new Date(issued)) : undefined,
+      validUntil: until ? formatDate(new Date(until)) : undefined,
       validFrom: undefined,
     } satisfies CredentialMetadata,
     claimFormat: credentialRecord.firstCredential.claimFormat,
-    validUntil: credential.expiryDate ? new Date(credential.expiryDate) : undefined,
-    validFrom: credential.issuanceDate ? new Date(credential.issuanceDate) : undefined,
+    validUntil: until ? new Date(until) : undefined,
+    validFrom: issued ? new Date(issued) : undefined,
     credentialSubject: openId4VcMetadata?.credential.credential_subject,
     attributeOrder: getCredentialAttributeOrder(openId4VcMetadata),
   }

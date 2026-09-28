@@ -42,6 +42,7 @@ import { GenericRecordsCommunityStore, type VtiHeldCredential } from '../module/
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
+import { deliveredCardCheck } from '../module/vtiDeliveredCheck'
 import { receiveIssue } from '../module/vtiInbox'
 import {
   GenericRecordsVettingStore,
@@ -448,7 +449,10 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
     const acceptStatement = (m: Parameters<typeof receiveIssue>[2]) =>
       new VtiApplicant(agent, persona, stores.vetting, stores.community).receiveStatement(m)
     const stopIssue = vtiAgent.onInbound(async (m) => {
-      const got = await receiveIssue(stores.community, persona.did, m, { acceptStatement })
+      const got = await receiveIssue(stores.community, persona.did, m, {
+        acceptStatement,
+        checkCard: deliveredCardCheck(agent),
+      })
       if (got.length) bump()
     })
     let cancelled = false
@@ -1485,6 +1489,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                           await receiveIssue(stores!.community, persona.did, msg, {
                             via: 'vetting',
                             acceptStatement: (m) => applicantRef.current!.receiveStatement(m),
+                            checkCard: deliveredCardCheck(agent),
                           })
                         })
                         try {
