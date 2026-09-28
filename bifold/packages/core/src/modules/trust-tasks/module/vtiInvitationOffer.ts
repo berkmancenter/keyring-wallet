@@ -35,6 +35,7 @@ import { signCompactJws } from '@bifold/trust-tasks'
 
 import type { VtiInvitation } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
+import { fetchWaitingIfBusy } from './vtcBusy'
 import { vtcRestUrl } from './vtiAgent'
 import { describeInvitation } from './vtiInvitation'
 
@@ -56,6 +57,8 @@ export type VtiInvitationOfferErrorReason =
   | 'cannotSign'
   | 'unreachable'
   | 'used'
+  /** The community answered 429 twice: busy, not broken. */
+  | 'busy'
   | 'otherIdentity'
   | 'failed'
 
@@ -163,7 +166,7 @@ export async function redeemInvitationOffer(
   agent: Agent,
   offer: VtiInvitationOffer,
   persona: VtiPersona | undefined,
-  deps: { fetch?: typeof fetch; now?: () => Date } = {}
+  deps: { fetch?: typeof fetch; now?: () => Date; sleep?: (ms: number) => Promise<void> } = {}
 ): Promise<VtiInvitation> {
   if (!persona) throw new VtiInvitationOfferError('noIdentity', offer.communityDid)
   if (!persona.kmsKeyIds?.signing) throw new VtiInvitationOfferError('cannotSign', persona.did)
@@ -186,22 +189,28 @@ export async function redeemInvitationOffer(
   )
   let response: Response
   try {
-    response = await (deps.fetch ?? fetch)(vtcRestUrl(base, 'credential-exchange/request'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'Trust-Task': CREDENTIAL_EXCHANGE_REQUEST },
-      body: JSON.stringify({
-        credential_request: {
-          // The community returns the credential it stored, whatever the
-          // format says; this is the shape its own tests send.
-          format: 'vc+sd-jwt',
-          vct: offer.configurationIds[0] ?? 'VIC',
-          proof: { proof_type: 'jwt', jwt },
-        },
-      }),
-    })
+    response = await fetchWaitingIfBusy(
+      deps.fetch ?? fetch,
+      vtcRestUrl(base, 'credential-exchange/request'),
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'Trust-Task': CREDENTIAL_EXCHANGE_REQUEST },
+        body: JSON.stringify({
+          credential_request: {
+            // The community returns the credential it stored, whatever the
+            // format says; this is the shape its own tests send.
+            format: 'vc+sd-jwt',
+            vct: offer.configurationIds[0] ?? 'VIC',
+            proof: { proof_type: 'jwt', jwt },
+          },
+        }),
+      },
+      deps.sleep
+    )
   } catch (e) {
     throw new VtiInvitationOfferError('unreachable', (e as Error).message)
   }
+  if (response.status === 429) throw new VtiInvitationOfferError('busy')
   if (response.status === 404) throw new VtiInvitationOfferError('used')
   if (response.status === 403) throw new VtiInvitationOfferError('otherIdentity', persona.did)
   if (!response.ok) throw new VtiInvitationOfferError('failed', `HTTP ${response.status}`)
