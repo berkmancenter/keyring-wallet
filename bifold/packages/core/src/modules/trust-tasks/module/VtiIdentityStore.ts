@@ -59,6 +59,12 @@ export interface VtiPersona {
   vtaKeyIds: { signing: string; keyAgreement: string }
   /** The KMS ids of borrowed copies, when the phone holds any. */
   kmsKeyIds?: { signing?: string; keyAgreement?: string }
+  /**
+   * Copies kept in the wallet's store before persona keys moved to memory
+   * (#10), recorded while they wait to be deleted: set before the copies move,
+   * cleared once they are gone, so an interrupted move finishes next time.
+   */
+  legacyKmsKeyIds?: { signing?: string; keyAgreement?: string }
   label?: string
   createdAt: string
 }
