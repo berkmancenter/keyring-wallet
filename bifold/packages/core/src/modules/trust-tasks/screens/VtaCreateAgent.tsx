@@ -47,8 +47,10 @@ import QRRenderer from '../../../components/misc/QRRenderer'
 import { confirmOwner, ownerLockKind, type OwnerConfirmFailure, type OwnerLockKind } from '../module/ownerConfirm'
 import type { AgentLabel } from '../module/agentLabel'
 import { vtaAgent } from '../module/vtaAgent'
+import { deviceCodeScan } from '../module/deviceCodeScan'
 import { DeviceCannotOwn, deviceCodeIn, deviceRefusalOf, type DeviceRefusalReason } from '../module/vtaOwner'
 
+import { openScanner } from './openScanner'
 import { useSafeHeaderHeight } from './VtaLink'
 import { useMeasuredKeyboardOffset } from './keyboardOffset'
 
@@ -141,6 +143,9 @@ const VtaCreateAgent: React.FC = () => {
   const [busy, setBusy] = useState(false)
   const [backupCode, setBackupCode] = useState('')
   const [backupAdded, setBackupAdded] = useState<string | undefined>()
+  const [addressShown, setAddressShown] = useState(false)
+  // A scan asked for from here and never answered is dropped with the screen.
+  useEffect(() => () => deviceCodeScan.cancel(), [])
   // The add-device code is sized to the space the screen has left, not only
   // its width (IN-50): on a tall phone with large text a width-sized code ran
   // under the Next bar, and a code with hidden rows cannot be read.
@@ -525,6 +530,23 @@ const VtaCreateAgent: React.FC = () => {
           />
         ) : null}
         <ThemedText>{t('CreateAgent.BackupScanThisBody')}</ThemedText>
+        {agentDid ? (
+          <Pressable
+            onPress={() => setAddressShown(!addressShown)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: addressShown }}
+            testID={testIdWithKey('AgentBackupShowAsText')}
+          >
+            <ThemedText style={styles.muted}>
+              {addressShown ? t('VtaLink.HideText') : t('VtaLink.ShowAsText')}
+            </ThemedText>
+          </Pressable>
+        ) : null}
+        {agentDid && addressShown ? (
+          <ThemedText selectable testID={testIdWithKey('AgentBackupAddressText')}>
+            {agentDid}
+          </ThemedText>
+        ) : null}
       </View>
     )
     actions = (
@@ -558,6 +580,18 @@ const VtaCreateAgent: React.FC = () => {
     actions = (
       <>
         {errorLine('AgentCreateError')}
+        {/* One filled button: Scan until there is a code, then adding it (#30). */}
+        <Button
+          title={t('CreateAgent.ScanItsCode')}
+          buttonType={backupCode.trim() ? ButtonType.Secondary : ButtonType.Primary}
+          onPress={() => {
+            setError(undefined)
+            deviceCodeScan.request((code) => setBackupCode(code))
+            openScanner(navigation)
+          }}
+          disabled={busy}
+          testID={testIdWithKey('AgentBackupScanButton')}
+        />
         <Button
           title={t('CreateAgent.Paste')}
           buttonType={ButtonType.Secondary}
@@ -567,15 +601,17 @@ const VtaCreateAgent: React.FC = () => {
           }}
           testID={testIdWithKey('AgentBackupPasteCode')}
         />
-        <Button
-          title={t('CreateAgent.AddBackup')}
-          buttonType={ButtonType.Primary}
-          onPress={onAddBackup}
-          disabled={busy || !backupCode.trim()}
-          testID={testIdWithKey('AgentBackupAdd')}
-        >
-          {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
-        </Button>
+        {backupCode.trim() ? (
+          <Button
+            title={t('CreateAgent.AddThisPhone')}
+            buttonType={ButtonType.Primary}
+            onPress={onAddBackup}
+            disabled={busy}
+            testID={testIdWithKey('AgentBackupAdd')}
+          >
+            {busy ? <ActivityIndicator color={ColorPalette.grayscale.white} /> : null}
+          </Button>
+        ) : null}
       </>
     )
   } else {

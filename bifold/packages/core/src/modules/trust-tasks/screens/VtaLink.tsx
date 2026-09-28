@@ -343,7 +343,10 @@ const VtaLink: React.FC = () => {
           <>
             {link.noAnswer ? (
               <ThemedText style={styles.error} testID={testIdWithKey('VtaLinkNoAnswer')}>
-                {t('VtaLink.NoAnswer', { label: agentDisplayNameStart(link, t), interpolation: { escapeValue: false } })}
+                {t('VtaLink.NoAnswer', {
+                  label: agentDisplayNameStart(link, t),
+                  interpolation: { escapeValue: false },
+                })}
               </ThemedText>
             ) : null}
             {phonePollExpired ? (
