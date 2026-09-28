@@ -10,13 +10,15 @@ import { ThemedText } from '../texts/ThemedText'
 interface QRRendererProps {
   value: string
   size?: number
+  /** White margin around the code, in points: cameras need one to find it. Default none. */
+  quietZone?: number
   style?: ViewStyle
   onError?: () => void
   /** The code's testID key; 'QRRenderer' unless a screen needs to tell its codes apart. */
   testID?: string
 }
 
-const QRRenderer: React.FC<QRRendererProps> = ({ value, onError, size, testID = 'QRRenderer' }) => {
+const QRRenderer: React.FC<QRRendererProps> = ({ value, onError, size, quietZone, testID = 'QRRenderer' }) => {
   const { width } = useWindowDimensions()
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
@@ -46,7 +48,7 @@ const QRRenderer: React.FC<QRRendererProps> = ({ value, onError, size, testID = 
 
   return (
     <View style={styles.container} testID={testIdWithKey(testID)}>
-      {<QRCode ecl="L" value={value} size={qrSize} onError={handleQRCodeGenerationError} />}
+      {<QRCode ecl="L" value={value} size={qrSize} quietZone={quietZone} onError={handleQRCodeGenerationError} />}
       {isInvalidQR && <ThemedText style={styles.errorMessage}>{t('QRRender.GenerationError')}</ThemedText>}
     </View>
   )

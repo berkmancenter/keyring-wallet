@@ -1751,7 +1751,7 @@
     "ReadyBody": "{{label}} est en ligne et appartient à ce téléphone.",
     "JoinCommunity": "Rejoindre une communauté",
     "BackupScanThis": "Scannez ceci avec votre autre téléphone",
-    "BackupScanThisBody": "Sur l'autre téléphone, ouvrez Keyring, allez dans Mon agent, choisissez J'en ai déjà un — le relier, puis Relier sans code QR, et scannez ceci.",
+    "BackupScanThisBody": "Sur l'autre téléphone, ouvrez Keyring, allez dans Mon agent, choisissez J'en ai déjà un — le relier, puis Scanner un code de liaison, et scannez le code ci-dessus.",
     "BackupNowScan": "Scannez maintenant le code qu'il affiche",
     "BackupNowScanBody": "L'autre téléphone affiche maintenant son code. Scannez-le, ou copiez-le sur ce téléphone-là et collez-le ici.",
     "AddBackup": "Ajouter comme sauvegarde",
