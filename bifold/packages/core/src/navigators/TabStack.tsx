@@ -24,6 +24,7 @@ import { isOpenIdCredentialOffer } from '../utils/parsers'
 import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { useAgentPresence } from '../modules/trust-tasks/module/vtaPresence'
+import { SiblingNoticeHost } from '../modules/trust-tasks/screens/SiblingNoticeHost'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind } from '../modules/trust-tasks/module/vtiLinks'
 import { openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
@@ -212,6 +213,8 @@ const TabStack: React.FC = () => {
     >
       {GradientBg && <GradientBg style={StyleSheet.absoluteFillObject} />}
       <VtaOfflineBanner />
+      {/* "Also open as you": the presence loop above emits it (#10, part F). */}
+      <SiblingNoticeHost />
       <Tab.Navigator
         initialRouteName={TabStacks.ContactStack}
         screenOptions={{
