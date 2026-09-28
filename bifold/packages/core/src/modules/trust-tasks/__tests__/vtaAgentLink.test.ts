@@ -15,6 +15,8 @@ const mockClient = {
   agentLabel: jest.fn(async (): Promise<{ label: string; source: string } | undefined> => undefined),
   managerDid: 'did:peer:2.permanent',
   isConnected: false,
+  holdPersonaKeys: jest.fn(async () => false),
+  borrowKey: jest.fn(async () => ({ keyId: 'k', curve: 'Ed25519' as const, publicKeyMultibase: 'z' })),
 }
 
 jest.mock('../module/VtaClient', () => ({
@@ -372,6 +374,137 @@ describe("the agent's own name", () => {
     await settle()
     expect(mockClient.agentLabel).toHaveBeenCalledTimes(2)
     expect(vta.getState().agentNames).toBeUndefined()
+  })
+})
+
+describe('when the app replaces its agent (an unlock after a lock builds a new one)', () => {
+  const linked = { vtaDid: offer.vta, label: offer.label, linkedAt: 't0', introSeenAt: 't1' }
+  const persona = {
+    communityDid: 'did:c:x',
+    vtaDid: offer.vta,
+    did: 'did:webvh:Q:x',
+    contextId: 'ctx',
+    vtaKeyIds: { signing: 's', keyAgreement: 'ka' },
+    kmsKeyIds: { signing: `vta-copy:${offer.vta}:s`, keyAgreement: `vta-copy:${offer.vta}:ka` },
+    createdAt: 't0',
+  }
+
+  it("reconnects on the new agent and fetches every identity's keys into it", async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    const agentA = { tag: 'A' } as never
+    const agentB = { tag: 'B' } as never
+    await vta.restore(agentA)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+    const VtaClientMock = jest.requireMock('../module/VtaClient').VtaClient as jest.Mock
+    VtaClientMock.mockClear()
+    mockClient.connect.mockClear()
+    mockClient.holdPersonaKeys.mockClear()
+
+    // Locking dropped the in-memory keys and the agent; unlocking made agent B.
+    await vta.restore(agentB)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(VtaClientMock.mock.calls.map((call) => call[0])).toContain(agentB)
+    expect(mockClient.connect).toHaveBeenCalled()
+    expect(mockClient.holdPersonaKeys).toHaveBeenCalledWith(persona)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  })
+
+  it('fetches the keys again when the SAME agent comes back from a lock (it was shut down and restarted)', async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    const agent = { tag: 'same' } as never
+    await vta.restore(agent)
+    await new Promise((resolve) => setImmediate(resolve))
+    mockClient.connect.mockClear()
+    mockClient.holdPersonaKeys.mockClear()
+
+    // Lock → unlock: the app restarts the same agent (its in-memory keys were
+    // dropped at the lock) and restores the controller again.
+    await vta.restore(agent)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(mockClient.connect).toHaveBeenCalled()
+    expect(mockClient.holdPersonaKeys).toHaveBeenCalledWith(persona)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  })
+
+  /** Unlocking is the commonest thing a person does: it must not flash "Signing in" or "offline". */
+  it('keeps the link shown online and connected while the new session opens, and opens only one', async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    const agentA = { tag: 'A' } as never
+    const agentB = { tag: 'B' } as never
+    await vta.restore(agentA)
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(vta.getState().status).toBe('connected')
+    const seen: string[] = []
+    const stop = vta.subscribe(() => seen.push(`${vta.getState().status}/${(vta.getState().link as { connection?: { kind: string } }).connection?.kind}`))
+    mockClient.connect.mockClear()
+    let open!: () => void
+    mockClient.connect.mockImplementationOnce(() => new Promise<undefined>((resolve) => (open = () => resolve(undefined))))
+
+    // The screen's own effect asks for a session while the unlock reopens one.
+    const restoring = vta.restore(agentB)
+    await new Promise((resolve) => setImmediate(resolve))
+    const screen = vta.connect(agentB, offer.vta)
+    open()
+    await Promise.all([restoring, screen])
+    await new Promise((resolve) => setImmediate(resolve))
+    stop()
+
+    expect(mockClient.connect).toHaveBeenCalledTimes(1)
+    expect(seen.every((s) => s === 'connected/online')).toBe(true)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  })
+
+  it('counts a reopen that fails as a drop, and retries', async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    await vta.restore({ tag: 'A' } as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    mockClient.connect.mockRejectedValueOnce(new Error('mediator unreachable'))
+
+    await vta.restore({ tag: 'B' } as never)
+
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'reconnecting' } })
+    await vta.unlink({ tag: 'B' } as never)
+  })
+
+  it('never hands out a client built for another agent', async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [] }) as never,
+    })
+    const agentA = { tag: 'A' } as never
+    const agentB = { tag: 'B' } as never
+    const VtaClientMock = jest.requireMock('../module/VtaClient').VtaClient as jest.Mock
+    VtaClientMock.mockClear()
+    vta.client(agentA, offer.vta)
+    vta.client(agentB, offer.vta)
+    expect(VtaClientMock.mock.calls.map((call) => call[0])).toEqual([agentA, agentB])
   })
 })
 
