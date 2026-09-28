@@ -144,8 +144,19 @@ package does not automate it.
    At the pinned commit, upstream documents it as
    `pnm bootstrap provision-integration --template push-gateway --var URL=<mediator DID>`.
    Confirm the verb against the VTI you run.
-2. Open the sealed bundle into the identity file the gateway reads
-   (`src/identity.rs`):
+2. Open the sealed bundle into the identity file the gateway reads, with
+   `tools/gateway-identity`. **Do not run `pnm bootstrap open` on this bundle.**
+   For a `TemplateBootstrap` payload it prints a summary, writes nothing, and
+   deletes the single-use seed, which loses the gateway's keys. Back up the seed
+   (`<pnm config dir>/bootstrap-secrets/<bundle-id>.key`) first either way.
+   ```sh
+   cd tools/gateway-identity && cargo build --release
+   ./target/release/gateway-identity --bundle <bundle.armor> \
+     --seed <bundle-id>.key --digest <sha256 from the provisioner> \
+     --mediator <mediator DID> --out ../../secrets/gateway-identity.json
+   ```
+   It opens the bundle with vta-sdk's `open_bundle`, keeps the seed, and writes
+   this file with mode 0600 (`src/identity.rs`):
    ```jsonc
    { "did": "did:webvh:…:push-gateway",
      "signing":      { "id": "did:webvh:…#key-0", "privateKeyMultibase": "z…" },
@@ -195,11 +206,15 @@ front of Caddy's HTTP port and set `GATEWAY_HOST` to the tunnel's hostname.
 ## Unknowns and unverified
 
 - **Not deployed.** CI builds the image and checks health and registration.
-  The wake path with a real identity, and delivery to real phones, haven't
-  run yet.
-- **The identity commands** (the `pnm` verb and the bundle-open step) are
-  upstream's documented ones at the pinned commit, unconfirmed against current
-  VTI.
+  On the project's local VTI lab (VTI `2240aa7e`), with a real identity and the
+  echo sender, an agent's `device/set-wake` produced a signed `push/provision`
+  that reached the gateway through the lab mediator and was accepted, and
+  upstream's signed `test-wake-fcm` returned `delivered`. An agent-triggered
+  wake (a step-up approval by a second party) and delivery to real phones
+  haven't run yet.
+- **The identity commands.** `pnm bootstrap provision-integration` is the verb
+  at VTI `2240aa7e`. Upstream has no tool that writes the gateway's identity
+  file; `tools/gateway-identity` fills that gap.
 - **Which agents a shared gateway serves** (exact DIDs or `*`) is not decided
   (plan §5.4).
 - **No unregister.** A removed phone's token stays in the store (plan §8).
