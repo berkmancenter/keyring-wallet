@@ -95,6 +95,8 @@ export function invitationOfferMessage(error: unknown): string {
       return 'This invitation is for a different identity from the one this phone uses for that community. Ask the admin to invite the identity under I was invited.'
     case 'used':
       return 'This invitation has already been used, or the admin replaced it. Ask the admin to send it again.'
+    case 'busy':
+      return 'The community is busy right now. Try again in a minute.'
     case 'unreachable':
       return "Keyring couldn't reach the community. Check your connection and try again."
     case 'cannotSign':

@@ -32,6 +32,8 @@ import type { Agent } from '@credo-ts/core'
 import { verifyDocumentProof } from '@bifold/trust-tasks'
 import { ungzip } from 'pako'
 
+import { fetchWaitingIfBusy } from './vtcBusy'
+
 /**
  * The W3C minimum list size, which is also what the issuers here allocate
  * (`DEFAULT_BITSTRING_SIZE` in `vta-vault`, and the fetcher's fallback in
@@ -44,6 +46,8 @@ const MAX_STATUS_LIST_BODY = 2 * 1024 * 1024
 
 /** How long to wait on the round trip before calling it unknown. */
 const FETCH_TIMEOUT_MS = 10_000
+/** The most a status-list read waits for a busy community, well inside FETCH_TIMEOUT_MS. */
+const STATUS_BUSY_WAIT_MS = 3_000
 
 /**
  * The outcome of a status check.
@@ -248,13 +252,17 @@ export async function checkStatusEntry(
         redirect: 'error',
         signal: controller.signal,
       })
-    let response = await get()
-    // 421 Misdirected Request: the client reused a connection opened for
-    // another host behind the same certificate and address (HTTP/2
-    // coalescing), and the server wants this request on a fresh one — RFC 9110
-    // §15.5.20 allows retrying it. Measured on 2026-09-22: it was the whole of
-    // the intermittent "grant could not be checked" on the lab's ngrok hosts.
-    if (response.status === 421) response = await get()
+    // One more try after a 421 (a coalesced connection; measured on the lab's
+    // ngrok hosts on 2026-09-22 as the whole of the intermittent "grant could
+    // not be checked") or a 429 (the community's rate limiter), waiting at
+    // most STATUS_BUSY_WAIT_MS so the whole read stays inside its timeout.
+    const response = await fetchWaitingIfBusy(
+      (() => get()) as typeof fetch,
+      entry.url,
+      undefined,
+      undefined,
+      STATUS_BUSY_WAIT_MS
+    )
     if (!response.ok) return unknown(`status list fetch returned ${response.status}`)
     const text = await response.text()
     if (text.length > MAX_STATUS_LIST_BODY) return unknown('status list body exceeds the cap')

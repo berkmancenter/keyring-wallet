@@ -53,6 +53,7 @@ import {
 } from './vtiTsp'
 import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
+import { fetchWaitingIfBusy } from './vtcBusy'
 
 const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
 const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
@@ -1177,19 +1178,27 @@ class VtiAgentController {
       const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
       if (!base) return undefined
       const now = new Date().toISOString()
-      const response = await fetch(vtcRestUrl(base, 'trust-tasks'), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          id: `urn:uuid:${utils.uuid()}`,
-          type: MANIFEST,
-          threadId: `urn:uuid:${utils.uuid()}`,
-          payload: {},
-          issuer: this.state.did ?? communityDid,
-          recipient: communityDid,
-          issuedAt: now,
-        }),
-      })
+      // A busy community (429) or a coalesced connection (421) is tried once more;
+      // a manifest that still cannot be read falls back to DIDComm below.
+      const response = await fetchWaitingIfBusy(
+        fetch,
+        vtcRestUrl(base, 'trust-tasks'),
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: `urn:uuid:${utils.uuid()}`,
+            type: MANIFEST,
+            threadId: `urn:uuid:${utils.uuid()}`,
+            payload: {},
+            issuer: this.state.did ?? communityDid,
+            recipient: communityDid,
+            issuedAt: now,
+          }),
+        },
+        undefined,
+        3_000
+      )
       if (!response.ok) return undefined
       const body = (await response.json()) as { type?: string; payload?: VtiManifest } | undefined
       if (String(body?.type ?? '').startsWith(TASK_ERROR)) return undefined
