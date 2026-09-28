@@ -74,6 +74,9 @@ const NATIVE_MARKERS = /^(android|ios|.*\.podspec|react-native\.config\.js|expo-
 export function classifyWalletPath(p) {
   if (p === "bifold") return { cls: "none", why: "submodule pin (its diff is judged file by file)" };
   if (p.startsWith("app/ios/") || p.startsWith("app/android/")) return { cls: "native", why: "native project" };
+  // Before the dependency and .env rules: e2e is a standalone package outside
+  // the workspaces, so its package.json and lockfile never reach a build.
+  if (p.startsWith("e2e/") || p.startsWith("docs/") || p.startsWith(".github/") || p.startsWith(".husky/") || p.startsWith("tsp-reference/")) return { cls: "none", why: "not in the app" };
   if (/(^|\/)\.env(\..*)?$/.test(p) && !p.endsWith(".sample")) return { cls: "native", why: "react-native-config bakes .env into native code" };
   if (/(^|\/)package\.json$|^yarn\.lock$|^\.yarnrc\.yml$|^\.yarn\//.test(p)) return { cls: "native", why: "dependencies (may add or change native code)" };
   if (p.startsWith("app/patches/")) return { cls: "native", why: "dependency patch" };
@@ -81,7 +84,6 @@ export function classifyWalletPath(p) {
   if (DEV_SCRIPTS.test(p)) return { cls: "none", why: "developer tooling, not a build input" };
   if (p.startsWith("scripts/")) return { cls: "native", why: "install/build scripts" };
   if (ASSET_EXT.test(p) && p.startsWith("app/")) return { cls: "native", why: "bundled asset: compiled into Android res/" };
-  if (p.startsWith("e2e/") || p.startsWith("docs/") || p.startsWith(".github/") || p.startsWith(".husky/") || p.startsWith("tsp-reference/")) return { cls: "none", why: "not in the app" };
   if (TEST.test(p) || (DOC.test(p) && !p.startsWith("app/src/"))) return { cls: "none", why: "test or document" };
   if (/^app\/(metro|babel)\.config\.js$|^app\/index\.js$/.test(p)) return { cls: "js", why: "bundle configuration / entry" };
   if (p.startsWith("app/src/") && CODE_EXT.test(p)) return { cls: "js", why: "app source" };
