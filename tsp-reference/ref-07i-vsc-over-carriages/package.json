@@ -1,0 +1,26 @@
+{
+  "name": "ref-07i-vsc-over-carriages",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 07i — a witnessed exchange, with a VSC, run over DIDComm v1 (live), TSP (live, layered on the same v1 connection) and DIDComm v2 (real message class + real thread-correlation check, Credo faked at the container boundary as the shipped jest suite already does for the same reason)",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "overrides": {
+    "@openwallet-foundation/askar-shared": "0.6.0",
+    "json-canonicalize": "2.0.0"
+  },
+  "dependencies": {
+    "@credo-ts/askar": "file:../../bifold/node_modules/@credo-ts/askar",
+    "@credo-ts/core": "file:../../bifold/node_modules/@credo-ts/core",
+    "@credo-ts/didcomm": "file:../../bifold/node_modules/@credo-ts/didcomm",
+    "@credo-ts/node": "file:../../bifold/node_modules/@credo-ts/node",
+    "@bifold/trust-tasks": "file:../../bifold/packages/trust-tasks",
+    "@openwallet-foundation/askar-nodejs": "file:../../bifold/node_modules/@openwallet-foundation/askar-nodejs",
+    "@noble/curves": "^1.6.0",
+    "@noble/hashes": "^1.5.0",
+    "canonicalize": "^2.0.0"
+  }
+}
