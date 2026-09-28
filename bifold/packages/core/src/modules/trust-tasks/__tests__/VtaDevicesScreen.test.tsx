@@ -181,6 +181,29 @@ describe('your devices', () => {
     expect(tree.getByTestId(id(`AgentDevice_${deviceKey(THIS)}`))).toHaveTextContent(/Sam’s phone/)
   })
 
+  // At the 226 gate the prompt closed as soon as the agent took the name, and
+  // for about 2 s the list still showed the old one until it was read again.
+  test('keeps the name prompt busy until the list read back from the agent shows the new name', async () => {
+    let answer!: (devices: AgentDevice[]) => void
+    jest
+      .spyOn(vtaAgent, 'agentDevices')
+      .mockResolvedValueOnce([thisPhone])
+      .mockImplementationOnce(() => new Promise<AgentDevice[]>((resolve) => (answer = resolve)))
+    jest.spyOn(vtaAgent, 'renameThisDevice').mockResolvedValue(undefined)
+    const tree = await show()
+    fireEvent.press(tree.getByTestId(id('AgentDeviceRename')))
+    fireEvent.changeText(tree.getByTestId(id('DeviceNameInput')), 'Sam’s phone')
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('DeviceNameSave')))
+    })
+    // The agent has the name; the list has not been read back yet.
+    expect(tree.getByTestId(id('DeviceNameInput'))).toBeTruthy()
+    expect(tree.getByTestId(id('DeviceNameSave'))).toBeDisabled()
+    await act(async () => answer([{ ...thisPhone, displayName: 'Sam’s phone' }]))
+    expect(tree.queryByTestId(id('DeviceNameInput'))).toBeNull()
+    expect(tree.getByTestId(id(`AgentDevice_${deviceKey(THIS)}`))).toHaveTextContent(/Sam’s phone/)
+  })
+
   test('a list the agent refuses is said in words', async () => {
     jest.spyOn(vtaAgent, 'agentDevices').mockRejectedValue(new DeviceActionRefused('noAnswer'))
     const tree = await show()
