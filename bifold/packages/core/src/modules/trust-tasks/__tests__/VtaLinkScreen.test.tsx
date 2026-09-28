@@ -283,3 +283,79 @@ describe('a link that failed', () => {
     expect(tree.queryByTestId(testIdWithKey('VtaLinkErrorDetailsToggle'))).toBeNull()
   })
 })
+
+describe('Link your agent — this phone was removed', () => {
+  // A removed phone can't learn over TSP that it was wiped: its next call is
+  // refused "not in ACL". It never erases itself on that alone (226 rule):
+  // the person chooses, and nothing is preselected.
+  const erase = jest.fn()
+  const controller = vtaAgent as unknown as Setter & { eraseThisPhonesCopy: jest.Mock }
+  const mockUseAgent = useAgent as jest.Mock
+  beforeEach(() => {
+    mockUseAgent.mockReturnValue({ agent: {} })
+    erase.mockReset().mockResolvedValue(undefined)
+    controller.eraseThisPhonesCopy = erase
+  })
+  const removed = (cause?: 'wiped' | 'notInAcl') => {
+    controller.set({
+      link: {
+        kind: 'revoked',
+        vtaDid: 'did:webvh:example:vta',
+        label: 'alice',
+        reason: 'not in ACL',
+        ...(cause ? { cause } : {}),
+      },
+    })
+    return render(
+      <BasicAppContext>
+        <VtaLink />
+      </BasicAppContext>
+    )
+  }
+
+  test('says so, and offers Erase and Link again with equal weight, neither chosen', () => {
+    const tree = removed('notInAcl')
+    expect(tree.getByText('VtaLink.RevokedTitle')).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent('VtaLink.RevokedBody')
+    const eraseButton = tree.getByTestId(testIdWithKey('VtaLinkErase'))
+    const again = tree.getByTestId(testIdWithKey('VtaLinkScanAgain'))
+    expect(JSON.stringify(eraseButton.props.style)).toBe(JSON.stringify(again.props.style))
+    expect(erase).not.toHaveBeenCalled()
+  })
+
+  test('a positive wipe signal changes the words, not the choice: nothing is erased by itself', () => {
+    const tree = removed('wiped')
+    expect(tree.getByTestId(testIdWithKey('VtaLinkError'))).toHaveTextContent('VtaLink.RevokedBodyWiped')
+    expect(tree.getByTestId(testIdWithKey('VtaLinkErase'))).toBeTruthy()
+    expect(erase).not.toHaveBeenCalled()
+  })
+
+  test('Erase says what goes and what stays, and erases only once confirmed', async () => {
+    const tree = removed('notInAcl')
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkErase')))
+    expect(tree.getByTestId(testIdWithKey('VtaLinkEraseWhat'))).toHaveTextContent('VtaLink.RevokedEraseWhat')
+    expect(erase).not.toHaveBeenCalled()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkEraseConfirm')))
+    })
+    expect(erase).toHaveBeenCalledWith({})
+  })
+
+  test('once erased, the phone is unlinked and says its copy is gone', async () => {
+    erase.mockImplementation(async () => controller.set({ link: { kind: 'notLinked' } }))
+    const tree = removed('notInAcl')
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkErase')))
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkEraseConfirm')))
+    })
+    expect(tree.getByTestId(testIdWithKey('VtaLinkErased'))).toHaveTextContent('VtaLink.RevokedErased')
+  })
+
+  test('Keep backs out of erasing, and nothing is sent', () => {
+    const tree = removed('notInAcl')
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkErase')))
+    fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkEraseKeep')))
+    expect(tree.queryByTestId(testIdWithKey('VtaLinkEraseWhat'))).toBeNull()
+    expect(erase).not.toHaveBeenCalled()
+  })
+})
