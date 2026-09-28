@@ -5,11 +5,10 @@
  * a lost phone: another device opens this list and removes the lost one.
  *
  * Remove is an owner act: the controller asks for Face ID first and sends
- * nothing without it. A registered phone is wiped: the agent refuses it at
- * once, and it stays listed as removed until it next connects and erases its
- * copy. Anything never registered is revoked and goes. This phone is never
- * offered for removal, only renamed. Refusals are worded by reason, beside
- * the list.
+ * nothing without it. Removing cuts the device's access (and, for a
+ * registered phone, asks it to erase its copy), and it leaves the list. This
+ * phone is never offered for removal, only renamed. Refusals are worded by
+ * reason, beside the list.
  *
  * @module trust-tasks/screens/VtaDevices
  */

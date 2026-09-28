@@ -2,8 +2,8 @@
  * One device on My devices (new-phone-new-device-plan.md §B): its name, what
  * it is and when it was last seen, and one action. Another phone gets
  * "Remove this phone"; anything else a plain Remove; this phone is never
- * removed here, only renamed. A removed device says it erases its copy when
- * it next connects, because the agent never sees that happen.
+ * removed here, only renamed. A device the agent still lists as removed says
+ * so, and offers nothing.
  *
  * @module trust-tasks/screens/DeviceRow
  */

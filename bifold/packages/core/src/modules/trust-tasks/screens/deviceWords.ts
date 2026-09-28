@@ -49,10 +49,10 @@ export const platformKeyOf = (platform: string | undefined): string | undefined 
 export type DeviceStatus = 'active' | 'removedErasePending'
 
 /**
- * Where a removal stands. The agent never sees a wipe happen: once asked, the
- * device is refused and can't report back, so a removed device stays "erases
- * its copy when it next connects". Any one sign of removal is enough; a
- * removed device is never shown as active.
+ * Where a removal stands. Removing revokes a device, so the agent rarely
+ * lists one as removed; when it does (a wipe recorded, access refused), any
+ * one sign of removal is enough, and a removed device is never shown as
+ * active.
  */
 export const deviceStatusOf = (device: {
   accessRevoked: boolean

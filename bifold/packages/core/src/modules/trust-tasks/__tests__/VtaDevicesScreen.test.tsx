@@ -2,8 +2,8 @@
  * My devices (own_agent_subtask.md §4; new-phone-new-device-plan.md §B): this
  * phone and the others that run the agent, each with its name, what it is and
  * when it was last seen; "Remove this phone" on the others, Rename on this
- * one. A registered phone is wiped (listed as removed until it next connects);
- * anything never registered is revoked and goes.
+ * one. Removing a phone cuts its access and asks it to erase its copy; it
+ * leaves the list.
  */
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
@@ -110,14 +110,13 @@ describe('your devices', () => {
     expect(tree.getByTestId(id('AgentDeviceOnlyThis'))).toHaveTextContent('Devices.OnlyThisPhone')
   })
 
-  test('removing a registered phone wipes it: it stays listed as removed until it next connects', async () => {
+  test('removing a registered phone wipes and revokes it: it says so, and the phone leaves the list', async () => {
+    // The agent serves a wiped device over TSP until it is revoked too (lab O8),
+    // so removal is both, and revoking deletes the device's binding.
     const list = jest
       .spyOn(vtaAgent, 'agentDevices')
       .mockResolvedValueOnce([thisPhone, oldPhone])
-      .mockResolvedValueOnce([
-        thisPhone,
-        { ...oldPhone, accessRevoked: true, wipePending: true, wipedAt: '2026-09-28T12:00:00Z' },
-      ])
+      .mockResolvedValueOnce([thisPhone])
     const remove = jest.spyOn(vtaAgent, 'removeAgentDevice').mockResolvedValue({ mode: 'wiped' })
     const tree = await show()
     await act(async () => {
@@ -126,8 +125,7 @@ describe('your devices', () => {
     expect(remove).toHaveBeenCalledWith({}, oldPhone)
     expect(tree.getByTestId(id('AgentDeviceRemoved'))).toHaveTextContent(/Devices\.RemovedWiped/)
     expect(list).toHaveBeenCalledTimes(2)
-    expect(tree.getByTestId(id(`AgentDeviceState_${deviceKey(OLD)}`))).toHaveTextContent('Devices.RemovedErasePending')
-    expect(tree.queryByTestId(id(`AgentDeviceRemove_${deviceKey(OLD)}`))).toBeNull()
+    expect(tree.queryByTestId(id(`AgentDevice_${deviceKey(OLD)}`))).toBeNull()
   })
 
   test('removing something never registered revokes it, and it goes', async () => {
