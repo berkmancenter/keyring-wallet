@@ -346,17 +346,33 @@ console.log('\nCHECK D — the witnessed edge, and our own VWC audited (#1065/#1
   report(
     legacyForm && !properForm,
     'KNOWN GAP: this VWC digest is legacy "sha256:"+hex, not the multibase multihash of #17 / PR #18',
-    'same form in witness-server’s computeVrcDigest — the rename is exactly PR #18’s digestMultibase change, already specified as encoding-only (demonstrated next)'
+    'same form in witness-server’s computeVrcDigest — the rename is exactly PR #18’s digestMultibase change. ' +
+      'CORRECTED (docs/plans/vsc-migration-plan.md §3.1, 2026-09-27): "already specified as encoding-only" was ' +
+      'true at the b89f389 pin and is NOT true at 994a3d63 — WD 0.4.0 also changes the digest COVERAGE, excluding ' +
+      'the referenced credential’s own top-level `proof`. The demonstration below re-encodes the SAME (proofed) ' +
+      'bytes, which is the encoding-only case a naive transcoder gets right and the coverage change gets wrong; ' +
+      'see tsp-reference/ref-07h-vsc-credo-suites and ref-07i-vsc-over-carriages for the three-break, ' +
+      'coverage-correct digest.'
   )
   // PR #18 claims the digestMultibase change is encoding-only for JCS
   // implementations. Demonstrate: same bytes, multihash 0x12 0x20 + base58btc.
+  //
+  // CORRECTED (docs/plans/vsc-migration-plan.md §3.1): this demonstration is still
+  // true as far as it goes — re-encoding the SAME digest bytes into multibase form
+  // is lossless — but WD 0.4.0 does not merely re-encode this digest, it computes a
+  // DIFFERENT digest (over the VRC excluding its own top-level `proof`).
+  // "Encoding-only" was the whole claim at the b89f389 pin; at 994a3d63 it is only
+  // 2 of 3 breaks (member move + encoding change), not the coverage change. The
+  // check below still runs unmodified and still correctly proves that *this
+  // specific* re-encoding is lossless — it must not be read as proving the
+  // migration's full digest change is encoding-only.
   const raw = hexBytes(sample.digest.replace(/^sha256:/, ''))
   const multihash = new Uint8Array([0x12, 0x20, ...raw])
   const digestMultibase = 'z' + base58.encode(multihash)
   const roundTrip = base58.decode(digestMultibase.slice(1)).slice(2)
   report(
     bytesEq(roundTrip, raw),
-    `encoding-only conversion verified: digestMultibase = ${digestMultibase.slice(0, 16)}… decodes to the identical bytes`
+    `re-encoding of the SAME (proofed) bytes verified lossless (not the full WD 0.4.0 change — see comment above): digestMultibase = ${digestMultibase.slice(0, 16)}… decodes to the identical bytes`
   )
   report(
     sample.taskContext === undefined,

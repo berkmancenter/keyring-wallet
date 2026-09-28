@@ -97,13 +97,22 @@ and audits our artifacts the way Glenn audits VTI. Three self-findings:
    0.6's private `record.credential` and looked for a `WitnessedCredential`
    type the witness never mints, and the offers were never accepted, so the
    whole VWC validation was unreachable).
-2. **Legacy digest form (known, planned).** The VWC's `credentialSubject.digest`
+2. **Legacy digest form (known, now the `wd02` default; `vsc` shape exists behind a flag).** The VWC's `credentialSubject.digest`
    is `"sha256:"+hex` — in vrc-reference *and* in witness-server's
    `computeVrcDigest` — not the multibase multihash of #17 / PR #18. This is
-   precisely PR #18's `digestMultibase` rename, already specified as
-   encoding-only; the rung demonstrates that claim (identical bytes,
-   `z`+base58btc multihash envelope). Note the task layer is already correct:
-   witness-server's session responses carry a proper `vwcDigestMultibase`.
+   precisely PR #18's `digestMultibase` rename. **CORRECTED
+   (`docs/plans/vsc-migration-plan.md` §3.1, 2026-09-27): "already specified as
+   encoding-only" was true at the spec pin this rung was written against and is
+   NOT true at the current pin — the digest also changes COVERAGE, excluding
+   the referenced credential's own top-level `proof`.** The rung's
+   demonstration (identical bytes, `z`+base58btc multihash envelope) is real
+   but only shows the re-encoding is lossless for the SAME (proofed) input; it
+   is not evidence that the full WD 0.4.0 digest change is encoding-only — see
+   `tsp-reference/ref-07h-vsc-credo-suites`/`ref-07i-vsc-over-carriages` for
+   the coverage-correct, three-break digest, and `WitnessService.ts`'s
+   `WITNESS_CREDENTIAL_SHAPE=vsc` path for where it's actually implemented.
+   Note the task layer is already correct: witness-server's session responses
+   carry a proper `vwcDigestMultibase`.
 3. **`taskContext` parity drift.** The vrc-reference (legacy demo) VWC carries
    only `witnessContext` — but the witness-server trust-tasks path ALREADY
    implements Trust Task Context Binding (`taskContext` = session document id,

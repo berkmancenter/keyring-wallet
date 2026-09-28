@@ -14,6 +14,7 @@ import { base58 } from '@scure/base'
 import { credentialTypes, witnessedExchangeContext, keyringSource } from './keyring-source.mjs'
 import { loadDefinitions, validateDefinitions, buildAcceptList } from './generate.mjs'
 import { configure, verify } from './verify.mjs'
+import { DTG_PREDICATE_WITNESSED } from '@bifold/dtg-vocab'
 
 let failures = 0
 const line = (ok, text) => {
@@ -85,7 +86,14 @@ head(0, 'the Keyring shapes this rung relies on are still what Keyring ships')
 
 const sessions = keyringSource('witness-server/src/trustTasks/WitnessTaskSessions.ts')
 const service = keyringSource('witness-server/src/WitnessService.ts')
-line(/subject\.taskContext = session\.sessionId/.test(sessions), 'witness server still binds taskContext on the VWC (WitnessTaskSessions.ts)')
+// V4 (plan §6, D4) extracted this into placeTaskContext(): 'wd02' shape (this
+// rung's assumption, and still Keyring's default) keeps the pre-migration
+// nested placement; 'vsc' shape moves it to the top level. Checking both
+// confirms the wd02 assumption below AND that D4's branch actually exists.
+line(
+  /subject\.taskContext = sessionId/.test(sessions) && /vwcJson\.taskContext = sessionId/.test(sessions),
+  'witness server still binds taskContext on the VWC, nested for wd02 / top-level for vsc (WitnessTaskSessions.ts)'
+)
 line(/subject\.parties = session\.parties/.test(sessions) && /subject\.taskDigestMultibase =/.test(sessions), 'and still adds parties + taskDigestMultibase alongside it')
 line(/hardwareAttestationIncluded:/.test(service) && /witnessContext\.localityVerification =/.test(service), 'witnessContext still carries hardwareAttestationIncluded and localityVerification (WitnessService.ts)')
 const namedVrc = vrcNamedBy(production)
@@ -135,11 +143,29 @@ const lr = verify(config, legacyStatement)
 line(!lr.ok && /taskContext/.test(lr.reason), `captured-exchange VWC as a statement: rejected — ${lr.reason}`)
 note('A real Keyring self-finding: the vrc-reference demo path predates Trust Task Context Binding.')
 
-line(!credentialTypes.isWitnessCredential(prodStatement), 'Keyring\'s real isWitnessCredential() no longer recognises the statement (no type string)')
-line(credentialTypes.isPeerVrcCredential(prodStatement), '…and isPeerVrcCredential() now claims it — today\'s wallet would file it under Contacts')
+// Everything above uses this rung's OWN local placeholder IRI (`WITNESSED`,
+// #52's issue-body example) — fine for exercising the Predicate Handling
+// FORMAT in the abstract, but Keyring's real credentialTypes.ts (V1 onward)
+// dispatches on @bifold/dtg-vocab's REAL registry-namespace accept-list, not
+// this rung's local one. Testing the real functions against the local IRI
+// would "pass" for the wrong reason — a namespace mismatch, not a correctly
+// recognised predicate — so build one statement with the real predicate for
+// this check specifically.
+const realProdStatement = {
+  ...prodStatement,
+  credentialSubject: { ...prodStatement.credentialSubject, predicate: DTG_PREDICATE_WITNESSED },
+}
+line(
+  credentialTypes.isWitnessCredential(realProdStatement),
+  "Keyring's real isWitnessCredential() now recognises it via the real predicate (V3's isWitnessStatement)"
+)
+line(
+  !credentialTypes.isPeerVrcCredential(realProdStatement),
+  '…and isPeerVrcCredential() correctly excludes it — the mis-filing bug this rung found (V3, AL\'s finding A11) is fixed'
+)
 const dispatch = (c) => (config.profiles[c.credentialSubject?.predicate] ? `profile ${c.credentialSubject.predicate.split('#')[1]}` : 'rejected')
-line(dispatch(prodStatement) === 'profile witnessed', 'dispatching on the accept-list instead routes it to the witnessed profile')
-note('So the accept-list is not only a verification allowlist — for a wallet it is the dispatch table.')
+line(dispatch(prodStatement) === 'profile witnessed', "dispatching on THIS rung's own local accept-list still routes it to the witnessed profile")
+note('So the accept-list format is not only a verification allowlist — for a wallet it is the dispatch table. (Keyring\'s real dispatch, just above, now runs on the real registry namespace — see @bifold/dtg-vocab, plan §6 V1.)')
 
 // ------------------------------------------------------------------- Act 4 --
 head(4, 'what the accept-list lets a generic verifier enforce, on Keyring data')
