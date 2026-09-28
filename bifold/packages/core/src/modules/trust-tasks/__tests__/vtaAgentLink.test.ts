@@ -165,7 +165,14 @@ describe('a linked phone after a restart', () => {
       await Promise.resolve()
       await Promise.resolve()
       await Promise.resolve()
-      expect(vta.getState().link).toMatchObject({ connection: { kind: 'reconnecting', attempt: 1, since: 1_000 } })
+      // Still connecting (IN-48: a start-up failure is not shown as offline yet)…
+      expect(vta.getState().link).toMatchObject({
+        connection: { kind: 'connecting', since: 1_000, reason: 'socket closed' },
+      })
+      // …with a retry scheduled: after the first backoff it tries again.
+      const attempts = mockClient.connect.mock.calls.length
+      await jest.advanceTimersByTimeAsync(1_000)
+      expect(mockClient.connect.mock.calls).toHaveLength(attempts + 1)
     } finally {
       jest.useRealTimers()
     }
@@ -631,7 +638,7 @@ describe('unlinking this phone from its agent', () => {
       await Promise.resolve()
       await Promise.resolve()
       await Promise.resolve()
-      expect(vta.getState().link).toMatchObject({ connection: { kind: 'reconnecting' } })
+      expect(vta.getState().link).toMatchObject({ connection: { kind: 'connecting' } })
       const attempts = mockClient.connect.mock.calls.length
 
       await vta.unlink({} as never)

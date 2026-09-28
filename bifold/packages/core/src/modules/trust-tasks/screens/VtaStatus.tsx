@@ -16,7 +16,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
-import { resolveVtaDid, showsOfflineBanner, type VtaConnection } from '../module/vtaLinkMachine'
+import { connectionShown, resolveVtaDid, showsOfflineBanner, type VtaConnection } from '../module/vtaLinkMachine'
 
 /** The link state, plus a clock that ticks each second while the agent is away. */
 export function useVtaLinkWithClock() {
@@ -40,11 +40,13 @@ export function useVtaDid(configured?: string): string | undefined {
 
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-/** "Online" · "Reconnecting…" · "Offline since 14:02" */
+/** "Online" · "Connecting to your agent…" · "Reconnecting…" · "Offline since 14:02" */
 export function connectionText(connection: VtaConnection, t: TFunction): string {
   switch (connection.kind) {
     case 'online':
       return t('VtaLink.StatusOnline')
+    case 'connecting':
+      return t('VtaLink.StatusConnecting')
     case 'reconnecting':
       return t('VtaLink.StatusReconnecting')
     case 'offline':
@@ -52,19 +54,21 @@ export function connectionText(connection: VtaConnection, t: TFunction): string 
   }
 }
 
-export const VtaStatusLine: React.FC<{ connection: VtaConnection }> = ({ connection }) => {
+/** `now` is the clock from useVtaLinkWithClock: a start-up connect turns offline only after its grace. */
+export const VtaStatusLine: React.FC<{ connection: VtaConnection; now?: number }> = ({ connection, now }) => {
   const { t } = useTranslation()
   const { ColorPalette } = useTheme()
+  const shown = connectionShown(connection, now ?? Date.now())
   const color =
-    connection.kind === 'online'
+    shown.kind === 'online'
       ? ColorPalette.semantic.success
-      : connection.kind === 'reconnecting'
-        ? ColorPalette.semantic.focus
-        : ColorPalette.semantic.error
-  const text = connectionText(connection, t)
+      : shown.kind === 'offline'
+        ? ColorPalette.semantic.error
+        : ColorPalette.semantic.focus
+  const text = connectionText(shown, t)
   return (
     <View style={styles.row} testID={testIdWithKey('VtaStatusLine')} accessibilityLabel={text}>
-      <View style={[styles.dot, { backgroundColor: color }]} />
+      <View style={[styles.dot, { backgroundColor: color }]} testID={testIdWithKey('VtaStatusDot')} />
       <ThemedText testID={testIdWithKey('VtaStatusText')}>{text}</ThemedText>
     </View>
   )
@@ -85,7 +89,7 @@ export const VtaOfflineBanner: React.FC = () => {
     >
       <ThemedText style={{ color: ColorPalette.grayscale.white }}>
         {t('VtaLink.BannerAway', {
-          status: connectionText(state.link.connection, t),
+          status: connectionText(connectionShown(state.link.connection, now), t),
           interpolation: { escapeValue: false },
         })}
       </ThemedText>

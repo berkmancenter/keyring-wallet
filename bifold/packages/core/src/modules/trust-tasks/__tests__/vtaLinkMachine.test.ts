@@ -1,8 +1,10 @@
 import {
+  connectionShown,
   initialLinkState,
   reconnectDelayMs,
   reduceLink,
   showsOfflineBanner,
+  STARTUP_GRACE_MS,
   type VtaLinkEvent,
   type VtaLinkState,
 } from '../module/vtaLinkMachine'
@@ -66,10 +68,26 @@ describe('linking', () => {
 })
 
 describe('the connection of a linked phone', () => {
-  it('comes back from storage offline, never online', () => {
+  it('comes back from storage connecting, never online', () => {
     const restored = reduceLink(initialLinkState, { type: 'restored', link: { ...agent, linkedAt: 't0' }, now: 5 })
-    expect(restored).toEqual({ kind: 'linked', ...agent, linkedAt: 't0', connection: { kind: 'offline', since: 5 } })
+    expect(restored).toEqual({ kind: 'linked', ...agent, linkedAt: 't0', connection: { kind: 'connecting', since: 5 } })
     expect(reduceLink(initialLinkState, { type: 'restored', now: 5 })).toBe(initialLinkState)
+  })
+
+  // IN-48: at app start the phone has not reached its agent yet, which is not a
+  // failure. Failed start-up attempts stay "connecting"; only the clock turns
+  // them into "offline" (see connectionShown), so a slow start never flashes red.
+  it('stays connecting through failed start-up attempts, with the start time kept, until a session opens', () => {
+    let state = reduceLink(initialLinkState, { type: 'restored', link: { ...agent, linkedAt: 't0' }, now: 1000 })
+    state = reduceLink(state, { type: 'sessionDropped', reason: 'timed out', now: 4000 })
+    expect(state).toMatchObject({ connection: { kind: 'connecting', since: 1000, reason: 'timed out' } })
+    state = reduceLink(state, { type: 'retryScheduled', attempt: 1, nextRetryAt: 5000 })
+    expect(state).toMatchObject({ connection: { kind: 'connecting', since: 1000, reason: 'timed out' } })
+    state = reduceLink(state, { type: 'sessionOpened' })
+    expect(state).toMatchObject({ connection: { kind: 'online' } })
+    // Once it has been online, a drop is a real drop, as before.
+    state = reduceLink(state, { type: 'sessionDropped', now: 9000 })
+    expect(state).toMatchObject({ connection: { kind: 'offline', since: 9000 } })
   })
 
   it('drops, retries with the first drop time kept, and comes back online', () => {
@@ -113,6 +131,20 @@ describe('helpers', () => {
     expect(showsOfflineBanner(dropped, 3000)).toBe(false)
     expect(showsOfflineBanner(dropped, 6000)).toBe(true)
     expect(showsOfflineBanner(initialLinkState, 99999)).toBe(false)
+  })
+
+  it('gives a start-up connect its grace before calling it offline', () => {
+    const connecting = reduceLink(initialLinkState, { type: 'restored', link: { ...agent, linkedAt: 't0' }, now: 1000 })
+    if (connecting.kind !== 'linked') throw new Error('not linked')
+    const early = 1000 + STARTUP_GRACE_MS - 1
+    const late = 1000 + STARTUP_GRACE_MS
+    expect(connectionShown(connecting.connection, early)).toEqual({ kind: 'connecting', since: 1000 })
+    expect(connectionShown(connecting.connection, late)).toEqual({ kind: 'offline', since: 1000 })
+    expect(showsOfflineBanner(connecting, early)).toBe(false)
+    expect(showsOfflineBanner(connecting, late)).toBe(true)
+    // Every other state is shown as it is.
+    const online = { kind: 'online' } as const
+    expect(connectionShown(online, late)).toBe(online)
   })
 })
 

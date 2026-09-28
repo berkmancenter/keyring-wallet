@@ -1218,6 +1218,7 @@
     "LinkYourAgentHint": "Scannez le code affiché sur la page de votre agent, ou collez son lien.",
     "LinkYourAgentHelp": "Pas de code ? Liez sans — saisissez l’adresse de votre agent, et son admin ajoute ce téléphone.",
     "StatusOnline": "En ligne",
+    "StatusConnecting": "Connexion à votre agent…",
     "StatusReconnecting": "Reconnexion…",
     "StatusOfflineSince": "Hors ligne depuis {{time}}",
     "WithoutQr": "Relier sans code QR",

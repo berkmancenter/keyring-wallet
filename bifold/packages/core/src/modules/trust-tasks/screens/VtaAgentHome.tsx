@@ -108,7 +108,7 @@ const VtaAgentHome: React.FC = () => {
   const { agent } = useAgent()
   const navigation = useNavigation()
   const { ColorPalette, TextTheme } = useTheme()
-  const { state } = useVtaLinkWithClock()
+  const { state, now } = useVtaLinkWithClock()
   const { link } = state
   const agentKey = link.kind === 'linked' ? link.vtaDid : undefined
   const [holdings, setHoldings] = useState<Holdings | undefined>(() =>
@@ -431,7 +431,7 @@ const VtaAgentHome: React.FC = () => {
           <ThemedText variant="bold" testID={testIdWithKey('AgentHomeName')}>
             {agentDisplayName(withAgentName(link, state.agentNames), t)}
           </ThemedText>
-          <VtaStatusLine connection={link.connection} />
+          <VtaStatusLine connection={link.connection} now={now} />
           {/* What this phone is here, in one line and one place.
               A reader used to infer the seat from which cards were on screen,
               which is how `run-vetter-grant-lifecycle` ended up waiting for an
