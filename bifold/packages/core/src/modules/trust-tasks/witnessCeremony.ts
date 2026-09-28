@@ -380,8 +380,16 @@ export async function runWitnessSession(
   }
   // The citation sits at the top level in a witnessed/1 VWC (DTG Credentials
   // v1) and in the subject before it: either binds the session the same way.
-  // Same dual-read the migration added inline here (plan §6 V4, D4, finding
-  // A5); main's taskCitationOf is the factored form and covers the digest too.
+  //
+  // This is the wallet side of both plan §6 V4/D4 (taskContext) and this
+  // segment's taskDigestMultibase fix: cred-spec (pin 94af2d8, §Base
+  // Structure) places taskDigestMultibase at the top level, sibling of
+  // credentialSubject, wherever taskContext is REQUIRED — vsc shape emits it
+  // there (WitnessTaskSessions.placeTaskDigestMultibase), wd02 keeps the
+  // legacy nested placement. taskCitationOf already dual-reads BOTH members
+  // in that order, so the segment's inline version is dropped in favour of it
+  // rather than keeping two implementations of one rule. The emission half of
+  // this segment (witness-server) is unaffected and applied as written.
   const { taskContext, taskDigestMultibase: taskDigest } = taskCitationOf(vwc)
   if (taskContext !== sessionId) {
     throw new Error(`VWC taskContext ${taskContext ?? 'absent'} does not name this session (${sessionId})`)

@@ -100,6 +100,30 @@ export function placeTaskContext(
   }
 }
 
+/**
+ * Where `taskDigestMultibase` goes — the same placement rule as
+ * `placeTaskContext`, and for the same reason: cred-spec's Base Structure
+ * lists `taskDigestMultibase` as a top-level member, sibling of
+ * `credentialSubject` (not nested inside it), REQUIRED wherever `taskContext`
+ * is REQUIRED (dtgwg-cred-spec pin 94af2d8, §Base Structure /
+ * §The taskDigestMultibase Property). `vsc` shape follows the real spec;
+ * `wd02` keeps its pre-migration nested placement, the same standing
+ * WD02-conformance bug `placeTaskContext` already documents — not fixed here
+ * for the same reason (byte-compat freeze, out of scope for this migration).
+ */
+export function placeTaskDigestMultibase(
+  vwcJson: Record<string, unknown>,
+  subject: Record<string, unknown>,
+  digest: string,
+  credentialShape: 'wd02' | 'vsc' | undefined
+): void {
+  if (credentialShape === 'vsc') {
+    vwcJson.taskDigestMultibase = digest
+  } else {
+    subject.taskDigestMultibase = digest
+  }
+}
+
 const SESSION_TYPE = 'https://trusttasks.org/spec/witness/session/0.1'
 const SUBMIT_TYPE = 'https://trusttasks.org/spec/witness/session/submit/0.1'
 const DISCOVERY_TYPE = 'https://trusttasks.org/spec/trust-task-discovery/0.1'
@@ -626,7 +650,7 @@ export class WitnessTaskSessions {
         const vwcJson = this.host.buildVwcJson(vpJson, session.sessionId, localityAssertion)
         const subject = (vwcJson.credentialSubject ?? {}) as Record<string, unknown>
         subject.parties = session.parties
-        subject.taskDigestMultibase = taskDigestMultibase(session.sessionDoc)
+        placeTaskDigestMultibase(vwcJson, subject, taskDigestMultibase(session.sessionDoc), this.host.credentialShape)
         placeTaskContext(vwcJson, subject, session.sessionId, this.host.credentialShape)
         vwcJson.credentialSubject = subject
 

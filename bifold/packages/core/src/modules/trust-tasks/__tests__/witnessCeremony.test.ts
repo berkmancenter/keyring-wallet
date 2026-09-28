@@ -443,14 +443,14 @@ describe('runWitnessSession', () => {
      * digest downstream of it, so only the intended field is actually wrong.
      *
      * taskContext/taskDigestMultibase are placed BOTH nested (credentialSubject)
-     * and at the top level. This is deliberate, not sloppy: the file's
-     * existing task-binding check (untouched by V3 — its read-site fix is
-     * V4's job, plan §3 D4/AL's finding A5) still reads the legacy nested
-     * location, while @bifold/dtg-vocab's verify() correctly expects D4's
-     * final top-level placement. Before V4 actually moves the read site,
-     * nothing in the codebase emits a VSC with taskContext in only one
-     * place — a real fixture exercising D8 today needs both, which is
-     * exactly the interaction AL's finding A5 predicted.
+     * and at the top level. Both placements now round-trip for real: the
+     * task-binding check above dual-reads top level first, nested as a
+     * fallback (matching cred-spec pin 94af2d8's top-level placement, and
+     * WitnessTaskSessions.placeTaskContext/placeTaskDigestMultibase's actual
+     * vsc-shape emission). Keeping both here isn't required for THIS
+     * fixture's own read anymore, but does still matter for D8's real
+     * @bifold/dtg-vocab accept-list check below, which expects D4's
+     * top-level placement independent of this ceremony's own dual-read.
      */
     function withVsc(vsc: Record<string, unknown>) {
       return (response: Record<string, unknown>, sessionDoc: Record<string, unknown>) => {
