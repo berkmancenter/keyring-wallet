@@ -151,8 +151,11 @@ const VtaDevices: React.FC = () => {
     setBusy('rename')
     try {
       await vtaAgent.renameThisDevice(agent, name)
-      setRenaming(false)
+      // Busy until the list read back shows it: closing first showed the old
+      // name for a moment (226 gate). A failed read closes it all the same —
+      // the name is saved, and load() says why the list is not there.
       await load()
+      setRenaming(false)
     } catch (e) {
       setError(wordsFor(e))
     } finally {
