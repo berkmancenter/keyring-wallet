@@ -7,7 +7,7 @@
  * 'ephemeral'"). This guard reads the list from core, so a new required
  * backend fails here first.
  */
-import { REQUIRED_KMS_BACKENDS } from '@bifold/core'
+import { REQUIRED_DEFAULT_KMS_BACKEND, REQUIRED_KMS_BACKENDS } from '@bifold/core'
 
 import { getBCAgentModules } from '../../src/utils/bc-agent-modules'
 
@@ -31,16 +31,17 @@ describe("the app's key-management backends", () => {
     for (const required of REQUIRED_KMS_BACKENDS) expect(registered).toContain(required)
   })
 
-  test('the in-memory backend first, so key-agreement for a borrowed key reaches it; askar the default for everything else', () => {
-    // Credo routes key-agreement encrypt/decrypt to the FIRST backend that
-    // supports the operation, not by key id: with the in-memory backend last,
-    // a persona's DIDComm packing went to askar, which has no copy of the key
-    // (lab, 09-28). It claims only its own key ids, so everything else still
-    // falls through to askar, the default, and new keys stay in the wallet.
+  test("the in-memory backend first and the default, so a borrowed key's key-agreement reaches it", () => {
+    // Credo tries the DEFAULT backend first for an operation it supports, then
+    // the first capable one; neither routes key-agreement by key id. With askar
+    // as the default, then with the in-memory backend only first, a persona's
+    // DIDComm packing went to askar, which has no copy of the key (lab, 09-28).
+    // The in-memory backend claims only its own ("vta-copy:") keys, so key
+    // creation, the wallet's imports and everything else fall through to askar.
     const kms = kmsOf()
     const registered = kms.backends.map((b) => b.backend)
     expect(registered[0]).toBe('ephemeral')
     expect(registered).toContain('askar')
-    expect(kms.defaultBackend.backend).toBe('askar')
+    expect(kms.defaultBackend.backend).toBe(REQUIRED_DEFAULT_KMS_BACKEND)
   })
 })
