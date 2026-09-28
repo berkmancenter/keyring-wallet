@@ -417,6 +417,30 @@ describe('when the app replaces its agent (an unlock after a lock builds a new o
     expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
   })
 
+  it('fetches the keys again when the SAME agent comes back from a lock (it was shut down and restarted)', async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    const agent = { tag: 'same' } as never
+    await vta.restore(agent)
+    await new Promise((resolve) => setImmediate(resolve))
+    mockClient.connect.mockClear()
+    mockClient.holdPersonaKeys.mockClear()
+
+    // Lock → unlock: the app restarts the same agent (its in-memory keys were
+    // dropped at the lock) and restores the controller again.
+    await vta.restore(agent)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(mockClient.connect).toHaveBeenCalled()
+    expect(mockClient.holdPersonaKeys).toHaveBeenCalledWith(persona)
+    expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  })
+
   it('never hands out a client built for another agent', async () => {
     const vta = new VtaAgentController()
     vta.configure({
