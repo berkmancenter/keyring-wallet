@@ -10,6 +10,10 @@
  */
 
 import type { Agent } from '@credo-ts/core'
+import type { TFunction } from 'i18next'
+import Toast, { type ToastShowParams } from 'react-native-toast-message'
+
+import { ToastType } from '../../../components/toast/BaseToast'
 
 import { KeyringLinkError, keyringAgentLinkKind, routeKeyringAgentLink, type MyAgentDestination } from './vtiLinks'
 
@@ -37,5 +41,32 @@ export async function openKeyringLink(
     notify({ kind: 'opened' })
   } catch (error) {
     notify({ kind: 'unusable', message: error instanceof KeyringLinkError ? error.message : undefined })
+  }
+}
+
+/**
+ * How long "this code can't be used" stays up. A code the camera opened is
+ * answered as the app comes back from the Camera app, and the reason is two
+ * lines ("The community is busy right now. Try again in a minute."): at 8 s it
+ * was often gone before it was read (226 gate §4). A tap dismisses it sooner.
+ */
+export const UNUSABLE_TOAST_MS = 12_000
+
+/** The toast for a notice, or 'hide' to clear the "reading" one. */
+export function linkNoticeToast(notice: KeyringLinkNotice, t: TFunction): ToastShowParams | 'hide' {
+  switch (notice.kind) {
+    case 'reading':
+      return { type: ToastType.Info, text1: t('Scan.ReadingCode'), visibilityTime: 15_000, position: 'bottom' }
+    case 'opened':
+      return 'hide'
+    case 'unusable':
+      return {
+        type: ToastType.Warn,
+        text1: t('Scan.CodeNotUsable'),
+        text2: notice.message ?? t('Scan.CodeNotRead'),
+        visibilityTime: UNUSABLE_TOAST_MS,
+        position: 'bottom',
+        onPress: () => Toast.hide(),
+      }
   }
 }

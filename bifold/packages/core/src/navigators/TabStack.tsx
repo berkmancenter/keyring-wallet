@@ -9,7 +9,6 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Toast from 'react-native-toast-message'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
-import { ToastType } from '../components/toast/BaseToast'
 import { AttachTourStep } from '../components/tour/AttachTourStep'
 import { EventTypes } from '../constants'
 import { TOKENS, useServices } from '../container-api'
@@ -27,7 +26,7 @@ import { isLinkOnline, useAgentPresence } from '../modules/trust-tasks/module/vt
 import { SiblingNoticeHost } from '../modules/trust-tasks/screens/SiblingNoticeHost'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind } from '../modules/trust-tasks/module/vtiLinks'
-import { openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
+import { linkNoticeToast, openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
 import { useVtiWalletCards } from '../modules/trust-tasks/module/vtiWalletCards'
 // How a community's card reads in the Wallet (registers itself on import).
@@ -126,25 +125,10 @@ const TabStack: React.FC = () => {
                   { screen: TabStacks.MyAgentStack, params: { screen: MY_AGENT_SCREEN[destination] } }
                 ),
               (notice: KeyringLinkNotice) => {
-                if (notice.kind === 'reading') {
-                  Toast.show({
-                    type: ToastType.Info,
-                    text1: t('Scan.ReadingCode'),
-                    visibilityTime: 15000,
-                    position: 'bottom',
-                  })
-                } else if (notice.kind === 'opened') {
-                  Toast.hide()
-                } else {
-                  logger.warn(`agent link not usable: ${notice.message ?? 'unreadable'}`)
-                  Toast.show({
-                    type: ToastType.Warn,
-                    text1: t('Scan.CodeNotUsable'),
-                    text2: notice.message ?? t('Scan.CodeNotRead'),
-                    visibilityTime: 8000,
-                    position: 'bottom',
-                  })
-                }
+                if (notice.kind === 'unusable') logger.warn(`agent link not usable: ${notice.message ?? 'unreadable'}`)
+                const toast = linkNoticeToast(notice, t)
+                if (toast === 'hide') Toast.hide()
+                else Toast.show(toast)
               }
             )
           }
