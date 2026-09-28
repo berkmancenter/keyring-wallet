@@ -38,10 +38,16 @@ export interface KeyMigrationStore {
 
 /**
  * `switched` now use in-memory copies, their stored ones deleted at a later
- * run; `moved` are finished, stored copies deleted; `waiting` could not fetch
- * from the agent and keep their stored copies until the next try.
+ * run; `moved` are finished, and `removed` names the stored copies deleted (ids
+ * only — never key material); `waiting` could not fetch from the agent and keep
+ * their stored copies until the next try.
  */
-export type KeyMigrationOutcome = { switched: string[]; moved: string[]; waiting: { did: string; error: unknown }[] }
+export type KeyMigrationOutcome = {
+  switched: string[]
+  moved: string[]
+  removed: string[]
+  waiting: { did: string; error: unknown }[]
+}
 
 const storedCopies = (ids: VtiPersona['kmsKeyIds']) =>
   Object.values(ids ?? {}).filter((id): id is string => !!id && !isInMemoryKeyId(id))
@@ -63,7 +69,7 @@ export async function migratePersonaKeys(
   vtaDid: string,
   switchedThisRun: Set<string> = new Set()
 ): Promise<KeyMigrationOutcome> {
-  const outcome: KeyMigrationOutcome = { switched: [], moved: [], waiting: [] }
+  const outcome: KeyMigrationOutcome = { switched: [], moved: [], removed: [], waiting: [] }
   const personas = (await store.listPersonas()).filter((p) => p.vtaDid === vtaDid && needsKeyMigration(p))
   for (let persona of personas) {
     try {
@@ -84,7 +90,10 @@ export async function migratePersonaKeys(
       }
       if (switchedThisRun.has(persona.did)) continue
       // 3. At a later run, delete the stored copies, then forget them.
-      for (const keyId of storedCopies(persona.legacyKmsKeyIds)) await port.forgetKeyCopy(keyId)
+      for (const keyId of storedCopies(persona.legacyKmsKeyIds)) {
+        await port.forgetKeyCopy(keyId)
+        outcome.removed.push(keyId)
+      }
       const done = { ...persona }
       delete done.legacyKmsKeyIds
       await store.setPersona(done)

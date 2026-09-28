@@ -1021,12 +1021,25 @@ export class VtaAgentController {
     // its stored copy and moves at a later session.
     try {
       const client = this.client(agent, vtaDid)
-      const { waiting } = await migratePersonaKeys(
+      const { switched, moved, removed, waiting } = await migratePersonaKeys(
         { borrowKey: (id) => client.borrowKey(id), forgetKeyCopy: (id) => forgetKeyCopy(agent, id) },
         this.identityStore(agent),
         vtaDid,
         this.switchedThisRun
       )
+      // Ids only, never key material: the upgrade's one destructive step is
+      // visible in the device log.
+      const log = agent.config?.logger
+      if (switched.length > 0) {
+        log?.warn?.(
+          `[VTA] key migration: ${switched.length} identities now use in-memory keys; their stored copies are removed at the next launch (${switched.join(', ')})`
+        )
+      }
+      if (moved.length > 0) {
+        log?.warn?.(
+          `[VTA] key migration: removed ${removed.length} stored identity key copies (ids: ${removed.join(', ')}) for ${moved.join(', ')}`
+        )
+      }
       for (const { did, error } of waiting) {
         agent.config?.logger?.warn?.(
           `[VTA] ${did} keeps its stored keys for now: ${error instanceof Error ? error.message : String(error)}`

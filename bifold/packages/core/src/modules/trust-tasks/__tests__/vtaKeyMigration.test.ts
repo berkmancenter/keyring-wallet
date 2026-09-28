@@ -59,6 +59,7 @@ describe("moving an existing install's persona keys into memory", () => {
 
     const next = await migratePersonaKeys(w.port, w.store, VTA, new Set())
     expect(next).toMatchObject({ switched: [], moved: ['did:p:a'] })
+    expect(next.removed.sort()).toEqual(['stored-ka-did:p:a', 'stored-s-did:p:a'])
     expect(w.deleted.sort()).toEqual(['stored-ka-did:p:a', 'stored-s-did:p:a'])
     expect(w.records.get('did:p:a')!.legacyKmsKeyIds).toBeUndefined()
     expect(needsKeyMigration(w.records.get('did:p:a')!)).toBe(false)
@@ -102,7 +103,7 @@ describe("moving an existing install's persona keys into memory", () => {
     })
     const w = world([persona('did:p:x', { vtaDid: OTHER }), inMemory])
     const outcome = await migratePersonaKeys(w.port, w.store, VTA, new Set())
-    expect(outcome).toEqual({ switched: [], moved: [], waiting: [] })
+    expect(outcome).toEqual({ switched: [], moved: [], removed: [], waiting: [] })
     expect(w.saves).toEqual([])
   })
 })
