@@ -23,7 +23,48 @@ export const WITNESSED_EXCHANGE_CONTEXT_DOCUMENT = {
     // Credential types (both variants for compatibility)
     WitnessedCredential: 'https://trustoverip.org/credentials/witnessed-exchange#WitnessedCredential',
     WitnessCredential: 'https://trustoverip.org/credentials/witnessed-exchange#WitnessCredential',
+    // NOT updated to the real DTG registry namespace (registry.trustoverip.org)
+    // as part of the VSC migration (docs/plans/vsc-migration-plan.md): DTGCredential
+    // is the shared type of every DTG credential, not just the VWC/VSC, so changing
+    // its IRI here would affect canonicalization of every already-issued VRC/VMC/etc,
+    // a far wider blast radius than this migration's scope. Flagged for a separate
+    // decision, not fixed here.
     DTGCredential: 'https://www.firstperson.network/dtg#DTGCredential',
+    // StatementCredential (plan D1): the VSC's one concrete type, replacing
+    // WitnessCredential/EndorsementCredential. New term, real DTG registry
+    // vocabulary namespace (settled in @bifold/dtg-vocab's src/namespace.ts,
+    // V1) — nothing has issued under this type yet, so no legacy blast radius.
+    StatementCredential: 'https://registry.trustoverip.org/dtg/credentials#StatementCredential',
+
+    // VSC predicate (plan D2): an absolute IRI naming the statement's meaning,
+    // e.g. one of @bifold/dtg-vocab's PREDICATE_WITNESSED/PREDICATE_ENDORSES.
+    // @type: @id so the value itself is treated as an IRI, never expanded as
+    // a nested node — cred-spec's Predicate Handling matches it byte-exact,
+    // unprocessed by JSON-LD, but a VSC's proof still canonicalizes the
+    // credential as a whole, so the member needs a term or it never enters
+    // the signed graph at all (ref-07h's `safe: true` finding).
+    predicate: {
+      '@id': 'https://registry.trustoverip.org/dtg/credentials#predicate',
+      '@type': '@id',
+    },
+    // VSC object (plan D2, D3): what the statement says about the subject.
+    // Scopes only `value` (@type: @json, an opaque canonicalized literal for
+    // a structured payload) — `id` already has its context-wide `@id` alias,
+    // and `digestMultibase` MUST NOT be redefined here: the base
+    // credentials/v2 context (credentialsV2Context.ts) already defines and
+    // @protects it (security#digestMultibase), and safe-mode JSON-LD treats
+    // redefining a protected term as fatal (verified directly against the
+    // bundled v2 context bytes, not assumed).
+    object: {
+      '@id': 'https://registry.trustoverip.org/dtg/credentials#object',
+      '@context': {
+        '@protected': true,
+        value: {
+          '@id': 'https://registry.trustoverip.org/dtg/credentials#value',
+          '@type': '@json',
+        },
+      },
+    },
 
     // Schema.org terms used in issuer object (required for issuer.name to
     // canonicalize correctly in v1.1 VWCs). MUST be byte-identical to the
