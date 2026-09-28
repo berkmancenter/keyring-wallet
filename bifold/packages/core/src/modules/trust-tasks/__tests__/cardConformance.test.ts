@@ -91,6 +91,7 @@ import {
   digestMultibase,
   signCompactJws,
   signDocumentProof,
+  taskDigestMultibase,
   verifyDocumentProof,
   verifyTrustTaskProof,
 } from '@bifold/trust-tasks'
@@ -199,10 +200,11 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       desk.requestId,
       { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
     )
-    // Delivered as the VTC delivers a credential: the body IS the delivery,
-    // `credential_response.credential` at its top level (vtc-service
-    // credentials/delivery.rs:128-141), which is where openvtc reads it
-    // (inbound.rs:791). Not a Trust Task document, so not listed below.
+    // Delivered as openvtc delivers and opens one (openvtc b52dc28
+    // vetting/wire.rs:188-205 `credential_delivery`, :218-240 `open`): a signed
+    // Trust Task document, its type the message's, issued by the vetter,
+    // threaded on the session, the statement under `payload`. A bare body has
+    // no `id` and is refused as a malformed vetting document. Listed below too.
     const [, sentType, issue, sentOptions] = mockSend.mock.calls.at(-1) as unknown as [
       string,
       string,
@@ -210,9 +212,19 @@ describe('a Vetting Card from the shipping code, really signed', () => {
       { thid?: string },
     ]
     expect(sentType).toBe('https://trusttasks.org/spec/credential-exchange/issue/0.1')
-    expect(Object.keys(issue)).toEqual(['credential_response'])
+    expect(issue).toMatchObject({ type: sentType, issuer: vetter.did, threadId: desk.session!.documentId })
+    expect(String(issue.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
+    await expect(verifyDocumentProof(vetter.agent as never, issue, vetter.did)).resolves.toBe(true)
     expect(sentOptions).toMatchObject({ thid: desk.session!.documentId })
-    const statement = (issue.credential_response as { credential: Record<string, unknown> }).credential
+    const statement = (
+      (issue.payload as Record<string, unknown>).credential_response as {
+        credential: Record<string, unknown>
+      }
+    ).credential
+    // Two ids: the document's, and the statement's own, which a vetter names to
+    // withdraw it (vetting/session/0.1 spec.md "The session's name").
+    expect(String(statement.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
+    expect(statement.id).not.toBe(issue.id)
     const endorsement = (statement.credentialSubject as { endorsement: Record<string, unknown> }).endorsement
     expect(endorsement.cardDigestMultibase).toBe(cardDigestMultibase(card))
     expect(endorsement.identityCommitment).toBe(card.identityCommitment)
@@ -475,10 +487,20 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
       claimsVerified: ['name.legal'],
       livenessConfirmed: true,
     })
-    // The statement's delivery is a bare body, not a signed Trust Task (above).
-    expect(Object.keys((mockSend.mock.calls.at(-1) as unknown as [string, string, object])[2])).toEqual([
-      'credential_response',
-    ])
+    lastSent('credential-exchange-issue', vetter.did)
+    // The statement names the session it was issued in, and binds the name to
+    // that document with its task digest (vetting/session/0.1 spec.md "The
+    // session's name": taskContext MUST, taskDigestMultibase SHOULD).
+    const sessionDocument = produced.find((p) => p.name === 'vetting-session')!.document
+    const issued = (
+      (produced.at(-1)!.document.payload as Record<string, unknown>).credential_response as {
+        credential: Record<string, unknown>
+      }
+    ).credential
+    expect(issued).toMatchObject({
+      taskContext: sessionDocument.id,
+      taskDigestMultibase: taskDigestMultibase(sessionDocument),
+    })
     await vetterDesk.decline(opened.requestId, 'the session ended')
     lastSent('vetting-decline', vetter.did)
 
@@ -606,7 +628,7 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
     // was sent as. And Keyring's own verifier, which mirrors vta-sdk's, agrees.
     const names = produced.map((p) => p.name)
     expect(new Set(names).size).toBe(names.length)
-    expect(names).toHaveLength(22)
+    expect(names).toHaveLength(23)
     for (const { name, sentAs, document, signer } of produced) {
       expect({ name, issuer: document.issuer }).toEqual({ name, issuer: signer })
       expect({ name, type: document.type }).toEqual({ name, type: sentAs })

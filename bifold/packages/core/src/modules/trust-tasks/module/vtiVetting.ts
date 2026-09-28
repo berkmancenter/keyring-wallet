@@ -28,6 +28,7 @@ import {
   encodeTicketUri,
   parseTicketUri,
   signDocumentProof,
+  taskDigestMultibase,
   verifyDocumentProof,
   verifyTrustTaskProof,
   vettingMatchCode,
@@ -74,12 +75,6 @@ export const TASK_ERROR_TYPE = `${TASK_ERROR}0.5`
  * other version Keyring does not emit.
  */
 export const LEGACY_ERROR_03_UNTIL = '2026-11-01'
-/**
- * Until when a statement delivered inside a signed Trust Task document (its
- * `credential_response` under `payload`) — what Keyring vetters sent before
- * PR E — is still read, logged as legacy.
- */
-export const LEGACY_STATEMENT_DOCUMENT_UNTIL = '2026-11-01'
 const DTG_CONTEXT = ['https://www.w3.org/ns/credentials/v2', 'https://firstperson.network/credentials/dtg/v1']
 
 export type VettingMethod = 'inPerson' | 'video' | 'priorAcquaintance'
@@ -125,6 +120,12 @@ export interface VettingDeskRequest {
     method: VettingMethod
     expiresAt: string
     matchCode: string
+    /**
+     * The session document's task digest (SPEC §4.9.3), which the statement
+     * carries as `taskDigestMultibase`. Absent on sessions opened before it
+     * was kept; the statement then goes without it (a SHOULD).
+     */
+    taskDigestMultibase?: string
   }
   card?: Record<string, unknown>
   statementId?: string
@@ -1171,6 +1172,7 @@ export class VtiVetterDesk {
       method,
       expiresAt,
       matchCode: vettingMatchCode(String(doc.id)),
+      taskDigestMultibase: taskDigestMultibase(doc),
     }
     await this.store.saveDesk(desk)
     this.onChange?.()
@@ -1263,7 +1265,10 @@ export class VtiVetterDesk {
       issuer: this.persona.did,
       validFrom: validFrom.toISOString(),
       validUntil: validUntil.toISOString(),
+      // Names the session it was issued in (MUST), and binds the name to that
+      // document (SHOULD): vetting/session/0.1 "The session's name".
       taskContext: desk.session.documentId,
+      ...(desk.session.taskDigestMultibase ? { taskDigestMultibase: desk.session.taskDigestMultibase } : {}),
       credentialSubject: {
         id: desk.applicantDid,
         endorsement: {
@@ -1283,16 +1288,21 @@ export class VtiVetterDesk {
       kmsKeyId: this.persona.kmsKeyIds?.signing,
       verificationMethodId: this.persona.vtaKeyIds.signing,
     })
-    // Delivered as the VTC and openvtc deliver a credential: the DIDComm body
-    // IS `{ credential_response: { credential } }` — vtc-service
-    // `issue_message_body` (credentials/delivery.rs:128-141), built into a
-    // plain message by `push_to_holder` (:170-173); openvtc
-    // `wire::credential_delivery` (vetting/wire.rs:177-185), threaded on the
-    // session. The statement carries its own proof. An openvtc applicant reads
-    // `/credential_response/credential` off the body (inbound.rs:791) and
-    // ignored Keyring's signed Trust Task wrapper, where it sat under
-    // `payload` (Phase 2, 2026-09-25 11:27:23Z).
-    const delivery = { credential_response: { credential: signed } }
+    // Delivered as openvtc delivers one peer to peer: a signed Trust Task
+    // document from the vetter to the applicant, threaded on the session, the
+    // statement under `payload` (openvtc b52dc28 `wire::credential_delivery`,
+    // vetting/wire.rs:188-205). Its applicant opens the delivery as a document
+    // (`wire::open`, :218-240) and refuses a bare `{ credential_response }`
+    // body as "malformed vetting document: missing field `id`" — what Keyring
+    // sent from 09-25, when openvtc still read the bare body (226 gate, TUI P2).
+    const delivery = await signedDocument(
+      this.agent,
+      this.persona,
+      desk.applicantDid,
+      CREDENTIAL_EXCHANGE_ISSUE,
+      { credential_response: { credential: signed } },
+      desk.session.documentId
+    )
     await vtiAgent.send(desk.applicantDid, CREDENTIAL_EXCHANGE_ISSUE, delivery, { thid: desk.session.documentId })
     desk.status = 'attested'
     desk.statementId = String(signed.id)
@@ -1306,7 +1316,9 @@ export class VtiVetterDesk {
    * place across a relaunch.
    */
   async confirmMatch(requestId: string): Promise<void> {
-    await this.patchDesk(requestId, (desk) => (desk.matchConfirmedAt ? undefined : { matchConfirmedAt: new Date().toISOString() }))
+    await this.patchDesk(requestId, (desk) =>
+      desk.matchConfirmedAt ? undefined : { matchConfirmedAt: new Date().toISOString() }
+    )
   }
 
   /**
@@ -1798,20 +1810,11 @@ export class VtiApplicant {
    */
   async receiveStatement(m: DidCommV2PlaintextMessage): Promise<void> {
     const body = bodyOf(m)
-    // The bare body is the delivery (vtc-service delivery.rs:128-141, openvtc
-    // wire.rs:177-185). Keyring vetters before PR E wrapped it in a signed
-    // Trust Task document: read until LEGACY_STATEMENT_DOCUMENT_UNTIL, and said so.
-    if (body.credential_response === undefined && body.payload !== undefined) {
-      if (Date.now() >= Date.parse(`${LEGACY_STATEMENT_DOCUMENT_UNTIL}T00:00:00Z`)) {
-        this.agent.config?.logger?.warn?.('[VTI] statement in the retired Trust Task document shape not read', {
-          from: String(m.from ?? ''),
-        })
-        return
-      }
-      this.agent.config?.logger?.info?.('[VTI] statement read in the legacy Trust Task document shape', {
-        from: String(m.from ?? ''),
-      })
-    }
+    // The delivery is a signed Trust Task document with the statement under
+    // `payload` (openvtc b52dc28 wire.rs:188-205, and Keyring vetters). A bare
+    // `{ credential_response }` body is what openvtc before #392 and Keyring
+    // vetters from 09-25 sent; still read. The statement is checked on its own
+    // proof below either way.
     const p = (body.credential_response !== undefined ? body : (body.payload ?? body)) as Record<string, unknown>
     const credential = ((p.credential_response as Record<string, unknown>)?.credential ?? undefined) as
       | Record<string, unknown>
