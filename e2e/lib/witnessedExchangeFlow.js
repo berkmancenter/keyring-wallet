@@ -9,8 +9,9 @@
 //
 // Device discovery and session creation are injected by the caller — nothing
 // here depends on which platform(s) the two sessions are on. See
-// run-vrc-exchange-witnessed-devices.js (Android + iPhone) and
-// run-vrc-exchange-witnessed-android-only-devices.js (two Android phones).
+// run-vrc-exchange-witnessed-devices.js, which wires this up for both the
+// default android+iPhone pairing (DEVICE_PLATFORMS=android,ios) and the
+// android-only pairing (DEVICE_PLATFORMS=android,android).
 import { execSync, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import net from "node:net";
@@ -270,8 +271,8 @@ async function assertHardwareEvidenceMarker(driver, timeout = 120000) {
  *   available. Use the exported `dumpAndroidWitnessLogs` helper for
  *   whichever udids are actually Android devices (ignore the rest — e.g. an
  *   iOS udid isn't reachable via `adb logcat`).
- * @param {string} opts.name - banner name, matching the npm script that invoked this
- *   (e.g. "vrc-exchange:witnessed:devices" or "vrc-exchange:witnessed:android-only").
+ * @param {string} opts.name - banner name, describing the invocation (e.g.
+ *   "vrc-exchange:witnessed:devices (android,ios)" or "... (android,android mediator)").
  * @param {boolean} [opts.assertLocality] - locality-plan.md §10.3 item 12:
  *   additionally require BOTH sides' co-presence to be confirmed
  *   (`assertLocalityConfirmedMarker`), not merely attempted. The CALLER is

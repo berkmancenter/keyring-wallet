@@ -3,11 +3,12 @@
  * phone paired with an iPhone, with LOCALITY (BLE co-presence) OFFERED —
  * attempted on both, gated on neither, and each side's outcome REPORTED.
  *
- * This is the first-run variant. The `required`-policy runner
- * (run-vrc-exchange-witnessed-locality-android-only-devices.js) asserts both
- * phones' co-presence was confirmed, which is the right bar once both
- * peripherals are known to work. Until then it would only ever tell you
- * "something failed" — this one tells you WHAT each peripheral did:
+ * This is the first-run variant. The `required`-policy run
+ * (`DEVICE_PLATFORMS=android,android E2E_LOCALITY=required yarn
+ * e2e:vrc:witnessed:devices` — see e2e/README.md) asserts both phones'
+ * co-presence was confirmed, which is the right bar once both peripherals
+ * are known to work. Until then it would only ever tell you "something
+ * failed" — this one tells you WHAT each peripheral did:
  *
  *   - Android: the [TrustTasks:Witness] locality confirmed / not confirmed
  *     marker, from run-scoped logcat (verified live against BlueZ 2026-08-21;

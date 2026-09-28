@@ -123,8 +123,8 @@ async function unlockWallet(driver, timeout = 180000) {
  *   called once right after the peer session is created (e.g. to pre-grant a
  *   camera permission the peer platform needs); pass an async no-op if
  *   nothing is needed.
- * @param {string} opts.name - banner name, matching the npm script that invoked this
- *   (e.g. "store-migration" or "store-migration:android-only").
+ * @param {string} opts.name - banner name, describing the invocation
+ *   (e.g. "store-migration" or "store-migration (android,android)").
  */
 export async function runStoreMigration({ baselineApk, createPeerSession, primePeer, name }) {
   let android, peer;

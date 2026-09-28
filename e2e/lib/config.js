@@ -28,8 +28,8 @@ function unquoteEnvValue(raw) {
 }
 
 /**
- * The witness's mediator invitation for the ":mediator" e2e variant (see
- * run-vrc-exchange-witnessed-android-only-devices-mediator.js). Reuses
+ * The witness's mediator invitation for the E2E_MEDIATOR=1 e2e variant (see
+ * run-vrc-exchange-witnessed-devices.js). Reuses
  * app/.env's own MEDIATOR_URL rather than requiring a second, separately
  * maintained value: it's the same production mediator the wallets already
  * connect to, so this is what makes the variant a real test of "does

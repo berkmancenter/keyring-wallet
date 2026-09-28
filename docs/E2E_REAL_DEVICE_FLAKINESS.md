@@ -4,7 +4,11 @@ Notes from getting `yarn e2e:vrc:devices:android-only:didcomm-v2`,
 `yarn e2e:vrc:witnessed:android-only:didcomm-v2`, and
 `yarn e2e:vrc:witnessed:locality:android-only:didcomm-v2` (two real Android
 phones; hardware attestation; DIDComm v2; a witness and BLE co-presence in
-the last two) to a clean, repeatable pass. None of this is specific to any
+the last two) to a clean, repeatable pass. Those exact command names have
+since been consolidated: run the same coverage today with
+`DEVICE_PLATFORMS=android,android E2E_DIDCOMM_V2=1 yarn e2e:vrc:devices` and
+`DEVICE_PLATFORMS=android,android E2E_DIDCOMM_V2=1 [E2E_LOCALITY=required] yarn e2e:vrc:witnessed:devices`
+— see `e2e/README.md`. None of this is specific to any
 one script — every pattern here lives in shared
 `e2e/lib/flows.js`/`lib/driver.js` helpers, so any real-device flow can hit
 them. Recorded here in more depth than `e2e/README.md`'s Troubleshooting
