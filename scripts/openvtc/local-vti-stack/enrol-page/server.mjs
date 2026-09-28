@@ -52,7 +52,8 @@ export function loadConfig(env = process.env) {
     label: env.ENROL_LABEL || 'Keyring lab agent (alice)',
     offerTtl: Number(env.OFFER_TTL ?? 300),
     pnmBin: env.PNM_BIN || path.join(home, 'Documents/vti-main/target/debug/pnm'),
-    pnmHome: env.PNM_HOME || path.join(home, 'vti-stack/pnm-alice'),
+    // Only when set: pnm since VTI main reads PNM_HOME as its config home.
+    pnmHome: env.PNM_HOME || undefined,
     vtaSlug: env.VTA_SLUG || 'alice',
     now: () => Math.floor(Date.now() / 1000),
   }
@@ -97,7 +98,7 @@ function runGrant(cfg, did) {
   const args = ['--vta', cfg.vtaSlug, 'acl', 'create', '--did', did, '--role', 'admin', '--expires', '1h', '--label', 'keyring-phone']
   return new Promise((resolve) => {
     // execFile, no shell: the DID is passed as a single argv element.
-    execFile(cfg.pnmBin, args, { env: { ...process.env, PNM_HOME: cfg.pnmHome }, timeout: 60_000 }, (err, stdout, stderr) => {
+    execFile(cfg.pnmBin, args, { env: { ...process.env, ...(cfg.pnmHome ? { PNM_HOME: cfg.pnmHome } : {}) }, timeout: 60_000 }, (err, stdout, stderr) => {
       resolve({ ok: !err, code: err ? (err.code ?? 1) : 0, stdout: String(stdout), stderr: String(stderr || err?.message || '') })
     })
   })
@@ -222,6 +223,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(`enrol page listening on 0.0.0.0:${app.server.address().port}`)
   console.log(`  open        ${c.publicUrl}/`)
   console.log(`  VTA DID     ${c.vtaDid || '(none!)'}  [from ${c.vtaDidSource}]`)
-  console.log(`  grant via   PNM_HOME=${c.pnmHome} ${c.pnmBin} --vta ${c.vtaSlug} acl create ...`)
+  console.log(`  grant via   ${c.pnmHome ? `PNM_HOME=${c.pnmHome} ` : ''}${c.pnmBin} --vta ${c.vtaSlug} acl create ...`)
   console.log(`  offer TTL   ${c.offerTtl}s   (no login — lab only)`)
 }

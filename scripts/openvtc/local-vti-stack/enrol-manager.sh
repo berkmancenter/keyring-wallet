@@ -54,7 +54,9 @@ fi
 
 if [ "$MODE" = online ]; then
   PNM="${PNM_BIN:-$HOME/Documents/vti-main/target/debug/pnm}"
-  export PNM_HOME="${PNM_HOME:-$STACK_DIR/pnm-$NAME}"
+  # PNM_HOME only when the caller set it: pnm since VTI main reads it as its
+  # config and session home, and an empty default dir breaks it.
+  [ -n "${PNM_HOME:-}" ] && export PNM_HOME
   strip() { sed -e 's/\x1b\[[0-9;]*m//g'; }
   expiry=()
   [ -n "${EXPIRES:-}" ] && expiry=(--expires "$EXPIRES")
@@ -66,7 +68,7 @@ if [ "$MODE" = online ]; then
   out=$(echo "$out" | strip)
   if ! echo "$out" | grep -qiE "409|already exists|conflict"; then
     echo "$out" >&2
-    echo "pnm acl create failed on $NAME (PNM_HOME=$PNM_HOME)" >&2
+    echo "pnm acl create failed on $NAME (PNM_HOME=${PNM_HOME:-unset})" >&2
     exit 1
   fi
   # The entry exists: create never changes it, so move the role with the
