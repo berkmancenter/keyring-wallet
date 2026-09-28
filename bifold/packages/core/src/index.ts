@@ -518,4 +518,4 @@ export { isDidCommInvitation, isOpenIdCredentialOffer, isOpenIdPresentationReque
 
 export { ownerChecks } from './modules/trust-tasks/module/ownerConfirm'
 export { dropInMemoryKeys, EphemeralKeyManagementService } from './modules/trust-tasks/module/EphemeralKeyManagementService'
-export { EPHEMERAL_KMS_BACKEND, REQUIRED_KMS_BACKENDS } from './modules/trust-tasks/module/vtaKeys'
+export { EPHEMERAL_KMS_BACKEND, REQUIRED_DEFAULT_KMS_BACKEND, REQUIRED_KMS_BACKENDS } from './modules/trust-tasks/module/vtaKeys'

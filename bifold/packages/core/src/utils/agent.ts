@@ -33,6 +33,7 @@ import { askar } from '@openwallet-foundation/askar-react-native'
 import { indyVdr } from '@hyperledger/indy-vdr-react-native'
 import Config from 'react-native-config'
 import { EphemeralKeyManagementService } from '../modules/trust-tasks/module/EphemeralKeyManagementService'
+import { EPHEMERAL_KMS_BACKEND } from '../modules/trust-tasks/module/vtaKeys'
 import { WalletSecret } from '../types/security'
 import { RetryingWebVhDidResolver } from './RetryingWebVhDidResolver'
 
@@ -82,14 +83,16 @@ export function getAgentModules({
     }),
     kms: new Kms.KeyManagementModule({
       backends: [
-        // Persona key copies, held in memory only (#10). First: Credo routes a
-        // key-agreement encrypt/decrypt to the first backend that supports it,
-        // and this one claims only operations naming its own keys.
+        // Persona key copies, held in memory only (#10). First, and the default:
+        // Credo sends an encrypt/decrypt whose key is a key agreement to the
+        // default backend when it supports the operation, else to the first
+        // that does. This one claims only operations naming its own keys, so
+        // everything else still reaches askar.
         new EphemeralKeyManagementService(),
         new AskarKeyManagementService(),
         new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
       ],
-      defaultBackend: 'askar',
+      defaultBackend: EPHEMERAL_KMS_BACKEND,
     }),
     anoncreds: new AnonCredsModule({
       anoncreds,

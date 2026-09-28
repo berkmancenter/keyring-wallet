@@ -14,13 +14,15 @@
  * signing, key agreement, DIDComm encryption — is exactly the one the wallet
  * uses.
  *
- * It goes FIRST in the agent's backends, and claims only operations that name
- * one of its own keys (ids from `inMemoryKeyId`, prefix `vta-copy:`). First,
- * because Credo routes an encrypt or decrypt whose key is a key agreement to
- * the first backend that supports it, never by the key's id (credo-ts core
- * 0.6.3 `KeyManagementApi.encrypt`/`decrypt` → `getKms(undefined, op)`); last,
- * a persona's DIDComm v2 session asked the wallet's store for an in-memory key
- * and failed. Everything that does not name an in-memory key — creating keys,
+ * It goes FIRST in the agent's backends AND is the default backend, and claims
+ * only operations that name one of its own keys (ids from `inMemoryKeyId`,
+ * prefix `vta-copy:`). Credo never routes an encrypt or decrypt whose key is a
+ * key agreement by the key's id: it goes to the default backend if that one
+ * supports it, else to the first that does (credo-ts 0.7.1-pr-2704 as bundled
+ * in the app, `KeyManagementApi.getKms`; 0.6.3 skips the default and takes the
+ * first). With askar the default, a persona's DIDComm v2 session asked the
+ * wallet's store for an in-memory key and never reached its mediator (lab,
+ * 2026-09-28). Everything that does not name an in-memory key — creating keys,
  * importing the wallet's own, deleting, random bytes — it declines, so it
  * falls through to the wallet's store as before. Signing is routed by key id
  * already (Credo asks each backend for the key), and finds it here.

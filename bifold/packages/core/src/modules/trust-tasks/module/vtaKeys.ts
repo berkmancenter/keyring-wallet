@@ -104,6 +104,14 @@ export const EPHEMERAL_KMS_BACKEND = 'ephemeral'
  */
 export const REQUIRED_KMS_BACKENDS = ['askar', EPHEMERAL_KMS_BACKEND] as const
 
+/**
+ * The agent's default KMS backend must be the in-memory one (first in the list
+ * too): Credo sends key-agreement encrypt/decrypt to the default backend when
+ * it supports the operation, and this one declines every operation that does
+ * not name an in-memory key, so those still reach askar.
+ */
+export const REQUIRED_DEFAULT_KMS_BACKEND = EPHEMERAL_KMS_BACKEND
+
 const IN_MEMORY_PREFIX = 'vta-copy:'
 
 /** The in-memory KMS id of this phone's copy of the agent's key `vtaKeyId`. */
