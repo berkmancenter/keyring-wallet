@@ -48,7 +48,11 @@ Two phones acting as the same persona share one mediator connection per persona,
 - **The agent can't sign persona proofs for the phone.** `keys/sign/0.1` signs a caller's bytes only under an opaque-signing frame (`vti.vta.opaque-signing.v1`, a zero byte, then the payload: `vta-sdk/src/protocols/key_management/sign.rs`; `vta-service/src/trust_tasks/keys.rs:336` at `63d4c0ca`). A Data Integrity proof or TSP frame signed that way verifies as nothing else. `vault/sign-trust-task/0.2` signs only as a vault entry's principal DID, not as a persona.
 - **No VTA task decrypts or agrees a key on a persona's behalf** (`vta-sdk/src/trust_tasks.rs:288-294`).
 - **Persona keys stay exportable.** Every session and every new phone fetches them, so `keys/set-exportability/0.1` isn't used on them.
-- Keyring's proof and TSP code signs through Credo's KMS by key id, so in-memory keys need a KMS the app can empty. That means an in-memory store, or dropping the keys from the wallet's store at lock.
+- **Where the keys live on the phone:** a second KMS backend (`ephemeral`) that holds Askar key handles in a JS map and is emptied at lock.
+  - Credo 0.6.3 takes several backends (`KeyManagementModuleConfig` `backends`), and it finds the backend for a sign, encrypt or decrypt call from the key id alone (`KeyManagementApi` `getKmsForOperationAndKeyId`). So the proof code and DIDComm code, which sign by key id, work unchanged.
+  - Import names the backend explicitly. Without one, `importKey` lands in the first import-capable backend, which is Askar's persistent store.
+  - Credo ships no in-memory backend. Askar's `inMemory` option covers only the one store `AskarModule` owns.
+  - The TSP adapter reads key-agreement keys straight from the Askar store (`credo-tsp-adapter/src/identity.ts` `keyAgreementFromAskarKey`, `keyAgreementFromEd25519Key`). It reads them through the backend instead.
 
 ### D. A lost phone
 
