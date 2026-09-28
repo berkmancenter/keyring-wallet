@@ -8,7 +8,7 @@
 #   ./invite-persona.sh --restore-criteria    put the vetting criterion back
 #
 # Uses tsp-reference/ref-20-local-vetting/vtc-admin.mjs against the stack in
-# ~/vti-stack — the same REST surface the admin portal fronts.
+# ~/vti-stack — the same signed Trust Tasks the community's admin console sends.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
