@@ -25,6 +25,7 @@ import {
   type VtaAclEntry,
   type VtaConsentRequest,
 } from './VtaClient'
+import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
@@ -124,6 +125,7 @@ export interface VtaAgentDeps {
   fetch?: typeof fetch
   linkStore?: (agent: Agent) => VtaLinkStore
   identityStore?: (agent: Agent) => VtiIdentityStore
+  communityStore?: (agent: Agent) => Pick<VtiCommunityStore, 'forgetCommunity'>
   enrol?: {
     submit: typeof submitEnrolment
     waitForGrant: typeof waitForGrant
@@ -286,6 +288,10 @@ export class VtaAgentController {
 
   private identityStore(agent: Agent) {
     return this.deps.identityStore?.(agent) ?? new GenericRecordsIdentityStore(agent)
+  }
+
+  private communityStore(agent: Agent) {
+    return this.deps.communityStore?.(agent) ?? new GenericRecordsCommunityStore(agent)
   }
 
   private now() {
@@ -475,6 +481,35 @@ export class VtaAgentController {
     })
     this.dispatch({ type: 'unlinked' })
     this.note('unlinked')
+  }
+
+  /**
+   * The person chose to erase this phone's copy of its agent (#10), after the
+   * agent stopped accepting it — or at any time. Only this phone's data for
+   * that agent goes: for each identity this phone minted through it, the
+   * borrowed key copies, the identity record, and the community's membership,
+   * invitations and delivered credentials; then everything {@link unlink}
+   * forgets. Contacts, DIDComm connections and the wallet's own credentials
+   * stay. The agent holds every identity's keys, so linking again (or another
+   * device) loses nothing. Never erases on its own: a refusal alone may be a
+   * mistake or a restore, so the person decides. Never throws; a record that
+   * fails to go is left, and the phone is unlinked either way.
+   */
+  async eraseThisPhonesCopy(agent: Agent): Promise<void> {
+    const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    if (vtaDid) {
+      const identities = this.identityStore(agent)
+      const communities = this.communityStore(agent)
+      const personas = await identities.listPersonas().catch(() => [])
+      for (const persona of personas.filter((p) => p.vtaDid === vtaDid)) {
+        for (const keyId of Object.values(persona.kmsKeyIds ?? {})) {
+          if (keyId) await agent.kms.deleteKey({ keyId }).catch(() => undefined)
+        }
+        await communities.forgetCommunity(persona.communityDid).catch(() => undefined)
+        await identities.forgetPersona(persona.communityDid).catch(() => undefined)
+      }
+    }
+    await this.unlink(agent)
   }
 
   /**

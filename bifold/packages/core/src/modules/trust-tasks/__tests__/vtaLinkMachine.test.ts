@@ -90,8 +90,15 @@ describe('the connection of a linked phone', () => {
 
   it('a revoked grant ends the link, and re-linking starts over', () => {
     const revoked = reduceLink(linked, { type: 'accessRevoked', reason: 'DID not in ACL' })
-    expect(revoked).toEqual({ kind: 'revoked', ...agent, reason: 'DID not in ACL' })
+    expect(revoked).toEqual({ kind: 'revoked', ...agent, reason: 'DID not in ACL', cause: 'notInAcl' })
     expect(reduceLink(revoked, { type: 'relink' })).toEqual({ kind: 'notLinked' })
+  })
+
+  it('says the phone was wiped only when the agent says so', () => {
+    const wiped = reduceLink(linked, { type: 'accessRevoked', reason: 'forbidden: device has been wiped' })
+    expect(wiped).toMatchObject({ kind: 'revoked', cause: 'wiped' })
+    const disabled = reduceLink(linked, { type: 'accessRevoked', reason: 'forbidden: device is disabled' })
+    expect(disabled).toMatchObject({ kind: 'revoked', cause: 'notInAcl' })
   })
 })
 
