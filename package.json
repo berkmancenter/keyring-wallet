@@ -116,6 +116,7 @@
     "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
     "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks",
     "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter",
+    "@bifold/dtg-vocab": "portal:bifold/packages/dtg-vocab",
     "json-canonicalize": "2.0.0",
     "rxjs": "7.8.2",
     "@scure/base@npm:^2.0.0": "patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch"

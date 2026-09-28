@@ -2237,6 +2237,14 @@ __metadata:
   languageName: node
   linkType: soft
 
+"@bifold/dtg-vocab@portal:bifold/packages/dtg-vocab::locator=keyring-wallet%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@bifold/dtg-vocab@portal:bifold/packages/dtg-vocab::locator=keyring-wallet%40workspace%3A."
+  dependencies:
+    ajv: "npm:^8.17.1"
+  languageName: node
+  linkType: soft
+
 "@bifold/oca@portal:bifold/packages/oca::locator=keyring-wallet%40workspace%3A.":
   version: 0.0.0-use.local
   resolution: "@bifold/oca@portal:bifold/packages/oca::locator=keyring-wallet%40workspace%3A."
@@ -14527,6 +14535,7 @@ __metadata:
     "@babel/runtime": "npm:~7.28.6"
     "@bifold/core": "npm:3.0.16"
     "@bifold/credo-tsp-adapter": "npm:0.1.0-alpha.1"
+    "@bifold/dtg-vocab": "npm:0.1.0-alpha.1"
     "@bifold/oca": "npm:3.0.16"
     "@bifold/react-hooks": "npm:3.0.16"
     "@bifold/react-native-attestation": "npm:3.0.16"
