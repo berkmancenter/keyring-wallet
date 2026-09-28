@@ -97,7 +97,7 @@ and audits our artifacts the way Glenn audits VTI. Three self-findings:
    0.6's private `record.credential` and looked for a `WitnessedCredential`
    type the witness never mints, and the offers were never accepted, so the
    whole VWC validation was unreachable).
-2. **Legacy digest form (known, now the `wd02` default; `vsc` shape exists behind a flag).** The VWC's `credentialSubject.digest`
+2. **Legacy digest form (known; `wd02` was the original default, `vsc` is now the default as of the pre-production flip — plan §9 Q1, 2026-09-28 — with `WITNESS_CREDENTIAL_SHAPE=wd02` opting a specific deployment back).** The VWC's `credentialSubject.digest`
    is `"sha256:"+hex` — in vrc-reference *and* in witness-server's
    `computeVrcDigest` — not the multibase multihash of #17 / PR #18. This is
    precisely PR #18's `digestMultibase` rename. **CORRECTED
