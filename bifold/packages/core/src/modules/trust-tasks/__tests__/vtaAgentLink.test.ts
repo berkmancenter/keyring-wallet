@@ -1,6 +1,6 @@
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
-import { GRANT_HOLD_MS, VtaAgentController } from '../module/vtaAgent'
+import { GRANT_HOLD_MS, SESSION_CONNECT_DEADLINE_MS, VtaAgentController } from '../module/vtaAgent'
 import { EnrolmentError } from '../module/vtaEnrolment'
 
 // The controller runs the whole link — submit, wait for the admin, sign in as
@@ -154,6 +154,26 @@ describe('a linked phone after a restart', () => {
     expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
   })
 
+  // IN-53 (226): a sign-in that never settled kept the "already reconnecting"
+  // guard set, so every later attempt (foreground, unlock, retry) returned at
+  // once and the phone never reached its agent again, with nothing in the log.
+  it('a sign-in that never finishes does not block the next: past its deadline it retries and comes online', async () => {
+    jest.useFakeTimers()
+    try {
+      mockClient.connect.mockImplementationOnce(() => new Promise<undefined>(() => undefined))
+      const { vta } = controller({ linked })
+      await vta.restore({} as never)
+      await Promise.resolve()
+      expect(mockClient.connect).toHaveBeenCalledTimes(1)
+      // Past the deadline, and the first backoff: a second sign-in, which answers.
+      await jest.advanceTimersByTimeAsync(SESSION_CONNECT_DEADLINE_MS + 2_000)
+      expect(mockClient.connect).toHaveBeenCalledTimes(2)
+      expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('schedules a quiet retry when the agent cannot be reached', async () => {
     jest.useFakeTimers()
     try {
@@ -162,9 +182,8 @@ describe('a linked phone after a restart', () => {
       })
       const { vta } = controller({ linked })
       await vta.restore({} as never)
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
+      // Let the failed first sign-in settle (no timer is due yet: the retry is 1 s away).
+      await jest.advanceTimersByTimeAsync(0)
       // Still connecting (IN-48: a start-up failure is not shown as offline yet)…
       expect(vta.getState().link).toMatchObject({
         connection: { kind: 'connecting', since: 1_000, reason: 'socket closed' },
