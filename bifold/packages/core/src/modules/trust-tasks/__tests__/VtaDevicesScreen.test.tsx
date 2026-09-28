@@ -192,7 +192,7 @@ describe('your devices', () => {
     jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('yes')
     const rotate = jest
       .spyOn(vtaAgent, 'rotateAllPersonaKeys')
-      .mockResolvedValue({ rotated: ['did:webvh:a'], failed: [] })
+      .mockResolvedValue({ rotated: ['did:webvh:a'], unpublished: [], failed: [] })
     const tree = await show()
     expect(tree.getByTestId(id('LostPhone'))).toHaveTextContent(/AgentKeys\.LostStep2/)
     await act(async () => {
@@ -207,12 +207,31 @@ describe('your devices', () => {
     jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('yes')
     jest
       .spyOn(vtaAgent, 'rotateAllPersonaKeys')
-      .mockResolvedValue({ rotated: ['did:webvh:a'], failed: [{ did: 'did:webvh:b', reason: 'noAnswer' }] })
+      .mockResolvedValue({
+        rotated: ['did:webvh:a'],
+        unpublished: [],
+        failed: [{ did: 'did:webvh:b', reason: 'noAnswer' }],
+      })
     const tree = await show()
     await act(async () => {
       fireEvent.press(tree.getByTestId(id('LostPhoneRotate')))
     })
     expect(tree.getByTestId(id('LostPhoneState'))).toHaveTextContent('AgentKeys.RotatePartial')
+    expect(tree.getByTestId(id('LostPhoneRotate'))).toBeTruthy()
+  })
+
+  test('keys changed but not yet published are never "Done": said plainly, and the button stays for later', async () => {
+    jest.spyOn(vtaAgent, 'agentDevices').mockResolvedValue([thisPhone, oldPhone])
+    jest.spyOn(vtaAgent, 'canRotatePersonaKeys').mockResolvedValue('yes')
+    jest
+      .spyOn(vtaAgent, 'rotateAllPersonaKeys')
+      .mockResolvedValue({ rotated: [], unpublished: ['did:webvh:a'], failed: [] })
+    const tree = await show()
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(id('LostPhoneRotate')))
+    })
+    expect(tree.getByTestId(id('LostPhoneState'))).toHaveTextContent('AgentKeys.RotateUnpublished')
+    expect(tree.getByTestId(id('LostPhoneState'))).not.toHaveTextContent('AgentKeys.Rotated')
     expect(tree.getByTestId(id('LostPhoneRotate'))).toBeTruthy()
   })
 

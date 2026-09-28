@@ -1812,6 +1812,8 @@
     "MovedDevices": "Mes appareils",
     "Moving": "Transfert de vos clés vers votre agent…",
     "RotatePartial_one": "{{count}} de vos identités n'a pas pu être changée. Réessayez.",
-    "RotatePartial_other": "{{count}} de vos identités n'ont pas pu être changées. Réessayez."
+    "RotatePartial_other": "{{count}} de vos identités n'ont pas pu être changées. Réessayez.",
+    "RotateUnpublished_one": "Votre agent a changé les clés, mais ne les a pas encore publiées : les autres ne peuvent peut-être pas vérifier {{count}} de vos identités pour l'instant. Réessayez plus tard.",
+    "RotateUnpublished_other": "Votre agent a changé les clés, mais ne les a pas encore publiées : les autres ne peuvent peut-être pas vérifier {{count}} de vos identités pour l'instant. Réessayez plus tard."
   }
 }
