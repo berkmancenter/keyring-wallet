@@ -5,7 +5,7 @@
  * vta-service 0.43.0), since an older one renumbers them and breaks every
  * relationship that names them.
  */
-import { agentVersion, ROTATE_KEYS_TASK, rotatePersonaKeys, rotationSupport } from '../module/vtaRotation'
+import { agentVersion, ROTATE_KEYS_TASK, rotateEachPersona, rotatePersonaKeys, rotationSupport } from '../module/vtaRotation'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 
 const VTA = 'did:webvh:QmVta:agent.example'
@@ -100,5 +100,41 @@ describe('rotating a persona', () => {
       )
     ).rejects.toThrow('refused')
     expect(saved).toEqual([])
+  })
+})
+
+describe('rotating every identity on this phone', () => {
+  const base: Omit<VtiPersona, 'did'> = {
+    communityDid: 'did:webvh:QmCommunity:c.example',
+    vtaDid: VTA,
+    contextId: 'ctx',
+    vtaKeyIds: { signing: 'vta-sign', keyAgreement: 'vta-ka' },
+    kmsKeyIds: { signing: 'kms-old-sign', keyAgreement: 'kms-old-ka' },
+    createdAt: '2026-09-01T00:00:00Z',
+  }
+  const personas = ['did:webvh:Qa:x:a', 'did:webvh:Qb:x:b', 'did:webvh:Qc:x:c'].map((did) => ({ ...base, did }))
+
+  it('rotates one at a time and carries on past a refusal', async () => {
+    let inFlight = 0
+    let most = 0
+    const saved: string[] = []
+    const result = await rotateEachPersona(
+      {
+        task: async (_type, payload) => {
+          most = Math.max(most, ++inFlight)
+          await new Promise((resolve) => setTimeout(resolve, 1))
+          inFlight--
+          if (payload.did === 'did:webvh:Qb:x:b') throw new Error('refused')
+          return {} as never
+        },
+        borrowKey: async (id: string) => ({ keyId: `kms-new-${id}`, curve: 'Ed25519' as const }),
+      },
+      { setPersona: async (p: VtiPersona) => void saved.push(p.did) },
+      personas
+    )
+    expect(most).toBe(1)
+    expect(result.rotated).toEqual(['did:webvh:Qa:x:a', 'did:webvh:Qc:x:c'])
+    expect(result.failed.map((f) => f.did)).toEqual(['did:webvh:Qb:x:b'])
+    expect(saved).toEqual(['did:webvh:Qa:x:a', 'did:webvh:Qc:x:c'])
   })
 })

@@ -27,7 +27,7 @@ import {
 import { GenericRecordsIdentityStore, type VtiIdentityStore } from './VtiIdentityStore'
 import { GenericRecordsVtaLinkStore, type VtaLinkStore } from './VtaLinkStore'
 import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
-import { agentVersion, rotatePersonaKeys, rotationSupport, type RotationSupport } from './vtaRotation'
+import { agentVersion, rotateEachPersona, rotatePersonaKeys, rotationSupport, type RotationSupport } from './vtaRotation'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 import {
@@ -39,6 +39,7 @@ import {
   looksLikeDid,
   type ConfirmOwner,
   type DeviceCanOwn,
+  type DeviceRefusalReason,
 } from './vtaOwner'
 
 export interface VtiApproval extends VtaConsentRequest {
@@ -868,6 +869,24 @@ export class VtaAgentController {
     await rotatePersonaKeys(client, store, persona).catch((error: unknown) => {
       throw this.refused(error)
     })
+  }
+
+  /**
+   * Rotate the keys of every identity this phone holds on the linked agent,
+   * behind one owner check rather than one per identity. Carries on past an
+   * identity the agent refuses and answers each outcome, worded as a
+   * {@link DeviceRefusalReason}.
+   */
+  async rotateAllPersonaKeys(
+    agent: Agent
+  ): Promise<{ rotated: string[]; failed: { did: string; reason: DeviceRefusalReason }[] }> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner("Replace your identities' keys")
+    const client = await this.signedIn(agent, vtaDid)
+    const store = this.identityStore(agent)
+    const personas = (await store.listPersonas()).filter((p) => p.vtaDid === vtaDid)
+    const { rotated, failed } = await rotateEachPersona(client, store, personas)
+    return { rotated, failed: failed.map(({ did, error }) => ({ did, reason: this.refused(error).reason })) }
   }
 
   /** The agent this phone is linked to, or a refusal a screen words as "no agent yet". */

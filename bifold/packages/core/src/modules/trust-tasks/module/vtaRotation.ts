@@ -84,3 +84,27 @@ export async function rotatePersonaKeys(
   await store.setPersona(rotated)
   return rotated
 }
+
+/**
+ * Rotate each of `personas` in turn — one at a time, so the agent never has
+ * two updates in flight — carrying on past a refusal so one identity the agent
+ * will not rotate does not strand the rest. Answers which were rotated and
+ * which failed, with the error for each.
+ */
+export async function rotateEachPersona(
+  port: RotationPort,
+  store: { setPersona(persona: VtiPersona): Promise<void> },
+  personas: VtiPersona[]
+): Promise<{ rotated: string[]; failed: { did: string; error: unknown }[] }> {
+  const rotated: string[] = []
+  const failed: { did: string; error: unknown }[] = []
+  for (const persona of personas) {
+    try {
+      await rotatePersonaKeys(port, store, persona)
+      rotated.push(persona.did)
+    } catch (error) {
+      failed.push({ did: persona.did, error })
+    }
+  }
+  return { rotated, failed }
+}
