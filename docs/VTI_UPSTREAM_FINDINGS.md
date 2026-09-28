@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.59 — 2026-09-27.** A living document: every finding here was measured
+**Version 1.60 — 2026-09-28.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -31,8 +31,8 @@ from a report or an issue always lands on the right entry.
 | [VTI-05](#vti-05) | The mediator refuses a phone's WebSocket upgrade | **High** | **Resolved upstream** — `affinidi-tdk-rs` #831 · **Upstream 09-22:** shipped (tdk-rs #831) — confirmed | A |
 | [VTI-06](#vti-06) | A misplaced configuration key is accepted in silence | Low | **Fixed upstream** (09-23): mediator (affinidi-tdk-rs #886, mediator 0.29.1) and VTC (VTI #1678) now warn at startup about every ignored key by its full dotted path; the VTA already did. No repro needed | A, re-checked on **C** |
 | [VTI-07](#vti-07) | The mediator resolves `functions_file` relative to the working directory | Low | **Resolved upstream** — tdk-rs #843; **verified on our stack** (era H) · **Upstream 09-22:** shipped (tdk-rs #843) — confirmed | A, re-measured on **H** |
-| [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | **Fixed upstream; re-run owed** — vti #1526 boxes each handler at the dispatch seam (read at `ed672fff`); our run without `RUST_MIN_STACK` is still owed · **Upstream 09-22:** already fixed by vti #1526, an ancestor of our era-G build | A |
-| [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | **Resolved for Trust Tasks** by vti #1687 (read at `ed672fff`): the binding envelope is the only DIDComm carriage on the VTA as on the VTC. Two legacy task-typed arms remain on the VTA (`acl/swap-key`, `provision/integration`). *Corrected in 1.56:* the fix is #1687, not #858, which frames the outbound granted notice · **Upstream 09-22:** already fixed (vti #858) | A |
+| [VTI-08](#vti-08) | `vta-service` overflows a worker stack creating a context | Medium | **Upstream says fixed (8ef95235 (#1796), 2026-09-27); re-measure pending on a lab at main.** **Fixed upstream; re-run owed** — vti #1526 boxes each handler at the dispatch seam (read at `ed672fff`); our run without `RUST_MIN_STACK` is still owed · **Upstream 09-22:** already fixed by vti #1526, an ancestor of our era-G build | A |
+| [VTI-09](#vti-09) | VTA and VTC disagree on the DIDComm body shape | Medium | **Upstream says fixed (24f2d355, 2026-09-27); re-measure pending on a lab at main.** **Resolved for Trust Tasks** by vti #1687 (read at `ed672fff`): the binding envelope is the only DIDComm carriage on the VTA as on the VTC. Two legacy task-typed arms remain on the VTA (`acl/swap-key`, `provision/integration`). *Corrected in 1.56:* the fix is #1687, not #858, which frames the outbound granted notice · **Upstream 09-22:** already fixed (vti #858) | A |
 | [VTI-10](#vti-10) | A document's issuer must equal the DIDComm sender | Low | **Confirmed by upstream** — deliberate; specification gap stands · **Upstream 09-22:** declined — design intent, to be documented | A |
 | [VTI-11](#vti-11) | A fresh VTC has an empty ACL and cannot authenticate its own admin | Low | Open, narrowed (2026-09-25, read at `ed672fff`): **documented** by the bootstrap runbook (vti #1627), with both ways to seed the first admin. The ACL is still empty at mint, and no setup-summary line naming `acl add` was found · **Upstream 09-22:** shipped — bootstrap runbook, vti #1627 | A |
 | [VTI-12](#vti-12) | A community's advertised transports are fixed at mint | Low | **Answered upstream** (09-23): the `dids edit` → `get-log` → `cnm did-log install` flow is the remedy. `cnm did-log install` is vti #1632; the flow is documented in one place by vti #1679. A community on a DID-hosting server needs only the edit. **Re-run owed** on our stack, together with VTI-35 | A |
@@ -46,11 +46,11 @@ from a report or an issue always lands on the right entry.
 | [VTI-20](#vti-20) | A serverless persona mint prints a log nobody serves | **Medium** (raised from Low) | Open, narrowed (2026-09-25, read at `ed672fff`): vti #1616 fixes the CLI's message only — a serverless mint now says the operator must host it. The mint is not refused, and the response carries no explicit serverless field (`serverId` is omitted when there is none) · **Upstream 09-22:** shipped (vti #1616) | A, re-met on **C** |
 | [VTI-21](#vti-21--no-channel-delivers-an-invitation-to-its-invitee) | No channel delivers an invitation to its invitee | Medium | **Resolved upstream** (2026-09-25, read at `ed672fff`): vti #1648 adds `vtc/invitations/deliver/0.1`, channel `message`. Keyring's receiving side is ours: keyring-bifold#139 (draft) · **Upstream 09-22:** shipped (Trust Tasks #581, vti #1648) | A |
 | [VTI-22](#vti-22--consent-policies-are-inert-unless-configpolicyenforcement-is-on) | Consent policies are inert unless config.policy.enforcement is on | Low | **Resolved upstream, as decided** (2026-09-25, read at `ed672fff`): vti #1633 keeps enforcement off by default and warns at boot when rules exist with it off · **Upstream 09-22:** decided (vti #1633) | A |
-| [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | Open, narrowed (2026-09-25, read at `ed672fff`): **the mint is fixed** by vti #1619 — it needs `KeyMint`, not admin. Key export stays an admin-derived capability, by design; signing goes through `keys/sign` (VTI-Q4) · **Upstream 09-22:** shipped (vti #1619) | A |
+| [VTI-23](#vti-23--every-operation-a-manager-needs-requires-the-admin-role) | Every operation a manager needs requires the admin role | Medium | **Upstream says fixed (24f2d355, 2026-09-27); re-measure pending on a lab at main.** Open, narrowed (2026-09-25, read at `ed672fff`): **the mint is fixed** by vti #1619 — it needs `KeyMint`, not admin. Key export stays an admin-derived capability, by design; signing goes through `keys/sign` (VTI-Q4) · **Upstream 09-22:** shipped (vti #1619) | A |
 | [VTI-24](#vti-24--a-pushed-consent-request-is-queued-not-delivered-to-an-idle-approver) | A pushed consent request is queued, not delivered, to an idle approver | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579 (with VTI-26); **validated live on era H** with a phone approver · **Upstream 09-22:** shipped (vti #1579) — confirmed | A |
 | [VTI-25](#vti-25--on-the-eucalyptus-train-the-card-is-delivered-not-returned) | On the Eucalyptus train the card is delivered, not returned | Medium | **Resolved — ours, not upstream's** (traced 09-24): the `allow` reply has always carried the card inline; Keyring read the credential pushes that arrive *before* it as the reply, and stopped doing so in keyring-bifold 4eddfbd2 (09-17) | B |
 | [VTI-26](#vti-26--a-consent-request-is-pushed-only-to-a-didkey-approver-every-other-approver-needs-the-requester-to-relay) | A consent request is pushed only to a did:key approver; every other approver needs the requester to relay | Medium | **Resolved upstream** — `verifiable-trust-infrastructure` #1579; **validated live on era H** with a phone approver. Keyring's relay stays as the fallback #1579 itself keeps · **Upstream 09-22:** shipped (vti #1579) — confirmed | B |
-| [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | Open — **re-check owed** · **Upstream 09-22:** already fixed (vti #1567, 18 Sep). *1.56:* that credit is not supported at the pin — the envelope path already answered a typed refusal before era B; see the body | B |
+| [VTI-27](#vti-27--an-authentication-or-acl-refusal-over-didcomm-is-a-problem-report-not-a-trust-task-error) | An authentication or ACL refusal over DIDComm is a problem-report, not a trust-task-error | Low | **Upstream says fixed (24f2d355, 2026-09-27); re-measure pending on a lab at main.** Open — **re-check owed** · **Upstream 09-22:** already fixed (vti #1567, 18 Sep). *1.56:* that credit is not supported at the pin — the envelope path already answered a typed refusal before era B; see the body | B |
 | [VTI-28](#vti-28--a-vta-answers-a-reply-with-an-error-and-loops-with-its-did-hosting-daemon) | A VTA answers a reply with an error, and loops with its DID-hosting daemon | **High** | **Resolved upstream** — `vti` #1567 and `affinidi-webvh-service` #202 (per upstream's PR list; not verified at a pin) · **Upstream 09-22:** already fixed (vti #1567 and the daemon change, #202 per upstream's PR list; not verified at a pin) — confirmed | B, re-measured on **C**: gone |
 | [VTI-29](#vti-29--members-who-never-collect-their-cards-silence-the-community-the-mediators-per-sender-queue-cap) | Members who never collect their cards silence the community: the mediator's per-sender queue cap | **High** | **Fixed upstream** — `affinidi-tdk-rs` #828, and re-measured on era E at upstream's stock limits with the per-relationship gate actually live: the ceremony passes · **Upstream 09-22:** shipped (tdk-rs #828, plus #829 for the direct and TSP paths) | B |
 | [VTI-30](#vti-30--a-live-push-can-be-dropped-and-a-client-that-only-listens-never-sees-the-message) | A live push can be dropped, and a client that only listens never sees the message | Medium | **Fixed upstream** — `affinidi-tdk-rs` #830 (their KR-30); on our stack since era E. **The client half is ours and open:** Keyring does not yet act on an unsolicited `status`; its 15-second poll recovers a dropped push meanwhile · **Upstream 09-22:** shipped (tdk-rs #830) | B |
@@ -72,6 +72,9 @@ from a report or an issue always lands on the right entry.
 | [VTI-46](#vti-46--aclswap-key-widens-a-key-restricted-grant-and-drops-approval-settings) | `acl/swap-key` widens a key-restricted grant and drops approval settings | Medium | Open, not sent. Read at `ed672fff`; not seen live. An open upstream PR (vti #1738) rebuilds the entry from the old one; not at the pin, not verified | read at `ed672fff` |
 | [VTI-47](#vti-47--the-vtcs-git-namespace-projector-scans-every-member-every-five-seconds-even-with-no-namespace-bound) | The VTC's git-namespace projector scans every member every five seconds, even with no namespace bound | Low | Open, not sent. Measured on the lab VTC (debug build, `ed672fff`): about 7% CPU while idle. Same code on upstream main (`acd6be09`) | lab, `ed672fff`; read at `acd6be09` |
 | [VTI-48](#vti-48--the-dtg-json-ld-context-every-community-card-names-is-not-published) | The DTG JSON-LD context every community card names is not published | Medium | Open, not sent. Measured 2026-09-27: `https://firstperson.network/credentials/dtg/v1` answers 404 (HTML); a JSON-LD wallet cannot store the cards | lab, `63d4c0ca`; public URL |
+| [VTI-49](#vti-49--a-reply-to-a-request-the-server-collected-by-poll-threads-to-the-wrong-id) | A reply to a request the server collected by poll threads to the wrong id | Medium | Open, not sent. Measured on the lab 2026-09-27: 2 of 7 DID mints timed out; source read at tdk `0dad454f`, webvh `e4a54068` | lab, VTI `63d4c0ca` |
+| [VTI-50](#vti-50--a-listen-only-vtc-loses-a-missed-live-push-once-the-message-expires) | A listen-only VTC loses a missed live push once the message expires | Medium | Open, not sent. Measured on the lab 2026-09-27: 2 of 854 messages expired uncollected. Keyring's half (a 5-minute forward expiry) is fixed in keyring-bifold #172 | lab, VTI `63d4c0ca`, tdk `6712fef2` |
+| [VTI-51](#vti-51--after-a-mediator-outage-vta-and-vtc-try-to-reconnect-once-then-stay-offline) | After a mediator outage, VTA and VTC try to reconnect once, then stay offline | High | Open, not sent. Measured on the lab 2026-09-27 22:07Z: all three services stayed offline 2+ h until restarted | lab, VTI `63d4c0ca`, tdk `6712fef2` |
 
 ## Stack under test
 
@@ -1987,6 +1990,48 @@ Read at `63d4c0ca`:
 
 **Local mitigation:** Keyring's document loader serves a stand-in for this URL: an empty context. It will be swapped for the real document once one is published. Keyring's Wallet copy now also stores each card on its own (keyring-bifold #170), so one card that cannot be stored no longer hides the others.
 
+### VTI-49 — A reply to a request the server collected by poll threads to the wrong id
+
+(a) **What happens.** The VTA creates a DID on a hosting server by sending a DIDComm message through the mediator and waiting 30 s for a reply whose `thid` is that message's `id`. The hosting server replies with `thid = message.id`. When it collects the request through its live stream, that `id` is the sender's, and the reply releases the VTA's waiter. When it collects it through the Pickup delivery-request (its 30-second backup poll), the messaging SDK overwrites the unpacked message's `id` with the mediator's attachment id (the message hash). The reply then threads to the hash, the VTA's waiter never fires, and the create fails after 30 s. The VTA then refuses the stray reply as `unsupportedType`.
+
+(b) **Measured** on the lab (VTI `63d4c0ca`, webvh `0883946`, tdk `6712fef2`), 2026-09-27. 2 of 7 DID creates requested by a phone failed; the rest succeeded.
+- Success at 03:44:19Z (2.7 s): the hosting server received the request live; no Delivery-Request.
+- Failure at 04:13:37Z: the request was collected by Status-Request/Delivery-Request at 04:13:39.97/40.19. The reply reached the VTA at 04:13:41Z. The VTA still logged `request timed out after 30s` at 04:14:07Z.
+- Failure at 03:36:12Z: the request waited a full poll cycle and was received at 03:36:43Z, after the VTA's 30 s timeout. The hosting server then logged `unsupportedType` and `dispatch suppressed (identity_mismatch w/ no transport sender) should_not_happen=true` for the VTA's refusal.
+
+Read:
+- `affinidi-messaging-sdk` 0.27.2 `protocols/message_pickup.rs:855` (`m.id = id.clone()`). It is still present at tdk `0dad454f`.
+- webvh `did-hosting-control/src/messaging.rs` replies `.thid(message.id.clone())` (lines 144, 1000, 1064 at `e4a54068`).
+- VTI `63d4c0ca` `vta-service` `outbound.rs:87` sets the 30 s wait.
+
+(c) **Expected:** keep the sender's `id` on messages collected by delivery-request, so a reply threads the same way whichever path collected the request, or have the server thread its reply to the id it was sent. A VTA wait longer than the server's poll interval would also avoid the timeout.
+
+### VTI-50 — A listen-only VTC loses a missed live push once the message expires
+
+(a) **What happens.** The VTC receives only by live delivery: it asks the mediator for live delivery when it connects, never sends a delivery-request, and does not drain its inbox on start. When one live push does not reach it, the mediator re-sends the stored inbox only when the VTC next turns live delivery on, at its token-refresh reconnect about every 12 minutes. A message whose expiry is shorter than that is deleted by the mediator's expiry sweep before the VTC comes back for it. The sender sees no answer.
+
+(b) **Measured** on the lab VTC (VTI `63d4c0ca`, mediator tdk `6712fef2`), 2026-09-27.
+- 854 messages were stored for the VTC. It collected 852 within about 200 ms each. 2 were never collected and expired after 300 s.
+- The first was stored at 04:44:20Z and dropped by the sweep at 04:49:19Z (`expiry sweep drained 1 messages … expired=1`). It was a vetting applicant's Apply, and the applicant's screen never showed an outcome.
+- The second was stored at 04:05:29Z and dropped at 04:10:29Z.
+- In both windows the VTC's websocket was up: it collected mediator replies stored 1.5 s before and 9 s after. It kept one session throughout.
+- The INFO logs don't show whether the mediator skipped the push or the client missed it. The only silent drops in source are at debug level.
+
+**Keyring's half:** our forwards carried a 300 s expiry, shorter than the VTC's catch-up. keyring-bifold #172 (merged 2026-09-27) raises it to 30 minutes.
+
+(c) **Expected:** a VTC that catches up without waiting for its next reconnect, for example a delivery-request on a timer or when the mediator signals a waiting inbox (Pickup 3.0 `status` with a `message_count`). Also, a mediator that reports when it drops a live push.
+
+### VTI-51 — After a mediator outage, VTA and VTC try to reconnect once, then stay offline
+
+(a) **What happens.** When the mediator becomes unreachable, the VTA's and the VTC's messaging websocket drops. Each service tries to reconnect once, fails, and then stops trying. It logs nothing further, no retry and no error, and receives no live messages until it is restarted. Only periodic pickup statuses arrive. From outside the service looks healthy (`/health` answers).
+
+(b) **Measured** on the lab (VTI `63d4c0ca`, tdk `6712fef2`), 2026-09-27. The mediator's public tunnel went offline at 22:07Z.
+- The bob VTA, the community VTA and the VTC all logged `WebSocket connection dropped` at 22:07:04.83Z, then one `Error creating websocket connection: HttpStatus(…)` about a second later. After that there was nothing for more than two hours.
+- The bob VTA's last trust task was at 22:24Z.
+- Restarting each service (same binary, config and store) reconnected it immediately: bob at 00:15Z, the community VTA and the VTC at 00:19Z on 2026-09-28.
+
+(c) **Expected:** reconnect with backoff indefinitely, and surface the disconnected state, for example in `/health` or a WARN on every attempt.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -2780,6 +2825,7 @@ and the credential's own id.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.60 | 2026-09-28 | **VTI-49** (new, Medium), **VTI-50** (new, Medium), **VTI-51** (new, High), from the lab upgraded to VTI main on 2026-09-27. VTI-08, VTI-09, VTI-23 and VTI-27 marked *upstream says fixed* (8ef95235, 24f2d355); the re-measure is pending on a lab at main. |
 | 1.59 | 2026-09-27 | **VTI-48** (new, Medium): the DTG JSON-LD context that every community card names (`https://firstperson.network/credentials/dtg/v1`) answers 404, so a JSON-LD wallet cannot store the cards. Keyring serves an empty stand-in until it is published. |
 | 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
