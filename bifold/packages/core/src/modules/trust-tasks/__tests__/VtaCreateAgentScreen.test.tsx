@@ -18,11 +18,14 @@ import { useAgent } from '@bifold/react-hooks'
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import { confirmOwner } from '../module/ownerConfirm'
+import { deviceCodeScan } from '../module/deviceCodeScan'
 import { vtaAgent } from '../module/vtaAgent'
 import { DeviceActionRefused, DeviceCannotOwn } from '../module/vtaOwner'
 import VtaCreateAgent, { GRANT_POLL_EVERY_MS, GRANT_POLL_WINDOW_MS, readyNameOf } from '../screens/VtaCreateAgent'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+const mockOpenScanner = jest.fn()
+jest.mock('../screens/openScanner', () => ({ openScanner: (...a: unknown[]) => mockOpenScanner(...a) }))
 jest.mock('../module/ownerConfirm', () => ({
   confirmOwner: jest.fn(),
   deviceCanOwn: jest.fn(async () => true),
@@ -224,6 +227,34 @@ describe('setup ends at Ready; another device is added from My devices', () => {
     fireEvent.changeText(tree.getByTestId(id('AgentBackupCodeInput')), 'did:key:z6MkBackup')
     return tree
   }
+
+  // #30: the other phone now shows its code as a QR; this phone scans it.
+  test('Scan its code: the scanned code fills the field, and adding it becomes the main button', () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    mockOpenScanner.mockClear()
+    const tree = show()
+    fireEvent.press(tree.getByTestId(id('AgentBackupNext')))
+    fireEvent.press(tree.getByTestId(id('AgentBackupScanButton')))
+    expect(mockOpenScanner).toHaveBeenCalled()
+    act(() => {
+      deviceCodeScan.claim('did:key:z6MkNewPhone')
+    })
+    expect(tree.getByTestId(id('AgentBackupCodeInput')).props.value).toBe('did:key:z6MkNewPhone')
+    expect(tree.getByTestId(id('AgentBackupAdd'))).toHaveTextContent('CreateAgent.AddThisPhone')
+    deviceCodeScan.cancel()
+  })
+
+  test("the agent's code can be shown as text, for an app with no camera", () => {
+    linked()
+    asAddDevice()
+    jest.spyOn(vtaAgent, 'agentAddress').mockReturnValue(VTA)
+    const tree = show()
+    expect(tree.queryByTestId(id('AgentBackupAddressText'))).toBeNull()
+    fireEvent.press(tree.getByTestId(id('AgentBackupShowAsText')))
+    expect(tree.getByTestId(id('AgentBackupAddressText'))).toHaveTextContent(VTA)
+  })
 
   test("Add another device: the other phone's code is added, and it returns to My devices", async () => {
     linked()
