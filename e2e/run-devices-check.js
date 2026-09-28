@@ -10,7 +10,7 @@
  *     [APPIUM_PORT=…] node run-devices-check.js
  *   ACTION=rename NAME="Sam's phone"          renames this phone
  *   ACTION=remove TARGET_DID=<the other DID>  removes that device (never this phone);
- *                 or TARGET_NAME=<its row name> when the DID isn't to hand
+ *                 or TARGET_NAME=<its row name> / TARGET_KEY=<its row key> when the DID isn't to hand
  *   ACTION=erase                              on a REMOVED phone: its "no longer linked"
  *                                             screen, then Erase this phone's copy
  *   ACTION=rotate                             changes the keys of the identities this phone made (the
@@ -241,16 +241,22 @@ try {
       if (Date.now() > until) throw new Error("the name prompt stayed open 60 s after Save");
     }
     lap("rename");
-    const after = await report(driver, "after");
-    const mine = after.find((r) => r.rename);
-    if (mine?.name !== name.trim()) throw new Error(`this phone reads "${mine?.name}", not "${name.trim()}"`);
+    // The prompt closes before the list is read again from the agent (about
+    // 2 s): wait for this phone's row to carry the new name, not the first frame.
+    let mine;
+    for (const until = Date.now() + 30000; ; await sleep(1500)) {
+      mine = (await readRows(driver)).find((r) => r.rename);
+      if (mine?.name === name.trim() || Date.now() > until) break;
+    }
+    await report(driver, "after");
+    if (mine?.name !== name.trim()) throw new Error(`this phone reads "${mine?.name}", not "${name.trim()}", 30 s after Save`);
   }
 
   if (ACTION === "remove") {
     const did = process.env.TARGET_DID;
     const byName = process.env.TARGET_NAME;
-    if (!did && !byName) throw new Error("ACTION=remove needs TARGET_DID or TARGET_NAME");
-    let key = did ? deviceKey(did) : before.find((r) => r.name === byName && !r.rename)?.key;
+    if (!did && !byName && !process.env.TARGET_KEY) throw new Error("ACTION=remove needs TARGET_DID, TARGET_NAME or TARGET_KEY");
+    let key = process.env.TARGET_KEY || (did ? deviceKey(did) : before.find((r) => r.name === byName && !r.rename)?.key);
     if (!key && byName) {
       await scrollToTestId(driver, "LostPhone", 40).catch(() => undefined);
       key = (await readRows(driver)).find((r) => r.name === byName && !r.rename)?.key;
@@ -262,7 +268,7 @@ try {
       await scrollToTestId(driver, `AgentDevice_${key}`, 40).catch(() => undefined);
       row = (await readRows(driver)).find((r) => r.key === key);
     }
-    if (!row) throw new Error(`no row for ${did ?? byName} (key ${key})`);
+    if (!row) throw new Error(`no row for ${did ?? byName ?? key} (key ${key})`);
     if (row.rename) throw new Error("TARGET_DID is this phone: it is never removed here");
     if (!row.remove) throw new Error(`the row for ${did} offers no Remove`);
     undoLock = ownerLockSetup();
