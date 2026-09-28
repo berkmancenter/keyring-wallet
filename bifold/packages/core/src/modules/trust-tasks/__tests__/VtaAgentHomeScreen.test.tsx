@@ -117,6 +117,25 @@ describe('Your agent — after linking', () => {
    * to sit there permanently saying "none" are simply absent until they have
    * something in them — half of why the panel read as a developer's screen.
    */
+  // A reconnect that stopped after its tries is said on the agent screen, with
+  // Try again — never a silent loop (227: a new key's sign-in stalled on iOS).
+  it('says the agent did not answer after reconnecting stopped, and Try again starts afresh', async () => {
+    controller.set({ reconnectGaveUp: true })
+    const again = jest.spyOn(vtaAgent, 'tryAgainNow').mockResolvedValue(undefined)
+    const tree = await renderHome([])
+    expect(tree.getByTestId(testIdWithKey('AgentGaveUp'))).toHaveTextContent(/VtaLink\.AgentDidNotAnswer/)
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentTryAgain')))
+    expect(again).toHaveBeenCalled()
+    controller.set({ reconnectGaveUp: false })
+    again.mockRestore()
+  })
+
+  it('says nothing of the kind while reconnecting still has tries left', async () => {
+    controller.set({ reconnectGaveUp: false })
+    const tree = await renderHome([])
+    expect(tree.queryByTestId(testIdWithKey('AgentGaveUp'))).toBeNull()
+  })
+
   it('shows nothing about approvals when there is nothing to approve', async () => {
     const tree = await renderHome([])
     expect(tree.queryByTestId(testIdWithKey('AgentApprovals'))).toBeNull()
