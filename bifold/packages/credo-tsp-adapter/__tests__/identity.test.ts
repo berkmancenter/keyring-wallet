@@ -11,13 +11,14 @@
 // same one tsp-reference/ref-10/ref-11/ref-12 document).
 import '@openwallet-foundation/askar-nodejs'
 
-import { Agent } from '@credo-ts/core'
+import { Agent, Kms } from '@credo-ts/core'
 import { agentDependencies } from '@credo-ts/node'
-import { AskarModule } from '@credo-ts/askar'
+import { AskarKeyManagementService, AskarModule } from '@credo-ts/askar'
 import { askarNodeJS as askar } from '@openwallet-foundation/askar-nodejs'
+import { Key, KeyAlgorithm } from '@openwallet-foundation/askar-shared'
 import { tsp } from '@bifold/trust-tasks'
 
-import { createAskarIdentity } from '../src/identity'
+import { createAskarIdentity, keyAgreementFromAskarKey } from '../src/identity'
 import { createCredoVidResolver } from '../src/vidResolver'
 
 const utf8 = (s: string) => new TextEncoder().encode(s)
@@ -94,4 +95,75 @@ describe('credo-tsp-adapter: real Askar identity + real Credo VidResolver', () =
     // alice trying to open a message she addressed to bob
     await expect(tsp.unpack(sealed.bytes, aliceIdentity, resolver)).rejects.toThrow()
   }, 30000)
+})
+
+/**
+ * A backend that holds keys outside the wallet's store and lends the raw key
+ * (Keyring's in-memory backend for persona key copies, #10) — here a map, so
+ * this package's test needs nothing from the app. It offers no KMS operation
+ * itself; key agreement reaches it only through `withKey`.
+ */
+class RawKeyHolderForTest {
+  public readonly backend = 'test-holder'
+  public readonly keys = new Map<string, Key>()
+  public isOperationSupported() {
+    return false
+  }
+  public async getPublicKey() {
+    return null
+  }
+  public async withKey<T>(keyId: string, use: (key: Key) => T | Promise<T>): Promise<T | undefined> {
+    const key = this.keys.get(keyId)
+    return key ? use(key) : undefined
+  }
+}
+
+describe('credo-tsp-adapter: key agreement with a key held outside the wallet store', () => {
+  let agent: Agent
+  const holder = new RawKeyHolderForTest()
+
+  beforeAll(async () => {
+    agent = new Agent({
+      config: { label: 'raw-key-holder' },
+      dependencies: agentDependencies,
+      modules: {
+        askar: new AskarModule({
+          askar,
+          enableKms: false,
+          store: { id: `credo-tsp-adapter-holder-${Date.now()}-${Math.random().toString(36).slice(2)}`, key: 'test-key' },
+        }),
+        kms: new Kms.KeyManagementModule({
+          backends: [new AskarKeyManagementService(), holder as unknown as Kms.KeyManagementService],
+          defaultBackend: 'askar',
+        }),
+      },
+    })
+    await agent.initialize()
+  })
+
+  afterAll(async () => {
+    await agent.shutdown()
+  })
+
+  const peerSecret = (peer: Key, mine: Uint8Array) =>
+    peer.keyFromKeyExchange({
+      algorithm: KeyAlgorithm.Chacha20C20P,
+      publicKey: Key.fromPublicBytes({ algorithm: KeyAlgorithm.X25519, publicKey: mine }),
+    }).secretBytes
+
+  test('finds a key the holder has, which the wallet store does not', async () => {
+    const mine = Key.generate(KeyAlgorithm.X25519)
+    holder.keys.set('vta-copy:agent:persona#key-1', mine)
+    const peer = Key.generate(KeyAlgorithm.X25519)
+    const port = keyAgreementFromAskarKey(agent, 'vta-copy:agent:persona#key-1', mine.publicBytes)
+    expect(Array.from(await port.agree(peer.publicBytes))).toEqual(Array.from(peerSecret(peer, mine.publicBytes)))
+  })
+
+  test('falls back to the wallet store for a key the holder does not have', async () => {
+    const created = await agent.kms.createKey({ type: { kty: 'OKP', crv: 'X25519' } })
+    const mine = new Uint8Array(Buffer.from((created.publicJwk as { x: string }).x, 'base64url'))
+    const peer = Key.generate(KeyAlgorithm.X25519)
+    const port = keyAgreementFromAskarKey(agent, created.keyId, mine)
+    expect(Array.from(await port.agree(peer.publicBytes))).toEqual(Array.from(peerSecret(peer, mine)))
+  })
 })
