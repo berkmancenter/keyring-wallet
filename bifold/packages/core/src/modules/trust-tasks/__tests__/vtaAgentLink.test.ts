@@ -375,6 +375,60 @@ describe("the agent's own name", () => {
   })
 })
 
+describe("erasing this phone's copy of its agent", () => {
+  const linked = { vtaDid: offer.vta, label: offer.label, linkedAt: 't0', introSeenAt: 't1' }
+  const persona = (communityDid: string, vtaDid: string) => ({
+    communityDid,
+    vtaDid,
+    did: `did:webvh:Q:${communityDid}`,
+    contextId: 'ctx',
+    vtaKeyIds: { signing: 's', keyAgreement: 'ka' },
+    kmsKeyIds: { signing: `kms-s-${communityDid}`, keyAgreement: `kms-ka-${communityDid}` },
+    createdAt: 't0',
+  })
+
+  it("erases only this agent's identities, their key copies and community records, then unlinks", async () => {
+    let stored: unknown = linked
+    const forgetPersona = jest.fn(async () => undefined)
+    const forgetManager = jest.fn(async () => undefined)
+    const forgetCommunity = jest.fn(async () => undefined)
+    const deleteKey = jest.fn(async () => true)
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({
+        get: async () => stored as never,
+        set: async (l) => void (stored = l),
+        clear: async () => void (stored = undefined),
+      }),
+      identityStore: () =>
+        ({
+          setManager: async () => undefined,
+          forgetManager,
+          forgetPersona,
+          listPersonas: async () => [persona('did:c:mine', offer.vta), persona('did:c:other', 'did:webvh:another-agent')],
+        }) as never,
+      communityStore: () => ({ forgetCommunity }),
+    })
+    await vta.restore({} as never)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    await vta.eraseThisPhonesCopy({ kms: { deleteKey } } as never)
+
+    expect(deleteKey.mock.calls.map(([o]) => (o as { keyId: string }).keyId).sort()).toEqual([
+      'kms-ka-did:c:mine',
+      'kms-s-did:c:mine',
+    ])
+    expect(forgetPersona).toHaveBeenCalledTimes(1)
+    expect(forgetPersona).toHaveBeenCalledWith('did:c:mine')
+    expect(forgetCommunity).toHaveBeenCalledWith('did:c:mine')
+    expect(forgetCommunity).not.toHaveBeenCalledWith('did:c:other')
+    expect(forgetManager).toHaveBeenCalledWith(offer.vta)
+    expect(stored).toBeUndefined()
+    expect(vta.getState().link).toEqual({ kind: 'notLinked' })
+  })
+})
+
 describe('unlinking this phone from its agent', () => {
   const linked = { vtaDid: offer.vta, label: offer.label, linkedAt: 't0', introSeenAt: 't1' }
 
