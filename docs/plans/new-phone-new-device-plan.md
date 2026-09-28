@@ -24,17 +24,21 @@ Today Keyring departs from that in one place. When it mints a persona, it export
 - The new phone links exactly as a first phone does today (enrolment page or manual link). It gets its own admin ACL entry with its own device key. The old phone's key is never moved.
 - After linking, the phone registers itself with `device/register/0.2`: a display name the person can read ("Sam's iPhone") and the platform.
 - It then sends `device/heartbeat/0.2` while it runs, so other devices can see when it was last seen.
+- The per-install device key is kept in its own "this device only" keychain item. A backup restored onto another phone therefore can't act as the old device; it links as a new one. The rest of the local wallet data (contacts, profiles) restores as before.
 - If the old phone is at hand, it can grant the new one. If it isn't, the new phone links through the same page an operator uses for a first link. No new recovery channel is added in this release.
 
 ### B. See your devices and remove an old one
 
-- A **Devices** screen lists every device from `device/list/0.2`: its name, platform, last seen, and this phone marked "this phone".
-- On any other device the person can choose:
-  - **Remove access:** `acl/revoke` of that device's entry;
-  - **Disable:** `device/disable/0.1`;
-  - **Wipe:** `device/wipe/0.2`. The wipe takes effect only when the device next checks in, and the screen says so.
+- The **Devices** screen (it extends the existing agent devices screen) lists every device from `device/list/0.2`: its name, platform, last seen, and this phone marked "this phone".
+- The default name is short and dated ("iPhone · added 28 Sep"), not the model string, and the person can change it.
+- On any other device there is one action, **Remove this phone**. It revokes the device's access (`acl/revoke`) and asks it to wipe (`device/wipe/0.2`). The wipe takes effect only when the device next checks in, and the screen shows it as pending until then.
+- `device/disable` isn't offered. It is irreversible (no task clears `disabledAt`), so it adds nothing to removal. The VTA refuses a disabled or wiped device at authentication (`vta-service/src/auth/backend.rs:225-236`).
 - Nothing is preselected, and no device is removed by default.
-- After a new phone links, Keyring offers this screen once. It stays reachable from Settings.
+- After a new phone links, the **new** phone offers this once, with **Keep** and **Remove** as equal choices. The screen stays reachable from Settings.
+
+### F. Two phones acting as one identity
+
+With keys in the agent, two phones acting as the same persona share one mediator connection per persona, so messaging on both may be interrupted. When `device/list` shows another device that was seen recently, Keyring says so once for each newly live device, as openvtc does (`openvtc-core/src/devices.rs` `sibling_warning`; `openvtc/src/state_handler/device_presence.rs:156-176`).
 
 ### C. Persona keys stay in the agent
 
@@ -67,7 +71,8 @@ This needs no network step beyond the next session, and nothing is lost: the age
 | Part | Prague lane (agent and crypto) | UI/UX lane (screens and flow) |
 |---|---|---|
 | A | `device/register` and `heartbeat` in `VtaClient`; a device key per install | link flow wording; device name prompt |
-| B | `device/list`, `acl/revoke`, `device/disable`, `device/wipe` calls | the Devices screen; the one-time offer after linking |
+| B | `listDevices` (id, name, platform, registered, last seen, disabled, wiped, wake, did, this phone), `removeDevice` (revoke + wipe) | the Devices screen; the one-time offer on the new phone |
+| F | recently-seen siblings from `device/list` | the once-per-sibling warning |
 | C | a VTA signer for the proof code; in-memory key-agreement keys; set-exportability | the "your agent signs for you" explanation; offline behaviour |
 | D | the rotate-keys call; the VTA version check | the lost-phone path and its words |
 | E | the migration and deletion of copies | the one-time notice |
@@ -86,15 +91,15 @@ This needs no network step beyond the next session, and nothing is lost: the age
 ## Costs
 
 - **Latency:** every persona signature is one round trip to the agent. The vetting ceremony signs several documents, and each step gains about the time of a trust-task call.
-- **Offline:** signing as a persona needs the agent to be reachable. Messages can still be read offline for the session.
+- **Offline:** signing as a persona needs the agent to be reachable. While it isn't, a step that signs is disabled with a plain reason; nothing is queued, and the step resumes when the agent is reachable. Messages can still be read offline for the session.
 
 ## Acceptance
 
 - **A:** a second phone links to the same agent; both appear in the Devices list with names and last-seen times.
 - **B:**
-  - removing the old phone's access makes its next agent call fail with an ACL refusal;
+  - removing the old phone makes its next agent call fail with an ACL refusal, and its wipe is shown pending until it checks in;
   - nothing is preselected;
-  - a wipe is shown as pending until the device checks in.
+- **F:** with two phones live on one agent, each shows the shared-identity notice once.
 - **C:**
   - after a fresh install and a full vetting ceremony, the phone's key store holds no persona private key, which a test checks;
   - every persona proof verifies against the persona's published key;
