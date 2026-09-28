@@ -61,6 +61,8 @@ Two phones acting as the same persona share one mediator connection per persona,
 
 The rotation invalidates any copy the lost phone held, including a key-agreement key it had in memory at that moment. Rotation keeps the persona's verification-method ids only from VTI `83492acf` (#1734) onwards; an older VTA renumbers them and breaks existing relationships. Keyring offers rotation only when the agent is new enough, and otherwise tells the person their agent needs an update first.
 
+A rotation counts as done only when the DID resolves, fresh from its host, with the new keys. The agent writes the new log entry, but peers see it only once the DID host serves it. On the lab, the host took an update and never served it, so the persona would have signed with keys no peer could find. Until the new keys resolve, Keyring reports the identity as not yet published, not as done.
+
 ### E. Existing installs
 
 Phones installed before this release hold persistent copies of both persona keys. On first start after upgrading, Keyring:
