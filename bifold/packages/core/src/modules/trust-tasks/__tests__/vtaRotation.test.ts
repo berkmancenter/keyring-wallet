@@ -137,4 +137,22 @@ describe('rotating every identity on this phone', () => {
     expect(result.failed.map((f) => f.did)).toEqual(['did:webvh:Qb:x:b'])
     expect(saved).toEqual(['did:webvh:Qa:x:a', 'did:webvh:Qc:x:c'])
   })
+
+  it('does not call a rotation done until the DID resolves with the new keys', async () => {
+    const checked: { did: string; keys: string[] }[] = []
+    const result = await rotateEachPersona(
+      {
+        task: async () => ({}) as never,
+        borrowKey: async (id: string) => ({ keyId: `kms-${id}`, curve: 'Ed25519' as const, publicKeyMultibase: `z-new-${id}` }),
+      },
+      { setPersona: async () => undefined },
+      personas.slice(0, 2),
+      async (did, keys) => {
+        checked.push({ did, keys })
+        return did === 'did:webvh:Qa:x:a'
+      }
+    )
+    expect(checked[0].keys.sort()).toEqual(['z-new-vta-ka', 'z-new-vta-sign'])
+    expect(result).toMatchObject({ rotated: ['did:webvh:Qa:x:a'], unpublished: ['did:webvh:Qb:x:b'], failed: [] })
+  })
 })
