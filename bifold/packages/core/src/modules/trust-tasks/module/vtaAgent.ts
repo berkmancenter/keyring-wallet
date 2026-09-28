@@ -44,6 +44,7 @@ import {
   type RotationSupport,
 } from './vtaRotation'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
+import { forgetKeyCopy } from './vtaKeys'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 import {
   DeviceActionRefused,
@@ -503,7 +504,7 @@ export class VtaAgentController {
       const personas = await identities.listPersonas().catch(() => [])
       for (const persona of personas.filter((p) => p.vtaDid === vtaDid)) {
         for (const keyId of Object.values(persona.kmsKeyIds ?? {})) {
-          if (keyId) await agent.kms.deleteKey({ keyId }).catch(() => undefined)
+          if (keyId) await forgetKeyCopy(agent, keyId)
         }
         await communities.forgetCommunity(persona.communityDid).catch(() => undefined)
         await identities.forgetPersona(persona.communityDid).catch(() => undefined)
@@ -1004,6 +1005,28 @@ export class VtaAgentController {
     }
   }
 
+  /**
+   * With a session open, fetch into memory the keys of every identity this
+   * phone holds through that agent (#10, plan part C): memory is empty after a
+   * restart or a lock, and nothing signs as a persona until its keys are back.
+   * Never throws; an identity whose keys cannot be fetched is tried again at
+   * the next session, or when it is next used.
+   */
+  private async holdPersonaKeys(agent: Agent, vtaDid: string): Promise<void> {
+    const personas = await Promise.resolve(this.identityStore(agent).listPersonas?.())
+      .then((all) => (all ?? []).filter((p) => p.vtaDid === vtaDid))
+      .catch(() => [])
+    for (const persona of personas) {
+      try {
+        await this.client(agent, vtaDid).holdPersonaKeys(persona)
+      } catch (e) {
+        agent.config?.logger?.warn?.(
+          `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
+        )
+      }
+    }
+  }
+
   /** The agent this phone is linked to, or a refusal a screen words as "no agent yet". */
   private linkedAgent(): string {
     const vtaDid = this.agentAddress()
@@ -1065,6 +1088,7 @@ export class VtaAgentController {
       await this.connect(agent, link.vtaDid)
       this.reconnectAttempt = 0
       this.dispatch({ type: 'sessionOpened' })
+      void this.holdPersonaKeys(agent, link.vtaDid)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       if (isUnsettledSwap(error) && error.refusedBoth && (await this.onTemporaryKey(agent, link.vtaDid))) {

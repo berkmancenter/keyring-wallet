@@ -9,6 +9,7 @@ import { CachesDirectoryPath } from 'react-native-fs'
 import { TOKENS, useServices } from '../container-api'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
+import { dropInMemoryKeys } from '../modules/trust-tasks/module/EphemeralKeyManagementService'
 import { WalletSecret } from '../types/security'
 import { createLinkSecretIfRequired, getAgentModules } from '../utils/agent'
 import { migrateToAskar } from '../utils/migration'
@@ -166,6 +167,8 @@ const useBifoldAgentSetup = (): AgentSetupReturnType => {
 
   const shutdownAndClearAgentIfExists = useCallback(async () => {
     if (agent) {
+      // Persona key copies live in memory only while the app is unlocked (#10).
+      await dropInMemoryKeys(agent)
       try {
         await agent.shutdown()
       } catch (error) {

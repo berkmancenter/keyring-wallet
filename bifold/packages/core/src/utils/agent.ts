@@ -32,6 +32,7 @@ import { anoncreds } from '@hyperledger/anoncreds-react-native'
 import { askar } from '@openwallet-foundation/askar-react-native'
 import { indyVdr } from '@hyperledger/indy-vdr-react-native'
 import Config from 'react-native-config'
+import { EphemeralKeyManagementService } from '../modules/trust-tasks/module/EphemeralKeyManagementService'
 import { WalletSecret } from '../types/security'
 import { RetryingWebVhDidResolver } from './RetryingWebVhDidResolver'
 
@@ -83,6 +84,9 @@ export function getAgentModules({
       backends: [
         new AskarKeyManagementService(),
         new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
+        // Persona key copies, held in memory only (#10): last, so nothing
+        // lands here unless an import names it.
+        new EphemeralKeyManagementService(),
       ],
       defaultBackend: 'askar',
     }),

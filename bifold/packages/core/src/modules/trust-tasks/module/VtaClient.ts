@@ -31,7 +31,7 @@ import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
 import { TRUST_TASK_V2_ENVELOPE_TYPE, signCompactJws, signDocumentProof, tsp } from '@bifold/trust-tasks'
 
-import { importVtaKey, type VtaExportedKey } from './vtaKeys'
+import { EPHEMERAL_KMS_BACKEND, importVtaKey, inMemoryKeyId, isInMemoryKeyId, type VtaExportedKey } from './vtaKeys'
 import {
   createVtiClientDid,
   resolveVtiMediator,
@@ -1014,7 +1014,10 @@ export class VtaClient {
     personaBaseUrl?: string
   }): Promise<VtiPersona> {
     const existing = await this.store.getPersona(options.communityDid)
-    if (existing?.kmsKeyIds?.keyAgreement && existing.kmsKeyIds.signing) return existing
+    if (existing?.kmsKeyIds?.keyAgreement && existing.kmsKeyIds.signing) {
+      await this.holdPersonaKeys(existing)
+      return existing
+    }
 
     await this.connect()
     const contexts = await this.listContexts()
@@ -1102,6 +1105,35 @@ export class VtaClient {
   /** Borrow one of the VTA's keys into the wallet's KMS; returns the KMS key id. */
   async borrowKey(vtaKeyId: string): Promise<{ keyId: string; curve: 'Ed25519' | 'X25519'; publicKeyMultibase: string }> {
     const exported = await this.task<VtaExportedKey>(VTA_TASK.keysExportSecret, { keyId: vtaKeyId })
-    return { ...(await importVtaKey(this.agent, exported)), publicKeyMultibase: exported.publicKeyMultibase }
+    // Held in memory only (#10, plan part C), under an id that is the same every
+    // session, so a persona's record keeps naming it across restarts.
+    const into = { backend: EPHEMERAL_KMS_BACKEND, keyId: inMemoryKeyId(this.vtaDid, vtaKeyId) }
+    return { ...(await importVtaKey(this.agent, exported, into)), publicKeyMultibase: exported.publicKeyMultibase }
+  }
+
+  /**
+   * Fetch a persona's key copies again when this phone does not hold them —
+   * after a restart or a lock the in-memory backend is empty. A persona whose
+   * copies are still in the wallet's store (minted before memory-only custody)
+   * is left alone. Answers whether anything was fetched.
+   */
+  async holdPersonaKeys(persona: VtiPersona): Promise<boolean> {
+    const pairs = [
+      [persona.kmsKeyIds?.signing, persona.vtaKeyIds.signing],
+      [persona.kmsKeyIds?.keyAgreement, persona.vtaKeyIds.keyAgreement],
+    ] as const
+    let fetched = false
+    for (const [kmsKeyId, vtaKeyId] of pairs) {
+      if (!kmsKeyId || !isInMemoryKeyId(kmsKeyId)) continue
+      const held = await this.agent.kms
+        .getPublicKey({ keyId: kmsKeyId, backend: EPHEMERAL_KMS_BACKEND })
+        .then(() => true)
+        .catch(() => false)
+      if (held) continue
+      await this.connect()
+      await this.borrowKey(vtaKeyId)
+      fetched = true
+    }
+    return fetched
   }
 }
