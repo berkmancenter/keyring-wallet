@@ -386,7 +386,10 @@ export async function waitForTestId(driver, key, timeout = 30000) {
     // anywhere from seconds to over a minute after the connect (attempts
     // 13 and 16, 2026-09-13) — and blocks every tap under it. Clear it and
     // look once more before giving up.
-    if (key !== PREFLIGHT_ALLOW_KEY && (await clearLocalityPreflightIfUp(driver))) {
+    const cleared =
+      key !== PREFLIGHT_ALLOW_KEY &&
+      ((await clearLocalityPreflightIfUp(driver)) || (key !== "SiblingNoticeDismiss" && (await clearSiblingNoticeIfUp(driver))));
+    if (cleared) {
       await el.waitForExist({ timeout: Math.min(timeout, 10000), timeoutMsg });
     } else {
       throw err;
@@ -411,6 +414,22 @@ export async function clearLocalityPreflightIfUp(driver) {
   return true;
 }
 
+/**
+ * If the "also open as you" notice (#10, SiblingNotice) is on screen, tap OK.
+ * Returns whether it was. On a shared runner agent every test phone is a
+ * sibling of the others, so it appears whenever another test phone goes live
+ * — mid-ceremony, above the tabs, pushing the screen down. It is dismissed
+ * the way a person would (OK), never "My devices".
+ */
+export async function clearSiblingNoticeIfUp(driver) {
+  const ok = byTestId(driver, "SiblingNoticeDismiss");
+  if (!(await ok.isExisting().catch(() => false))) return false;
+  await ok.click().catch(() => undefined);
+  console.log(`[e2e] ${deviceTag(driver)}: "also open as you" notice — tapped OK`);
+  await new Promise((r) => setTimeout(r, 800));
+  return true;
+}
+
 /** `android:emulator-5554` (or just the platform, e.g. `ios`, when no udid
  *  is tracked) — prefixes every tap log so a two-device run's log is
  *  attributable to the device that acted, not just "android" twice. */
@@ -422,6 +441,7 @@ export function deviceTag(driver) {
 }
 
 export async function tapTestId(driver, key, timeout = 30000) {
+  if (!key.startsWith("SiblingNotice")) await clearSiblingNoticeIfUp(driver);
   const el = await waitForTestId(driver, key, timeout);
   await el.waitForDisplayed({ timeout });
   await el.click();
@@ -614,6 +634,7 @@ export async function scrollToTestId(driver, key, maxSwipes = 6, { from = 0.7, d
 }
 
 async function scrollOnce(driver, key, maxSwipes, from, direction) {
+  await clearSiblingNoticeIfUp(driver);
   // An upward swipe starts well below the top: on an iPad the app can run in a
   // window inset from the screen's top edge, and a swipe starting at 15% lands
   // in the app's own header, where it scrolls nothing (seen on a real iPad).
