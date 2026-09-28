@@ -1,4 +1,4 @@
-# A new phone is a new device, and persona keys stay in the agent
+# A new phone is a new device, and persona keys are held in memory only
 
 **Status:** proposed for release 226 (issues #10 and #4). Owners: the Prague lane (agent and crypto side) and the UI/UX lane (screens and flow).
 **Companions:** [2026-09-28-al.md](./new-phone-new-device-plan/2026-09-28-al.md), with the reasoning, the upstream reading and the PNM-parity gap list.
@@ -40,16 +40,15 @@ Today Keyring departs from that in one place. When it mints a persona, it export
 
 ### F. Two phones acting as one identity
 
-With keys in the agent, two phones acting as the same persona share one mediator connection per persona, so messaging on both may be interrupted. When `device/list` shows another device that was seen recently, Keyring says so once for each newly live device, as openvtc does (`openvtc-core/src/devices.rs` `sibling_warning`; `openvtc/src/state_handler/device_presence.rs:156-176`).
+Two phones acting as the same persona share one mediator connection per persona, so messaging on both may be interrupted. When `device/list` shows another device that was seen recently, Keyring says so once for each newly live device, as openvtc does (`openvtc-core/src/devices.rs` `sibling_warning`; `openvtc/src/state_handler/device_presence.rs:156-176`).
 
-### C. Persona keys stay in the agent
+### C. Persona keys held in memory only
 
-- **Signing goes through the agent.** Every signature a persona makes goes through `keys/sign/0.1`: vetting cards, eligibility presentations, vetting statements, trust-task requests signed as the persona, and approval replies.
-  - The request carries the persona's key id and the bytes to sign (base64url), and the VTA returns the signature.
-  - Keyring's proof code already signs a hash through one signer function (`packages/trust-tasks/src/documentProof.ts`), so the change is a signer that calls the VTA instead of the phone's key store.
-  - `vault/sign-trust-task/0.2` is the alternative for whole trust-task documents. `keys/sign` is used because it covers every proof Keyring makes.
-- **Key agreement stays on the phone, in memory only.** No VTA task decrypts or agrees a key on a persona's behalf. Upstream says a holder "has to hold that DID's private keys to decrypt … It cannot delegate that per-frame" (`vta-sdk/src/trust_tasks.rs:288-294`). So the persona's key-agreement key is fetched with `keys/export-secret` when a session starts and held in memory. It's never written to the key store, and it's dropped when the app is locked or closed. This is what openvtc does.
-- **Signing keys are never exported again.** Once signing goes through the agent, Keyring stops exporting persona signing keys. It sets them non-exportable with `keys/set-exportability/0.1` (the "lock-down" step), so no device can take one later.
+- **The phone fetches each persona's keys from the agent when a session starts and keeps them in memory only.** Both the signing and key-agreement keys come through `keys/export-secret`. They are never written to the key store, and they are dropped when the app is locked or closed. openvtc does exactly this: it fetches every VTA-managed persona key with `get_key_secret` at load and holds it only in the TDK's in-memory secrets resolver (`openvtc-core/src/config/keys.rs:276-296`), then signs with it locally (`openvtc/src/state_handler/inbox_actions.rs:763`).
+- **The agent can't sign persona proofs for the phone.** `keys/sign/0.1` signs a caller's bytes only under an opaque-signing frame (`vti.vta.opaque-signing.v1`, a zero byte, then the payload: `vta-sdk/src/protocols/key_management/sign.rs`; `vta-service/src/trust_tasks/keys.rs:336` at `63d4c0ca`). A Data Integrity proof or TSP frame signed that way verifies as nothing else. `vault/sign-trust-task/0.2` signs only as a vault entry's principal DID, not as a persona.
+- **No VTA task decrypts or agrees a key on a persona's behalf** (`vta-sdk/src/trust_tasks.rs:288-294`).
+- **Persona keys stay exportable.** Every session and every new phone fetches them, so `keys/set-exportability/0.1` isn't used on them.
+- Keyring's proof and TSP code signs through Credo's KMS by key id, so in-memory keys need a KMS the app can empty. That means an in-memory store, or dropping the keys from the wallet's store at lock.
 
 ### D. A lost phone
 
@@ -62,11 +61,10 @@ The rotation invalidates any copy the lost phone held, including a key-agreement
 
 Phones installed before this release hold persistent copies of both persona keys. On first start after upgrading, Keyring:
 1. deletes every persistent persona-key copy from its key store;
-2. switches signing to the agent;
-3. fetches key-agreement keys into memory as in C;
-4. registers the phone as a device (A).
+2. fetches the keys into memory as in C;
+3. registers the phone as a device (A).
 
-This needs no network step beyond the next session, and nothing is lost: the agent holds every key. The copies deleted from this phone can't be recalled from other phones or backups that already hold them. The Devices screen explains that, and offers rotation (D) to anyone who wants certainty.
+Nothing is lost: the agent holds every key. The copies deleted from this phone can't be recalled from other phones or backups that already hold them. The Devices screen explains that, and offers rotation (D) to anyone who wants certainty.
 
 ## Who does what
 
@@ -75,15 +73,15 @@ This needs no network step beyond the next session, and nothing is lost: the age
 | A | `device/register` and `heartbeat` in `VtaClient`; a device key per install | link flow wording; device name prompt |
 | B | `listDevices` (id, name, platform, registered, last seen, disabled, wiped, wake, did, this phone), `removeDevice` (revoke + wipe) | the Devices screen; the one-time offer on the new phone |
 | F | recently-seen siblings from `device/list` | the once-per-sibling warning |
-| C | a VTA signer for the proof code; in-memory key-agreement keys; set-exportability | the "your agent signs for you" explanation; offline behaviour |
+| C | persona keys fetched per session into an in-memory KMS; never persisted | offline behaviour at session start |
 | D | the rotate-keys call; the VTA version check | the lost-phone path and its words |
-| E | the migration and deletion of copies | the one-time notice |
+| E | deletion of persistent copies; the resumable migration | the one-time notice |
 
 ## Feasibility on the stacks
 
 | Task | Our lab (VTI `63d4c0ca`) | Farm VTAs |
 |---|---|---|
-| `keys/sign/0.1` | yes | yes: since 2026-08-01 (`89a53912`), before `ed672fff` |
+| `keys/sign/0.1`: opaque frame only, so not usable for persona proofs | yes | yes: since 2026-08-01 (`89a53912`), before `ed672fff` |
 | `device/register`, `list`, `heartbeat` 0.2; `vault/sign-trust-task/0.2` | yes | yes: since 2026-06-07 (`caa3a67a`) |
 | `device/wipe/0.2` | yes | yes: since 2026-08-27 (`d582a9de`) |
 | `acl/revoke`, `keys/set-exportability/0.1` | yes | yes |
@@ -92,8 +90,8 @@ This needs no network step beyond the next session, and nothing is lost: the age
 
 ## Costs
 
-- **Latency:** every persona signature is one round trip to the agent. The vetting ceremony signs several documents, and each step gains about the time of a trust-task call.
-- **Offline:** signing as a persona needs the agent to be reachable. While it isn't, a step that signs is disabled with a plain reason; nothing is queued, and the step resumes when the agent is reachable. Messages can still be read offline for the session.
+- **Session start needs the agent.** Fetching persona keys needs the agent reachable when a session starts. Until it is, a step that signs or decrypts is disabled with a plain reason, and nothing is queued.
+- **A lost phone's in-memory copies** last until the app is locked or closed, or until rotation (D).
 
 ## Acceptance
 
@@ -105,7 +103,7 @@ This needs no network step beyond the next session, and nothing is lost: the age
 - **C:**
   - after a fresh install and a full vetting ceremony, the phone's key store holds no persona private key, which a test checks;
   - every persona proof verifies against the persona's published key;
-  - `keys/export-secret` is never called for a signing key.
+  - after lock and unlock the keys are fetched again, and signing still works.
 - **D:** on the lab, rotating after removal leaves existing relationships verifiable (method ids unchanged), and the removed phone's old key no longer verifies.
 - **E:** an upgraded install that held copies ends with none, and still joins, vets and messages.
 - **Gates:**
