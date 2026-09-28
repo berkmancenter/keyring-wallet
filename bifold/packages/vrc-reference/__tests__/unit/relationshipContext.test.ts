@@ -1,4 +1,9 @@
-import { RELATIONSHIP_CONTEXT_URL, RELATIONSHIP_CONTEXT_DOCUMENT } from '../../src/relationshipContext'
+import {
+  RELATIONSHIP_CONTEXT_URL,
+  RELATIONSHIP_CONTEXT_DOCUMENT,
+  REGISTRY_DTG_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_DOCUMENT,
+} from '../../src/relationshipContext'
 
 describe('RelationshipContext', () => {
   describe('RELATIONSHIP_CONTEXT_URL', () => {
@@ -48,6 +53,34 @@ describe('RelationshipContext', () => {
       }).not.toThrow()
       // Note: In real scenarios, you might want to freeze the object
       // This test just verifies it doesn't throw when trying to modify
+    })
+  })
+
+  describe('REGISTRY_DTG_CONTEXT_URL', () => {
+    it('should be the real cred-spec registry context IRI, not the legacy placeholder', () => {
+      expect(typeof REGISTRY_DTG_CONTEXT_URL).toBe('string')
+      expect(REGISTRY_DTG_CONTEXT_URL).toBe('https://registry.trustoverip.org/dtg/context/v1')
+    })
+  })
+
+  describe('REGISTRY_DTG_CONTEXT_DOCUMENT', () => {
+    it('should map DTGCredential to the real registry vocabulary IRI', () => {
+      expect(REGISTRY_DTG_CONTEXT_DOCUMENT['@context']).toHaveProperty(
+        'DTGCredential',
+        'https://registry.trustoverip.org/dtg/credentials#DTGCredential'
+      )
+    })
+
+    it('should map RelationshipCredential to the real registry vocabulary IRI', () => {
+      expect(REGISTRY_DTG_CONTEXT_DOCUMENT['@context']).toHaveProperty(
+        'RelationshipCredential',
+        'https://registry.trustoverip.org/dtg/credentials#RelationshipCredential'
+      )
+    })
+
+    it('should specify JSON-LD version 1.1 and be protected', () => {
+      expect(REGISTRY_DTG_CONTEXT_DOCUMENT['@context']).toHaveProperty('@version', 1.1)
+      expect(REGISTRY_DTG_CONTEXT_DOCUMENT['@context']).toHaveProperty('@protected', true)
     })
   })
 })

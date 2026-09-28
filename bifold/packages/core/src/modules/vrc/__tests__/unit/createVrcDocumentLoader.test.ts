@@ -1,5 +1,10 @@
 import { createVrcDocumentLoader } from '../../createVrcDocumentLoader'
-import { DTG_CONTEXT_URL, DTG_CONTEXT_DOCUMENT } from '../../types/relationshipContext'
+import {
+  DTG_CONTEXT_URL,
+  DTG_CONTEXT_DOCUMENT,
+  REGISTRY_DTG_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_DOCUMENT,
+} from '../../types/relationshipContext'
 import {
   WITNESSED_EXCHANGE_CONTEXT_URL,
   WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
@@ -81,6 +86,16 @@ describe('createVrcDocumentLoader', () => {
         contextUrl: null,
         documentUrl: WITNESSED_EXCHANGE_CONTEXT_URL,
         document: WITNESSED_EXCHANGE_CONTEXT_DOCUMENT,
+      })
+    })
+
+    it('should resolve the real DTG registry context URL locally (dual-read, new-issuance VRCs)', async () => {
+      const result = await documentLoader(REGISTRY_DTG_CONTEXT_URL)
+
+      expect(result).toEqual({
+        contextUrl: null,
+        documentUrl: REGISTRY_DTG_CONTEXT_URL,
+        document: REGISTRY_DTG_CONTEXT_DOCUMENT,
       })
     })
   })

@@ -22,7 +22,7 @@ import { Preferences } from '../../types/state'
 import { isWitnessCredential } from './credentialTypes'
 import { selectCredentialContexts } from './utils/selectCredentialContexts'
 import { RelationshipDidRepository } from './repositories/RelationshipDidRepository'
-import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from './types/relationshipContext'
+import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL } from './types/relationshipContext'
 import Toast from 'react-native-toast-message'
 import { ToastType } from '../../components/toast/BaseToast'
 import { createVrcLogger } from './vrc-logging'
@@ -330,7 +330,14 @@ export async function buildVrcCredential(
     ? {
         // VCDM 2.0 shape per the DTG spec (SHOULD issue 2.0). Proof-context
         // rules live in selectCredentialContexts (shared with the RCard builder).
-        '@context': selectCredentialContexts({ useVc20, useDi }, [DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL]),
+        //
+        // Real DTG registry context, not the legacy self-hosted
+        // DTG_CONTEXT_URL/RELATIONSHIP_CONTEXT_URL pair (still used by the
+        // VCDM 1.1 branch below): cred-spec's own `@context` array requires
+        // exactly this IRI second, after credentials/v2. Every document
+        // loader still resolves the old pair too (dual-read), so already-
+        // issued/legacy credentials keep verifying unchanged.
+        '@context': selectCredentialContexts({ useVc20, useDi }, [REGISTRY_DTG_CONTEXT_URL]),
         type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
         // Bare DID string per DTG spec — contact info rides in the RCard instead
         issuer: myRelationshipDid,

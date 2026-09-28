@@ -14,6 +14,8 @@ export {
   RELATIONSHIP_CONTEXT_DOCUMENT,
   RCARD_CONTEXT_URL,
   RCARD_CONTEXT_DOCUMENT,
+  REGISTRY_DTG_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_DOCUMENT,
 } from './relationshipContext'
 
 // Witnessed Exchange context (for VWCs)

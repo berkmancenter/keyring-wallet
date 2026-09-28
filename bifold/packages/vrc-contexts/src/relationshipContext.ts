@@ -41,6 +41,38 @@ export const RELATIONSHIP_CONTEXT_DOCUMENT = {
   },
 }
 
+// Real DTG registry context (cred-spec `spec/body.md`: `@context` MUST list
+// `https://www.w3.org/ns/credentials/v2` first, this unversioned IRI second,
+// compared as an exact string; `type` MUST include `DTGCredential` plus
+// exactly one concrete subtype). Same registry namespace VSC's own
+// StatementCredential/issuerScope terms already target
+// (@bifold/dtg-vocab's src/namespace.ts is the canonical source for these
+// strings; vrc-contexts has no dependency on dtg-vocab, so they're
+// duplicated here byte-for-byte, same convention already used in
+// witnessedExchangeContext.ts for StatementCredential/issuerScope).
+//
+// NEW ISSUANCE ONLY, VC 2.0 profile: a VRC issued from here on uses this
+// context instead of DTG_CONTEXT_URL/RELATIONSHIP_CONTEXT_URL above. Those
+// two are NOT removed or changed, and every document loader that resolves
+// them keeps doing so -- old-format and legacy VCDM 1.1 credentials keep
+// verifying exactly as before. Dual-read, same design this migration used
+// for witness credentials' wd02/vsc split.
+//
+// RCard is deliberately excluded: cred-spec `spec/body.md` states RCard is
+// "not a DTGCredential subtype" and awaits an undefined future DTG
+// Verifiable Data Structures spec -- there is no real target IRI for it
+// yet, so RCARD_CONTEXT_URL/RCARD_CONTEXT_DOCUMENT below are untouched.
+export const REGISTRY_DTG_CONTEXT_URL = 'https://registry.trustoverip.org/dtg/context/v1'
+
+export const REGISTRY_DTG_CONTEXT_DOCUMENT = {
+  '@context': {
+    '@version': 1.1,
+    '@protected': true,
+    DTGCredential: 'https://registry.trustoverip.org/dtg/credentials#DTGCredential',
+    RelationshipCredential: 'https://registry.trustoverip.org/dtg/credentials#RelationshipCredential',
+  },
+}
+
 // RelationshipCard (RCard) context — the exchanged contact-card credential
 // defined by the DTG spec (type: ["VerifiableCredential", "RelationshipCard"]).
 //
