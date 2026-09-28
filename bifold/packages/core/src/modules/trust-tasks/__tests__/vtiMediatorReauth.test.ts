@@ -128,13 +128,18 @@ describe('a login step that never answers', () => {
     let authenticateCalls = 0
     global.fetch = ((url: string, init?: { signal?: AbortSignal }) => {
       if (String(url).endsWith('/challenge')) {
-        return Promise.resolve({ status: 200, text: async () => JSON.stringify({ data: { challenge: 'c', session_id: 's' } }) })
+        return Promise.resolve({
+          status: 200,
+          text: async () => JSON.stringify({ data: { challenge: 'c', session_id: 's' } }),
+        })
       }
       authenticateCalls += 1
       if (authenticateCalls === 1) {
         // Answered at the mediator, never at the phone: only an abort ends it.
         return new Promise((_, reject) => {
-          init?.signal?.addEventListener('abort', () => reject(Object.assign(new Error('Aborted'), { name: 'AbortError' })))
+          init?.signal?.addEventListener('abort', () =>
+            reject(Object.assign(new Error('Aborted'), { name: 'AbortError' }))
+          )
         })
       }
       return Promise.resolve({ status: 200, json: async () => ({ data: { access_token: 'fresh' } }) })
