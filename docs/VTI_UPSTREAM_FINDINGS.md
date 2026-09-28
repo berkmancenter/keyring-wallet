@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.62 — 2026-09-28.** A living document: every finding here was measured
+**Version 1.63 — 2026-09-28.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -2064,7 +2064,7 @@ Where a push did happen on this mediator, it was not immediate: on a phone's ses
 
 (c) **Expected, their call:** an installer on the gateway side (for example `vti-push-gateway import-bundle`), or `pnm bootstrap open --install-identity <path>` for template payloads; at the least, `bootstrap open` should not consume a seed when it writes nothing.
 
-(d) **Our workaround:** a converter that opens the bundle with vta-sdk's documented `open_bundle` (`provision-integration.md`, "Open a bundle"), keeps the seed, and writes the identity file at mode 0600 (wallet PR #241). Its measured result is still to come.
+(d) **Our workaround:** a converter that opens the bundle with vta-sdk's documented `open_bundle` (`provision-integration.md`, "Open a bundle"), keeps the seed, and writes the identity file at mode 0600 (wallet PR #241). **Measured on the lab, 2026-09-28 ~23:41–23:47Z** (VTI `2240aa7e`, gateway `e542a9d7`), run on backup copies of the bundle and seed: the converter opened the bundle (digest verified) and wrote the identity file, and the seed stayed in place. The gateway started with it, and push-test's signed `push/provision` crossed the lab mediator and was accepted (`gateway_provision_total{outcome="ok"} 1`).
 
 ## Beyond VTI
 
@@ -2862,6 +2862,7 @@ and the credential's own id.
 | 1.60 | 2026-09-28 | **VTI-49** (new, Medium), **VTI-50** (new, Medium), **VTI-51** (new, High), from the lab upgraded to VTI main on 2026-09-27. VTI-08, VTI-09, VTI-23 and VTI-27 marked *upstream says fixed* (8ef95235, 24f2d355); the re-measure is pending on a lab at main. |
 | 1.61 | 2026-09-28 | Lab on upstream main (VTI `2240aa7e`, webvh `1f2221a`, tdk mediator `55580615`). **VTI-09** resolved and **VTI-27** resolved in code (live TSP 403 seen; a DIDComm-path check still owed), read at `2240aa7e`. **VTI-23** unchanged. **VTI-08** live re-run still owed. **VTI-52** (new candidate, Medium): a reply stored for a connected client is not pushed on its live session, twice, on the new mediator. |
 | 1.62 | 2026-09-28 | **VTI-53** (new candidate, Medium): a push-gateway provision bundle has no installer, and `pnm bootstrap open` consumes its single-use seed while writing nothing, so following the gateway README destroys the keys. Read from source, not run. |
+| 1.63 | 2026-09-28 | VTI-53 (d): the workaround converter measured on the lab. It opened the bundle and kept the seed, the gateway started with the resulting identity, and push-test's signed `push/provision` was accepted. |
 | 1.59 | 2026-09-27 | **VTI-48** (new, Medium): the DTG JSON-LD context that every community card names (`https://firstperson.network/credentials/dtg/v1`) answers 404, so a JSON-LD wallet cannot store the cards. Keyring serves an empty stand-in until it is published. |
 | 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
