@@ -190,6 +190,14 @@ describe('linking without a QR', () => {
     })
   })
 
+  // #30: a key shown after the agent's address was SCANNED (another phone's
+  // "Add another phone" code) is shown as a code for that phone to scan.
+  it('remembers that the address came from a scan', () => {
+    const scanned = reduceLink(initialLinkState, { type: 'keyShown', ...agent, did: 'did:key:z6Mknew', via: 'scan' })
+    expect(scanned).toMatchObject({ kind: 'showingKey', did: 'did:key:z6Mknew', via: 'scan' })
+    expect(reduceLink(scanned, { type: 'grantCheckStarted' })).toMatchObject({ via: 'scan' })
+  })
+
   it('never shows a key over a working link', () => {
     expect(reduceLink(linked, { type: 'keyShown', ...agent, did: 'x' })).toBe(linked)
   })
