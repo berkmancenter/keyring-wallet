@@ -198,7 +198,15 @@ try {
     // says it is no longer linked, with Erase and Link again of equal weight.
     await unlockToHome(driver);
     await tapTestId(driver, "MyAgent", 15000).catch(() => undefined);
+    let landedOnLink = false;
     for (const until = Date.now() + 120000; !(await existsTestId(driver, "VtaLinkErase", 2000)); ) {
+      // 226: My Agent shows the plain "Link your agent" landing, and the
+      // no-longer-linked screen only behind it. Recorded, then followed.
+      if (await existsTestId(driver, "AgentHomeLink", 500)) {
+        landedOnLink = true;
+        await tapTestId(driver, "AgentHomeLink", 5000).catch(() => undefined);
+        continue;
+      }
       if (await existsTestId(driver, "AgentDevices", 500)) {
         await tapTestId(driver, "AgentDevices", 5000).catch(() => undefined);
         await sleep(3000);
@@ -206,13 +214,13 @@ try {
       }
       if (Date.now() > until) throw new Error("the removed phone never showed its no-longer-linked screen within 120 s");
     }
-    console.log(`[devices] removed phone: "${await textOf(driver, "VtaLinkError")}"`);
+    console.log(`[devices] removed phone: "${await textOf(driver, "VtaLinkError").catch(() => "(text not readable)")}"${landedOnLink ? ' — reached only through My Agent\'s "Link your agent" landing' : ""}`);
     const both = (await existsTestId(driver, "VtaLinkErase", 500)) && (await existsTestId(driver, "VtaLinkScanAgain", 500));
     if (!both) throw new Error("the removed phone must offer Erase and Link again");
     await screenshot(driver, `devices-removed-${PLATFORM}`);
     lap("removed screen");
     await tapTestId(driver, "VtaLinkErase", 15000);
-    console.log(`[devices] erase explains: "${await textOf(driver, "VtaLinkEraseWhat")}"`);
+    console.log(`[devices] erase explains: "${await textOf(driver, "VtaLinkEraseWhat").catch(() => "(text not readable)")}"`);
     await tapTestId(driver, "VtaLinkEraseConfirm", 15000);
     await waitForTestId(driver, "VtaLinkErased", 60000);
     console.log(`[devices] erased: "${await textOf(driver, "VtaLinkErased")}"`);
