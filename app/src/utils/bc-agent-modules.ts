@@ -86,6 +86,10 @@ export function getBCAgentModules({
       backends: [
         new AskarKeyManagementService(),
         new SecureEnvironmentKeyManagementService({ biometricsBacked: false }),
+        // Persona keys borrowed from the agent for this session, never stored
+        // (#10). Last: Credo gives an unnamed create or import to the first
+        // capable backend, and new keys stay in the wallet store.
+        new BifoldCore.EphemeralKeyManagementService(),
       ],
       defaultBackend: 'askar',
     }),
