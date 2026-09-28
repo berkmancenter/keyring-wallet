@@ -12,6 +12,7 @@
 - **[[VETTING-DESIGN]]** — `docs/design/vetting-process.md` in `OpenVTC/openvtc` (DRAFT v3): §1 non-goals, §10.5 accountability, §14.2 V2 scope, D7/D14/D19.
 - **[[VTI-CRED-ARCH]]** — `docs/05-design-notes/vti-credential-architecture.md` in VTI, present at our pin `187ad9cd`: D4 and §4, proof formats.
 - **[[AGENT-STATE]]** — *The Agent Is the State: UIs That Keep Nothing*, `ic3.software/blog/the-agent-is-the-state`.
+- **[[W39]]** — *Week 39 OpenVTC report*, `docs.fpp.storm.ws/week-39-openvtc-report.html` (public, read 2026-09-27): hidden vetting implemented on unmerged `zkp-pcs` branches in both repositories, *"proving runs on the client side (via the community app), while verification occurs server-side"*, a proof *"about 1.3 KB, and milliseconds to check"*, and the library *"a research artefact and unaudited"*.
 - **[[ZKP-TF]]** — `trustoverip/dtgwg-zkp-tf` (DTG ZKP V1.0, working draft targeted at IIW #43, Nov 2026) and its evidence lab `mitchuski/dtgwg-zkp-mage`.
 - **[[CONSENT-VIEW]]** — `packages/core/src/persona/consent-view.ts` in `vta-browser-plugin` at `9643c57` (not at `89d70c4`): how upstream's own client renders a predicate claim.
 - **`tsp-reference/ref-03d-bls12-381-hermes`** — BLS12-381 measured on the app's Hermes.
@@ -50,7 +51,7 @@ Everything in our ecosystem is **non-interactive**. The verifier's random challe
 | **Math** | Pairing-based signature over BLS12-381; the holder derives a proof of knowledge of the signature | Σ-protocols made non-interactive by Fiat–Shamir over a pairing-friendly curve; pseudorandom *tags* stand in for identities; blind issuance | R1CS circuit (circom), BN254 curve, Poseidon hashing; constant-size proof |
 | **Cost** | Proof derivation is a public operation on the issuer's signature; the holder needs **no** BLS key ([[VTI-CRED-ARCH]] §4) | Constant-size proof; proving and verifying are both cheap on server hardware. No public benchmark we can cite | ≈680 ms to prove, 721 B proof, on the lab's 11 523-constraint circuit ([[ZKP-TF]] lab) |
 | **Setup** | None | None beyond the issuer's keys | A **per-circuit trusted-setup ceremony**; the lab's is lab-only |
-| **Upstream status** | Adopted, not built: `affinidi-bbs` over `bls12_381_plus` and `bbs_2023` in the TDK, gated on an independent audit ([[VTI-CRED-ARCH]] D4) | Listed as V2 scope — *"k-of-n proofs over hidden vetters"* ([[VETTING-DESIGN]] §14.2). No public specification yet | A `CredentialFormat::Zkp` variant exists; "the Circom circuit + Groth16 prover/verifier (server-side VTA proving) live outside it and are deferred" ([[VTI-CRED-ARCH]] §4) |
+| **Upstream status** | Adopted, not built: `affinidi-bbs` over `bls12_381_plus` and `bbs_2023` in the TDK, gated on an independent audit ([[VTI-CRED-ARCH]] D4) | **Implemented upstream** on `zkp-pcs` branches in both repositories, unmerged and not public, proof *"about 1.3 KB"* ([[W39]]); deliberately off the 5 October critical path. Still no public specification, and the library is *"a research artefact and unaudited"* ([[W39]]) | A `CredentialFormat::Zkp` variant exists; "the Circom circuit + Groth16 prover/verifier (server-side VTA proving) live outside it and are deferred" ([[VTI-CRED-ARCH]] §4) |
 | **Our track** | Z2 | Z1 | Z3 |
 
 ### 2.3 The building blocks, in the words the specs use
@@ -103,10 +104,12 @@ Three facts specific to a phone bear on it. The first is general; the second and
 2. **Hidden vetting needs an always-on agent.** Capping how often an anonymous vetter may vouch means handing each of them rate-limiting tokens, and the collection of those tokens must not track their activity — otherwise the collection pattern is itself the signal the design exists to hide. That implies a component awake on a schedule of its own. A mobile OS suspends and kills apps as routine, so the phone cannot be that component.
 3. **Anonymity does not survive two copies.** A vetter's attestations held on the phone *and* in the VTA are two places to leak identifying tags from, and two sources of truth for what has already been spent.
 
+**Upstream's own implementation proves on the client, for both roles.** [[W39]] states it plainly: *"proving runs on the client side (via the community app), while verification occurs server-side"*. That is a coherent choice for a desktop client which is running whenever its operator is, and it does not change our answer, because the reason the vetter's side needs an agent is not custody but **duties that continue while the client is closed**. It does mean our placement is a deliberate divergence from the reference client, made for a phone, and should be described that way rather than as the ecosystem's rule.
+
 **So, split by role:**
 
-- **Vetter side — settled, the VTA proves.** Points 2 and 3 are decisive: an unattended collection schedule and a single source of truth for what has been spent are not things a phone can offer. A Keyring user who vouches does so through their agent.
-- **Applicant side — open (decision D4, §8).** None of that binds here. The applicant's secret is minted for one application and discarded with it, there is no schedule to keep, nothing is rate-limited, and the applicant is not hiding from anybody: the community learns their join DID at submit in either design. So the phone proving for itself is defensible, and it would work offline and keep the applicant's secret off any server. Against it: a second proving stack to ship and maintain in the app, for a party that gains no privacy from holding it, and a split architecture where the vetter's side lives in the agent and the applicant's does not. **This plan's working assumption stays "the VTA proves both sides", because it is the simpler client and matches §3.2 — but it is an assumption, not a finding, and D4 records what would decide it.**
+- **Vetter side — settled for us, the VTA proves.** Points 2 and 3 are decisive: an unattended collection schedule and a single source of truth for what has been spent are not things a phone can offer. A Keyring user who vouches does so through their agent.
+- **Applicant side — open (decision D4, §8), and the evidence now favours the phone.** [[W39]]'s client-side placement is the reference implementation for exactly this operation, and none of the vetter's constraints bind here. The applicant's secret is minted for one application and discarded with it, there is no schedule to keep, nothing is rate-limited, and the applicant is not hiding from anybody: the community learns their join DID at submit in either design. So the phone proving for itself is defensible, and it would work offline and keep the applicant's secret off any server. Against it: a second proving stack to ship and maintain in the app, for a party that gains no privacy from holding it, and a split architecture where the vetter's side lives in the agent and the applicant's does not. **The working assumption is now the weaker reading.** It remains "the VTA proves both sides" only because nothing has been built here yet and the simpler client is the cheaper place to start; [[W39]], and the fact that our ceremony layer already borrows persona secrets to the phone (§3.3), both point the other way. D4 records what settles it, and an applicant-side prover is the outcome to plan for unless Alberto's borrowed-keys answer forbids it.
 
 **Rejected for the vetter's side: proving on the device.** It is feasible. BLS12-381 runs on the app's Hermes and gives byte-identical output to Node, at about 15× Node's cost (a pairing is 96.7 ms, a BLS verify 146 ms; `ref-03d`), and the DTG lab's Groth16 prover runs in about 680 ms. For a vetter it is still ruled out by points 2 and 3: it cannot keep an unattended schedule, and it creates a second source of truth for what has been spent. For an applicant those objections do not apply, which is exactly why D4 is open rather than closed — and `ref-03d` is the measurement that says the phone could carry it if we chose to.
 
@@ -218,6 +221,7 @@ This covers Groth16 predicate proofs with scoped nullifiers (personhood, livenes
 | C4 | Named and hidden vetting never mix in one criterion, or one vetter can be counted twice | Ours (§4.1) |
 | C5 | Anything a vetter sends anonymously goes from a fresh identifier, never the member DID or the session DID | Ours (§4.1) |
 | C6 | *"Implementations SHOULD make ZKP presentation the default behavior so that users obtain privacy preservation without having to opt in"* | DTG Core Credentials, as quoted in [`openvtc-integration-plan.md`](./openvtc-integration-plan.md) §4.6 |
+| C6a | The construction's library is *"a research artefact and unaudited"* ([[W39]]). No community with real members should rely on it before an independent review, the same gate [[VTI-CRED-ARCH]] D4 sets for BBS | [[W39]]; ours by analogy |
 | C7 | Holders need no BLS key to derive a BBS disclosure; only durable `did:webvh` issuers mint BBS credentials; BBS is gated on an independent audit | [[VTI-CRED-ARCH]] D4, §4 |
 | C8 | *"Do not build a second copy of anything the agent already is"* | [[AGENT-STATE]] |
 | C9 | ZK over vetting is a V2 non-goal of the current ceremony: *"ZKP predicate claims; k-of-n proofs over hidden vetters"* | [[VETTING-DESIGN]] §1, §14.2 |
@@ -229,7 +233,7 @@ Each phase starts only on instruction. Every phase that touches upstream behavio
 
 ### ZK0 — Baseline and access
 
-- Obtain the predicate-credential library this construction needs — published, or otherwise readable — and pin it in `external/` via `setup-external.mjs`, alongside `OpenVTC/openvtc`, which is cloned but unpinned today.
+- Obtain the predicate-credential library this construction needs and pin it in `external/` via `setup-external.mjs`. A repository now exists at `OpenVTC/predicate-credential-system`, but as of 2026-09-27 it holds **one commit, a title-only README, 0 KB of code and no licence** — a placeholder, not the library. Pin it when it has source and a licence; an unlicensed dependency is unusable regardless of visibility. alongside `OpenVTC/openvtc`, which is cloned but unpinned today.
 - Advance the VTI pin from `187ad9cd` (vta-sdk 0.25) to a release carrying the vetting-privacy work, coordinated with the owner of the pins and the lab stack; the lab's own bump (to `3dcbfe98`) is queued behind the Farm work. The VTI advance is its own motion: it does not ride with the `dtgwg-cred-spec` advance that [`vsc-migration-plan.md`](./vsc-migration-plan.md) schedules at the start of its V0 (*"One pin, one reason, one entry in `SYNC_LOG.md`"*, §10). It shares the VTI clone repair and the `personhood.rego` re-read that plan's §7.1 needs, so do those once for both.
 - Re-read §2.2's upstream-status column against the new pins and correct this plan.
 
@@ -306,7 +310,8 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 
 | Trigger | Unblocks |
 |---|---|
-| The predicate-credential library becomes readable or published | ZK0 (B1) |
+| `OpenVTC/predicate-credential-system` gains source **and a licence** | ZK0 (B1) |
+| The `zkp-pcs` branches merge, or are pushed where we can read them | ZK1 (B2) |
 | A hidden-vetting task URI appears in any readable spec, even a draft | ZK1 (B2) |
 | A VTI release whose `vta-service` carries the vetter's proof key | ZK2, ZK3 (B3) |
 | A manifest field, or a Farm signal, naming the operator of a VTA or mediator | §3.5, VTI-Q16 (B5) |
@@ -314,8 +319,8 @@ None of this was built for zero knowledge, and three pieces of it are load-beari
 
 **Decided upstream, waiting on someone else:**
 
-- **B1** — A readable predicate-credential library. We have found none published that implements this construction, and a service that publishes to crates.io cannot depend on a git-only crate in any case. Who publishes it, and under what licence, is not ours to decide. Blocks ZK0.
-- **B2** — The message and task definitions for hidden vetting: what a community publishes about the mode, how a vetter enrols and collects its allowance, what a vetter returns instead of a named statement, how an applicant submits the proof, and how a withdrawal is expressed. Upstream. Blocks ZK1.
+- **B1** — A readable, licensed predicate-credential library. `OpenVTC/predicate-credential-system` exists but is an empty placeholder (see ZK0), and a service that publishes to crates.io cannot depend on a git-only crate in any case. Who publishes it, and under what licence, is not ours to decide. Blocks ZK0.
+- **B2** — The message and task definitions for hidden vetting. The work exists on unmerged `zkp-pcs` branches ([[W39]]), so the shapes are written but not readable by us, and they are behind their own `main` by a wide margin. What we need published: what a community publishes about the mode, how a vetter enrols and collects its allowance, what a vetter returns instead of a named statement, how an applicant submits the proof, and how a withdrawal is expressed. Upstream. Blocks ZK1.
 - **B3** — Hidden-vetting support in `vtc-service` and `vta-service`. Upstream. Blocks ZK2 and ZK3.
 - **B4** — Governance acceptance of the trade hidden mode makes. The accountability machinery [[VETTING-DESIGN]] §10.5 describes — lineage, and the cascade review that re-examines everyone a discredited vetter vouched for — cannot work against vetters nobody can name. A community must decide it accepts that, and that decision is not ours. Hidden mode may never be enabled anywhere Keyring runs.
 - **B5** — A signal a client can read that the VTA and VTC operators differ (§3.5). Not designed anywhere yet. Raised as **VTI-Q16** in `docs/VTI_UPSTREAM_FINDINGS.md` (on `main`, `a5f5cab`), which cites only published sources.
