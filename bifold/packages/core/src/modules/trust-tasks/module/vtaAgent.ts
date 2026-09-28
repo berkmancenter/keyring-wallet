@@ -866,7 +866,7 @@ export class VtaAgentController {
 
   /**
    * Remove a device from this agent (#10, {@link removeAgentDevice}): a
-   * registered device is wiped, one with no binding revoked. Never this phone,
+   * registered device is wiped and then revoked, one with no binding revoked. Never this phone,
    * refused before anything is asked; the person confirms first and nothing is
    * sent without it.
    */

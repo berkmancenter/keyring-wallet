@@ -126,25 +126,42 @@ export async function listAgentDevices(port: AgentDevicePort): Promise<AgentDevi
 }
 
 /**
- * Remove a device from the agent: wipe a registered one, revoke one with no
- * binding. Never this phone — the agent refuses a caller removing itself, and
- * a person who wants to leave does so from the other device.
+ * Remove a device from the agent: revoke its access, after first wiping it
+ * when it is registered. Never this phone — the agent refuses a caller removing
+ * itself, and a person who wants to leave does so from the other device.
+ *
+ * Both, because neither is enough alone. A wipe marks the binding, but the
+ * agent checks that mark only when a caller signs in over REST
+ * (vta-service `auth/backend.rs` `device_access_gate`); its trust-task path
+ * resolves authority from the access list alone (`messaging/auth.rs`
+ * `auth_from_did`), so a wiped phone kept acting as an administrator over TSP
+ * on the lab (VTI 63d4c0ca). Revoking deletes the access-list entry, which
+ * both paths refuse. It deletes the binding too, so the device leaves the
+ * list; the removed phone learns it on its next call, from the refusal.
+ *
+ * A wipe the agent refuses does not stop the revoke: access is what matters.
+ * `mode` is `wiped` when both happened, `revoked` when only the revoke did.
  */
 export async function removeAgentDevice(
   port: AgentDevicePort,
   device: AgentDevice
 ): Promise<{ mode: 'wiped' | 'revoked' }> {
   if (device.isThisPhone) throw new Error('refusing to remove this phone from its own agent')
+  let wiped = false
   if (device.source === 'registered' && device.deviceId) {
-    await port.task(AGENT_DEVICE_TASK.wipe, {
-      deviceId: device.deviceId,
-      scope: 'cache-and-keys',
-      reason: 'Removed from the agent by its owner in Keyring',
-    })
-    return { mode: 'wiped' }
+    wiped = await port
+      .task(AGENT_DEVICE_TASK.wipe, {
+        deviceId: device.deviceId,
+        scope: 'cache-and-keys',
+        reason: 'Removed from the agent by its owner in Keyring',
+      })
+      .then(
+        () => true,
+        () => false
+      )
   }
   await port.task(AGENT_DEVICE_TASK.aclRevoke, { subject: device.did })
-  return { mode: 'revoked' }
+  return { mode: wiped ? 'wiped' : 'revoked' }
 }
 
 /**
