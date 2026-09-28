@@ -144,6 +144,12 @@ export interface VtaAgentDeps {
    */
   confirmOwner?: ConfirmOwner
   /**
+   * How long an owner act (adding a device) may take once the owner has
+   * confirmed: signing in plus the agent's answer. Past it the act gives up
+   * as `noAnswer` instead of leaving the screen waiting (IN-53). Tests shorten it.
+   */
+  ownerActDeadlineMs?: number
+  /**
    * Whether this phone has a screen lock or biometrics, so an owner key made
    * on it is protected (plan §3). Unset, "Create my agent" refuses with
    * {@link OwnerCheckNotConfigured}.
@@ -202,6 +208,11 @@ export const GRANT_CHECK_DEADLINE_MS = 10000
 export const GRANT_CONNECT_DEADLINE_MS = 30000
 /** How long a background sign-in may take before it counts as a drop and is retried (IN-53). */
 export const SESSION_CONNECT_DEADLINE_MS = 30000
+/**
+ * Signing in and the agent's answer to an owner act (adding a device): the
+ * grant's own reply wait is 30 s once sent, and signing in comes before it.
+ */
+export const OWNER_ACT_DEADLINE_MS = 45000
 
 /** Matches VtaClient's own "no answer in time" — a silence, not a refusal. */
 const NO_ANSWER = /the VTA did not answer/
@@ -929,13 +940,35 @@ export class VtaAgentController {
     let mine = await this.phoneKeys(agent, vtaDid)
     if (mine.includes(did)) throw new DeviceActionRefused('thisPhone')
     await this.confirmOwner('Add a backup device to your agent')
-    const client = await this.signedIn(agent, vtaDid)
-    mine = await this.phoneKeys(agent, vtaDid)
-    if (mine.includes(did)) throw new DeviceActionRefused('thisPhone')
-    const entry = await client.grantAdmin(did, { label }).catch((error: unknown) => {
-      throw this.refused(error)
+    return this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      mine = await this.phoneKeys(agent, vtaDid)
+      if (mine.includes(did)) throw new DeviceActionRefused('thisPhone')
+      const entry = await client.grantAdmin(did, { label }).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+      return deviceFrom(entry, mine)
     })
-    return deviceFrom(entry, mine)
+  }
+
+  /**
+   * An owner act, bounded: signing in has no deadline of its own (resolving the
+   * agent's mediator and opening the session), so an agent that cannot be
+   * reached kept "Add as backup" spinning for minutes (IN-53, a Farm-hosted
+   * agent on 226). Past the deadline it is `noAnswer` — "Your agent didn't
+   * answer. Check the list before trying again." — since the act may still land.
+   */
+  private async withinOwnerDeadline<T>(act: () => Promise<T>): Promise<T> {
+    const ms = this.deps.ownerActDeadlineMs ?? OWNER_ACT_DEADLINE_MS
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new DeviceActionRefused('noAnswer')), ms)
+    })
+    try {
+      return await Promise.race([act(), late])
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   /**
