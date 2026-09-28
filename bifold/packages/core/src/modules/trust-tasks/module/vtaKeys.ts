@@ -100,6 +100,14 @@ export async function importVtaKey(
 /** The KMS backend holding persona key copies in memory only (EphemeralKeyManagementService). */
 export const EPHEMERAL_KMS_BACKEND = 'ephemeral'
 
+/**
+ * The KMS backends the agent must be built with: the wallet's own store, and
+ * the in-memory one persona key copies go to. An app that assembles its own
+ * agent modules checks its list against this one — the in-memory backend
+ * missing leaves every persona on its stored copy, silently.
+ */
+export const REQUIRED_KMS_BACKENDS = ['askar', EPHEMERAL_KMS_BACKEND] as const
+
 const IN_MEMORY_PREFIX = 'vta-copy:'
 
 /** The in-memory KMS id of this phone's copy of the agent's key `vtaKeyId`. */

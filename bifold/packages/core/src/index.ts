@@ -517,3 +517,5 @@ export { isMediatorInvitation } from './utils/mediatorhelpers'
 export { isDidCommInvitation, isOpenIdCredentialOffer, isOpenIdPresentationRequest } from './utils/parsers'
 
 export { ownerChecks } from './modules/trust-tasks/module/ownerConfirm'
+export { EphemeralKeyManagementService } from './modules/trust-tasks/module/EphemeralKeyManagementService'
+export { EPHEMERAL_KMS_BACKEND, REQUIRED_KMS_BACKENDS } from './modules/trust-tasks/module/vtaKeys'
