@@ -2142,9 +2142,14 @@ export function setupVrcConnectionHandler(agent: Agent) {
             if (credential?.type) {
               const types = Array.isArray(credential.type) ? credential.type : [credential.type]
 
-              // Auto-accept WitnessCredentials (the credential, not just its
-              // types: a witnessed/1 VWC is told by its predicate)
-              if (isWitnessCredential(credential) || isWitnessCredential(types)) {
+              // Auto-accept WitnessCredentials. Pass the full credential (not
+              // just its type array) so isWitnessCredential can also check
+              // credentialSubject.predicate for the new VSC shape — AL's
+              // review, finding A14. The separate `isWitnessCredential(types)`
+              // call main had is redundant once the credential is passed; the
+              // `types` binding stays because the RelationshipCard check below
+              // still uses it.
+              if (isWitnessCredential(credential)) {
                 vwcAutoLogger.info(`✓ Auto-accepting WitnessCredential offer: ${record.id}`)
 
                 await release()
@@ -2222,11 +2227,13 @@ export function setupVrcConnectionHandler(agent: Agent) {
           }
 
           const credential = w3cRecord.encoded as any
-          const types = credential.type || []
-          vwcLogger.debug(`Credential types: ${types.join(', ')}`)
+          vwcLogger.debug(`Credential types: ${(credential.type || []).join(', ')}`)
 
-          // Check if this is a WitnessCredential (either shape; see isWitnessCredential)
-          if (isWitnessCredential(credential) || isWitnessCredential(types)) {
+          // Check if this is a WitnessCredential — pass the full credential
+          // (not just its type array) so isWitnessCredential can also check
+          // credentialSubject.predicate for the new VSC shape (AL's review,
+          // finding A14).
+          if (isWitnessCredential(credential)) {
             vwcLogger.info(`✓ Detected WitnessCredential received: ${w3cRecord.id}`)
 
             // Extract counterparty's relationship DID from credentialSubject.id

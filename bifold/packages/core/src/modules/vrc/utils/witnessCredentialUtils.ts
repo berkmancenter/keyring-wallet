@@ -3,6 +3,20 @@
  *
  * These functions help identify, filter, and extract information from
  * WitnessCredentials in the credential store.
+ *
+ * VSC migration (docs/plans/vsc-migration-plan.md §6 V3, §7): every function
+ * here that classifies a credential (`hasWitnessCredentialType`,
+ * `getWitnessCredentialsForSubject`) reads BOTH shapes through
+ * `credentialTypes.ts`'s `isWitnessCredential` — the legacy WD02 type-string
+ * form, and the new VSC/`dtg:witnessed` predicate form.
+ *
+ * TODO(vsc-migration): this dual-read is a DATED deletion, not a permanent
+ * tolerance (plan §7) — delete it one release after V4 ships to the last
+ * channel. Date not yet known; V4 hasn't shipped. Fill in the actual date
+ * here once it does, and remove the legacy-shape handling in
+ * `extractWitnessInfo` below (the nested `witnessContext.localityVerification`
+ * / flat `locality*`-inside-`witnessContext` reads — V4 moves these to be
+ * siblings of `witnessContext` instead, per plan §3.5).
  */
 
 import { W3cCredentialRecord } from '@credo-ts/core'

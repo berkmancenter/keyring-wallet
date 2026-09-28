@@ -2059,6 +2059,7 @@ __metadata:
     "@babel/core": "npm:~7.28.6"
     "@babel/runtime": "npm:~7.28.6"
     "@bifold/credo-tsp-adapter": "workspace:*"
+    "@bifold/dtg-vocab": "workspace:*"
     "@bifold/oca": "npm:3.0.16"
     "@bifold/react-hooks": "npm:3.0.16"
     "@bifold/react-native-attestation": "npm:3.0.16"
@@ -2288,7 +2289,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@bifold/dtg-vocab@workspace:packages/dtg-vocab":
+"@bifold/dtg-vocab@workspace:*, @bifold/dtg-vocab@workspace:packages/dtg-vocab":
   version: 0.0.0-use.local
   resolution: "@bifold/dtg-vocab@workspace:packages/dtg-vocab"
   dependencies:

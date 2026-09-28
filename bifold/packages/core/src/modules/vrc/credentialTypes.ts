@@ -11,7 +11,27 @@
  * type string (some AnonCreds call sites only hold a serialized type value).
  * Matching is substring-based per element, mirroring the long-standing
  * behavior of the display registry's original helpers.
+ *
+ * VSC migration (docs/plans/vsc-migration-plan.md §1, §6 V3): WD 0.4.0
+ * collapses `WitnessCredential`/`EndorsementCredential` into one
+ * `StatementCredential` type whose meaning lives in `credentialSubject.predicate`,
+ * not the type array. "Is this a witness credential?" therefore stops being
+ * answerable from a type array alone — it needs the full credential JSON, so
+ * `credentialSubject.predicate` can be checked against `@bifold/dtg-vocab`'s
+ * accept-list. `isWitnessCredential`/`isPeerVrcCredential` below read both
+ * shapes (dual-read, plan §7 — deleted one release after V4 ships to the
+ * last channel; TODO once that date is known).
+ *
+ * Known limitation: a predicate is only checked when the input is a full
+ * credential-shaped object. Two call sites in `vrc-manager.ts` used to pass a
+ * bare `type` array where a full credential was already in scope — fixed to
+ * pass the credential object instead (AL's review, finding A14), so as of
+ * this migration there are no known call sites still passing a bare type
+ * array where predicate-aware detection would matter. If one is added later,
+ * it silently falls back to type-string-only detection — document it here.
  */
+
+import { DTG_PREDICATE_WITNESSED, PredicateHandlingConfig, configure, loadAcceptList } from '@bifold/dtg-vocab'
 
 export const VERIFIABLE_CREDENTIAL_TYPE = 'VerifiableCredential'
 export const DTG_CREDENTIAL_TYPE = 'DTGCredential'
@@ -25,8 +45,12 @@ export const STATEMENT_CREDENTIAL_TYPE = 'StatementCredential'
  * (VTI 0.47.0 / #1859, tf witness/session/submit as recast by #691): the VWC
  * is a `StatementCredential` under it, and no longer carries the
  * `WitnessCredential` type.
+ *
+ * Defined as `@bifold/dtg-vocab`'s `DTG_PREDICATE_WITNESSED` (byte-identical)
+ * so the registry mirror is the single source of truth, while the name main
+ * already exports — and tests against — keeps working.
  */
-export const WITNESSED_V1_PREDICATE = 'https://registry.trustoverip.org/dtg/vsc/witnessed/1'
+export const WITNESSED_V1_PREDICATE = DTG_PREDICATE_WITNESSED
 
 /** A credential JSON, a `type` array, or a single type string. */
 export type CredentialTypeInput = unknown
@@ -77,9 +101,25 @@ export function isRCardTemplate(input: CredentialTypeInput): boolean {
 }
 
 /**
+ * Lazily configured accept-list from `@bifold/dtg-vocab` — loaded once, not
+ * per call. `configure()`/`loadAcceptList()` do file I/O; caching keeps this
+ * module's predicates cheap to call from render paths.
+ */
+let acceptListConfig: PredicateHandlingConfig | undefined
+function getAcceptListConfig(): PredicateHandlingConfig {
+  if (!acceptListConfig) acceptListConfig = configure(loadAcceptList())
+  return acceptListConfig
+}
+
+/**
  * The `predicate` of a credential's (first) subject, from its JSON or from a
  * Credo credential instance (whose subject keeps members other than `id` in
  * `claims`). Undefined when the input is not a credential object.
+ *
+ * The `claims` fallback is main's and is kept deliberately: a Credo credential
+ * *instance* keeps subject members other than `id` under `claims`, so reading
+ * only `subject.predicate` misses every instance-shaped credential. This
+ * replaces the migration's `readPredicate`, which lacked it.
  */
 function subjectPredicateOf(input: CredentialTypeInput): string | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
@@ -92,24 +132,52 @@ function subjectPredicateOf(input: CredentialTypeInput): string | undefined {
 }
 
 /**
- * A DTG Credentials v1 witness credential: a `StatementCredential` (matched
- * exactly — a vetting statement is one too) stating the witnessed/1
- * predicate. Needs the credential itself: a bare type list cannot say.
+/**
+ * True if `input` is a `StatementCredential` whose `credentialSubject.predicate`
+ * is `dtg:witnessed` in `@bifold/dtg-vocab`'s configured accept-list — the new
+ * VSC shape of a VWC (plan §1, §3 D1/D2). Requires a full credential object;
+ * see the file header's "known limitation" note.
+ *
+ * Reads the predicate with `subjectPredicateOf`, so a Credo credential
+ * instance (predicate under `claims`) is recognized as well as raw JSON.
  */
-export function isWitnessedStatement(input: CredentialTypeInput): boolean {
-  return (
-    getCredentialTypeList(input).includes(STATEMENT_CREDENTIAL_TYPE) &&
-    subjectPredicateOf(input) === WITNESSED_V1_PREDICATE
-  )
+export function isWitnessStatement(input: CredentialTypeInput): boolean {
+  if (!hasCredentialTypeName(input, STATEMENT_CREDENTIAL_TYPE)) return false
+  const predicate = subjectPredicateOf(input)
+  if (!predicate) return false
+  return predicate === DTG_PREDICATE_WITNESSED && predicate in getAcceptListConfig().profiles
 }
 
 /**
- * A VWC issued by a witness for a witnessed exchange, in either shape: the
- * `WitnessCredential` type, or a witnessed/1 statement (`isWitnessedStatement`,
- * which needs the credential, not just its types).
+ * Main's name for `isWitnessStatement`, kept so its callers and
+ * `trust-tasks/__tests__/witnessedV1.test.ts` keep working. One behavioural
+ * difference, inherited deliberately from the migration: the predicate must
+ * also be in the accept-list, so an unrecognized `dtg/vsc/...` predicate no
+ * longer counts as witnessed.
+ */
+export const isWitnessedStatement = isWitnessStatement
+
+/**
+ * True if `input` is a `StatementCredential` whose `credentialSubject.predicate`
+ * matches ANY profile in `@bifold/dtg-vocab`'s configured accept-list —
+ * `dtg:witnessed`, `dtg:endorses`, or any predicate a future accept-list
+ * update adds. Exported as a general-purpose positive check; `isPeerVrcCredential`
+ * below does not need it directly (see its own comment) but other call sites
+ * may want to recognize a VSC statement without caring which profile matched.
+ */
+export function isStatementCredential(input: CredentialTypeInput): boolean {
+  if (!hasCredentialTypeName(input, STATEMENT_CREDENTIAL_TYPE)) return false
+  const predicate = subjectPredicateOf(input)
+  return predicate !== undefined && predicate in getAcceptListConfig().profiles
+}
+
+/**
+ * WitnessCredential — a VWC issued by a witness for a witnessed exchange.
+ * Dual-read (plan §7): the legacy WD02 type-string form, OR the new VSC
+ * `dtg:witnessed` predicate form. See `isWitnessStatement` for the latter.
  */
 export function isWitnessCredential(input: CredentialTypeInput): boolean {
-  return hasCredentialTypeName(input, WITNESS_CREDENTIAL_TYPE) || isWitnessedStatement(input)
+  return hasCredentialTypeName(input, WITNESS_CREDENTIAL_TYPE) || isWitnessStatement(input)
 }
 
 /**
@@ -120,6 +188,18 @@ export function isWitnessCredential(input: CredentialTypeInput): boolean {
  * a role ["VerifiableCredential","DTGCredential","EndorsementCredential"] — and
  * keyed on DTGCredential each would list its community in Contacts as an
  * unnamed contact (measured on a simulator with the real shapes, 2026-09-26).
+ *
+ * This also already excludes every StatementCredential (witness, endorsement,
+ * or any future predicate) without a separate check: D1 forbids a
+ * StatementCredential from carrying any other concrete DTGCredential subtype
+ * in its type array, so `isRelationshipCredential` alone is false for one —
+ * `isStatementCredential` above was AL's review finding A11's original fix
+ * (an explicit `!isStatementCredential` exclusion on an `isDTGCredential`
+ * base); reconciled here against an independent, broader upstream fix for
+ * the same over-matching class of bug (community cards, 2026-09-26) that
+ * subsumes it structurally. See this file's test suite for a case asserting
+ * the invariant holds, so a future change to either function is caught if
+ * it stops holding.
  */
 export function isPeerVrcCredential(input: CredentialTypeInput): boolean {
   return isRelationshipCredential(input) && !isWitnessCredential(input)

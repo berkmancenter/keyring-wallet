@@ -944,6 +944,10 @@ async function deliverVrcViaTrustTaskForExchangeInner(
         myRelationshipDid: record.myRelationshipDid,
         buildPresentation: (challenge, domain) =>
           buildChallengeBoundVp(agent, signedVc, verificationMethodId, challenge, domain),
+        // VSC migration plan §6 V3, D6: the VRC this session witnesses, so
+        // the returned VWC's subject binding is checked against a specific,
+        // identified edge rather than left as an opaque hash.
+        referencedVrc: signedVc,
         sendDocument: sendTrustTaskDocument,
         retain: (doc, role) => service.retain(agent.context, doc, role, witnessConnectionId),
         // locality-plan.md §8.1/§10.3 item 10: offer per the user's own

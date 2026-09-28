@@ -6,6 +6,7 @@
  * taskDigestMultibase) are exercised for real; document-proof crypto is
  * mocked (covered in documentProof.test.ts).
  */
+import { DTG_PREDICATE_WITNESSED } from '@bifold/dtg-vocab'
 import * as witnessSession from '@openvtc/trust-tasks/witness/session/0.1/payload'
 import * as witnessSubmit from '@openvtc/trust-tasks/witness/session/submit/0.1/payload'
 
@@ -15,7 +16,7 @@ import {
   LocalityTranscript,
   transcriptDigestMultibase,
 } from '../deviceLocality'
-import { digestMultibase } from '../documentProof'
+import { digestMultibase, taskDigestMultibase } from '../documentProof'
 import { resolveWitnessResponse, runWitnessSession } from '../witnessCeremony'
 
 const STUB_PROOF = {
@@ -400,6 +401,123 @@ describe('runWitnessSession', () => {
 
       expect(outcome.locality).toEqual({ transcriptProduced: true })
       expect(storedCredentials).toHaveLength(1)
+    })
+  })
+
+  // VSC migration plan §6 V3: D6 (subject binding) and D8 (predicate
+  // acceptance), against the real digest primitives (taskDigestMultibase,
+  // digestBytesEqual) and the real @bifold/dtg-vocab accept-list — not
+  // mocked, so a real mismatch is what actually fails these tests, not an
+  // assertion that trusts its own fixture.
+  describe('D6 — subject binding, and D8 — predicate acceptance', () => {
+    const referencedVrc = {
+      '@context': ['https://www.w3.org/ns/credentials/v2'],
+      type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+      issuer: 'did:peer:0zPeerRel',
+      credentialSubject: { id: 'did:peer:0zMyRel' },
+      proof: { type: 'DataIntegrityProof', proofValue: 'zvrc' },
+    }
+
+    function vscVwc(overrides: { predicate?: string; subjectId?: string; digestMultibase?: string } = {}) {
+      return {
+        '@context': ['https://www.w3.org/ns/credentials/v2'],
+        type: ['VerifiableCredential', 'DTGCredential', 'StatementCredential'],
+        issuer: 'did:example:witness',
+        credentialSubject: {
+          id: overrides.subjectId ?? referencedVrc.issuer,
+          predicate: overrides.predicate ?? DTG_PREDICATE_WITNESSED,
+          object: { digestMultibase: overrides.digestMultibase ?? taskDigestMultibase(referencedVrc) },
+        },
+      }
+    }
+
+    /**
+     * Replaces the delivered VWC's credentialSubject and re-derives every
+     * digest downstream of it, so only the intended field is actually wrong.
+     *
+     * taskContext/taskDigestMultibase are placed BOTH nested (credentialSubject)
+     * and at the top level. This is deliberate, not sloppy: the file's
+     * existing task-binding check (untouched by V3 — its read-site fix is
+     * V4's job, plan §3 D4/AL's finding A5) still reads the legacy nested
+     * location, while @bifold/dtg-vocab's verify() correctly expects D4's
+     * final top-level placement. Before V4 actually moves the read site,
+     * nothing in the codebase emits a VSC with taskContext in only one
+     * place — a real fixture exercising D8 today needs both, which is
+     * exactly the interaction AL's finding A5 predicted.
+     */
+    function withVsc(vsc: Record<string, unknown>) {
+      return (response: Record<string, unknown>, sessionDoc: Record<string, unknown>) => {
+        const payload = response.payload as { vwc: Record<string, unknown> }
+        const subject = vsc.credentialSubject as Record<string, unknown>
+        payload.vwc = {
+          ...vsc,
+          taskContext: sessionDoc.id,
+          taskDigestMultibase: digestMultibase(sessionDoc),
+          credentialSubject: { ...subject, taskContext: sessionDoc.id, taskDigestMultibase: digestMultibase(sessionDoc) },
+        }
+        ;(response.payload as Record<string, unknown>).vwcDigestMultibase = digestMultibase(payload.vwc)
+      }
+    }
+
+    test('a VSC-shaped VWC whose subject and digest both match the referenced VRC: subjectBinding is checked and ok', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness(withVsc(vscVwc()))
+
+      const outcome = await runWitnessSession(agent, { ...baseOptions(witness, []), referencedVrc })
+
+      expect(outcome.subjectBinding).toEqual({ checked: true, ok: true })
+      expect(storedCredentials).toHaveLength(1)
+    })
+
+    test('no referencedVrc supplied: subjectBinding is unchecked, not falsely ok (cred-spec C5 — an opaque hash, not an identified edge)', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness(withVsc(vscVwc()))
+
+      const outcome = await runWitnessSession(agent, baseOptions(witness, []))
+
+      expect(outcome.subjectBinding.checked).toBe(false)
+      expect(outcome.subjectBinding.ok).toBe(false)
+      expect(storedCredentials).toHaveLength(1) // unchecked is conforming, not a refusal
+    })
+
+    test('a VSC-shaped VWC whose subject is NOT the referenced VRC\'s issuer is refused (the D6 violation this check exists to catch)', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness(withVsc(vscVwc({ subjectId: 'did:peer:0zSomeoneElse' })))
+
+      await expect(runWitnessSession(agent, { ...baseOptions(witness, []), referencedVrc })).rejects.toThrow(
+        'VWC subject binding failed'
+      )
+      expect(storedCredentials).toHaveLength(0)
+    })
+
+    test('a VSC-shaped VWC whose digest does not match the referenced VRC is refused', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness(withVsc(vscVwc({ digestMultibase: taskDigestMultibase({ different: 'document' }) })))
+
+      await expect(runWitnessSession(agent, { ...baseOptions(witness, []), referencedVrc })).rejects.toThrow(
+        'VWC subject binding failed'
+      )
+      expect(storedCredentials).toHaveLength(0)
+    })
+
+    test('an unrecognized predicate is refused outright (D8 — rejection is the only conforming outcome)', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness(withVsc(vscVwc({ predicate: 'https://example.com/not-in-accept-list' })))
+
+      await expect(runWitnessSession(agent, { ...baseOptions(witness, []), referencedVrc })).rejects.toThrow(
+        'VWC predicate rejected'
+      )
+      expect(storedCredentials).toHaveLength(0)
+    })
+
+    test('a legacy WD02 VWC (no predicate at all) is not subject to D8 — the check does not apply, it does not fail', async () => {
+      const { agent, storedCredentials } = makeFakeAgent()
+      const witness = makeWitness() // the file's default witness emits the legacy WitnessCredential shape
+
+      const outcome = await runWitnessSession(agent, baseOptions(witness, []))
+
+      expect(storedCredentials).toHaveLength(1)
+      expect(outcome.subjectBinding.checked).toBe(false) // legacy fixture carries no digest either
     })
   })
 })

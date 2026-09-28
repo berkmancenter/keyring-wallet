@@ -25,8 +25,11 @@
  * the witness-server speaks the dialect.
  */
 
+import type { PredicateHandlingConfig } from '@bifold/dtg-vocab'
+import { configure, loadAcceptList, verify as verifyPredicate } from '@bifold/dtg-vocab'
 import type { Agent } from '@credo-ts/core'
 import { W3cCredentialRecord, utils } from '@credo-ts/core'
+import { sha256 } from '@noble/hashes/sha2.js'
 import * as submit from '@openvtc/trust-tasks/witness/session/submit/0.1/payload'
 import * as session from '@openvtc/trust-tasks/witness/session/0.1/payload'
 
@@ -40,6 +43,7 @@ import {
 import {
   digestBytesEqual,
   digestMultibase,
+  jcsCanonicalize,
   signDocumentProof,
   taskDigestMultibase,
   verifyDocumentProof,
@@ -48,11 +52,100 @@ import { taskCitationOf } from './taskCitation'
 
 const LOG_PREFIX = '[TrustTasks:Witness]'
 
+// VSC migration (docs/plans/vsc-migration-plan.md §6 V3): D6 and D8, run
+// here because this is where a VWC is received and either stored or
+// refused, on both shapes (legacy WD02 `WitnessCredential`, and the new
+// VSC/`dtg:witnessed` predicate form).
+let acceptListConfig: PredicateHandlingConfig | undefined
+function getAcceptListConfig(): PredicateHandlingConfig {
+  if (!acceptListConfig) acceptListConfig = configure(loadAcceptList())
+  return acceptListConfig
+}
+
+/**
+ * D6 (plan §3 D6, §3.2): whether this VWC's `credentialSubject.id` is the
+ * referenced VRC's issuer, and whether the digest it carries matches that
+ * VRC. Distinguishes three states, never collapsed into a boolean — cred-spec
+ * C5: "a digest without the referenced credential to hand is an opaque hash,
+ * not an identified edge", so a caller with no referenced VRC gets `checked:
+ * false`, never a false `ok: true`.
+ */
+export interface SubjectBinding {
+  checked: boolean
+  ok: boolean
+  reason?: string
+}
+
+function subjectOf(vwc: Record<string, unknown>): Record<string, unknown> | undefined {
+  const cs = vwc.credentialSubject
+  return (Array.isArray(cs) ? cs[0] : cs) as Record<string, unknown> | undefined
+}
+
+/** Legacy WD02 digest: sha256(JCS(the referenced VRC, PROOF INCLUDED)) — a different document than taskDigestMultibase covers (plan §3.1). Verification-only; the witness-server's own issuance-side equivalent is being deleted in V4, not ported here. */
+function legacyVrcDigest(vrc: Record<string, unknown>): string {
+  return 'sha256:' + Array.from(sha256(new TextEncoder().encode(jcsCanonicalize(vrc))), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+export function checkSubjectBinding(vwc: Record<string, unknown>, referencedVrc?: Record<string, unknown>): SubjectBinding {
+  if (!referencedVrc) return { checked: false, ok: false, reason: 'no referenced VRC available — opaque hash, not an identified edge (cred-spec C5)' }
+  const subject = subjectOf(vwc)
+  if (!subject?.id) return { checked: true, ok: false, reason: 'VWC carries no credentialSubject.id' }
+
+  const issuer = typeof referencedVrc.issuer === 'string' ? referencedVrc.issuer : (referencedVrc.issuer as { id?: string } | undefined)?.id
+  if (subject.id !== issuer) {
+    return { checked: true, ok: false, reason: `credentialSubject.id (${subject.id}) is not the referenced VRC's issuer (${issuer})` }
+  }
+
+  const object = subject.object as { digestMultibase?: string } | undefined
+  if (object?.digestMultibase) {
+    // New VSC shape (D3): digest excludes the referenced VRC's top-level proof.
+    const ok = digestBytesEqual(object.digestMultibase, taskDigestMultibase(referencedVrc))
+    return ok
+      ? { checked: true, ok: true }
+      : { checked: true, ok: false, reason: 'object.digestMultibase does not match the referenced VRC' }
+  }
+
+  const legacyDigest = subject.digest
+  if (typeof legacyDigest === 'string') {
+    // Legacy WD02 shape (D3): digest over the PROOFED VRC, sha256:hex — not
+    // the same coverage as taskDigestMultibase, so compared with its own
+    // encoding, not digestBytesEqual (which decodes a multibase multihash).
+    const ok = legacyDigest === legacyVrcDigest(referencedVrc)
+    return ok
+      ? { checked: true, ok: true }
+      : { checked: true, ok: false, reason: 'legacy digest does not match the referenced VRC' }
+  }
+
+  return { checked: true, ok: false, reason: 'VWC carries neither object.digestMultibase nor a legacy digest' }
+}
+
+/**
+ * D8 (plan §3 D8): for a VSC-shaped VWC (carries `credentialSubject.predicate`),
+ * rejection is the only conforming outcome for a predicate this wallet's
+ * accept-list does not recognize. A legacy WD02 VWC has no predicate at all —
+ * this check does not apply to it (`applicable: false`), not a pass.
+ */
+export interface PredicateAcceptance {
+  applicable: boolean
+  ok: boolean
+  reason?: string
+}
+
+export function checkPredicateAcceptance(vwc: Record<string, unknown>): PredicateAcceptance {
+  const subject = subjectOf(vwc)
+  const predicate = subject?.predicate
+  if (typeof predicate !== 'string') return { applicable: false, ok: true }
+  const result = verifyPredicate(getAcceptListConfig(), vwc)
+  return { applicable: true, ok: result.ok, reason: result.ok ? undefined : result.reason }
+}
+
 export interface WitnessSessionOutcome {
   /** The session document's id — the VWC's taskContext. */
   sessionId: string
   /** The issued Verifiable Witness Credential, as delivered. */
   vwc: Record<string, unknown>
+  /** D6: whether the VWC is bound to a specific, identified edge (not just an opaque digest). */
+  subjectBinding: SubjectBinding
   /** Present only when this session actually ran the locality leg (offered + a sensor directive arrived). */
   locality?: { transcriptProduced: boolean }
 }
@@ -108,6 +201,15 @@ export interface RunWitnessSessionOptions {
    * (the witnessed-vrc-manager owns that).
    */
   buildPresentation: (challenge: string, domain: string) => Promise<Record<string, unknown>>
+  /**
+   * The VRC this session is witnessing, signed — the same value the caller
+   * already built before calling this (VSC migration plan §6 V3, D6). Its
+   * absence is conforming (a witness ceremony can run before the VRC exists
+   * yet in some flows); the resulting VWC is then only checkable as "an
+   * opaque hash, not an identified edge" (cred-spec C5) — see
+   * `WitnessSessionOutcome.subjectBinding`.
+   */
+  referencedVrc?: Record<string, unknown>
   /** Send a trust-task document on a connection (ceremony.ts provides this). */
   sendDocument: (agent: Agent, connectionId: string, document: Record<string, unknown>) => Promise<void>
   /** Retain a document (TrustTasksService.retain, bound by the caller). */
@@ -248,6 +350,25 @@ export async function runWitnessSession(
     throw new Error('VWC taskDigestMultibase does not bind this session document')
   }
 
+  // ---- D8: predicate acceptance (plan §3 D8, §6 V3) ------------------------
+  // Rejection is the only conforming outcome for a VSC-shaped VWC whose
+  // predicate this wallet's accept-list does not recognize. A legacy WD02
+  // VWC has no predicate at all, so this check does not apply to it.
+  const predicateAcceptance = checkPredicateAcceptance(vwc)
+  if (predicateAcceptance.applicable && !predicateAcceptance.ok) {
+    throw new Error(`VWC predicate rejected: ${predicateAcceptance.reason}`)
+  }
+
+  // ---- D6: subject binding (plan §3 D6, §3.2, §6 V3) -----------------------
+  // Checked whenever the referenced VRC is in hand. Having none is
+  // conforming — an opaque hash, not an identified edge (cred-spec C5) — but
+  // a determinable violation (wrong subject, or a digest that does not
+  // match) is refused rather than silently stored.
+  const subjectBinding = checkSubjectBinding(vwc, options.referencedVrc)
+  if (subjectBinding.checked && !subjectBinding.ok) {
+    throw new Error(`VWC subject binding failed: ${subjectBinding.reason}`)
+  }
+
   // ---- locality cross-check (plan §10.3 item 10) --------------------------
   // The witness's observation rides the SAME #response's ext (plan §6 table
   // row 4). A witness claiming a CONFIRMED observation this device did not
@@ -302,7 +423,12 @@ export async function runWitnessSession(
   })
   logger.info(`${LOG_PREFIX} VWC stored — taskContext bound to session ${sessionId} (outcome evidence retained)`)
 
-  return { sessionId, vwc, locality: directive ? { transcriptProduced: transcript !== null } : undefined }
+  return {
+    sessionId,
+    vwc,
+    subjectBinding,
+    locality: directive ? { transcriptProduced: transcript !== null } : undefined,
+  }
 }
 
 /** Test seam: the number of ceremonies still awaiting a witness response. */
