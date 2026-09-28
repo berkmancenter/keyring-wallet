@@ -44,6 +44,8 @@ import {
   type RotationSupport,
 } from './vtaRotation'
 import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
+import { migratePersonaKeys } from './vtaKeyMigration'
+import { forgetKeyCopy } from './vtaKeys'
 import { initialLinkState, reconnectDelayMs, reduceLink, type VtaLinkEvent, type VtaLinkState } from './vtaLinkMachine'
 import {
   DeviceActionRefused,
@@ -257,6 +259,8 @@ export class VtaAgentController {
   private reconnectAttempt = 0
   private retryTimer?: ReturnType<typeof setTimeout>
   private reconnecting = false
+  /** Identities whose keys moved into memory in this run; their stored copies go at the next (plan part E). */
+  private readonly switchedThisRun = new Set<string>()
   /** Agents whose name is being read, or was read, in this app run. */
   private namesAsked = new Set<string>()
   /** The agent the current link attempt is creating from this phone ("Create my agent"), if it is one. */
@@ -503,7 +507,7 @@ export class VtaAgentController {
       const personas = await identities.listPersonas().catch(() => [])
       for (const persona of personas.filter((p) => p.vtaDid === vtaDid)) {
         for (const keyId of Object.values(persona.kmsKeyIds ?? {})) {
-          if (keyId) await agent.kms.deleteKey({ keyId }).catch(() => undefined)
+          if (keyId) await forgetKeyCopy(agent, keyId)
         }
         await communities.forgetCommunity(persona.communityDid).catch(() => undefined)
         await identities.forgetPersona(persona.communityDid).catch(() => undefined)
@@ -942,6 +946,17 @@ export class VtaAgentController {
     }
   }
 
+  /**
+   * A signed-in client for the presence loop (#10, `vtaPresence`) while this
+   * phone is linked; undefined when it is not. Refuses like any other call when
+   * the agent cannot be reached — the loop logs that and tries again.
+   */
+  async presencePort(agent: Agent): Promise<VtaClient | undefined> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return undefined
+    return this.signedIn(agent, vtaDid)
+  }
+
   /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */
   async renameThisDevice(agent: Agent, displayName: string): Promise<void> {
     const client = await this.signedIn(agent, this.linkedAgent())
@@ -1001,6 +1016,60 @@ export class VtaAgentController {
       rotated,
       unpublished,
       failed: failed.map(({ did, error }) => ({ did, reason: this.refused(error).reason })),
+    }
+  }
+
+  /**
+   * With a session open, fetch into memory the keys of every identity this
+   * phone holds through that agent (#10, plan part C): memory is empty after a
+   * restart or a lock, and nothing signs as a persona until its keys are back.
+   * Never throws; an identity whose keys cannot be fetched is tried again at
+   * the next session, or when it is next used.
+   */
+  private async holdPersonaKeys(agent: Agent, vtaDid: string): Promise<void> {
+    // An install from before memory-only custody moves its stored copies first
+    // (plan part E); a persona whose agent will not hand its keys over keeps
+    // its stored copy and moves at a later session.
+    try {
+      const client = this.client(agent, vtaDid)
+      const { switched, moved, removed, waiting } = await migratePersonaKeys(
+        { borrowKey: (id) => client.borrowKey(id), forgetKeyCopy: (id) => forgetKeyCopy(agent, id) },
+        this.identityStore(agent),
+        vtaDid,
+        this.switchedThisRun
+      )
+      // Ids only, never key material: the upgrade's one destructive step is
+      // visible in the device log.
+      const log = agent.config?.logger
+      if (switched.length > 0) {
+        log?.warn?.(
+          `[VTA] key migration: ${switched.length} identities now use in-memory keys; their stored copies are removed at the next launch (${switched.join(', ')})`
+        )
+      }
+      if (moved.length > 0) {
+        log?.warn?.(
+          `[VTA] key migration: removed ${removed.length} stored identity key copies (ids: ${removed.join(', ')}) for ${moved.join(', ')}`
+        )
+      }
+      for (const { did, error } of waiting) {
+        agent.config?.logger?.warn?.(
+          `[VTA] ${did} keeps its stored keys for now: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+    } catch (e) {
+      agent.config?.logger?.warn?.(`[VTA] moving identities' keys into memory: ${e instanceof Error ? e.message : String(e)}`)
+    }
+    const personas = await Promise.resolve(this.identityStore(agent).listPersonas?.())
+      .then((all) => (all ?? []).filter((p) => p.vtaDid === vtaDid))
+      .catch(() => [])
+    for (const persona of personas) {
+      try {
+        await this.client(agent, vtaDid).holdPersonaKeys(persona)
+      } catch (e) {
+        agent.config?.logger?.warn?.(
+          `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
+        )
+      }
     }
   }
 
@@ -1065,6 +1134,7 @@ export class VtaAgentController {
       await this.connect(agent, link.vtaDid)
       this.reconnectAttempt = 0
       this.dispatch({ type: 'sessionOpened' })
+      void this.holdPersonaKeys(agent, link.vtaDid)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       if (isUnsettledSwap(error) && error.refusedBoth && (await this.onTemporaryKey(agent, link.vtaDid))) {

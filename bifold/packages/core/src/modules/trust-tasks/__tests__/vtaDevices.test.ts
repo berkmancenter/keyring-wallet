@@ -152,7 +152,7 @@ describe('this phone', () => {
   it('takes "already registered" as registered, since the agent refuses a second claim', async () => {
     const { port } = fakeAgent({
       [AGENT_DEVICE_TASK.register]: () => {
-        throw new VtiRefusal('device/register:alreadyRegistered', 'already registered')
+        throw new VtiRefusal('conflict', 'device/register:alreadyRegistered — a DeviceBinding already exists')
       },
     })
     await expect(registerThisDevice(port, { displayName: 'x', platform: 'ios' })).resolves.toBe('alreadyRegistered')

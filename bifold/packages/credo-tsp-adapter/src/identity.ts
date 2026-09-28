@@ -41,6 +41,38 @@ import { convertPublicKeyToX25519 } from '@stablelib/ed25519'
 import { tsp } from '@bifold/trust-tasks'
 
 /**
+ * A KMS backend that holds keys outside the wallet's store and lends the raw
+ * Askar key for an operation the KMS API does not offer (Keyring's in-memory
+ * backend for persona key copies). Duck-typed so this package needs nothing
+ * from the app.
+ */
+interface RawKeyHolder {
+  withKey<T>(keyId: string, use: (key: Key) => T | Promise<T>): Promise<T | undefined>
+}
+
+/**
+ * Run `use` with the raw Askar key held under `keyId`: from a backend that
+ * lends raw keys if one holds it, else from the wallet's Askar store.
+ */
+async function withRawKey<T>(agent: Agent, keyId: string, use: (key: Key) => T | Promise<T>): Promise<T> {
+  const manager = agent.dependencyManager
+  const backends = manager.isRegistered(Kms.KeyManagementModuleConfig)
+    ? manager.resolve(Kms.KeyManagementModuleConfig).backends
+    : []
+  for (const backend of backends) {
+    const holder = backend as unknown as Partial<RawKeyHolder>
+    if (typeof holder.withKey !== 'function') continue
+    const answer = await holder.withKey(keyId, use)
+    if (answer !== undefined) return answer
+  }
+  return manager.resolve(AskarStoreManager).withSession(agent.context, async (session) => {
+    const entry = await session.fetchKey({ name: keyId })
+    if (!entry) throw new Error(`credo-tsp-adapter: no askar key stored under keyId ${keyId}`)
+    return use(entry.key)
+  })
+}
+
+/**
  * Derive a `KeyAgreement` port from an EXISTING Ed25519 Askar key — never an
  * independent key (see module header). `signingKeyId` is the Credo KMS key
  * id backing the identity's signing key (e.g. a relationship DID's owning
@@ -51,15 +83,12 @@ export function keyAgreementFromEd25519Key(
   signingKeyId: string,
   ed25519PublicKeyBytes: Uint8Array
 ): tsp.KeyAgreement {
-  const storeManager = agent.dependencyManager.resolve(AskarStoreManager)
   const publicKey = convertPublicKeyToX25519(ed25519PublicKeyBytes)
   return {
     publicKey,
     async agree(peerPublicKey) {
-      const sharedSecret = await storeManager.withSession(agent.context, async (session) => {
-        const entry = await session.fetchKey({ name: signingKeyId })
-        if (!entry) throw new Error(`credo-tsp-adapter: no askar key stored under keyId ${signingKeyId}`)
-        const x25519Key = entry.key.convertkey({ algorithm: KeyAlgorithm.X25519 })
+      const sharedSecret = await withRawKey(agent, signingKeyId, (key) => {
+        const x25519Key = key.convertkey({ algorithm: KeyAlgorithm.X25519 })
         // Askar's native binding needs a standalone 32-byte buffer: a `Buffer`
         // view sliced from a larger message (`Buffer.prototype.slice` — unlike
         // `Uint8Array.prototype.slice` — returns a view over the ORIGINAL
@@ -88,17 +117,11 @@ export function keyAgreementFromEd25519Key(
  * does. `publicKey` is the X25519 public key the DID document publishes.
  */
 export function keyAgreementFromAskarKey(agent: Agent, kmsKeyId: string, publicKey: Uint8Array): tsp.KeyAgreement {
-  const storeManager = agent.dependencyManager.resolve(AskarStoreManager)
   return {
     publicKey,
     async agree(peerPublicKey) {
-      const sharedSecret = await storeManager.withSession(agent.context, async (session) => {
-        const entry = await session.fetchKey({ name: kmsKeyId })
-        if (!entry) throw new Error(`credo-tsp-adapter: no askar key stored under keyId ${kmsKeyId}`)
-        const x25519Key =
-          entry.key.algorithm === KeyAlgorithm.X25519
-            ? entry.key
-            : entry.key.convertkey({ algorithm: KeyAlgorithm.X25519 })
+      const sharedSecret = await withRawKey(agent, kmsKeyId, (key) => {
+        const x25519Key = key.algorithm === KeyAlgorithm.X25519 ? key : key.convertkey({ algorithm: KeyAlgorithm.X25519 })
         const peerKey = Key.fromPublicBytes({
           algorithm: KeyAlgorithm.X25519,
           publicKey: Uint8Array.from(peerPublicKey),
