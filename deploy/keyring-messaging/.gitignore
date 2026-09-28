@@ -1,0 +1,6 @@
+# Push credentials, the gateway identity, anything mounted into the gateway.
+secrets/
+# The gateway's token store and Caddy's certificates.
+data/
+# Filled-in configuration.
+.env

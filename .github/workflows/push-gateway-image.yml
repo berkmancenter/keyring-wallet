@@ -1,0 +1,118 @@
+name: Push gateway image
+
+# Builds the vti-push-gateway image in deploy/keyring-messaging/ on a GitHub
+# runner, runs the package README's "First run" checks against it (health, a
+# served agent's registration accepted, any other agent's refused), and uploads
+# the image as this run's artifact. Nothing is pushed to a registry.
+#
+#   gh run download <run-id> -R berkmancenter/keyring-wallet -n vti-push-gateway-image-arm64
+#   docker load -i vti-push-gateway.tar
+#
+# One job per architecture on a native runner: arm64 for Apple-silicon Macs,
+# amd64 for servers. Emulated Rust builds take far longer.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "deploy/keyring-messaging/**"
+      - ".github/workflows/push-gateway-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Gateway image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: deploy/keyring-messaging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned gateway commit
+        id: pin
+        run: |
+          commit=$(sed -n 's/^GATEWAY_COMMIT=//p' .env.example)
+          if ! printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::GATEWAY_COMMIT in .env.example is not a full SHA: '$commit'"; exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "image=keyring-messaging/vti-push-gateway:$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Compose file is valid
+        run: |
+          cp .env.example .env
+          sed -i 's/^GATEWAY_HOST=$/GATEWAY_HOST=localhost/' .env
+          docker compose config --quiet
+
+      - name: Build the gateway image
+        run: |
+          docker build \
+            --build-arg GATEWAY_COMMIT="${{ steps.pin.outputs.commit }}" \
+            -t "${{ steps.pin.outputs.image }}" gateway
+
+      - name: First-run checks (echo sender, no keys)
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+          SERVED: did:web:ci.invalid:served-agent
+          OTHER: did:web:ci.invalid:other-agent
+        run: |
+          # Empty GATEWAY_IDENTITY_FILE also checks the entrypoint unsets empty
+          # variables (the gateway fails to read an empty path otherwise).
+          docker run -d --name gw -p 8300:8300 \
+            -e GATEWAY_DEV_ECHO_SENDER=1 \
+            -e GATEWAY_ALLOWED_CONTROLLERS="$SERVED" \
+            -e GATEWAY_ADDR=http://localhost:8300 \
+            -e GATEWAY_IDENTITY_FILE= \
+            "$IMAGE"
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8300/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://localhost:8300/healthz
+
+          register() {
+            curl -sS http://localhost:8300/trust-tasks -H 'content-type: application/json' -d '{
+              "id": "urn:uuid:'"$(cat /proc/sys/kernel/random/uuid)"'",
+              "type": "https://trusttasks.org/spec/push/register/0.2",
+              "payload": { "registration": { "platform": "fcm", "token": "ci-first-run" },
+                           "controllerVtaDid": "'"$1"'" } }'
+          }
+
+          accepted=$(register "$SERVED")
+          echo "served agent: $accepted"
+          handle=$(printf '%s' "$accepted" | jq -r '.payload.wakeHandle.handle // empty')
+          if [ -z "$handle" ]; then
+            echo "::error::a served agent's registration returned no wake handle"; docker logs gw; exit 1
+          fi
+
+          refused=$(register "$OTHER")
+          echo "other agent: $refused"
+          if ! printf '%s' "$refused" | grep -q permissionDenied; then
+            echo "::error::an unlisted agent's registration was not refused with permissionDenied"; docker logs gw; exit 1
+          fi
+
+          docker inspect --format '{{.State.Health.Status}}' gw || true
+          docker logs gw
+          docker rm -f gw
+
+      - name: Save the image
+        run: docker save -o vti-push-gateway.tar "${{ steps.pin.outputs.image }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vti-push-gateway-image-${{ matrix.arch }}
+          path: deploy/keyring-messaging/vti-push-gateway.tar
+          retention-days: 14
+          if-no-files-found: error

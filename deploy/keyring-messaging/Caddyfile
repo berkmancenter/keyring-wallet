@@ -1,0 +1,15 @@
+# One site: the push wake-up gateway. With SITE_SCHEME=https (the default) Caddy
+# obtains and renews its certificate automatically; this needs a public DNS
+# A/AAAA record pointing here and ports 80 and 443 open (README
+# "Prerequisites"). Environment placeholders are substituted before parsing.
+#
+# No ACME contact email is set; add a global `{ email ops@example.org }` block
+# at the top of this file if you want expiry notices.
+
+# POST /trust-tasks and GET /healthz. The gateway serves /metrics only on its
+# own loopback listener, so there is nothing to route; the explicit 404 keeps it
+# that way if that ever changes upstream.
+{$SITE_SCHEME:https}://{$GATEWAY_HOST} {
+	respond /metrics* 404
+	reverse_proxy gateway:8300
+}

@@ -1,0 +1,91 @@
+# Keyring push wake-up gateway (OpenVTC/vti-push-gateway) behind Caddy with
+# automatic HTTPS. See README.md, including "Unknowns".
+#
+#   cp .env.example .env   # then fill it in
+#   docker compose config  # static check
+#   docker compose up -d
+#
+# Keyring's mailbox (its DIDComm mediator) is not part of this stack: it keeps
+# running where it runs today, and the gateway uses the shared VTI DIDComm v2
+# mediator named in its identity file (docs/plans/push-notifications-plan.md
+# §5.2). Only Caddy publishes ports; the gateway's metrics listener stays on
+# the container's own loopback and is not reachable even from Caddy.
+
+name: keyring-messaging
+
+x-no-auto-update: &no-auto-update
+  # Every image here is pinned; updates are deliberate (README "Updating").
+  com.centurylinklabs.watchtower.enable: "false"
+
+services:
+  gateway:
+    # OpenVTC/vti-push-gateway has no published image; built from source at a
+    # pinned commit (gateway/Dockerfile), or loaded from the CI artifact
+    # (README "Getting the image").
+    build:
+      context: ./gateway
+      args:
+        GATEWAY_COMMIT: ${GATEWAY_COMMIT:-e542a9d77a7369f4f3da01d573107ea155c80691}
+    image: keyring-messaging/vti-push-gateway:${GATEWAY_COMMIT:-e542a9d77a7369f4f3da01d573107ea155c80691}
+    restart: unless-stopped
+    environment:
+      # Empty values are unset by the image's entrypoint, so every optional
+      # variable below can stay blank in .env without breaking startup.
+      GATEWAY_BIND: 0.0.0.0:8300
+      # Advertised in wake handles only when there is no identity file; with
+      # one, handles name the gateway's DID.
+      GATEWAY_ADDR: ${SITE_SCHEME:-https}://${GATEWAY_HOST:?set GATEWAY_HOST in .env}
+      GATEWAY_IDENTITY_FILE: ${GATEWAY_IDENTITY_FILE:-}
+      # The controller VTAs (agents) this gateway serves, as exact DIDs. Unset
+      # serves nothing: every push/register is refused.
+      GATEWAY_ALLOWED_CONTROLLERS: ${GATEWAY_ALLOWED_CONTROLLERS:-}
+      GATEWAY_APNS_KEY_FILE: ${GATEWAY_APNS_KEY_FILE:-}
+      GATEWAY_APNS_KEY_ID: ${GATEWAY_APNS_KEY_ID:-}
+      GATEWAY_APNS_TEAM_ID: ${GATEWAY_APNS_TEAM_ID:-}
+      GATEWAY_APNS_TOPICS: ${GATEWAY_APNS_TOPICS:-}
+      GATEWAY_FCM_SERVICE_ACCOUNT_FILE: ${GATEWAY_FCM_SERVICE_ACCOUNT_FILE:-}
+      GATEWAY_STORE_FILE: /data/gateway-store.json
+      GATEWAY_STRICT_KEY_PERMS: ${GATEWAY_STRICT_KEY_PERMS:-1}
+      GATEWAY_DEV_ECHO_SENDER: ${GATEWAY_DEV_ECHO_SENDER:-}
+      # Metrics stay on the container's loopback (the gateway's own default).
+      GATEWAY_METRICS_BIND: 127.0.0.1:9300
+      # Behind Caddy every HTTP client shares Caddy's address, so the gateway's
+      # per-peer-IP limit is effectively a global one. Sized in .env.
+      GATEWAY_HTTP_PER_SEC: ${GATEWAY_HTTP_PER_SEC:-}
+      GATEWAY_HTTP_BURST: ${GATEWAY_HTTP_BURST:-}
+      RUST_LOG: ${GATEWAY_LOG:-vti_push_gateway=info,tower_http=info}
+    volumes:
+      - ./data/gateway:/data
+      - ./secrets:/run/secrets/gateway:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8300/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [edge]
+    labels: *no-auto-update
+
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    environment:
+      GATEWAY_HOST: ${GATEWAY_HOST}
+      # https (default) = automatic certificates. http = plain HTTP, for a local
+      # run or behind a tunnel that terminates TLS itself (README "Local testing").
+      SITE_SCHEME: ${SITE_SCHEME:-https}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config
+    networks: [edge]
+    labels: *no-auto-update
+
+networks:
+  edge: {}
