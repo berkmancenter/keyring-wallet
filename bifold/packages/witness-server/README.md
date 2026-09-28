@@ -650,14 +650,20 @@ The Witness issues credentials that attest to having observed the VRC exchange:
       "sessionId": "<session ID>",
       "method": "session-based-challenge",
       "event": "EthDenver 2024"
-    }
+    },
+    "witnessName": "<witness display name>"
   }
 }
 ```
 
 **Note:** `event` is only included if `WITNESS_EVENT_NAME` is configured.
+`witnessName` (`credentialSubject.witnessName`, a distinct term from any
+`name` used elsewhere) restores the witness's display name, sanctioned as an
+additional `credentialSubject` member by cred-spec's §Predicate Profiles
+point 5 — the pre-migration `issuer: {id, name}` form was a real spec
+divergence (ref-07e Act 4), and `issuer` is now a bare string in both shapes.
 
-**This is the `wd02` shape, the default.** As of the VSC migration
+**This is the `wd02` shape.** As of the VSC migration
 (`docs/plans/vsc-migration-plan.md`), `buildWitnessCredentialJson` can also
 emit a `dtg:witnessed` VSC shape — `type: ["VerifiableCredential",
 "DTGCredential", "StatementCredential"]`, the digest moved and recomputed as
@@ -666,8 +672,10 @@ re-encoding — it excludes the referenced VRC's own `proof`), `taskContext` at
 the top level rather than nested in `credentialSubject`, and the extension
 members (`hardwareAttestationIncluded`, `locality*`, `parties`) hoisted to be
 siblings of `witnessContext` rather than nested inside it. Selected by the
-`WITNESS_CREDENTIAL_SHAPE=wd02|vsc` config value, **defaulting to `wd02`** —
-no live behavior has changed. See `WitnessService.ts`'s shape branch,
+`WITNESS_CREDENTIAL_SHAPE=wd02|vsc` config value, **defaulting to `vsc`** as
+of plan §9 Q1 (pre-production: no fleet to migrate, VWCs expire after 7
+days) — pass `WITNESS_CREDENTIAL_SHAPE=wd02` to opt a specific deployment
+back to the legacy shape. See `WitnessService.ts`'s shape branch,
 `@bifold/dtg-vocab` (the predicate accept-list), and `@bifold/vrc-contexts`
 (the new JSON-LD terms) for the implementation.
 

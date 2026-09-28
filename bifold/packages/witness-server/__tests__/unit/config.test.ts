@@ -41,6 +41,7 @@ describe('WitnessServerConfig', () => {
     delete process.env.MEDIATOR_INVITATION_URL
     delete process.env.WITNESS_REPORTING_ENABLED
     delete process.env.WITNESS_RETAIN_MESSAGES
+    delete process.env.WITNESS_CREDENTIAL_SHAPE
   })
 
   afterAll(() => {
@@ -293,6 +294,38 @@ describe('WitnessServerConfig', () => {
         process.env.WITNESS_RETAIN_MESSAGES = val
         const config = loadConfig()
         expect(config.retainMessages).toBe(false)
+      }
+    })
+
+    // ── WITNESS_CREDENTIAL_SHAPE (VSC migration plan §9 Q1) ────────────────
+
+    it('credentialShape defaults to vsc when WITNESS_CREDENTIAL_SHAPE is not set (pre-production flip, plan §9 Q1)', () => {
+      const config = loadConfig()
+
+      expect(config.credentialShape).toBe('vsc')
+    })
+
+    it('credentialShape is wd02 when WITNESS_CREDENTIAL_SHAPE=wd02 (explicit opt-out to the legacy shape)', () => {
+      process.env.WITNESS_CREDENTIAL_SHAPE = 'wd02'
+
+      const config = loadConfig()
+
+      expect(config.credentialShape).toBe('wd02')
+    })
+
+    it('credentialShape is vsc when WITNESS_CREDENTIAL_SHAPE=vsc (explicit)', () => {
+      process.env.WITNESS_CREDENTIAL_SHAPE = 'vsc'
+
+      const config = loadConfig()
+
+      expect(config.credentialShape).toBe('vsc')
+    })
+
+    it('credentialShape falls back to vsc for any value that is not exactly "wd02"', () => {
+      for (const val of ['WD02', 'legacy', 'wd2', '']) {
+        process.env.WITNESS_CREDENTIAL_SHAPE = val
+        const config = loadConfig()
+        expect(config.credentialShape).toBe('vsc')
       }
     })
   })
