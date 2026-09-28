@@ -200,6 +200,8 @@ export const GRANT_CHECK_DEADLINE_MS = 10000
  * time was thrown away (Android, 2026-09-24: connect ≈5.5 s, answer ≈4.3 s).
  */
 export const GRANT_CONNECT_DEADLINE_MS = 30000
+/** How long a background sign-in may take before it counts as a drop and is retried (IN-53). */
+export const SESSION_CONNECT_DEADLINE_MS = 30000
 
 /** Matches VtaClient's own "no answer in time" — a silence, not a refusal. */
 const NO_ANSWER = /the VTA did not answer/
@@ -1193,7 +1195,7 @@ export class VtaAgentController {
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined
     try {
-      await this.connect(agent, link.vtaDid)
+      await this.signInWithin(agent, link.vtaDid)
       this.reconnectAttempt = 0
       this.dispatch({ type: 'sessionOpened' })
       void this.holdPersonaKeys(agent, link.vtaDid)
@@ -1222,6 +1224,36 @@ export class VtaAgentController {
       this.scheduleReconnect(agent)
     } finally {
       this.reconnecting = false
+    }
+  }
+
+  /**
+   * Sign in, bounded. Signing in has no deadline of its own (resolving the
+   * agent's mediator, opening the session), and while one is in flight every
+   * other attempt returns at once (`reconnecting`): one that never settled
+   * kept the phone from its agent for good, through foregrounds, unlocks and
+   * retries, with nothing in the log (IN-53, 226). Past the deadline the
+   * half-open client is let go and it counts as a drop, so the usual retry
+   * follows.
+   */
+  private async signInWithin(agent: Agent, vtaDid: string): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        // The sign-in in flight is shared by every caller (`opening`): let it
+        // go, or the next attempt would wait on the same one.
+        const stuck = this.opening
+        if (stuck) {
+          this.opening = undefined
+          void stuck.client.disconnect().catch(() => undefined)
+        }
+        reject(new Error(`the VTA did not answer: signing in took over ${SESSION_CONNECT_DEADLINE_MS / 1000} s`))
+      }, SESSION_CONNECT_DEADLINE_MS)
+    })
+    try {
+      await Promise.race([this.connect(agent, vtaDid), late])
+    } finally {
+      clearTimeout(timer)
     }
   }
 
