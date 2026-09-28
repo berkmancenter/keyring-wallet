@@ -136,7 +136,7 @@ describe('this phone', () => {
         throw new VtiRefusal('device/register:alreadyRegistered', 'already registered')
       },
     })
-    await expect(registerThisDevice(port, { displayName: 'x', platform: 'ios' })).resolves.toBeUndefined()
+    await expect(registerThisDevice(port, { displayName: 'x', platform: 'ios' })).resolves.toBe('alreadyRegistered')
   })
 
   it('is renamed on a heartbeat, the only place a binding name can change', async () => {
