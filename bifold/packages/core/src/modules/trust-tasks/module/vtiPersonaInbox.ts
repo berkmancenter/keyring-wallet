@@ -20,7 +20,7 @@ import type { Agent } from '@credo-ts/core'
 import { useEffect } from 'react'
 import { DeviceEventEmitter } from 'react-native'
 
-import { VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
+import { VTI_PERSONA_DELIVERIES_EVENT, VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { deliveredCardCheck } from './vtiDeliveredCheck'
@@ -58,6 +58,10 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
   let persona: VtiPersona | undefined
   let stopped = false
   let busy = false
+  // A look asked for while one was running: run it once that one is done.
+  let again = false
+  // A look that met someone else's sign-in in flight: run it once that settles.
+  let afterAgent = false
 
   // Registered before any connect: opening the session drains what the
   // mediator held, and a listener attached after the connect misses that
@@ -100,29 +104,57 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     )
   })
 
-  const tick = async () => {
-    if (stopped || busy) return
+  const tick = async (): Promise<void> => {
+    if (stopped) return
+    if (busy) {
+      again = true
+      return
+    }
     busy = true
+    again = false
     try {
       persona = await personaFor(agent, options.communityDid)
       if (!persona?.kmsKeyIds?.keyAgreement) return
       // Only when nothing holds the session: never take it from a flow that
       // opened it on purpose.
       const { status } = vtiAgent.getState()
-      if (vtiAgent.isConnected || status === 'resolving' || status === 'authenticating') return
+      if (vtiAgent.isConnected) return
+      if (status === 'resolving' || status === 'authenticating') {
+        // Another sign-in is running (after an unlock, the inbox that just
+        // stopped): this look is not dropped but waits for it (228 lab check).
+        afterAgent = true
+        return
+      }
       await vtiAgent.connect(agent, options.mediatorDid, { persona, peerRevisionStore })
     } catch (e) {
       options.onError?.(e)
     } finally {
       busy = false
     }
+    if (again) return tick()
   }
+
+  // After an unlock the identity's keys come back a moment after the agent
+  // does; a sign-in before then cannot sign, and waiting for the next look
+  // left messages unread for ~30 s (227 gate). Look again when they are back.
+  const keysHeld = DeviceEventEmitter.addListener(VTI_PERSONA_KEYS_HELD_EVENT, (e: { did?: string }) => {
+    if (!persona || e?.did === persona.did) void tick()
+  })
+
+  const stopWatchingAgent = vtiAgent.subscribe(() => {
+    const { status } = vtiAgent.getState()
+    if (!afterAgent || status === 'resolving' || status === 'authenticating') return
+    afterAgent = false
+    void tick()
+  })
 
   void tick()
   const timer = setInterval(() => void tick(), options.intervalMs ?? 30_000)
   return () => {
     stopped = true
     clearInterval(timer)
+    keysHeld.remove()
+    stopWatchingAgent()
     stopListening()
   }
 }

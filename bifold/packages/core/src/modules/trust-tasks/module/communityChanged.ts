@@ -29,6 +29,13 @@ export const COMMUNITY_CHANGED_EVENT = 'vti:community-changed'
 /** The persona inbox's own event: a delivery it stored (kept here so both can be heard without an import cycle). */
 export const VTI_PERSONA_DELIVERIES_EVENT = 'vti:persona-deliveries'
 
+/**
+ * An identity's keys are back in memory (`{ did }`) — after an unlock or a
+ * restart nothing signs as it until then, so its inbox signs in on this cue
+ * instead of at its next look.
+ */
+export const VTI_PERSONA_KEYS_HELD_EVENT = 'vti:persona-keys-held'
+
 export type CommunityChange =
   | 'membership'
   | 'submission'

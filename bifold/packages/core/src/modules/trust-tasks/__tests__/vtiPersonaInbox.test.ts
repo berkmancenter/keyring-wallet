@@ -8,8 +8,14 @@ import { DeviceEventEmitter } from 'react-native'
 const mockHandlers: Array<(m: unknown) => void> = []
 const mockOrder: string[] = []
 const mockAgentState = { isConnected: false, status: 'disconnected' as string }
+const mockAgentListeners = new Set<() => void>()
+const mockAgentChanged = () => mockAgentListeners.forEach((l) => l())
 jest.mock('../module/vtiAgent', () => ({
   vtiAgent: {
+    subscribe: (l: () => void) => {
+      mockAgentListeners.add(l)
+      return () => mockAgentListeners.delete(l)
+    },
     onInbound: (h: (m: unknown) => void) => {
       mockOrder.push('listen')
       mockHandlers.push(h)
@@ -56,6 +62,7 @@ jest.mock('../module/vtiVetting', () => ({
 }))
 
 import { startPersonaInbox as start, VTI_PERSONA_DELIVERIES_EVENT } from '../module/vtiPersonaInbox'
+import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 import { vtiAgent } from '../module/vtiAgent'
 
 const agent = {} as never
@@ -70,6 +77,97 @@ const startPersonaInbox = (...a: Parameters<typeof start>) => {
 afterEach(() => running.splice(0).forEach((stop) => stop()))
 
 describe('startPersonaInbox', () => {
+  // 227 gate, Android lock probe: after an unlock the inbox asked the mediator
+  // to sign in before the persona's keys were back in memory, could not sign,
+  // and waited for its next look — ~30 s of community messages not arriving
+  // while the agent itself was back in 2 s. The keys coming back is the cue.
+  describe('after an unlock', () => {
+    const connect = vtiAgent.connect as jest.Mock
+    beforeEach(() => {
+      mockOrder.length = 0
+      mockAgentState.isConnected = false
+      mockAgentState.status = 'disconnected'
+      connect.mockClear()
+      mockAgentListeners.clear()
+    })
+
+    it("signs in again the moment the persona's keys are back, not at its next look", async () => {
+      connect.mockRejectedValueOnce(new Error('key not found: sig')).mockImplementationOnce(async () => {
+        mockAgentState.isConnected = true
+      })
+      startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+      await flush()
+      expect(vtiAgent.connect).toHaveBeenCalledTimes(1)
+
+      DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: mockPersona.did })
+      await flush()
+      expect(vtiAgent.connect).toHaveBeenCalledTimes(2)
+      expect(mockAgentState.isConnected).toBe(true)
+    })
+
+    it("does not stir for another identity's keys", async () => {
+      connect.mockRejectedValueOnce(new Error('key not found: sig'))
+      startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+      await flush()
+      DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: 'did:webvh:p:host:someone-else' })
+      await flush()
+      expect(vtiAgent.connect).toHaveBeenCalledTimes(1)
+    })
+
+    // 228 lab check (09-29, bob): the unlock restarted the inbox, so the cue
+    // and the new inbox's first look both met the OLD inbox's sign-in still in
+    // flight (vtiAgent busy) and were dropped; the identity signed in only at
+    // the next look, 29.4 s after the agent. A look that meets someone else's
+    // sign-in waits for it to settle, then looks again.
+    it('a look that meets another sign-in in flight looks again once it settles', async () => {
+      mockAgentState.status = 'authenticating' // another inbox's attempt, still running
+      connect.mockImplementationOnce(async () => {
+        mockAgentState.isConnected = true
+      })
+      startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+      await flush()
+      DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: mockPersona.did })
+      await flush()
+      expect(connect).not.toHaveBeenCalled()
+
+      mockAgentState.status = 'failed' // that attempt gave up
+      mockAgentChanged()
+      await flush()
+      expect(connect).toHaveBeenCalledTimes(1)
+      expect(mockAgentState.isConnected).toBe(true)
+    })
+
+    it('does not stir when the agent changes while nothing waits on it', async () => {
+      connect.mockImplementationOnce(async () => {
+        mockAgentState.isConnected = true
+      })
+      startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+      await flush()
+      expect(connect).toHaveBeenCalledTimes(1)
+      mockAgentChanged()
+      mockAgentChanged()
+      await flush()
+      expect(connect).toHaveBeenCalledTimes(1)
+    })
+
+    it('keys that come back while a sign-in is still failing are not missed', async () => {
+      let fail: (e: Error) => void = () => undefined
+      connect
+        .mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)))
+        .mockImplementationOnce(async () => {
+          mockAgentState.isConnected = true
+        })
+      startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+      await flush()
+      DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: mockPersona.did })
+      fail(new Error('key not found: sig'))
+      await flush()
+      await flush()
+      expect(vtiAgent.connect).toHaveBeenCalledTimes(2)
+      expect(mockAgentState.isConnected).toBe(true)
+    })
+  })
+
   beforeEach(() => {
     mockHandlers.length = 0
     mockOrder.length = 0

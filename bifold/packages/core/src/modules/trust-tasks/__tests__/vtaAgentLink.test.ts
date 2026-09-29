@@ -1,3 +1,4 @@
+import { DeviceEventEmitter } from 'react-native'
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import {
@@ -8,6 +9,7 @@ import {
   VtaAgentController,
 } from '../module/vtaAgent'
 import { EnrolmentError } from '../module/vtaEnrolment'
+import { VTI_PERSONA_KEYS_HELD_EVENT } from '../module/communityChanged'
 
 // The controller runs the whole link — submit, wait for the admin, sign in as
 // the temporary key, rotate onto a long-lived one, remember the agent — and
@@ -546,6 +548,39 @@ describe('when the app replaces its agent (an unlock after a lock builds a new o
     expect(mockClient.connect).toHaveBeenCalled()
     expect(mockClient.holdPersonaKeys).toHaveBeenCalledWith(persona)
     expect(vta.getState().link).toMatchObject({ kind: 'linked', connection: { kind: 'online' } })
+  })
+
+  it("says when an identity's keys are back, so its inbox can sign in then", async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    const held: unknown[] = []
+    const sub = DeviceEventEmitter.addListener(VTI_PERSONA_KEYS_HELD_EVENT, (e) => held.push(e))
+    await vta.restore({ tag: 'unlocked' } as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    sub.remove()
+    expect(held).toEqual([{ did: persona.did }])
+  })
+
+  it('says nothing for an identity whose keys could not be fetched', async () => {
+    const vta = new VtaAgentController()
+    vta.configure({
+      now: () => 1_000,
+      linkStore: () => ({ get: async () => linked as never, set: async () => undefined, clear: async () => undefined }),
+      identityStore: () => ({ setManager: async () => undefined, listPersonas: async () => [persona] }) as never,
+    })
+    mockClient.holdPersonaKeys.mockRejectedValueOnce(new Error('the VTA did not answer'))
+    const held: unknown[] = []
+    const sub = DeviceEventEmitter.addListener(VTI_PERSONA_KEYS_HELD_EVENT, (e) => held.push(e))
+    await vta.restore({ tag: 'unlocked' } as never)
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+    sub.remove()
+    expect(held).toEqual([])
   })
 
   /** Unlocking is the commonest thing a person does: it must not flash "Signing in" or "offline". */
