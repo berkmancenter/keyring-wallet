@@ -48,6 +48,7 @@ import { isDigestMultibase } from './vettingShape'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
 import { purposeForDocumentType } from './proofPurpose'
+import { checkVtaReply } from './vtaReplyProof'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
@@ -677,6 +678,17 @@ export class VtaClient {
         const p = answer.body as { code?: string; comment?: string } | undefined
         throw new VtiRefusal(p?.code ?? 'problem-report', p?.comment ?? `the VTA refused ${type}`)
       }
+      // vta-sdk's client refuses a reply that is unsigned, does not verify, or
+      // was signed by a key other than this VTA's (verify_reply). Keyring logs
+      // the verdict first, off the answer's path, and refuses nothing yet.
+      void checkVtaReply(this.agent, (answer.body ?? {}) as Record<string, unknown>, this.vtaDid).then((verdict) => {
+        const logger = this.agent.config?.logger
+        if (!logger) return
+        if (verdict.kind === 'verified') logger.info(`${LOG_PREFIX} reply verified: ${type}`)
+        else if (verdict.kind === 'wrongSigner') logger.warn(`${LOG_PREFIX} reply signed by ${verdict.signer}, not ${this.vtaDid}: ${type}`)
+        else if (verdict.kind === 'unsigned') logger.warn(`${LOG_PREFIX} reply unsigned: ${type}`)
+        else if (verdict.kind === 'invalid') logger.warn(`${LOG_PREFIX} reply proof does not verify (${verdict.detail}): ${type}`)
+      })
       const body = answer.body as { type?: string; payload?: unknown } | undefined
       if (String(body?.type ?? '').startsWith(TASK_ERROR)) {
         const p = body?.payload as { code?: string; message?: string; details?: unknown } | undefined
