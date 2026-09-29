@@ -362,6 +362,8 @@ export class VtaClient {
     /** What the reply may name as its thread: our DIDComm message, our document, our thread. */
     ids: Set<string>
   }
+  /** The task on the wire now: what a task queued behind it logs that it waits on. */
+  private inFlight?: { type: string; since: number; id: string }
   /** The manager's TSP identity, when this build and this wallet can supply one. */
   private tsp?: TspSessionIdentity
   /** §4.2's per-peer decision, taken once per session. */
@@ -543,6 +545,7 @@ export class VtaClient {
     await this.session?.stop()
     this.session = undefined
     this.pending = undefined
+    this.inFlight = undefined
   }
 
   /**
@@ -560,7 +563,18 @@ export class VtaClient {
     /** Called once the task has left the phone — the moment `timeoutMs` starts. */
     onSent?: () => void
   ): Promise<T> {
-    const run = (): Promise<T> => this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent)
+    const run = (): Promise<T> =>
+      this.sendTask<T>(type, payload, timeoutMs, documentExtras, onSent).finally(() => {
+        this.inFlight = undefined
+      })
+    // One task at a time: one queued behind another says what it waits on, so a
+    // queue that stalls shows what it stalled on (two-phone gate trial, 09-29).
+    const ahead = this.inFlight
+    if (ahead) {
+      this.agent.config.logger.info(
+        `${LOG_PREFIX} ${type} waits behind ${ahead.type} (in flight ${Math.round((Date.now() - ahead.since) / 1000)} s, ${ahead.id})`
+      )
+    }
     // Chain behind whatever is in flight, but do not let one failure poison the next.
     const next = this.queue.then(run, run)
     this.queue = next.catch(() => undefined)
@@ -676,6 +690,7 @@ export class VtaClient {
       const sentAt = Date.now()
       const reply = new Promise<DidCommV2PlaintextMessage>((resolve) => {
         this.pending = { resolve, sentAt, ids: new Set([envelopeId, documentId, threadId]) }
+        this.inFlight = { type, since: sentAt, id: documentId }
       })
       // §4.2 on the VTA leg: read what the VTA advertises and speak TSP when it
       // offers it and this wallet can introduce itself. A VTA built without the
