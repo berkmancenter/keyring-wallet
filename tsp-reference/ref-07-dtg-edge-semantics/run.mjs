@@ -34,6 +34,7 @@ const edgeReused = fixture('edge-reused-pairwise.json')
 const edgeMixed = fixture('edge-mixed-migration.json')
 const edgeCaptured = fixture('edge-pairwise-captured.json')
 const witnessed = fixture('edge-witnessed-captured.json')
+const witnessedVsc = fixture('edge-witnessed-vsc-captured.json')
 const { publicKeys } = fixture('keys.json')
 
 let failures = 0
@@ -386,6 +387,115 @@ console.log('\nCHECK D — the witnessed edge, and our own VWC audited (#1065/#1
 }
 
 // ---------------------------------------------------------------------------
+// CHECK D2 — the SAME witnessed edge, `vsc` shape, minted by the REAL
+// production builder (docs/plans/vsc-migration-plan/2026-09-29-bm.md item 2).
+//
+// `edge-witnessed-vsc-captured.json` is captured by
+// bifold/packages/vrc-reference/__tests__/integration/captureWitnessedEdgeVsc.test.ts
+// — the SAME 5-phase flow as `edge-witnessed-captured.json` above, but every
+// VWC field is computed by witness-server's real
+// `buildWitnessCredentialJson(..., { shape: 'vsc' })` (imported as a library,
+// not re-implemented), not this reference implementation's hardcoded wd02-only
+// builder. Check D (above) audits the wd02 output against the spec's bar;
+// this audits the `vsc` output the SAME function is capable of emitting, so
+// the two checks are a legacy/current pair, not duplicates.
+// ---------------------------------------------------------------------------
+console.log('\nCHECK D2 — the same witnessed edge, vsc shape, from the REAL production builder')
+{
+  const vwcs = witnessedVsc.vwcs.map((v) => v.credential)
+  const vrcs = witnessedVsc.vrcs.map((v) => v.credential)
+  report(
+    witnessedVsc.vwcs.every((v) => v.verifiedAtCapture === true),
+    'both REAL vsc-shaped VWCs verified by Credo (holders’ own verifiers) at capture'
+  )
+
+  // Same mutual-naming regression guard as Check D, over the vsc capture's
+  // own VRC pair (a separate real exchange, its own session/DIDs).
+  const witnessedEdge = { halves: [vrcs[0], vrcs[1]] }
+  const body = bodyVerifier(witnessedEdge)
+  report(body.verifiableEdge, 'the vsc capture’s witnessed halves mutually name each other too')
+
+  // D1: no concrete DTGCredential subtype other than StatementCredential —
+  // NOT 'WitnessCredential' (that's the wd02 type list).
+  for (const vwc of vwcs) {
+    report(
+      Array.isArray(vwc.type) &&
+        vwc.type.includes('StatementCredential') &&
+        !vwc.type.includes('WitnessCredential'),
+      'D1: type is StatementCredential, no other concrete DTGCredential subtype',
+      vwc.type.join(', ')
+    )
+  }
+
+  // issuerScope (cred-spec #68, REQUIRED as of 2026-09-28): the profile's
+  // stated minimum, 'directed'.
+  report(
+    vwcs.every((v) => v.issuerScope === 'directed'),
+    'issuerScope is present and "directed" on every vsc VWC'
+  )
+
+  // D2: predicate is a real, resolvable dtg:witnessed IRI (not a placeholder).
+  report(
+    vwcs.every((v) => v.credentialSubject.predicate === 'https://registry.trustoverip.org/dtg/vsc/witnessed/1'),
+    'D2: predicate is the real registry dtg:witnessed IRI, not a firstperson.network placeholder'
+  )
+
+  // D3 (the digest coverage break Check D's item 2 flags as NOT closed by
+  // wd02): object.digestMultibase, independently recomputed here with this
+  // rung's OWN jcs+sha256+base58 primitives (same ones Check D's Check 0/D
+  // use) per the framework's §4.9.3 TASK DIGEST definition — multibase
+  // (base58btc) multihash (sha-256) over the JCS form of the referenced VRC
+  // EXCLUDING its own top-level `proof` — NOT a re-encoding of Check D's
+  // legacy `sha256:`+hex digest, a genuinely different computation.
+  const taskDigestMultibaseHere = (document) => {
+    // eslint-disable-next-line no-unused-vars
+    const { proof: _proof, ...unproofed } = document
+    const canonicalBytes = new TextEncoder().encode(jcs(unproofed))
+    const multihash = new Uint8Array([0x12, 0x20, ...sha256(canonicalBytes)])
+    return 'z' + base58.encode(multihash)
+  }
+  for (const vwc of vwcs) {
+    const claimed = vwc.credentialSubject.object.digestMultibase
+    const match = vrcs.find((vrc) => taskDigestMultibaseHere(vrc) === claimed)
+    report(
+      match !== undefined,
+      'D3: object.digestMultibase recomputes over the witnessed VRC minus its own proof (independent multibase multihash, not this rung’s legacy sha256:hex)',
+      match ? `binds the VRC issued by …${match.issuer.slice(-12)}` : 'NO captured VRC reproduces this digestMultibase'
+    )
+  }
+
+  // Discriminating, not a constant/placeholder value: the two captured VRCs
+  // recompute to two DIFFERENT digestMultibase values.
+  report(
+    taskDigestMultibaseHere(vrcs[0]) !== taskDigestMultibaseHere(vrcs[1]),
+    'digestMultibase discriminates between the two captured VRCs (not a constant value)'
+  )
+
+  // Same parity-drift self-finding as Check D, now confirmed to persist
+  // under vsc shape too — this legacy-dialect builder's vsc branch was never
+  // extended to emit taskContext/taskDigestMultibase at the top level either
+  // (docs/plans/vsc-migration-plan/2026-09-29-bm.md item 4 — a real, flagged,
+  // NOT fixed gap; the newer Trust Tasks ceremony path,
+  // WitnessTaskSessions.ts, already does this correctly).
+  report(
+    vwcs.every((v) => v.taskContext === undefined && v.taskDigestMultibase === undefined),
+    'PARITY DRIFT PERSISTS UNDER vsc SHAPE TOO: no top-level taskContext/taskDigestMultibase',
+    'same legacy basicmessage-dialect builder as Check D — flagged, not fixed, in both shapes'
+  )
+
+  // witnessContext keeps only the profile's three members (D... / plan §3.5)
+  // — no hardwareAttestationIncluded/locality* leaking into it; those are
+  // siblings of witnessContext under credentialSubject instead.
+  report(
+    vwcs.every((v) => {
+      const keys = Object.keys(v.credentialSubject.witnessContext).sort()
+      return keys.every((k) => ['event', 'method', 'sessionId'].includes(k))
+    }),
+    'witnessContext carries only { event?, sessionId, method } — hardwareAttestationIncluded etc. are siblings, not nested'
+  )
+}
+
+// ---------------------------------------------------------------------------
 // CHECK E — one identifier, two scope vocabularies (cross-spec, #22 × TT 0.5.0).
 //
 // Trust Tasks framework 0.5.0 (trustoverip/dtgwg-trust-tasks-spec @ 6425a741,
@@ -458,5 +568,8 @@ console.log('#22 declared-scope model yields one deterministic rule set over the
 console.log('#23/#22-opening edges unnameable under four types, nameable under declared scope;')
 console.log('Check D: our own witnessed artifacts audited — digest binding recomputes, and three')
 console.log('self-findings recorded (wrong-R-DID minting bug, legacy digest form, missing taskContext);')
+console.log('Check D2: the same edge, vsc shape, from the REAL production builder — digestMultibase')
+console.log('recomputes independently, issuerScope/predicate/type conform, and the missing-taskContext')
+console.log('parity drift is confirmed to persist under vsc shape too, not just wd02;')
 console.log('Check E: the cred-spec scope axis and TT framework 0.5.0 identifierScope cannot')
 console.log('express each other — `community` and `linked` have no faithful target.')
