@@ -332,6 +332,14 @@ export function activeSwapTestHook(): VtaSwapTestHook {
 
 type Probe = { kind: 'live' } | { kind: 'refused'; detail: string } | { kind: 'unknown'; detail: string }
 
+/** Documents the agent sends of its own accord: never the answer to a task this client asked. */
+const UNSOLICITED = new Set<string>([
+  VTA_TASK.consentRequest,
+  VTA_TASK.consentGranted,
+  STEP_UP_TASK.approveRequest01,
+  STEP_UP_TASK.approveRequest02,
+])
+
 /** Persona mints running now, by VTA and community (see `ensurePersona`). */
 const personasInFlight = new Map<string, Promise<VtiPersona>>()
 
@@ -367,6 +375,13 @@ export class VtaClient {
         this.grantWaiters.delete(digest as string)
         wake()
       }
+      this.options.onInbound?.(plaintext)
+      return
+    }
+    // What the agent sends of its own accord is never a task's answer: a
+    // consent request taken as the reply to a heartbeat sent just before it
+    // arrived never reached the approvals (push finding F3, 09-29).
+    if (body?.type && UNSOLICITED.has(body.type)) {
       this.options.onInbound?.(plaintext)
       return
     }
