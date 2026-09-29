@@ -9,6 +9,7 @@ import { testIdWithKey } from '../../src/utils/testable'
 import { BasicAppContext } from '../helpers/app'
 import * as helpers from '../../src/utils/helpers'
 import { KeyringLinkError } from '../../src/modules/trust-tasks/module/vtiLinks'
+import { deviceCodeScan } from '../../src/modules/trust-tasks/module/deviceCodeScan'
 
 const waitTimeMs = 300
 
@@ -131,6 +132,33 @@ describe('PasteUrl Screen', () => {
       expect(await tree.queryAllByText(/already been used/)).toHaveLength(1)
       expect(await tree.queryAllByText('PasteUrl.ErrorInvalidUrl')).toHaveLength(0)
     })
+  })
+
+  // #30: "Scan its code" opened the scanner for another phone's code; pasting
+  // that code here (the scanner's own paste-a-link) must hand it back to the
+  // add-device screen, not route it as a link ("This code is a key…").
+  test('a device code pasted while "Scan its code" is waiting goes back to the add-device screen', async () => {
+    const got = jest.fn()
+    deviceCodeScan.request(got)
+    const parentGoBack = jest.fn()
+    const nav = { ...(navigation as object), getParent: () => ({ goBack: parentGoBack }) }
+    const tree = render(
+      <BasicAppContext>
+        <StoreProvider initialState={defaultState}>
+          <PasteUrl navigation={nav as any} route={{} as any} />
+        </StoreProvider>
+      </BasicAppContext>
+    )
+    act(() => {
+      fireEvent.changeText(tree.getByTestId(testIdWithKey('PastedUrl')), 'did:key:z6MkNewPhone')
+    })
+    await act(async () => {
+      fireEvent.press(tree.getByTestId(testIdWithKey('ScanPastedUrl')))
+    })
+    expect(got).toHaveBeenCalledWith('did:key:z6MkNewPhone')
+    expect(parentGoBack).toHaveBeenCalled()
+    expect(mockConnectFromScanOrDeepLink).not.toHaveBeenCalled()
+    deviceCodeScan.cancel()
   })
 
   test('Test valid url navigation', async () => {

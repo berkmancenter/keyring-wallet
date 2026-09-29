@@ -7,6 +7,7 @@
 import { useNavigation } from '@react-navigation/native'
 import { act, fireEvent, render } from '@testing-library/react-native'
 import React from 'react'
+import QRCode from 'react-native-qrcode-svg'
 
 import { useAgent } from '@bifold/react-hooks'
 
@@ -16,7 +17,7 @@ import { Screens, Stacks } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { vtaAgent } from '../module/vtaAgent'
 import { openScanner } from '../screens/openScanner'
-import VtaLink from '../screens/VtaLink'
+import VtaLink, { PHONE_GRANT_POLL_EVERY_MS } from '../screens/VtaLink'
 import { shareableKey } from '../screens/shareableKey'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
@@ -111,6 +112,48 @@ describe('the key the admin has to add', () => {
         ...extra,
       },
     })
+
+  // #30 (IN-52/53): after scanning another phone's "Add another phone" code,
+  // this phone shows ITS code for that phone to scan — no admin, no Share —
+  // and notices by itself when it has been added.
+  describe('after scanning the other phone', () => {
+    const show = () =>
+      render(
+        <BasicAppContext>
+          <VtaLink />
+        </BasicAppContext>
+      )
+
+    test('shows its code as a QR, with Copy and the code as text, and nothing about an admin', () => {
+      showKey({ via: 'scan', did: 'did:key:z6MkNewPhone' })
+      const tree = show()
+      expect(tree.getByTestId(testIdWithKey('VtaLinkForOtherPhone'))).toHaveTextContent(/VtaLink\.ShowToOtherPhone/)
+      expect(tree.UNSAFE_getByType(QRCode).props.value).toBe('did:key:z6MkNewPhone')
+      expect(tree.getByTestId(testIdWithKey('VtaLinkCopyKey'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('VtaLinkShareKey'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('VtaLinkGiveKeyHow'))).toBeNull()
+      fireEvent.press(tree.getByTestId(testIdWithKey('VtaLinkShowAsText')))
+      expect(tree.getByTestId(testIdWithKey('VtaLinkManualDid'))).toHaveTextContent('did:key:z6MkNewPhone')
+    })
+
+    test('checks by itself whether the other phone has added it, and says it is waiting', () => {
+      jest.useFakeTimers()
+      try {
+        const check = jest.spyOn(vtaAgent, 'checkManualGrant').mockResolvedValue(undefined)
+        showKey({ via: 'scan', did: 'did:key:z6MkNewPhone' })
+        const tree = show()
+        expect(tree.getByTestId(testIdWithKey('VtaLinkWaitingForPhone'))).toBeTruthy()
+        // No "I've been added" to press: the check runs on its own.
+        expect(tree.queryByTestId(testIdWithKey('VtaLinkCheckGrant'))).toBeNull()
+        act(() => {
+          jest.advanceTimersByTime(PHONE_GRANT_POLL_EVERY_MS * 2 + 10)
+        })
+        expect(check).toHaveBeenCalledTimes(2)
+      } finally {
+        jest.useRealTimers()
+      }
+    })
+  })
 
   test('an agent that said nothing says so, and the button offers another go', async () => {
     const mockUseAgent = useAgent as jest.Mock

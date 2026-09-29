@@ -145,7 +145,9 @@ async function routeBareDid(
       if (vtaAgent.getState().link.kind === 'linked') {
         throw new KeyringLinkError('This phone is already linked to an agent.')
       }
-      await vtaAgent.startManualLink(agent, did, didHost(did))
+      // Scanned or pasted: usually another phone's "Add another phone" code, so
+      // this phone shows its own code for that phone to scan (#30).
+      await vtaAgent.startManualLink(agent, did, didHost(did), { via: 'scan' })
       navigate('VtaLink')
       return
     case 'ambiguous':

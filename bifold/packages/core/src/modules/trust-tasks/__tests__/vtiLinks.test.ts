@@ -274,7 +274,7 @@ describe('a bare DID, scanned or pasted', () => {
     const navigate = jest.fn()
     const agent = withDoc(doc(['VTARest', 'DIDCommMessaging']))
     await routeKeyringAgentLink(agentDid, agent, navigate)
-    expect(start).toHaveBeenCalledWith(agent, agentDid, 'dids.example')
+    expect(start).toHaveBeenCalledWith(agent, agentDid, 'dids.example', { via: 'scan' })
     expect(navigate).toHaveBeenCalledWith('VtaLink')
   })
 

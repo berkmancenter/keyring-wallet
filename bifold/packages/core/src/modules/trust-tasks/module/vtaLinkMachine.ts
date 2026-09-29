@@ -52,7 +52,15 @@ export type VtaLinkState =
   | ({ kind: 'confirming'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
   | ({ kind: 'submitting'; offerUrl: string; exp: number } & VtaIdentityOfAgent)
   | ({ kind: 'awaitingGrant'; offerUrl: string; exp: number; code: string } & VtaIdentityOfAgent)
-  | ({ kind: 'showingKey'; did: string; checking: boolean; notYet?: boolean; noAnswer?: boolean } & VtaIdentityOfAgent)
+  | ({
+      kind: 'showingKey'
+      did: string
+      checking: boolean
+      notYet?: boolean
+      noAnswer?: boolean
+      /** `scan`: the agent's address was scanned or pasted — usually another phone's "Add another phone" code (#30). */
+      via?: 'scan'
+    } & VtaIdentityOfAgent)
   | ({ kind: 'linking'; step: 'connecting' | 'rotating' } & VtaIdentityOfAgent)
   | ({ kind: 'linked'; linkedAt: string; connection: VtaConnection } & VtaIdentityOfAgent)
   | ({ kind: 'revoked'; reason: string; cause: RevocationCause } & VtaIdentityOfAgent)
@@ -100,7 +108,7 @@ export type VtaLinkEvent =
   | { type: 'relink' }
   /** The person unlinked this phone from its agent: from any state, back to no agent. */
   | { type: 'unlinked' }
-  | ({ type: 'keyShown'; did: string } & VtaIdentityOfAgent)
+  | ({ type: 'keyShown'; did: string; via?: 'scan' } & VtaIdentityOfAgent)
   | { type: 'grantCheckStarted' }
   | { type: 'grantNotYet' }
   | { type: 'grantNoAnswer' }
@@ -141,7 +149,14 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
 
     case 'keyShown':
       return state.kind === 'notLinked'
-        ? { kind: 'showingKey', vtaDid: event.vtaDid, label: event.label, did: event.did, checking: false }
+        ? {
+            kind: 'showingKey',
+            vtaDid: event.vtaDid,
+            label: event.label,
+            did: event.did,
+            checking: false,
+            ...(event.via ? { via: event.via } : {}),
+          }
         : state
 
     case 'grantCheckStarted':
