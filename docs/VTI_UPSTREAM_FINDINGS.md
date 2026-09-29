@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.66 — 2026-09-29.** A living document: every finding here was measured
+**Version 1.67 — 2026-09-29.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -2116,6 +2116,15 @@ Alberto contributes them himself; we open no PR or issue.
 
 (d) **Status.** Built and unit-tested. **CI (wallet #241 @`c786666`, run 36521937598):** the patch applies cleanly onto `e542a9d7`, and upstream's full `cargo test --locked --all-targets` passes with it (89 + 25 + 32 tests, 0 failed), including the 8 new tests. They cover: unsafe keys rejected; the mode unset leaves APNs and FCM unchanged; an interactive wake becomes a visible alert or notification naming only a key; a background wake stays silent with the mode on; the title key is carried when configured. The device proof (iPhone after a force-quit, Android notification tray) comes with the push lane's device test.
 
+## Observations
+
+Things we noticed upstream that are neither our defect nor a finding we would
+report as one. Numbered `OBS-NN`. For Alberto to share if useful.
+
+### OBS-01 — openvtc main still registers devices with `device/register/0.1`
+
+On the lab, 2026-09-29 04:38:09Z, the openvtc TUI (main `506b8ac`) registered with the runner VTA using `device/register/0.1` (actor: the TUI fixture's vetter identity). VTI main (`2240aa7e`) marks the 0.1 device tasks superseded by 0.2 (`vta-service/src/deprecation.rs:660-685`) and removes a superseded task only when observed usage reaches zero, so the maintainers' own client keeps 0.1 alive. Keyring sends 0.2 (keyring-bifold #191).
+
 ## Farm cross-mediator round trip (2026-09-22)
 
 Step 2 of our Farm measurement, read-only, with no app involved. A fresh client
@@ -2884,6 +2893,7 @@ and the credential's own id.
 | 1.64 | 2026-09-29 | **VTI-08** resolved, measured live: a debug VTA at `2240aa7e` without the `RUST_MIN_STACK` workaround created contexts over REST and TSP with no overflow. |
 | 1.65 | 2026-09-29 | New section **Contribution candidates** (`CONTRIB-NN`, never submitted by us). **CONTRIB-01:** an optional visible alert mode for interactive wakes in vti-push-gateway, built and unit-tested against `e542a9d7`. |
 | 1.66 | 2026-09-29 | CONTRIB-01 (d): CI result. The patch applies onto `e542a9d7`, and upstream's full test suite passes with it, 8 new tests included. |
+| 1.67 | 2026-09-29 | New section **Observations** (`OBS-NN`: neither our defect nor a finding). **OBS-01:** openvtc main `506b8ac` still sends `device/register/0.1`, which VTI main has superseded. |
 | 1.59 | 2026-09-27 | **VTI-48** (new, Medium): the DTG JSON-LD context that every community card names (`https://firstperson.network/credentials/dtg/v1`) answers 404, so a JSON-LD wallet cannot store the cards. Keyring serves an empty stand-in until it is published. |
 | 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
