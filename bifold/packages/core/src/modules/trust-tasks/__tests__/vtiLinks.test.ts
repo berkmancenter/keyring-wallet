@@ -1,9 +1,11 @@
 import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifold/trust-tasks'
 
+import { Screens } from '../../../types/navigators'
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import {
   APPROVALS_LINK,
+  MY_AGENT_SCREEN,
   KeyringLinkError,
   communityLinkReturn,
   keyringAgentLinkKind,
@@ -68,11 +70,12 @@ describe('the approvals link a push notification opens', () => {
     expect(keyringAgentLinkKind('keyring://vta/approvals?x=1')).toBeUndefined()
   })
 
-  it('goes to My Agent, where approvals wait, and does nothing else', async () => {
+  it('goes to the agent home, where approvals wait, and does nothing else', async () => {
     const navigate = jest.fn()
     await routeKeyringAgentLink(APPROVALS_LINK, {} as never, navigate)
     expect(navigate).toHaveBeenCalledTimes(1)
-    expect(navigate).toHaveBeenCalledWith('MyAgent')
+    expect(navigate).toHaveBeenCalledWith('VtaAgent')
+    expect(MY_AGENT_SCREEN.VtaAgent).toBe(Screens.VtaAgent)
   })
 })
 

@@ -53,7 +53,7 @@ export class KeyringLinkError extends Error {
 }
 
 /**
- * The app's own link to the waiting approvals (My Agent). A push notification
+ * The app's own link to the waiting approvals (the agent home). A push notification
  * opens it: the notification carries no content, so a tap can only say "go to
  * where approvals wait", and the approval itself is fetched after unlocking.
  */
@@ -187,11 +187,13 @@ async function routeBareDid(
 }
 
 /** Where a link lands, inside the My Agent stack. */
-export type MyAgentDestination = 'VtaLink' | 'MyAgent' | 'VtiVetting' | 'VtiJoin' | 'VtiInvited'
+export type MyAgentDestination = 'VtaLink' | 'MyAgent' | 'VtaAgent' | 'VtiVetting' | 'VtiJoin' | 'VtiInvited'
 
 export const MY_AGENT_SCREEN: Record<MyAgentDestination, Screens> = {
   VtaLink: Screens.VtaLink,
   MyAgent: Screens.MyAgent,
+  // The agent home, where waiting approvals are listed (VtaAgentHome).
+  VtaAgent: Screens.VtaAgent,
   VtiVetting: Screens.VtiVetting,
   VtiJoin: Screens.VtiJoin,
   VtiInvited: Screens.VtiInvited,
@@ -272,7 +274,7 @@ export async function routeKeyringAgentLink(
       return
     }
     case 'approvals':
-      navigate('MyAgent')
+      navigate('VtaAgent')
       return
     case 'enrolment': {
       let offer
