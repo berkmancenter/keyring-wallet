@@ -35,6 +35,7 @@ import { useCommunityJourney } from '../module/communityJourney'
 import { communityLabelAnsweredOf, communityLabelOf, communityLabelStartOf } from './communityName'
 import { plainError } from './plainError'
 import { useCommunityCalled } from './useCommunity'
+import { localDate } from './localTime'
 
 /** The raw text behind a plain line, for Details: a framework code, else the message. */
 const detailOf = (err: unknown): string => {
@@ -249,7 +250,7 @@ const VtiCommunity: React.FC = () => {
               </Text>
             </View>
             <Text style={styles.label} testID={testIdWithKey('CommunityMemberSince')}>
-              {t('MyAgent.MemberSince', { date: membership.grantedAt.slice(0, 10) })}
+              {t('MyAgent.MemberSince', { date: localDate(membership.grantedAt) })}
             </Text>
             {vetsHere ? (
               <Pressable

@@ -54,6 +54,7 @@ import { useChosenCommunityDid } from './useCommunity'
 import { useVtaDid } from './VtaStatus'
 import { sayFailure, type Said } from './plainError'
 import SaidFailure from './SaidFailure'
+import { localDate, localDateTime } from './localTime'
 
 /** Which seat this phone would take at a vetting: decided by what it holds. */
 type VettingSeat = 'vetter' | 'applicant'
@@ -438,7 +439,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                   })}
                 </Text>
                 <Text style={styles.label}>
-                  {t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}
+                  {t('MyAgent.ApprovalExpires', { when: localDateTime(approval.expiresAt) })}
                 </Text>
                 <ApprovalDetails approval={approval} />
                 {approval.status === 'pending' ? (
@@ -525,7 +526,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
           <Text style={styles.label} testID={testIdWithKey('MyAgentMembershipRole')}>
             {m.role} · {viaText(m.via)}
           </Text>
-          <Text style={styles.label}>{t('MyAgent.MemberSince', { date: m.grantedAt.slice(0, 10) })}</Text>
+          <Text style={styles.label}>{t('MyAgent.MemberSince', { date: localDate(m.grantedAt) })}</Text>
         </Pressable>
       ))}
       {communityDid && !memberships.some((m) => m.communityDid === communityDid) ? (

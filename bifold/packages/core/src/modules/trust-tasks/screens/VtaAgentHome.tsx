@@ -52,6 +52,7 @@ import { DidDetails } from './DidDetails'
 import { GetCardsFromAgent } from './GetCardsFromAgent'
 import { SEGMENT_MIN_SCALE, segmentLayout } from './segmentLayout'
 import { useVtaLinkWithClock, VtaStatusLine } from './VtaStatus'
+import { localDateTime } from './localTime'
 
 interface Holdings {
   personas: VtiPersona[]
@@ -733,7 +734,7 @@ const VtaAgentHome: React.FC = () => {
                       })}
                     </ThemedText>
                     <ThemedText style={styles.muted}>
-                      {t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}
+                      {t('MyAgent.ApprovalExpires', { when: localDateTime(approval.expiresAt) })}
                     </ThemedText>
                     <ApprovalDetails approval={approval} />
                     <DidDetails did={approval.requester} testIdStem="AgentApprovalRequester" />

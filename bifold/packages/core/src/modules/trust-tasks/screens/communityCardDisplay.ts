@@ -21,9 +21,10 @@ import { classifyCredential } from '../module/vtiInbox'
 import { isCommunityCard } from '../module/vtiWalletCards'
 
 import { communityHeadingOf } from './communityName'
+import { localDate } from './localTime'
 
 const day = (iso: unknown): string | undefined =>
-  typeof iso === 'string' && !Number.isNaN(Date.parse(iso)) ? iso.slice(0, 10) : undefined
+  typeof iso === 'string' && !Number.isNaN(Date.parse(iso)) ? localDate(iso) : undefined
 
 /** Roles every community has, worded by the app; any other role is the community's own. */
 const ROLE_WORDS: Record<string, string> = {

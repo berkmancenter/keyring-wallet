@@ -81,6 +81,7 @@ import { ticketRefusalWords } from './ticketWords'
 import { vetterStandingLine } from './vetterStanding'
 import { useVtaDid } from './VtaStatus'
 import { applicantPrimary, deskPrimary, type ApplicantStep, type VetterStep } from './vettingPrimary'
+import { localDate } from './localTime'
 
 /**
  * A short, stable name for one vetting request: the tail of its request
@@ -810,7 +811,7 @@ const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
                           </Text>
                         ) : null}
                         <Text style={styles.label}>
-                          {tp('Vetting.TicketValid', { uses: x.usesLeft, until: x.expiresAt.slice(0, 10) })}
+                          {tp('Vetting.TicketValid', { uses: x.usesLeft, until: localDate(x.expiresAt) })}
                         </Text>
                       </View>
                     ))

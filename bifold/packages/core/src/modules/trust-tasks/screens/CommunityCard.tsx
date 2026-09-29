@@ -25,6 +25,7 @@ import { communityCardModel, type CommunityCardPrimary } from './communityCardMo
 import { communityHeadingOf } from './communityName'
 import { shareIdentity } from './identityShare'
 import { didHashKey, didLabelKey } from './testIdKey'
+import { localDate } from './localTime'
 
 /**
  * A card's handle for tests and runners: `<label>-<hash>`, where the label is
@@ -135,14 +136,14 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
             {removal ? (
               // Ended by the community: when, and its reason when it gave one.
               <ThemedText testID={testIdWithKey(`AgentMembershipEnded_${key}`)}>
-                {t('VtaLink.CardMembershipEnded', { date: removal.decidedAt.slice(0, 10) })}
+                {t('VtaLink.CardMembershipEnded', { date: localDate(removal.decidedAt) })}
                 {removal.reason
                   ? ` ${t('Community.RemovedReason', { reason: removal.reason, interpolation: { escapeValue: false } })}`
                   : ''}
               </ThemedText>
             ) : (
               <ThemedText testID={testIdWithKey(`AgentMemberSince_${key}`)}>
-                {t('MyAgent.MemberSince', { date: membership.grantedAt.slice(0, 10) })}
+                {t('MyAgent.MemberSince', { date: localDate(membership.grantedAt) })}
               </ThemedText>
             )}
             {heldBeforeLink && !removal ? (

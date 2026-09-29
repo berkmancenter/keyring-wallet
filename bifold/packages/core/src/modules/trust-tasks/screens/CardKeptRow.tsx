@@ -17,6 +17,8 @@ import { testIdWithKey } from '../../../utils/testable'
 import { cardStandingOf, subscribeCardStanding, type CardStanding } from '../module/vtiCardStanding'
 import { cardVaultStateOf, subscribeCardVault } from '../module/vtiCardVault'
 
+import { localDate } from './localTime'
+
 /** A card's vault state as one string: what the row's words and icon key on. */
 export type CardKeptKey = 'kept' | 'pending' | 'notYetKept' | 'cannotKeep:proofSet' | 'cannotKeep:refusedByAgent'
 
@@ -92,7 +94,7 @@ export const CardKeptRow: React.FC<CardKeptRowProps> = ({ card, kind, handle, co
           <ThemedText testID={testIdWithKey(`AgentCardHistory_${kind}_${handle}`)}>
             {standing.state === 'expired'
               ? t(kind === 'membership' ? 'VtaLink.CardMembershipEnded' : 'VtaLink.CardRoleEnded', {
-                  date: standing.at.slice(0, 10),
+                  date: localDate(standing.at),
                 })
               : t('VtaLink.CardWithdrawn', {
                   community: community ?? t('Community.Unnamed'),
