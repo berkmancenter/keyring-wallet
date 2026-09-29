@@ -27,6 +27,7 @@ import {
   statementFacts,
   encodeTicketUri,
   parseTicketUri,
+  purposeForDocumentType,
   signDocumentProof,
   taskDigestMultibase,
   verifyDocumentProof,
@@ -534,6 +535,7 @@ async function signedDocument(
   return signDocumentProof(agent, doc, persona.did, {
     kmsKeyId: persona.kmsKeyIds?.signing,
     verificationMethodId: persona.vtaKeyIds.signing,
+    proofPurpose: purposeForDocumentType(String(doc.type)),
   })
 }
 

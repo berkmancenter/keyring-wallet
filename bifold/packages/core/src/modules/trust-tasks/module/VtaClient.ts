@@ -29,7 +29,7 @@ import { chooseAgentLabel, verifiedAgentName, vtaNameFrom, type AgentLabel, type
 import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
-import { TRUST_TASK_V2_ENVELOPE_TYPE, signCompactJws, signDocumentProof, tsp } from '@bifold/trust-tasks'
+import { TRUST_TASK_V2_ENVELOPE_TYPE, purposeForDocumentType, signCompactJws, signDocumentProof, tsp } from '@bifold/trust-tasks'
 
 import { EPHEMERAL_KMS_BACKEND, importVtaKey, inMemoryKeyId, isInMemoryKeyId, type VtaExportedKey } from './vtaKeys'
 import {
@@ -621,7 +621,8 @@ export class VtaClient {
           // Covered by the proof like everything else on the document.
           ...documentExtras,
         },
-        did
+        did,
+        { proofPurpose: purposeForDocumentType(type) }
       )
       const sentAt = Date.now()
       const reply = new Promise<DidCommV2PlaintextMessage>((resolve) => {

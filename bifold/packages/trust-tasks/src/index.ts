@@ -12,6 +12,7 @@
  */
 export * from './carriage'
 export * from './documentProof'
+export * from './proofPurpose'
 export * from './TrustTaskMessage'
 export * from './TspEnvelopeMessage'
 export * from './TrustTaskEnvelopeV2Message'

@@ -23,7 +23,7 @@ import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
 
-import { signDocumentProof } from '../documentProof'
+import { purposeForDocumentType, signDocumentProof } from '../documentProof'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import {
@@ -1115,6 +1115,7 @@ class VtiAgentController {
     return signDocumentProof(agent, document, persona.did, {
       kmsKeyId: persona.kmsKeyIds.signing,
       verificationMethodId: persona.vtaKeyIds.signing,
+      proofPurpose: purposeForDocumentType(type),
     })
   }
 
