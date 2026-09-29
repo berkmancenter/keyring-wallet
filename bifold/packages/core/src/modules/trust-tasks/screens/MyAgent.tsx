@@ -34,6 +34,7 @@ import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { ApprovalDetails } from './ApprovalDetails'
 import { DevicesCard } from './DevicesCard'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { vtaAgent } from '../module/vtaAgent'
@@ -433,6 +434,7 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
                 <Text style={styles.label}>
                   {t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}
                 </Text>
+                <ApprovalDetails approval={approval} />
                 {approval.status === 'pending' ? (
                   <View style={styles.row}>
                     <Pressable
