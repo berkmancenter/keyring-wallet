@@ -331,13 +331,25 @@ export async function buildVrcCredential(
         // VCDM 2.0 shape per the DTG spec (SHOULD issue 2.0). Proof-context
         // rules live in selectCredentialContexts (shared with the RCard builder).
         //
-        // Real DTG registry context, not the legacy self-hosted
-        // DTG_CONTEXT_URL/RELATIONSHIP_CONTEXT_URL pair (still used by the
-        // VCDM 1.1 branch below): cred-spec's own `@context` array requires
-        // exactly this IRI second, after credentials/v2. Every document
-        // loader still resolves the old pair too (dual-read), so already-
-        // issued/legacy credentials keep verifying unchanged.
-        '@context': selectCredentialContexts({ useVc20, useDi }, [REGISTRY_DTG_CONTEXT_URL]),
+        // Real DTG registry context, per cred-spec's `@context` array
+        // requirement (exactly this IRI second, after credentials/v2) —
+        // PLUS the legacy DTG_CONTEXT_URL alongside it. The registry
+        // context defines only DTGCredential/RelationshipCredential, with
+        // no top-level @vocab; DTG_CONTEXT_URL's @vocab is what covers the
+        // hardware-attestation `evidence` block's terms (attestation,
+        // hardwareBinding, ...). Without it, JSON-LD safe-mode signing
+        // rejects any VC 2.0 VRC carrying real attestation evidence —
+        // silent on emulators (which skip hardware attestation entirely)
+        // and in every existing test (none build a credential with an
+        // evidence block), only surfacing on a real-device signed
+        // exchange (found 2026-09-29). Every document loader already
+        // resolves both IRIs (dual-read), so already-issued/legacy
+        // credentials keep verifying unchanged either way. Must be set
+        // here, before hardware signing — BiometricSignatureVerifier's
+        // extractSignedContent only strips evidence/proof, so the context
+        // can't be appended after signing without invalidating the
+        // hardware signature.
+        '@context': selectCredentialContexts({ useVc20, useDi }, [REGISTRY_DTG_CONTEXT_URL, DTG_CONTEXT_URL]),
         type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
         // Bare DID string per DTG spec — contact info rides in the RCard instead
         issuer: myRelationshipDid,
