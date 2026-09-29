@@ -24,6 +24,7 @@ import { testIdWithKey } from '../utils/testable'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { isLinkOnline, useAgentPresence } from '../modules/trust-tasks/module/vtaPresence'
 import { SiblingNoticeHost } from '../modules/trust-tasks/screens/SiblingNoticeHost'
+import { StepUpAskHost } from '../modules/trust-tasks/screens/StepUpAskHost'
 import { VtaOfflineBanner } from '../modules/trust-tasks/screens/VtaStatus'
 import { MY_AGENT_SCREEN, keyringAgentLinkKind } from '../modules/trust-tasks/module/vtiLinks'
 import { linkNoticeToast, openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
@@ -217,6 +218,8 @@ const TabStack: React.FC = () => {
       <VtaOfflineBanner />
       {/* "Also open as you": the presence loop above emits it (#10, part F). */}
       <SiblingNoticeHost />
+      {/* The agent asks to be sure it is the person before a task (a step-up, #200). */}
+      <StepUpAskHost />
       <Tab.Navigator
         initialRouteName={TabStacks.ContactStack}
         screenOptions={{

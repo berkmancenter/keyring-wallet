@@ -402,7 +402,7 @@ export class VtaClient {
        * person could not be asked (nothing is sent then). Without it, the
        * refusal stands.
        */
-      onStepUp?: (request: StepUpRequest) => Promise<'approve' | 'deny'>
+      onStepUp?: (request: StepUpRequest, context: { taskType: string }) => Promise<'approve' | 'deny'>
       /** How long a fresh session drains the mediator's backlog before the first send. */
       connectDrainMs?: number
       /** How long to wait for the answer to `acl/swap-key`. */
@@ -520,7 +520,9 @@ export class VtaClient {
     return next.catch(async (error: unknown) => {
       const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
       if (stepUp)
-        return this.answerStepUp<T>(stepUp, error, () => this.sendTask<T>(type, payload, timeoutMs, documentExtras))
+        return this.answerStepUp<T>(stepUp, error, type, () =>
+          this.sendTask<T>(type, payload, timeoutMs, documentExtras)
+        )
       // A task the policy holds for consent is refused with
       // `details.reason = "auth:consent_required"` and the signed requests the
       // approvers were sent (policy_gate.rs). The grant that consent produces
@@ -571,6 +573,7 @@ export class VtaClient {
   private async answerStepUp<T>(
     stepUp: NonNullable<ReturnType<typeof stepUpRequestOf>>,
     refusal: unknown,
+    taskType: string,
     resubmit: () => Promise<T>
   ): Promise<T> {
     const ask = this.options.onStepUp
@@ -578,7 +581,7 @@ export class VtaClient {
       if (!stepUp.ok) this.agent.config.logger.warn(`${LOG_PREFIX} not answering the agent's step-up: ${stepUp.why}`)
       throw refusal
     }
-    const answer = await ask(stepUp.request)
+    const answer = await ask(stepUp.request, { taskType })
     const decision = answer === 'approve' ? 'approved' : 'denied'
     await this.sendTask(STEP_UP_TASK.approveResponse, approveResponsePayload(stepUp.request, decision), 30000)
     if (decision === 'denied') throw new StepUpDeclined()
