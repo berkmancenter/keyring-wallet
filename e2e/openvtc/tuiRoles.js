@@ -16,7 +16,7 @@
 // a 177a218 binary). Where a string is the same in both, one citation (ed13d29)
 // stands; 177a218's line is given alongside when it moved.
 
-import { selectedLine, walkTo } from './listWalk.js';
+import { rowSelected, selectedLine, walkTo } from './listWalk.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -151,7 +151,10 @@ export async function issueTicket(tui) {
   const code = issued[1];
   // The link shown is the SELECTED ticket's (vetting_panel.rs:1665-1686); with
   // older tickets out, select this one by its code before reading the link.
-  const selected = () => new RegExp(`Read aloud\\s+${code}`).test(tui.screen());
+  // With enough tickets out (25 on 2026-09-29) the list fills the pane and the
+  // "Read aloud" detail is below it, off screen; the ▸ on the ticket's row is
+  // then the only sign it is selected.
+  const selected = () => new RegExp(`Read aloud\\s+${code}`).test(tui.screen()) || rowSelected(tui.screen(), code);
   // The tickets view grows by one every run; its position is the ticket read aloud.
   await walkTo(tui, selected, { pace: 600, state: (screen) => screen.match(/Read aloud\s+(\S+)/)?.[1] ?? selectedLine(screen) });
   if (!selected()) throw tui.failure('vetter.ticketSelect', new Date(), `could not select ticket ${code} on the Tickets view`);
