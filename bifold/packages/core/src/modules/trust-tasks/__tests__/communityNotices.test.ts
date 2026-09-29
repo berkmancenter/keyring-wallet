@@ -126,6 +126,23 @@ describe("a community's removal notice", () => {
   })
 })
 
+// An applied notice says so, or a removal that was stored reads exactly like one
+// that was dropped (lab, 2026-09-29). Identifiers as prefixes only: the line
+// reaches testers' problem reports.
+describe('an applied notice', () => {
+  it('is logged, naming the community by a DID prefix only', async () => {
+    const info = jest.fn()
+    const logged = { config: { logger: { warn: jest.fn(), info } } } as never
+    const { st } = store({ membership })
+    await expect(receiveCommunityNotice(logged, st, PERSONA, notice(), { now: NOW, verify: verified })).resolves.toBe(
+      'removed'
+    )
+    expect(info).toHaveBeenCalledWith(expect.stringMatching(/^\[VTI\] applied a removal notice from did:webvh:QmCommunity:vt…/))
+    expect(String(info.mock.calls[0][0])).not.toContain(COMMUNITY)
+    expect(String(info.mock.calls[0][0])).not.toContain(PERSONA)
+  })
+})
+
 describe("a community's join receipt", () => {
   const receipt = (payload: Record<string, unknown>, doc: Record<string, unknown> = {}) => ({
     type: SUBMIT_RECEIPT,
