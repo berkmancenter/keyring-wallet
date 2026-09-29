@@ -8,11 +8,11 @@ import { Linking } from 'react-native'
 
 import { DispatchAction } from '../../src/contexts/reducers/store'
 
-const dispatch = jest.fn()
-let didAuthenticate = false
+const mockDispatch = jest.fn()
+let mockDidAuthenticate = false
 
 jest.mock('../../src/contexts/store', () => ({
-  useStore: () => [{ authentication: { didAuthenticate } }, dispatch],
+  useStore: () => [{ authentication: { didAuthenticate: mockDidAuthenticate } }, mockDispatch],
 }))
 jest.mock('../../src/contexts/activity', () => ({
   useActivity: () => ({ appStateStatus: 'active' }),
@@ -24,8 +24,8 @@ import { openAppLink, useDeepLinks } from '../../src/hooks/deep-links'
 const LINK = 'keyring://vta/approvals'
 
 beforeEach(() => {
-  dispatch.mockReset()
-  didAuthenticate = false
+  mockDispatch.mockReset()
+  mockDidAuthenticate = false
   ;(Linking as unknown as { getInitialURL: () => Promise<string | null> }).getInitialURL = jest.fn(async () => null)
   ;(Linking as unknown as { addListener: () => { remove: () => void } }).addListener = jest.fn(() => ({
     remove: jest.fn(),
@@ -36,20 +36,20 @@ describe('a link the app opens itself', () => {
   it('waits for the wallet to be unlocked, then becomes the active deep link', async () => {
     const hook = renderHook(() => useDeepLinks())
     await act(async () => openAppLink(LINK))
-    expect(dispatch).not.toHaveBeenCalled()
+    expect(mockDispatch).not.toHaveBeenCalled()
 
-    didAuthenticate = true
+    mockDidAuthenticate = true
     await act(async () => hook.rerender({}))
-    expect(dispatch).toHaveBeenCalledWith({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [LINK] })
+    expect(mockDispatch).toHaveBeenCalledWith({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [LINK] })
     hook.unmount()
   })
 
   it('opened before the hook mounts (a cold start), is kept for it', async () => {
     openAppLink(LINK)
-    didAuthenticate = true
+    mockDidAuthenticate = true
     const hook = renderHook(() => useDeepLinks())
     await act(async () => {})
-    expect(dispatch).toHaveBeenCalledWith({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [LINK] })
+    expect(mockDispatch).toHaveBeenCalledWith({ type: DispatchAction.ACTIVE_DEEP_LINK, payload: [LINK] })
     hook.unmount()
   })
 })
