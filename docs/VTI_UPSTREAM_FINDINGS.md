@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.68 — 2026-09-29.** A living document: every finding here was measured
+**Version 1.69 — 2026-09-29.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -2161,6 +2161,23 @@ report as one. Numbered `OBS-NN`. For Alberto to share if useful.
 
 On the lab, 2026-09-29 04:38:09Z, the openvtc TUI (main `506b8ac`) registered with the runner VTA using `device/register/0.1` (actor: the TUI fixture's vetter identity). VTI main (`2240aa7e`) marks the 0.1 device tasks superseded by 0.2 (`vta-service/src/deprecation.rs:660-685`) and removes a superseded task only when observed usage reaches zero, so the maintainers' own client keeps 0.1 alive. Keyring sends 0.2 (keyring-bifold #191).
 
+### OBS-02 — removing an already-removed member removes it again and sends a second notice
+
+On the lab (VTI `afcf2470`), a test member was removed with
+`vtc/members/admin-remove/0.1` at 2026-09-29 19:38:28Z. The removal logged
+"member removed" and a removal notice, and set the card's revocation bit.
+The same task for the same DID at 19:54:04Z (a harness mistake) was not
+refused. The VTC again logged "member removed", answered `{ removed: true }`,
+and queued and pushed a second `vtc/members/removal-notice/0.1` (19:54:05Z).
+Measured in the VTC log; the card's bit stayed 1.
+Why the second call is not refused as "not a member" isn't read from the code
+yet: a tombstoned member row may still count as removable. A client that
+applies notices once (Keyring ignores a repeat as "already removed") is
+unaffected. An operator's audit log gains a second removal, though, and a
+member gets a second notice for one removal. The question for upstream
+would be whether admin-remove should answer `notFound` or `alreadyRemoved`
+for a DID that is no longer a member.
+
 ## Farm cross-mediator round trip (2026-09-22)
 
 Step 2 of our Farm measurement, read-only, with no app involved. A fresh client
@@ -2931,6 +2948,7 @@ and the credential's own id.
 | 1.66 | 2026-09-29 | CONTRIB-01 (d): CI result. The patch applies onto `e542a9d7`, and upstream's full test suite passes with it, 8 new tests included. |
 | 1.67 | 2026-09-29 | New section **Observations** (`OBS-NN`: neither our defect nor a finding). **OBS-01:** openvtc main `506b8ac` still sends `device/register/0.1`, which VTI main has superseded. |
 | 1.68 | 2026-09-29 | **VTI-44** (f): re-measured on VTI `afcf2470` and unchanged at main `de15b6d0`. The VTA's credential vault refuses the VTC's two-proof membership card and accepts the same card with its eddsa proof alone (first-hand, `pnm cred-vault receive` on the lab VTA). Keyring's own card copy to its agent's vault hits it, so "Get your cards from your agent" restores nothing. A removal still revokes the card (status bit 0 → 1, measured). |
+| 1.69 | 2026-09-29 | **OBS-02** (new): `vtc/members/admin-remove/0.1` for a member already removed is not refused. It logs the removal again, answers `removed: true`, and pushes a second removal notice (lab, VTI `afcf2470`). |
 | 1.59 | 2026-09-27 | **VTI-48** (new, Medium): the DTG JSON-LD context that every community card names (`https://firstperson.network/credentials/dtg/v1`) answers 404, so a JSON-LD wallet cannot store the cards. Keyring serves an empty stand-in until it is published. |
 | 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
