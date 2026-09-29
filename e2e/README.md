@@ -863,6 +863,28 @@ ANDROID_AVD2=<second-avd> yarn e2e:credential-exchange-query
 ANDROID_UDID2=<second-device-udid> yarn e2e:credential-exchange-query
 ```
 
+## Push is off for testers (`push-off-probe`): every release gate, both platforms
+
+Push is built in and switched off in the testers' configuration: the build sets
+no `PUSH_GATEWAY_URL`, so the onboarding push step and the Settings →
+Notifications switch must not appear. Run it after each platform's link, on the
+build the gate ships:
+
+```sh
+PLATFORM=ios UDID=<sim udid> APPIUM_PORT=4761 npm run push-off-probe
+```
+
+It opens Settings on the installed app and searches it end to end for the
+`Notifications` row and any "notification" text. Prints
+`PUSH_OFF PASS|FAIL`; exit 0 pass, 3 fail, 1 the run failed.
+
+The rest of the check comes from the gate's own records:
+
+- **Onboarding.** The link run's transcript shows no `PushNotificationContinue`
+  step and no notification permission alert.
+- **Logs.** No `push/register`, `push/provision`, `push/wake` or
+  `device/set-wake` in the runner VTA's log over the gate window.
+
 ## Real lock and unlock (`lock-probe`) — every release gate, both platforms
 
 Locking shuts the wallet's agent down and drops every identity's in-memory
