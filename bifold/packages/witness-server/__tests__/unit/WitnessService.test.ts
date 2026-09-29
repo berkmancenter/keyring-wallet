@@ -28,6 +28,7 @@ import {
   computeVrcDigest,
   buildWitnessCredentialJson,
   WitnessCredentialBuildContext,
+  extractVrcHardwareAttestationPublicKey,
 } from '../../src/WitnessService'
 import { LocalityEvidence } from '../../src/LocalityService'
 import {
@@ -2634,5 +2635,52 @@ describe('WitnessService - onSessionCompletedWithAttestations callback', () => {
       expect(result3.edgeRecorded).toBe(false)
       expect(result3.reportingDidsUsed).toBeUndefined()
     })
+  })
+})
+
+describe('extractVrcHardwareAttestationPublicKey (locality §7.3 step-6 key-match input)', () => {
+  it('returns the public key from the VRC evidence entry that carries one', () => {
+    const presentation = {
+      verifiableCredential: [
+        {
+          evidence: [{ type: ['HardwareAttestation'], hardwareBinding: { publicKey: 'z6Mk-example-pubkey' } }],
+        },
+      ],
+    }
+
+    expect(extractVrcHardwareAttestationPublicKey(presentation)).toBe('z6Mk-example-pubkey')
+  })
+
+  it('returns undefined when the VRC carries no evidence array', () => {
+    const presentation = { verifiableCredential: [{}] }
+
+    expect(extractVrcHardwareAttestationPublicKey(presentation)).toBeUndefined()
+  })
+
+  it('returns undefined when an evidence entry has no hardwareBinding.publicKey', () => {
+    const presentation = {
+      verifiableCredential: [{ evidence: [{ type: ['HardwareAttestation'] }] }],
+    }
+
+    expect(extractVrcHardwareAttestationPublicKey(presentation)).toBeUndefined()
+  })
+
+  it('returns undefined when the presentation carries no verifiableCredential at all', () => {
+    expect(extractVrcHardwareAttestationPublicKey({})).toBeUndefined()
+  })
+
+  it('skips a non-string/empty publicKey and returns the first valid one found across multiple evidence entries', () => {
+    const presentation = {
+      verifiableCredential: [
+        {
+          evidence: [
+            { type: ['HardwareAttestation'], hardwareBinding: { publicKey: '' } },
+            { type: ['HardwareAttestation'], hardwareBinding: { publicKey: 'z6Mk-second-real-key' } },
+          ],
+        },
+      ],
+    }
+
+    expect(extractVrcHardwareAttestationPublicKey(presentation)).toBe('z6Mk-second-real-key')
   })
 })
