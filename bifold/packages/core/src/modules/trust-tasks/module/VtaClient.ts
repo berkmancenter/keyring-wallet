@@ -353,10 +353,15 @@ export class VtaClient {
    * redelivers at connect time — measured: a queued refusal of an earlier
    * unsigned `whoami` "answered" a later signed one. A message that arrived
    * before the current request was sent cannot be its reply, so it is dropped.
-   * This does not depend on how the VTA threads a reply, which the framework
-   * derives from its own result document rather than echoing our thread id.
+   * A reply is matched by its thread (see `deliver`); only a reply that names
+   * no thread falls back to arriving next, with a warning.
    */
-  private pending?: { resolve: (plaintext: DidCommV2PlaintextMessage) => void; sentAt: number }
+  private pending?: {
+    resolve: (plaintext: DidCommV2PlaintextMessage) => void
+    sentAt: number
+    /** What the reply may name as its thread: our DIDComm message, our document, our thread. */
+    ids: Set<string>
+  }
   /** The manager's TSP identity, when this build and this wallet can supply one. */
   private tsp?: TspSessionIdentity
   /** §4.2's per-peer decision, taken once per session. */
@@ -386,14 +391,39 @@ export class VtaClient {
       return
     }
     const pending = this.pending
-    // A reply older than the request is a re-delivery of a stale message (a
-    // poll draining the queue), never the answer — created_time is seconds.
-    const stale =
-      typeof plaintext.created_time === 'number' && plaintext.created_time * 1000 < (pending?.sentAt ?? 0) - 5000
-    if (!pending || stale) {
+    if (!pending) {
       this.options.onInbound?.(plaintext)
       return
     }
+    // Upstream threads every reply to its request: the DIDComm reply's `thid`
+    // names our message (vta-service messaging/service.rs:673-677), the reply
+    // document's `threadId` names our request (vta-mobile-core reply.rs); a
+    // TSP reply carries the document's in `thid` (vtiTsp.ts).
+    const threadRefs = [
+      plaintext.thid,
+      (plaintext as { pthid?: string }).pthid,
+      (body as { threadId?: unknown } | undefined)?.threadId,
+    ].filter((ref): ref is string => typeof ref === 'string' && ref.length > 0)
+    if (threadRefs.length > 0) {
+      if (!threadRefs.some((ref) => pending.ids.has(ref))) {
+        // Threaded to another request: a late answer to an earlier task.
+        this.options.onInbound?.(plaintext)
+        return
+      }
+      this.pending = undefined
+      pending.resolve(plaintext)
+      return
+    }
+    // No thread at all: the old rule, the next message after the request — but
+    // never one older than it (a poll draining the queue) — and say so.
+    const stale = typeof plaintext.created_time === 'number' && plaintext.created_time * 1000 < pending.sentAt - 5000
+    if (stale) {
+      this.options.onInbound?.(plaintext)
+      return
+    }
+    this.agent.config.logger.warn(
+      `${LOG_PREFIX} a reply with no thread was taken as the answer to the task in flight (${body?.type ?? 'no type'})`
+    )
     this.pending = undefined
     pending.resolve(plaintext)
   }
@@ -625,10 +655,12 @@ export class VtaClient {
       // and it is the same DID the envelope is sealed from, which the VTA
       // checks (VTI-10).
       const threadId = `urn:uuid:${utils.uuid()}`
+      const documentId = `urn:uuid:${utils.uuid()}`
+      const envelopeId = `urn:uuid:${utils.uuid()}`
       const document = await signDocumentProof(
         this.agent,
         {
-          id: `urn:uuid:${utils.uuid()}`,
+          id: documentId,
           type,
           threadId,
           payload,
@@ -643,7 +675,7 @@ export class VtaClient {
       )
       const sentAt = Date.now()
       const reply = new Promise<DidCommV2PlaintextMessage>((resolve) => {
-        this.pending = { resolve, sentAt }
+        this.pending = { resolve, sentAt, ids: new Set([envelopeId, documentId, threadId]) }
       })
       // §4.2 on the VTA leg: read what the VTA advertises and speak TSP when it
       // offers it and this wallet can introduce itself. A VTA built without the
@@ -668,7 +700,7 @@ export class VtaClient {
         this.agent.config.logger.info(`${LOG_PREFIX} asked ${this.vtaDid} ${type} over ${packed.revision}`)
       } else
         await session.sendTo(this.vtaDid, {
-          id: `urn:uuid:${utils.uuid()}`,
+          id: envelopeId,
           typ: 'application/didcomm-plain+json',
           type: TRUST_TASK_V2_ENVELOPE_TYPE,
           from: did,
