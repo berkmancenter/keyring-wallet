@@ -339,4 +339,32 @@ describe("a community admin console's Send: a pushed invitation offer", () => {
     await mockHandlers[0](offerFrom('did:webvh:QmOtherCommunity:x'))
     expect(mockRedeem).not.toHaveBeenCalled()
   })
+
+  // A notice the inbox would apply, skipped without a word, looks exactly like
+  // one that never arrived (lab, 2026-09-29: a removal delivered, nothing applied,
+  // nothing logged). The skip says which message and why.
+  it('says so when it skips a message it owns because the session is another identity', async () => {
+    const warn = jest.fn()
+    const logged = { config: { logger: { warn, info: jest.fn(), debug: jest.fn() } } } as never
+    startPersonaInbox(logged, { communityDid: mockPersona.communityDid })
+    await flush()
+    mockAgentState.isConnected = false
+    mockHandlers.forEach((h) =>
+      h({ type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1', from: mockPersona.communityDid, body: {} })
+    )
+    await flush()
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/persona inbox skipped .*removal-notice.*session/))
+  })
+
+  it('says so when it has no persona for the chosen community', async () => {
+    const warn = jest.fn()
+    const logged = { config: { logger: { warn, info: jest.fn(), debug: jest.fn() } } } as never
+    startPersonaInbox(logged, { communityDid: 'did:webvh:other:host' })
+    await flush()
+    mockHandlers.forEach((h) =>
+      h({ type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1', from: mockPersona.communityDid, body: {} })
+    )
+    await flush()
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/persona inbox skipped .*removal-notice.*no persona/))
+  })
 })
