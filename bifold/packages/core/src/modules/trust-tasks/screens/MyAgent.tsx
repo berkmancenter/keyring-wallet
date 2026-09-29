@@ -19,7 +19,7 @@
  * @module trust-tasks/screens/MyAgent
  */
 
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
 import { useAgent } from '@bifold/react-hooks'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
@@ -74,6 +74,16 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
   const navigation = useNavigation<StackNavigationProp<MyAgentStackParams>>()
   const state = useSyncExternalStore(vtiAgent.subscribe, vtiAgent.getState)
   const vta = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  // Every way to link starts here and ends by going back here, and the tab
+  // chose this screen as its first while the phone was not linked. Once it is
+  // linked, the agent home is the screen (#11); hand over to it rather than
+  // leave the phone on this older panel (two-phone gate trial, 09-29).
+  const linked = vta.link.kind === 'linked'
+  useFocusEffect(
+    useCallback(() => {
+      if (linked) navigation.replace(Screens.VtaAgent)
+    }, [linked, navigation])
+  )
 
   const mediatorDid = config?.mediatorDid
   // The phone's community — not one a link is only showing.
