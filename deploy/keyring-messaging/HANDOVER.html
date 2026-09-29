@@ -1,1086 +1,1342 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover"
-    />
-    <title>Keyring Push Gateway Handover</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap"
-    />
-    <style>
-      :root {
-        --paper: #f5f7fa;
-        --panel: #ffffff;
-        --ink: #1b2330;
-        --muted: #566173;
-        --rule: #d8dee7;
-        --accent: #1f6f8b;
-        --accent-soft: #e3f0f5;
-        --warn: #b4532a;
-        --warn-soft: #fbeee7;
-        --code-bg: #eef1f5;
-        --ok: #2f7d4f;
-        --sans:
-          "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-        --cond:
-          "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
-        --mono:
-          "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
-          monospace;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root:not([data-theme="light"]) {
-          color-scheme: dark;
-          --paper: #11151b;
-          --panel: #171c24;
-          --ink: #e3e8ef;
-          --muted: #9aa6b6;
-          --rule: #2a323e;
-          --accent: #62b6d2;
-          --accent-soft: #16303a;
-          --warn: #e3906a;
-          --warn-soft: #3a241b;
-          --code-bg: #1d242e;
-          --ok: #6cc08e;
-        }
-      }
-      :root[data-theme="dark"] {
-        color-scheme: dark;
-        --paper: #11151b;
-        --panel: #171c24;
-        --ink: #e3e8ef;
-        --muted: #9aa6b6;
-        --rule: #2a323e;
-        --accent: #62b6d2;
-        --accent-soft: #16303a;
-        --warn: #e3906a;
-        --warn-soft: #3a241b;
-        --code-bg: #1d242e;
-        --ok: #6cc08e;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        background: var(--paper);
-        color: var(--ink);
-        font: 16px/1.6 var(--sans);
-        padding-inline: 16px;
-        padding-block: 32px 64px;
-      }
-      .wrap {
-        max-width: 1080px;
-        margin: 0 auto;
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 40px;
-      }
-      @media (min-width: 920px) {
-        .wrap {
-          grid-template-columns: 200px minmax(0, 1fr);
-        }
-      }
-      nav.toc {
-        font-size: 14px;
-      }
-      @media (min-width: 920px) {
-        nav.toc {
-          position: sticky;
-          top: calc(env(safe-area-inset-top, 0px) + 24px);
-          align-self: start;
-        }
-      }
-      nav.toc ol {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: 6px;
-      }
-      nav.toc a {
-        color: var(--muted);
-        text-decoration: none;
-      }
-      nav.toc a:hover,
-      nav.toc a:focus-visible {
-        color: var(--accent);
-      }
-      nav.toc .label {
-        font: 600 12px/1 var(--cond);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--muted);
-        margin-bottom: 10px;
-      }
-      main {
-        max-width: 72ch;
-        min-width: 0;
-      }
-      header .kicker {
-        font: 600 13px/1 var(--cond);
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--accent);
-      }
-      h1 {
-        font: 700 clamp(30px, 5vw, 42px)/1.1 var(--cond);
-        margin: 10px 0 14px;
-        text-wrap: balance;
-      }
-      h2 {
-        font: 700 25px/1.2 var(--cond);
-        margin: 48px 0 12px;
-        text-wrap: balance;
-        scroll-margin-top: 24px;
-      }
-      h3 {
-        font: 600 18px/1.3 var(--cond);
-        margin: 28px 0 8px;
-        letter-spacing: 0.01em;
-      }
-      p,
-      li {
-        max-width: 68ch;
-      }
-      .lede {
-        font-size: 18px;
-        color: var(--muted);
-      }
-      .status {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin: 18px 0 0;
-      }
-      .chip {
-        font: 500 13px/1 var(--mono);
-        padding: 6px 10px;
-        border-radius: 999px;
-        border: 1px solid var(--rule);
-        background: var(--panel);
-        color: var(--ink);
-      }
-      .chip.ok {
-        border-color: var(--ok);
-        color: var(--ok);
-      }
-      code,
-      kbd {
-        font: 0.9em var(--mono);
-        background: var(--code-bg);
-        padding: 1px 5px;
-        border-radius: 4px;
-      }
-      pre {
-        font: 13.5px/1.55 var(--mono);
-        background: var(--code-bg);
-        padding: 14px 16px;
-        border-radius: 6px;
-        overflow-x: auto;
-        margin: 10px 0 16px;
-      }
-      pre code {
-        background: none;
-        padding: 0;
-      }
-      a {
-        color: var(--accent);
-      }
-      a:focus-visible,
-      button:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-      }
-      .tablebox {
-        overflow-x: auto;
-        margin: 10px 0 16px;
-        border: 1px solid var(--rule);
-        border-radius: 6px;
-        background: var(--panel);
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        font-size: 14.5px;
-      }
-      th,
-      td {
-        text-align: left;
-        vertical-align: top;
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--rule);
-      }
-      tr:last-child td {
-        border-bottom: none;
-      }
-      th {
-        font: 600 12px/1.3 var(--cond);
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--muted);
-        background: var(--paper);
-      }
-      td code {
-        white-space: nowrap;
-      }
-      .secret {
-        font: 600 11px/1 var(--cond);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--warn);
-        border: 1px solid var(--warn);
-        border-radius: 3px;
-        padding: 2px 5px;
-        margin-right: 6px;
-        white-space: nowrap;
-      }
-      .warnbox {
-        border-left: 4px solid var(--warn);
-        background: var(--warn-soft);
-        padding: 14px 16px;
-        border-radius: 0 6px 6px 0;
-        margin: 16px 0;
-      }
-      .warnbox strong {
-        color: var(--warn);
-      }
-      .note {
-        border-left: 4px solid var(--accent);
-        background: var(--accent-soft);
-        padding: 12px 16px;
-        border-radius: 0 6px 6px 0;
-        margin: 16px 0;
-      }
-      figure {
-        margin: 18px 0 8px;
-      }
-      figure .svgbox {
-        overflow-x: auto;
-        background: var(--panel);
-        border: 1px solid var(--rule);
-        border-radius: 6px;
-        padding: 12px;
-      }
-      figure svg {
-        display: block;
-        min-width: 620px;
-        width: 100%;
-        height: auto;
-      }
-      figcaption {
-        font-size: 14px;
-        color: var(--muted);
-        margin-top: 8px;
-      }
-      svg .box {
-        fill: var(--paper);
-        stroke: var(--ink);
-        stroke-width: 1.4;
-      }
-      svg .hub {
-        fill: var(--accent-soft);
-        stroke: var(--accent);
-        stroke-width: 2;
-      }
-      svg .t {
-        fill: var(--ink);
-        font: 600 14px var(--cond);
-      }
-      svg .s {
-        fill: var(--muted);
-        font: 12px var(--sans);
-      }
-      svg .line {
-        stroke: var(--ink);
-        stroke-width: 1.4;
-        fill: none;
-      }
-      svg .reg {
-        stroke: var(--accent);
-        stroke-width: 1.4;
-        fill: none;
-        stroke-dasharray: 5 4;
-      }
-      svg .lbl {
-        fill: var(--ink);
-        font: 12px var(--mono);
-      }
-      svg .lbl.a {
-        fill: var(--accent);
-      }
-      svg .arrow {
-        fill: var(--ink);
-      }
-      svg .arrow.a {
-        fill: var(--accent);
-      }
-      ol.steps {
-        padding-left: 22px;
-        display: grid;
-        gap: 10px;
-      }
-      ol.steps li::marker {
-        font-weight: 600;
-        color: var(--accent);
-      }
-      .checklist {
-        list-style: none;
-        padding: 0;
-        display: grid;
-        gap: 10px;
-      }
-      .checklist li {
-        display: grid;
-        grid-template-columns: 22px 1fr;
-        gap: 8px;
-      }
-      .checklist input {
-        width: 16px;
-        height: 16px;
-        margin-top: 4px;
-        accent-color: var(--accent);
-      }
-      .log {
-        font: 13px/1.5 var(--mono);
-        color: var(--muted);
-      }
-      .copyrow {
-        position: relative;
-      }
-      .copy {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        font: 500 12px var(--sans);
-        border: 1px solid var(--rule);
-        background: var(--panel);
-        color: var(--ink);
-        border-radius: 4px;
-        padding: 4px 8px;
-        cursor: pointer;
-      }
-      footer {
-        margin-top: 56px;
-        padding-top: 16px;
-        border-top: 1px solid var(--rule);
-        font-size: 14px;
-        color: var(--muted);
-      }
-      @media (prefers-reduced-motion: no-preference) {
-        a,
-        .copy {
-          transition:
-            color 0.15s,
-            background 0.15s;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <nav class="toc" aria-label="Contents">
-        <div class="label">Contents</div>
-        <ol>
-          <li><a href="#what">1. What it is</a></li>
-          <li><a href="#image">2. The image</a></li>
-          <li><a href="#settings">3. Settings &amp; secrets</a></li>
-          <li><a href="#identity">3.4 Its identity</a></li>
-          <li><a href="#allowlist">3.5 Who it serves</a></li>
-          <li><a href="#host">4. Host needs</a></li>
-          <li><a href="#golive">5. Go-live &amp; test</a></li>
-          <li><a href="#gaps">6. Known gaps</a></li>
-        </ol>
-      </nav>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keyring Push Gateway Handover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+:root{
+  --paper:#f5f7fa; --panel:#ffffff; --ink:#1b2330; --muted:#566173; --rule:#d8dee7;
+  --accent:#1f6f8b; --accent-soft:#e3f0f5; --warn:#b4532a; --warn-soft:#fbeee7;
+  --code-bg:#eef1f5; --ok:#2f7d4f;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#11151b; --panel:#171c24; --ink:#e3e8ef; --muted:#9aa6b6; --rule:#2a323e;
+    --accent:#62b6d2; --accent-soft:#16303a; --warn:#e3906a; --warn-soft:#3a241b;
+    --code-bg:#1d242e; --ok:#6cc08e;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#11151b; --panel:#171c24; --ink:#e3e8ef; --muted:#9aa6b6; --rule:#2a323e;
+  --accent:#62b6d2; --accent-soft:#16303a; --warn:#e3906a; --warn-soft:#3a241b;
+  --code-bg:#1d242e; --ok:#6cc08e;
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:16px/1.6 var(--sans);padding-inline:16px;padding-block:32px 64px}
+.wrap{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:40px}
+@media (min-width:920px){.wrap{grid-template-columns:200px minmax(0,1fr)}}
+nav.toc{font-size:14px}
+@media (min-width:920px){nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start}}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+nav.toc a{color:var(--muted);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--accent)}
+nav.toc .label{font:600 12px/1 var(--cond);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+main{max-width:72ch;min-width:0}
+header .kicker{font:600 13px/1 var(--cond);letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 clamp(30px,5vw,42px)/1.1 var(--cond);margin:10px 0 14px;text-wrap:balance}
+h2{font:700 25px/1.2 var(--cond);margin:48px 0 12px;text-wrap:balance;scroll-margin-top:24px}
+h3{font:600 18px/1.3 var(--cond);margin:28px 0 8px;letter-spacing:.01em}
+p,li{max-width:68ch}
+.lede{font-size:18px;color:var(--muted)}
+.status{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 0}
+.chip{font:500 13px/1 var(--mono);padding:6px 10px;border-radius:999px;border:1px solid var(--rule);background:var(--panel);color:var(--ink)}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+code,kbd{font:0.9em var(--mono);background:var(--code-bg);padding:1px 5px;border-radius:4px}
+pre{font:13.5px/1.55 var(--mono);background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;margin:10px 0 16px}
+pre code{background:none;padding:0}
+a{color:var(--accent)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tablebox{overflow-x:auto;margin:10px 0 16px;border:1px solid var(--rule);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--rule)}
+tr:last-child td{border-bottom:none}
+th{font:600 12px/1.3 var(--cond);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--paper)}
+td code{white-space:nowrap}
+.secret{font:600 11px/1 var(--cond);letter-spacing:.08em;text-transform:uppercase;color:var(--warn);border:1px solid var(--warn);border-radius:3px;padding:2px 5px;margin-right:6px;white-space:nowrap}
+.warnbox{border-left:4px solid var(--warn);background:var(--warn-soft);padding:14px 16px;border-radius:0 6px 6px 0;margin:16px 0}
+.warnbox strong{color:var(--warn)}
+.note{border-left:4px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 6px 6px 0;margin:16px 0}
+figure{margin:18px 0 8px}
+figure .svgbox{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:12px}
+figure svg{display:block;min-width:700px;width:100%;height:auto}
+figcaption{font-size:14px;color:var(--muted);margin-top:8px}
+svg .box{fill:var(--paper);stroke:var(--ink);stroke-width:1.4}
+svg .hub{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+svg .t{fill:var(--ink);font:600 14px var(--cond)}
+svg .s{fill:var(--muted);font:12px var(--sans)}
+svg .line{stroke:var(--ink);stroke-width:1.4;fill:none}
+svg .reg{stroke:var(--accent);stroke-width:1.4;fill:none;stroke-dasharray:5 4}
+svg .lbl{fill:var(--ink);font:12px var(--mono)}
+svg .lbl.a{fill:var(--accent)}
+svg .arrow{fill:var(--ink)}
+svg .arrow.a{fill:var(--accent)}
+ol.steps{padding-left:22px;display:grid;gap:10px}
+ol.steps li::marker{font-weight:600;color:var(--accent)}
+.checklist{list-style:none;padding:0;display:grid;gap:10px}
+.checklist li{display:grid;grid-template-columns:22px 1fr;gap:8px}
+.checklist input{width:16px;height:16px;margin-top:4px;accent-color:var(--accent)}
+.log{font:13px/1.5 var(--mono);color:var(--muted)}
+.copyrow{position:relative}
+.copy{position:absolute;top:8px;right:8px;font:500 12px var(--sans);border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:4px;padding:4px 8px;cursor:pointer}
+footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--rule);font-size:14px;color:var(--muted)}
+@media (prefers-reduced-motion:no-preference){a,.copy{transition:color .15s,background .15s}}
+</style>
+<style>
+p code,li code{overflow-wrap:anywhere}
+main h2 .header-anchor, main h3 .header-anchor{color:inherit;text-decoration:none}
+.status-box{border:1px solid var(--accent);background:var(--accent-soft);border-radius:6px;padding:4px 18px;margin:20px 0 8px}
+.status-box p:first-child strong{font:700 17px/1.3 var(--cond);letter-spacing:.02em}
+.warnbox p{margin:0}
+blockquote{margin:16px 0}
+.done{border-top:1px dashed var(--rule);padding-top:10px;color:var(--muted);font-size:15px}
+.done strong{color:var(--ok)}
+nav.toc ol{counter-reset:none}
+@media (min-width:920px){.wrap{grid-template-columns:230px minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc" aria-label="Contents">
+    <div class="label">Contents</div>
+    <ol>
+<li><a href="#1-what-the-gateway-is-and-the-terms-used-here">1. What the gateway is, and the terms used here</a></li>
+<li><a href="#2-what-we-send-you-and-who-to-ask">2. What we send you, and who to ask</a></li>
+<li><a href="#3-decisions-to-settle-first">3. Decisions to settle first</a></li>
+<li><a href="#4-getting-the-package-and-the-image">4. Getting the package and the image</a></li>
+<li><a href="#5-from-zero-a-fresh-server-to-a-running-gateway">5. From zero: a fresh server to a running gateway</a></li>
+<li><a href="#6-the-settings-env-annotated">6. The settings (.env), annotated</a></li>
+<li><a href="#7-the-services-docker-composeyml-explained">7. The services (docker-compose.yml), explained</a></li>
+<li><a href="#8-the-gateways-identity-who-does-what">8. The gateway's identity: who does what</a></li>
+<li><a href="#9-host-needs-backups-and-monitoring">9. Host needs, backups and monitoring</a></li>
+<li><a href="#10-go-live-checklist-and-the-production-test">10. Go-live checklist and the production test</a></li>
+<li><a href="#11-troubleshooting">11. Troubleshooting</a></li>
+<li><a href="#12-updates-secret-rotation-and-rollback">12. Updates, secret rotation and rollback</a></li>
+<li><a href="#13-known-gaps">13. Known gaps</a></li>
+    </ol>
+  </nav>
+  <main>
+    <header>
+      <div class="kicker">Handover · for the engineer running it</div>
+      <h1>Keyring push gateway</h1>
+    </header>
+<p>This document is for a backend engineer who will run Keyring's push wake-up
+gateway on a server. It assumes you know Linux, Docker and DNS. It assumes no
+background in Keyring or in the identity technology it uses: §1 defines every
+term. It is self-contained, so you can read it without the repository.
+Secrets are not in it; each one says where it comes from.</p>
+<blockquote class="status-box">
+<p><strong>STATUS: ready to deploy for a staging test. Not yet production-ready.</strong></p>
+<p><strong>Proven</strong></p>
+<ul>
+<li>End to end on a real iPhone, against a local copy of this setup
+(2026-09-29). The phone showed the notification with the app in the
+background and after it was force-quit: 5 wakes sent, 5 delivered, each
+within about 5 seconds. With the app open it showed nothing, which is by
+design.</li>
+<li>The Apple push key: Apple accepted it and delivered to that iPhone, on
+Apple's development (sandbox) channel.</li>
+<li>The image: CI builds it for amd64 and arm64 and passes upstream's own test
+suite with our patch applied.</li>
+</ul>
+<p><strong>Not yet proven</strong></p>
+<ul>
+<li>A real Android phone. The gateway loads the Google key at startup, but no
+notification has been sent through Google yet.</li>
+<li>Apple's production channel, used by App Store and TestFlight builds.</li>
+<li>Running on a real server, with public HTTPS, a public hostname and a
+persistent volume.</li>
+</ul>
+<p><strong>Open decisions</strong> (§3)</p>
+<ul>
+<li>Which agents the gateway serves (the allowlist).</li>
+<li>Which VTA issues the gateway's identity, and which DID host publishes it.</li>
+<li>Which shared mediator the gateway and the agents use.</li>
+</ul>
+<p><strong>The production test in §10 is what turns it production-ready.</strong></p>
+</blockquote>
+<h2 id="1-what-the-gateway-is-and-the-terms-used-here" tabindex="-1">1. What the gateway is, and the terms used here</h2>
+<p>Keyring is a wallet app for phones. Each person using it has an <strong>agent</strong>: a
+server-side service that acts for them. Sometimes the agent needs the person,
+for example to approve a request. If the app is closed, the agent can't reach
+it. The gateway solves that one problem: it is a <strong>doorbell</strong>. The agent rings
+it, the phone shows a notification, and the person opens Keyring, which then
+fetches the actual request from the agent directly.</p>
+<figure>
+        <div class="svgbox">
+          <svg viewBox="0 0 860 300" role="img" aria-labelledby="dtitle">
+            <title id="dtitle">The phone registers once with the gateway; later the agent sends a signed wake through its mediator to the gateway, which asks Apple or Google to show a fixed line on the phone; the phone then fetches the real request from the agent.</title>
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow" d="M0,0 L10,5 L0,10 z"/></marker>
+              <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow a" d="M0,0 L10,5 L0,10 z"/></marker>
+            </defs>
+            <rect class="box" x="20" y="120" width="130" height="64" rx="6"/>
+            <text class="t" x="85" y="148" text-anchor="middle">Agent (VTA)</text>
+            <text class="s" x="85" y="167" text-anchor="middle">signs the wake</text>
+            <rect class="box" x="230" y="120" width="150" height="64" rx="6"/>
+            <text class="t" x="305" y="148" text-anchor="middle">DIDComm mediator</text>
+            <text class="s" x="305" y="167" text-anchor="middle">relays it</text>
+            <rect class="hub" x="460" y="112" width="150" height="80" rx="6"/>
+            <text class="t" x="535" y="144" text-anchor="middle">Push gateway</text>
+            <text class="s" x="535" y="163" text-anchor="middle">tokens behind handles</text>
+            <text class="s" x="535" y="180" text-anchor="middle">(this service)</text>
+            <rect class="box" x="690" y="120" width="150" height="64" rx="6"/>
+            <text class="t" x="765" y="148" text-anchor="middle">Phone</text>
+            <text class="s" x="765" y="167" text-anchor="middle">shows one fixed line</text>
+            <path class="line" d="M150,152 L226,152" marker-end="url(#ah)"/>
+            <path class="line" d="M380,152 L456,152" marker-end="url(#ah)"/>
+            <path class="line" d="M610,152 L686,152" marker-end="url(#ah)"/>
+            <text class="lbl" x="190" y="142" text-anchor="middle">push/wake</text>
+            <text class="lbl" x="420" y="142" text-anchor="middle">relayed</text>
+            <text class="lbl" x="648" y="142" text-anchor="middle">APNs/FCM</text>
+            <path class="reg" d="M765,120 C765,50 535,50 535,108" marker-end="url(#aha)"/>
+            <text class="lbl a" x="650" y="44" text-anchor="middle">1 · register token → get handle (HTTPS)</text>
+            <path class="reg" d="M765,184 C765,270 85,270 85,188" marker-end="url(#aha)"/>
+            <text class="lbl a" x="425" y="262" text-anchor="middle">2 · tell the agent the handle · later: fetch the real request</text>
+          </svg>
+        </div>
+        <figcaption>Dashed: once per phone, set up by the app. Solid: each wake-up. Nothing on the solid path carries the request itself.</figcaption>
+      </figure>
+<h3 id="terms" tabindex="-1">Terms</h3>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning here</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>APNs / FCM</strong></td>
+<td>Apple Push Notification service and Firebase Cloud Messaging: Apple's and Google's services that deliver notifications to phones. Sending through them needs the app publisher's credentials, which is why this gateway exists</td>
+</tr>
+<tr>
+<td><strong>Push token</strong></td>
+<td>An address Apple or Google gives the app on one phone. With it and the publisher's credentials, anyone can notify that phone</td>
+</tr>
+<tr>
+<td><strong>Handle</strong></td>
+<td>A random string the gateway gives the phone in exchange for its push token. The agent only ever sees the handle, never the token</td>
+</tr>
+<tr>
+<td><strong>DID</strong></td>
+<td>Decentralized Identifier: a string such as <code>did:webvh:…</code> that names a party. Resolving it gives a small JSON <em>DID document</em> listing the party's public keys and how to reach it. Every party here (each agent, the gateway, the mediator) has one</td>
+</tr>
+<tr>
+<td><strong><code>did:webvh</code></strong></td>
+<td>A kind of DID whose document is published as a file on an ordinary web server (a <strong>DID host</strong>), with a signed history of changes. Resolving it is an HTTPS fetch from that host</td>
+</tr>
+<tr>
+<td><strong>VTA</strong></td>
+<td>Verifiable Trust Agent: the server software each person's agent runs on (from OpenVTC's open-source <em>VTI</em>, Verifiable Trust Infrastructure). A VTA also <em>issues</em> identities to services such as this gateway (§8). It has admins, who run commands against it with <code>pnm</code>, its command-line tool</td>
+</tr>
+<tr>
+<td><strong>DIDComm v2</strong></td>
+<td>A messaging protocol between DIDs: each message is encrypted to the recipient's DID keys and signed by the sender's</td>
+</tr>
+<tr>
+<td><strong>Mediator</strong></td>
+<td>A DIDComm v2 relay: a mailbox server that holds messages for a DID until that DID connects and collects them. The gateway connects <em>out</em> to one, so agents can reach it without the gateway opening any port</td>
+</tr>
+<tr>
+<td><strong>TSP</strong></td>
+<td>Trust Spanning Protocol: a second protocol for sending signed and encrypted messages between DIDs. The gateway accepts wakes over both TSP and DIDComm, through the same mediator. A <code>TSPTransport</code> entry in its DID document tells agents how to reach it over TSP</td>
+</tr>
+<tr>
+<td><strong>Trust Task</strong></td>
+<td>A small signed JSON document naming one operation, such as <code>push/register</code>, <code>push/provision</code> or <code>push/wake</code>. The gateway's whole interface is three Trust Tasks</td>
+</tr>
+<tr>
+<td><strong>Controller / allowlist</strong></td>
+<td>The agent a handle belongs to is its <em>controller</em>. The allowlist (<code>GATEWAY_ALLOWED_CONTROLLERS</code>) names the agents the gateway serves</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="what-it-holds-sends-and-does" tabindex="-1">What it holds, sends and does</h3>
+<p><strong>It holds:</strong></p>
+<ul>
+<li>Keyring's Apple (APNs) and Google (FCM) push credentials;</li>
+<li>the phones' push tokens, each behind a handle.</li>
+</ul>
+<p><strong>It sends</strong> a push with <strong>no content</strong>. Apple and Google see that a Keyring
+push went to a phone at a certain time, and nothing else. The phone shows one
+fixed line from its own strings (&quot;Something is waiting for you in Keyring.&quot;),
+then gets the actual request from its agent.</p>
+<p><strong>It doesn't:</strong></p>
+<ul>
+<li>carry messages;</li>
+<li>hold user data beyond push tokens;</li>
+<li>replace Keyring's mailbox, the mediator the app itself uses.</li>
+</ul>
+<p><strong>Who may use it.</strong> The three Trust Tasks, in order:</p>
+<ol>
+<li><strong><code>push/register</code></strong>: a phone registers itself over HTTPS, anonymously and
+rate-limited, and gets a handle. It must name an agent the gateway serves.</li>
+<li><strong><code>push/provision</code></strong>: only that agent may then say which agents are allowed
+to wake the handle. Normally that is just itself.</li>
+<li><strong><code>push/wake</code></strong>: only agents on that list may wake it.</li>
+</ol>
+<p>Steps 2 and 3 must be documents signed by the agent's own DID key (a Data
+Integrity proof, <code>eddsa-jcs-2022</code>, purpose <code>authentication</code>). How a message
+arrived never authorises anything.</p>
+<p><strong>How it's reached:</strong></p>
+<ul>
+<li><strong>Phones reach it over HTTPS.</strong> That is the only inbound traffic.</li>
+<li><strong>Agents reach it through the mediator.</strong> The gateway connects out to the
+mediator and collects its messages there, so wake-ups need no inbound port.
+The mediator has to be one the agents already send through (§3).</li>
+</ul>
+<p class="done"><strong>You're done with this section when</strong> you can say what the gateway stores
+(credentials, and tokens behind handles), what it sends (a push with no
+content), and how each side reaches it (phones by HTTPS, agents through the
+mediator).</p>
+<h2 id="2-what-we-send-you-and-who-to-ask" tabindex="-1">2. What we send you, and who to ask</h2>
+<p>The project lead is your contact for everything below.</p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>What</th>
+<th>How it reaches you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The APNs auth key (<code>.p8</code> file), its key ID and the Apple team ID</td>
+<td>Privately, from the project lead</td>
+</tr>
+<tr>
+<td>The FCM service-account key (<code>.json</code> file)</td>
+<td>Privately, from the project lead</td>
+</tr>
+<tr>
+<td>The package folder, and a current image or CI run ID (§4)</td>
+<td>A link to the branch, or a tarball plus the image file</td>
+</tr>
+<tr>
+<td>The decisions in §3</td>
+<td>Agreed with the project lead before you start</td>
+</tr>
+<tr>
+<td>The identity approval (§8, step 2)</td>
+<td>You send <code>request.json</code>. The VTA admin sends back <code>bundle.armor</code>, and the digest by a separate channel</td>
+</tr>
+<tr>
+<td>If the mediator denies unknown DIDs: allowing the gateway's DID</td>
+<td>The mediator's admin, once you tell them the DID (§8, step 4)</td>
+</tr>
+<tr>
+<td>The test agent's DID, for the allowlist during the production test</td>
+<td>From us, before the test</td>
+</tr>
+<tr>
+<td>The production test (§10)</td>
+<td>Scheduled with you once the checklist's first steps pass</td>
+</tr>
+</tbody>
+</table></div>
+<p class="done"><strong>You're done with this section when</strong> you have the two key files, the key
+and team IDs, and the package, and you know who the VTA admin and the
+mediator admin are.</p>
+<h2 id="3-decisions-to-settle-first" tabindex="-1">3. Decisions to settle first</h2>
+<p>Settle these with the project lead before §5. The package works either way;
+they change which values go into <code>.env</code> and who runs §8.</p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>What it means</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Which VTA issues the gateway's identity</strong></td>
+<td>An admin of that VTA runs §8 step 2</td>
+<td>The VTA service that hosts Keyring's agents in production. Its admin runs step 2 (the project lead, or that service's operator), so you don't need to run a VTA yourself</td>
+</tr>
+<tr>
+<td><strong>Which DID host (<code>WEBVH_SERVER</code>)</strong></td>
+<td>Where the gateway's <code>did:webvh</code> document is published. Anyone resolving the gateway's DID fetches it from there</td>
+<td>The DID host that VTA already publishes its own DIDs on</td>
+</tr>
+<tr>
+<td><strong>Which DIDComm v2 mediator</strong></td>
+<td>Agents send wake-ups to the gateway through it, so both sides must be able to reach it</td>
+<td>The mediator the production agents already use. If it denies unknown DIDs, its admin has to allow the gateway's DID (§8, step 4)</td>
+</tr>
+<tr>
+<td><strong>Which agents it serves (<code>GATEWAY_ALLOWED_CONTROLLERS</code>)</strong></td>
+<td>An exact list of agent DIDs, or <code>*</code> for any agent. More below</td>
+<td><strong>Still an open question</strong>, for you and the project lead. We recommend <code>*</code> for production, for the reason below</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The allowlist, in more detail.</strong> The setting is required: unset means every
+registration is refused.</p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>What it means</th>
+<th>Limits</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>An exact list</strong> of agent DIDs</td>
+<td>Only those agents' phones can register or be woken. No wildcards or patterns, by upstream's design</td>
+<td>Every new person's agent means a configuration change and a restart</td>
+</tr>
+<tr>
+<td><strong><code>*</code> (open mode)</strong></td>
+<td>Any agent may register phones</td>
+<td>The gateway logs a warning at startup. The bounds still hold: at most 4096 live handles per agent, a handle no agent provisions is dropped after 1 hour, and per-sender and per-handle budgets apply</td>
+</tr>
+</tbody>
+</table></div>
+<p>Why we recommend <code>*</code>: each Keyring user has their own agent, so an exact list
+would need a change and a restart for every new user. Open mode still lets an
+agent wake only the phones that registered with it and that it provisioned,
+and the limits above still apply. For the production test the list is just
+our test agent's DID, either way.</p>
+<p class="done"><strong>You're done with this section when</strong> you have, in writing:</p>
+<ul>
+<li>the issuing VTA and its admin;</li>
+<li>the DID host's id;</li>
+<li>the mediator's DID;</li>
+<li>the allowlist choice for production.</li>
+</ul>
+<h2 id="4-getting-the-package-and-the-image" tabindex="-1">4. Getting the package and the image</h2>
+<p><strong>The package</strong> is the folder <code>deploy/keyring-messaging/</code> in the public
+repository <code>berkmancenter/keyring-wallet</code>. It isn't on <code>main</code> yet: it lives on
+the branch <code>deploy/push-gateway-test</code> (draft pull request #241). Either clone
+that branch, which needs no GitHub access rights:</p>
+<pre><code class="language-sh">git clone -b deploy/push-gateway-test https://github.com/berkmancenter/keyring-wallet.git
+cd keyring-wallet/deploy/keyring-messaging
+</code></pre>
+<p>or ask the project lead for a tarball of the folder. It contains:</p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Path</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docker-compose.yml</code></td>
+<td>The two services (§7)</td>
+</tr>
+<tr>
+<td><code>Caddyfile</code></td>
+<td>The HTTPS proxy's one site</td>
+</tr>
+<tr>
+<td><code>.env.example</code></td>
+<td>The settings template (§6)</td>
+</tr>
+<tr>
+<td><code>gateway/Dockerfile</code>, <code>gateway/entrypoint.sh</code></td>
+<td>Builds the gateway from upstream source at a pinned commit, with our patch</td>
+</tr>
+<tr>
+<td><code>gateway/patches/0001-…visible-alert…patch</code></td>
+<td>Our one patch (below)</td>
+</tr>
+<tr>
+<td><code>tools/gateway-identity/</code></td>
+<td>A small Rust tool that writes the gateway's identity file (§8)</td>
+</tr>
+<tr>
+<td><code>README.md</code></td>
+<td>A shorter operator reference</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The image.</strong> The gateway is OpenVTC's
+<a href="https://github.com/OpenVTC/vti-push-gateway"><code>vti-push-gateway</code></a>, pinned at
+commit <strong><code>e542a9d77a7369f4f3da01d573107ea155c80691</code></strong>, plus one patch of ours.
+Upstream publishes no image, so there are two ways to get one:</p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Way</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Download the CI build (preferred)</strong></td>
+<td>The <code>push-gateway-image</code> workflow builds the image on GitHub runners for <code>amd64</code> and <code>arm64</code>. It runs the gateway's own test suite with our patch applied, then uploads each image as a run artifact. Nothing is pushed to a registry. Anyone logged in to GitHub can download it (the repository is public), but <strong>artifacts are kept for 14 days only</strong>, so ask the project lead for a current run's ID, or for the image file itself.</td>
+</tr>
+<tr>
+<td><strong>Build it yourself</strong></td>
+<td><code>docker compose build gateway</code> in the package folder. It is a multi-stage Rust build, needing about 4 GB of RAM and several minutes. It fetches the pinned commit, checks it is exactly that commit, and applies <code>gateway/patches/*.patch</code>; the build fails if a patch no longer applies.</td>
+</tr>
+</tbody>
+</table></div>
+<p>To load a CI build (<code>gh</code> is GitHub's CLI, logged in with <code>gh auth login</code>; pick
+<code>amd64</code> for most servers):</p>
+<pre><code class="language-sh">gh run download &lt;run-id&gt; -R berkmancenter/keyring-wallet -n vti-push-gateway-image-amd64
+docker load -i vti-push-gateway.tar
+docker image ls keyring-messaging/vti-push-gateway
+</code></pre>
+<p>Expected: <code>docker load</code> prints
+<code>Loaded image: keyring-messaging/vti-push-gateway:e542a9d77a7369f4f3da01d573107ea155c80691</code>,
+and <code>docker image ls</code> lists that tag.</p>
+<p><strong>Why the patch exists.</strong> Upstream sends every wake as a <em>silent</em> background
+push. On iPhone, Apple throttles those (&quot;don't try to send more than two or
+three per hour&quot;) and drops them after a force-quit (&quot;If something force quits
+or kills the app, the system discards the held notification&quot;). An approval
+can't depend on that.</p>
+<p>With <code>GATEWAY_ALERT_LOC_KEY</code> set, the patch sends an <strong>interactive</strong> wake as a
+visible notification that the phone's system displays itself:</p>
+<ul>
+<li>APNs <code>alert</code>, priority 10, <code>loc-key</code>, collapse ID;</li>
+<li>FCM notification message, <code>body_loc_key</code>, collapse key.</li>
+</ul>
+<p>Background wakes stay silent. The payload names a localisation key, never text.
+The patch is self-contained, with its own tests, and is a candidate for
+contributing upstream (tracked as CONTRIB-01). It hasn't been submitted; the
+project does that itself, so please don't open anything upstream.</p>
+<p class="done"><strong>You're done with this section when</strong>
+<code>docker image ls keyring-messaging/vti-push-gateway</code> lists the tag
+<code>e542a9d77a7369f4f3da01d573107ea155c80691</code> on the server.</p>
+<h2 id="5-from-zero-a-fresh-server-to-a-running-gateway" tabindex="-1">5. From zero: a fresh server to a running gateway</h2>
+<p>This walkthrough assumes a fresh <strong>Ubuntu 24.04 LTS</strong> VM with a public IP and
+<code>sudo</code>. Any Linux with Docker Engine and Compose v2 works; only step 1 differs.
+With the CI image the VM needs little, since the gateway is one small Rust
+process. Building the image on the VM instead needs about 4 GB of RAM.
+Throughout, replace <code>push.example.org</code> with your hostname.</p>
+<p><strong>1. Install Docker Engine and the Compose plugin</strong>, using Docker's documented
+apt method:</p>
+<pre><code class="language-sh">sudo apt-get update
+sudo apt-get install -y ca-certificates curl git
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo &quot;deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu $(. /etc/os-release &amp;&amp; echo &quot;$VERSION_CODENAME&quot;) stable&quot; \
+  | sudo tee /etc/apt/sources.list.d/docker.list &gt;/dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo docker run --rm hello-world
+sudo docker compose version
+</code></pre>
+<p>Expected: <code>Hello from Docker!</code>, then <code>Docker Compose version v2.…</code>.</p>
+<p><strong>2. Open the firewall.</strong> Allow inbound TCP 80 and 443 and UDP 443 (for
+HTTP/3), plus SSH for yourself. Nothing else is inbound, because DIDComm is
+outbound to the mediator. With <code>ufw</code>:</p>
+<pre><code class="language-sh">sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp &amp;&amp; sudo ufw allow 443/tcp &amp;&amp; sudo ufw allow 443/udp
+sudo ufw enable
+sudo ufw status
+</code></pre>
+<p>Expected: <code>Status: active</code>, with <code>OpenSSH</code>, <code>80/tcp</code>, <code>443/tcp</code> and <code>443/udp</code>
+set to <code>ALLOW</code>. Open the same ports in the cloud provider's firewall or
+security group, if it has one. Outbound access is listed in §9.</p>
+<p><strong>3. Point DNS at the server.</strong> Create an A record for your hostname, and an
+AAAA record if the VM has IPv6. Do this <strong>before</strong> the first start: Caddy asks
+Let's Encrypt for a certificate on boot, and that fails until the name
+resolves to this server.</p>
+<pre><code class="language-sh">dig +short push.example.org
+</code></pre>
+<p>Expected: this server's public IP.</p>
+<p><strong>4. Get the package</strong> (§4) into <code>/opt</code>:</p>
+<pre><code class="language-sh">sudo git clone -b deploy/push-gateway-test https://github.com/berkmancenter/keyring-wallet.git /opt/keyring-wallet
+sudo ln -s /opt/keyring-wallet/deploy/keyring-messaging /opt/keyring-messaging
+cd /opt/keyring-messaging &amp;&amp; ls
+</code></pre>
+<p>Expected: <code>Caddyfile  HANDOVER.md  README.md  docker-compose.yml  gateway  tools</code>
+(and <code>.env.example</code>, which <code>ls -a</code> shows).</p>
+<p><strong>5. Get the image</strong> (§4). Either <code>sudo docker load -i vti-push-gateway.tar</code>
+with the CI artifact, or <code>sudo docker compose build gateway</code>.</p>
+<p><strong>6. First boot, without credentials.</strong> This checks DNS, TLS and the proxy
+before any secret is on the machine. It uses the gateway's <em>echo sender</em>,
+which accepts registrations, logs wakes and delivers nothing.</p>
+<pre><code class="language-sh">sudo cp .env.example .env
+sudo mkdir -p data/gateway secrets
+sudo chown -R 10001:10001 data/gateway secrets
+sudo chmod 700 data/gateway secrets
+sudo nano .env
+#   GATEWAY_HOST=push.example.org
+#   GATEWAY_DEV_ECHO_SENDER=1
+#   GATEWAY_ALLOWED_CONTROLLERS=did:example:first-run-check
+sudo docker compose config &gt;/dev/null &amp;&amp; echo config-ok
+sudo docker compose up -d
+sleep 30; sudo docker compose ps
+curl -fsS https://push.example.org/healthz; echo
+</code></pre>
+<p>Expected:</p>
+<ul>
+<li><code>config-ok</code>;</li>
+<li><code>docker compose ps</code> lists <code>keyring-messaging-gateway-1</code> as <code>Up … (healthy)</code>
+and <code>keyring-messaging-caddy-1</code> as <code>Up</code>;</li>
+<li>the <code>curl</code> prints <code>ok</code>.</li>
+</ul>
+<p>If the <code>curl</code> fails with a TLS error, give Caddy a minute to get its
+certificate, and check <code>sudo docker compose logs caddy</code> (§11).</p>
+<p>Then check that the allowlist is enforced. First, register naming the listed
+agent:</p>
+<pre><code class="language-sh">curl -s https://push.example.org/trust-tasks -H 'content-type: application/json' -d '{
+  &quot;id&quot;:&quot;urn:uuid:00000000-0000-4000-8000-000000000001&quot;,
+  &quot;type&quot;:&quot;https://trusttasks.org/spec/push/register/0.2&quot;,
+  &quot;payload&quot;:{&quot;registration&quot;:{&quot;platform&quot;:&quot;fcm&quot;,&quot;token&quot;:&quot;first-run-test&quot;},
+             &quot;controllerVtaDid&quot;:&quot;did:example:first-run-check&quot;}}'; echo
+</code></pre>
+<p>Expected: a JSON document whose payload holds a <code>handle</code> (a random string).
+Now send it again with <code>&quot;controllerVtaDid&quot;:&quot;did:example:someone-else&quot;</code> and a
+new <code>id</code> (change the last digit). Expected: a rejection whose code is
+<code>permissionDenied</code>.</p>
+<p><strong>7. Place the real secrets.</strong> Put the files from the project lead (§2) in
+<code>secrets/</code> and set the permissions. The gateway runs as uid 10001 and refuses
+to start if a secret is readable by anyone else:</p>
+<pre><code class="language-sh">sudo cp AuthKey_&lt;KEYID&gt;.p8 fcm-service-account.json /opt/keyring-messaging/secrets/
+sudo chown -R 10001:10001 secrets data/gateway
+sudo chmod 700 secrets data/gateway &amp;&amp; sudo chmod 600 secrets/*
+sudo ls -ln secrets
+</code></pre>
+<p>Expected: each file shows <code>-rw-------</code> and owner <code>10001 10001</code>.</p>
+<p><strong>8. Create the gateway's identity</strong> (§8). The result is
+<code>secrets/gateway-identity.json</code>.</p>
+<p><strong>9. Fill in <code>.env</code> for real</strong> (§6). Clear <code>GATEWAY_DEV_ECHO_SENDER</code>, and set
+the Apple, Google, identity and allowlist values. Then run:</p>
+<pre><code class="language-sh">sudo docker compose up -d
+sleep 20; sudo docker compose logs --tail 80 gateway
+</code></pre>
+<p><strong>10. Verify.</strong> Work through the go-live checklist in §10. Its startup lines
+tell you each part is configured. If a line is missing or an error appears,
+see §11.</p>
+<p class="done"><strong>You're done with this section when</strong>:</p>
+<ul>
+<li><code>https://push.example.org/healthz</code> returns <code>ok</code>;</li>
+<li>the log shows every line in §10 step 3;</li>
+<li>the echo-sender warning is gone.</li>
+</ul>
+<h2 id="6-the-settings-env-annotated" tabindex="-1">6. The settings (<code>.env</code>), annotated</h2>
+<p><code>docker compose</code> reads <code>.env</code> from the package folder. Nothing in <code>.env</code> is a
+secret value. The secrets are files in <code>./secrets/</code>, which appear inside the
+container at <code>/run/secrets/gateway/</code>, and <code>.env</code> only names their paths. Here
+is the full file with the values production needs; <code>&lt;…&gt;</code> marks what you fill
+in.</p>
+<pre><code class="language-sh">###############################################################################
+# Hostname and ports
+###############################################################################
 
-      <main>
-        <header>
-          <div class="kicker">Handover · for the engineer running it</div>
-          <h1>Keyring push gateway</h1>
-          <p class="lede">
-            How to run the service that wakes a person's phone when their agent
-            needs them, without telling Apple or Google anything about why.
-          </p>
-          <div class="status">
-            <span class="chip ok">Tested on a real iPhone · 2026-09-29</span>
-            <span class="chip">upstream e542a9d7 + patch 0001</span>
-            <span class="chip">no secrets on this page</span>
-          </div>
-          <p>
-            In the test, a request from the person's agent showed a notification
-            on the phone within about 5 seconds, with the app in the background
-            and after it was force-quit. With the app open it showed nothing,
-            which is the design. The package lives in
-            <code>deploy/keyring-messaging/</code> of the Keyring wallet
-            repository, with the same text as <code>HANDOVER.md</code>.
-          </p>
-        </header>
+# Public hostname, no scheme. Needs a DNS A/AAAA record pointing at this
+# server before the first start (Caddy gets its certificate on boot).
+GATEWAY_HOST=&lt;push.example.org&gt;
 
-        <section id="what">
-          <h2>1. What the gateway is</h2>
-          <p>
-            Each Keyring user has an <strong>agent</strong>: a server-side
-            service (a VTA) that acts for them. Sometimes the agent needs the
-            person, for example to approve a request. If the app is closed, the
-            agent can't reach it. The gateway solves that one problem. It's a
-            <strong>doorbell</strong>.
-          </p>
-          <figure>
-            <div class="svgbox">
-              <svg viewBox="0 0 760 300" role="img" aria-labelledby="dtitle">
-                <title id="dtitle">
-                  The phone registers once with the gateway; later the agent
-                  sends a signed wake through its mediator to the gateway, which
-                  asks Apple or Google to show a fixed line on the phone; the
-                  phone then fetches the real request from the agent.
-                </title>
-                <defs>
-                  <marker
-                    id="ah"
-                    viewBox="0 0 10 10"
-                    refX="9"
-                    refY="5"
-                    markerWidth="7"
-                    markerHeight="7"
-                    orient="auto-start-reverse"
-                  >
-                    <path class="arrow" d="M0,0 L10,5 L0,10 z" />
-                  </marker>
-                  <marker
-                    id="aha"
-                    viewBox="0 0 10 10"
-                    refX="9"
-                    refY="5"
-                    markerWidth="7"
-                    markerHeight="7"
-                    orient="auto-start-reverse"
-                  >
-                    <path class="arrow a" d="M0,0 L10,5 L0,10 z" />
-                  </marker>
-                </defs>
-                <rect
-                  class="box"
-                  x="20"
-                  y="120"
-                  width="130"
-                  height="64"
-                  rx="6"
-                />
-                <text class="t" x="85" y="148" text-anchor="middle">
-                  Agent (VTA)
-                </text>
-                <text class="s" x="85" y="167" text-anchor="middle">
-                  signs the wake
-                </text>
-                <rect
-                  class="box"
-                  x="200"
-                  y="120"
-                  width="130"
-                  height="64"
-                  rx="6"
-                />
-                <text class="t" x="265" y="148" text-anchor="middle">
-                  DIDComm mediator
-                </text>
-                <text class="s" x="265" y="167" text-anchor="middle">
-                  relays it
-                </text>
-                <rect
-                  class="hub"
-                  x="380"
-                  y="112"
-                  width="150"
-                  height="80"
-                  rx="6"
-                />
-                <text class="t" x="455" y="144" text-anchor="middle">
-                  Push gateway
-                </text>
-                <text class="s" x="455" y="163" text-anchor="middle">
-                  tokens behind handles
-                </text>
-                <text class="s" x="455" y="180" text-anchor="middle">
-                  (this service)
-                </text>
-                <rect
-                  class="box"
-                  x="580"
-                  y="120"
-                  width="160"
-                  height="64"
-                  rx="6"
-                />
-                <text class="t" x="660" y="148" text-anchor="middle">
-                  Phone
-                </text>
-                <text class="s" x="660" y="167" text-anchor="middle">
-                  shows one fixed line
-                </text>
-                <path
-                  class="line"
-                  d="M150,152 L196,152"
-                  marker-end="url(#ah)"
-                />
-                <path
-                  class="line"
-                  d="M330,152 L376,152"
-                  marker-end="url(#ah)"
-                />
-                <path
-                  class="line"
-                  d="M530,152 L576,152"
-                  marker-end="url(#ah)"
-                />
-                <text class="lbl" x="553" y="140" text-anchor="middle">
-                  APNs/FCM
-                </text>
-                <text class="lbl" x="173" y="140" text-anchor="middle">
-                  push/wake
-                </text>
-                <path
-                  class="reg"
-                  d="M660,120 C660,60 455,60 455,108"
-                  marker-end="url(#aha)"
-                />
-                <text class="lbl a" x="560" y="58" text-anchor="middle">
-                  1 · register token → get handle (HTTPS)
-                </text>
-                <path
-                  class="reg"
-                  d="M660,184 C660,270 85,270 85,188"
-                  marker-end="url(#aha)"
-                />
-                <text class="lbl a" x="372" y="262" text-anchor="middle">
-                  2 · tell the agent the handle · later: fetch the real request
-                </text>
-              </svg>
-            </div>
-            <figcaption>
-              Dashed: once per phone, set up by the app. Solid: each wake-up.
-              Nothing on the solid path carries the request itself.
-            </figcaption>
-          </figure>
-          <ul>
-            <li>
-              <strong>It holds</strong> Keyring's Apple and Google push
-              credentials, and the phones' push tokens, each behind a random
-              <em>handle</em>. The agent only ever sees the handle.
-            </li>
-            <li>
-              <strong>It sends</strong> a push with no content. Apple and Google
-              see that a Keyring push reached a phone at a certain time. The
-              phone shows its own line (“Something is waiting for you in
-              Keyring.”) and gets the actual request from its agent.
-            </li>
-            <li>
-              <strong>It doesn't</strong> carry messages, hold user data beyond
-              push tokens, or replace Keyring's DIDComm mailbox.
-            </li>
-            <li>
-              <strong>Who may use it:</strong> a phone registers itself
-              (anonymous, rate-limited) and must name an agent the gateway
-              serves. Only that agent can set who may wake the handle, and only
-              agents on that list can wake it. Both calls are documents signed
-              with the agent's own key; the transport's identity never
-              authorises anything.
-            </li>
-          </ul>
-        </section>
+# https = Caddy gets and renews a Let's Encrypt certificate itself.
+# (http is only for a local run, or behind a tunnel that terminates TLS.)
+SITE_SCHEME=https
 
-        <section id="image">
-          <h2>2. The image</h2>
-          <p>
-            OpenVTC's
-            <a href="https://github.com/OpenVTC/vti-push-gateway"
-              >vti-push-gateway</a
-            >, pinned at <code>e542a9d77a7369f4f3da01d573107ea155c80691</code>,
-            plus one patch of ours.
-          </p>
-          <div class="tablebox">
-            <table>
-              <thead>
-                <tr>
-                  <th>Way</th>
-                  <th>How</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>Download the CI build</strong> (preferred)</td>
-                  <td>
-                    The <code>push-gateway-image</code> workflow builds for
-                    amd64 and arm64 on GitHub runners, runs the gateway's own
-                    test suite with the patch applied, and uploads each image as
-                    a run artifact. Nothing goes to a registry.
-                    <code
-                      >gh run download &lt;run-id&gt; -R
-                      berkmancenter/keyring-wallet -n
-                      vti-push-gateway-image-amd64</code
-                    >, then <code>docker load -i vti-push-gateway.tar</code>.
-                    The image is tagged
-                    <code
-                      >keyring-messaging/vti-push-gateway:&lt;commit&gt;</code
-                    >.
-                  </td>
-                </tr>
-                <tr>
-                  <td><strong>Build it yourself</strong></td>
-                  <td>
-                    <code>docker compose build gateway</code> in the package
-                    folder. It checks out the pinned commit and applies
-                    <code>gateway/patches/*.patch</code>, and fails if a patch
-                    no longer applies. About 4 GB of RAM and several minutes.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <h3>Why the patch exists</h3>
-          <p>
-            Upstream sends every wake as a silent background push. On iPhone,
-            Apple throttles those (“don't try to send more than two or three per
-            hour”) and drops them after a force-quit (“If something force quits
-            or kills the app, the system discards the held notification”). An
-            approval can't depend on that.
-          </p>
-          <p>
-            With <code>GATEWAY_ALERT_LOC_KEY</code> set, the patch sends an
-            <em>interactive</em> wake as a notification the phone's system shows
-            itself: an APNs alert with a <code>loc-key</code>, or an FCM
-            notification with a <code>body_loc_key</code>. Both carry a key,
-            never text. Background wakes stay silent.
-          </p>
-          <div class="note">
-            The patch is self-contained, with its own tests and README section,
-            and is a candidate for contributing upstream (tracked as
-            CONTRIB-01). The project submits it itself; please don't open
-            anything upstream. Move the pinned commit only together with the
-            agents the gateway serves, because authorisation changed in upstream
-            PR #32.
-          </div>
-        </section>
+# Host ports Caddy publishes. Keep 80/443 on a server: the certificate
+# challenge needs port 80.
+HTTP_PORT=80
+HTTPS_PORT=443
 
-        <section id="settings">
-          <h2>3. Settings and secrets</h2>
-          <p>
-            Copy <code>.env.example</code> to <code>.env</code>. Secrets are
-            files in <code>./secrets/</code>, mounted read-only at
-            <code>/run/secrets/gateway/</code>. The gateway runs as uid 10001
-            and refuses to start if a secret is readable by anyone else:
-          </p>
-          <div class="copyrow">
-            <pre><code>sudo chown -R 10001:10001 secrets data/gateway
-sudo chmod 700 secrets data/gateway &amp;&amp; sudo chmod 600 secrets/*</code></pre>
-          </div>
+###############################################################################
+# Push gateway (OpenVTC/vti-push-gateway)
+###############################################################################
 
-          <h3>3.1 Apple (APNs)</h3>
-          <div class="tablebox">
-            <table>
-              <thead>
-                <tr>
-                  <th>Setting</th>
-                  <th>Value</th>
-                  <th>Comes from</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>GATEWAY_APNS_KEY_FILE</code></td>
-                  <td>
-                    <code>/run/secrets/gateway/AuthKey_&lt;KEYID&gt;.p8</code>
-                  </td>
-                  <td>
-                    <span class="secret">Secret</span>Keyring's APNs auth key,
-                    shared privately by the project lead
-                  </td>
-                </tr>
-                <tr>
-                  <td><code>GATEWAY_APNS_KEY_ID</code></td>
-                  <td>the key's ID</td>
-                  <td>the project lead</td>
-                </tr>
-                <tr>
-                  <td><code>GATEWAY_APNS_TEAM_ID</code></td>
-                  <td>the Apple Developer team ID</td>
-                  <td>the project lead</td>
-                </tr>
-                <tr>
-                  <td><code>GATEWAY_APNS_TOPICS</code></td>
-                  <td>
-                    <code>asml.bkc.harvard.wallet.pushtest</code> for the test;
-                    add <code>asml.bkc.harvard.wallet</code> at go-live
-                  </td>
-                  <td>fixed</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p>
-            Each registration says whether its token is for Apple's sandbox
-            (development builds) or production, so the gateway needs no setting
-            for it.
-          </p>
+# The upstream commit the image is built from, which is also the image tag.
+# Change it only as part of an update the project gives you (§12).
+GATEWAY_COMMIT=e542a9d77a7369f4f3da01d573107ea155c80691
 
-          <h3>3.2 Google (FCM)</h3>
-          <div class="tablebox">
-            <table>
-              <thead>
-                <tr>
-                  <th>Setting</th>
-                  <th>Value</th>
-                  <th>Comes from</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>GATEWAY_FCM_SERVICE_ACCOUNT_FILE</code></td>
-                  <td>
-                    <code>/run/secrets/gateway/fcm-service-account.json</code>
-                  </td>
-                  <td>
-                    <span class="secret">Secret</span>a key for a service
-                    account holding only
-                    <em>Firebase Cloud Messaging API Admin</em>, shared
-                    privately by the project lead
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+# Which agents the gateway serves: exact DIDs separated by commas or spaces,
+# or * for any agent (§3). Unset or empty = every phone registration is
+# refused.
+GATEWAY_ALLOWED_CONTROLLERS=&lt;the test agent's DID, for the production test&gt;
 
-          <h3>3.3 Visible alert mode</h3>
-          <div class="tablebox">
-            <table>
-              <thead>
-                <tr>
-                  <th>Setting</th>
-                  <th>Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>GATEWAY_ALERT_LOC_KEY</code></td>
-                  <td>
-                    <code>KEYRING_WAKE</code>, the key the app defines in every
-                    language
-                  </td>
-                </tr>
-                <tr>
-                  <td><code>GATEWAY_ALERT_COLLAPSE_ID</code></td>
-                  <td>
-                    <code>keyring-wake</code>, which merges repeated wakes into
-                    one notification
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    <code>GATEWAY_ALERT_TITLE_LOC_KEY</code>,
-                    <code>GATEWAY_FCM_ANDROID_CHANNEL_ID</code>
-                  </td>
-                  <td>blank</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+# The gateway's identity file (§8), as a path INSIDE the container.
+# Blank = HTTPS-only: phones can register, but no agent can reach the
+# gateway, so nothing is ever provisioned or woken.
+GATEWAY_IDENTITY_FILE=/run/secrets/gateway/gateway-identity.json
 
-          <h3 id="identity">3.4 The gateway's own identity</h3>
-          <p>
-            The gateway has its own <code>did:webvh</code>. Agents address
-            wake-ups to it, and it collects them from a DIDComm v2 mediator it
-            connects <em>out</em> to, so it needs no inbound port for them. The
-            identity comes from a VTA, made from the VTA's
-            <code>push-gateway</code> template, in three steps:
-          </p>
-          <ol class="steps">
-            <li>
-              <strong>Request</strong>, on the machine that will hold the
-              identity. This stores a one-time seed under pnm's config directory
-              and writes <code>request.json</code>.
-              <pre><code>pnm bootstrap provision-request --template push-gateway \
+# Apple: the auth key file, its Key ID and the team ID (§2). Set all three,
+# or none (APNs off). The two IDs are not secret; the .p8 is.
+# Sandbox or production is chosen per registration by the app, not here.
+GATEWAY_APNS_KEY_FILE=/run/secrets/gateway/AuthKey_&lt;KEYID&gt;.p8
+GATEWAY_APNS_KEY_ID=&lt;KEYID&gt;
+GATEWAY_APNS_TEAM_ID=&lt;TEAMID&gt;
+
+# The app bundle IDs registrations may name, comma-separated. A registration
+# naming any other is refused. The test app only, until the production test
+# passes; then add the release app (§10).
+GATEWAY_APNS_TOPICS=asml.bkc.harvard.wallet.pushtest
+
+# Google: the service-account key file. Blank = FCM off.
+GATEWAY_FCM_SERVICE_ACCOUNT_FILE=/run/secrets/gateway/fcm-service-account.json
+
+# Visible alert mode (our patch): an interactive wake (an approval waiting) is
+# shown by the phone's system as a notification, using the app's own string
+# for this key, in the phone's language. Background wakes stay silent.
+# Blank = every wake silent (upstream behaviour).
+GATEWAY_ALERT_LOC_KEY=KEYRING_WAKE
+GATEWAY_ALERT_TITLE_LOC_KEY=
+# Repeated wakes replace each other on the phone instead of stacking up.
+GATEWAY_ALERT_COLLAPSE_ID=keyring-wake
+GATEWAY_FCM_ANDROID_CHANNEL_ID=
+
+# 1 = refuse to start when a secret file is readable beyond its owner
+# (uid 10001 in the container). Keep it at 1.
+GATEWAY_STRICT_KEY_PERMS=1
+
+# Dev echo sender: logs wakes and delivers NOTHING, yet reports them
+# delivered. Only for the first boot (§5 step 6). MUST be blank in production.
+GATEWAY_DEV_ECHO_SENDER=
+
+# Rate limit on POST /trust-tasks, per client IP. Behind Caddy every phone
+# shares Caddy's address, so this is a global limit in practice; upstream's
+# default (10/s, burst 40) is too low for that.
+GATEWAY_HTTP_PER_SEC=100
+GATEWAY_HTTP_BURST=400
+
+# Log filter. Blank = vti_push_gateway=info,tower_http=info
+GATEWAY_LOG=
+</code></pre>
+<p>Blank values are fine: the image's entrypoint unsets every empty <code>GATEWAY_*</code>
+variable, so the gateway sees only what you filled in. Changing <code>.env</code> takes
+effect with <code>sudo docker compose up -d</code>, which recreates the container.</p>
+<p class="done"><strong>You're done with this section when</strong>:</p>
+<ul>
+<li>no <code>&lt;…&gt;</code> placeholder is left in <code>.env</code>;</li>
+<li><code>GATEWAY_DEV_ECHO_SENDER</code> is blank;</li>
+<li><code>sudo docker compose config &gt;/dev/null</code> exits without an error.</li>
+</ul>
+<h2 id="7-the-services-docker-composeyml-explained" tabindex="-1">7. The services (<code>docker-compose.yml</code>), explained</h2>
+<p>The compose project is called <code>keyring-messaging</code>. It has two services on one
+private network (<code>edge</code>), and <strong>only Caddy publishes ports</strong>.</p>
+<p><strong><code>gateway</code></strong>: <code>vti-push-gateway</code>.</p>
+<ul>
+<li><strong>Image:</strong> <code>keyring-messaging/vti-push-gateway:&lt;GATEWAY_COMMIT&gt;</code>, loaded or
+built as in §4.</li>
+<li><strong>Listens:</strong> on port 8300, reachable only from Caddy on the <code>edge</code> network.
+Prometheus metrics listen on <code>127.0.0.1:9300</code> inside its own container, so
+nothing outside the container can reach them.</li>
+<li><strong>Settings:</strong> all come from <code>.env</code> (§6). The compose file fixes a few itself:
+<ul>
+<li>the store file is <code>/data/gateway-store.json</code>;</li>
+<li>the metrics bind is <code>127.0.0.1:9300</code>;</li>
+<li>the log filter comes from <code>GATEWAY_LOG</code>.</li>
+</ul>
+</li>
+<li><strong>Volumes:</strong>
+<ul>
+<li><code>./data/gateway</code> → <code>/data</code>, read-write: the handle registry. It holds
+phones' push tokens in clear text (§9).</li>
+<li><code>./secrets</code> → <code>/run/secrets/gateway</code>, read-only: the APNs key, FCM key and
+identity file.</li>
+</ul>
+</li>
+<li><strong>Health check:</strong> <code>GET /healthz</code> inside the container every 15 s.
+<code>docker compose ps</code> shows <code>healthy</code> once it passes.</li>
+<li><strong>Restart policy:</strong> <code>unless-stopped</code>. A gateway that exits on a
+configuration error restarts in a loop, which shows in <code>docker compose ps</code>
+(§11).</li>
+<li><strong>Watchtower:</strong> labelled so it never auto-updates. Updates are deliberate
+(§12).</li>
+</ul>
+<p><strong><code>caddy</code></strong>: the HTTPS proxy.</p>
+<ul>
+<li><strong>Image:</strong> <code>caddy:2.11.4-alpine</code>, pinned by digest.</li>
+<li><strong>Publishes:</strong> <code>HTTP_PORT</code> → 80, and <code>HTTPS_PORT</code> → 443 on both TCP and UDP.</li>
+<li><strong>Certificate:</strong> gets and renews a Let's Encrypt certificate for
+<code>GATEWAY_HOST</code>.</li>
+<li><strong>Routing:</strong> everything goes to <code>gateway:8300</code>, except <code>/metrics</code>, which
+answers 404.</li>
+<li><strong>Volumes:</strong>
+<ul>
+<li><code>./Caddyfile</code>, read-only;</li>
+<li><code>./data/caddy/data</code> and <code>./data/caddy/config</code>, for certificates and
+ACME state.</li>
+</ul>
+</li>
+<li><strong>Expiry notices:</strong> no ACME contact email is set. To get certificate expiry
+notices, add a global block, <code>{ email ops@example.org }</code>, at the top of
+<code>Caddyfile</code>.</li>
+</ul>
+<p>What the gateway serves publicly:</p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Who calls it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /trust-tasks</code></td>
+<td>Phones: <code>push/register</code></td>
+</tr>
+<tr>
+<td><code>GET /healthz</code></td>
+<td>You, and your monitoring</td>
+</tr>
+</tbody>
+</table></div>
+<p>Agents never call it over HTTPS. Their <code>push/provision</code> and <code>push/wake</code> arrive
+through the mediator.</p>
+<p class="done"><strong>You're done with this section when</strong> <code>sudo docker compose ps</code> shows the
+gateway <code>healthy</code> and Caddy <code>Up</code>, and <code>curl -s -o /dev/null -w '%{http_code}\n' https://push.example.org/metrics</code> prints <code>404</code>.</p>
+<h2 id="8-the-gateways-identity-who-does-what" tabindex="-1">8. The gateway's identity: who does what</h2>
+<p>The gateway has its own <code>did:webvh</code>. Agents address their wake-ups to it, and
+it receives them through the mediator it connects <strong>out</strong> to. The identity is
+an &quot;integration&quot; that a VTA issues from its built-in <code>push-gateway</code> DID
+template (§3 decides which VTA). The result is one JSON file holding:</p>
+<ul>
+<li>the gateway's DID;</li>
+<li>its two private keys, one for signing and one for decrypting;</li>
+<li>the mediator's DID.</li>
+</ul>
+<p>The gateway reads it through <code>GATEWAY_IDENTITY_FILE</code>.</p>
+<p><strong>Tools.</strong> Both are Rust command-line tools; building them needs Rust 1.95 or
+later (install it with <a href="https://rustup.rs">rustup</a>). Run steps 1 and 3 on the
+server itself, or on a trusted machine you then copy the identity file from.</p>
+<ul>
+<li><code>pnm</code> (the VTA's command-line tool), from OpenVTC's
+<a href="https://github.com/OpenVTC/verifiable-trust-infrastructure"><code>verifiable-trust-infrastructure</code></a>.
+Build it from the same release the issuing VTA runs; ask its admin which one.<pre><code class="language-sh">git clone https://github.com/OpenVTC/verifiable-trust-infrastructure.git &amp;&amp; cd verifiable-trust-infrastructure
+git checkout &lt;the release the VTA admin names&gt;
+cargo build --package pnm-cli --release     # → target/release/pnm
+</code></pre>
+</li>
+<li><code>gateway-identity</code>, in this package:<pre><code class="language-sh">cd tools/gateway-identity &amp;&amp; cargo build --release   # → target/release/gateway-identity
+</code></pre>
+</li>
+</ul>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Who</th>
+<th>Where</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Request</td>
+<td><strong>You</strong></td>
+<td>Your machine</td>
+<td><code>request.json</code>. The one-time seed stays with you</td>
+</tr>
+<tr>
+<td>2. Approve</td>
+<td><strong>The issuing VTA's admin</strong></td>
+<td>Their machine</td>
+<td><code>bundle.armor</code>, and a digest</td>
+</tr>
+<tr>
+<td>3. Open</td>
+<td><strong>You</strong></td>
+<td>Your machine</td>
+<td><code>gateway-identity.json</code></td>
+</tr>
+<tr>
+<td>4. Allow on the mediator (only if it denies unknown DIDs)</td>
+<td><strong>The mediator's admin</strong></td>
+<td>Their machine</td>
+<td>The gateway may connect</td>
+</tr>
+<tr>
+<td>5. Install</td>
+<td><strong>You</strong></td>
+<td>The server</td>
+<td>The gateway starts with its DID</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Step 1, request (you).</strong></p>
+<pre><code class="language-sh">pnm bootstrap provision-request --template push-gateway \
   --var URL=&lt;the mediator's DID&gt; \
-  --var SERVICE_TSP='{"id":"{DID}#tsp","type":"TSPTransport","serviceEndpoint":"&lt;the mediator's DID&gt;"}' \
-  --var WEBVH_SERVER=&lt;the DID-hosting server id&gt; \
-  --context-hint push-gateway</code></pre>
-            </li>
-            <li>
-              <strong>Approve</strong>, by an admin of that VTA. This prints a
-              SHA-256 digest and writes a sealed <code>bundle.armor</code>.
-              <pre><code>pnm --vta &lt;vta&gt; bootstrap provision-integration --request request.json \
-  --context push-gateway --create-context</code></pre>
-            </li>
-            <li>
-              <strong>Open it into the identity file</strong> with
-              <code>tools/gateway-identity</code>. Back the seed up first.
-              <pre><code>cp &lt;pnm config&gt;/bootstrap-secrets/&lt;bundle-id&gt;.key ./seed-backup.key   # back it up first
-cd tools/gateway-identity &amp;&amp; cargo build --release
-./target/release/gateway-identity --bundle bundle.armor --seed &lt;bundle-id&gt;.key \
+  --var SERVICE_TSP='{&quot;id&quot;:&quot;{DID}#tsp&quot;,&quot;type&quot;:&quot;TSPTransport&quot;,&quot;serviceEndpoint&quot;:&quot;&lt;the mediator's DID&gt;&quot;}' \
+  --var WEBVH_SERVER=&lt;the DID host's id&gt; \
+  --context-hint push-gateway
+</code></pre>
+<ul>
+<li><code>URL</code> is the <strong>mediator's DID</strong>, because the gateway is reached through it.</li>
+<li><code>SERVICE_TSP</code> adds the TSP entry the gateway checks for at startup. Type
+<code>{DID}</code> literally: the VTA fills it in.</li>
+<li><code>WEBVH_SERVER</code> is the DID host's id as the issuing VTA knows it; its admin
+tells you the value.</li>
+</ul>
+<p>Expected: <code>Provision bootstrap request written to …</code> and <code>Seed saved: …</code>.
+The seed is a one-time key under pnm's config directory, at
+<code>bootstrap-secrets/&lt;bundle-id&gt;.key</code>. Back up the seed now, because it is the only way to open the bundle:</p>
+<pre><code class="language-sh">cp &lt;pnm config dir&gt;/bootstrap-secrets/&lt;bundle-id&gt;.key ./seed-backup.key
+</code></pre>
+<p>Send <code>request.json</code> to the VTA's admin. It holds no secret: the seed never
+leaves your machine.</p>
+<p><strong>Step 2, approve (the VTA's admin).</strong></p>
+<pre><code class="language-sh">pnm --vta &lt;vta&gt; bootstrap provision-integration --request request.json \
+  --context push-gateway --create-context --out bundle.armor
+</code></pre>
+<p>Expected: the VTA mints the gateway's DID, then pnm prints a SHA-256
+<strong>digest</strong> (64 hex characters) and writes a sealed <code>bundle.armor</code>, which only
+your seed can open. The admin sends you both, the digest by a different
+channel than the bundle (a message, or read out on a call). Checking it proves
+the bundle is the one they made.</p>
+<p><strong>Step 3, open (you).</strong></p>
+<pre><code class="language-sh">./target/release/gateway-identity --bundle bundle.armor --seed &lt;bundle-id&gt;.key \
   --digest &lt;digest from step 2&gt; --mediator &lt;the mediator's DID&gt; \
-  --out ../../secrets/gateway-identity.json</code></pre>
-              Then set
-              <code
-                >GATEWAY_IDENTITY_FILE=/run/secrets/gateway/gateway-identity.json</code
-              >.
-            </li>
-          </ol>
-          <div class="warnbox">
-            <strong
-              >Don't run <code>pnm bootstrap open</code> on this bundle.</strong
-            >
-            For this bundle type it prints a summary, writes nothing, and
-            deletes the one-time seed first, so the gateway's keys are gone and
-            you'd have to start over. No upstream tool writes the gateway's
-            identity file (tracked as VTI-53), which is why
-            <code>tools/gateway-identity</code> exists. It opens the bundle with
-            the VTA SDK's documented <code>open_bundle</code>, keeps the seed,
-            and writes the file with mode 0600.
-          </div>
-          <p>
-            <strong>Mediator account:</strong> nothing to create on a mediator
-            that admits new DIDs by default; the gateway registers itself the
-            first time it authenticates. On a mediator that denies unknown DIDs,
-            its admin must allow the gateway's DID.
-          </p>
+  --out gateway-identity.json
+</code></pre>
+<p>Expected: <code>wrote gateway-identity.json (0600)</code>, then the gateway's <code>did:</code>,
+its two key IDs and the mediator, and <code>The seed and the bundle were not modified.</code> It never deletes the seed
+or the bundle, and never prints a private key. The file looks like this:</p>
+<pre><code class="language-jsonc">{ &quot;did&quot;: &quot;did:webvh:…&quot;,
+  &quot;signing&quot;:      { &quot;id&quot;: &quot;did:webvh:…#key-0&quot;, &quot;privateKeyMultibase&quot;: &quot;z…&quot; },
+  &quot;keyAgreement&quot;: { &quot;id&quot;: &quot;did:webvh:…#key-1&quot;, &quot;privateKeyMultibase&quot;: &quot;z…&quot; },
+  &quot;mediator&quot;: &quot;did:…(the mediator)&quot; }
+</code></pre>
+<blockquote class="warnbox">
+<p><strong>Do not run <code>pnm bootstrap open</code> on this bundle.</strong> For this bundle type it
+prints a summary, writes nothing, and <strong>deletes the one-time seed first</strong>. The
+gateway's keys are then gone for good, and you'd have to start over from
+step 1. No upstream tool writes the gateway's identity file (tracked as
+finding VTI-53), which is why <code>tools/gateway-identity</code> exists. It opens the
+bundle with the VTA SDK's documented <code>open_bundle</code>.</p>
+</blockquote>
+<p><strong>Step 4, the mediator account (the mediator's admin, sometimes).</strong> On a
+mediator that admits new DIDs by default there is nothing to do: the gateway
+registers itself the first time it connects. On a mediator that denies unknown
+DIDs, send its admin the gateway's DID (the <code>did</code> in the file) to allow before
+step 5.</p>
+<p><strong>Step 5, install (you).</strong></p>
+<pre><code class="language-sh">sudo install -o 10001 -g 10001 -m 600 gateway-identity.json /opt/keyring-messaging/secrets/
+# in .env: GATEWAY_IDENTITY_FILE=/run/secrets/gateway/gateway-identity.json
+cd /opt/keyring-messaging &amp;&amp; sudo docker compose up -d gateway
+sleep 20; sudo docker compose logs --tail 80 gateway | grep -E 'mediator listener|TSPTransport'
+</code></pre>
+<p>Expected, two lines naming the gateway's DID and the mediator:</p>
+<ul>
+<li><code>mediator listener started (TSP and DIDComm)</code>;</li>
+<li><code>DID document advertises TSPTransport</code>.</li>
+</ul>
+<p>The identity file holds the gateway's private keys. Back it up with the other
+secrets (§9). Then delete the working copies of the seed, the bundle and the
+file from the machine where you ran steps 1–3, if that wasn't the server.</p>
+<p class="done"><strong>You're done with this section when</strong> both lines above appear, the
+identity file is backed up, and you've sent the gateway's DID to the project
+lead.</p>
+<h2 id="9-host-needs-backups-and-monitoring" tabindex="-1">9. Host needs, backups and monitoring</h2>
+<ul>
+<li><strong>Docker</strong> with Compose v2.</li>
+<li><strong>A public HTTPS hostname</strong> with DNS pointing at the host. Phones register at
+<code>https://&lt;host&gt;/trust-tasks</code>.</li>
+<li><strong>Inbound:</strong> TCP 80 and 443, and UDP 443. That's all: there is <strong>no inbound
+port for DIDComm</strong>, which is outbound to the mediator.</li>
+<li><strong>Outbound HTTPS:</strong>
+<ul>
+<li><code>api.push.apple.com</code> and <code>api.sandbox.push.apple.com</code>;</li>
+<li><code>fcm.googleapis.com</code> and <code>oauth2.googleapis.com</code>;</li>
+<li>Let's Encrypt (<code>acme-v02.api.letsencrypt.org</code>);</li>
+<li>the mediator;</li>
+<li>the <code>did:webvh</code> hosts: the DID host of the gateway's own DID, and those of
+the agents it verifies.</li>
+</ul>
+</li>
+<li><strong>A persistent volume</strong> for <code>data/gateway</code>. It holds phones' push tokens
+<strong>in clear text</strong>, so protect it and its backups like credentials.</li>
+</ul>
+<p><strong>Backups.</strong> Treat all of these as credentials:</p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>What</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data/gateway/gateway-store.json</code></td>
+<td>The handle registry, with raw push tokens in clear text. Copy it with its 0600 mode, encrypt the backup, and restrict who can read it</td>
+</tr>
+<tr>
+<td><code>secrets/</code></td>
+<td>The APNs key, the FCM key, the gateway identity</td>
+</tr>
+<tr>
+<td><code>.env</code></td>
+<td>The configuration: no secret values, but needed to restore</td>
+</tr>
+<tr>
+<td><code>data/caddy/</code></td>
+<td>Optional. Certificates are re-issued, but keeping them avoids Let's Encrypt rate limits</td>
+</tr>
+</tbody>
+</table></div>
+<p>Restore by putting back <code>.env</code>, <code>secrets/</code> and <code>data/gateway/</code>, owned by 10001
+with the modes from §5. Then load the image and run <code>sudo docker compose up -d</code>.</p>
+<p>Losing the store is survivable but disruptive. Every phone's handle is gone,
+so wakes stop until each phone turns notifications off and on again in
+Keyring. Losing the identity file means a new identity (§8). Agents then
+refuse to wake the new DID, so every phone has to register again too.</p>
+<p><strong>Monitoring.</strong></p>
+<ul>
+<li>
+<p><strong>Health:</strong> <code>GET https://&lt;host&gt;/healthz</code> returns <code>ok</code>. The container also has
+its own health check (<code>docker compose ps</code>).</p>
+</li>
+<li>
+<p><strong>Metrics:</strong> Prometheus text format on the container's loopback only. Read
+them with:</p>
+<pre><code class="language-sh">sudo docker compose exec gateway curl -s http://127.0.0.1:9300/metrics
+</code></pre>
+<p>The ones to watch:</p>
+<ul>
+<li><code>gateway_register_total</code>;</li>
+<li><code>gateway_provision_total{outcome=…}</code>;</li>
+<li><code>gateway_wake_total{outcome=delivered|transient_failure|token_unregistered|not_allowed}</code>.</li>
+</ul>
+<p>A rising <code>transient_failure</code> means Apple or Google are refusing; check the
+log (§11). <code>token_unregistered</code> is normal churn: an app deleted, or a token
+replaced.</p>
+</li>
+<li>
+<p><strong>Logs:</strong> <code>sudo docker compose logs gateway</code>, and
+<code>sudo docker compose logs caddy</code> for certificates. No message content is
+ever logged, because there is none.</p>
+</li>
+</ul>
+<p class="done"><strong>You're done with this section when</strong>:</p>
+<ul>
+<li>a backup of the three items above exists off the server, encrypted;</li>
+<li><code>/healthz</code> is in your monitoring;</li>
+<li>you can read the metrics.</li>
+</ul>
+<h2 id="10-go-live-checklist-and-the-production-test" tabindex="-1">10. Go-live checklist and the production test</h2>
+<ol>
+<li>
+<p>The image is loaded (§4), and <code>.env</code> and <code>secrets/</code> are in place (§6, §8),
+with owner 10001 and modes 700/600.</p>
+</li>
+<li>
+<p>DNS points at the host, the firewall is open (§5), and
+<code>sudo docker compose up -d</code> brings up <code>https://&lt;host&gt;/healthz</code> → <code>ok</code>.</p>
+</li>
+<li>
+<p><code>sudo docker compose logs gateway</code> shows all of these:</p>
+<ul>
+<li><code>APNs sender enabled</code>, with the key and team IDs (compare them with the
+ones you were sent);</li>
+<li><code>FCM (Firebase Cloud Messaging) sender enabled</code>;</li>
+<li><code>visible alert mode: interactive wakes are shown as notifications</code>, with
+<code>loc_key=KEYRING_WAKE</code>;</li>
+<li><code>APNs topic allow-list</code>, naming the test app;</li>
+<li><code>controller allowlist</code> with <code>controllers=N listed</code>, or the open-mode
+warning if <code>*</code> was chosen (§3);</li>
+<li><code>mediator listener started (TSP and DIDComm)</code>;</li>
+<li><code>DID document advertises TSPTransport</code>.</li>
+</ul>
+<p>It shows <strong>no</strong> echo-sender warning, and no <code>ERROR</code> lines.</p>
+</li>
+<li>
+<p>Send us the URL and the gateway's DID. <strong>The production test</strong>, which we
+run with you:</p>
+<ul>
+<li>We build Keyring's push-test app with <code>https://&lt;host&gt;</code> as its gateway, and
+install it on a test iPhone and a test Android phone.</li>
+<li>Each phone links to our test agent (its DID is in your allowlist) and
+turns notifications on. <code>gateway_register_total</code> and
+<code>gateway_provision_total{outcome=&quot;ok&quot;}</code> go up.</li>
+<li>We trigger an approval request from the agent three times: with the app
+in the background, after a force-quit, and with the app open. Expected:
+the line appears in the first two cases and not in the third, and
+<code>gateway_wake_total{outcome=&quot;delivered&quot;}</code> goes up each time.</li>
+</ul>
+</li>
+<li>
+<p>After the test passes, add the release app's bundle ID to the topics and
+restart:</p>
+<pre><code class="language-sh"># in .env: GATEWAY_APNS_TOPICS=asml.bkc.harvard.wallet.pushtest,asml.bkc.harvard.wallet
+sudo docker compose up -d gateway
+</code></pre>
+<p>If you chose an exact allowlist, keep adding agents' DIDs as the project
+sends them. Keyring then ships a release pointing at this URL; when is the
+project's call. Push goes live for users only then.</p>
+</li>
+</ol>
+<p class="done"><strong>You're done when</strong> the production test passes on both phones and the release
+app's bundle ID is in <code>GATEWAY_APNS_TOPICS</code>. The gateway is then
+production-ready.</p>
+<h2 id="11-troubleshooting" tabindex="-1">11. Troubleshooting</h2>
+<p>Start with <code>sudo docker compose ps</code> and
+<code>sudo docker compose logs --tail 100 gateway</code>. A <strong>fatal</strong> error makes the
+gateway exit before it serves anything: the log ends in a line starting
+<code>Error:</code>, the container shows <code>Restarting</code>, and <code>/healthz</code> fails. Everything
+else is a <code>WARN</code> or <code>ERROR</code> line while the gateway keeps running.</p>
+<p><strong>At startup: fatal (the container restarts in a loop)</strong></p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Log says</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>read APNs auth key /run/secrets/gateway/…: No such file or directory</code> (likewise <code>read FCM service-account key …</code> or <code>read identity file …</code>)</td>
+<td>The path in <code>.env</code> doesn't match a file in <code>secrets/</code></td>
+<td>Compare the file name in <code>secrets/</code> with the setting. The setting uses the in-container path <code>/run/secrets/gateway/&lt;name&gt;</code></td>
+</tr>
+<tr>
+<td><code>read … : Permission denied</code></td>
+<td>The file isn't owned by uid 10001</td>
+<td><code>sudo chown 10001:10001 secrets/*</code></td>
+</tr>
+<tr>
+<td><code>… has mode 0644; GATEWAY_STRICT_KEY_PERMS requires owner-only permissions (chmod 600)</code></td>
+<td>The secret is readable by others</td>
+<td><code>sudo chmod 600 secrets/*</code> and <code>sudo chmod 700 secrets</code></td>
+</tr>
+<tr>
+<td><code>parse identity file: …</code></td>
+<td><code>GATEWAY_IDENTITY_FILE</code> points at the wrong file, such as the bundle or the seed</td>
+<td>Point it at the output of <code>gateway-identity</code> (§8, step 3)</td>
+</tr>
+<tr>
+<td><code>egress policy: …</code></td>
+<td>A malformed <code>GATEWAY_APNS_TOPICS</code> value</td>
+<td>Comma-separated bundle IDs, no wildcards</td>
+</tr>
+<tr>
+<td>An error naming <code>GATEWAY_ALLOWED_CONTROLLERS</code></td>
+<td>A malformed allowlist</td>
+<td>Exact DIDs separated by commas or spaces, or a lone <code>*</code></td>
+</tr>
+<tr>
+<td><code>set GATEWAY_HOST in .env</code> (from <code>docker compose</code>, before anything starts)</td>
+<td><code>.env</code> is missing, or has no host</td>
+<td><code>sudo cp .env.example .env</code> and set it</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>At startup: runs, but degraded</strong></p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Log says</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GATEWAY_APNS_KEY_FILE set but GATEWAY_APNS_KEY_ID / GATEWAY_APNS_TEAM_ID missing; APNs disabled</code></td>
+<td>One of the two IDs is blank</td>
+<td>Fill both in <code>.env</code></td>
+</tr>
+<tr>
+<td><code>APNs sender init failed; echo fallback</code></td>
+<td>The <code>.p8</code> file isn't a valid APNs key, for example a truncated copy</td>
+<td>Get the file again from the project lead</td>
+</tr>
+<tr>
+<td><code>FCM sender init failed; echo fallback</code></td>
+<td>The service-account JSON is malformed or incomplete</td>
+<td>Get the file again</td>
+</tr>
+<tr>
+<td><code>no push sender is configured — every push/register will be refused</code></td>
+<td>Neither APNs nor FCM is set</td>
+<td>Fill in §6's Apple and Google settings</td>
+</tr>
+<tr>
+<td><code>GATEWAY_ALLOWED_CONTROLLERS is unset or empty — every push/register will be refused</code></td>
+<td>No allowlist</td>
+<td>Set it (§3)</td>
+</tr>
+<tr>
+<td><code>GATEWAY_APNS_TOPICS not set</code></td>
+<td>Any iOS app could register</td>
+<td>Set it to the test app's bundle ID</td>
+</tr>
+<tr>
+<td><code>GATEWAY_DEV_ECHO_SENDER is set — … Do not enable this in production.</code></td>
+<td>Left on from the first boot</td>
+<td>Clear it and run <code>sudo docker compose up -d gateway</code>. While it's on, wakes are reported delivered and nothing is sent</td>
+</tr>
+<tr>
+<td><code>no GATEWAY_IDENTITY_FILE — TSP and DIDComm disabled, HTTPS-only</code></td>
+<td>No identity yet</td>
+<td>Do §8. Until then phones can register, but nothing can be provisioned or woken</td>
+</tr>
+<tr>
+<td><code>mediator listener failed to start; HTTPS-only</code></td>
+<td>The gateway couldn't connect or authenticate to the mediator named in its identity file. The mediator may be unreachable, it may deny the gateway's DID, or the gateway's DID may not resolve</td>
+<td>Check outbound access to the mediator. Ask its admin to allow the gateway's DID (§8, step 4). Check that the DID resolves (next row)</td>
+</tr>
+<tr>
+<td><code>could not resolve the gateway's DID to check its TSPTransport service</code></td>
+<td>The DID host is unreachable from the server, or the DID isn't published there</td>
+<td>Check outbound access to the DID host. Ask the VTA's admin whether the DID was published</td>
+</tr>
+<tr>
+<td><code>the gateway's DID document has no TSPTransport service …</code></td>
+<td>Step 1 ran without <code>SERVICE_TSP</code></td>
+<td>Agents can't find the gateway over TSP. Redo §8 with <code>SERVICE_TSP</code> set</td>
+</tr>
+<tr>
+<td><code>the gateway's TSPTransport service does not name the mediator it listens on</code></td>
+<td><code>SERVICE_TSP</code> and <code>--mediator</code> named different mediators</td>
+<td>Redo §8 with the same mediator DID in all three places</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>While running</strong></p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Log says, or you see</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>APNs rejected the wake</code> with <code>status=403</code> and <code>reason=InvalidProviderToken</code></td>
+<td>The key ID or team ID doesn't match the <code>.p8</code>, or the key was revoked</td>
+<td>Compare the IDs in the <code>APNs sender enabled</code> line with what you were sent; ask the project lead</td>
+</tr>
+<tr>
+<td><code>APNs rejected the wake</code> with <code>reason=TopicDisallowed</code> or <code>BadTopic</code></td>
+<td>The key can't send for that bundle ID</td>
+<td>Ask the project lead: the key must belong to the Apple team that owns the app</td>
+</tr>
+<tr>
+<td><code>gateway_wake_total{outcome=&quot;token_unregistered&quot;}</code> rises for every iPhone</td>
+<td>A sandbox token was sent to production, or the other way round. The app says which per registration, so this means a mismatched app build</td>
+<td>Tell us, with the time</td>
+</tr>
+<tr>
+<td><code>FCM OAuth2 token exchange failed</code></td>
+<td>The service-account key was revoked or deleted in Google Cloud</td>
+<td>Ask the project lead for a new key</td>
+</tr>
+<tr>
+<td><code>FCM rejected the wake</code> with <code>status=403</code> or <code>SENDER_ID_MISMATCH</code></td>
+<td>The service account lacks the <em>Firebase Cloud Messaging API Admin</em> role, or belongs to a different Firebase project than the app</td>
+<td>Ask the project lead</td>
+</tr>
+<tr>
+<td><code>APNs send failed</code>, <code>FCM send failed</code> or <code>push send exceeded the wake timeout</code></td>
+<td>The network to Apple or Google</td>
+<td>Check outbound access (§9). These count as <code>transient_failure</code>, and the agent retries</td>
+</tr>
+<tr>
+<td><code>refusing registration naming a controller this gateway does not serve</code></td>
+<td>A phone linked to an agent that isn't on the allowlist</td>
+<td>Expected for strangers. For a real user, add their agent's DID, or use <code>*</code> (§3)</td>
+</tr>
+<tr>
+<td><code>rate limit exceeded; refusing the request</code></td>
+<td>More registrations than <code>GATEWAY_HTTP_PER_SEC</code>/<code>_BURST</code> allow</td>
+<td>Raise them in <code>.env</code></td>
+</tr>
+<tr>
+<td><code>refusing push/* document</code>, with a reason</td>
+<td>An agent's <code>push/provision</code> or <code>push/wake</code> failed a check: its signature, the addressee, a replay, or not being allowed</td>
+<td>One-offs are expected. A steady stream from one agent means that agent and the gateway disagree, often after an update (§12). Tell us, with the time</td>
+</tr>
+<tr>
+<td>Caddy log: certificate errors, <code>NXDOMAIN</code>, or <code>timeout during connect</code></td>
+<td>DNS doesn't point here yet, or port 80 is closed</td>
+<td>Fix DNS or the firewall. Caddy retries by itself</td>
+</tr>
+<tr>
+<td>A phone shows nothing, but the wake shows <code>delivered</code></td>
+<td>Notifications are off for Keyring on the phone, or the app was open (by design, nothing shows then)</td>
+<td>Check the phone's notification settings for Keyring</td>
+</tr>
+</tbody>
+</table></div>
+<p>If you're stuck, send the project lead the component (<code>gateway</code> or <code>caddy</code>),
+the UTC time window, and the relevant log lines. Log lines contain DIDs and
+handles, but no tokens or keys.</p>
+<h2 id="12-updates-secret-rotation-and-rollback" tabindex="-1">12. Updates, secret rotation and rollback</h2>
+<p>Nothing updates by itself. The gateway is pinned by commit, and Caddy, Rust
+and Debian by tag and digest. <strong>Don't move the gateway's upstream commit on
+your own.</strong> Its protocol has to match the agents it serves: authorisation
+changed in upstream PR #32, and a gateway and an agent on opposite sides of
+such a change can't talk to each other. When an update is due, the project
+sends you:</p>
+<ul>
+<li>the updated package, with the new <code>GATEWAY_COMMIT</code> and a patch that applies
+to it;</li>
+<li>a CI image.</li>
+</ul>
+<p><strong>Updating the gateway</strong></p>
+<pre><code class="language-sh">cd /opt/keyring-messaging
+# 1. Record what runs now, and back up the store.
+grep ^GATEWAY_COMMIT .env
+sudo cp -p data/gateway/gateway-store.json data/gateway/gateway-store.json.pre-update
+# 2. Get the new package and image (§4), then set the new GATEWAY_COMMIT in .env.
+# 3. Recreate the gateway only; Caddy keeps serving.
+sudo docker compose up -d gateway
+sleep 20; sudo docker compose logs --tail 80 gateway   # the §10 step-3 lines again
+curl -fsS https://push.example.org/healthz; echo
+</code></pre>
+<p>Keep the old image until the new one has run for a while: don't run
+<code>docker image prune</code> yet.</p>
+<p><strong>Rolling back</strong></p>
+<pre><code class="language-sh"># 1. Put the old GATEWAY_COMMIT back in .env (and the old package files, if they changed).
+# 2. If the new version wrote the store, restore the backup.
+sudo docker compose stop gateway
+sudo cp -p data/gateway/gateway-store.json.pre-update data/gateway/gateway-store.json
+# 3. Start the old image.
+sudo docker compose up -d gateway
+</code></pre>
+<p>The old image is still loaded under its commit tag, so this takes seconds.
+Registrations made between the update and the rollback are lost with the
+restored store. Those phones register again when notifications are turned off
+and on.</p>
+<p><strong>Updating Caddy.</strong> Bump its tag and digest together in <code>docker-compose.yml</code>.
+Read the digest with <code>docker buildx imagetools inspect caddy:&lt;tag&gt;</code>, then run
+<code>sudo docker compose up -d caddy</code>. Roll back by restoring the old line.</p>
+<p><strong>Changing settings.</strong> Edit <code>.env</code>, then run <code>sudo docker compose up -d</code>.</p>
+<p><strong>Rotating a secret</strong> (a new APNs key, FCM key or identity):</p>
+<pre><code class="language-sh">sudo install -o 10001 -g 10001 -m 600 &lt;new file&gt; /opt/keyring-messaging/secrets/&lt;name&gt;
+# if the file name changed: update the path (and, for APNs, the key ID) in .env
+sudo docker compose up -d gateway      # after an .env change
+sudo docker compose restart gateway    # if only the file's contents changed
+</code></pre>
+<p>A new APNs or FCM key changes nothing for phones. A <strong>new identity</strong> is
+different: it is a new DID, and agents only wake the gateway their phones
+registered with. Rotate the identity only with the project, as it means every
+phone registers again.</p>
+<p class="done"><strong>You're done with an update when</strong>:</p>
+<ul>
+<li>the §10 step-3 lines appear again;</li>
+<li><code>/healthz</code> returns <code>ok</code>;</li>
+<li><code>gateway_wake_total{outcome=&quot;delivered&quot;}</code> keeps rising with normal use.</li>
+</ul>
+<h2 id="13-known-gaps" tabindex="-1">13. Known gaps</h2>
+<ul>
+<li><strong>No unregister.</strong> A removed phone's handle and token stay in the store. They
+can't be used once no agent wakes them, but they are still stored tokens.</li>
+<li><strong>Disabling or wiping a device at the agent doesn't clear its wake channel</strong>
+(tracked as VTI-Q37). Only the phone clearing its own channel does. Keyring's
+app clears it when it unlinks; a phone that is lost can't.</li>
+<li><strong>Timing is visible.</strong> The gateway, Apple and Google see <em>when</em> a wake goes
+out, and that correlates with the agent's activity. The content is never
+visible.</li>
+<li><strong>The upstream commit moves with the agents</strong> (§12).</li>
+</ul>
 
-          <h3 id="allowlist">3.5 Which agents it serves: your decision</h3>
-          <p>
-            <code>GATEWAY_ALLOWED_CONTROLLERS</code> lists the agents whose
-            phones may register. It's required: unset means every registration
-            is refused.
-          </p>
-          <div class="tablebox">
-            <table>
-              <thead>
-                <tr>
-                  <th>Option</th>
-                  <th>Meaning</th>
-                  <th>Limits</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>Exact list</strong> of agent DIDs</td>
-                  <td>
-                    Only those agents' phones can register or be woken. There
-                    are no wildcards, by upstream's design
-                  </td>
-                  <td>
-                    Every new person's agent means a configuration change and a
-                    restart
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    <strong><code>*</code></strong> (open)
-                  </td>
-                  <td>Any agent may register phones</td>
-                  <td>
-                    A startup warning. Still bounded: 4096 live handles per
-                    agent, unprovisioned handles dropped after an hour, and
-                    per-sender and per-handle budgets
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p>
-            For the production test the list is just our test agent's DID, which
-            we'll send you. What production needs is open, and it's your call
-            with the project lead.
-          </p>
-
-          <h3>3.6 Everything else</h3>
-          <div class="tablebox">
-            <table>
-              <thead>
-                <tr>
-                  <th>Setting</th>
-                  <th>Value and note</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>GATEWAY_HOST</code></td>
-                  <td>your public hostname</td>
-                </tr>
-                <tr>
-                  <td>
-                    <code>GATEWAY_HTTP_PER_SEC</code> / <code>_BURST</code>
-                  </td>
-                  <td>
-                    <code>100</code> / <code>400</code>: behind the proxy every
-                    phone shares one IP, so the upstream default of 10/s is too
-                    low
-                  </td>
-                </tr>
-                <tr>
-                  <td><code>GATEWAY_DEV_ECHO_SENDER</code></td>
-                  <td>
-                    <strong>blank in production</strong>; when on, wakes are
-                    logged and never sent
-                  </td>
-                </tr>
-                <tr>
-                  <td><code>GATEWAY_METRICS_TOKEN</code></td>
-                  <td>
-                    optional bearer token for <code>/metrics</code>, which
-                    listens only on the container's loopback
-                  </td>
-                </tr>
-                <tr>
-                  <td><code>GATEWAY_LOG</code></td>
-                  <td><code>vti_push_gateway=info,tower_http=info</code></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section id="host">
-          <h2>4. What the host needs</h2>
-          <ul>
-            <li><strong>Docker</strong> with Compose v2.</li>
-            <li>
-              <strong>A public HTTPS hostname.</strong> Phones register at
-              <code>https://&lt;host&gt;/trust-tasks</code>. The bundled Caddy
-              gets and renews the certificate; it needs a DNS record and ports
-              80 and 443 open.
-            </li>
-            <li>
-              <strong>Outbound access</strong> to
-              <code>api.push.apple.com</code>,
-              <code>api.sandbox.push.apple.com</code>,
-              <code>fcm.googleapis.com</code>,
-              <code>oauth2.googleapis.com</code>, the DIDComm v2 mediator, and
-              the <code>did:webvh</code> hosts.
-            </li>
-            <li>
-              <strong>A persistent volume</strong> for
-              <code>data/gateway</code>. It holds phones' push tokens
-              <strong>in clear text</strong>, so protect it and its backups like
-              credentials.
-            </li>
-            <li>
-              <strong>Backups:</strong> the store file (encrypted),
-              <code>secrets/</code> and <code>.env</code>. To restore, put them
-              back and run <code>docker compose up -d</code>.
-            </li>
-            <li>
-              <strong>Health:</strong> <code>GET /healthz</code> returns
-              <code>ok</code>. <strong>Metrics</strong> (Prometheus, container
-              loopback <code>:9300</code>): <code>gateway_register_total</code>,
-              <code>gateway_provision_total</code> and
-              <code
-                >gateway_wake_total{outcome=delivered|transient_failure|token_unregistered|not_allowed}</code
-              >.
-            </li>
-            <li>
-              <strong>Logs:</strong> <code>docker compose logs gateway</code>.
-              No message content is ever logged, because none passes through.
-            </li>
-          </ul>
-        </section>
-
-        <section id="golive">
-          <h2>5. Go-live checklist and production test</h2>
-          <ul class="checklist">
-            <li>
-              <input type="checkbox" id="c1" /><label for="c1"
-                >The image is loaded, and <code>.env</code> and
-                <code>secrets/</code> are in place, with permissions set.</label
-              >
-            </li>
-            <li>
-              <input type="checkbox" id="c2" /><label for="c2"
-                >DNS points at the host, 80 and 443 are open, and
-                <code>docker compose up -d</code> gives
-                <code>https://&lt;host&gt;/healthz</code> →
-                <code>ok</code>.</label
-              >
-            </li>
-            <li>
-              <input type="checkbox" id="c3" /><label for="c3"
-                >The startup log shows these lines, and no echo-sender
-                warning:<br /><span class="log"
-                  >APNs sender enabled · FCM … sender enabled · visible alert
-                  mode … loc_key=KEYRING_WAKE · controller allowlist
-                  controllers=N listed · DID document advertises
-                  TSPTransport</span
-                ></label
-              >
-            </li>
-            <li>
-              <input type="checkbox" id="c4" /><label for="c4"
-                >You've sent us the URL, and we've run the production test
-                together (below).</label
-              >
-            </li>
-            <li>
-              <input type="checkbox" id="c5" /><label for="c5"
-                >After it passes: <code>asml.bkc.harvard.wallet</code> is added
-                to <code>GATEWAY_APNS_TOPICS</code>, and the release app is
-                pointed at the URL. Push goes live only then.</label
-              >
-            </li>
-          </ul>
-          <h3>The production test</h3>
-          <ol class="steps">
-            <li>
-              We build the push-test app with your URL and install it on a test
-              iPhone and Android phone.
-            </li>
-            <li>
-              The phone links to our test agent, whose DID is on your allowlist,
-              and turns notifications on.
-              <code>gateway_register_total</code> and
-              <code>provision_total{outcome="ok"}</code> go up.
-            </li>
-            <li>
-              We trigger an approval request with the app in the background,
-              then force-quit, then open. Expected: the line in the first two
-              cases, nothing in the third, and
-              <code>wake_total{outcome="delivered"}</code> up each time.
-            </li>
-          </ol>
-        </section>
-
-        <section id="gaps">
-          <h2>6. Known gaps</h2>
-          <ul>
-            <li>
-              <strong>No unregister.</strong> A removed phone's handle and token
-              stay in the store. They can't be used once no agent wakes them,
-              but they are still stored tokens.
-            </li>
-            <li>
-              <strong
-                >Disabling or wiping a device at the agent doesn't clear its
-                wake channel</strong
-              >
-              (tracked as VTI-Q37). Only the phone clearing its own channel
-              does. The app clears it when it unlinks; a lost phone can't.
-            </li>
-            <li>
-              <strong>Timing is visible.</strong> The gateway, Apple and Google
-              see when a wake goes out, which correlates with the agent's
-              activity. The content never passes through.
-            </li>
-            <li>
-              <strong>The upstream pin moves with the agents</strong> (§2).
-            </li>
-          </ul>
-        </section>
-
-        <footer>
-          Same content as <code>deploy/keyring-messaging/HANDOVER.md</code> in
-          the Keyring wallet repository. Questions go to the project lead.
-        </footer>
-      </main>
-    </div>
-  </body>
+    <footer>Same content as <code>deploy/keyring-messaging/HANDOVER.md</code>. Questions go to the project lead.</footer>
+  </main>
+</div>
+</body>
 </html>

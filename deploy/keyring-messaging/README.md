@@ -141,9 +141,9 @@ package does not automate it.
    out to it), `ROUTING_KEYS` empty, and `SERVICE_TSP` set. The gateway
    warns at startup unless its DID document carries
    `{ "id": "{DID}#tsp", "type": "TSPTransport", "serviceEndpoint": "<mediator DID>" }`.
-   At the pinned commit, upstream documents it as
-   `pnm bootstrap provision-integration --template push-gateway --var URL=<mediator DID>`.
-   Confirm the verb against the VTI you run.
+   That is `pnm bootstrap provision-request --template push-gateway …` on the
+   gateway's side, then `pnm bootstrap provision-integration --request … --out …`
+   by the VTA's admin; HANDOVER.md §8 has the full commands and who runs each.
 2. Open the sealed bundle into the identity file the gateway reads, with
    `tools/gateway-identity`. **Do not run `pnm bootstrap open` on this bundle.**
    For a `TemplateBootstrap` payload it prints a summary, writes nothing, and
