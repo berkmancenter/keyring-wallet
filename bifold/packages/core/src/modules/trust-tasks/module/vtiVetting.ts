@@ -27,7 +27,6 @@ import {
   statementFacts,
   encodeTicketUri,
   parseTicketUri,
-  purposeForDocumentType,
   signDocumentProof,
   taskDigestMultibase,
   verifyDocumentProof,
@@ -52,6 +51,7 @@ import {
   type EligibilityRefusal,
 } from './vtiEligibility'
 import { againstSchema, checkVetterProfile, checkVettingRequirements } from './vettingShape'
+import { purposeForDocumentType } from './proofPurpose'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',

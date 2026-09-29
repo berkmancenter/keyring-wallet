@@ -1,4 +1,4 @@
-import { purposeForDocumentType } from '@bifold/trust-tasks'
+import { purposeForDocumentType } from '../module/proofPurpose'
 
 // The cases vta-sdk's own classifier is tested with (VTI afcf2470
 // vta-sdk/tests/proof_purpose_classifier.rs): only an approver's decision is

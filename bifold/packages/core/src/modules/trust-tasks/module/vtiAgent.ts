@@ -23,7 +23,8 @@ import { utils } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
 
-import { purposeForDocumentType, signDocumentProof } from '../documentProof'
+import { signDocumentProof } from '../documentProof'
+import { purposeForDocumentType } from './proofPurpose'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import type { VtiPersona } from './VtiIdentityStore'
 import {

@@ -86,10 +86,10 @@ import {
 } from '../module/vtiVetting'
 // eslint-disable-next-line import/order
 import { verifyEligibilityPresentation } from '../module/vtiEligibility'
+import { purposeForDocumentType } from '../module/proofPurpose'
 // eslint-disable-next-line import/order
 import {
   digestMultibase,
-  purposeForDocumentType,
   signCompactJws,
   signDocumentProof,
   taskDigestMultibase,
@@ -215,7 +215,11 @@ describe('a Vetting Card from the shipping code, really signed', () => {
     expect(sentType).toBe('https://trusttasks.org/spec/credential-exchange/issue/0.1')
     expect(issue).toMatchObject({ type: sentType, issuer: vetter.did, threadId: desk.session!.documentId })
     expect(String(issue.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
-    await expect(verifyDocumentProof(vetter.agent as never, issue, vetter.did)).resolves.toBe(true)
+    // The wrapper is an operational Trust Task document, signed for
+    // authentication as vta-sdk signs one; a receiver checks it as a Trust Task
+    // (inboundProofs: verifyTrustTaskProof), whatever purpose it declares.
+    expect((issue.proof as { proofPurpose?: string }).proofPurpose).toBe('authentication')
+    await expect(verifyTrustTaskProof(vetter.agent as never, issue)).resolves.toEqual({ ok: true, signer: vetter.did })
     expect(sentOptions).toMatchObject({ thid: desk.session!.documentId })
     const statement = (
       (issue.payload as Record<string, unknown>).credential_response as {

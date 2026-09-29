@@ -1,4 +1,4 @@
-import type { ProofPurpose } from './documentProof'
+import type { ProofPurpose } from '@bifold/trust-tasks'
 
 /**
  * Registry slugs whose request documents are the issuer's attestation — an
