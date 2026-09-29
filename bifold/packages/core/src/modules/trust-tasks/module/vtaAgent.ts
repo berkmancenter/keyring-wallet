@@ -12,11 +12,12 @@
 
 import type { Agent } from '@credo-ts/core'
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
-import { Platform } from 'react-native'
+import { DeviceEventEmitter, Platform } from 'react-native'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import type { AgentLabel } from './agentLabel'
+import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
 import type { StepUpRequest } from './stepUp'
 import {
@@ -1248,6 +1249,7 @@ export class VtaAgentController {
     for (const persona of personas) {
       try {
         await this.client(agent, vtaDid).holdPersonaKeys(persona)
+        DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
       } catch (e) {
         agent.config?.logger?.warn?.(
           `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
