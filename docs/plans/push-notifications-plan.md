@@ -14,9 +14,8 @@ that later carries message notifications.
 - The gateway's DIDComm identity and its mediator come from the VTI stack that
   the [OpenVTC integration plan](./openvtc-integration-plan.md) covers.
 - The [release flow](./release-flow-plan.md) is unchanged. The push-enabled
-  signing profile is a new credential it carries, and the notification service
-  extension's profile is a second one. The release flow's signing step handles
-  one profile today, so accepting two is a dependency (§8).
+  signing profile is a new credential it carries; no second profile is needed,
+  because the app has no notification extension (§3).
 - [`docs/VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md) (`:866`,
   `:1809`) holds upstream's device and wake-up answers. Step 1.5 and the pin
   rule in §8 follow that log's discipline of separating what was measured from
@@ -36,7 +35,7 @@ that later carries message notifications.
 
 | Companion | Contents |
 |---|---|
-| [2026-09-28-al.md](./push-notifications-plan/2026-09-28-al.md) | The review of the first draft (2026-09-26), and the decisions of 2026-09-28: which v2 mediator, iPhone phase scope, no mailbox swap, test isolation, hosting. Also the superseded positions: a bundled Credo mediator, silent-push-only iPhone, "simulators cannot receive pushes", and two earlier cost figures. Its Part 3 answers the review below: the register path (F2), the background handler (F3), the gateway pin move to `e542a9d7`, unregister, and `binding/push/0.1`. Its Part 4 records how push ships: built in and off, bifold's push framework reused rather than removed, no notification display in the first build, and the build-time push-test variant |
+| [2026-09-28-al.md](./push-notifications-plan/2026-09-28-al.md) | The review of the first draft (2026-09-26), and the decisions of 2026-09-28: which v2 mediator, iPhone phase scope, no mailbox swap, test isolation, hosting. Also the superseded positions: a bundled Credo mediator, silent-push-only iPhone, "simulators cannot receive pushes", and two earlier cost figures. Its Part 3 answers the review below: the register path (F2), the background handler (F3), the gateway pin move to `e542a9d7`, unregister, and `binding/push/0.1`. Its Part 4 records how push ships: built in and off, bifold's push framework reused rather than removed, the build-time push-test variant, no notification extension (one neutral line by key), and the gateway's visible-alert mode as a self-contained patch |
 | [2026-09-28-bam.md](./push-notifications-plan/2026-09-28-bam.md) | The review of the plan against the code it lands in: the lock behaviour, the registration anchor, background execution, iOS signing, the test app ID, the dormant-code scope, Firebase compatibility, privacy metadata, and the testing and coverage requirements |
 
 ---
@@ -120,29 +119,52 @@ Apple treats a silent (background) push as low priority:
 The same page: "If something force quits or kills the app, the system discards
 the held notification."
 
-An approval that someone is waiting on cannot depend on that. So Phase 2 adds a
-**visible push marked for modification** (`mutable-content`). It carries fixed,
-generic text and no server address. A small notification service extension
-inside the app can replace that text when it is able to. That is Signal's
-technique, and it arrives after a force-quit. **iPhone ships Phases 1 and 2
-together.** Android ships on Phase 1: a high-priority FCM data message that
-shows a notification reaches a backgrounded app.
+An approval that someone is waiting on cannot depend on that. So Phase 2 makes
+the wake a **plain visible notification**: an APNs `alert` push (priority 10)
+that the system shows itself, whatever state the app is in, carrying one
+neutral line by key:
 
-The gateway at `e542a9d7` sends only contentless pushes. That is upstream's
-rule, and generic fixed text arguably fits it. The Phase 2 change is proposed
-upstream, but Keyring may have to carry it as its own patch (§8).
+> "If the text of your notification messages is predetermined, you can store
+> your message strings in the Localizable.strings file of your app bundle and use
+> the title-loc-key, subtitle-loc-key, and loc-key payload keys to specify which
+> strings you want to display."
+> — Apple, [*Generating a remote notification*](https://developer.apple.com/documentation/usernotifications/generating-a-remote-notification)
+
+The phone shows the line in its own language, and the payload carries only the
+key. Every wake uses the same key, so Apple cannot tell an approval from a
+message. `apns-collapse-id` merges repeated wakes.
+
+**No notification service extension.** An extension exists to change a
+notification's content on the phone; it runs only for a payload with
+`mutable-content: 1` and has "about 30 seconds" to do it
+([*Modifying content in newly delivered notifications*](https://developer.apple.com/documentation/usernotifications/modifying-content-in-newly-delivered-notifications)).
+The line never changes (§2) and nothing is encrypted, so an extension would
+have nothing to do. Signal needs one because it names the sender; Keyring does
+not. Upstream's own iPhone app has none either (vta-mobile-agent-ios, wakes by
+background push only). **iPhone ships Phases 1 and 2 together.**
+
+Android does the same with an FCM *notification* message whose
+`android.notification.body_loc_key` names a string resource in the app: the
+system tray shows it while the app is in the background or closed, with no
+local-notification library, and in the foreground it reaches the app, which
+shows nothing.
+
+The gateway at `e542a9d7` sends only background (APNs) and data-only (FCM)
+pushes, so Phase 2 is a gateway change (2.1): a visible-alert mode, off unless
+configured, applied to interactive wakes. It is kept as a self-contained patch
+against the pinned commit, as a candidate to contribute upstream (§8).
 
 ## 4. Phases
 
 | Phase | Delivers | Ships on |
 | --- | --- | --- |
 | 1 | Approvals and step-ups reach a backgrounded phone | Android |
-| 2 | The visible, modifiable push and the notification service extension | iPhone, together with Phase 1 |
+| 2 | The visible wake: one neutral line by key (APNs alert, FCM notification) | iPhone, together with Phase 1; Android too |
 | 3 | Message notifications. Built in from the start, **off by default**, switched on when the messaging server sends wake-ups | Both, later |
 
 ### 4.1 Phase 1 steps and acceptance criteria
 
-**How it ships.** Push is built into the app and off: a build carries no push gateway unless it is the push-test variant, so testers see no prompt and no switch and nothing registers. The first build to carry it holds everything except the notification display (1.6's second half), because the display needs a local-notification library, a native dependency, and it follows in a later build.
+**How it ships.** Push is built into the app and off: a build carries no push gateway unless it is the push-test variant, so testers see no prompt and no switch and nothing registers. The first build to carry it holds registration, the switch and the logging handlers; the visible wake (Phase 2: the gateway's alert mode and the app's strings) follows in a later build, and needs no new native dependency.
 
 **Gates.** Every step ends with `cd app && TZ=GMT yarn jest`, root
 `yarn typecheck` and `yarn lint` passing. A step that changes `bifold/` also
@@ -155,10 +177,10 @@ commit with the sign-off trailer last (root `CLAUDE.md`).
 | 1.1 | Keyring's own Firebase project replaces the inherited BC Government one (`bc-wallet-mobile` in `app/android/app/google-services.json`) | The test build's `google-services.json` names the Keyring project, and the plan records which of its values are committed. The Firebase BoM and the RNFirebase version resolve to a compatible pair, which is recorded (`app/package.json` has `~21.14.0`; `app/android/app/build.gradle` pins `firebase-bom:26.8.0`). FCM issues a token on an Android device, and a foreground and a background message are received on a New Architecture build (`newArchEnabled=true`) |
 | 1.2 | Remove the inherited BC Wallet push path from `app/`: `src/utils/PushNotificationsHelper.ts` (it calls `agent.modules.pushNotificationsFcm`, which `bc-agent-modules.ts` does not register), its commented references in `src/hooks/useBCAgentSetup.ts`, `container-imp.ts` and `src/onboarding.ts`, the `UserDeniedPushNotifications` and `DeviceToken` keys in `src/store.tsx`, and `MEDIATOR_USE_PUSH_NOTIFICATIONS`. Bifold's push framework stays: 1.4 reuses it | No code path registers a token with the mediator. A test fails if `pushNotificationsFcm`, `PushNotificationsHelper`, `MEDIATOR_USE_PUSH_NOTIFICATIONS` or `setDeviceInfo` reappears in the app source |
 | 1.3 | iOS push entitlement (`aps-environment`, absent from `AriesBifold.entitlements` today), a push-enabled App ID and signing profile; the test app ID first (§6). Confirm that `remote-notification` is set in `Info.plist` (it is), and review the unused `audio` and `voip` modes: `voip` implies PushKit obligations that App Review checks | A test build on a real iPhone obtains an APNs device token. The `audio` and `voip` modes are removed or their use is justified in writing. A sandbox push reaches an iOS simulator (§6) |
-| 1.4 | The permission and the switch through bifold's push framework: the app supplies `enablePushNotifications` (`status` and `setup` read and ask for the notification permission; `toggle` turns wake-ups on with 1.5 and off by clearing the wake channel), which drives bifold's Settings switch. The app supplies it **only** when the build sets `PUSH_GATEWAY_URL`. The Android notification channel and a local-notification library come with 1.6's display. The copy is owned by the UI plan | Without `PUSH_GATEWAY_URL` there is no configuration, so no prompt, no switch and no registration (a unit test). With it, the Settings switch appears, turning it on registers and turning it off clears the channel; a refusal is logged, never shown as an error. Denying permission leaves the app fully usable. A sandbox push reaches an Android emulator with Google Play services (§6) |
+| 1.4 | The permission and the switch through bifold's push framework: the app supplies `enablePushNotifications` (`status` and `setup` read and ask for the notification permission; `toggle` turns wake-ups on with 1.5 and off by clearing the wake channel), which drives bifold's Settings switch. The app supplies it **only** when the build sets `PUSH_GATEWAY_URL`. The Android notification channel is declared with 1.6's strings. The copy is owned by the UI plan | Without `PUSH_GATEWAY_URL` there is no configuration, so no prompt, no switch and no registration (a unit test). With it, the Settings switch appears, turning it on registers and turning it off clears the channel; a refusal is logged, never shown as an error. Denying permission leaves the app fully usable. A sandbox push reaches an Android emulator with Google Play services (§6) |
 | 1.5a | Add `device/set-wake/0.2` to the agent-device client in `bifold/` (`packages/core/src/modules/trust-tasks/module/vtaDevices.ts`, beside `registerThisDevice`, over the same agent port), as its own submodule commit. Add the `push/register` HTTPS client in `app/`: it is specific to the gateway, so it is not a `@bifold/*` package and needs none of the four wiring entries | The new task is covered by unit tests in `bifold/packages/core` (request shape, a clearing call with no `wakeHandle`, a refusal). The `app/` client is covered by unit tests against a stubbed gateway (success, `permissionDenied`, `taskFailed`) |
 | 1.5 | Registration, by the path in §4.4: after `device/register`, the phone sends `push/register` to the gateway over HTTPS, receives the gateway-made wake handle, and conveys it to its agent with `device/set-wake/0.2`. The agent provisions the gateway. On a token change the phone registers again and sends the new handle. On unlink or revoke, the agent clears the device's wake channel; that is authoritative, and the app dropping its token is best effort, since a wiped phone cannot do it | After registering, the agent can wake the phone. After a revoke, no wake reaches the phone. A token refreshed while the phone is offline is re-registered on next launch. Unit tests cover register, refresh (including while offline) and clear. The test agent's log shows its provision reached the gateway, because a failed provision is never reported to the phone (§4.4) |
-| 1.6 | Wake handling per §2. First, the background and foreground handlers log the wake's known hints and never open the agent, start pickup or read the wallet. Then, with a local-notification library, the background and killed-app handlers show the generic notification, the foreground handler shows nothing, and tapping opens the approval after unlocking | Logging: unit tests cover the hints read and nothing else done. Display: unit tests cover the handler in each app state, with auto-lock disabled, and with a missing or refused permission; on a real device, background, closed and a tap from each show the generic text and land on the approval. The attended runs use `yarn e2e:vrc:devices` or its single-device equivalent, so the iPhone criterion is reproducible |
+| 1.6 | Wake handling per §2. The system shows the visible wake (Phase 2) from the app's own strings: `Localizable.strings` on iOS, a string resource on Android, one neutral line in each supported language. The app's background and foreground handlers log the wake's known hints and never open the agent, start pickup or read the wallet; the foreground shows nothing. Tapping the notification opens the approvals after unlocking | Unit tests cover the hints read and nothing else done, and that the line's key exists in every supported language. On a real device: background and closed each show the line, and a tap from each lands on the approvals. The attended runs use `yarn e2e:vrc:devices` or its single-device equivalent, so the iPhone criterion is reproducible |
 | 1.7 | The gateway image is built on a CI runner and hosted (§5) | The image builds from `e542a9d7` on CI. A first run with the gateway's test sender registers a handle and "delivers" a wake with no Apple or Google keys. The rate-limit settings of §5.1 are set, with a test that the package's configuration carries them |
 | 1.8 | End to end: a VTA sends a wake and the phone shows the notification | Measured on a real Android phone and, with Phase 2, a real iPhone. Timings are recorded per step. The failure-mode matrix of §6.1 passes |
 
@@ -166,8 +188,8 @@ commit with the sign-off trailer last (root `CLAUDE.md`).
 
 | # | Step | Done when |
 | --- | --- | --- |
-| 2.1 | Gateway change: a visible `mutable-content` push with fixed generic text and no server address | The push payload holds only the fixed text and flags. A patch against the pinned commit is carried in the package, with a gateway-side test that the payload holds only the fixed text and flags |
-| 2.2 | iOS notification service extension: a new Xcode target and bundle ID (`asml.bkc.harvard.wallet.<ext>`), an App ID with push, a signing profile, a Podfile target entry so the extension links without the app's pods and builds against the same Firebase `modular_headers` setup (`app/ios/Podfile`), and a second profile secret alongside `BUILD_PROVISION_PROFILE_BASE64` in `.github/workflows/staging.yaml` | After a force-quit, a wake still shows the generic notification on a real iPhone, attended, on `yarn e2e:vrc:devices`. The extension builds in CI with both profiles. The release flow's signing step accepts two profiles (§8) |
+| 2.1 | Gateway change: a visible-alert mode, off unless configured. For an interactive wake it sends an APNs `alert` push (priority 10, `apns-collapse-id`, `aps.alert.loc-key`) and an FCM notification message (`android.notification.body_loc_key`, `collapse_key`); background wakes stay silent. A self-contained patch against the pinned commit, carried in the package, not mixed with Keyring's own changes | The payload holds only the key, the flags and the existing hints; the collapse ID is set; with the mode unset the payloads are unchanged. Gateway-side tests cover each. A short rationale and a README section go with the patch |
+| 2.2 | The line's strings in the app (1.6), with the same key the gateway sends | A wake after a force-quit shows the line on a real iPhone, attended, on `yarn e2e:vrc:devices` |
 
 ### 4.3 Phase 3 steps and acceptance criteria
 
@@ -465,15 +487,11 @@ Phase 3 stays inside these limits by design:
   - A gateway older than PR #32 refuses those documents. An agent older than
     that PR can't reach this one.
   - The pin moves only together with the agents the gateway serves.
-- **The Phase 2 patch may stay Keyring's** (§3).
+- **The Phase 2 gateway patch may stay Keyring's** (§3). It is kept self-contained so it can be offered upstream as it stands.
 - **The shared mediator is a dependency.** The gateway needs a `did:webvh` and
   an account on the shared DIDComm v2 mediator, and agents must be able to
   reach it. Until the hosted stack can create DIDs, the gateway lives on the
   local lab (§6).
-- **The release flow must accept two signing profiles.** Its signing step
-  handles one profile today (`.github/workflows/staging.yaml`). Phase 2's
-  notification service extension needs a second (2.2). Until that lands, the
-  extension builds only on the test variant.
 - **Timing is observable.** The gateway, APNs and FCM see when each wake goes
   out, and that correlates with the agent's activity. Wakes set `apns-collapse-id`
   and the FCM `collapse_key`, because an empty push carries no `thread-id` and
