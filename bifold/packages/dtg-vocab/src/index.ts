@@ -1,5 +1,6 @@
 export { DTG_PREDICATE_NAMESPACE, DTG_VOCAB_NAMESPACE, DTG_CONTEXT_URL, DTG_PREDICATE_WITNESSED, DTG_PREDICATE_ENDORSES } from './namespace'
 export { loadAcceptList } from './acceptList'
 export type { AcceptList, AcceptListEntry, AdditionalMemberConstraint } from './acceptList'
+export { loadSchemaStore } from './schemaStore'
 export { configure, verify } from './predicateHandling'
 export type { PredicateHandlingConfig, VerifyResult, VerifyOptions, ReferencedCredential, SchemaStore } from './predicateHandling'

@@ -26,7 +26,7 @@
  */
 
 import type { PredicateHandlingConfig } from '@bifold/dtg-vocab'
-import { configure, loadAcceptList, verify as verifyPredicate } from '@bifold/dtg-vocab'
+import { configure, loadAcceptList, loadSchemaStore, verify as verifyPredicate } from '@bifold/dtg-vocab'
 import type { Agent } from '@credo-ts/core'
 import { W3cCredentialRecord, utils } from '@credo-ts/core'
 import { sha256 } from '@noble/hashes/sha2.js'
@@ -58,7 +58,10 @@ const LOG_PREFIX = '[TrustTasks:Witness]'
 // VSC/`dtg:witnessed` predicate form).
 let acceptListConfig: PredicateHandlingConfig | undefined
 function getAcceptListConfig(): PredicateHandlingConfig {
-  if (!acceptListConfig) acceptListConfig = configure(loadAcceptList())
+  // loadSchemaStore(): without it, witnessContext's named schema is never
+  // loaded and verify() unconditionally rejects every witnessed credential
+  // (see loadSchemaStore's own doc comment — found 2026-09-29).
+  if (!acceptListConfig) acceptListConfig = configure(loadAcceptList(), loadSchemaStore())
   return acceptListConfig
 }
 

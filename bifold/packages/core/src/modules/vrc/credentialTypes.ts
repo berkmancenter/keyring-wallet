@@ -31,7 +31,7 @@
  * it silently falls back to type-string-only detection — document it here.
  */
 
-import { DTG_PREDICATE_WITNESSED, PredicateHandlingConfig, configure, loadAcceptList } from '@bifold/dtg-vocab'
+import { DTG_PREDICATE_WITNESSED, PredicateHandlingConfig, configure, loadAcceptList, loadSchemaStore } from '@bifold/dtg-vocab'
 
 export const VERIFIABLE_CREDENTIAL_TYPE = 'VerifiableCredential'
 export const DTG_CREDENTIAL_TYPE = 'DTGCredential'
@@ -107,7 +107,10 @@ export function isRCardTemplate(input: CredentialTypeInput): boolean {
  */
 let acceptListConfig: PredicateHandlingConfig | undefined
 function getAcceptListConfig(): PredicateHandlingConfig {
-  if (!acceptListConfig) acceptListConfig = configure(loadAcceptList())
+  // loadSchemaStore(): without it, witnessContext's named schema is never
+  // loaded and verify() unconditionally rejects every witnessed credential
+  // (see loadSchemaStore's own doc comment — found 2026-09-29).
+  if (!acceptListConfig) acceptListConfig = configure(loadAcceptList(), loadSchemaStore())
   return acceptListConfig
 }
 
