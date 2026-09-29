@@ -47,6 +47,7 @@ import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf, 
 import { isDigestMultibase } from './vettingShape'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
+import { purposeForDocumentType } from './proofPurpose'
 
 const LOG_PREFIX = '[TrustTasks:VtaClient]'
 const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
@@ -621,7 +622,8 @@ export class VtaClient {
           // Covered by the proof like everything else on the document.
           ...documentExtras,
         },
-        did
+        did,
+        { proofPurpose: purposeForDocumentType(type) }
       )
       const sentAt = Date.now()
       const reply = new Promise<DidCommV2PlaintextMessage>((resolve) => {

@@ -86,6 +86,7 @@ import {
 } from '../module/vtiVetting'
 // eslint-disable-next-line import/order
 import { verifyEligibilityPresentation } from '../module/vtiEligibility'
+import { purposeForDocumentType } from '../module/proofPurpose'
 // eslint-disable-next-line import/order
 import {
   digestMultibase,
@@ -214,7 +215,11 @@ describe('a Vetting Card from the shipping code, really signed', () => {
     expect(sentType).toBe('https://trusttasks.org/spec/credential-exchange/issue/0.1')
     expect(issue).toMatchObject({ type: sentType, issuer: vetter.did, threadId: desk.session!.documentId })
     expect(String(issue.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
-    await expect(verifyDocumentProof(vetter.agent as never, issue, vetter.did)).resolves.toBe(true)
+    // The wrapper is an operational Trust Task document, signed for
+    // authentication as vta-sdk signs one; a receiver checks it as a Trust Task
+    // (inboundProofs: verifyTrustTaskProof), whatever purpose it declares.
+    expect((issue.proof as { proofPurpose?: string }).proofPurpose).toBe('authentication')
+    await expect(verifyTrustTaskProof(vetter.agent as never, issue)).resolves.toEqual({ ok: true, signer: vetter.did })
     expect(sentOptions).toMatchObject({ thid: desk.session!.documentId })
     const statement = (
       (issue.payload as Record<string, unknown>).credential_response as {
@@ -637,6 +642,11 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
         document
       )
       expect({ name, verdict }).toEqual({ name, verdict: { ok: true, signer } })
+      // Signed for the purpose upstream signs this type for (vta-sdk
+      // purpose_for_document_type): authentication, save an approver's
+      // attestation. card-verify checks it against vta-sdk itself.
+      const purpose = (document.proof as { proofPurpose?: string } | undefined)?.proofPurpose
+      expect({ name, purpose }).toEqual({ name, purpose: purposeForDocumentType(String(document.type)) })
     }
 
     const out = process.env.CARD_OUT

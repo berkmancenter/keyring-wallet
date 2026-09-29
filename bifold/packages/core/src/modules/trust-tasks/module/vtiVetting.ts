@@ -51,6 +51,7 @@ import {
   type EligibilityRefusal,
 } from './vtiEligibility'
 import { againstSchema, checkVetterProfile, checkVettingRequirements } from './vettingShape'
+import { purposeForDocumentType } from './proofPurpose'
 
 export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
@@ -534,6 +535,7 @@ async function signedDocument(
   return signDocumentProof(agent, doc, persona.did, {
     kmsKeyId: persona.kmsKeyIds?.signing,
     verificationMethodId: persona.vtaKeyIds.signing,
+    proofPurpose: purposeForDocumentType(String(doc.type)),
   })
 }
 

@@ -48,7 +48,7 @@ import { DidKey, TypedArrayEncoder } from '@credo-ts/core'
 // eslint-disable-next-line import/order
 import { ed25519 } from '@noble/curves/ed25519.js'
 // eslint-disable-next-line import/order
-import { digestMultibase, signDocumentProof, verifyDocumentProof } from '@bifold/trust-tasks'
+import { digestMultibase, signDocumentProof, verifyDocumentProof, verifyTrustTaskProof } from '@bifold/trust-tasks'
 
 // eslint-disable-next-line import/order
 import {
@@ -898,7 +898,10 @@ describe("the vetter's statement delivery", () => {
       recipient: applicantKey.did,
       threadId: SESSION_ID,
     })
-    await expect(verifyDocumentProof(vetter.agent as never, doc, vetter.did)).resolves.toBe(true)
+    // An operational Trust Task document, signed for authentication as vta-sdk
+    // signs one, and checked as a Trust Task, as a receiver checks it.
+    expect((doc.proof as { proofPurpose?: string }).proofPurpose).toBe('authentication')
+    await expect(verifyTrustTaskProof(vetter.agent as never, doc)).resolves.toEqual({ ok: true, signer: vetter.did })
     // `statement_in`: the statement under payload.credential_response.credential,
     // with its own id, the session it names and that session's task digest.
     const credential = (
