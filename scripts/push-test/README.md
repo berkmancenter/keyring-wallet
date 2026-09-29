@@ -41,6 +41,15 @@ scripts/push-test/build-ios.sh       # then: xcrun devicectl device install app 
 Both are full native release builds: declare them before running on a shared
 Mac, one heavy build at a time.
 
+`build-ios.sh` edits the tracked `project.pbxproj` for the length of one build.
+It refuses to start if that file has changes, restores it on any exit, ctrl-C
+or kill signal, and ends by showing it is clean. The one case it cannot catch
+is `kill -9`; after that, before anything else:
+
+```sh
+git checkout -- app/ios/AriesBifold.xcodeproj/project.pbxproj
+```
+
 ## Limits
 
 - No App Attest in the iOS variant: its profile does not grant it, so a

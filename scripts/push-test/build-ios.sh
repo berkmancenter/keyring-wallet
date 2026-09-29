@@ -46,7 +46,20 @@ expect_twice 'PROVISIONING_PROFILE_SPECIFIER = "";'
 
 BACKUP=$(mktemp)
 cp "$PBX" "$BACKUP"
-trap 'cp "$BACKUP" "$PBX"; rm -f "$BACKUP"' EXIT
+# Put the project file back however this ends: a normal exit, a failed build,
+# ctrl-C, or a kill. A signal alone does not always run an EXIT trap, so each
+# signal exits explicitly and the EXIT trap does the one restore. Only SIGKILL
+# escapes it; then the next run refuses the dirty file (above), and
+# `git checkout -- app/ios/AriesBifold.xcodeproj/project.pbxproj` recovers it.
+restore() {
+  if [ -n "${BACKUP:-}" ] && [ -f "$BACKUP" ]; then
+    cp "$BACKUP" "$PBX" && rm -f "$BACKUP"
+  fi
+}
+trap restore EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 sed -i '' \
   -e 's/PRODUCT_BUNDLE_IDENTIFIER = asml\.bkc\.harvard\.wallet;/PRODUCT_BUNDLE_IDENTIFIER = asml.bkc.harvard.wallet.pushtest;/' \
   -e 's#CODE_SIGN_ENTITLEMENTS = AriesBifold/AriesBifold\.entitlements;#CODE_SIGN_ENTITLEMENTS = AriesBifold/AriesBifold-PushTest.entitlements;#' \
@@ -59,6 +72,15 @@ cd "$ROOT/app/ios"
 ENVFILE=.env.pushtest xcodebuild \
   -workspace AriesBifold.xcworkspace -scheme AriesBifold -configuration Release \
   -destination 'generic/platform=iOS' -derivedDataPath "$DERIVED" build
+
+restore
+if ! git -C "$ROOT" diff --quiet -- "$PBX"; then
+  git -C "$ROOT" diff --stat -- "$PBX" >&2
+  die "project.pbxproj did not come back clean; run: git checkout -- app/ios/AriesBifold.xcodeproj/project.pbxproj"
+fi
+echo "project.pbxproj restored:"
+git -C "$ROOT" diff --stat -- "$PBX"
+echo "  (no changes)"
 
 APP=$DERIVED/Build/Products/Release-iphoneos/KeyRing.app
 echo "push-test app: $APP"
