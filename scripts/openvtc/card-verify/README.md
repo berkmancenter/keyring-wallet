@@ -89,12 +89,13 @@ card-verify verify-tasks <tasks.json> <dir>
 1. **The proof verifies.** It runs vta-sdk's `verify_trust_task_proof_with`, and the proven signer must be `<expected-signer-did>`.
 2. **The signer is the issuer.** The proven signer must equal the document's own `issuer`. SPEC §4.7 binds the proof to the issuer, and vtc-service refuses a valid proof by any other DID (`vtc-service/src/trust_tasks/mod.rs:326-349`, VTI `ed672fff`).
 3. **The type matches.** When `<expected-type>` is given, the document's `type` must equal it.
-4. **The payload matches its type's spec** in trust-tasks-rs 0.22.3. A request is checked against the spec's `Payload` and a `#response` against its `Response`, in three steps:
+4. **The payload matches its type's spec** in trust-tasks-rs 0.24.6. A request is checked against the spec's `Payload` and a `#response` against its `Response`, in three steps:
    - the specification's consumer policy (`SpecPolicy::enforce`, as vtc-service runs it at `trust_tasks/mod.rs:302`);
    - the published JSON Schema that the crate inlines (`validate::ValidatedPayload::validate_value`), which refuses unknown members wherever the schema sets `additionalProperties: false`;
    - a serde parse into the typed payload, as openvtc's `vetting/wire.rs` `open::<P>` does.
 
    A type that `card-verify` does not map, but for which upstream publishes a schema (`schema_index::schema_for`), is checked against that schema alone. A type with neither is accepted with `payload: no typed schema upstream`.
+5. **The proof purpose matches the type (opt-in).** With `CARD_VERIFY_EXPECT_PURPOSE=1`, the proof's `proofPurpose` must be the one vta-sdk signs that type for (`trust_task_proof::purpose_for_document_type`): `assertionMethod` for an approver's attestation, `authentication` for everything else. It is off by default, because a Keyring that signs every document for `assertionMethod` is still accepted by every verifier. keyring-bifold's conformance job turns it on once Keyring signs by type.
 
 **`verify-tasks`** runs `verify-task` on every `{ file, type, signer }` entry of the `tasks.json` that bifold's `cardConformance.test.ts` writes, with `file` relative to `<dir>`. For each document it prints one line: `OK`, `PAYLOAD-UNCHECKED` or `REFUSED` with the reason. Then it prints a count. It exits non-zero if any document is refused or the list is empty.
 

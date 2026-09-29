@@ -63,7 +63,7 @@ use vta_sdk::vetting::card::{CardDraft, identity_commitment, sign_card};
 use vta_sdk::vetting::statement::{StatementDraft, sign_statement};
 use vta_sdk::vetting::match_code::vetting_match_code;
 use vta_sdk::vetting::statement::verify_statement;
-use vta_sdk::trust_task_proof::verify_trust_task_proof_with;
+use vta_sdk::trust_task_proof::{purpose_for_document_type, verify_trust_task_proof_with};
 use vta_sdk::vetting::ticket_uri;
 use vta_sdk::vetting::eligibility::{EligibilityExpectations, build_eligibility_vp, verify_eligibility_vp};
 use affinidi_data_integrity::{DataIntegrityProof, SignOptions, crypto_suites::CryptoSuite};
@@ -356,6 +356,15 @@ fn typed_payload_check(type_uri: &str, doc: &trust_tasks_rs::TrustTask<Value>) -
 /// against its typed spec (`typed_payload_check`). A type upstream knows only
 /// by schema is checked against the schema alone.
 async fn check_task(doc_value: Value, expected_signer: &str, expected_type: Option<&str>) -> Result<TaskVerdict, String> {
+    // With CARD_VERIFY_EXPECT_PURPOSE=1, the proof must be made for the purpose
+    // vta-sdk signs this type for (`purpose_for_document_type`): what Keyring
+    // is held to once it signs that way (keyring-bifold A3). Off by default,
+    // so a Keyring that still signs every document for assertionMethod passes.
+    let declared_purpose = doc_value
+        .get("proof")
+        .and_then(|p| p.get("proofPurpose"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
     let doc: trust_tasks_rs::TrustTask<Value> =
         serde_json::from_value(doc_value).map_err(|e| format!("REFUSED: not a Trust Task document: {e}"))?;
     let resolver = resolver_for(expected_signer).await?;
@@ -376,6 +385,15 @@ async fn check_task(doc_value: Value, expected_signer: &str, expected_type: Opti
         && type_uri != expected
     {
         return Err(format!("REFUSED: the document's type is {type_uri}, not {expected}"));
+    }
+    if std::env::var("CARD_VERIFY_EXPECT_PURPOSE").as_deref() == Ok("1") {
+        let expected_purpose = purpose_for_document_type(&doc.type_uri);
+        if declared_purpose.as_deref() != Some(expected_purpose.as_str()) {
+            return Err(format!(
+                "REFUSED: the proof is for {}, but vta-sdk signs {type_uri} for {expected_purpose}",
+                declared_purpose.as_deref().unwrap_or("no purpose")
+            ));
+        }
     }
     let head = format!("proof by {signer} = issuer");
     match typed_payload_check(&type_uri, &doc) {
