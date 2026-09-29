@@ -56,7 +56,7 @@ export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
   session: 'https://trusttasks.org/spec/vetting/session/0.1',
   decline: 'https://trusttasks.org/spec/vetting/decline/0.1',
-  revokeStatement: 'https://trusttasks.org/spec/vetting/revoke-statement/0.1',
+  revokeStatement: 'https://trusttasks.org/spec/vtc/vetting/revoke-statement/0.1',
   vettersList: 'https://trusttasks.org/spec/vtc/vetting/vetters/list/0.1',
   vettersProfile: 'https://trusttasks.org/spec/vtc/vetting/vetters/profile/0.1',
 } as const
