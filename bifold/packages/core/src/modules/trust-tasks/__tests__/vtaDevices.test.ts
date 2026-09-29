@@ -5,12 +5,14 @@
  */
 import {
   AGENT_DEVICE_TASK,
+  clearThisDeviceWake,
   defaultDeviceName,
   listAgentDevices,
   liveSiblings,
   registerThisDevice,
   removeAgentDevice,
   renameThisDevice,
+  setThisDeviceWake,
   type AgentDevicePort,
 } from '../module/vtaDevices'
 import { VtiRefusal } from '../module/vtiAgent'
@@ -172,6 +174,59 @@ describe('this phone', () => {
   })
 })
 
+describe('waking this phone', () => {
+  const GATEWAY = 'did:webvh:QmGateway:push.example.org:gateway'
+  const AGENT = 'did:webvh:QmAgent:agent.example.org'
+
+  it('gives the agent the gateway handle over set-wake 0.2, and never a push token', async () => {
+    const { port, sent } = fakeAgent({
+      [AGENT_DEVICE_TASK.setWake]: () => ({ pushCapable: true, triggerPolicy: { allowedTriggers: [AGENT] } }),
+    })
+    const channel = await setThisDeviceWake(port, { gateway: GATEWAY, handle: 'zHandle' }, { pushPlatform: 'fcm' })
+    expect(AGENT_DEVICE_TASK.setWake).toBe('https://trusttasks.org/spec/device/set-wake/0.2')
+    expect(sent).toEqual([
+      {
+        type: AGENT_DEVICE_TASK.setWake,
+        payload: { wakeHandle: { gateway: GATEWAY, handle: 'zHandle' }, pushPlatform: 'fcm' },
+      },
+    ])
+    expect(channel).toEqual({ pushCapable: true, allowedTriggers: [AGENT] })
+  })
+
+  it('suggests triggers only when there are some', async () => {
+    const { port, sent } = fakeAgent()
+    await setThisDeviceWake(port, { gateway: GATEWAY, handle: 'h' }, { suggestedTriggers: [] })
+    await setThisDeviceWake(port, { gateway: GATEWAY, handle: 'h' }, { suggestedTriggers: ['did:web:mediator'] })
+    expect(sent[0].payload).toEqual({ wakeHandle: { gateway: GATEWAY, handle: 'h' } })
+    expect(sent[1].payload.suggestedTriggers).toEqual(['did:web:mediator'])
+  })
+
+  it('clears the channel with no handle, so a phone leaving its agent is not woken again', async () => {
+    const { port, sent } = fakeAgent({ [AGENT_DEVICE_TASK.setWake]: () => ({ pushCapable: false }) })
+    await expect(clearThisDeviceWake(port)).resolves.toEqual({ pushCapable: false, allowedTriggers: undefined })
+    expect(sent).toEqual([{ type: AGENT_DEVICE_TASK.setWake, payload: {} }])
+  })
+
+  it('reads a malformed answer as not wakeable rather than trusting it', async () => {
+    const { port } = fakeAgent({
+      [AGENT_DEVICE_TASK.setWake]: () => ({ pushCapable: 'yes', triggerPolicy: { allowedTriggers: [AGENT, 7] } }),
+    })
+    await expect(setThisDeviceWake(port, { gateway: GATEWAY, handle: 'h' })).resolves.toEqual({
+      pushCapable: false,
+      allowedTriggers: [AGENT],
+    })
+  })
+
+  it('passes the agent refusal through', async () => {
+    const { port } = fakeAgent({
+      [AGENT_DEVICE_TASK.setWake]: () => {
+        throw new VtiRefusal('permissionDenied', 'device/set-wake: caller has no device binding')
+      },
+    })
+    await expect(setThisDeviceWake(port, { gateway: GATEWAY, handle: 'h' })).rejects.toBeInstanceOf(VtiRefusal)
+  })
+})
+
 describe('another phone acting as the same agent', () => {
   it('counts a device seen in the last 15 minutes, never this phone, a removed one or one never seen', async () => {
     const recent = new Date(NOW.getTime() - 14 * 60_000).toISOString()
@@ -206,6 +261,7 @@ describe('the device tasks this phone speaks', () => {
       heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
       list: 'https://trusttasks.org/spec/device/list/0.2',
       wipe: 'https://trusttasks.org/spec/device/wipe/0.2',
+      setWake: 'https://trusttasks.org/spec/device/set-wake/0.2',
       aclList: 'https://trusttasks.org/spec/acl/list/0.1',
       aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
     })

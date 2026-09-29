@@ -127,14 +127,21 @@ const createMockAgent = (): Agent => {
   } as unknown as Agent
 }
 
-export const BasicAppContext: React.FC<PropsWithChildren> = ({ children }) => {
+interface BasicAppContextProps extends PropsWithChildren {
+  /** Adjust the test container after the defaults are registered, e.g. to replace TOKENS.CONFIG. */
+  configure?: (c: Container) => void
+}
+export const BasicAppContext: React.FC<BasicAppContextProps> = ({ children, configure }) => {
   const context = useMemo(() => {
     const c = new MainContainer(container.createChildContainer()).init()
     c.resolve(TOKENS.UTIL_LOGGER)
     c.container.registerInstance(TOKENS.UTIL_LOGGER, new MockLogger())
     // Use mock OCA resolver for faster, more reliable tests
     c.container.registerInstance(TOKENS.UTIL_OCA_RESOLVER, createMockOCABundleResolver())
+    configure?.(c)
     return c
+    // `configure` is read once, when the container is built.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const mockAgent = useMemo(() => createMockAgent(), [])

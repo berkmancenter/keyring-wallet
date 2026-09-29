@@ -39,6 +39,7 @@ export const AGENT_DEVICE_TASK = {
   heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
   list: 'https://trusttasks.org/spec/device/list/0.2',
   wipe: 'https://trusttasks.org/spec/device/wipe/0.2',
+  setWake: 'https://trusttasks.org/spec/device/set-wake/0.2',
   aclList: 'https://trusttasks.org/spec/acl/list/0.1',
   aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
 } as const
@@ -205,6 +206,59 @@ export async function heartbeat(port: AgentDevicePort): Promise<void> {
 /** Rename this phone: a heartbeat carrying the corrected name, the only way a binding's name changes. */
 export async function renameThisDevice(port: AgentDevicePort, displayName: string): Promise<void> {
   await port.task(AGENT_DEVICE_TASK.heartbeat, { ext: { [EXT_DEVICE_NAME]: { displayName } } })
+}
+
+/** A push gateway's opaque handle for this phone's push token (`push/register`'s answer). */
+export interface WakeHandle {
+  /** The gateway's DID. The agent wakes only a gateway named by a DID. */
+  gateway: string
+  handle: string
+}
+
+export type PushPlatform = 'apns' | 'fcm'
+
+/** The agent's answer to `device/set-wake`. */
+export interface WakeChannel {
+  pushCapable: boolean
+  /** Who may wake this phone; the agent owns this list and provisions it to the gateway. */
+  allowedTriggers?: string[]
+}
+
+/**
+ * Tell the agent how to wake this phone: the handle a push gateway gave for its
+ * push token (docs/plans/push-notifications-plan.md §4.4). The agent records
+ * it, computes who may wake the phone (itself, plus any suggested trigger it
+ * accepts) and provisions the gateway; that last step is best effort on the
+ * agent's side and never reported here (vta-service `trust_tasks/device.rs`,
+ * `provision_gateway`). The agent never sees the push token.
+ */
+export async function setThisDeviceWake(
+  port: AgentDevicePort,
+  wake: WakeHandle,
+  opts: { pushPlatform?: PushPlatform; suggestedTriggers?: string[] } = {}
+): Promise<WakeChannel> {
+  const payload: Record<string, unknown> = { wakeHandle: { gateway: wake.gateway, handle: wake.handle } }
+  if (opts.pushPlatform) payload.pushPlatform = opts.pushPlatform
+  if (opts.suggestedTriggers?.length) payload.suggestedTriggers = opts.suggestedTriggers
+  return toWakeChannel(await port.task(AGENT_DEVICE_TASK.setWake, payload))
+}
+
+/**
+ * Stop the agent waking this phone: `set-wake` with no handle clears the
+ * channel. Sent before this phone unlinks, since the gateway has no unregister
+ * and the agent's disable and wipe leave a wake channel in place (plan §8).
+ */
+export async function clearThisDeviceWake(port: AgentDevicePort): Promise<WakeChannel> {
+  return toWakeChannel(await port.task(AGENT_DEVICE_TASK.setWake, {}))
+}
+
+function toWakeChannel(answer: unknown): WakeChannel {
+  const a = (answer ?? {}) as { pushCapable?: unknown; triggerPolicy?: { allowedTriggers?: unknown } }
+  const triggers = a.triggerPolicy?.allowedTriggers
+  return {
+    pushCapable: a.pushCapable === true,
+    allowedTriggers: Array.isArray(triggers) ? triggers.filter((t): t is string => typeof t === 'string') : undefined,
+  }
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

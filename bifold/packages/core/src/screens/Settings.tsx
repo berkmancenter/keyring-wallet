@@ -51,7 +51,8 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     {
       settings,
       enableTours,
-      /* enablePushNotifications, */ disableContactsInSettings,
+      enablePushNotifications,
+      disableContactsInSettings,
       supportedLanguages,
       customAutoLockTimes,
     },
@@ -257,18 +258,19 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     settingsSections.shift()
   }
 
-  // DISABLED: Push notifications toggle in settings — no server backend yet
-  // if (enablePushNotifications) {
-  //   settingsSections
-  //     .find((item) => item.header.title === t('Settings.AppSettings'))
-  //     ?.data.push({
-  //       title: t('Settings.Notifications'),
-  //       value: undefined,
-  //       accessibilityLabel: t('Settings.Notifications'),
-  //       testID: testIdWithKey('Notifications'),
-  //       onPress: () => navigation.navigate(Screens.TogglePushNotifications),
-  //     })
-  // }
+  // The notifications switch, only when the app supplies a push configuration
+  // (Keyring does so only in a build that names a push gateway).
+  if (enablePushNotifications) {
+    settingsSections
+      .find((item) => item.header.title === t('Settings.AppSettings'))
+      ?.data.push({
+        title: t('Settings.Notifications'),
+        value: undefined,
+        accessibilityLabel: t('Settings.Notifications'),
+        testID: testIdWithKey('Notifications'),
+        onPress: () => navigation.navigate(Screens.TogglePushNotifications),
+      })
+  }
 
   // add optional history menu to settings
   if (historyEnabled) {
