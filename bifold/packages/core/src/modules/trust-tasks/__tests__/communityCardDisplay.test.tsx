@@ -25,6 +25,7 @@ import { recordCardRevocation, resetCardStanding } from '../module/vtiCardStandi
 import { resetCardVaultCache } from '../module/vtiCardVault'
 import { communityTarget } from '../module/vtiCommunityLink'
 import { CommunityCard, communityCardKey } from '../screens/CommunityCard'
+import { localDate } from '../screens/localTime'
 import { CommunityCardDetails, communityCardOf } from '../screens/CommunityCardDetails'
 import {
   communityCardDisplay,
@@ -100,8 +101,9 @@ describe('a community card as the Wallet reads it', () => {
     expect(JSON.stringify(d)).not.toMatch(/vtc\.example|did:webvh/)
     expect(d.attributes).toEqual({
       'Community.CardCommunity': 'keyring-test-vtc',
-      'Community.CardSince': '2026-09-26',
-      'Community.CardUntil': '2026-10-26',
+      // In the phone's time zone, month named (IN-58).
+      'Community.CardSince': localDate('2026-09-26T09:00:00Z'),
+      'Community.CardUntil': localDate('2026-10-26T09:00:00Z'),
     })
   })
 
