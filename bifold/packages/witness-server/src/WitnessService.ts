@@ -2567,6 +2567,22 @@ export class WitnessService {
    * attestation evidence. This allows verifiers to know:
    * 1. The exchange was witnessed (the VWC itself)
    * 2. The participant used hardware-backed authentication (hardwareAttestationIncluded flag)
+   *
+   * SHAPE: deliberately, always `wd02` — see the call site below. This is the
+   * legacy JSON-over-basicmessage witnessed-exchange dialect (kept so old
+   * wallets that never adopted the Trust Task carriages keep working,
+   * alongside `WitnessTaskSessions.ts`'s two newer ones). `sessionData` here
+   * is an in-memory bookkeeping record (`utils.uuid()`, a challenge, some
+   * `Map`s) — never a real, content-bearing Trust Task document exchanged
+   * with either party, unlike `WitnessTaskSessions.ts`'s `session.sessionDoc`
+   * (a real `witness/session` document that gets digested for
+   * `taskDigestMultibase`). The `dtg:witnessed` predicate profile makes
+   * `taskContext` REQUIRED for `vsc` shape, and there is nothing citable here
+   * to put in it — emitting one would assert a Trust Task document exists
+   * when it does not. So this dialect stays `wd02` permanently, not as an
+   * oversight: see `docs/plans/vsc-migration-plan/2026-09-29-bm.md` G26 for
+   * the investigation that reached this conclusion, and the plan's own §3.1
+   * paragraph on this dialect.
    */
   private buildWitnessCredential(
     sessionData: SessionData,
@@ -2591,6 +2607,11 @@ export class WitnessService {
       }
     }
 
+    // `shape` is deliberately NOT passed here -- see this function's own
+    // doc comment. `buildWitnessCredentialJson` defaults to `wd02` when
+    // `shape` is omitted, which is exactly the intended, permanent behavior
+    // for this legacy dialect, not `this.config.credentialShape` silently
+    // going unused by oversight.
     return buildWitnessCredentialJson(observedPresentation, {
       issuerDid: this.issuerDid,
       witnessName: this.name,
