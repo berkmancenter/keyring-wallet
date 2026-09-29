@@ -18,6 +18,7 @@ import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import type { AgentLabel } from './agentLabel'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
+import type { StepUpRequest } from './stepUp'
 import {
   ManagerKeyUnresolved,
   SwapDoneSignInFailed,
@@ -407,6 +408,7 @@ export class VtaAgentController {
       },
       onInbound: (plaintext) => this.inbound(plaintext),
       onConsentPending: ({ taskType }) => this.set({ awaitingConsentFor: taskType }),
+      onStepUp: (request) => this.askStepUp(request),
     })
     // The client replaced for the agent an unlock handed over keeps what the
     // screen shows: the new session opens quietly behind it.
@@ -1268,6 +1270,25 @@ export class VtaAgentController {
     const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
     const signedInAs = this.current?.vtaDid === vtaDid ? this.current.client.managerDid : undefined
     return [record?.did, record?.pendingNext?.did, signedInAs].filter((d): d is string => Boolean(d))
+  }
+
+  /**
+   * The agent asks for a step-up: the owner check, its prompt the agent's own
+   * reason. Confirmed is approve; cancelled is the person saying no, which the
+   * agent hears as a signed denial. A check that failed sends nothing.
+   */
+  private async askStepUp(request: StepUpRequest): Promise<'approve' | 'deny'> {
+    const confirm = this.deps.confirmOwner
+    if (!confirm) throw new OwnerCheckNotConfigured('confirmOwner')
+    let answer: Awaited<ReturnType<ConfirmOwner>> | undefined
+    try {
+      answer = await confirm(request.reason)
+    } catch (error) {
+      throw new OwnerNotConfirmed('failed', error instanceof Error ? error.message : String(error))
+    }
+    if (answer?.ok === true) return 'approve'
+    if (answer?.reason === 'cancelled') return 'deny'
+    throw new OwnerNotConfirmed(answer?.reason ?? 'failed')
   }
 
   /** The owner check, first thing in every owner act. Throws unless the person confirmed. */
