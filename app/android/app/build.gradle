@@ -114,6 +114,13 @@ android {
 
     defaultConfig {
         applicationId "asml.bkc.harvard.wallet"
+        // The push-test variant (scripts/push-test/build-android.sh,
+        // docs/plans/push-notifications-plan.md §6): only a build run with
+        // -PkeyringPushTest gets its own application ID and installs beside the
+        // release app. Every other build is unchanged.
+        if (project.hasProperty("keyringPushTest")) {
+            applicationIdSuffix ".pushtest"
+        }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode System.getenv("VERSION_CODE") ? System.getenv("VERSION_CODE").toInteger() : 4

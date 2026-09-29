@@ -101,3 +101,8 @@ artifacts/
 # Private notes and files never go in this public repo.
 *.local-al*
 *.private.*
+
+# Push-test variant (scripts/push-test/): its env file, and the Firebase config
+# the Android build script copies in for the duration of one build.
+app/.env.pushtest
+app/android/app/src/release/google-services.json
