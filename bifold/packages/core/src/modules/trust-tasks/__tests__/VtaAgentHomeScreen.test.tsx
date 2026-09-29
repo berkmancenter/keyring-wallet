@@ -198,6 +198,35 @@ describe('Your agent — after linking', () => {
     controller.set({ approvals: [] })
   })
 
+  // 228 lab check of #199: after Approve the card said "Approved" under a banner
+  // still saying a request waited. Only undecided requests wait.
+  it('says nothing is waiting once every request is decided', async () => {
+    const approval = {
+      requester: 'did:peer:2.Vz6MkrequesterXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+      taskType: 'https://trusttasks.org/spec/vta/contexts/list/1.0',
+      expiresAt: '2026-09-23T04:30:00Z',
+    }
+    controller.set({
+      approvals: [
+        { ...approval, id: 'done', status: 'approved' },
+        { ...approval, id: 'no', status: 'denied' },
+      ],
+    } as never)
+    const decided = await renderHome([])
+    expect(decided.queryByTestId(testIdWithKey('AgentApprovalBanner'))).toBeNull()
+    decided.unmount()
+
+    controller.set({
+      approvals: [
+        { ...approval, id: 'done', status: 'approved' },
+        { ...approval, id: 'open', status: 'pending' },
+      ],
+    } as never)
+    const one = await renderHome([])
+    expect(one.getByTestId(testIdWithKey('AgentApprovalBanner'))).toBeTruthy()
+    controller.set({ approvals: [] })
+  })
+
   it('says an invitation is waiting on the door that accepts it', async () => {
     const invitation: Rec = {
       tags: { recordType: 'keyring/vti-community', kind: 'invitation', key: 'i1' },
