@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.67 — 2026-09-29.** A living document: every finding here was measured
+**Version 1.68 — 2026-09-29.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -1874,6 +1874,38 @@ The refusal's text comes from `vta-vault/src/di_verify.rs:48-54` at
 touches `vetting/mod.rs` and the verifier's resolver argument but not proof
 sets; not at the pin.
 
+
+(f) **Re-measured 2026-09-29 on upstream main, and Keyring hits it too.** The
+lab now runs VTI `afcf2470`, and the code below is unchanged at VTI main
+`de15b6d0`.
+- **The credentials.** The lab VTC's membership and role credentials still
+  carry a two-proof set, [`eddsa-jcs-2022`, `mldsa44-jcs-2024`]. We read them
+  from the community itself with `vtc/members/credentials/0.1`.
+- **The vault, first-hand.** We sent that membership credential to the lab
+  VTA (bob, vta-service 0.45.1) with `pnm cred-vault receive`:
+  - As issued: refused, `malformedRequest … Data-Integrity proof has no
+    'verificationMethod'`.
+  - The same credential with only its `eddsa-jcs-2022` proof: accepted and
+    stored, `status: valid`.
+  So the proof set alone is what the vault refuses.
+- **Where, at both heads.**
+  - `vta-vault/src/di_verify.rs:48-54` reads `proof.verificationMethod`, as
+    if `proof` were one object. It refuses first.
+  - `vta-vault/src/receive.rs:365-366` (`receive_di_vc`) then parses `proof`
+    as one `DataIntegrityProof`.
+  - The VTC side is `vtc-service/src/credentials/signer.rs:161-166`
+    (`DataIntegrityProof::sign_multi`, one proof per key).
+- **What it does to Keyring.** Keyring's app copies each community card into
+  its agent's vault (`vault/credentials/receive/0.1`), so a new phone can get
+  its cards back. On a lab run at 19:38:13Z and 19:38:14Z, both of the phone's
+  sends got no signed success reply. Its "Get your cards from your agent"
+  then found 0 cards and restored 0. openvtc's `credential_sync` is the same
+  push and meets the same refusal (e).
+- **What it does not break.** A community's removal still revokes the
+  membership card. The card's revocation bit read 0 before an admin removal
+  and 1 after it (same run, status-list index 54556). So a card that did
+  reach a vault would be refused as revoked on restore.
+
 ### VTI-45 — vta-sdk checks a Trust Task proof over its own re-serialisation, not the bytes it received
 
 (a) **What happens.** vta-sdk verifies an `eddsa-jcs-2022` proof on a Trust
@@ -2894,6 +2926,7 @@ and the credential's own id.
 | 1.65 | 2026-09-29 | New section **Contribution candidates** (`CONTRIB-NN`, never submitted by us). **CONTRIB-01:** an optional visible alert mode for interactive wakes in vti-push-gateway, built and unit-tested against `e542a9d7`. |
 | 1.66 | 2026-09-29 | CONTRIB-01 (d): CI result. The patch applies onto `e542a9d7`, and upstream's full test suite passes with it, 8 new tests included. |
 | 1.67 | 2026-09-29 | New section **Observations** (`OBS-NN`: neither our defect nor a finding). **OBS-01:** openvtc main `506b8ac` still sends `device/register/0.1`, which VTI main has superseded. |
+| 1.68 | 2026-09-29 | **VTI-44** (f): re-measured on VTI `afcf2470` and unchanged at main `de15b6d0`. The VTA's credential vault refuses the VTC's two-proof membership card and accepts the same card with its eddsa proof alone (first-hand, `pnm cred-vault receive` on the lab VTA). Keyring's own card copy to its agent's vault hits it, so "Get your cards from your agent" restores nothing. A removal still revokes the card (status bit 0 → 1, measured). |
 | 1.59 | 2026-09-27 | **VTI-48** (new, Medium): the DTG JSON-LD context that every community card names (`https://firstperson.network/credentials/dtg/v1`) answers 404, so a JSON-LD wallet cannot store the cards. Keyring serves an empty stand-in until it is published. |
 | 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
