@@ -73,7 +73,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@animo-id/pex@npm:^6.1.1":
+"@animo-id/pex@npm:6.1.1":
   version: 6.1.1
   resolution: "@animo-id/pex@npm:6.1.1"
   dependencies:
@@ -90,6 +90,26 @@ __metadata:
     nanoid: "npm:^3.3.7"
     uint8arrays: "npm:^3.1.1"
   checksum: 10c0/db61fb680b59d75dce387374fd07dabd40d63ec76b3ced702a65f9c01a72e744a24a60648cc482a5f80251eb697c99adef0d384c656cb00998f77b2e7130d7b5
+  languageName: node
+  linkType: hard
+
+"@animo-id/pex@patch:@animo-id/pex@npm%3A6.1.1#~/.yarn/patches/@animo-id-pex-npm-6.1.1-976fb8ed6b.patch":
+  version: 6.1.1
+  resolution: "@animo-id/pex@patch:@animo-id/pex@npm%3A6.1.1#~/.yarn/patches/@animo-id-pex-npm-6.1.1-976fb8ed6b.patch::version=6.1.1&hash=4044ff"
+  dependencies:
+    "@animo-id/mdoc": "npm:^0.5.2"
+    "@astronautlabs/jsonpath": "npm:^1.1.2"
+    "@sd-jwt/decode": "npm:^0.7.2"
+    "@sd-jwt/present": "npm:^0.7.2"
+    "@sd-jwt/types": "npm:^0.7.2"
+    "@sphereon/pex-models": "npm:^2.3.2"
+    "@sphereon/ssi-types": "npm:0.33.0"
+    ajv: "npm:^8.12.0"
+    ajv-formats: "npm:^2.1.1"
+    jwt-decode: "npm:^3.1.2"
+    nanoid: "npm:^3.3.7"
+    uint8arrays: "npm:^3.1.1"
+  checksum: 10c0/a0d130b96027cb02238da4f14f2514f6e3332ae3bf1bc66eba2ec1a0fe3e1dfbaa651f5892f70fe7d70b7a01ae4e45f80f0650b391c7b17af81191662f8be305
   languageName: node
   linkType: hard
 
@@ -3011,7 +3031,7 @@ __metadata:
 
 "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch":
   version: 0.7.1-pr-2704-20260909134930
-  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch::version=0.7.1-pr-2704-20260909134930&hash=212cb5"
+  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch::version=0.7.1-pr-2704-20260909134930&hash=250ec1"
   dependencies:
     "@animo-id/pex": "npm:^6.1.1"
     "@astronautlabs/jsonpath": "npm:^1.1.2"
@@ -3054,7 +3074,7 @@ __metadata:
     web-did-resolver: "npm:^2.0.32"
     webcrypto-core: "npm:^1.8.1"
     zod: "npm:^4.3.6"
-  checksum: 10c0/4a0a904f7fc31b6e89c3542e425639d6e230ca771936ec25526aee5314c45c7b2d6fdbab474bd39ce92b7a7f9e400fc2956a1077d3b623f9b0f8f35afd9b8633
+  checksum: 10c0/7b30a7c10bc98b8ce3d13274d142d9f3438390ae3b4c0ad9c4f54595df3d05d8667b0424c96736c01711c7ebcccec09b9594aff1e2ec0d0234a67f9ffd1449d5
   languageName: node
   linkType: hard
 
@@ -5436,12 +5456,12 @@ __metadata:
 
 "@openvtc/vti-tsp-js@file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz::locator=%40bifold%2Ftrust-tasks%40portal%3Abifold%2Fpackages%2Ftrust-tasks%3A%3Alocator%3Dkeyring-wallet%2540workspace%253A.":
   version: 0.3.0
-  resolution: "@openvtc/vti-tsp-js@file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz#./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz::hash=84521e&locator=%40bifold%2Ftrust-tasks%40portal%3Abifold%2Fpackages%2Ftrust-tasks%3A%3Alocator%3Dkeyring-wallet%2540workspace%253A."
+  resolution: "@openvtc/vti-tsp-js@file:./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz#./vendor/openvtc-vti-tsp-js-0.3.0-bfdb0dc.tgz::hash=203df9&locator=%40bifold%2Ftrust-tasks%40portal%3Abifold%2Fpackages%2Ftrust-tasks%3A%3Alocator%3Dkeyring-wallet%2540workspace%253A."
   dependencies:
     "@noble/ciphers": "npm:^2.0.0"
     "@noble/curves": "npm:^2.2.0"
     "@noble/hashes": "npm:^2.0.0"
-  checksum: 10c0/f1b91b6f93c1d38bbe61c06aca1419d13f323f04ee8acd27bc5e0058c22c572e552093a9ffe1bef125ee02974ffa35ef7e0b0816aaf3bef2741e32a12ff55f41
+  checksum: 10c0/21b40e5ae17b59187d1054cd69c2b6bc29b28d1bf645912fb24623399482b460aad55835f5e70dff040eb4adf682fedcaca6cf87016a54e10ff0e2f7ed00f690
   languageName: node
   linkType: hard
 
@@ -14548,7 +14568,7 @@ __metadata:
     "@craftzdog/react-native-buffer": "npm:^6.1.1"
     "@credo-ts/anoncreds": "npm:0.7.1-pr-2704-20260909134930"
     "@credo-ts/askar": "npm:0.7.1-pr-2704-20260909134930"
-    "@credo-ts/core": "npm:0.7.1-pr-2704-20260909134930"
+    "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch"
     "@credo-ts/didcomm": "npm:0.7.1-pr-2704-20260909134930"
     "@credo-ts/indy-vdr": "npm:0.7.1-pr-2704-20260909134930"
     "@credo-ts/openid4vc": "npm:0.7.1-pr-2704-20260909134930"

@@ -119,7 +119,9 @@
     "@bifold/dtg-vocab": "portal:bifold/packages/dtg-vocab",
     "json-canonicalize": "2.0.0",
     "rxjs": "7.8.2",
-    "@scure/base@npm:^2.0.0": "patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch"
+    "@scure/base@npm:^2.0.0": "patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch",
+    "@animo-id/pex@npm:^6.1.1": "patch:@animo-id/pex@npm%3A6.1.1#~/.yarn/patches/@animo-id-pex-npm-6.1.1-976fb8ed6b.patch",
+    "@credo-ts/core@npm:0.7.1-pr-2704-20260909134930": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {
