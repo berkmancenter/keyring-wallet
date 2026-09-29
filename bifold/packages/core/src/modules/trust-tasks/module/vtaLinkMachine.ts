@@ -22,6 +22,7 @@
  *
  *   linked carries one connection sub-state:
  *       online ⇄ offline(since, reason) ⇄ reconnecting(attempt, nextRetryAt, since)
+ *       offline / reconnecting / connecting ─agentGone─▶ gone(why) ─sessionOpened─▶ online
  *
  * Pure: a reducer and two helpers, no I/O, so every transition is a unit
  * test. An event that does not apply to the current state leaves it as it is
@@ -29,6 +30,8 @@
  *
  * @module trust-tasks/module/vtaLinkMachine
  */
+
+import type { AgentGoneWhy } from './agentGone'
 
 export type VtaConnection =
   | { kind: 'online' }
@@ -41,6 +44,12 @@ export type VtaConnection =
   | { kind: 'connecting'; since: number; reason?: string }
   | { kind: 'reconnecting'; attempt: number; nextRetryAt: number; since: number }
   | { kind: 'offline'; since: number; reason?: string }
+  /**
+   * The agent is gone for good (agentGone.ts): its address does not exist, or
+   * it has not been reached for days. Retrying stops; reaching it again (a
+   * foreground, "Try again") still brings it back online.
+   */
+  | { kind: 'gone'; since: number; why: AgentGoneWhy }
 
 export interface VtaIdentityOfAgent {
   vtaDid: string
@@ -104,6 +113,8 @@ export type VtaLinkEvent =
   | { type: 'sessionOpened' }
   | { type: 'sessionDropped'; reason?: string; now: number }
   | { type: 'retryScheduled'; attempt: number; nextRetryAt: number }
+  /** The agent was found gone for good (agentGone.ts). Never from online. */
+  | { type: 'agentGone'; why: AgentGoneWhy; now: number }
   | { type: 'accessRevoked'; reason: string }
   | { type: 'relink' }
   /** The person unlinked this phone from its agent: from any state, back to no agent. */
@@ -229,7 +240,10 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
         : { ...state, connection: { kind: 'offline', since: event.now, reason: event.reason } }
 
     case 'retryScheduled':
-      return state.kind === 'linked' && state.connection.kind !== 'online' && state.connection.kind !== 'connecting'
+      return state.kind === 'linked' &&
+        state.connection.kind !== 'online' &&
+        state.connection.kind !== 'connecting' &&
+        state.connection.kind !== 'gone'
         ? {
             ...state,
             connection: {
@@ -239,6 +253,11 @@ export function reduceLink(state: VtaLinkState, event: VtaLinkEvent): VtaLinkSta
               since: state.connection.since,
             },
           }
+        : state
+
+    case 'agentGone':
+      return state.kind === 'linked' && state.connection.kind !== 'online'
+        ? { ...state, connection: { kind: 'gone', since: event.now, why: event.why } }
         : state
 
     case 'accessRevoked':
@@ -292,7 +311,8 @@ export function connectionShown(connection: VtaConnection, now: number): VtaConn
 export function showsOfflineBanner(state: VtaLinkState, now: number, thresholdMs = 5000): boolean {
   if (state.kind !== 'linked') return false
   const shown = connectionShown(state.connection, now)
-  if (shown.kind === 'online' || shown.kind === 'connecting') return false
+  // Gone has its own card, which says more than "offline" can.
+  if (shown.kind === 'online' || shown.kind === 'connecting' || shown.kind === 'gone') return false
   return now - shown.since >= thresholdMs
 }
 

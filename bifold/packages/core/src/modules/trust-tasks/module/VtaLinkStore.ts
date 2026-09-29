@@ -26,6 +26,14 @@ export interface VtaLink {
    * which says nothing either way about who else administers it.
    */
   owner?: boolean
+  /**
+   * When this phone last reached the agent, and the first time since that its
+   * address was answered "not found" (epoch ms). Not whether it is reachable
+   * now — that stays live — but the history that says an agent is gone for
+   * good across restarts (agentGone.ts).
+   */
+  lastOnlineAt?: number
+  notFoundAt?: number
 }
 
 export interface VtaLinkStore {

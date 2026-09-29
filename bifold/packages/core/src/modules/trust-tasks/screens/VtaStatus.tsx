@@ -22,7 +22,9 @@ import { connectionShown, resolveVtaDid, showsOfflineBanner, type VtaConnection 
 export function useVtaLinkWithClock() {
   const state = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
   const [now, setNow] = useState(() => Date.now())
-  const away = state.link.kind === 'linked' && state.link.connection.kind !== 'online'
+  // Gone does not count down to anything: no clock for it.
+  const away =
+    state.link.kind === 'linked' && state.link.connection.kind !== 'online' && state.link.connection.kind !== 'gone'
   useEffect(() => {
     if (!away) return
     setNow(Date.now())
@@ -40,7 +42,7 @@ export function useVtaDid(configured?: string): string | undefined {
 
 const clock = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-/** "Online" · "Connecting to your agent…" · "Reconnecting…" · "Offline since 14:02" */
+/** "Online" · "Connecting to your agent…" · "Reconnecting…" · "Offline since 14:02" · "Can't be found" */
 export function connectionText(connection: VtaConnection, t: TFunction): string {
   switch (connection.kind) {
     case 'online':
@@ -51,6 +53,8 @@ export function connectionText(connection: VtaConnection, t: TFunction): string 
       return t('VtaLink.StatusReconnecting')
     case 'offline':
       return t('VtaLink.StatusOfflineSince', { time: clock(connection.since), interpolation: { escapeValue: false } })
+    case 'gone':
+      return t('VtaLink.StatusGone')
   }
 }
 
@@ -62,7 +66,7 @@ export const VtaStatusLine: React.FC<{ connection: VtaConnection; now?: number }
   const color =
     shown.kind === 'online'
       ? ColorPalette.semantic.success
-      : shown.kind === 'offline'
+      : shown.kind === 'offline' || shown.kind === 'gone'
         ? ColorPalette.semantic.error
         : ColorPalette.semantic.focus
   const text = connectionText(shown, t)
