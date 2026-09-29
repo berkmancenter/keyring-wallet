@@ -28,6 +28,7 @@ import type { Agent } from '@credo-ts/core'
 import { verifyDocumentProof } from '@bifold/trust-tasks'
 import { DeviceEventEmitter } from 'react-native'
 
+import { didPrefix } from './didPrefix'
 import { recordStatus } from './joinSubmission'
 import type { VtiCommunityStore, VtiRemoval } from './VtiCommunityStore'
 
@@ -138,6 +139,7 @@ export async function receiveCommunityNotice(
     // Decided before this membership was granted: about an earlier one.
     if (Date.parse(removal.decidedAt) < Date.parse(membership.grantedAt)) return log('about an earlier membership')
     await store.saveMembership({ ...membership, removal })
+    agent.config?.logger?.info?.(`[VTI] applied a removal notice from ${didPrefix(community)} (${removal.code})`)
     DeviceEventEmitter.emit(VTI_REMOVED_EVENT, { communityDid: community, reason: removal.reason })
     return 'removed'
   }
@@ -146,5 +148,7 @@ export async function receiveCommunityNotice(
   const status = doc.payload?.status
   if (typeof requestId !== 'string' || !requestId || typeof status !== 'string' || !status) return log('malformed')
   const recorded = await recordStatus(store, community, { requestId, status })
-  return recorded ? 'acknowledged' : log('no join request for it')
+  if (!recorded) return log('no join request for it')
+  agent.config?.logger?.info?.(`[VTI] applied a join receipt from ${didPrefix(community)} (${status})`)
+  return 'acknowledged'
 }
