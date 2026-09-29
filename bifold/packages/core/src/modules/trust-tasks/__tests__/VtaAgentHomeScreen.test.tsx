@@ -166,6 +166,35 @@ describe('Your agent — after linking', () => {
     expect(card).not.toHaveTextContent(/trusttasks\.org/)
     expect(tree.getByTestId(testIdWithKey('ApproveConsentButton'))).toBeTruthy()
     expect(tree.getByTestId(testIdWithKey('DenyConsentButton'))).toBeTruthy()
+    // Nothing said what it would do: the card says it could not tell, never "no effects".
+    expect(tree.getByTestId(testIdWithKey('ApprovalOutcomeUnknown'))).toHaveTextContent(
+      /MyAgent\.ApprovalOutcomeUnknown/
+    )
+    expect(tree.queryByTestId(testIdWithKey('ApprovalMatchCode'))).toBeNull()
+    controller.set({ approvals: [] })
+  })
+
+  it('shows what approving would do and the code to compare', async () => {
+    controller.set({
+      approvals: [
+        {
+          id: 'a2',
+          requester: 'did:peer:2.Vz6MkrequesterXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+          taskType: 'https://trusttasks.org/spec/keys/export-secret/0.1',
+          expiresAt: '2026-09-23T04:30:00Z',
+          status: 'pending',
+          matchCode: 'abcdef',
+          outcome: { from: 'effects', lines: ['Hands a copy of the signing key to the requester'] },
+        },
+      ],
+    })
+    const tree = await renderHome([])
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentApprovalBanner')))
+    const outcome = tree.getByTestId(testIdWithKey('ApprovalOutcome'))
+    expect(outcome).toHaveTextContent(/MyAgent\.ApprovalWouldDo/)
+    expect(outcome).toHaveTextContent(/Hands a copy of the signing key to the requester/)
+    expect(tree.queryByTestId(testIdWithKey('ApprovalOutcomeUnknown'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('ApprovalMatchCode'))).toHaveTextContent('abcdef')
     controller.set({ approvals: [] })
   })
 

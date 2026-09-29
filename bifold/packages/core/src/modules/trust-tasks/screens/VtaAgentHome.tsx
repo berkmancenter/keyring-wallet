@@ -45,6 +45,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { DevicesCard } from './DevicesCard'
 import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
 import { agentDisplayName, withAgentName } from './agentName'
+import { ApprovalDetails } from './ApprovalDetails'
 import { CommunityCard } from './CommunityCard'
 import { communityHeadingOf, communityLabelOf, partyLabelStartOf } from './communityName'
 import { DidDetails } from './DidDetails'
@@ -727,6 +728,7 @@ const VtaAgentHome: React.FC = () => {
                     <ThemedText style={styles.muted}>
                       {t('MyAgent.ApprovalExpires', { when: approval.expiresAt.replace('T', ' ').slice(0, 16) })}
                     </ThemedText>
+                    <ApprovalDetails approval={approval} />
                     <DidDetails did={approval.requester} testIdStem="AgentApprovalRequester" />
                     {approval.status === 'pending' ? (
                       <View style={styles.row}>

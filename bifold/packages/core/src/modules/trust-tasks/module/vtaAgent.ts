@@ -17,6 +17,7 @@ import { Platform } from 'react-native'
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import type { AgentLabel } from './agentLabel'
+import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
 import {
   ManagerKeyUnresolved,
   SwapDoneSignInFailed,
@@ -71,6 +72,15 @@ export interface VtiApproval extends VtaConsentRequest {
   receivedAt: string
   status: 'pending' | 'approved' | 'denied' | 'expired' | 'failed'
   error?: string
+  /** The code to compare with the screen that asked (vta-sdk `match_code`); none for a digest that is not one. */
+  matchCode?: string
+  /** What approving would do: the dry-run effects, else the task's consequences, else unknown. */
+  outcome?: ConsentOutcome
+  /**
+   * How the request fared against `ConsentRequest::verify`: `verified`, or why
+   * not. Log-only for now — a request that fails is still listed.
+   */
+  requestCheck?: 'verified' | string
 }
 
 export interface VtaAgentState {
@@ -1405,13 +1415,40 @@ export class VtaAgentController {
     if (body?.type === VTA_TASK.consentRequest && body.payload?.challenge) {
       const id = String(body.id ?? body.payload.challenge)
       if (this.state.approvals.some((a) => a.id === id)) return
-      const approval: VtiApproval = { ...body.payload, id, receivedAt: new Date().toISOString(), status: 'pending' }
+      const approval: VtiApproval = {
+        ...body.payload,
+        id,
+        receivedAt: new Date().toISOString(),
+        status: 'pending',
+        matchCode: consentMatchCode(body.payload.payloadDigest),
+        outcome: consentOutcome(body.payload),
+      }
       this.set({ approvals: [approval, ...this.state.approvals] })
+      void this.checkRequest(id, body as unknown as Record<string, unknown>)
       return
     }
     if (body?.type === VTA_TASK.consentGranted) {
       this.set({ awaitingConsentFor: undefined })
     }
+  }
+
+  /** Check a consent request against the linked agent and this phone, and log the verdict (log-only). */
+  private async checkRequest(id: string, doc: Record<string, unknown>) {
+    const current = this.current
+    const approver = current?.client.managerDid
+    if (!current || !approver) return
+    const log = current.agent.config?.logger
+    const verdict = await checkConsentRequest(current.agent, doc, { vtaDid: current.vtaDid, approver }).catch(() => ({
+      ok: false as const,
+      reason: 'proof' as const,
+    }))
+    const requestCheck = verdict.ok ? 'verified' : verdict.reason
+    if (verdict.ok) log?.info?.(`[TrustTasks:VtaAgent] consent request ${id} verified`)
+    else
+      log?.warn?.(
+        `[TrustTasks:VtaAgent] consent request ${id} did not pass the check (${verdict.reason}); listed anyway`
+      )
+    this.update(id, { requestCheck })
   }
 
   /** Answer a consent request; the decision is signed by this phone's manager identity. */
