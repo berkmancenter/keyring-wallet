@@ -220,6 +220,8 @@ export const GRANT_CHECK_DEADLINE_MS = 10000
 export const GRANT_CONNECT_DEADLINE_MS = 30000
 /** How long a background sign-in may take before it counts as a drop and is retried (IN-53). */
 export const SESSION_CONNECT_DEADLINE_MS = 30000
+/** How long Unlink waits on the agent to hear it (wake cleared, sessions ended) before it unlinks anyway. */
+export const UNLINK_TELL_DEADLINE_MS = 5000
 /**
  * Signing in and the agent's answer to an owner act (adding a device): the
  * grant's own reply wait is 30 s once sent, and signing in comes before it.
@@ -545,6 +547,7 @@ export class VtaAgentController {
    */
   async unlink(agent: Agent): Promise<void> {
     const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    await this.tellAgentBeforeUnlink()
     this.attemptToken++
     this.offer = undefined
     this.ownerFor = undefined
@@ -570,6 +573,26 @@ export class VtaAgentController {
     })
     this.dispatch({ type: 'unlinked' })
     this.note('unlinked')
+  }
+
+  /**
+   * Before the local unlink, tell a reachable agent (A6, upstream alignment):
+   * stop waking this phone (`device/set-wake`, empty), then end this phone's
+   * sessions (`auth/revoke-session/0.2`, `all`). Best-effort and bounded by
+   * {@link UNLINK_TELL_DEADLINE_MS}: offline, nothing is sent; a refusal or a
+   * silence changes nothing, and the phone unlinks either way.
+   */
+  private async tellAgentBeforeUnlink(): Promise<void> {
+    const link = this.state.link
+    const client = this.current?.client
+    if (link.kind !== 'linked' || link.connection.kind !== 'online' || !client) return
+    const tell = (async () => {
+      await clearThisDeviceWake(client).catch(() => undefined)
+      await client.task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }).catch(() => undefined)
+    })()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([tell, new Promise<void>((resolve) => (timer = setTimeout(resolve, UNLINK_TELL_DEADLINE_MS)))])
+    clearTimeout(timer)
   }
 
   /**
