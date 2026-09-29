@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		EDD6570FDD6D77A33D4D66CB /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 534BD67E637EC4D2A64DE527 /* Localizable.strings */; };
 		00E356F31AD99517003FC87E /* AriesBifoldTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 00E356F21AD99517003FC87E /* AriesBifoldTests.m */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
 		1A157F462BACCDEA00E30CDB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1A157F452BACCDEA00E30CDB /* PrivacyInfo.xcprivacy */; };
@@ -42,6 +43,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A7BAEA5A322FF6CE7C10F5F7 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = AriesBifold/en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		9EEFE3730422B5631DF51C2D /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = AriesBifold/fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		2F8C0BF06001DEC9B96BE6B8 /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = AriesBifold/pt-BR.lproj/Localizable.strings; sourceTree = "<group>"; };
 		00E356EE1AD99517003FC87E /* AriesBifoldTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AriesBifoldTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		00E356F11AD99517003FC87E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		00E356F21AD99517003FC87E /* AriesBifoldTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AriesBifoldTests.m; sourceTree = "<group>"; };
@@ -129,6 +133,7 @@
 				13B07FAF1A68108700A75B9A /* AppDelegate.h */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
+				534BD67E637EC4D2A64DE527 /* Localizable.strings */,
 				13B07FB71A68108700A75B9A /* main.m */,
 			);
 			name = AriesBifold;
@@ -316,6 +321,8 @@
 			knownRegions = (
 				en,
 				Base,
+				fr,
+				"pt-BR",
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
@@ -343,6 +350,7 @@
 				2F9994AE2A8D83CB004E773E /* GoogleService-Info.plist in Resources */,
 				1A157F462BACCDEA00E30CDB /* PrivacyInfo.xcprivacy in Resources */,
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
+				EDD6570FDD6D77A33D4D66CB /* Localizable.strings in Resources */,
 				566FB1F2273B158E003E9BEE /* Media.xcassets in Resources */,
 				CB235E56048D4298812CEEBC /* GT-America-Bold.OTF in Resources */,
 				6B635E855FAE43FD9F0B47B2 /* GT-America-Extended-Bold.OTF in Resources */,
@@ -597,6 +605,19 @@
 			targetProxy = 00E356F41AD99517003FC87E /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		534BD67E637EC4D2A64DE527 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A7BAEA5A322FF6CE7C10F5F7 /* en */,
+				9EEFE3730422B5631DF51C2D /* fr */,
+				2F8C0BF06001DEC9B96BE6B8 /* pt-BR */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		00E356F61AD99517003FC87E /* Debug */ = {
