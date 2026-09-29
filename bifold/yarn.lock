@@ -89,7 +89,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@animo-id/pex@npm:^6.1.1":
+"@animo-id/pex@npm:6.1.1":
   version: 6.1.1
   resolution: "@animo-id/pex@npm:6.1.1"
   dependencies:
@@ -106,6 +106,26 @@ __metadata:
     nanoid: "npm:^3.3.7"
     uint8arrays: "npm:^3.1.1"
   checksum: 10c0/db61fb680b59d75dce387374fd07dabd40d63ec76b3ced702a65f9c01a72e744a24a60648cc482a5f80251eb697c99adef0d384c656cb00998f77b2e7130d7b5
+  languageName: node
+  linkType: hard
+
+"@animo-id/pex@patch:@animo-id/pex@npm%3A6.1.1#~/.yarn/patches/@animo-id-pex-npm-6.1.1-976fb8ed6b.patch":
+  version: 6.1.1
+  resolution: "@animo-id/pex@patch:@animo-id/pex@npm%3A6.1.1#~/.yarn/patches/@animo-id-pex-npm-6.1.1-976fb8ed6b.patch::version=6.1.1&hash=13317b"
+  dependencies:
+    "@animo-id/mdoc": "npm:^0.5.2"
+    "@astronautlabs/jsonpath": "npm:^1.1.2"
+    "@sd-jwt/decode": "npm:^0.7.2"
+    "@sd-jwt/present": "npm:^0.7.2"
+    "@sd-jwt/types": "npm:^0.7.2"
+    "@sphereon/pex-models": "npm:^2.3.2"
+    "@sphereon/ssi-types": "npm:0.33.0"
+    ajv: "npm:^8.12.0"
+    ajv-formats: "npm:^2.1.1"
+    jwt-decode: "npm:^3.1.2"
+    nanoid: "npm:^3.3.7"
+    uint8arrays: "npm:^3.1.1"
+  checksum: 10c0/c05c9b28e4ab58506f10a9746264e875cefae578dc552f81b0d6b227a85bed85f5e144593826f38e9996fce36c52b1042d84fe8cdb0c82fa50d0cfec3e31cae2
   languageName: node
   linkType: hard
 
@@ -3177,7 +3197,7 @@ __metadata:
 
 "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch":
   version: 0.7.1-pr-2704-20260909134930
-  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch::version=0.7.1-pr-2704-20260909134930&hash=a788b7"
+  resolution: "@credo-ts/core@patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch::version=0.7.1-pr-2704-20260909134930&hash=ea0426"
   dependencies:
     "@animo-id/pex": "npm:^6.1.1"
     "@astronautlabs/jsonpath": "npm:^1.1.2"
@@ -3220,7 +3240,7 @@ __metadata:
     web-did-resolver: "npm:^2.0.32"
     webcrypto-core: "npm:^1.8.1"
     zod: "npm:^4.3.6"
-  checksum: 10c0/b1d8f386950876566556e97e9a2a0fe637951ed5e325e6fc1772056c299fb14cd591d84f2c70a3adb0d6a79d498d098f8069de607af184f857aec43ed3bc4c5c
+  checksum: 10c0/8b436eae96bc5c1fe14d48787f0ae491579203550dd258ad27fd3780dd43dd20ece651e9a462035e14cae93f09fcf8e76d4783cfa80df72ea5e7ff31de61ee8b
   languageName: node
   linkType: hard
 

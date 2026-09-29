@@ -29,22 +29,27 @@ describe('Proof Exchange Integration', () => {
     // The Participant class manually adds authentication/assertionMethod to the DID document
     // after creation and re-imports it to ensure proper verification method resolution
     //
-    // KNOWN, UNRESOLVED BUG (as of the vsc-migration diagnosis, 2026-09-29): this
-    // test currently fails with `jsonld.SyntaxError: Invalid JSON-LD syntax; tried
-    // to redefine a protected term`, thrown from
+    // FIXED (vsc-migration, 2026-09-29): this test used to fail with
+    // `jsonld.SyntaxError: Invalid JSON-LD syntax; tried to redefine a
+    // protected term`, thrown from
     // DifPresentationExchangeService -> W3cCredentialService.signPresentation.
-    // Root cause: credo's own DIF-Presentation-Exchange path builds its
-    // outgoing VP via W3cCredentialService.createPresentation(), which
-    // hardcodes `@context: [CREDENTIALS_CONTEXT_V1_URL]` — a VC1.1 (v1) VP
-    // wrapping this VRC's VC2.0 (v2) `@context` triggers the exact "v1 VP
-    // around a v2 VC" JSON-LD conflict that diConformance.test.ts documents
-    // and that G14/G22 already fixed for the hand-rolled witnessed-exchange
-    // VP path (see docs/plans/vsc-migration-plan/2026-09-29-bm.md). That fix
-    // does not reach this path because the VP here is built internally by
-    // credo's DIF-PE library, not by this migration's own code. Not patched
-    // mechanically — needs a real design decision (e.g. whether VC2.0 VRCs
-    // should ever flow through the generic present-proof/DIF-PE protocol at
-    // all, vs. only the hand-built witnessed-exchange VP path).
+    // Root cause: two third-party dependencies both hardcoded a VC1.1 (v1)
+    // base `@context` when building the outgoing VP — @animo-id/pex's
+    // `constructPresentations()` unconditionally force-appended
+    // CREDENTIALS_CONTEXT_V1_URL, and credo's own DifPresentationExchangeService
+    // never supplied a v2 alternative — so wrapping this VRC's VC2.0 (v2)
+    // `@context` in a v1-shaped VP always triggered the "v1 VP around a v2 VC"
+    // conflict that diConformance.test.ts documents and that G14/G22 already
+    // fixed for the hand-rolled witnessed-exchange VP path (see
+    // docs/plans/vsc-migration-plan/2026-09-29-bm.md). Fixed with two
+    // coordinated patches: `.yarn/patches/@animo-id-pex-npm-6.1.1-*.patch`
+    // (only default to v1 when no base context is supplied at all) and an
+    // added hunk in `.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-*.patch`
+    // (DifPresentationExchangeService now supplies a v2 `basePresentationPayload`
+    // when every wrapped credential is VC2.0-shaped LdpVc). Both patches exist
+    // independently in this repo's own `.yarn/patches/`/`package.json` and in
+    // the outer `keyring-wallet` repo's, since `bifold` and the outer app are
+    // separate yarn workspaces with separate dependency trees.
     it('should complete full proof exchange workflow', async () => {
       // Bob requests proof
       await bob.sendProofRequest()
@@ -125,10 +130,11 @@ describe('Proof Exchange Integration', () => {
 
     // FIXED: Same fix as above - using did:peer:0 with manual authentication patching
     //
-    // KNOWN, UNRESOLVED BUG: same "v1 VP wraps v2 VC" JSON-LD conflict as
-    // 'should complete full proof exchange workflow' above (see that test's
-    // comment for the full root-cause explanation) — this test exercises the
-    // same alice.acceptProofRequest() -> DIF-PE signPresentation path.
+    // FIXED (vsc-migration, 2026-09-29): same "v1 VP wraps v2 VC" JSON-LD
+    // conflict as 'should complete full proof exchange workflow' above (see
+    // that test's comment for the full root-cause explanation and the fix) —
+    // this test exercises the same alice.acceptProofRequest() -> DIF-PE
+    // signPresentation path.
     it('should include RelationshipCredential in proof response', async () => {
       await bob.sendProofRequest()
 
