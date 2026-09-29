@@ -187,6 +187,69 @@ describe('checking the request, as ConsentRequest::verify', () => {
   })
 })
 
+// Made by upstream at VTI afcf2470 (the lab's head): a request signed by
+// vta-sdk's signer (affinidi-data-integrity, `authentication`), which
+// `ConsentRequest::verify` accepts and whose `match_code` is 1c6eb9. The phone
+// must read the same code and pass the same proof.
+const UPSTREAM_REQUEST: Record<string, unknown> = {
+  id: 'urn:uuid:4d1e2c7a-0000-4000-8000-00000000c0de',
+  issuedAt: '2026-09-29T14:00:00Z',
+  issuer: 'did:key:z6MkfMo6gxqdBhaHMNnmfhgZFBjpCDTkmJMJLoypsBZS9PwD',
+  payload: {
+    approverSet: 'owners',
+    challenge: 'Y2hhbGxlbmdlLWtleXJpbmctdmVjdG9yLTAwMQ',
+    effects: [],
+    excludeRequester: true,
+    expiresAt: '2099-01-01T00:00:00Z',
+    exposure: {
+      actsAsSubject: false,
+      discloses: 'secret',
+    },
+    minApprovals: 1,
+    payloadDigest: 'zQmQFe3v2DJ512uYS2QigNTiS9WBBx49eNrvGFkTkPRedDM',
+    requester: 'did:key:z6MkkeyringVectorRequester',
+    sideEffects: 'none',
+    taskType: 'https://trusttasks.org/spec/keys/export-secret/0.1',
+  },
+  proof: {
+    created: '2026-09-29T16:10:56Z',
+    cryptosuite: 'eddsa-jcs-2022',
+    proofPurpose: 'authentication',
+    proofValue: 'z42dJ2PDDN9tthQaciQsQUuE8wutXQpD3ERDjsxvX4e4PDkdX24ZTZrw82oKFBeMKkyrQkFjK54kpVwHfZyjumvAd',
+    type: 'DataIntegrityProof',
+    verificationMethod:
+      'did:key:z6MkfMo6gxqdBhaHMNnmfhgZFBjpCDTkmJMJLoypsBZS9PwD#z6MkfMo6gxqdBhaHMNnmfhgZFBjpCDTkmJMJLoypsBZS9PwD',
+  },
+  recipient: 'did:key:z6MkkeyringVectorApprover',
+  type: 'https://trusttasks.org/spec/task-consent/request/0.1',
+}
+const UPSTREAM_MATCH_CODE = '1c6eb9'
+
+describe('a request made by upstream (VTI afcf2470)', () => {
+  const upstream = {
+    vtaDid: UPSTREAM_REQUEST.issuer as string,
+    approver: UPSTREAM_REQUEST.recipient as string,
+  }
+
+  it('shows the code upstream shows', () => {
+    const payload = UPSTREAM_REQUEST.payload as { payloadDigest: string }
+    expect(consentMatchCode(payload.payloadDigest)).toBe(UPSTREAM_MATCH_CODE)
+  })
+
+  it('passes the check upstream passes', async () => {
+    await expect(checkConsentRequest(vta.agent as never, UPSTREAM_REQUEST, upstream)).resolves.toEqual({ ok: true })
+  })
+
+  it('refuses it once its digest is changed', async () => {
+    const payload = UPSTREAM_REQUEST.payload as Record<string, unknown>
+    const changed = { ...UPSTREAM_REQUEST, payload: { ...payload, payloadDigest: digestOf([0xab, 0xcd, 0xef]) } }
+    await expect(checkConsentRequest(vta.agent as never, changed, upstream)).resolves.toEqual({
+      ok: false,
+      reason: 'proof',
+    })
+  })
+})
+
 describe('an approval as the phone lists it', () => {
   const controllerWith = () => {
     const controller = new VtaAgentController()
