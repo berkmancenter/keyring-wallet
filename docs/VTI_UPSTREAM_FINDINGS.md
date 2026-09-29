@@ -1899,7 +1899,11 @@ lab now runs VTI `afcf2470`, and the code below is unchanged at VTI main
   its agent's vault (`vault/credentials/receive/0.1`), so a new phone can get
   its cards back. On a lab run at 19:38:13Z and 19:38:14Z, both of the phone's
   sends got no signed success reply. Its "Get your cards from your agent"
-  then found 0 cards and restored 0. openvtc's `credential_sync` is the same
+  then found 0 cards and restored 0. Every card copy the lab VTA received
+  since 2026-09-27 05:11Z was refused: 80 of 80 answered
+  `status=400 Bad Request` through 2026-09-29 19:38Z, counted on the
+  "TSP trust-task dispatched" line after each
+  `vault/credentials/receive/0.1` in its logs. openvtc's `credential_sync` is the same
   push and meets the same refusal (e).
 - **What it does not break.** A community's removal still revokes the
   membership card. The card's revocation bit read 0 before an admin removal
