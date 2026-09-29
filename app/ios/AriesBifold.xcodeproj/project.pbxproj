@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		EDD6570FDD6D77A33D4D66CB /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 534BD67E637EC4D2A64DE527 /* Localizable.strings */; };
 		00E356F31AD99517003FC87E /* AriesBifoldTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 00E356F21AD99517003FC87E /* AriesBifoldTests.m */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
 		1A157F462BACCDEA00E30CDB /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1A157F452BACCDEA00E30CDB /* PrivacyInfo.xcprivacy */; };
@@ -29,6 +28,7 @@
 		C959C5CA9F16407BAE06E3ED /* SourceSans3-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 568B2A4917CE4BA48C0ABCDB /* SourceSans3-Bold.ttf */; };
 		CB235E56048D4298812CEEBC /* GT-America-Bold.OTF in Resources */ = {isa = PBXBuildFile; fileRef = CA217BD1171D444992207F53 /* GT-America-Bold.OTF */; };
 		CED19FBD1CCA4673921EC20D /* SourceSans3-Semibold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0FC00DDBB2AD4ED8A7C229DB /* SourceSans3-Semibold.ttf */; };
+		EDD6570FDD6D77A33D4D66CB /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 534BD67E637EC4D2A64DE527 /* Localizable.strings */; };
 		EE028E65A89D40D4879B36E0 /* GT-America-Regular.OTF in Resources */ = {isa = PBXBuildFile; fileRef = FAE9144464984615A799B578 /* GT-America-Regular.OTF */; };
 /* End PBXBuildFile section */
 
@@ -43,9 +43,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		A7BAEA5A322FF6CE7C10F5F7 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = AriesBifold/en.lproj/Localizable.strings; sourceTree = "<group>"; };
-		9EEFE3730422B5631DF51C2D /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = AriesBifold/fr.lproj/Localizable.strings; sourceTree = "<group>"; };
-		2F8C0BF06001DEC9B96BE6B8 /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = AriesBifold/pt-BR.lproj/Localizable.strings; sourceTree = "<group>"; };
 		00E356EE1AD99517003FC87E /* AriesBifoldTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AriesBifoldTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		00E356F11AD99517003FC87E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		00E356F21AD99517003FC87E /* AriesBifoldTests.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AriesBifoldTests.m; sourceTree = "<group>"; };
@@ -61,6 +58,7 @@
 		1A72D9212B217145008DE489 /* AriesBifold.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = AriesBifold.entitlements; path = AriesBifold/AriesBifold.entitlements; sourceTree = "<group>"; };
 		1A762CD52D87E24100455F4C /* AppDelegate.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = AppDelegate.mm; path = AriesBifold/AppDelegate.mm; sourceTree = "<group>"; };
 		2B0A69ADEAE9A3DCF7C7E51A /* Pods-AriesBifold.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AriesBifold.release.xcconfig"; path = "Target Support Files/Pods-AriesBifold/Pods-AriesBifold.release.xcconfig"; sourceTree = "<group>"; };
+		2F8C0BF06001DEC9B96BE6B8 /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "AriesBifold/pt-BR.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		2F9994AD2A8D83CB004E773E /* GoogleService-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		3BCFBFA2482B416CB88F732A /* GT-America-Extended-Bold.OTF */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "GT-America-Extended-Bold.OTF"; path = "../src/assets/fonts/GT-America-Extended-Bold.OTF"; sourceTree = "<group>"; };
 		433E773D26557E1B00F569EE /* Indy.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Indy.framework; path = Pods/Frameworks/Indy.framework; sourceTree = "<group>"; };
@@ -78,7 +76,9 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = AriesBifold/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		8695E760B846E4F378AB5655 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-AriesBifold-AriesBifoldTests/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		99A1BC81F291BF040E41B70D /* libPods-AriesBifold.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-AriesBifold.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		9EEFE3730422B5631DF51C2D /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = AriesBifold/fr.lproj/Localizable.strings; sourceTree = "<group>"; };
 		A68707143FAC4C9A8B391935 /* GT-America-Mono-Bold.OTF */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "GT-America-Mono-Bold.OTF"; path = "../src/assets/fonts/GT-America-Mono-Bold.OTF"; sourceTree = "<group>"; };
+		A7BAEA5A322FF6CE7C10F5F7 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = AriesBifold/en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		CA217BD1171D444992207F53 /* GT-America-Bold.OTF */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "GT-America-Bold.OTF"; path = "../src/assets/fonts/GT-America-Bold.OTF"; sourceTree = "<group>"; };
 		CD31A5BF6BF8A983EDD23CC4 /* Pods-AriesBifold-AriesBifoldTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AriesBifold-AriesBifoldTests.release.xcconfig"; path = "Target Support Files/Pods-AriesBifold-AriesBifoldTests/Pods-AriesBifold-AriesBifoldTests.release.xcconfig"; sourceTree = "<group>"; };
 		D2FEEE17975EE5C7D138D250 /* libPods-AriesBifold-AriesBifoldTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-AriesBifold-AriesBifoldTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
