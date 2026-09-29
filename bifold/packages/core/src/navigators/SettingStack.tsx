@@ -20,8 +20,7 @@ import EditRCard from '../modules/vrc/screens/EditRCard'
 import MyProfiles from '../modules/vrc/screens/MyProfiles'
 // DISABLED: Witnessing toggle is now inline in Settings
 // import ToggleWitnessing from '../screens/ToggleWitnessing'
-// DISABLED: Push notifications disabled — no server backend yet
-// import TogglePushNotifications from '../screens/TogglePushNotifications'
+import TogglePushNotifications from '../screens/TogglePushNotifications'
 import Settings from '../screens/Settings'
 import Tours from '../screens/Tours'
 import { Screens, SettingStackParams } from '../types/navigators'
@@ -185,8 +184,7 @@ const SettingStack: React.FC = () => {
             ...ScreenOptionsDictionary[Screens.ChangePIN],
           }}
         ></Stack.Screen>
-        {/* DISABLED: Push notifications disabled — no server backend yet */}
-        {/* <Stack.Screen
+        <Stack.Screen
           name={Screens.TogglePushNotifications}
           component={TogglePushNotifications}
           options={{
@@ -194,7 +192,7 @@ const SettingStack: React.FC = () => {
             headerBackTestID: testIdWithKey('Back'),
             ...ScreenOptionsDictionary[Screens.TogglePushNotifications],
           }}
-        /> */}
+        />
         <Stack.Screen
           name={Screens.Terms}
           component={terms}
