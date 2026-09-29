@@ -81,6 +81,7 @@ export const TASK = {
   acceptsDelete: `${SPEC}vtc/schemas/accepts/delete/0.1`,
   joinDiscoveryShow: `${SPEC}vtc/community/join-discovery/show/0.1`,
   joinDiscoveryUpdate: `${SPEC}vtc/community/join-discovery/update/0.1`,
+  memberRemove: `${SPEC}vtc/members/admin-remove/0.1`,
   vettersGrant: `${SPEC}vtc/vetting/vetters/grant/0.1`,
   policyUpsert: `${SPEC}policy/upsert/0.2`,
   policyGet: `${SPEC}policy/get/0.1`,
@@ -366,6 +367,12 @@ const COMMANDS = {
   // (vtc-service routes/community/join_discovery.rs). "closed" makes an
   // applicant's anonymous REST read fail, so the phone must ask over DIDComm or
   // TSP: the path keyring-bifold #158 signs.
+  // The administrator removes a member; the community then pushes the member a
+  // vtc/members/removal-notice/0.1 (vtc-service ceremony/removal_notice.rs).
+  "member-remove": {
+    signed: true,
+    run: ({ send }, [did, reason]) => send(TASK.memberRemove, { did, ...(reason ? { reason } : {}) }),
+  },
   "join-discovery-show": { signed: true, run: ({ send }) => send(TASK.joinDiscoveryShow, {}) },
   "join-discovery-set": {
     signed: true,
@@ -471,6 +478,7 @@ const SIGNED_TASK = {
   "list-types": TASK.typeList,
   "put-criterion": TASK.acceptsRegister,
   "delete-criterion": TASK.acceptsDelete,
+  "member-remove": TASK.memberRemove,
   "join-discovery-show": TASK.joinDiscoveryShow,
   "join-discovery-set": TASK.joinDiscoveryUpdate,
   "vetter-grant": TASK.vettersGrant,

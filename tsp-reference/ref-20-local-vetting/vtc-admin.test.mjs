@@ -83,6 +83,7 @@ const ALLOWED = {
   "vtc/schemas/accepts/delete/0.1": ["ext", "id"],
   "vtc/community/join-discovery/show/0.1": ["ext"],
   "vtc/community/join-discovery/update/0.1": ["ext", "joinDiscovery"],
+  "vtc/members/admin-remove/0.1": ["did", "disposition", "ext", "reason"],
   "vtc/endorsement-types/list/0.1": ["cursor", "ext", "limit"],
   "vtc/vetting/vetters/grant/0.1": ["ext", "memberDid", "validitySeconds"],
   "policy/upsert/0.2": ["appliesTo", "description", "enabled", "expectedVersion", "ext", "id", "module", "name", "priority"],
@@ -376,6 +377,23 @@ test("join-discovery-show, join-discovery-set: whether the manifest answers an u
     ]);
     const bad = await run(vtc.base, "join-discovery-set", "maybe");
     assert.notEqual(bad.code, 0, "only open or closed");
+  } finally {
+    await vtc.close();
+  }
+});
+
+test("member-remove: the admin removes a member, with a reason when given", async () => {
+  const vtc = await fakeVtc({ tasks: { "vtc/members/admin-remove/0.1": [200, { did: "did:key:zM", removed: true }] } });
+  try {
+    for (const args of [["member-remove", "did:key:zM"], ["member-remove", "did:key:zM", "left the lab"]]) {
+      const r = await run(vtc.base, ...args);
+      assert.equal(r.code, 0, `${args[0]}: ${r.stderr}`);
+      assert.equal(statusOf(r.stdout), "200");
+    }
+    assert.deepEqual(signedDocs(vtc.seen), [
+      { short: "vtc/members/admin-remove/0.1", payload: { did: "did:key:zM" } },
+      { short: "vtc/members/admin-remove/0.1", payload: { did: "did:key:zM", reason: "left the lab" } },
+    ]);
   } finally {
     await vtc.close();
   }
