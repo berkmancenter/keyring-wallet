@@ -108,6 +108,18 @@
         "spec/terms-definitions/",
         "specs.json"
       ]
+    },
+    "dtgwg-vsc-registry": {
+      "url": "https://github.com/trustoverip/dtgwg-vsc-registry.git",
+      "sha": "eb29484",
+      "commitDate": "2026-09-28",
+      "pinnedOn": "2026-09-29",
+      "why": "First pin (repo wasn't in the corpus before): D7 (vsc-migration-plan) needs the real byte-frozen dtg/context/v1 document to check the SHA-256 digest dtgwg-cred-spec 94af2d8 pins in its Context Versions section (zQmSWyCagdx8oPfXn3piSUx6yqVy5MZ7ZG7nW1TC64QvKZh) against the actual published bytes, rather than guessing or hand-authoring a candidate. Pinned to origin/main HEAD at the time of this check.",
+      "watch": [
+        "context/",
+        "predicates/",
+        "registry.config.json"
+      ]
     }
   },
   "npm": {
