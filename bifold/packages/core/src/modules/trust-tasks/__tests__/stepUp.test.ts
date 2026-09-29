@@ -13,7 +13,7 @@
  * word for word.
  */
 import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf } from '../module/stepUp'
-import { VtaAgentController } from '../module/vtaAgent'
+import { STEP_UP_ASK_TIMEOUT_MS, VtaAgentController } from '../module/vtaAgent'
 import { OwnerNotConfirmed, deviceRefusalOf } from '../module/vtaOwner'
 import { VtaClient } from '../module/VtaClient'
 import { VtiRefusal } from '../module/vtiAgent'
@@ -197,7 +197,9 @@ describe('a task that needs a step-up', () => {
       .mockResolvedValueOnce({ granted: true })
 
     await expect(vta.task(DEVICES_ADD, { subject: 'did:key:z6MkNew' })).resolves.toEqual({ granted: true })
-    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ reason: REASON, challenge: CHALLENGE }))
+    expect(ask).toHaveBeenCalledWith(expect.objectContaining({ reason: REASON, challenge: CHALLENGE }), {
+      taskType: DEVICES_ADD,
+    })
     expect(send.mock.calls.map((c) => c[0])).toEqual([DEVICES_ADD, STEP_UP_TASK.approveResponse, DEVICES_ADD])
     // The answer waits for the agent's reply like any task.
     expect(send.mock.calls[1][2]).toBe(30000)
@@ -260,29 +262,81 @@ describe('a task that needs a step-up', () => {
 })
 
 describe('asking the person', () => {
+  // 228 lab check (09-29): on Android the owner check right after a device
+  // act's own check passed without a prompt, so the reason — which lived only
+  // in that prompt — was never shown. The card shows it first, in the app;
+  // the owner check still runs after it.
   const request = { issuer: VTA, subject: PHONE, sessionId: 'session-7', challenge: CHALLENGE, reason: REASON }
+  type Asking = { askStepUp: (r: typeof request, c?: { taskType?: string }) => Promise<string> }
   const ask = (answer: { ok: boolean; reason?: 'cancelled' | 'failed' | 'unavailable' }) => {
     const controller = new VtaAgentController()
     const confirmOwner = jest.fn(async () => answer)
     controller.setOwnerChecks({ confirmOwner, deviceCanOwn: async () => true })
-    return {
-      confirmOwner,
-      asked: (controller as unknown as { askStepUp: (r: typeof request) => Promise<string> }).askStepUp(request),
-    }
+    const asked = (controller as unknown as Asking).askStepUp(request, { taskType: DEVICES_ADD })
+    const card = () => controller.getState().stepUpAsk
+    return { controller, confirmOwner, asked, card }
   }
 
-  it("prompts with the agent's reason, word for word; confirmed is approve", async () => {
-    const { confirmOwner, asked } = ask({ ok: true })
+  it("shows the agent's reason, word for word, before any owner check", async () => {
+    const { confirmOwner, card, controller } = ask({ ok: true })
+    await Promise.resolve()
+    expect(card()).toMatchObject({ reason: REASON, taskType: DEVICES_ADD })
+    expect(confirmOwner).not.toHaveBeenCalled()
+    controller.answerStepUp(card()!.id, 'deny')
+  })
+
+  it('confirmed on the card, then the owner check, is approve', async () => {
+    const { confirmOwner, asked, card, controller } = ask({ ok: true })
+    await Promise.resolve()
+    controller.answerStepUp(card()!.id, 'approve')
     await expect(asked).resolves.toBe('approve')
     expect(confirmOwner).toHaveBeenCalledWith(REASON)
+    expect(card()).toBeUndefined()
   })
 
-  it('cancelled is the person saying no', async () => {
-    await expect(ask({ ok: false, reason: 'cancelled' }).asked).resolves.toBe('deny')
+  it("Don't allow on the card is no, without an owner check", async () => {
+    const { confirmOwner, asked, card, controller } = ask({ ok: true })
+    await Promise.resolve()
+    controller.answerStepUp(card()!.id, 'deny')
+    await expect(asked).resolves.toBe('deny')
+    expect(confirmOwner).not.toHaveBeenCalled()
   })
 
-  it('a check that failed answers nothing', async () => {
-    await expect(ask({ ok: false, reason: 'failed' }).asked).rejects.toBeInstanceOf(OwnerNotConfirmed)
+  it('confirmed on the card but cancelled at the owner check is no', async () => {
+    const { asked, card, controller } = ask({ ok: false, reason: 'cancelled' })
+    await Promise.resolve()
+    controller.answerStepUp(card()!.id, 'approve')
+    await expect(asked).resolves.toBe('deny')
+  })
+
+  it('an owner check that failed answers nothing', async () => {
+    const { asked, card, controller } = ask({ ok: false, reason: 'failed' })
+    await Promise.resolve()
+    controller.answerStepUp(card()!.id, 'approve')
+    await expect(asked).rejects.toBeInstanceOf(OwnerNotConfirmed)
+  })
+
+  it('an answer for another card is ignored', async () => {
+    const { card, controller } = ask({ ok: true })
+    await Promise.resolve()
+    controller.answerStepUp('not-this-card', 'approve')
+    expect(card()).toBeDefined()
+    controller.answerStepUp(card()!.id, 'deny')
+  })
+
+  it('a card left unanswered answers nothing, and goes away', async () => {
+    jest.useFakeTimers()
+    try {
+      const { asked, card } = ask({ ok: true })
+      const settled = asked.catch((e: unknown) => e)
+      await Promise.resolve()
+      expect(card()).toBeDefined()
+      jest.advanceTimersByTime(STEP_UP_ASK_TIMEOUT_MS)
+      expect(await settled).toBeInstanceOf(OwnerNotConfirmed)
+      expect(card()).toBeUndefined()
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('a screen words the outcomes', () => {
