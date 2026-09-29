@@ -51,6 +51,21 @@ const ERROR_TYPE_MARKER = '/trust-task-error/'
  * rather than keeping two implementations of one rule.
  */
 
+/*
+ * The same applies to `taskDigestMultibase`, and it mattered: the spec's Base
+ * Structure requires it as a top-level sibling of `credentialSubject` for
+ * `vsc` shape (fixed in the issuance/read paths, `be8dd604`, 2026-09-29), but
+ * this self-check still only looked in the old nested
+ * `credentialSubject.taskDigestMultibase` location — so it unconditionally
+ * failed ("credential carries no taskDigestMultibase") for every `vsc`-shape
+ * VWC, on the one path that had actually been fixed. Found the same day the
+ * placement fix landed, on the first real end-to-end witnessed exchange to
+ * reach this check (orphan commit 9a008d7b).
+ *
+ * `taskCitationOf` dual-reads both members, so that fix is kept behaviourally
+ * and its local `readTaskDigestMultibase` helper is not reintroduced.
+ */
+
 /** A `taskContext`-bearing credential with its matching outcome evidence. */
 export interface VwcPresentationBundle {
   /** The signed Verifiable Presentation wrapping the VWC. */
@@ -240,8 +255,8 @@ export async function verifyVwcPresentationBundle(
 
   // 3–7. The pairing checklist.
   // Top level (DTG Credentials v1's witnessed/1) or in the subject (before it).
-  // taskCitationOf dual-reads BOTH members; the migration's inline version read
-  // taskDigestMultibase from the subject only, which segment #220 then fixed.
+  // This is what the orphan fix 9a008d7b set out to do — dual-read the digest
+  // in the self-check, not just taskContext. taskCitationOf already does both.
   const citation = taskCitationOf(vwc)
   const taskContext = citation.taskContext ?? ''
   const taskDigest = citation.taskDigestMultibase ?? ''
