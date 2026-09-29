@@ -130,6 +130,38 @@ describe('Your agent — after linking', () => {
     again.mockRestore()
   })
 
+  // 228 agent-gone: an agent that no longer exists is said so, with a new one as the way on.
+  it('says the agent cannot be found and why, and Link a new agent confirms unlinking in words for a gone agent', async () => {
+    const { link } = controller.getState()
+    controller.set({ link: { ...(link as object), connection: { kind: 'gone', why: 'notFound', since: 0 } } as never })
+    const unlink = jest.spyOn(vtaAgent, 'unlink').mockResolvedValue(undefined)
+    const tree = await renderHome([])
+    expect(tree.getByTestId(testIdWithKey('AgentGone'))).toHaveTextContent(/VtaLink\.AgentGoneTitle/)
+    expect(tree.getByTestId(testIdWithKey('AgentGoneWhy'))).toHaveTextContent(/VtaLink\.AgentGoneNotFound/)
+    expect(tree.getByTestId(testIdWithKey('VtaStatusText'))).toHaveTextContent(/VtaLink\.StatusGone/)
+    expect(tree.queryByTestId(testIdWithKey('AgentGaveUp'))).toBeNull()
+
+    fireEvent.press(tree.getByTestId(testIdWithKey('AgentGoneLinkNew')))
+    expect(tree.getByTestId(testIdWithKey('AgentUnlinkBody'))).toHaveTextContent(/VtaLink\.UnlinkBodyGone/)
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('AgentUnlinkConfirm'))))
+    expect(unlink).toHaveBeenCalled()
+    unlink.mockRestore()
+  })
+
+  it('says it has not reached the agent for days when that is why', async () => {
+    const { link } = controller.getState()
+    controller.set({
+      link: { ...(link as object), connection: { kind: 'gone', why: 'unreachable', since: 0 } } as never,
+    })
+    const tree = await renderHome([])
+    expect(tree.getByTestId(testIdWithKey('AgentGoneWhy'))).toHaveTextContent(/VtaLink\.AgentGoneUnreachable/)
+  })
+
+  it('an agent that is only offline keeps the usual Unlink words', async () => {
+    const tree = await renderHome([])
+    expect(tree.queryByTestId(testIdWithKey('AgentGone'))).toBeNull()
+  })
+
   it('says nothing of the kind while reconnecting still has tries left', async () => {
     controller.set({ reconnectGaveUp: false })
     const tree = await renderHome([])

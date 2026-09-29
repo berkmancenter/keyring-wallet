@@ -16,7 +16,9 @@ import { DeviceEventEmitter, Platform } from 'react-native'
 
 import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
+import { agentGoneVerdict, type AgentGoneWhy } from './agentGone'
 import type { AgentLabel } from './agentLabel'
+import { classifyDid, type DidResolverAgent } from './classifyDid'
 import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
 import type { StepUpRequest } from './stepUp'
@@ -156,6 +158,8 @@ const ACTIVITY_LIMIT = 20
 export interface VtaAgentDeps {
   fetch?: typeof fetch
   linkStore?: (agent: Agent) => VtaLinkStore
+  /** Whether the agent's address exists: its DID host says `notFound`, it resolves (`found`), or no one could tell. */
+  agentAddress?: (agent: Agent, vtaDid: string) => Promise<'notFound' | 'found' | 'unknown'>
   identityStore?: (agent: Agent) => VtiIdentityStore
   communityStore?: (agent: Agent) => Pick<VtiCommunityStore, 'forgetCommunity'>
   enrol?: {
@@ -1373,6 +1377,7 @@ export class VtaAgentController {
       this.reconnectAttempt = 0
       if (this.state.reconnectGaveUp) this.set({ reconnectGaveUp: false })
       this.dispatch({ type: 'sessionOpened' })
+      void this.noteReached(agent, link.vtaDid)
       void this.holdPersonaKeys(agent, link.vtaDid)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
@@ -1397,9 +1402,61 @@ export class VtaAgentController {
       }
       this.dispatch({ type: 'sessionDropped', reason, now: this.now() })
       this.scheduleReconnect(agent)
+      // Beside the retry, never in front of it: the lookup can take seconds.
+      void this.markIfGone(agent, link.vtaDid)
     } finally {
       this.reconnecting = false
     }
+  }
+
+  /** The agent answered: keep when, and forget any "not found" seen before (agentGone.ts). */
+  private async noteReached(agent: Agent, vtaDid: string): Promise<void> {
+    const store = this.linkStore(agent)
+    const link = await store.get().catch(() => undefined)
+    if (!link || link.vtaDid !== vtaDid) return
+    const now = this.now()
+    // One write an hour is plenty for a threshold counted in days.
+    const fresh = link.lastOnlineAt !== undefined && now - link.lastOnlineAt < 60 * 60 * 1000
+    if (fresh && link.notFoundAt === undefined) return
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { notFoundAt: _forgotten, ...rest } = link
+    await store.set({ ...rest, lastOnlineAt: now }).catch(() => undefined)
+  }
+
+  /** A gone agent is said once, with a way on (a new agent), and retrying stops. */
+  private async markIfGone(agent: Agent, vtaDid: string): Promise<void> {
+    const why = await this.goneFor(agent, vtaDid)
+    const link = this.state.link
+    if (!why || link.kind !== 'linked' || link.vtaDid !== vtaDid) return
+    this.dispatch({ type: 'agentGone', why, now: this.now() })
+    if (this.state.link.kind === 'linked' && this.state.link.connection.kind === 'gone' && this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = undefined
+    }
+  }
+
+  /**
+   * After a failed sign-in: is the agent gone for good? Its address is looked
+   * up, what that says is kept with the link, and the thresholds decide.
+   */
+  private async goneFor(agent: Agent, vtaDid: string): Promise<AgentGoneWhy | undefined> {
+    const store = this.linkStore(agent)
+    const link = await store.get().catch(() => undefined)
+    if (!link || link.vtaDid !== vtaDid) return undefined
+    const lookUp = this.deps.agentAddress ?? agentAddressOf
+    const address = await lookUp(agent, vtaDid).catch(() => 'unknown' as const)
+    const verdict = agentGoneVerdict(link, {
+      notFound: address === 'unknown' ? undefined : address === 'notFound',
+      now: this.now(),
+    })
+    if (verdict.notFoundAt !== link.notFoundAt) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { notFoundAt: _previous, ...rest } = link
+      await store
+        .set(verdict.notFoundAt !== undefined ? { ...rest, notFoundAt: verdict.notFoundAt } : rest)
+        .catch(() => undefined)
+    }
+    return verdict.gone
   }
 
   /**
@@ -1546,6 +1603,13 @@ function deviceFrom(entry: VtaAclEntry, mine: string[]): VtaDevice {
 }
 
 export const vtaAgent = new VtaAgentController()
+
+/** The agent's address, looked up once more: bounded, so a failed sign-in is not held up by it. */
+async function agentAddressOf(agent: Agent, vtaDid: string): Promise<'notFound' | 'found' | 'unknown'> {
+  const kind = await classifyDid(agent as unknown as DidResolverAgent, vtaDid, { timeoutMs: 10_000 })
+  if (kind.kind !== 'unresolvable') return 'found'
+  return kind.reason === 'notFound' ? 'notFound' : 'unknown'
+}
 
 /**
  * Whether `did` resolves, fresh from its host, with every key in `keys` — asked

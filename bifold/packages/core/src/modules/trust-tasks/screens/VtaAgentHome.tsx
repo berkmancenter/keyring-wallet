@@ -437,7 +437,35 @@ const VtaAgentHome: React.FC = () => {
             {agentDisplayName(withAgentName(link, state.agentNames), t)}
           </ThemedText>
           <VtaStatusLine connection={link.connection} now={now} />
-          {state.reconnectGaveUp ? (
+          {link.connection.kind === 'gone' ? (
+            // Gone for good (agentGone.ts): said plainly, with the way on — a new agent.
+            // Unlinking is still confirmed, in Manage, with words for an agent that is gone.
+            <View style={{ gap: 8 }} testID={testIdWithKey('AgentGone')}>
+              <ThemedText variant="bold" style={{ color: ColorPalette.semantic.error }}>
+                {t('VtaLink.AgentGoneTitle')}
+              </ThemedText>
+              <ThemedText testID={testIdWithKey('AgentGoneWhy')}>
+                {t(link.connection.why === 'notFound' ? 'VtaLink.AgentGoneNotFound' : 'VtaLink.AgentGoneUnreachable')}
+              </ThemedText>
+              <Button
+                title={t('VtaLink.AgentGoneLinkNew')}
+                buttonType={ButtonType.Primary}
+                onPress={() => {
+                  chooseSegment('manage')
+                  setUnlinkOpen(true)
+                }}
+                testID={testIdWithKey('AgentGoneLinkNew')}
+              />
+              <Button
+                title={t('VtaLink.TryAgainNow')}
+                buttonType={ButtonType.Secondary}
+                onPress={() => {
+                  if (agent) void vtaAgent.tryAgainNow(agent)
+                }}
+                testID={testIdWithKey('AgentGoneTryAgain')}
+              />
+            </View>
+          ) : state.reconnectGaveUp ? (
             // Reconnecting stopped after its tries: said, with the way on, never a silent loop.
             <View style={{ gap: 8 }} testID={testIdWithKey('AgentGaveUp')}>
               <ThemedText style={{ color: ColorPalette.semantic.error }}>{t('VtaLink.AgentDidNotAnswer')}</ThemedText>
@@ -785,7 +813,9 @@ const VtaAgentHome: React.FC = () => {
                     interpolation: { escapeValue: false },
                   })}
                 </ThemedText>
-                <ThemedText testID={testIdWithKey('AgentUnlinkBody')}>{t('VtaLink.UnlinkBody')}</ThemedText>
+                <ThemedText testID={testIdWithKey('AgentUnlinkBody')}>
+                  {t(link.connection.kind === 'gone' ? 'VtaLink.UnlinkBodyGone' : 'VtaLink.UnlinkBody')}
+                </ThemedText>
                 <Button
                   title={t('VtaLink.UnlinkConfirm')}
                   buttonType={ButtonType.Critical}
