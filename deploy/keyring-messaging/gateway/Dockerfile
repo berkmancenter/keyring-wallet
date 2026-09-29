@@ -34,6 +34,11 @@ RUN git init -q . \
  && git checkout -q FETCH_HEAD \
  && test "$(git rev-parse HEAD)" = "${GATEWAY_COMMIT}"
 
+# Keyring's patches on top of the pinned commit (patches/README.md), each a
+# clean format-patch; the build fails if one no longer applies.
+COPY patches/ /patches/
+RUN for p in /patches/*.patch; do [ -e "$p" ] || continue; git apply --index "$p"; done
+
 # --locked: build exactly the upstream Cargo.lock.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \

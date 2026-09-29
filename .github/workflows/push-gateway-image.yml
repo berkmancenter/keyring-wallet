@@ -23,6 +23,39 @@ permissions:
   contents: read
 
 jobs:
+  gateway-tests:
+    # The gateway's own test suite at the pinned commit, with Keyring's patches
+    # applied (deploy/keyring-messaging/gateway/patches/), so a patch that stops
+    # applying or breaks a test fails here and not in an image build.
+    name: Gateway tests with patches
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build dependencies (as upstream's CI)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
+
+      - name: Check out the pinned gateway and apply the patches
+        run: |
+          commit=$(sed -n 's/^GATEWAY_COMMIT=//p' deploy/keyring-messaging/.env.example)
+          git init -q gw
+          git -C gw remote add origin https://github.com/OpenVTC/vti-push-gateway.git
+          git -C gw fetch -q --depth 1 origin "$commit"
+          git -C gw checkout -q FETCH_HEAD
+          for p in deploy/keyring-messaging/gateway/patches/*.patch; do
+            [ -e "$p" ] || continue
+            echo "applying $p"
+            git -C gw apply --index "$PWD/$p"
+          done
+
+      - name: cargo test
+        working-directory: gw
+        run: |
+          rustup toolchain install stable --profile minimal
+          cargo test --locked --all-targets
+
   image:
     name: Gateway image (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
