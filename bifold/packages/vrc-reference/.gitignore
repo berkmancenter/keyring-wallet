@@ -7,3 +7,7 @@
 
 # Witness server persisted invitation (stable QR code)
 .oob-invitation.json
+
+# Throwaway output from captureWitnessedEdge.test.ts (CAPTURE_OUTPUT=1) —
+# regenerable, not a ladder input.
+__tests__/integration/capture-output/
