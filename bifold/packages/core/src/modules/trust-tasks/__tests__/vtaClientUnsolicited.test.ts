@@ -130,3 +130,45 @@ describe('a reply is matched to its request by thread', () => {
     expect(onInbound).toHaveBeenCalledWith(old)
   })
 })
+
+// Two-phone gate trial 2 (09-29): a phone sent nothing to its agent for three
+// minutes while its device list waited. The queue is one task at a time, so a
+// task that queues behind another says what it waits on.
+describe('a task that queues behind another says what it waits on', () => {
+  it('logs the task in flight: its type, how long it has waited, its id', async () => {
+    const info = jest.fn()
+    const client = new VtaClient(
+      { config: { logger: { warn: jest.fn(), info, debug: jest.fn() } } } as never,
+      'did:webvh:agent',
+      {} as never,
+      {}
+    )
+    const internals = client as unknown as {
+      sendTask: (...a: unknown[]) => Promise<unknown>
+    }
+    let release: (v: unknown) => void = () => undefined
+    const first = new Promise((r) => (release = r))
+    const send = jest
+      .spyOn(internals, 'sendTask')
+      .mockImplementationOnce(async function (this: unknown) {
+        const internal = client as unknown as { inFlight?: object }
+        internal.inFlight = {
+          type: HEARTBEAT,
+          since: Date.now() - 2000,
+          id: 'urn:uuid:doc-hb',
+        }
+        return first
+      })
+      .mockResolvedValueOnce({ entries: [] })
+    const a = client.task(HEARTBEAT, {})
+    await Promise.resolve()
+    const b = client.task('https://trusttasks.org/spec/device/list/0.2', {})
+    expect(info).toHaveBeenCalledWith(
+      expect.stringMatching(/device\/list\/0\.2 waits behind .*heartbeat\/0\.2.*urn:uuid:doc-hb/)
+    )
+    release({ ok: true })
+    await a
+    await b
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+})
