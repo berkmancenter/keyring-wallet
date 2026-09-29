@@ -89,6 +89,7 @@ import { verifyEligibilityPresentation } from '../module/vtiEligibility'
 // eslint-disable-next-line import/order
 import {
   digestMultibase,
+  purposeForDocumentType,
   signCompactJws,
   signDocumentProof,
   taskDigestMultibase,
@@ -637,6 +638,11 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
         document
       )
       expect({ name, verdict }).toEqual({ name, verdict: { ok: true, signer } })
+      // Signed for the purpose upstream signs this type for (vta-sdk
+      // purpose_for_document_type): authentication, save an approver's
+      // attestation. card-verify checks it against vta-sdk itself.
+      const purpose = (document.proof as { proofPurpose?: string } | undefined)?.proofPurpose
+      expect({ name, purpose }).toEqual({ name, purpose: purposeForDocumentType(String(document.type)) })
     }
 
     const out = process.env.CARD_OUT
