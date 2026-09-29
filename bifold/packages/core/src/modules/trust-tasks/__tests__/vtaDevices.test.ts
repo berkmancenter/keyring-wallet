@@ -261,6 +261,7 @@ describe('the device tasks this phone speaks', () => {
       heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
       list: 'https://trusttasks.org/spec/device/list/0.2',
       wipe: 'https://trusttasks.org/spec/device/wipe/0.2',
+      setWake: 'https://trusttasks.org/spec/device/set-wake/0.2',
       aclList: 'https://trusttasks.org/spec/acl/list/0.1',
       aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
     })
