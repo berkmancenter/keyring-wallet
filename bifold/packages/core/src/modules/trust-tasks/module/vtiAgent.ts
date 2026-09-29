@@ -55,6 +55,7 @@ import {
 import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { fetchWaitingIfBusy } from './vtcBusy'
+import { didPrefix } from './didPrefix'
 
 const MANIFEST = 'https://trusttasks.org/spec/vtc/join-requests/manifest/0.2'
 const SUBMIT = 'https://trusttasks.org/spec/vtc/join-requests/submit/0.2'
@@ -506,6 +507,11 @@ class VtiAgentController {
 
   private async deliver(received: DidCommV2PlaintextMessage): Promise<void> {
     const plaintext = unwrapBindingEnvelope(received)
+    // The type and DID prefixes only: this line reaches testers' problem
+    // reports, so never a body, a card or a whole identifier.
+    this.agent?.config?.logger?.info?.(
+      `vtiAgent: inbound ${String(plaintext.type ?? '')} from ${didPrefix(plaintext.from)} (session ${didPrefix(this.state.did)})`
+    )
     this.dropExpiredHolds()
     const entry = this.askAnswered(plaintext)
     if (entry) {
