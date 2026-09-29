@@ -262,6 +262,47 @@ describe('Your agent — after linking', () => {
     expect(tree.getByTestId(testIdWithKey('AgentSeat'))).toHaveTextContent('VtaLink.SeatMember')
   })
 
+  // #166's lab run (09-29): the community's removal notice was stored on the
+  // membership, and My Agent still said "You are a member".
+  it('a membership the community removed is not membership: the seat, the steps and the card say it ended', async () => {
+    const removed: Rec = {
+      tags: membership.tags,
+      content: {
+        ...membership.content,
+        vmc: {
+          id: 'urn:uuid:removed-vmc',
+          type: ['VerifiableCredential', 'MembershipCredential'],
+          issuer: communityDid,
+        },
+        removal: {
+          code: 'adminRemoved',
+          reason: 'Left the project',
+          decidedBy: 'did:webvh:QmAdmin:vtc.example:admin',
+          decidedAt: '2026-09-29T18:20:00Z',
+          disposition: 'tombstone',
+          noticeId: 'urn:uuid:removal-notice-1',
+        },
+      },
+    }
+    const tree = await renderHome([persona, removed])
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('AgentSeat'))).not.toHaveTextContent('VtaLink.SeatMember')
+    const key = communityCardKey(communityDid)
+    // The community stays on screen, saying what happened.
+    expect(tree.getByTestId(testIdWithKey(`AgentCommunityStatus_${key}`))).toHaveTextContent(/Join\.StandingRemoved/)
+    expect(tree.queryByTestId(testIdWithKey(`AgentMemberSince_${key}`))).toBeNull()
+    const ended = tree.getByTestId(testIdWithKey(`AgentMembershipEnded_${key}`))
+    expect(ended).toHaveTextContent(/VtaLink\.CardMembershipEnded/)
+    expect(ended).toHaveTextContent(/Community\.RemovedReason/)
+    // Its card is history, not "kept by your agent".
+    expect(tree.getByTestId(testIdWithKey(`AgentCard_membership_${key}`))).toHaveTextContent(
+      /VtaLink\.CardMembershipEnded/
+    )
+    expect(tree.queryByTestId(testIdWithKey(`AgentCardKept_membership_${key}`))).toBeNull()
+  })
+
   // 219: every tab unmounts when it loses focus, so a return to My Agent
   // rebuilt this screen with nothing read, and for a frame "Holds" spun and the
   // seat line was missing. A return shows the last reading at once.
