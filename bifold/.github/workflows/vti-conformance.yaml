@@ -80,6 +80,10 @@ jobs:
         run: CONFORMANCE_WHOLE_SECOND=1 CARD_OUT="$RUNNER_TEMP/conformance-whole-second" TZ=GMT yarn jest src/modules/trust-tasks/__tests__/cardConformance.test.ts
 
       - name: VTI SDK judges them
+        # Each proof must be for the purpose vta-sdk signs its type for
+        # (purpose_for_document_type): card-verify checks it with upstream's own function.
+        env:
+          CARD_VERIFY_EXPECT_PURPOSE: "1"
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
           for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
@@ -98,6 +102,10 @@ jobs:
       # VTC runs on each task it receives. The test itself holds issuer ==
       # signer and the type until card-verify checks them.
       - name: VTI SDK judges every Trust Task Keyring signs
+        # Each proof must be for the purpose vta-sdk signs its type for
+        # (purpose_for_document_type): card-verify checks it with upstream's own function.
+        env:
+          CARD_VERIFY_EXPECT_PURPOSE: "1"
         run: |
           bin="$RUNNER_TEMP/wallet/scripts/openvtc/card-verify/target/release/card-verify"
           for out in "$RUNNER_TEMP/conformance" "$RUNNER_TEMP/conformance-whole-second"; do
