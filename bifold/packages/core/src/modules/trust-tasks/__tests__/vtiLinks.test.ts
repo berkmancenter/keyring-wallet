@@ -3,6 +3,7 @@ import { encodeEnrolmentLink, encodeTicketUri, type EnrolmentOffer } from '@bifo
 import { vtaAgent } from '../module/vtaAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 import {
+  APPROVALS_LINK,
   KeyringLinkError,
   communityLinkReturn,
   keyringAgentLinkKind,
@@ -56,6 +57,22 @@ describe('recognising our links', () => {
     expect(keyringAgentLinkKind('keyring://vti/invitation?c=abc')).toBe('invitation')
     expect(keyringAgentLinkKind('https://example.com/?oob=abc')).toBeUndefined()
     expect(keyringAgentLinkKind('didcomm://invite?oob=abc')).toBeUndefined()
+  })
+})
+
+describe('the approvals link a push notification opens', () => {
+  it('is recognised exactly, and nothing near it', () => {
+    expect(APPROVALS_LINK).toBe('keyring://vta/approvals')
+    expect(keyringAgentLinkKind(APPROVALS_LINK)).toBe('approvals')
+    expect(keyringAgentLinkKind(` ${APPROVALS_LINK}\n`)).toBe('approvals')
+    expect(keyringAgentLinkKind('keyring://vta/approvals?x=1')).toBeUndefined()
+  })
+
+  it('goes to My Agent, where approvals wait, and does nothing else', async () => {
+    const navigate = jest.fn()
+    await routeKeyringAgentLink(APPROVALS_LINK, {} as never, navigate)
+    expect(navigate).toHaveBeenCalledTimes(1)
+    expect(navigate).toHaveBeenCalledWith('MyAgent')
   })
 })
 

@@ -52,8 +52,16 @@ export class KeyringLinkError extends Error {
   }
 }
 
+/**
+ * The app's own link to the waiting approvals (My Agent). A push notification
+ * opens it: the notification carries no content, so a tap can only say "go to
+ * where approvals wait", and the approval itself is fetched after unlocking.
+ */
+export const APPROVALS_LINK = 'keyring://vta/approvals'
+
 export type KeyringAgentLinkKind =
   | 'agentHost'
+  | 'approvals'
   | 'enrolment'
   | 'invitation'
   | 'invitationOffer'
@@ -68,6 +76,7 @@ export function keyringAgentLinkKind(text: string): KeyringAgentLinkKind | undef
   // An agent host's automatic connection: JSON with a callback. Claimed even
   // when it fails its checks, so the scanner says why rather than "invalid".
   if (looksLikeAgentHostQr(trimmed)) return 'agentHost'
+  if (trimmed === APPROVALS_LINK) return 'approvals'
   if (isEnrolmentLink(trimmed)) return 'enrolment'
   if (isVtiInvitationLink(trimmed)) return 'invitation'
   // A community admin console's invitation QR: an OID4VCI offer whose issuer
@@ -262,6 +271,9 @@ export async function routeKeyringAgentLink(
       navigate('VtaLink')
       return
     }
+    case 'approvals':
+      navigate('MyAgent')
+      return
     case 'enrolment': {
       let offer
       try {

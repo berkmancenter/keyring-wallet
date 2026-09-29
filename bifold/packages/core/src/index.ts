@@ -91,7 +91,8 @@ export { useNetwork } from './contexts/network'
 export { DispatchAction, reducer, default as Store } from './contexts/reducers/store'
 export { defaultState, mergeReducers, StoreContext, StoreProvider, useStore } from './contexts/store'
 export { ThemeProvider, useTheme } from './contexts/theme'
-export { useDeepLinks } from './hooks/deep-links'
+export { openAppLink, useDeepLinks } from './hooks/deep-links'
+export { APPROVALS_LINK } from './modules/trust-tasks/module/vtiLinks'
 export { useConnectionDisplayName } from './hooks/connections'
 export { useRCardCredential } from './modules/vrc/hooks/useRCardCredential'
 export { VrcNameCacheProvider, useVrcNameCache } from './modules/vrc/context/VrcNameCacheProvider'
@@ -517,5 +518,12 @@ export { isMediatorInvitation } from './utils/mediatorhelpers'
 export { isDidCommInvitation, isOpenIdCredentialOffer, isOpenIdPresentationRequest } from './utils/parsers'
 
 export { ownerChecks } from './modules/trust-tasks/module/ownerConfirm'
-export { dropInMemoryKeys, EphemeralKeyManagementService } from './modules/trust-tasks/module/EphemeralKeyManagementService'
-export { EPHEMERAL_KMS_BACKEND, REQUIRED_DEFAULT_KMS_BACKEND, REQUIRED_KMS_BACKENDS } from './modules/trust-tasks/module/vtaKeys'
+export {
+  dropInMemoryKeys,
+  EphemeralKeyManagementService,
+} from './modules/trust-tasks/module/EphemeralKeyManagementService'
+export {
+  EPHEMERAL_KMS_BACKEND,
+  REQUIRED_DEFAULT_KMS_BACKEND,
+  REQUIRED_KMS_BACKENDS,
+} from './modules/trust-tasks/module/vtaKeys'
