@@ -77,6 +77,8 @@ export const TASK = {
   manifest: `${SPEC}vtc/join-requests/manifest/0.2`,
   typeRegister: `${SPEC}vtc/endorsement-types/register/0.1`,
   typeList: `${SPEC}vtc/endorsement-types/list/0.1`,
+  acceptsRegister: `${SPEC}vtc/schemas/accepts/register/0.1`,
+  acceptsDelete: `${SPEC}vtc/schemas/accepts/delete/0.1`,
   vettersGrant: `${SPEC}vtc/vetting/vetters/grant/0.1`,
   policyUpsert: `${SPEC}policy/upsert/0.2`,
   policyGet: `${SPEC}policy/get/0.1`,
@@ -351,6 +353,13 @@ const COMMANDS = {
     run: ({ send }, [typeUri, description]) => send(TASK.typeRegister, { typeUri, description: description ?? "" }),
   },
   "list-types": { signed: true, run: ({ sendAll }) => sendAll(TASK.typeList) },
+  // VTI #1835 retired /v1/schemas; the criterion file is the register payload
+  // as it was the POST body (surface_tasks.rs handle_accepts_register).
+  "put-criterion": {
+    signed: true,
+    run: ({ send }, [file]) => send(TASK.acceptsRegister, JSON.parse(readFileSync(file, "utf8"))),
+  },
+  "delete-criterion": { signed: true, run: ({ send }, [id]) => send(TASK.acceptsDelete, { id }) },
   "vetter-grant": {
     signed: true,
     run: ({ send }, [memberDid, seconds]) =>
@@ -392,15 +401,6 @@ const COMMANDS = {
   // `whoami` describes the bearer session a request carries, which a signed
   // document does not have, so it stays with the session surface (routes/mod.rs).
   whoami: { run: ({ token, base }) => rest(base, "/auth/whoami", { task: TASK.whoami, token }) },
-  // The criteria store is plain admin-gated CRUD mounted outside the
-  // Trust-Task router (routes/mod.rs, `schemas::*`; admin-ui postJsonExempt).
-  "put-criterion": {
-    run: ({ token, base }, [file]) =>
-      rest(base, "/schemas/accepts", { method: "POST", token, body: JSON.parse(readFileSync(file, "utf8")) }),
-  },
-  "delete-criterion": {
-    run: ({ token, base }, [id]) => rest(base, `/schemas/accepts/${encodeURIComponent(id)}`, { method: "DELETE", token }),
-  },
   // The grant listing ({ vetters: [...] }) has no Trust Task; the signed
   // vetters/list/0.1 is the applicant's public listing, a different answer.
   "vetters-list": { run: ({ token, base }) => rest(base, "/vetting/vetters", { token }) },
@@ -435,8 +435,6 @@ const COMMANDS = {
 /** The label a REST command prints, as before the port: `GET /members`. */
 const REST_LABEL = {
   whoami: () => "GET /auth/whoami",
-  "put-criterion": () => "POST /schemas/accepts",
-  "delete-criterion": ([id]) => `DELETE /schemas/accepts/${id}`,
   "vetters-list": () => "GET /vetting/vetters",
   "vetter-resend": ([did]) => `POST /vetting/vetters/${did}/resend`,
   endorsements: () => "GET /credentials/endorsements",
@@ -457,6 +455,8 @@ const SIGNED_TASK = {
   manifest: TASK.manifest,
   "register-type": TASK.typeRegister,
   "list-types": TASK.typeList,
+  "put-criterion": TASK.acceptsRegister,
+  "delete-criterion": TASK.acceptsDelete,
   "vetter-grant": TASK.vettersGrant,
   "put-policy": TASK.policyUpsert,
   "activate-policy": TASK.policyActivate,
