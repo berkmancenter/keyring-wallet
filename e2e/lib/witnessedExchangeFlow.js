@@ -210,7 +210,11 @@ export function dumpAndroidWitnessLogs(udids) {
       const raw = execSync(`adb -s ${udid} logcat -d`, { maxBuffer: 64 * 1024 * 1024 }).toString();
       const lines = raw
         .split("\n")
-        .filter((l) => /VRC:|Attestation|BiometricSignature|Witness|VWC|proofType|cryptosuite/i.test(l));
+        .filter((l) =>
+          /VRC:|VRC Flow|Attestation|BiometricSignature|Witness|VWC|proofType|cryptosuite|TrustTasks|didn't complete|delivery after acceptance failed/i.test(
+            l
+          )
+        );
       const file = `artifacts/witnessed-logcat-${udid}-${Date.now()}.txt`;
       writeFileSync(file, lines.join("\n"));
       console.log(`[e2e] android (${udid}) witnessed log lines saved: ${file} (${lines.length} lines)`);
