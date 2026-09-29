@@ -1,0 +1,64 @@
+/**
+ * Making this phone wakeable by its agent (docs/plans/push-notifications-plan.md
+ * §4.4, step 1.5): after the phone is registered as a device of its agent,
+ *
+ * 1. read this phone's platform push token;
+ * 2. register it with the push gateway (`push/register`), which returns an
+ *    opaque handle;
+ * 3. give the handle to the agent (`device/set-wake`), which provisions the
+ *    gateway itself.
+ *
+ * Off unless a build names a gateway (`PUSH_GATEWAY_URL`): nothing about push is
+ * baked into a shipped build. The agent never sees the token, and a locked or
+ * closed app shows only generic text when woken (plan §2); this module does
+ * not handle wakes.
+ */
+import { registerWithGateway, type GatewayWakeHandle, type PushRegistration } from './pushGateway'
+
+export interface PushWakeDeps {
+  /** The gateway's HTTPS base URL; empty or undefined means push is off. */
+  gatewayUrl?: string
+  /** The DID of the agent this phone is linked to, or undefined when it is not linked. */
+  agentDid(): string | undefined
+  /** This phone's platform push token, or undefined when there is none (permission denied, no services). */
+  pushRegistration(): Promise<PushRegistration | undefined>
+  /** `device/set-wake` on the linked agent. */
+  setWake(
+    wake: GatewayWakeHandle,
+    opts: { pushPlatform: PushRegistration['platform'] }
+  ): Promise<{ pushCapable: boolean; allowedTriggers?: string[] }>
+  register?: typeof registerWithGateway
+}
+
+export type PushWakeOutcome =
+  | { status: 'off' }
+  | { status: 'notLinked' }
+  | { status: 'noToken' }
+  | { status: 'wakeable'; handle: GatewayWakeHandle; allowedTriggers?: string[] }
+  | { status: 'notWakeable'; handle: GatewayWakeHandle }
+
+/**
+ * Make this phone wakeable by its agent. Call it after the phone is registered
+ * as a device, and again whenever the platform token changes: a new token gets
+ * a new handle, and the agent replaces the old one. Refusals from the gateway
+ * or the agent are thrown for the caller to log; they never block the app.
+ */
+export async function enablePushWake(deps: PushWakeDeps): Promise<PushWakeOutcome> {
+  const gatewayUrl = deps.gatewayUrl?.trim()
+  if (!gatewayUrl) return { status: 'off' }
+  const agentDid = deps.agentDid()
+  if (!agentDid) return { status: 'notLinked' }
+  const registration = await deps.pushRegistration()
+  if (!registration) return { status: 'noToken' }
+
+  const handle = await (deps.register ?? registerWithGateway)(gatewayUrl, registration, agentDid)
+  if (!handle.gateway.startsWith('did:')) {
+    // An agent wakes only a gateway named by a DID; one without an identity
+    // answers with its URL, and set-wake would record a channel nothing uses.
+    throw new Error('push gateway has no DID identity, so the agent could not wake this phone through it')
+  }
+  const channel = await deps.setWake(handle, { pushPlatform: registration.platform })
+  return channel.pushCapable
+    ? { status: 'wakeable', handle, allowedTriggers: channel.allowedTriggers }
+    : { status: 'notWakeable', handle }
+}

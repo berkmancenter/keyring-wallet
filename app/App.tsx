@@ -33,6 +33,7 @@ import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/const
 import { ErrorAlertProvider } from '@/contexts/ErrorAlertContext'
 import { ErrorBoundaryWrapper } from '@/errors/components/ErrorBoundary'
 import { localization } from '@/localization'
+import { onPushWake } from '@/push/pushHandlers'
 import { initialState, reducer } from '@/store'
 import { themes } from '@/theme'
 import BCLogger from '@/utils/logger'
@@ -43,11 +44,13 @@ import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
 
 initLanguages(localization)
 
-// Do nothing with push notifications received while the app is in the background
-messaging().setBackgroundMessageHandler(async () => {})
-
-// Do nothing with push notifications received while the app is in the foreground
-messaging().onMessage(async () => {})
+// A push is a contentless wake-up (docs/plans/push-notifications-plan.md §2):
+// log it, never open the agent from here. None arrive unless the build names a
+// push gateway and the person turned notifications on.
+messaging().setBackgroundMessageHandler(async (message) =>
+  onPushWake('background', message, (m, d) => BCLogger.info(m, d))
+)
+messaging().onMessage(async (message) => onPushWake('foreground', message, (m, d) => BCLogger.info(m, d)))
 
 const App = () => {
   const { t } = useTranslation()

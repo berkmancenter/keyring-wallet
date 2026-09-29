@@ -39,6 +39,7 @@ import { DependencyContainer } from 'tsyringe'
 
 import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
 import useBCAgentSetup from '@/hooks/useBCAgentSetup'
+import { appPushNotificationsConfig } from '@/push/pushDefaults'
 import { offerFeedbackReport } from '@/utils/problemReport'
 import { expirationOverrideInMinutes } from '@utils/expiration'
 import BCLogger from '@utils/logger'
@@ -250,6 +251,10 @@ export class AppContainer implements Container {
       showDetailsInfo: true,
       contactHideList: ['BCAttestationService'],
       proofTemplateBaseUrl: Config.PROOF_TEMPLATE_URL,
+      // Push wake-ups (docs/plans/push-notifications-plan.md): undefined unless
+      // the build names a push gateway, so a tester's build has no prompt, no
+      // Settings switch and no registration.
+      enablePushNotifications: appPushNotificationsConfig(),
       appUpdateConfig: {
         appleAppStoreUrl,
         googlePlayStoreUrl,
