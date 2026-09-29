@@ -41,13 +41,17 @@ scripts/push-test/build-ios.sh       # then: xcrun devicectl device install app 
 Both are full native release builds: declare them before running on a shared
 Mac, one heavy build at a time.
 
-`build-ios.sh` edits the tracked `project.pbxproj` for the length of one build.
+`build-ios.sh` edits the tracked `project.pbxproj` and `Info.plist` for the length
+of one build. The `Info.plist` change allows local networking
+(`NSAllowsLocalNetworking`), so the phone can reach a push gateway on the Mac at
+`http://<mac>.local:<port>`; the release app allows plain HTTP to `localhost`
+only, and a test fails if its `Info.plist` ever allows more.
 It refuses to start if that file has changes, restores it on any exit, ctrl-C
 or kill signal, and ends by showing it is clean. The one case it cannot catch
 is `kill -9`; after that, before anything else:
 
 ```sh
-git checkout -- app/ios/AriesBifold.xcodeproj/project.pbxproj
+git checkout -- app/ios/AriesBifold.xcodeproj/project.pbxproj app/ios/AriesBifold/Info.plist
 ```
 
 ## Limits
