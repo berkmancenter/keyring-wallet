@@ -79,6 +79,8 @@ const ALLOWED = {
   "vtc/join-requests/decide/0.1": ["decision", "ext", "id", "reason"],
   "vtc/join-requests/manifest/0.2": ["ext"],
   "vtc/endorsement-types/register/0.1": ["claimSchema", "description", "ext", "typeUri"],
+  "vtc/schemas/accepts/register/0.1": ["description", "ext", "id", "query", "vetting"],
+  "vtc/schemas/accepts/delete/0.1": ["ext", "id"],
   "vtc/endorsement-types/list/0.1": ["cursor", "ext", "limit"],
   "vtc/vetting/vetters/grant/0.1": ["ext", "memberDid", "validitySeconds"],
   "policy/upsert/0.2": ["appliesTo", "description", "enabled", "expectedVersion", "ext", "id", "module", "name", "priority"],
@@ -326,6 +328,32 @@ test("put-policy, activate-policy, active-policies: signed; activate names the p
   }
 });
 
+test("put-criterion, delete-criterion: signed vtc/schemas/accepts tasks, the file is the payload", async () => {
+  const body = { id: "vetted-member", description: "One vetter", query: { credentials: [{ id: "v", format: "ldp_vc" }] }, vetting: { minStatements: 1 } };
+  const vtc = await fakeVtc({
+    tasks: {
+      "vtc/schemas/accepts/register/0.1": [200, { criterion: body }],
+      "vtc/schemas/accepts/delete/0.1": [200, { id: "vetted-member" }],
+    },
+  });
+  const criterion = path.join(dir, "criterion.json");
+  writeFileSync(criterion, JSON.stringify(body));
+  try {
+    for (const args of [["put-criterion", criterion], ["delete-criterion", "vetted-member"]]) {
+      const r = await run(vtc.base, ...args);
+      assert.equal(r.code, 0, `${args[0]}: ${r.stderr}`);
+      assert.equal(statusOf(r.stdout), "200");
+    }
+    assert.deepEqual(signedDocs(vtc.seen), [
+      { short: "vtc/schemas/accepts/register/0.1", payload: body },
+      { short: "vtc/schemas/accepts/delete/0.1", payload: { id: "vetted-member" } },
+    ]);
+    assert.ok(!vtc.seen.some((s) => s.path.startsWith("/v1/schemas")), "no REST criteria route");
+  } finally {
+    await vtc.close();
+  }
+});
+
 test("a refusal prints the trust-task-error's status and payload, and the callers see it as a refusal", async () => {
   const vtc = await fakeVtc({ tasks: { "vtc/invitations/list/0.1": [403, { code: "permissionDenied", message: "not an inviter" }] } });
   try {
@@ -345,22 +373,16 @@ test("the REST routes VTI main keeps: bearer sign-in, then the route, with the c
       "POST /v1/vetting/vetters/did%3Akey%3AzV/resend": [200, { memberDid: "did:key:zV" }],
       "GET /v1/credentials/endorsements": [200, { items: [] }],
       "DELETE /v1/credentials/endorsements/e1": [200, { statusListIndex: 7 }],
-      "POST /v1/schemas/accepts": [200, { id: "vetted-member" }],
-      "DELETE /v1/schemas/accepts/vetted-member": [204, {}],
       "GET /v1/community/branding": [200, { displayName: "Lab" }],
       "PUT /v1/community/branding": [200, { displayName: "Lab" }],
     },
   });
-  const criterion = path.join(dir, "criterion.json");
-  writeFileSync(criterion, JSON.stringify({ id: "vetted-member" }));
   const expected = [
     [["whoami"], "GET /v1/auth/whoami", `${SPEC}auth/whoami/0.1`],
     [["vetters-list"], "GET /v1/vetting/vetters", undefined],
     [["vetter-resend", "did:key:zV"], "POST /v1/vetting/vetters/did%3Akey%3AzV/resend", `${SPEC}vtc/vetting/vetters/resend/0.1`],
     [["endorsements"], "GET /v1/credentials/endorsements", `${SPEC}vtc/endorsements/list/0.1`],
     [["revoke-endorsement", "e1"], "DELETE /v1/credentials/endorsements/e1", `${SPEC}vtc/endorsements/revoke/0.1`],
-    [["put-criterion", criterion], "POST /v1/schemas/accepts", undefined],
-    [["delete-criterion", "vetted-member"], "DELETE /v1/schemas/accepts/vetted-member", undefined],
     [["branding-show"], "GET /v1/community/branding", undefined],
     [["branding-set", "Lab"], "PUT /v1/community/branding", undefined],
   ];
