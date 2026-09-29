@@ -2,6 +2,7 @@ import { Alice } from '../../src/Alice'
 import { Bob } from '../../src/Bob'
 import { setupConnectedAgents, issueAndReceiveCredential } from '../fixtures/connectionSetup'
 import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from '../../src/relationshipContext'
+import { CREDENTIALS_V2_CONTEXT_URL } from '@bifold/vrc-contexts'
 import { cleanupAgents } from '../helpers/testUtils'
 
 describe('Credential Structure Integration', () => {
@@ -24,12 +25,14 @@ describe('Credential Structure Integration', () => {
   describe('Relationship Credential Structure', () => {
     it('should create valid relationship credential structure', async () => {
       const storedCredentials = await alice.agent.w3cCredentials.getAll()
-      const storedCredential = storedCredentials.find((r) => r.credential !== null)
+      // W3cCredentialRecord.credential is write-only (a setter, for legacy
+      // assignment); the read accessor is credentialInstances/firstCredential.
+      const storedCredential = storedCredentials.find((r) => r.credentialInstances && r.credentialInstances.length > 0)
 
       expect(storedCredential).toBeDefined()
-      expect(storedCredential?.credential).toBeDefined()
+      expect(storedCredential?.firstCredential).toBeDefined()
 
-      const credential = storedCredential!.credential as any
+      const credential = storedCredential!.firstCredential as any
 
       // Verify credential structure - handle both plain objects and W3cJsonLdVerifiableCredential
       const context = credential['@context'] || credential.contexts || []
@@ -37,20 +40,26 @@ describe('Credential Structure Integration', () => {
       const issuer = credential.issuer || credential.issuerId
       const subject = credential.credentialSubject || credential.credentialSubjects?.[0]
 
-      expect(context).toContain('https://www.w3.org/2018/credentials/v1')
+      // VCDM 2.0 shape (the VRC's own build — Participant.buildRelationshipCredential
+      // — issues with the v2 base context, not v1.1): @context[0] is the v2 base
+      // context, not the legacy v1 credentials context.
+      expect(context[0]).toBe(CREDENTIALS_V2_CONTEXT_URL)
       expect(context).toContain(DTG_CONTEXT_URL)
       expect(context).toContain(RELATIONSHIP_CONTEXT_URL)
       expect(types).toContain('VerifiableCredential')
       expect(types).toContain('RelationshipCredential')
       expect(issuer).toMatch(/^did:peer:/)
       expect(subject?.id).toMatch(/^did:peer:/)
-      expect(credential.issuanceDate || credential.issuanceDate).toBeDefined()
+      // VCDM 2.0 credentials carry validFrom, not the v1.1-only issuanceDate
+      // (which credo now leaves undefined for a v2-shaped credential).
+      expect(credential.validFrom).toBeDefined()
+      expect(typeof credential.validFrom).toBe('string')
     }, 45000)
 
     it('should use correct R-DIDs in credential', async () => {
       const storedCredentials = await alice.agent.w3cCredentials.getAll()
-      const storedCredential = storedCredentials.find((r) => r.credential !== null)
-      const credential = storedCredential?.credential as any
+      const storedCredential = storedCredentials.find((r) => r.credentialInstances && r.credentialInstances.length > 0)
+      const credential = storedCredential?.firstCredential as any
 
       // Get Alice's R-DID from connection metadata
       const aliceConnection = await alice.agent.modules.didcomm.connections.getById(alice.connectionRecordId!)
@@ -71,11 +80,11 @@ describe('Credential Structure Integration', () => {
 
     it('should include valid Ed25519Signature2018 proof', async () => {
       const storedCredentials = await alice.agent.w3cCredentials.getAll()
-      const storedCredential = storedCredentials.find((r) => r.credential !== null)
+      const storedCredential = storedCredentials.find((r) => r.credentialInstances && r.credentialInstances.length > 0)
 
       // Verify the credential cryptographically - this confirms the proof exists and is valid
       const verificationResult = await alice.agent.w3cCredentials.verifyCredential({
-        credential: storedCredential!.credential as any,
+        credential: storedCredential!.firstCredential,
       })
 
       expect(verificationResult.isValid).toBe(true)
