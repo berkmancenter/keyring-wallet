@@ -81,6 +81,8 @@ const ALLOWED = {
   "vtc/endorsement-types/register/0.1": ["claimSchema", "description", "ext", "typeUri"],
   "vtc/schemas/accepts/register/0.1": ["description", "ext", "id", "query", "vetting"],
   "vtc/schemas/accepts/delete/0.1": ["ext", "id"],
+  "vtc/community/join-discovery/show/0.1": ["ext"],
+  "vtc/community/join-discovery/update/0.1": ["ext", "joinDiscovery"],
   "vtc/endorsement-types/list/0.1": ["cursor", "ext", "limit"],
   "vtc/vetting/vetters/grant/0.1": ["ext", "memberDid", "validitySeconds"],
   "policy/upsert/0.2": ["appliesTo", "description", "enabled", "expectedVersion", "ext", "id", "module", "name", "priority"],
@@ -349,6 +351,31 @@ test("put-criterion, delete-criterion: signed vtc/schemas/accepts tasks, the fil
       { short: "vtc/schemas/accepts/delete/0.1", payload: { id: "vetted-member" } },
     ]);
     assert.ok(!vtc.seen.some((s) => s.path.startsWith("/v1/schemas")), "no REST criteria route");
+  } finally {
+    await vtc.close();
+  }
+});
+
+test("join-discovery-show, join-discovery-set: whether the manifest answers an unidentified caller", async () => {
+  const vtc = await fakeVtc({
+    tasks: {
+      "vtc/community/join-discovery/show/0.1": [200, { joinDiscovery: { public: true } }],
+      "vtc/community/join-discovery/update/0.1": [200, { joinDiscovery: { public: false } }],
+    },
+  });
+  try {
+    for (const args of [["join-discovery-show"], ["join-discovery-set", "closed"], ["join-discovery-set", "open"]]) {
+      const r = await run(vtc.base, ...args);
+      assert.equal(r.code, 0, `${args[0]}: ${r.stderr}`);
+      assert.equal(statusOf(r.stdout), "200");
+    }
+    assert.deepEqual(signedDocs(vtc.seen), [
+      { short: "vtc/community/join-discovery/show/0.1", payload: {} },
+      { short: "vtc/community/join-discovery/update/0.1", payload: { joinDiscovery: { public: false } } },
+      { short: "vtc/community/join-discovery/update/0.1", payload: { joinDiscovery: { public: true } } },
+    ]);
+    const bad = await run(vtc.base, "join-discovery-set", "maybe");
+    assert.notEqual(bad.code, 0, "only open or closed");
   } finally {
     await vtc.close();
   }

@@ -79,6 +79,8 @@ export const TASK = {
   typeList: `${SPEC}vtc/endorsement-types/list/0.1`,
   acceptsRegister: `${SPEC}vtc/schemas/accepts/register/0.1`,
   acceptsDelete: `${SPEC}vtc/schemas/accepts/delete/0.1`,
+  joinDiscoveryShow: `${SPEC}vtc/community/join-discovery/show/0.1`,
+  joinDiscoveryUpdate: `${SPEC}vtc/community/join-discovery/update/0.1`,
   vettersGrant: `${SPEC}vtc/vetting/vetters/grant/0.1`,
   policyUpsert: `${SPEC}policy/upsert/0.2`,
   policyGet: `${SPEC}policy/get/0.1`,
@@ -360,6 +362,18 @@ const COMMANDS = {
     run: ({ send }, [file]) => send(TASK.acceptsRegister, JSON.parse(readFileSync(file, "utf8"))),
   },
   "delete-criterion": { signed: true, run: ({ send }, [id]) => send(TASK.acceptsDelete, { id }) },
+  // Whether the join manifest answers a caller the community cannot identify
+  // (vtc-service routes/community/join_discovery.rs). "closed" makes an
+  // applicant's anonymous REST read fail, so the phone must ask over DIDComm or
+  // TSP: the path keyring-bifold #158 signs.
+  "join-discovery-show": { signed: true, run: ({ send }) => send(TASK.joinDiscoveryShow, {}) },
+  "join-discovery-set": {
+    signed: true,
+    run: ({ send }, [state]) => {
+      if (state !== "open" && state !== "closed") throw new Error('join-discovery-set takes "open" or "closed"');
+      return send(TASK.joinDiscoveryUpdate, { joinDiscovery: { public: state === "open" } });
+    },
+  },
   "vetter-grant": {
     signed: true,
     run: ({ send }, [memberDid, seconds]) =>
@@ -457,6 +471,8 @@ const SIGNED_TASK = {
   "list-types": TASK.typeList,
   "put-criterion": TASK.acceptsRegister,
   "delete-criterion": TASK.acceptsDelete,
+  "join-discovery-show": TASK.joinDiscoveryShow,
+  "join-discovery-set": TASK.joinDiscoveryUpdate,
   "vetter-grant": TASK.vettersGrant,
   "put-policy": TASK.policyUpsert,
   "activate-policy": TASK.policyActivate,
