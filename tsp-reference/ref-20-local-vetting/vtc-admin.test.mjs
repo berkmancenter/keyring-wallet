@@ -84,6 +84,7 @@ const ALLOWED = {
   "vtc/community/join-discovery/show/0.1": ["ext"],
   "vtc/community/join-discovery/update/0.1": ["ext", "joinDiscovery"],
   "vtc/members/admin-remove/0.1": ["did", "disposition", "ext", "reason"],
+  "vtc/members/credentials/0.1": ["did", "ext"],
   "vtc/endorsement-types/list/0.1": ["cursor", "ext", "limit"],
   "vtc/vetting/vetters/grant/0.1": ["ext", "memberDid", "validitySeconds"],
   "policy/upsert/0.2": ["appliesTo", "description", "enabled", "expectedVersion", "ext", "id", "module", "name", "priority"],
@@ -394,6 +395,18 @@ test("member-remove: the admin removes a member, with a reason when given", asyn
       { short: "vtc/members/admin-remove/0.1", payload: { did: "did:key:zM" } },
       { short: "vtc/members/admin-remove/0.1", payload: { did: "did:key:zM", reason: "left the lab" } },
     ]);
+  } finally {
+    await vtc.close();
+  }
+});
+
+test("member-credentials: what the community issued a member, its status among it", async () => {
+  const vtc = await fakeVtc({ tasks: { "vtc/members/credentials/0.1": [200, { did: "did:key:zM", memberVmc: { id: "urn:vmc" } }] } });
+  try {
+    const r = await run(vtc.base, "member-credentials", "did:key:zM");
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(statusOf(r.stdout), "200");
+    assert.deepEqual(signedDocs(vtc.seen), [{ short: "vtc/members/credentials/0.1", payload: { did: "did:key:zM" } }]);
   } finally {
     await vtc.close();
   }
