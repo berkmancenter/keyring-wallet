@@ -18,6 +18,7 @@ import type { EnrolmentOffer } from '@bifold/trust-tasks'
 
 import type { AgentLabel } from './agentLabel'
 import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
+import type { StepUpRequest } from './stepUp'
 import {
   ManagerKeyUnresolved,
   SwapDoneSignInFailed,
@@ -90,6 +91,12 @@ export interface VtaAgentState {
   approvals: VtiApproval[]
   /** A task of ours the VTA is holding for someone else's consent. */
   awaitingConsentFor?: string
+  /**
+   * The agent asks this phone to confirm it is the person before it does a
+   * task (a step-up): its own reason, shown as sent, and the task. Answered
+   * with `answerStepUp`; the owner check follows a confirmation.
+   */
+  stepUpAsk?: { id: string; reason: string; taskType?: string }
   error?: string
   /**
    * Whether this phone is linked to an agent, and how that link is doing
@@ -239,6 +246,9 @@ export const UNLINK_TELL_DEADLINE_MS = 5000
 export const OWNER_ACT_DEADLINE_MS = 45000
 /** Reconnect tries in a row (1 s, 2 s, 4 s, 8 s, 16 s apart) before the agent screen says it didn't answer. */
 export const MAX_RECONNECT_TRIES = 5
+
+/** How long the step-up card waits for the person; unanswered, nothing is sent. */
+export const STEP_UP_ASK_TIMEOUT_MS = 120_000
 
 /** Matches VtaClient's own "no answer in time" — a silence, not a refusal. */
 const NO_ANSWER = /the VTA did not answer/
@@ -407,6 +417,7 @@ export class VtaAgentController {
       },
       onInbound: (plaintext) => this.inbound(plaintext),
       onConsentPending: ({ taskType }) => this.set({ awaitingConsentFor: taskType }),
+      onStepUp: (request, context) => this.askStepUp(request, context),
     })
     // The client replaced for the agent an unlock handed over keeps what the
     // screen shows: the new session opens quietly behind it.
@@ -1268,6 +1279,55 @@ export class VtaAgentController {
     const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
     const signedInAs = this.current?.vtaDid === vtaDid ? this.current.client.managerDid : undefined
     return [record?.did, record?.pendingNext?.did, signedInAs].filter((d): d is string => Boolean(d))
+  }
+
+  /** The answer to the step-up card on screen now, if it is still there. */
+  private stepUpAnswer?: { id: string; answer: (choice: 'approve' | 'deny') => void }
+
+  /**
+   * The agent asks for a step-up. The person first sees its reason, as sent,
+   * on a card in the app (the 228 lab check: on Android the owner check right
+   * after an act's own check passed without a prompt, so a reason that lived
+   * only in that prompt was never seen). Confirmed, the owner check runs;
+   * cancelled there, or "Don't allow" on the card, is a signed no. Nothing is
+   * sent for a check that failed or a card left unanswered.
+   */
+  private async askStepUp(request: StepUpRequest, context: { taskType?: string } = {}): Promise<'approve' | 'deny'> {
+    const confirm = this.deps.confirmOwner
+    if (!confirm) throw new OwnerCheckNotConfigured('confirmOwner')
+    const id = `step-up-${request.challenge.slice(0, 12)}-${this.now()}`
+    const choice = await new Promise<'approve' | 'deny' | undefined>((resolve) => {
+      const timer = setTimeout(() => resolve(undefined), STEP_UP_ASK_TIMEOUT_MS)
+      this.stepUpAnswer = {
+        id,
+        answer: (c) => {
+          clearTimeout(timer)
+          resolve(c)
+        },
+      }
+      this.set({
+        stepUpAsk: { id, reason: request.reason, ...(context.taskType ? { taskType: context.taskType } : {}) },
+      })
+    })
+    if (this.stepUpAnswer?.id === id) this.stepUpAnswer = undefined
+    if (this.state.stepUpAsk?.id === id) this.set({ stepUpAsk: undefined })
+    if (choice === undefined) throw new OwnerNotConfirmed('cancelled', 'the extra check was not answered')
+    if (choice === 'deny') return 'deny'
+    let answer: Awaited<ReturnType<ConfirmOwner>> | undefined
+    try {
+      answer = await confirm(request.reason)
+    } catch (error) {
+      throw new OwnerNotConfirmed('failed', error instanceof Error ? error.message : String(error))
+    }
+    if (answer?.ok === true) return 'approve'
+    if (answer?.reason === 'cancelled') return 'deny'
+    throw new OwnerNotConfirmed(answer?.reason ?? 'failed')
+  }
+
+  /** The person answered the step-up card `id`; an answer for a card no longer shown is ignored. */
+  answerStepUp(id: string, choice: 'approve' | 'deny'): void {
+    if (this.stepUpAnswer?.id !== id) return
+    this.stepUpAnswer.answer(choice)
   }
 
   /** The owner check, first thing in every owner act. Throws unless the person confirmed. */

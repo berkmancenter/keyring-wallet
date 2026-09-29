@@ -43,6 +43,7 @@ import {
 } from './VtiMediatorTransport'
 import type { VtiIdentityStore, VtiManagerIdentity, VtiMintRequest, VtiPersona } from './VtiIdentityStore'
 import { VtiRefusal } from './vtiAgent'
+import { STEP_UP_TASK, StepUpDeclined, approveResponsePayload, stepUpRequestOf, type StepUpRequest } from './stepUp'
 import { isDigestMultibase } from './vettingShape'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { packTrustTaskForPeer, tspSessionForManager, unpackTrustTaskFromPeer, type TspSessionIdentity } from './vtiTsp'
@@ -395,6 +396,13 @@ export class VtaClient {
       onConsentPending?: (info: { taskType: string; payloadDigest?: string }) => void
       /** How long to wait for approvers before giving up on a held task. */
       consentWaitMs?: number
+      /**
+       * The agent asks for a step-up on a task: ask the person, showing the
+       * agent's `reason` as it is. Answer `approve` or `deny`; throw when the
+       * person could not be asked (nothing is sent then). Without it, the
+       * refusal stands.
+       */
+      onStepUp?: (request: StepUpRequest, context: { taskType: string }) => Promise<'approve' | 'deny'>
       /** How long a fresh session drains the mediator's backlog before the first send. */
       connectDrainMs?: number
       /** How long to wait for the answer to `acl/swap-key`. */
@@ -510,6 +518,11 @@ export class VtaClient {
     const next = this.queue.then(run, run)
     this.queue = next.catch(() => undefined)
     return next.catch(async (error: unknown) => {
+      const stepUp = this.managerDid ? stepUpRequestOf(error, { vtaDid: this.vtaDid, me: this.managerDid }) : undefined
+      if (stepUp)
+        return this.answerStepUp<T>(stepUp, error, type, () =>
+          this.sendTask<T>(type, payload, timeoutMs, documentExtras)
+        )
       // A task the policy holds for consent is refused with
       // `details.reason = "auth:consent_required"` and the signed requests the
       // approvers were sent (policy_gate.rs). The grant that consent produces
@@ -549,6 +562,30 @@ export class VtaClient {
       }
       throw lastError instanceof Error ? lastError : new Error(String(lastError))
     })
+  }
+
+  /**
+   * Answer the agent's step-up for a task, then re-submit it once approved.
+   * The answer goes on this session, signed by this client's identity — the
+   * session the agent elevates. A request this phone cannot answer leaves the
+   * refusal as it came.
+   */
+  private async answerStepUp<T>(
+    stepUp: NonNullable<ReturnType<typeof stepUpRequestOf>>,
+    refusal: unknown,
+    taskType: string,
+    resubmit: () => Promise<T>
+  ): Promise<T> {
+    const ask = this.options.onStepUp
+    if (!stepUp.ok || !ask) {
+      if (!stepUp.ok) this.agent.config.logger.warn(`${LOG_PREFIX} not answering the agent's step-up: ${stepUp.why}`)
+      throw refusal
+    }
+    const answer = await ask(stepUp.request, { taskType })
+    const decision = answer === 'approve' ? 'approved' : 'denied'
+    await this.sendTask(STEP_UP_TASK.approveResponse, approveResponsePayload(stepUp.request, decision), 30000)
+    if (decision === 'denied') throw new StepUpDeclined()
+    return resubmit()
   }
 
   /** One send and its matched answer — no queue, no consent handling. */

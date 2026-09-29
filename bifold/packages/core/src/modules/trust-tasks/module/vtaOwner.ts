@@ -15,6 +15,7 @@
  */
 
 import { consentPendingOf } from './VtaClient'
+import { StepUpDeclined } from './stepUp'
 import { VtiRefusal } from './vtiAgent'
 
 /** Why the person did not confirm: cancelled is silent on screen; failed and unavailable are worded. */
@@ -77,8 +78,10 @@ export class DeviceCannotOwn extends Error {
  * - `notPermitted` — the agent will not let this phone do that (it is not the
  *   agent's full owner).
  * - `accessRevoked` — the agent no longer knows this phone at all.
- * - `stepUpRequired` — the agent's operator requires a re-authentication for
- *   this act that Keyring cannot give yet.
+ * - `stepUpRequired` — the agent asked for an extra check (a step-up) that
+ *   this phone could not answer.
+ * - `stepUpDeclined` — the person said no to the agent's extra check.
+ * - `notConfirmed` — the extra check could not confirm it was the person.
  * - `awaitingApproval` — the agent holds the act for someone else's approval,
  *   which did not come in time.
  * - `noAnswer` — the agent said nothing in time; the act may or may not have
@@ -95,6 +98,8 @@ export type DeviceRefusalReason =
   | 'notPermitted'
   | 'accessRevoked'
   | 'stepUpRequired'
+  | 'stepUpDeclined'
+  | 'notConfirmed'
   | 'awaitingApproval'
   | 'noAnswer'
   | 'unreachable'
@@ -108,7 +113,9 @@ const PLAIN_WORDS: Record<DeviceRefusalReason, string> = {
   notFound: "Your agent doesn't have that device.",
   notPermitted: "Your agent doesn't let this phone do that.",
   accessRevoked: "Your agent doesn't accept this phone any more.",
-  stepUpRequired: 'Your agent asks for an extra check that Keyring cannot give yet.',
+  stepUpRequired: "Your agent asked for an extra check this phone couldn't answer.",
+  stepUpDeclined: 'You declined the extra check, so your agent did not do this.',
+  notConfirmed: "Keyring couldn't confirm it's you.",
   awaitingApproval: 'Your agent is waiting for someone else to approve this.',
   noAnswer: "Your agent didn't answer. Check the list before trying again.",
   unreachable: "Keyring couldn't reach your agent. Check your connection and try again.",
@@ -166,6 +173,8 @@ export function deviceRefusalOf(error: unknown): DeviceActionRefused {
   if (error instanceof DeviceActionRefused) return error
   const message = error instanceof Error ? error.message : String(error)
   const refusal = (reason: DeviceRefusalReason) => new DeviceActionRefused(reason, message)
+  if (error instanceof StepUpDeclined) return refusal('stepUpDeclined')
+  if (error instanceof OwnerNotConfirmed) return refusal('notConfirmed')
   if (consentPendingOf(error)) return refusal('awaitingApproval')
   if (!(error instanceof VtiRefusal)) return refusal(NO_ANSWER.test(message) ? 'noAnswer' : 'failed')
   const details = (error.details ?? {}) as { reason?: unknown }
