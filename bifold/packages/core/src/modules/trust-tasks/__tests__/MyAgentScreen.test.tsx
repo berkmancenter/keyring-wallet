@@ -8,8 +8,10 @@ import { render, act } from '@testing-library/react-native'
 import React from 'react'
 
 import { useAgent } from '@bifold/react-hooks'
+import { useNavigation } from '@react-navigation/native'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
 import MyAgent from '../screens/MyAgent'
 import { emitCommunityChanged } from '../module/communityChanged'
@@ -93,6 +95,47 @@ const vetterGrant = {
     receivedAt: '2026-09-18T00:00:00Z',
   },
 }
+
+// The two-phone gate trial (09-29): the second phone finished linking and was
+// left on this older panel, not the agent home. Every flow that starts here
+// (link by QR, link without QR, two phones, relink, create my agent) ends by
+// going back to it, and the stack only chooses its first screen once. Once
+// the phone is linked, the panel hands over to the agent home.
+describe('My Agent — the older panel hands over once linked', () => {
+  const linkedLink = {
+    kind: 'linked',
+    vtaDid: config.vtaDid,
+    label: 'bob',
+    linkedAt: '2026-09-29T21:36:00Z',
+    connection: { kind: 'online' },
+  }
+  beforeEach(() => (useNavigation() as unknown as { replace: jest.Mock }).replace.mockClear())
+
+  test('a linked phone is taken to the agent home', async () => {
+    setVta({ status: 'connected', approvals: [], link: linkedLink })
+    mockUseAgent.mockReturnValue(fakeAgent([]))
+    render(
+      <BasicAppContext>
+        <MyAgent config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    expect((useNavigation() as unknown as { replace: jest.Mock }).replace).toHaveBeenCalledWith(Screens.VtaAgent)
+    setVta({ link: { kind: 'notLinked' } })
+  })
+
+  test('a phone that is not linked stays here, where the ways to link are', async () => {
+    setVta({ status: 'disconnected', approvals: [], link: { kind: 'notLinked' } })
+    mockUseAgent.mockReturnValue(fakeAgent([]))
+    render(
+      <BasicAppContext>
+        <MyAgent config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => undefined)
+    expect((useNavigation() as unknown as { replace: jest.Mock }).replace).not.toHaveBeenCalled()
+  })
+})
 
 describe('My Agent — the connected gate', () => {
   beforeEach(() => {
