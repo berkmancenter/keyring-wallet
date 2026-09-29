@@ -651,3 +651,19 @@ describe('every Trust Task Keyring signs, from the shipping code', () => {
     }
   })
 })
+
+// Each address as the published specification names it (the `$id` of each
+// schema in trust-tasks-rs 0.24.6, the version VTI main pins). A wrong one is
+// a task no community serves, whatever the payload says.
+describe('the vetting task addresses Keyring uses', () => {
+  it('are the published ones', () => {
+    expect(VETTING).toEqual({
+      request: 'https://trusttasks.org/spec/vetting/request/0.1',
+      session: 'https://trusttasks.org/spec/vetting/session/0.1',
+      decline: 'https://trusttasks.org/spec/vetting/decline/0.1',
+      revokeStatement: 'https://trusttasks.org/spec/vtc/vetting/revoke-statement/0.1',
+      vettersList: 'https://trusttasks.org/spec/vtc/vetting/vetters/list/0.1',
+      vettersProfile: 'https://trusttasks.org/spec/vtc/vetting/vetters/profile/0.1',
+    })
+  })
+})

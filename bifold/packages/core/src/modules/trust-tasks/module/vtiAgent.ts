@@ -62,25 +62,25 @@ const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
 const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
 const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
 const SELF_REMOVE = 'https://trusttasks.org/spec/vtc/members/self-remove/0.1'
-const VETTERS_PROFILE = 'https://trusttasks.org/spec/vtc/vetting/vetters/profile/0.1'
 const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
-/**
- * The community tasks this controller signs. Those whose specifications
- * declare the document `proof` REQUIRED — a VTC refuses them unsigned
- * (`proofRequired`) since vti #1672, over every carriage — and the vetter
- * profile, whose proof is RECOMMENDED so a published profile stays
- * attributable to its vetter after the transport has closed
- * (vtc/vetting/vetters/profile/0.1 spec.md:26-28), and which openvtc signs
- * (`publish_profile` → `sign_and_send`, openvtc vetting_actions.rs:1731-1760,
- * :1097-1110).
+/*
+ * Every document `ask` sends is signed. `ask` carries only DIDComm and TSP,
+ * and over those a VTC takes a document only when its proof is by its
+ * `issuer` and the issuer is the transport's sender (vti #1739; the spine's
+ * step 3a, vtc-service trust_tasks/mod.rs:401-414), whatever the task's own
+ * spec says about the proof. Before that, only the tasks whose specs declare
+ * the proof REQUIRED (vti #1672) and the vetter profile were signed, and the
+ * join manifest went out unsigned.
  *
- * The manifest stays unsigned. Its proof is RECOMMENDED too, but the spec's
- * own privacy analysis is why not: an unproofed read discloses no applicant
- * identifier, and a proof "converts an anonymous read into an attributable
- * one" of someone merely considering applying (vtc/join-requests/manifest/0.2
- * spec.md:26-28, :326-329). openvtc signs it; Keyring does not, on purpose.
+ * The manifest's proof is only RECOMMENDED, and the spec's privacy analysis is
+ * why Keyring left it off: an unproofed read discloses no applicant
+ * identifier, where a proof "converts an anonymous read into an attributable
+ * one" (vtc/join-requests/manifest/0.2 spec.md:26-28, :326-329). That still
+ * holds for the read that is anonymous, the REST one (`manifestOverRest`),
+ * which stays unsigned. Over DIDComm or TSP the transport has already named
+ * the persona to the community, so the proof discloses nothing more. openvtc
+ * signs every request, the manifest included.
  */
-const SIGNED_TASKS = new Set([SUBMIT, STATUS, WITHDRAW, SUPPLEMENT, SELF_REMOVE, VETTERS_PROFILE])
 
 /**
  * The community tasks `ask` may send twice: reads, which change nothing, so a
@@ -1077,18 +1077,20 @@ class VtiAgentController {
 
   /**
    * The Trust Task document `ask` sends: from this session's DID to the
-   * community, dated, and — for a task whose specification declares the proof
-   * REQUIRED — signed with the persona's borrowed key under the verification
-   * method its DID document names, exactly as a vetting task is signed. A VTC
+   * community, dated, and signed with the persona's borrowed key under the
+   * verification method its DID document names, exactly as a vetting task is
+   * signed (see the note after the task URIs at the top of this file for why
+   * every one is). A VTC
    * checks that the proof's key belongs to the document's `issuer`, so the
    * issuer is the persona and nothing else.
    *
    * A session that is not a persona (a phone-minted did:peer) has no key a
    * community could resolve, and a persona without a borrowed signing key
-   * cannot sign: either sends the document unsigned and says so, because a
-   * community before vti #1672 still accepts it and one after refuses it with
+   * cannot sign: either sends the document unsigned and says so, because an
+   * older community still accepts it and a current one refuses it with
    * `proofRequired` — an answer the caller already surfaces — rather than
-   * the wallet failing silently before asking.
+   * the wallet failing silently before asking. The manifest a fresh phone
+   * reads before it has a persona goes over REST first (`fetchManifest`).
    */
   private async taskDocument(
     communityDid: string,
@@ -1105,7 +1107,6 @@ class VtiAgentController {
       issuedAt: new Date().toISOString(),
       payload,
     }
-    if (!SIGNED_TASKS.has(type)) return document
     const persona = this.persona
     const agent = this.agent
     if (!agent || !persona || persona.did !== this.state.did || !persona.kmsKeyIds?.signing) {

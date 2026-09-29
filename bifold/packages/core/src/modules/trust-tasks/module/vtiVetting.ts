@@ -56,7 +56,7 @@ export const VETTING = {
   request: 'https://trusttasks.org/spec/vetting/request/0.1',
   session: 'https://trusttasks.org/spec/vetting/session/0.1',
   decline: 'https://trusttasks.org/spec/vetting/decline/0.1',
-  revokeStatement: 'https://trusttasks.org/spec/vetting/revoke-statement/0.1',
+  revokeStatement: 'https://trusttasks.org/spec/vtc/vetting/revoke-statement/0.1',
   vettersList: 'https://trusttasks.org/spec/vtc/vetting/vetters/list/0.1',
   vettersProfile: 'https://trusttasks.org/spec/vtc/vetting/vetters/profile/0.1',
 } as const
@@ -822,7 +822,8 @@ export class VtiVetterDesk {
     // for the profile payload, protocols/vetting.rs:570-597, which the
     // community applies): the schema, and the event rule the schema states in
     // prose only — an https `url`, and `endDate` on or after `startDate` and
-    // at most 31 days after it. Signed by `vtiAgent.ask` (its SIGNED_TASKS).
+    // at most 31 days after it. Signed by `vtiAgent.ask`, which signs
+    // everything it sends.
     const shape = checkVetterProfile(payload)
     if (!shape.ok) throw new VetterProfileError(shape.detail)
     // The community's document may not be in the resolver's cache on this
