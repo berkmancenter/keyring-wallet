@@ -14,6 +14,7 @@ import { TOKENS, useServices } from '../container-api'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
 import { ConnectStackParams } from '../types/navigators'
+import { deviceCodeScan } from '../modules/trust-tasks/module/deviceCodeScan'
 import { KeyringLinkError } from '../modules/trust-tasks/module/vtiLinks'
 import { connectFromScanOrDeepLink } from '../utils/helpers'
 import { testIdWithKey } from '../utils/testable'
@@ -77,6 +78,17 @@ const PasteUrl: React.FC<PasteProps> = ({ navigation }) => {
   }
 
   const processPastedContent = async () => {
+    // "Scan its code" on the phone adding another one (#30): a device code
+    // pasted here goes back to that screen, as a scanned one does.
+    const forDevice = deviceCodeScan.claim(pastedContent)
+    if (forDevice?.taken) {
+      navigation?.getParent()?.goBack()
+      return
+    }
+    if (forDevice) {
+      setErrorMessage({ title: t('Scan.CodeNotUsable'), message: t('Scan.NotADeviceCode') })
+      return
+    }
     try {
       await connectFromScanOrDeepLink(
         pastedContent,
