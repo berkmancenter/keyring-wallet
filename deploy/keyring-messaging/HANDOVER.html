@@ -1,0 +1,1086 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Keyring Push Gateway Handover</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&display=swap"
+    />
+    <style>
+      :root {
+        --paper: #f5f7fa;
+        --panel: #ffffff;
+        --ink: #1b2330;
+        --muted: #566173;
+        --rule: #d8dee7;
+        --accent: #1f6f8b;
+        --accent-soft: #e3f0f5;
+        --warn: #b4532a;
+        --warn-soft: #fbeee7;
+        --code-bg: #eef1f5;
+        --ok: #2f7d4f;
+        --sans:
+          "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --cond:
+          "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+        --mono:
+          "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+          monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          color-scheme: dark;
+          --paper: #11151b;
+          --panel: #171c24;
+          --ink: #e3e8ef;
+          --muted: #9aa6b6;
+          --rule: #2a323e;
+          --accent: #62b6d2;
+          --accent-soft: #16303a;
+          --warn: #e3906a;
+          --warn-soft: #3a241b;
+          --code-bg: #1d242e;
+          --ok: #6cc08e;
+        }
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --paper: #11151b;
+        --panel: #171c24;
+        --ink: #e3e8ef;
+        --muted: #9aa6b6;
+        --rule: #2a323e;
+        --accent: #62b6d2;
+        --accent-soft: #16303a;
+        --warn: #e3906a;
+        --warn-soft: #3a241b;
+        --code-bg: #1d242e;
+        --ok: #6cc08e;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font: 16px/1.6 var(--sans);
+        padding-inline: 16px;
+        padding-block: 32px 64px;
+      }
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+      @media (min-width: 920px) {
+        .wrap {
+          grid-template-columns: 200px minmax(0, 1fr);
+        }
+      }
+      nav.toc {
+        font-size: 14px;
+      }
+      @media (min-width: 920px) {
+        nav.toc {
+          position: sticky;
+          top: calc(env(safe-area-inset-top, 0px) + 24px);
+          align-self: start;
+        }
+      }
+      nav.toc ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 6px;
+      }
+      nav.toc a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      nav.toc a:hover,
+      nav.toc a:focus-visible {
+        color: var(--accent);
+      }
+      nav.toc .label {
+        font: 600 12px/1 var(--cond);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+      main {
+        max-width: 72ch;
+        min-width: 0;
+      }
+      header .kicker {
+        font: 600 13px/1 var(--cond);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      h1 {
+        font: 700 clamp(30px, 5vw, 42px)/1.1 var(--cond);
+        margin: 10px 0 14px;
+        text-wrap: balance;
+      }
+      h2 {
+        font: 700 25px/1.2 var(--cond);
+        margin: 48px 0 12px;
+        text-wrap: balance;
+        scroll-margin-top: 24px;
+      }
+      h3 {
+        font: 600 18px/1.3 var(--cond);
+        margin: 28px 0 8px;
+        letter-spacing: 0.01em;
+      }
+      p,
+      li {
+        max-width: 68ch;
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--muted);
+      }
+      .status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 18px 0 0;
+      }
+      .chip {
+        font: 500 13px/1 var(--mono);
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--rule);
+        background: var(--panel);
+        color: var(--ink);
+      }
+      .chip.ok {
+        border-color: var(--ok);
+        color: var(--ok);
+      }
+      code,
+      kbd {
+        font: 0.9em var(--mono);
+        background: var(--code-bg);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      pre {
+        font: 13.5px/1.55 var(--mono);
+        background: var(--code-bg);
+        padding: 14px 16px;
+        border-radius: 6px;
+        overflow-x: auto;
+        margin: 10px 0 16px;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+      }
+      a {
+        color: var(--accent);
+      }
+      a:focus-visible,
+      button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .tablebox {
+        overflow-x: auto;
+        margin: 10px 0 16px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        background: var(--panel);
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 14.5px;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--rule);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      th {
+        font: 600 12px/1.3 var(--cond);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: var(--paper);
+      }
+      td code {
+        white-space: nowrap;
+      }
+      .secret {
+        font: 600 11px/1 var(--cond);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--warn);
+        border: 1px solid var(--warn);
+        border-radius: 3px;
+        padding: 2px 5px;
+        margin-right: 6px;
+        white-space: nowrap;
+      }
+      .warnbox {
+        border-left: 4px solid var(--warn);
+        background: var(--warn-soft);
+        padding: 14px 16px;
+        border-radius: 0 6px 6px 0;
+        margin: 16px 0;
+      }
+      .warnbox strong {
+        color: var(--warn);
+      }
+      .note {
+        border-left: 4px solid var(--accent);
+        background: var(--accent-soft);
+        padding: 12px 16px;
+        border-radius: 0 6px 6px 0;
+        margin: 16px 0;
+      }
+      figure {
+        margin: 18px 0 8px;
+      }
+      figure .svgbox {
+        overflow-x: auto;
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        padding: 12px;
+      }
+      figure svg {
+        display: block;
+        min-width: 620px;
+        width: 100%;
+        height: auto;
+      }
+      figcaption {
+        font-size: 14px;
+        color: var(--muted);
+        margin-top: 8px;
+      }
+      svg .box {
+        fill: var(--paper);
+        stroke: var(--ink);
+        stroke-width: 1.4;
+      }
+      svg .hub {
+        fill: var(--accent-soft);
+        stroke: var(--accent);
+        stroke-width: 2;
+      }
+      svg .t {
+        fill: var(--ink);
+        font: 600 14px var(--cond);
+      }
+      svg .s {
+        fill: var(--muted);
+        font: 12px var(--sans);
+      }
+      svg .line {
+        stroke: var(--ink);
+        stroke-width: 1.4;
+        fill: none;
+      }
+      svg .reg {
+        stroke: var(--accent);
+        stroke-width: 1.4;
+        fill: none;
+        stroke-dasharray: 5 4;
+      }
+      svg .lbl {
+        fill: var(--ink);
+        font: 12px var(--mono);
+      }
+      svg .lbl.a {
+        fill: var(--accent);
+      }
+      svg .arrow {
+        fill: var(--ink);
+      }
+      svg .arrow.a {
+        fill: var(--accent);
+      }
+      ol.steps {
+        padding-left: 22px;
+        display: grid;
+        gap: 10px;
+      }
+      ol.steps li::marker {
+        font-weight: 600;
+        color: var(--accent);
+      }
+      .checklist {
+        list-style: none;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+      .checklist li {
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        gap: 8px;
+      }
+      .checklist input {
+        width: 16px;
+        height: 16px;
+        margin-top: 4px;
+        accent-color: var(--accent);
+      }
+      .log {
+        font: 13px/1.5 var(--mono);
+        color: var(--muted);
+      }
+      .copyrow {
+        position: relative;
+      }
+      .copy {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        font: 500 12px var(--sans);
+        border: 1px solid var(--rule);
+        background: var(--panel);
+        color: var(--ink);
+        border-radius: 4px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+      footer {
+        margin-top: 56px;
+        padding-top: 16px;
+        border-top: 1px solid var(--rule);
+        font-size: 14px;
+        color: var(--muted);
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        a,
+        .copy {
+          transition:
+            color 0.15s,
+            background 0.15s;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav class="toc" aria-label="Contents">
+        <div class="label">Contents</div>
+        <ol>
+          <li><a href="#what">1. What it is</a></li>
+          <li><a href="#image">2. The image</a></li>
+          <li><a href="#settings">3. Settings &amp; secrets</a></li>
+          <li><a href="#identity">3.4 Its identity</a></li>
+          <li><a href="#allowlist">3.5 Who it serves</a></li>
+          <li><a href="#host">4. Host needs</a></li>
+          <li><a href="#golive">5. Go-live &amp; test</a></li>
+          <li><a href="#gaps">6. Known gaps</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <header>
+          <div class="kicker">Handover · for the engineer running it</div>
+          <h1>Keyring push gateway</h1>
+          <p class="lede">
+            How to run the service that wakes a person's phone when their agent
+            needs them, without telling Apple or Google anything about why.
+          </p>
+          <div class="status">
+            <span class="chip ok">Tested on a real iPhone · 2026-09-29</span>
+            <span class="chip">upstream e542a9d7 + patch 0001</span>
+            <span class="chip">no secrets on this page</span>
+          </div>
+          <p>
+            In the test, a request from the person's agent showed a notification
+            on the phone within about 5 seconds, with the app in the background
+            and after it was force-quit. With the app open it showed nothing,
+            which is the design. The package lives in
+            <code>deploy/keyring-messaging/</code> of the Keyring wallet
+            repository, with the same text as <code>HANDOVER.md</code>.
+          </p>
+        </header>
+
+        <section id="what">
+          <h2>1. What the gateway is</h2>
+          <p>
+            Each Keyring user has an <strong>agent</strong>: a server-side
+            service (a VTA) that acts for them. Sometimes the agent needs the
+            person, for example to approve a request. If the app is closed, the
+            agent can't reach it. The gateway solves that one problem. It's a
+            <strong>doorbell</strong>.
+          </p>
+          <figure>
+            <div class="svgbox">
+              <svg viewBox="0 0 760 300" role="img" aria-labelledby="dtitle">
+                <title id="dtitle">
+                  The phone registers once with the gateway; later the agent
+                  sends a signed wake through its mediator to the gateway, which
+                  asks Apple or Google to show a fixed line on the phone; the
+                  phone then fetches the real request from the agent.
+                </title>
+                <defs>
+                  <marker
+                    id="ah"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto-start-reverse"
+                  >
+                    <path class="arrow" d="M0,0 L10,5 L0,10 z" />
+                  </marker>
+                  <marker
+                    id="aha"
+                    viewBox="0 0 10 10"
+                    refX="9"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto-start-reverse"
+                  >
+                    <path class="arrow a" d="M0,0 L10,5 L0,10 z" />
+                  </marker>
+                </defs>
+                <rect
+                  class="box"
+                  x="20"
+                  y="120"
+                  width="130"
+                  height="64"
+                  rx="6"
+                />
+                <text class="t" x="85" y="148" text-anchor="middle">
+                  Agent (VTA)
+                </text>
+                <text class="s" x="85" y="167" text-anchor="middle">
+                  signs the wake
+                </text>
+                <rect
+                  class="box"
+                  x="200"
+                  y="120"
+                  width="130"
+                  height="64"
+                  rx="6"
+                />
+                <text class="t" x="265" y="148" text-anchor="middle">
+                  DIDComm mediator
+                </text>
+                <text class="s" x="265" y="167" text-anchor="middle">
+                  relays it
+                </text>
+                <rect
+                  class="hub"
+                  x="380"
+                  y="112"
+                  width="150"
+                  height="80"
+                  rx="6"
+                />
+                <text class="t" x="455" y="144" text-anchor="middle">
+                  Push gateway
+                </text>
+                <text class="s" x="455" y="163" text-anchor="middle">
+                  tokens behind handles
+                </text>
+                <text class="s" x="455" y="180" text-anchor="middle">
+                  (this service)
+                </text>
+                <rect
+                  class="box"
+                  x="580"
+                  y="120"
+                  width="160"
+                  height="64"
+                  rx="6"
+                />
+                <text class="t" x="660" y="148" text-anchor="middle">
+                  Phone
+                </text>
+                <text class="s" x="660" y="167" text-anchor="middle">
+                  shows one fixed line
+                </text>
+                <path
+                  class="line"
+                  d="M150,152 L196,152"
+                  marker-end="url(#ah)"
+                />
+                <path
+                  class="line"
+                  d="M330,152 L376,152"
+                  marker-end="url(#ah)"
+                />
+                <path
+                  class="line"
+                  d="M530,152 L576,152"
+                  marker-end="url(#ah)"
+                />
+                <text class="lbl" x="553" y="140" text-anchor="middle">
+                  APNs/FCM
+                </text>
+                <text class="lbl" x="173" y="140" text-anchor="middle">
+                  push/wake
+                </text>
+                <path
+                  class="reg"
+                  d="M660,120 C660,60 455,60 455,108"
+                  marker-end="url(#aha)"
+                />
+                <text class="lbl a" x="560" y="58" text-anchor="middle">
+                  1 · register token → get handle (HTTPS)
+                </text>
+                <path
+                  class="reg"
+                  d="M660,184 C660,270 85,270 85,188"
+                  marker-end="url(#aha)"
+                />
+                <text class="lbl a" x="372" y="262" text-anchor="middle">
+                  2 · tell the agent the handle · later: fetch the real request
+                </text>
+              </svg>
+            </div>
+            <figcaption>
+              Dashed: once per phone, set up by the app. Solid: each wake-up.
+              Nothing on the solid path carries the request itself.
+            </figcaption>
+          </figure>
+          <ul>
+            <li>
+              <strong>It holds</strong> Keyring's Apple and Google push
+              credentials, and the phones' push tokens, each behind a random
+              <em>handle</em>. The agent only ever sees the handle.
+            </li>
+            <li>
+              <strong>It sends</strong> a push with no content. Apple and Google
+              see that a Keyring push reached a phone at a certain time. The
+              phone shows its own line (“Something is waiting for you in
+              Keyring.”) and gets the actual request from its agent.
+            </li>
+            <li>
+              <strong>It doesn't</strong> carry messages, hold user data beyond
+              push tokens, or replace Keyring's DIDComm mailbox.
+            </li>
+            <li>
+              <strong>Who may use it:</strong> a phone registers itself
+              (anonymous, rate-limited) and must name an agent the gateway
+              serves. Only that agent can set who may wake the handle, and only
+              agents on that list can wake it. Both calls are documents signed
+              with the agent's own key; the transport's identity never
+              authorises anything.
+            </li>
+          </ul>
+        </section>
+
+        <section id="image">
+          <h2>2. The image</h2>
+          <p>
+            OpenVTC's
+            <a href="https://github.com/OpenVTC/vti-push-gateway"
+              >vti-push-gateway</a
+            >, pinned at <code>e542a9d77a7369f4f3da01d573107ea155c80691</code>,
+            plus one patch of ours.
+          </p>
+          <div class="tablebox">
+            <table>
+              <thead>
+                <tr>
+                  <th>Way</th>
+                  <th>How</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Download the CI build</strong> (preferred)</td>
+                  <td>
+                    The <code>push-gateway-image</code> workflow builds for
+                    amd64 and arm64 on GitHub runners, runs the gateway's own
+                    test suite with the patch applied, and uploads each image as
+                    a run artifact. Nothing goes to a registry.
+                    <code
+                      >gh run download &lt;run-id&gt; -R
+                      berkmancenter/keyring-wallet -n
+                      vti-push-gateway-image-amd64</code
+                    >, then <code>docker load -i vti-push-gateway.tar</code>.
+                    The image is tagged
+                    <code
+                      >keyring-messaging/vti-push-gateway:&lt;commit&gt;</code
+                    >.
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Build it yourself</strong></td>
+                  <td>
+                    <code>docker compose build gateway</code> in the package
+                    folder. It checks out the pinned commit and applies
+                    <code>gateway/patches/*.patch</code>, and fails if a patch
+                    no longer applies. About 4 GB of RAM and several minutes.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>Why the patch exists</h3>
+          <p>
+            Upstream sends every wake as a silent background push. On iPhone,
+            Apple throttles those (“don't try to send more than two or three per
+            hour”) and drops them after a force-quit (“If something force quits
+            or kills the app, the system discards the held notification”). An
+            approval can't depend on that.
+          </p>
+          <p>
+            With <code>GATEWAY_ALERT_LOC_KEY</code> set, the patch sends an
+            <em>interactive</em> wake as a notification the phone's system shows
+            itself: an APNs alert with a <code>loc-key</code>, or an FCM
+            notification with a <code>body_loc_key</code>. Both carry a key,
+            never text. Background wakes stay silent.
+          </p>
+          <div class="note">
+            The patch is self-contained, with its own tests and README section,
+            and is a candidate for contributing upstream (tracked as
+            CONTRIB-01). The project submits it itself; please don't open
+            anything upstream. Move the pinned commit only together with the
+            agents the gateway serves, because authorisation changed in upstream
+            PR #32.
+          </div>
+        </section>
+
+        <section id="settings">
+          <h2>3. Settings and secrets</h2>
+          <p>
+            Copy <code>.env.example</code> to <code>.env</code>. Secrets are
+            files in <code>./secrets/</code>, mounted read-only at
+            <code>/run/secrets/gateway/</code>. The gateway runs as uid 10001
+            and refuses to start if a secret is readable by anyone else:
+          </p>
+          <div class="copyrow">
+            <pre><code>sudo chown -R 10001:10001 secrets data/gateway
+sudo chmod 700 secrets data/gateway &amp;&amp; sudo chmod 600 secrets/*</code></pre>
+          </div>
+
+          <h3>3.1 Apple (APNs)</h3>
+          <div class="tablebox">
+            <table>
+              <thead>
+                <tr>
+                  <th>Setting</th>
+                  <th>Value</th>
+                  <th>Comes from</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GATEWAY_APNS_KEY_FILE</code></td>
+                  <td>
+                    <code>/run/secrets/gateway/AuthKey_&lt;KEYID&gt;.p8</code>
+                  </td>
+                  <td>
+                    <span class="secret">Secret</span>Keyring's APNs auth key,
+                    shared privately by the project lead
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>GATEWAY_APNS_KEY_ID</code></td>
+                  <td>the key's ID</td>
+                  <td>the project lead</td>
+                </tr>
+                <tr>
+                  <td><code>GATEWAY_APNS_TEAM_ID</code></td>
+                  <td>the Apple Developer team ID</td>
+                  <td>the project lead</td>
+                </tr>
+                <tr>
+                  <td><code>GATEWAY_APNS_TOPICS</code></td>
+                  <td>
+                    <code>asml.bkc.harvard.wallet.pushtest</code> for the test;
+                    add <code>asml.bkc.harvard.wallet</code> at go-live
+                  </td>
+                  <td>fixed</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Each registration says whether its token is for Apple's sandbox
+            (development builds) or production, so the gateway needs no setting
+            for it.
+          </p>
+
+          <h3>3.2 Google (FCM)</h3>
+          <div class="tablebox">
+            <table>
+              <thead>
+                <tr>
+                  <th>Setting</th>
+                  <th>Value</th>
+                  <th>Comes from</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GATEWAY_FCM_SERVICE_ACCOUNT_FILE</code></td>
+                  <td>
+                    <code>/run/secrets/gateway/fcm-service-account.json</code>
+                  </td>
+                  <td>
+                    <span class="secret">Secret</span>a key for a service
+                    account holding only
+                    <em>Firebase Cloud Messaging API Admin</em>, shared
+                    privately by the project lead
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>3.3 Visible alert mode</h3>
+          <div class="tablebox">
+            <table>
+              <thead>
+                <tr>
+                  <th>Setting</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GATEWAY_ALERT_LOC_KEY</code></td>
+                  <td>
+                    <code>KEYRING_WAKE</code>, the key the app defines in every
+                    language
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>GATEWAY_ALERT_COLLAPSE_ID</code></td>
+                  <td>
+                    <code>keyring-wake</code>, which merges repeated wakes into
+                    one notification
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>GATEWAY_ALERT_TITLE_LOC_KEY</code>,
+                    <code>GATEWAY_FCM_ANDROID_CHANNEL_ID</code>
+                  </td>
+                  <td>blank</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="identity">3.4 The gateway's own identity</h3>
+          <p>
+            The gateway has its own <code>did:webvh</code>. Agents address
+            wake-ups to it, and it collects them from a DIDComm v2 mediator it
+            connects <em>out</em> to, so it needs no inbound port for them. The
+            identity comes from a VTA, made from the VTA's
+            <code>push-gateway</code> template, in three steps:
+          </p>
+          <ol class="steps">
+            <li>
+              <strong>Request</strong>, on the machine that will hold the
+              identity. This stores a one-time seed under pnm's config directory
+              and writes <code>request.json</code>.
+              <pre><code>pnm bootstrap provision-request --template push-gateway \
+  --var URL=&lt;the mediator's DID&gt; \
+  --var SERVICE_TSP='{"id":"{DID}#tsp","type":"TSPTransport","serviceEndpoint":"&lt;the mediator's DID&gt;"}' \
+  --var WEBVH_SERVER=&lt;the DID-hosting server id&gt; \
+  --context-hint push-gateway</code></pre>
+            </li>
+            <li>
+              <strong>Approve</strong>, by an admin of that VTA. This prints a
+              SHA-256 digest and writes a sealed <code>bundle.armor</code>.
+              <pre><code>pnm --vta &lt;vta&gt; bootstrap provision-integration --request request.json \
+  --context push-gateway --create-context</code></pre>
+            </li>
+            <li>
+              <strong>Open it into the identity file</strong> with
+              <code>tools/gateway-identity</code>. Back the seed up first.
+              <pre><code>cp &lt;pnm config&gt;/bootstrap-secrets/&lt;bundle-id&gt;.key ./seed-backup.key   # back it up first
+cd tools/gateway-identity &amp;&amp; cargo build --release
+./target/release/gateway-identity --bundle bundle.armor --seed &lt;bundle-id&gt;.key \
+  --digest &lt;digest from step 2&gt; --mediator &lt;the mediator's DID&gt; \
+  --out ../../secrets/gateway-identity.json</code></pre>
+              Then set
+              <code
+                >GATEWAY_IDENTITY_FILE=/run/secrets/gateway/gateway-identity.json</code
+              >.
+            </li>
+          </ol>
+          <div class="warnbox">
+            <strong
+              >Don't run <code>pnm bootstrap open</code> on this bundle.</strong
+            >
+            For this bundle type it prints a summary, writes nothing, and
+            deletes the one-time seed first, so the gateway's keys are gone and
+            you'd have to start over. No upstream tool writes the gateway's
+            identity file (tracked as VTI-53), which is why
+            <code>tools/gateway-identity</code> exists. It opens the bundle with
+            the VTA SDK's documented <code>open_bundle</code>, keeps the seed,
+            and writes the file with mode 0600.
+          </div>
+          <p>
+            <strong>Mediator account:</strong> nothing to create on a mediator
+            that admits new DIDs by default; the gateway registers itself the
+            first time it authenticates. On a mediator that denies unknown DIDs,
+            its admin must allow the gateway's DID.
+          </p>
+
+          <h3 id="allowlist">3.5 Which agents it serves: your decision</h3>
+          <p>
+            <code>GATEWAY_ALLOWED_CONTROLLERS</code> lists the agents whose
+            phones may register. It's required: unset means every registration
+            is refused.
+          </p>
+          <div class="tablebox">
+            <table>
+              <thead>
+                <tr>
+                  <th>Option</th>
+                  <th>Meaning</th>
+                  <th>Limits</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Exact list</strong> of agent DIDs</td>
+                  <td>
+                    Only those agents' phones can register or be woken. There
+                    are no wildcards, by upstream's design
+                  </td>
+                  <td>
+                    Every new person's agent means a configuration change and a
+                    restart
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <strong><code>*</code></strong> (open)
+                  </td>
+                  <td>Any agent may register phones</td>
+                  <td>
+                    A startup warning. Still bounded: 4096 live handles per
+                    agent, unprovisioned handles dropped after an hour, and
+                    per-sender and per-handle budgets
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            For the production test the list is just our test agent's DID, which
+            we'll send you. What production needs is open, and it's your call
+            with the project lead.
+          </p>
+
+          <h3>3.6 Everything else</h3>
+          <div class="tablebox">
+            <table>
+              <thead>
+                <tr>
+                  <th>Setting</th>
+                  <th>Value and note</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GATEWAY_HOST</code></td>
+                  <td>your public hostname</td>
+                </tr>
+                <tr>
+                  <td>
+                    <code>GATEWAY_HTTP_PER_SEC</code> / <code>_BURST</code>
+                  </td>
+                  <td>
+                    <code>100</code> / <code>400</code>: behind the proxy every
+                    phone shares one IP, so the upstream default of 10/s is too
+                    low
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>GATEWAY_DEV_ECHO_SENDER</code></td>
+                  <td>
+                    <strong>blank in production</strong>; when on, wakes are
+                    logged and never sent
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>GATEWAY_METRICS_TOKEN</code></td>
+                  <td>
+                    optional bearer token for <code>/metrics</code>, which
+                    listens only on the container's loopback
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>GATEWAY_LOG</code></td>
+                  <td><code>vti_push_gateway=info,tower_http=info</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="host">
+          <h2>4. What the host needs</h2>
+          <ul>
+            <li><strong>Docker</strong> with Compose v2.</li>
+            <li>
+              <strong>A public HTTPS hostname.</strong> Phones register at
+              <code>https://&lt;host&gt;/trust-tasks</code>. The bundled Caddy
+              gets and renews the certificate; it needs a DNS record and ports
+              80 and 443 open.
+            </li>
+            <li>
+              <strong>Outbound access</strong> to
+              <code>api.push.apple.com</code>,
+              <code>api.sandbox.push.apple.com</code>,
+              <code>fcm.googleapis.com</code>,
+              <code>oauth2.googleapis.com</code>, the DIDComm v2 mediator, and
+              the <code>did:webvh</code> hosts.
+            </li>
+            <li>
+              <strong>A persistent volume</strong> for
+              <code>data/gateway</code>. It holds phones' push tokens
+              <strong>in clear text</strong>, so protect it and its backups like
+              credentials.
+            </li>
+            <li>
+              <strong>Backups:</strong> the store file (encrypted),
+              <code>secrets/</code> and <code>.env</code>. To restore, put them
+              back and run <code>docker compose up -d</code>.
+            </li>
+            <li>
+              <strong>Health:</strong> <code>GET /healthz</code> returns
+              <code>ok</code>. <strong>Metrics</strong> (Prometheus, container
+              loopback <code>:9300</code>): <code>gateway_register_total</code>,
+              <code>gateway_provision_total</code> and
+              <code
+                >gateway_wake_total{outcome=delivered|transient_failure|token_unregistered|not_allowed}</code
+              >.
+            </li>
+            <li>
+              <strong>Logs:</strong> <code>docker compose logs gateway</code>.
+              No message content is ever logged, because none passes through.
+            </li>
+          </ul>
+        </section>
+
+        <section id="golive">
+          <h2>5. Go-live checklist and production test</h2>
+          <ul class="checklist">
+            <li>
+              <input type="checkbox" id="c1" /><label for="c1"
+                >The image is loaded, and <code>.env</code> and
+                <code>secrets/</code> are in place, with permissions set.</label
+              >
+            </li>
+            <li>
+              <input type="checkbox" id="c2" /><label for="c2"
+                >DNS points at the host, 80 and 443 are open, and
+                <code>docker compose up -d</code> gives
+                <code>https://&lt;host&gt;/healthz</code> →
+                <code>ok</code>.</label
+              >
+            </li>
+            <li>
+              <input type="checkbox" id="c3" /><label for="c3"
+                >The startup log shows these lines, and no echo-sender
+                warning:<br /><span class="log"
+                  >APNs sender enabled · FCM … sender enabled · visible alert
+                  mode … loc_key=KEYRING_WAKE · controller allowlist
+                  controllers=N listed · DID document advertises
+                  TSPTransport</span
+                ></label
+              >
+            </li>
+            <li>
+              <input type="checkbox" id="c4" /><label for="c4"
+                >You've sent us the URL, and we've run the production test
+                together (below).</label
+              >
+            </li>
+            <li>
+              <input type="checkbox" id="c5" /><label for="c5"
+                >After it passes: <code>asml.bkc.harvard.wallet</code> is added
+                to <code>GATEWAY_APNS_TOPICS</code>, and the release app is
+                pointed at the URL. Push goes live only then.</label
+              >
+            </li>
+          </ul>
+          <h3>The production test</h3>
+          <ol class="steps">
+            <li>
+              We build the push-test app with your URL and install it on a test
+              iPhone and Android phone.
+            </li>
+            <li>
+              The phone links to our test agent, whose DID is on your allowlist,
+              and turns notifications on.
+              <code>gateway_register_total</code> and
+              <code>provision_total{outcome="ok"}</code> go up.
+            </li>
+            <li>
+              We trigger an approval request with the app in the background,
+              then force-quit, then open. Expected: the line in the first two
+              cases, nothing in the third, and
+              <code>wake_total{outcome="delivered"}</code> up each time.
+            </li>
+          </ol>
+        </section>
+
+        <section id="gaps">
+          <h2>6. Known gaps</h2>
+          <ul>
+            <li>
+              <strong>No unregister.</strong> A removed phone's handle and token
+              stay in the store. They can't be used once no agent wakes them,
+              but they are still stored tokens.
+            </li>
+            <li>
+              <strong
+                >Disabling or wiping a device at the agent doesn't clear its
+                wake channel</strong
+              >
+              (tracked as VTI-Q37). Only the phone clearing its own channel
+              does. The app clears it when it unlinks; a lost phone can't.
+            </li>
+            <li>
+              <strong>Timing is visible.</strong> The gateway, Apple and Google
+              see when a wake goes out, which correlates with the agent's
+              activity. The content never passes through.
+            </li>
+            <li>
+              <strong>The upstream pin moves with the agents</strong> (§2).
+            </li>
+          </ul>
+        </section>
+
+        <footer>
+          Same content as <code>deploy/keyring-messaging/HANDOVER.md</code> in
+          the Keyring wallet repository. Questions go to the project lead.
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>
