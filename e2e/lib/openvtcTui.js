@@ -15,6 +15,7 @@ import path from 'node:path';
 
 import pty from 'node-pty';
 import xterm from '@xterm/headless';
+import { DESK_VIEWS, selectedTab } from '../openvtc/deskTabs.js';
 
 const require = createRequire(import.meta.url);
 
@@ -171,6 +172,28 @@ export class OpenvtcTui {
     for (const it of items) counts.set(it.colour, (counts.get(it.colour) ?? 0) + 1);
     const odd = items.filter((it) => counts.get(it.colour) === 1);
     return odd.length === 1 ? odd[0].label : undefined;
+  }
+
+  /**
+   * The vetting desk's selected view: Requests, Tickets or Issued. The desk
+   * draws them on one line and marks the selected one only by style, bold in
+   * the accent colour (openvtc vetting_panel.rs `desk_views`, ed13d29), so it
+   * is read from the cells, not the text. Undefined when no desk is on screen
+   * or no single view is drawn apart.
+   */
+  deskSelection() {
+    const buf = this.term.buffer.active;
+    for (let y = 0; y < this.rows; y++) {
+      const line = buf.getLine(buf.viewportY + y);
+      const text = line?.translateToString(true) ?? '';
+      if (!/Requests \(\d+\)\s+Tickets \(\d+\)\s+Issued \(\d+\)/.test(text)) continue;
+      const tabs = DESK_VIEWS.map((label) => {
+        const cell = line.getCell(text.indexOf(`${label} (`));
+        return { label, bold: Boolean(cell?.isBold()), colour: `${cell?.getFgColorMode()}:${cell?.getFgColor()}` };
+      });
+      return selectedTab(tabs);
+    }
+    return undefined;
   }
 
   /** Move the main menu to `label`, pressing Up/Down until it is the highlighted row. */
