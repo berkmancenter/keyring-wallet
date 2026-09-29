@@ -35,7 +35,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { Screens } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
-import { GenericRecordsCommunityStore, type VtiMembership } from '../module/VtiCommunityStore'
+import { GenericRecordsCommunityStore, isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { vtaAgent, type VtaActivity } from '../module/vtaAgent'
 import { ownVetterGrantState, type VetterGrantState } from '../module/vtiGrantState'
@@ -398,7 +398,10 @@ const VtaAgentHome: React.FC = () => {
 
   const activityText = (a: VtaActivity) => t(`VtaLink.Activity.${a.kind}`)
   const isVetter = (holdings?.vetterFor.length ?? 0) > 0
-  const isMember = (holdings?.memberships.length ?? 0) > 0
+  // A membership the community removed stays on its card ("… removed you"),
+  // but it is not membership (#166).
+  const currentMemberships = (holdings?.memberships ?? []).filter(isCurrentMembership)
+  const isMember = currentMemberships.length > 0
   // Holds an identity for a community, and neither belongs nor vets there yet.
   const isApplicant = !isMember && !isVetter && (holdings?.personas.length ?? 0) > 0
   const lapsed = holdings?.lapsed ?? []
@@ -486,45 +489,48 @@ const VtaAgentHome: React.FC = () => {
           {/* Where the phone is, per community it belongs to: a finished step
               says so ("Joined", not "Join") and names the community. */}
           <View testID={testIdWithKey('AgentJourney')} accessibilityRole="summary">
-            {(isMember
-              ? Array.from(new Set((holdings?.memberships ?? []).map((m) => m.communityDid)))
-              : [undefined]
-            ).map((communityDid) => (
-              <View key={communityDid ?? 'none'} style={styles.strip} testID={testIdWithKey('AgentJourneyRow')}>
-                {[
-                  { key: 'Linked', label: t('VtaLink.JourneyLinked'), done: true, now: false },
-                  communityDid
-                    ? {
-                        key: 'Joined',
-                        // The membership is the community's own answer: a name
-                        // that only a link gave is not qualified here, where
-                        // "(not confirmed …)" read as if the joining were.
-                        label: t('VtaLink.JourneyJoined', {
-                          community: communityHeadingOf(communityDid, t, { claim: 'plain' }),
-                          interpolation: { escapeValue: false },
-                        }),
-                        done: true,
-                        now: false,
-                      }
-                    : { key: 'Join', label: t('VtaLink.JourneyJoin'), done: false, now: true },
-                  { key: 'Member', label: t('VtaLink.JourneyMember'), done: !!communityDid, now: false },
-                ].map((stop, i) => (
-                  <View key={stop.key} style={styles.stopGroup} testID={testIdWithKey(`AgentJourneyStop_${stop.key}`)}>
-                    {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
+            {(isMember ? Array.from(new Set(currentMemberships.map((m) => m.communityDid))) : [undefined]).map(
+              (communityDid) => (
+                <View key={communityDid ?? 'none'} style={styles.strip} testID={testIdWithKey('AgentJourneyRow')}>
+                  {[
+                    { key: 'Linked', label: t('VtaLink.JourneyLinked'), done: true, now: false },
+                    communityDid
+                      ? {
+                          key: 'Joined',
+                          // The membership is the community's own answer: a name
+                          // that only a link gave is not qualified here, where
+                          // "(not confirmed …)" read as if the joining were.
+                          label: t('VtaLink.JourneyJoined', {
+                            community: communityHeadingOf(communityDid, t, { claim: 'plain' }),
+                            interpolation: { escapeValue: false },
+                          }),
+                          done: true,
+                          now: false,
+                        }
+                      : { key: 'Join', label: t('VtaLink.JourneyJoin'), done: false, now: true },
+                    { key: 'Member', label: t('VtaLink.JourneyMember'), done: !!communityDid, now: false },
+                  ].map((stop, i) => (
                     <View
-                      style={[styles.stop, stop.now ? styles.stopNow : undefined]}
-                      accessibilityState={{ selected: stop.now }}
-                      testID={testIdWithKey(`AgentJourney${stop.key}`)}
+                      key={stop.key}
+                      style={styles.stopGroup}
+                      testID={testIdWithKey(`AgentJourneyStop_${stop.key}`)}
                     >
-                      <ThemedText style={stop.done ? styles.stopDone : stop.now ? styles.stopNowText : styles.muted}>
-                        {stop.done ? '✓ ' : ''}
-                        {stop.label}
-                      </ThemedText>
+                      {i > 0 ? <Icon name="chevron-right" size={16} color={ColorPalette.grayscale.mediumGrey} /> : null}
+                      <View
+                        style={[styles.stop, stop.now ? styles.stopNow : undefined]}
+                        accessibilityState={{ selected: stop.now }}
+                        testID={testIdWithKey(`AgentJourney${stop.key}`)}
+                      >
+                        <ThemedText style={stop.done ? styles.stopDone : stop.now ? styles.stopNowText : styles.muted}>
+                          {stop.done ? '✓ ' : ''}
+                          {stop.label}
+                        </ThemedText>
+                      </View>
                     </View>
-                  </View>
-                ))}
-              </View>
-            ))}
+                  ))}
+                </View>
+              )
+            )}
           </View>
           <Pressable
             onPress={() => vtaAgent.showIntro()}

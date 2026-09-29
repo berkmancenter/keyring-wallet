@@ -32,7 +32,12 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { useTheme } from '../../../contexts/theme'
 import { Screens, type MyAgentStackParams } from '../../../types/navigators'
 import { testIdWithKey } from '../../../utils/testable'
-import { GenericRecordsCommunityStore, type VtiInvitation, type VtiMembership } from '../module/VtiCommunityStore'
+import {
+  GenericRecordsCommunityStore,
+  isCurrentMembership,
+  type VtiInvitation,
+  type VtiMembership,
+} from '../module/VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
 import { ApprovalDetails } from './ApprovalDetails'
 import { DevicesCard } from './DevicesCard'
@@ -105,7 +110,8 @@ const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
     ])
     setPersona(p)
     setInvitations(i.filter((x) => x.status === 'pending'))
-    setMemberships(m)
+    // One the community removed is not a membership here (#166).
+    setMemberships(m.filter(isCurrentMembership))
     // A vetter grant that still stands makes this phone the desk — a revoked or
     // expired one does not. The status list is a network read, so it is asked
     // again only when the grants change or once a minute, not on every refresh.

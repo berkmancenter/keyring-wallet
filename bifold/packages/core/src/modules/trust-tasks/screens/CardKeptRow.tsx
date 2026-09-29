@@ -59,14 +59,17 @@ export interface CardKeptRowProps {
   handle: string
   /** The community's name, for "<community> withdrew this card". */
   community?: string
+  /** The membership was ended by the community at this time (#166): the card is history, whatever it says. */
+  endedAt?: string
 }
 
-export const CardKeptRow: React.FC<CardKeptRowProps> = ({ card, kind, handle, community }) => {
+export const CardKeptRow: React.FC<CardKeptRowProps> = ({ card, kind, handle, community, endedAt }) => {
   const { t } = useTranslation()
   const { ColorPalette, TextTheme } = useTheme()
   const id = typeof card.id === 'string' ? card.id : ''
   const kept = useCardKept(id)
-  const standing = useCardStanding(card)
+  const read = useCardStanding(card)
+  const standing = endedAt ? { state: 'expired' as const, at: endedAt } : read
   const styles = StyleSheet.create({
     row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     muted: { color: ColorPalette.grayscale.mediumGrey },

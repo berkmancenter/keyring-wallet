@@ -31,7 +31,7 @@ import { DeviceEventEmitter } from 'react-native'
 import { VTI_PERSONA_DELIVERIES_EVENT } from './communityChanged'
 import { listKeyed, putKeyed } from './keyedRecords'
 import { vtaAgent } from './vtaAgent'
-import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
+import { GenericRecordsCommunityStore, isCurrentMembership, type VtiCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { checkDeliveredCard, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
 import { classifyCredential } from './vtiInbox'
@@ -134,6 +134,8 @@ async function cardsOf(store: VtiCommunityStore, persona: VtiPersona): Promise<C
   }
   for (const m of await store.listMemberships()) {
     if (m.personaDid !== persona.did) continue
+    // Ended by the community: not a card to keep, nor one a new phone gets back.
+    if (!isCurrentMembership(m)) continue
     add(m.vmc, 'membership', m.communityDid)
     add(m.roleVec, 'role', m.communityDid)
   }
@@ -242,7 +244,11 @@ export async function recoverCardsFromAgent(
       continue
     }
     if (item.kind === 'membership') {
-      const existing = await store.getMembership(item.communityDid)
+      const found = await store.getMembership(item.communityDid)
+      // The very card the community ended does not bring the membership back.
+      if (found && !isCurrentMembership(found) && found.vmc?.id === credential.id) continue
+      // A membership the community ended lends nothing to a new one.
+      const existing = found && isCurrentMembership(found) ? found : undefined
       await store.saveMembership({
         communityDid: item.communityDid,
         personaDid: persona.did,
