@@ -54,6 +54,8 @@ const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
 /** The tasks this client speaks, by the URIs `vta-sdk` registers. */
 export const VTA_TASK = {
   whoAmI: 'https://trusttasks.org/spec/auth/whoami/0.1',
+  /** End sessions: `{ all: true }` ends every session of the caller (vta-sdk RevokeSessions::AllMine; 0.1 is no longer served). */
+  revokeSession: 'https://trusttasks.org/spec/auth/revoke-session/0.2',
   configShow: 'https://trusttasks.org/spec/config/show/0.1',
   contextsList: 'https://trusttasks.org/spec/vta/contexts/list/1.0',
   contextsCreate: 'https://trusttasks.org/spec/vta/contexts/create/1.0',
