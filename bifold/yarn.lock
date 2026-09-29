@@ -2518,8 +2518,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@bifold/vrc-reference@workspace:packages/vrc-reference"
   dependencies:
+    "@bifold/dtg-vocab": "workspace:*"
+    "@bifold/trust-tasks": "workspace:*"
     "@bifold/vrc-contexts": "workspace:*"
     "@bifold/vrc-shared": "workspace:*"
+    "@bifold/witness-server": "workspace:*"
     "@credo-ts/askar": "npm:0.7.1-pr-2704-20260909134930"
     "@credo-ts/core": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch"
     "@credo-ts/didcomm": "patch:@credo-ts/didcomm@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-didcomm-npm-0.7.1-pr-2704-20260909134930-b4e8afd4d1.patch"
@@ -2554,7 +2557,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@bifold/witness-server@workspace:packages/witness-server":
+"@bifold/witness-server@workspace:*, @bifold/witness-server@workspace:packages/witness-server":
   version: 0.0.0-use.local
   resolution: "@bifold/witness-server@workspace:packages/witness-server"
   dependencies:
