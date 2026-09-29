@@ -119,7 +119,7 @@ describe('startPersonaInbox', () => {
     // flight (vtiAgent busy) and were dropped; the identity signed in only at
     // the next look, 29.4 s after the agent. A look that meets someone else's
     // sign-in waits for it to settle, then looks again.
-    it("a look that meets another sign-in in flight looks again once it settles", async () => {
+    it('a look that meets another sign-in in flight looks again once it settles', async () => {
       mockAgentState.status = 'authenticating' // another inbox's attempt, still running
       connect.mockImplementationOnce(async () => {
         mockAgentState.isConnected = true
