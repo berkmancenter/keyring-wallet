@@ -154,7 +154,8 @@ const VtaAgentHome: React.FC = () => {
     sessionSegment = next
     setSegment(next)
   }, [])
-  const pendingApprovals = state.approvals.length
+  // Only what still waits: a decided request stays on its card, not in the count.
+  const pendingApprovals = state.approvals.filter((a) => a.status === 'pending').length
   // One line per label, always: side by side while that stays readable,
   // stacked when the phone is narrow or the text is large (IN-37).
   const { width, fontScale } = useWindowDimensions()
