@@ -255,6 +255,8 @@ export async function readJoinState(
   const store = options.communityStore ?? new GenericRecordsCommunityStore(agent)
 
   const membership = await store.getMembership(communityDid).catch(() => undefined)
+  // The community said so in a signed notice: removed, whatever the card says.
+  if (membership?.removal) return { kind: 'removed', membership, at: membership.removal.decidedAt }
   if (membership) {
     const cardStatus =
       options.cardStatus ??

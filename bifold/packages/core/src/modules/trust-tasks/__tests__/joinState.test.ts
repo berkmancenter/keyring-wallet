@@ -168,6 +168,26 @@ describe('where a join stands', () => {
     ).resolves.toMatchObject({ kind: 'removed', at: 'r' })
   })
 
+  // A community tells a removed member so in a signed notice
+  // (vtc/members/removal-notice/0.1), which the phone keeps with the
+  // membership: removed, and when it was decided, whatever the card's status.
+  it('removed, as the community said in its removal notice, whatever the card says', async () => {
+    const removal = {
+      code: 'adminRemoved' as const,
+      reason: 'Repeated code-of-conduct breach.',
+      decidedBy: 'did:webvh:Qm:admin',
+      decidedAt: '2026-09-24T04:30:00Z',
+      disposition: 'tombstone' as const,
+      noticeId: 'urn:uuid:n1',
+    }
+    const { store } = memoryStore({ membership: { ...card, removal } as VtiMembership })
+    const ok = async () => ({ revoked: false })
+    await expect(readJoinState(agent, COMMUNITY, { communityStore: store, cardStatus: ok })).resolves.toMatchObject({
+      kind: 'removed',
+      at: '2026-09-24T04:30:00Z',
+    })
+  })
+
   it('sent, while the community has not answered and nobody polls', async () => {
     const { store } = memoryStore({ submission: sent({ withInvitation: true }) })
     const state = await readJoinState(agent, COMMUNITY, { communityStore: store, poll: false })

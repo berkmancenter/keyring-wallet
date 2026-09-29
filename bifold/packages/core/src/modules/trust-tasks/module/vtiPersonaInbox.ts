@@ -24,8 +24,10 @@ import { VTI_PERSONA_DELIVERIES_EVENT, VTI_PERSONA_KEYS_HELD_EVENT } from './com
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { GenericRecordsIdentityStore, type VtiPersona } from './VtiIdentityStore'
 import { deliveredCardCheck } from './vtiDeliveredCheck'
+import { receiveCommunityNotice, REMOVAL_NOTICE, SUBMIT_RECEIPT } from './vtiCommunityNotices'
 import { receiveIssue, type VtiReceivedCredential } from './vtiInbox'
 import { invitationOfferOfMessage, redeemInvitationOffer, VtiInvitationOfferError } from './vtiInvitationOffer'
+import { didPrefix } from './didPrefix'
 import { vtiAgent } from './vtiAgent'
 import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
 import { GenericRecordsVettingStore, VtiApplicant } from './vtiVetting'
@@ -50,6 +52,17 @@ async function personaFor(agent: Agent, communityDid?: string): Promise<VtiPerso
   return all.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0]
 }
 
+/** The messages this inbox takes: a community's notices, a delivered credential, an invitation offer. */
+function ownedByInbox(message: { type?: unknown; body?: unknown }): boolean {
+  const type = String(message.type ?? '')
+  return (
+    type === REMOVAL_NOTICE ||
+    type === SUBMIT_RECEIPT ||
+    type.startsWith('https://trusttasks.org/spec/credential-exchange/issue/') ||
+    Boolean(invitationOfferOfMessage(message as never))
+  )
+}
+
 /** Start collecting; returns the function that stops it. */
 export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): () => void {
   const community = new GenericRecordsCommunityStore(agent)
@@ -70,8 +83,30 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     const target = persona
     // Only for the persona the session is connected as: another flow may hold
     // it as a different identity (a join as a new persona, a community
-    // connect), and what arrives then is not this persona's to store.
-    if (!target || vtiAgent.getState().did !== target.did) return
+    // connect), and what arrives then is not this persona's to store. A message
+    // this inbox would have taken says why it was skipped: silence looks
+    // exactly like a message that never came (lab, 2026-09-29).
+    const skipped = (why: string) => {
+      if (!ownedByInbox(message)) return
+      agent.config?.logger?.warn?.(
+        `[VTI] persona inbox skipped ${String(message.type ?? '')} from ${didPrefix(message.from)}: ${why}`
+      )
+    }
+    if (!target) return skipped(`no persona for ${options.communityDid ? didPrefix(options.communityDid) : 'any community'}`)
+    const sessionDid = vtiAgent.getState().did
+    if (sessionDid !== target.did)
+      return skipped(`the session is ${sessionDid ? didPrefix(sessionDid) : 'not connected'}, not ${didPrefix(target.did)}`)
+    // The community removed this persona, or received its join request: applied
+    // once checked (vtiCommunityNotices), and nothing else to do with it.
+    if (message.type === REMOVAL_NOTICE || message.type === SUBMIT_RECEIPT) {
+      return receiveCommunityNotice(agent, community, target.did, message).then((outcome) => {
+        if (outcome === 'removed' || outcome === 'acknowledged')
+          DeviceEventEmitter.emit(VTI_PERSONA_DELIVERIES_EVENT, {
+            communityDid: target.communityDid,
+            kinds: [outcome],
+          })
+      })
+    }
     // A community admin console's Send: an offer of the invitation, redeemed
     // here for the invitation itself, which "I was invited" then joins with.
     const offer = invitationOfferOfMessage(message)

@@ -51,6 +51,24 @@ export interface VtiMembership {
   validUntil?: string
   /** How the membership was earned — what the card says under the name. */
   via: 'invitation' | 'vetting' | 'approval' | 'unknown'
+  /**
+   * The community removed this member, as its signed removal notice says
+   * (vtc/members/removal-notice/0.1, `vtiCommunityNotices`). Kept with the
+   * membership, as openvtc keeps it, so the phone can say who decided, when
+   * and why.
+   */
+  removal?: VtiRemoval
+}
+
+/** What a community's removal notice said (vtc/members/removal-notice/0.1 payload). */
+export interface VtiRemoval {
+  code: 'adminRemoved' | 'purged'
+  reason?: string
+  decidedBy: string
+  decidedAt: string
+  disposition: 'purge' | 'tombstone' | 'historical'
+  /** The notice's document id. */
+  noticeId: string
 }
 
 /**
