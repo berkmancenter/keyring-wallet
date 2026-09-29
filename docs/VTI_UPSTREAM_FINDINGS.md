@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.64 — 2026-09-29.** A living document: every finding here was measured
+**Version 1.65 — 2026-09-29.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -2098,6 +2098,24 @@ only one on the Farm.
 
 ---
 
+## Contribution candidates
+
+Changes we have built and could offer upstream, as opposed to defects we
+report. Numbered `CONTRIB-NN`, permanent like the rest. **None is submitted:**
+Alberto contributes them himself; we open no PR or issue.
+
+### CONTRIB-01 — vti-push-gateway: an optional visible alert mode for interactive wakes
+
+*Built and unit-tested; not submitted.* Against vti-push-gateway `e542a9d7`, 2026-09-29.
+
+(a) **What.** With `GATEWAY_ALERT_LOC_KEY` set, an interactive wake is sent as a notification the platform displays itself: APNs `alert` (priority 10, `apns-collapse-id`, `aps.alert.loc-key`) and an FCM notification (`android.notification.body_loc_key`, `collapse_key`). Background wakes, and every wake while the mode is unset, are unchanged. It stays contentless: the payload names a localisation *key*, the device shows its own string, and the hint fields ride along.
+
+(b) **Why.** At `e542a9d7` every wake is a silent push (`sender.rs:468-487`: APNs background at priority 5; FCM data-only). Apple throttles those ("don't try to send more than two or three per hour"), and "if something force quits or kills the app, the system discards the held notification" (Apple, *Pushing background updates to your App*). An approval a person is waiting on cannot rely on that. Upstream's own iOS agent (vta-mobile-agent-ios `035dd65`) wakes by background push only, so it has the same exposure.
+
+(c) **Where.** A clean format-patch against `e542a9d7` with tests, a README section and the rationale: wallet PR #241, `deploy/keyring-messaging/gateway/patches/0001-sender-optional-visible-alert-mode-for-interactive-wakes.patch`. CI runs the gateway's own `cargo test` with it applied.
+
+(d) **Status.** Built and unit-tested. The device proof (iPhone after a force-quit, Android notification tray) comes with the push lane's device test.
+
 ## Farm cross-mediator round trip (2026-09-22)
 
 Step 2 of our Farm measurement, read-only, with no app involved. A fresh client
@@ -2864,6 +2882,7 @@ and the credential's own id.
 | 1.62 | 2026-09-28 | **VTI-53** (new candidate, Medium): a push-gateway provision bundle has no installer, and `pnm bootstrap open` consumes its single-use seed while writing nothing, so following the gateway README destroys the keys. Read from source, not run. |
 | 1.63 | 2026-09-28 | VTI-53 (d): the workaround converter measured on the lab. It opened the bundle and kept the seed, the gateway started with the resulting identity, and push-test's signed `push/provision` was accepted. |
 | 1.64 | 2026-09-29 | **VTI-08** resolved, measured live: a debug VTA at `2240aa7e` without the `RUST_MIN_STACK` workaround created contexts over REST and TSP with no overflow. |
+| 1.65 | 2026-09-29 | New section **Contribution candidates** (`CONTRIB-NN`, never submitted by us). **CONTRIB-01:** an optional visible alert mode for interactive wakes in vti-push-gateway, built and unit-tested against `e542a9d7`. |
 | 1.59 | 2026-09-27 | **VTI-48** (new, Medium): the DTG JSON-LD context that every community card names (`https://firstperson.network/credentials/dtg/v1`) answers 404, so a JSON-LD wallet cannot store the cards. Keyring serves an empty stand-in until it is published. |
 | 1.58 | 2026-09-26 | **VTI-47** (new, Low): the VTC's git-namespace projector lists and decodes every member every five seconds before checking whether any namespace is bound, so an idle community with none bound burns CPU in proportion to its members (about 7% on our lab's debug build). Measured on the lab at `ed672fff`; same code at `acd6be09`. Not sent. |
 | 1.57 | 2026-09-26 | **VTI-Q33–Q36** (new), from the plan for approval rules and the credential vault: whether rules are enforced is invisible to clients (Q33); no approver can list pending consent requests (Q34); a VTA does not receive what is addressed to the personas it holds, so a community cannot deposit into the holder's vault (Q35); `vault/credentials/receive` stores unscoped by default and overwrites across contexts (Q36). Read at `ed672fff`. Not sent. |
