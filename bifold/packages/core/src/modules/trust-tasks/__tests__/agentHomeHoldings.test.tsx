@@ -18,6 +18,7 @@ import { communityTarget } from '../module/vtiCommunityLink'
 import { communityCardKey } from '../screens/CommunityCard'
 import { communityHeadingOf, didPathName } from '../screens/communityName'
 import VtaAgentHome, { forgetAgentHoldings } from '../screens/VtaAgentHome'
+import { localDate } from '../screens/localTime'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('@react-navigation/native', () => ({
@@ -148,10 +149,10 @@ describe('what your agent holds, card by card', () => {
       membership(B, '2026-09-23T00:00:00Z'),
     ])
     expect(tree.getByTestId(testIdWithKey(`AgentMemberSince_${keyOf(A)}`))).toHaveTextContent(
-      'MyAgent.MemberSince(date=2026-09-01)'
+      `MyAgent.MemberSince(date=${localDate('2026-09-01T00:00:00Z')})`
     )
     expect(tree.getByTestId(testIdWithKey(`AgentMemberSince_${keyOf(B)}`))).toHaveTextContent(
-      'MyAgent.MemberSince(date=2026-09-23)'
+      `MyAgent.MemberSince(date=${localDate('2026-09-23T00:00:00Z')})`
     )
     expect(tree.getByTestId(testIdWithKey(`AgentMemberBeforeLink_${keyOf(A)}`))).toHaveTextContent(
       'MyAgent.MemberBeforeLink'
