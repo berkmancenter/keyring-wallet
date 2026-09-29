@@ -17,7 +17,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { useTheme } from '../../../contexts/theme'
 import { testIdWithKey } from '../../../utils/testable'
 import { useCommunityJourney } from '../module/communityJourney'
-import type { VtiMembership } from '../module/VtiCommunityStore'
+import { isCurrentMembership, type VtiMembership } from '../module/VtiCommunityStore'
 import type { VtiPersona } from '../module/VtiIdentityStore'
 
 import { CardKeptRow } from './CardKeptRow'
@@ -72,7 +72,15 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
   const { ColorPalette, TextTheme } = useTheme()
   const { journey } = useCommunityJourney(agent, communityDid)
   // Until the journey is read, a held membership already says "member".
-  const join = journey?.join ?? (membership ? { kind: 'member' as const, membership } : undefined)
+  // A membership the community removed says so from the start (#166).
+  const removal = membership && !isCurrentMembership(membership) ? membership.removal : undefined
+  const join =
+    journey?.join ??
+    (membership
+      ? removal
+        ? { kind: 'removed' as const, membership, at: removal.decidedAt }
+        : { kind: 'member' as const, membership }
+      : undefined)
   const model = communityCardModel({ join, hasIdentity: !!persona, invited, vetter })
   const key = communityCardKey(communityDid)
   // Named, or at least told apart from the other cards — never a host.
@@ -113,7 +121,7 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
           </ThemedText>
           <ThemedText style={styles.muted} testID={testIdWithKey(`AgentCommunityStatus_${key}`)}>
             {status}
-            {vetter && membership ? ` · ${t('Vetting.SeatVetter')}` : ''}
+            {vetter && membership && !removal ? ` · ${t('Vetting.SeatVetter')}` : ''}
           </ThemedText>
         </View>
         <Icon name="chevron-right" size={22} color={ColorPalette.grayscale.mediumGrey} />
@@ -124,10 +132,20 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
         <View style={styles.row}>
           <Icon name="card-account-details-outline" size={20} color={TextTheme.normal.color} />
           <View style={{ flex: 1 }}>
-            <ThemedText testID={testIdWithKey(`AgentMemberSince_${key}`)}>
-              {t('MyAgent.MemberSince', { date: membership.grantedAt.slice(0, 10) })}
-            </ThemedText>
-            {heldBeforeLink ? (
+            {removal ? (
+              // Ended by the community: when, and its reason when it gave one.
+              <ThemedText testID={testIdWithKey(`AgentMembershipEnded_${key}`)}>
+                {t('VtaLink.CardMembershipEnded', { date: removal.decidedAt.slice(0, 10) })}
+                {removal.reason
+                  ? ` ${t('Community.RemovedReason', { reason: removal.reason, interpolation: { escapeValue: false } })}`
+                  : ''}
+              </ThemedText>
+            ) : (
+              <ThemedText testID={testIdWithKey(`AgentMemberSince_${key}`)}>
+                {t('MyAgent.MemberSince', { date: membership.grantedAt.slice(0, 10) })}
+              </ThemedText>
+            )}
+            {heldBeforeLink && !removal ? (
               <ThemedText style={styles.muted} testID={testIdWithKey(`AgentMemberBeforeLink_${key}`)}>
                 {t('MyAgent.MemberBeforeLink')}
               </ThemedText>
@@ -137,10 +155,22 @@ export const CommunityCard: React.FC<CommunityCardProps> = ({
       ) : null}
       {/* The cards themselves, and whether the agent keeps them (226). */}
       {membership?.vmc ? (
-        <CardKeptRow card={membership.vmc} kind="membership" handle={key} community={community} />
+        <CardKeptRow
+          card={membership.vmc}
+          kind="membership"
+          handle={key}
+          community={community}
+          endedAt={removal?.decidedAt}
+        />
       ) : null}
       {membership?.roleVec ? (
-        <CardKeptRow card={membership.roleVec} kind="role" handle={key} community={community} />
+        <CardKeptRow
+          card={membership.roleVec}
+          kind="role"
+          handle={key}
+          community={community}
+          endedAt={removal?.decidedAt}
+        />
       ) : null}
       {persona ? (
         <View style={styles.row}>

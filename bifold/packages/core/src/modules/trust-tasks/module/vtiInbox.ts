@@ -18,7 +18,7 @@
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 import { DeviceEventEmitter } from 'react-native'
 
-import type { VtiCommunityStore, VtiMembership } from './VtiCommunityStore'
+import { isCurrentMembership, type VtiCommunityStore, type VtiMembership } from './VtiCommunityStore'
 import type { VtiCardCheckRefusal, VtiDeliveredCardCheck } from './vtiDeliveredCheck'
 
 /**
@@ -191,9 +191,18 @@ export async function receiveIssue(
       DeviceEventEmitter.emit(VTI_CARD_REFUSED_EVENT, { communityDid: item.communityDid, kind: item.kind, refusal: checked })
       continue
     }
+    if (item.kind === 'membership') {
+      // The very card the community ended, delivered again, does not bring
+      // the membership back.
+      const ended = await store.getMembership(item.communityDid)
+      if (ended && !isCurrentMembership(ended) && ended.vmc?.id === item.credential.id) continue
+    }
     kept.push(item)
     if (item.kind === 'membership') {
-      const existing = await store.getMembership(item.communityDid)
+      const found = await store.getMembership(item.communityDid)
+      // Joining again after a removal starts afresh: the ended membership's
+      // role, role card and way in are not this one's.
+      const existing = found && isCurrentMembership(found) ? found : undefined
       await store.saveMembership({
         communityDid: item.communityDid,
         personaDid,

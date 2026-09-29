@@ -72,6 +72,16 @@ export interface VtiRemoval {
 }
 
 /**
+ * Whether a membership stands: not one the community removed (its signed
+ * removal notice is kept on the record, #166). A removed membership stays in
+ * the store, so the phone can say who ended it, when and why, but nothing
+ * that asks "is this person a member?" counts it.
+ */
+export function isCurrentMembership(membership: Pick<VtiMembership, 'removal'>): boolean {
+  return !membership.removal
+}
+
+/**
  * A join request this phone sent, and what the community has said about it —
  * so a screen can say "Sent — waiting for the community" until the community
  * answers, and what it answered after that (p220 item 7). Written before the
