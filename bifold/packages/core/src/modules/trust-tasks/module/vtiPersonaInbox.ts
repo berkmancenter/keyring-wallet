@@ -60,6 +60,8 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
   let busy = false
   // A look asked for while one was running: run it once that one is done.
   let again = false
+  // A look that met someone else's sign-in in flight: run it once that settles.
+  let afterAgent = false
 
   // Registered before any connect: opening the session drains what the
   // mediator held, and a listener attached after the connect misses that
@@ -116,7 +118,13 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
       // Only when nothing holds the session: never take it from a flow that
       // opened it on purpose.
       const { status } = vtiAgent.getState()
-      if (vtiAgent.isConnected || status === 'resolving' || status === 'authenticating') return
+      if (vtiAgent.isConnected) return
+      if (status === 'resolving' || status === 'authenticating') {
+        // Another sign-in is running (after an unlock, the inbox that just
+        // stopped): this look is not dropped but waits for it (228 lab check).
+        afterAgent = true
+        return
+      }
       await vtiAgent.connect(agent, options.mediatorDid, { persona, peerRevisionStore })
     } catch (e) {
       options.onError?.(e)
@@ -133,12 +141,20 @@ export function startPersonaInbox(agent: Agent, options: PersonaInboxOptions): (
     if (!persona || e?.did === persona.did) void tick()
   })
 
+  const stopWatchingAgent = vtiAgent.subscribe(() => {
+    const { status } = vtiAgent.getState()
+    if (!afterAgent || status === 'resolving' || status === 'authenticating') return
+    afterAgent = false
+    void tick()
+  })
+
   void tick()
   const timer = setInterval(() => void tick(), options.intervalMs ?? 30_000)
   return () => {
     stopped = true
     clearInterval(timer)
     keysHeld.remove()
+    stopWatchingAgent()
     stopListening()
   }
 }
