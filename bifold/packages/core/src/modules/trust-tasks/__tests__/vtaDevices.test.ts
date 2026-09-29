@@ -107,7 +107,7 @@ describe('removing one', () => {
     const types = sent.map((s) => s.type).filter((t) => t === AGENT_DEVICE_TASK.wipe || t === AGENT_DEVICE_TASK.aclRevoke)
     expect(types).toEqual([AGENT_DEVICE_TASK.wipe, AGENT_DEVICE_TASK.aclRevoke])
     const wipe = sent.find((s) => s.type === AGENT_DEVICE_TASK.wipe)
-    expect(wipe?.payload).toMatchObject({ deviceId: 'dev-old', scope: 'cache-and-keys' })
+    expect(wipe?.payload).toMatchObject({ deviceId: 'dev-old', scope: 'cacheAndKeys' })
     expect(typeof wipe?.payload.reason).toBe('string')
     expect(sent.find((s) => s.type === AGENT_DEVICE_TASK.aclRevoke)?.payload).toEqual({ subject: OLD_PHONE })
   })
@@ -192,5 +192,22 @@ describe('another phone acting as the same agent', () => {
     })
     const live = liveSiblings(await listAgentDevices(port), NOW)
     expect(live.map((d) => d.did)).toEqual([OLD_PHONE])
+  })
+})
+
+// VTI 2240aa7e deprecates device/{register,heartbeat,list,wipe}/0.1: "will be
+// removed in a future release" (vta-sdk trust_tasks.rs). 0.2 is the same shape
+// with camelCase enum values on the wire: wipe's scope is `cacheAndKeys`.
+// acl/list and acl/revoke are not deprecated and stay at 0.1.
+describe('the device tasks this phone speaks', () => {
+  it('are the 0.2 versions, and the access-list tasks stay at 0.1', () => {
+    expect(AGENT_DEVICE_TASK).toEqual({
+      register: 'https://trusttasks.org/spec/device/register/0.2',
+      heartbeat: 'https://trusttasks.org/spec/device/heartbeat/0.2',
+      list: 'https://trusttasks.org/spec/device/list/0.2',
+      wipe: 'https://trusttasks.org/spec/device/wipe/0.2',
+      aclList: 'https://trusttasks.org/spec/acl/list/0.1',
+      aclRevoke: 'https://trusttasks.org/spec/acl/revoke/0.1',
+    })
   })
 })
