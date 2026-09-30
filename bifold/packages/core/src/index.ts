@@ -125,17 +125,20 @@ export {
   DTG_CONTEXT,
   RELATIONSHIP_CONTEXT,
   REGISTRY_DTG_CONTEXT,
+  HARDWARE_EVIDENCE_CONTEXT,
   CUSTOM_CONTEXTS,
   DTG_CONTEXT_URL,
   RELATIONSHIP_CONTEXT_URL,
   RCARD_CONTEXT_URL,
   REGISTRY_DTG_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
 } from './modules/vrc'
 export {
   DTG_CONTEXT_DOCUMENT,
   RELATIONSHIP_CONTEXT_DOCUMENT,
   RCARD_CONTEXT_DOCUMENT,
   REGISTRY_DTG_CONTEXT_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
 } from './modules/vrc'
 export { getIndyLedgers, IndyLedger, readIndyLedgersFromFile, writeIndyLedgersToFile } from './utils/ledger'
 export { statusBarStyleForColor, StatusBarStyles } from './utils/luminance'

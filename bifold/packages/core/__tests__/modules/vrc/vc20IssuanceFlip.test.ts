@@ -63,13 +63,14 @@ function buildAgentWithTemplate() {
 describe('RCE protocol version handshake', () => {
   const message = `This is my relationship DID: vrc:relationshipDid:${MY_DID} vrc:rceVersion:${RCE_PROTOCOL_VERSION}`
 
-  test('this app announces RCE v4 (Trust Task dialect capable)', () => {
+  test('this app announces RCE v5 (Trust Task dialect + hardware-evidence context)', () => {
     // v4 = the Trust Task dialect: the relationship exchange can additionally
     // run as vrc/relationships/propose documents over binding 0.2 (see
-    // modules/trust-tasks). Credentials are unchanged from v3 — the bump is
-    // pure capability announcement, and peers below v4 never see a Trust
-    // Task message.
-    expect(RCE_PROTOCOL_VERSION).toBe(4)
+    // modules/trust-tasks); peers below v4 never see a Trust Task message.
+    // v5 = the hardware-evidence context: a VC 2.0 VRC issued to a v5+ peer
+    // lists the dedicated evidence context instead of the legacy DTG
+    // context; v5 implies v4 and changes no other behavior.
+    expect(RCE_PROTOCOL_VERSION).toBe(5)
   })
 
   test('the OLD (pre-flip) parser still extracts the DID from the new message', () => {

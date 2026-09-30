@@ -22,7 +22,12 @@ import { Preferences } from '../../types/state'
 import { isWitnessCredential } from './credentialTypes'
 import { selectCredentialContexts } from './utils/selectCredentialContexts'
 import { RelationshipDidRepository } from './repositories/RelationshipDidRepository'
-import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL } from './types/relationshipContext'
+import {
+  DTG_CONTEXT_URL,
+  RELATIONSHIP_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+} from './types/relationshipContext'
 import Toast from 'react-native-toast-message'
 import { ToastType } from '../../components/toast/BaseToast'
 import { createVrcLogger } from './vrc-logging'
@@ -120,12 +125,19 @@ async function logIssuedCredentialSnapshot(
  *       v4 changes nothing about credentials; both dialects write the same
  *       repository state, and peers below v4 never see a Trust Task message.
  *
+ * - v5: the hardware-evidence context. A VC 2.0 VRC issued to a v5+ peer
+ *       lists HARDWARE_EVIDENCE_CONTEXT_URL as its third `@context` entry (a
+ *       dedicated, `@vocab`-free context for the `evidence` block) instead of
+ *       the legacy DTG_CONTEXT_URL, whose `@vocab` only ever existed to make
+ *       that block signable. A pre-v5 peer has no bundled copy of the new
+ *       context, so it still gets the legacy entry. v5 implies v4.
+ *
  * The version is announced in the relationshipDid handshake message
  * (`vrc:rceVersion:<n>`). A peer that doesn't announce one is treated as v1,
  * so exchanges with pre-VC-2.0 app versions still produce credentials the
  * old peer can validate.
  */
-export const RCE_PROTOCOL_VERSION = 4
+export const RCE_PROTOCOL_VERSION = 5
 
 /** A parsed `vrc:relationshipDid:… vrc:rceVersion:N` legacy announcement. */
 export interface LegacyRelationshipAnnouncement {
@@ -326,6 +338,9 @@ export async function buildVrcCredential(
   // (docs/CRYPTO_SUITE_FOLLOWUP.md, Level 0 spike check 4).
   const useDi = useVc20 && (await counterpartySpeaksDi(agent, counterpartyRelationshipDid))
 
+  const useHardwareEvidenceContext =
+    useVc20 && (await counterpartySpeaksHardwareEvidenceContext(agent, counterpartyRelationshipDid))
+
   const credential: any = useVc20
     ? {
         // VCDM 2.0 shape per the DTG spec (SHOULD issue 2.0). Proof-context
@@ -333,11 +348,13 @@ export async function buildVrcCredential(
         //
         // Real DTG registry context, per cred-spec's `@context` array
         // requirement (exactly this IRI second, after credentials/v2) —
-        // PLUS the legacy DTG_CONTEXT_URL alongside it. The registry
-        // context defines only DTGCredential/RelationshipCredential, with
-        // no top-level @vocab; DTG_CONTEXT_URL's @vocab is what covers the
-        // hardware-attestation `evidence` block's terms (attestation,
-        // hardwareBinding, ...). Without it, JSON-LD safe-mode signing
+        // PLUS a third entry that covers the hardware-attestation `evidence`
+        // block's terms (attestation, hardwareBinding, ...), which the
+        // registry context does not define. For a v5+ peer that is the
+        // dedicated HARDWARE_EVIDENCE_CONTEXT_URL (no @vocab; provisional
+        // IRI). For an older peer, which has no bundled copy of it, it stays
+        // the legacy DTG_CONTEXT_URL, whose @vocab is what made the block
+        // signable. Without one of them, JSON-LD safe-mode signing
         // rejects any VC 2.0 VRC carrying real attestation evidence —
         // silent on emulators (which skip hardware attestation entirely)
         // and in every existing test (none build a credential with an
@@ -349,7 +366,10 @@ export async function buildVrcCredential(
         // extractSignedContent only strips evidence/proof, so the context
         // can't be appended after signing without invalidating the
         // hardware signature.
-        '@context': selectCredentialContexts({ useVc20, useDi }, [REGISTRY_DTG_CONTEXT_URL, DTG_CONTEXT_URL]),
+        '@context': selectCredentialContexts({ useVc20, useDi }, [
+          REGISTRY_DTG_CONTEXT_URL,
+          selectVrcEvidenceContextUrl(useHardwareEvidenceContext),
+        ]),
         type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
         // Bare DID string per DTG spec — contact info rides in the RCard instead
         issuer: myRelationshipDid,
@@ -443,6 +463,24 @@ function counterpartySpeaksVc20(agent: Agent, counterpartyRelationshipDid: strin
 /** RCE v3+: the counterparty can verify DataIntegrityProof/eddsa-rdfc-2022. */
 function counterpartySpeaksDi(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
   return counterpartyRceVersionAtLeast(agent, counterpartyRelationshipDid, 3)
+}
+
+/**
+ * RCE v5+: the counterparty bundles the hardware-evidence context and can
+ * resolve it offline. Older peers fail to resolve an unknown context IRI, so
+ * they must keep receiving the legacy DTG_CONTEXT_URL.
+ */
+function counterpartySpeaksHardwareEvidenceContext(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
+  return counterpartyRceVersionAtLeast(agent, counterpartyRelationshipDid, 5)
+}
+
+/**
+ * The third VRC `@context` entry for a VC 2.0 VRC: the dedicated
+ * hardware-evidence context for v5+ peers, the legacy `@vocab`-carrying DTG
+ * context for everyone else (see RCE_PROTOCOL_VERSION).
+ */
+export function selectVrcEvidenceContextUrl(peerSpeaksHardwareEvidenceContext: boolean): string {
+  return peerSpeaksHardwareEvidenceContext ? HARDWARE_EVIDENCE_CONTEXT_URL : DTG_CONTEXT_URL
 }
 
 /**

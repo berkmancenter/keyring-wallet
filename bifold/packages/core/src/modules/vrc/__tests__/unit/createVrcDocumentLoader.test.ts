@@ -4,6 +4,8 @@ import {
   DTG_CONTEXT_DOCUMENT,
   REGISTRY_DTG_CONTEXT_URL,
   REGISTRY_DTG_CONTEXT_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
 } from '../../types/relationshipContext'
 import {
   WITNESSED_EXCHANGE_CONTEXT_URL,
@@ -96,6 +98,16 @@ describe('createVrcDocumentLoader', () => {
         contextUrl: null,
         documentUrl: REGISTRY_DTG_CONTEXT_URL,
         document: REGISTRY_DTG_CONTEXT_DOCUMENT,
+      })
+    })
+
+    it('should resolve the hardware-evidence context URL locally (offline, no network)', async () => {
+      const result = await documentLoader(HARDWARE_EVIDENCE_CONTEXT_URL)
+
+      expect(result).toEqual({
+        contextUrl: null,
+        documentUrl: HARDWARE_EVIDENCE_CONTEXT_URL,
+        document: HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
       })
     })
   })

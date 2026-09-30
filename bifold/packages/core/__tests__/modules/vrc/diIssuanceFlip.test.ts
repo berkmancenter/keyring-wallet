@@ -12,11 +12,16 @@
 import { W3cCredentialRepository } from '@credo-ts/core'
 
 import { buildRCardCredential } from '../../../src/modules/vrc/services/rCardCredential'
-import { buildVrcCredential, getVrcJsonLdProofOptions } from '../../../src/modules/vrc/vrc-manager'
+import {
+  buildVrcCredential,
+  getVrcJsonLdProofOptions,
+  RCE_PROTOCOL_VERSION,
+} from '../../../src/modules/vrc/vrc-manager'
 import { RelationshipDidRepository } from '../../../src/modules/vrc/repositories/RelationshipDidRepository'
 import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
 import {
   DTG_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
   RCARD_CONTEXT_URL,
   RELATIONSHIP_CONTEXT_URL,
   REGISTRY_DTG_CONTEXT_URL,
@@ -101,13 +106,39 @@ describe('getVrcJsonLdProofOptions capability gate', () => {
 describe('VRC credential @context on the DI path', () => {
   test('v3 peer: VCDM 2.0 shape without the Ed25519 suite context', async () => {
     const { credential } = await buildVrcCredential(buildAgent(3), MY_DID, THEIR_DID)
-    // Real DTG registry context (cred-spec's own IRI) second, then the
-    // legacy DTG_CONTEXT_URL, whose @vocab covers the hardware-attestation
-    // `evidence` block's terms (see buildVrcCredential). The legacy
+    // A v3 peer predates the hardware-evidence context (RCE v5), so it keeps
+    // getting the legacy DTG_CONTEXT_URL third, whose @vocab covers the
+    // hardware-attestation `evidence` block's terms (see buildVrcCredential).
+    // Real DTG registry context (cred-spec's own IRI) second. The legacy
     // RELATIONSHIP_CONTEXT_URL is no longer emitted for new VC 2.0 issuance.
     expect(credential['@context']).toEqual([CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, DTG_CONTEXT_URL])
     expect(credential.validFrom).toBeDefined()
     expect(credential.issuer).toBe(MY_DID)
+  })
+
+  test('v4 peer (pre-hardware-evidence-context): legacy DTG_CONTEXT_URL third, no new IRI', async () => {
+    const { credential } = await buildVrcCredential(buildAgent(4), MY_DID, THEIR_DID)
+    expect(credential['@context']).toEqual([CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, DTG_CONTEXT_URL])
+    expect(credential['@context']).not.toContain(HARDWARE_EVIDENCE_CONTEXT_URL)
+  })
+
+  test('unknown peer (no record): VCDM 1.1 legacy shape, never the evidence context', async () => {
+    const { credential } = await buildVrcCredential(buildAgent(undefined), MY_DID, THEIR_DID)
+    expect(credential['@context']).not.toContain(HARDWARE_EVIDENCE_CONTEXT_URL)
+  })
+
+  test('v5 peer: dedicated hardware-evidence context replaces the legacy @vocab context', async () => {
+    const { credential } = await buildVrcCredential(buildAgent(5), MY_DID, THEIR_DID)
+    expect(credential['@context']).toEqual([
+      CREDENTIALS_V2_CONTEXT_URL,
+      REGISTRY_DTG_CONTEXT_URL,
+      HARDWARE_EVIDENCE_CONTEXT_URL,
+    ])
+    expect(credential['@context']).not.toContain(DTG_CONTEXT_URL)
+  })
+
+  test('this app announces RCE v5 (the version that carries the gate)', () => {
+    expect(RCE_PROTOCOL_VERSION).toBeGreaterThanOrEqual(5)
   })
 
   test('v2 peer: VCDM 2.0 shape still carries the Ed25519 suite context', async () => {

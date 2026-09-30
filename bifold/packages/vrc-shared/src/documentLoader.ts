@@ -29,6 +29,8 @@ import {
   CACHED_STANDARD_CONTEXTS,
   REGISTRY_DTG_CONTEXT_URL,
   REGISTRY_DTG_CONTEXT_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
 } from '@bifold/vrc-contexts'
 
 /**
@@ -267,6 +269,16 @@ export const demoDocumentLoader = (_agentContext: AgentContext): DocumentLoader 
         contextUrl: null,
         documentUrl: url,
         document: REGISTRY_DTG_CONTEXT_DOCUMENT,
+      }
+    }
+
+    // Hardware-attestation evidence context (new-issuance VC 2.0 VRCs to RCE
+    // v5+ peers). Provisional IRI — see vrc-contexts' hardwareEvidenceContext.ts
+    if (normalizedUrl === HARDWARE_EVIDENCE_CONTEXT_URL) {
+      return {
+        contextUrl: null,
+        documentUrl: url,
+        document: HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
       }
     }
 

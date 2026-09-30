@@ -16,6 +16,8 @@ import {
   RCARD_CONTEXT_DOCUMENT,
   REGISTRY_DTG_CONTEXT_URL,
   REGISTRY_DTG_CONTEXT_DOCUMENT,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
 } from './types/relationshipContext'
 import { WITNESSED_EXCHANGE_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_DOCUMENT } from './types/witnessedExchangeContext'
 import { CACHED_SECURITY_CONTEXTS } from './types/cachedSecurityContexts'
@@ -156,6 +158,9 @@ export function createVrcDocumentLoader(agentContext: AgentContext) {
     }
     if (url === REGISTRY_DTG_CONTEXT_URL) {
       return { contextUrl: null, documentUrl: url, document: REGISTRY_DTG_CONTEXT_DOCUMENT }
+    }
+    if (url === HARDWARE_EVIDENCE_CONTEXT_URL) {
+      return { contextUrl: null, documentUrl: url, document: HARDWARE_EVIDENCE_CONTEXT_DOCUMENT }
     }
     if (url === RCARD_CONTEXT_URL) {
       return { contextUrl: null, documentUrl: url, document: RCARD_CONTEXT_DOCUMENT }

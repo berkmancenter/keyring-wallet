@@ -40,7 +40,12 @@ import { AskarModule } from '@credo-ts/askar'
 import { agentDependencies } from '@credo-ts/node'
 import { askar } from '@openwallet-foundation/askar-nodejs'
 import { DataIntegritySuiteModule, demoDocumentLoader, deleteWallet, walletExists } from '@bifold/vrc-shared'
-import { CREDENTIALS_V2_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL } from '@bifold/vrc-contexts'
+import {
+  CREDENTIALS_V2_CONTEXT_URL,
+  ED25519_2018_SUITE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_URL,
+} from '@bifold/vrc-contexts'
 
 import { DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL } from '../../src/relationshipContext'
 import { WITNESSED_EXCHANGE_CONTEXT_URL } from '../../src/witnessedExchangeContext'
@@ -149,7 +154,12 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
       credential: JsonTransformer.fromJSON(
         {
           ...buildVrcJson('urn:uuid:di-conformance-2018'),
-          '@context': [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+          '@context': [
+            CREDENTIALS_V2_CONTEXT_URL,
+            DTG_CONTEXT_URL,
+            RELATIONSHIP_CONTEXT_URL,
+            ED25519_2018_SUITE_CONTEXT_URL,
+          ],
         },
         W3cCredential,
         { validate: false }
@@ -221,7 +231,12 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
       credential: JsonTransformer.fromJSON(
         {
           ...buildVrcJson('urn:uuid:di-conformance-witnessed-2018'),
-          '@context': [CREDENTIALS_V2_CONTEXT_URL, DTG_CONTEXT_URL, RELATIONSHIP_CONTEXT_URL, ED25519_2018_SUITE_CONTEXT_URL],
+          '@context': [
+            CREDENTIALS_V2_CONTEXT_URL,
+            DTG_CONTEXT_URL,
+            RELATIONSHIP_CONTEXT_URL,
+            ED25519_2018_SUITE_CONTEXT_URL,
+          ],
         },
         W3cCredential,
         { validate: false }
@@ -292,4 +307,59 @@ describe('Data Integrity conformance (DataIntegrityProof/eddsa-rdfc-2022)', () =
     const verifyResult = await agent.w3cCredentials.verifyCredential({ credential: signed })
     expect(verifyResult.isValid).toBe(true)
   }, 30000)
+
+  describe('VRC carrying a hardware-attestation evidence block', () => {
+    const evidence = () => ({
+      id: 'urn:uuid:1b2c3d4e-0000-4000-8000-0000000000e1',
+      type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+      created: '2026-09-29T10:00:00Z',
+      authenticationMethod: { type: 'FaceID', authenticatorType: 'platform', userVerification: 'required' },
+      biometricMethod: { type: 'FaceID', authenticatorType: 'platform', userVerification: 'required' },
+      hardwareBinding: {
+        keyStorage: 'SecureEnclave',
+        platform: 'ios',
+        keyType: 'EC-P256',
+        algorithm: 'ECDSA-SHA256',
+        publicKey: 'BAAA',
+      },
+      attestation: { format: 'apple-appattest-v1', certificateChain: ['leaf', 'intermediate', 'root'] },
+      signature: { value: 'MEUC', algorithm: 'ECDSA-SHA256', signedContentHash: 'abc' },
+    })
+    const withEvidence = (id: string, context: string[]) => ({
+      ...buildVrcJson(id),
+      '@context': context,
+      evidence: [evidence()],
+    })
+
+    test('new context: DI sign + verify, context untouched, tampering with evidence or chain order is detected', async () => {
+      const context = [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, HARDWARE_EVIDENCE_CONTEXT_URL]
+      const signed = await signDi(withEvidence('urn:uuid:di-evidence-new', context))
+      const json = JsonTransformer.toJSON(signed) as Record<string, any>
+      expect(json.proof.cryptosuite).toBe('eddsa-rdfc-2022')
+      expect(json['@context']).toEqual(context)
+      expect((await agent.w3cCredentials.verifyCredential({ credential: signed })).isValid).toBe(true)
+
+      const tamper = async (mutate: (j: Record<string, any>) => void) => {
+        const copy = JSON.parse(JSON.stringify(json))
+        mutate(copy)
+        const c = JsonTransformer.fromJSON(copy, W3cJsonLdVerifiableCredential, { validate: false })
+        return (await agent.w3cCredentials.verifyCredential({ credential: c })).isValid
+      }
+      expect(await tamper((j) => (j.evidence[0].hardwareBinding.publicKey = 'BBBB'))).toBe(false)
+      expect(await tamper((j) => j.evidence[0].attestation.certificateChain.reverse())).toBe(false)
+    }, 30000)
+
+    test('new context: a misspelled evidence member refuses to sign', async () => {
+      const context = [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, HARDWARE_EVIDENCE_CONTEXT_URL]
+      const bad = withEvidence('urn:uuid:di-evidence-typo', context) as Record<string, any>
+      bad.evidence[0].hardwareBindng = { x: 1 }
+      await expect(signDi(bad)).rejects.toThrow()
+    }, 30000)
+
+    test('dual-read: a VRC on the legacy DTG_CONTEXT_URL (older peers) still signs and verifies', async () => {
+      const context = [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, DTG_CONTEXT_URL]
+      const signed = await signDi(withEvidence('urn:uuid:di-evidence-legacy', context))
+      expect((await agent.w3cCredentials.verifyCredential({ credential: signed })).isValid).toBe(true)
+    }, 30000)
+  })
 })

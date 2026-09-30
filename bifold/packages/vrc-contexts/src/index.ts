@@ -21,6 +21,13 @@ export {
   REGISTRY_DTG_CONTEXT_DIGEST_MULTIBASE,
 } from './relationshipContext'
 
+// Hardware-attestation evidence context (for the `evidence` block of VC 2.0 VRCs)
+export {
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_NAMESPACE,
+  HARDWARE_EVIDENCE_CONTEXT_DOCUMENT,
+} from './hardwareEvidenceContext'
+
 // Witnessed Exchange context (for VWCs)
 export { WITNESSED_EXCHANGE_CONTEXT_URL, WITNESSED_EXCHANGE_CONTEXT_DOCUMENT } from './witnessedExchangeContext'
 
