@@ -134,12 +134,12 @@ log "every VTA can mint a served persona"
 # A VTA with no DID-hosting server registered mints personas "serverless":
 # created, keys held, served by nobody — the phone then fails at "community
 # session as persona" with a 404 naming the persona (VTI-20). The runner VTA,
-# bob, had none on 2026-09-22 and cost a run. Read-only: each VTA's own pnm
-# home lists its servers; a VTA with no pnm home here is skipped.
-for n in alice community bob; do
-  home="$STACK_DIR/pnm-$n"
-  [ -d "$home" ] || continue
-  servers=$(PNM_HOME="$home" "${PNM_BIN:-$HOME/vti-stack/bin/pnm}" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c "did:webvh" || true)
+# bob, had none on 2026-09-22 and cost a run. Read-only. pnm from VTI main
+# keeps every profile in its own config dir and reads PNM_HOME as that dir, so
+# a per-VTA PNM_HOME hid every profile and this check failed on healthy VTAs;
+# it is left unset. alice is Alberto's own agent and is not queried here.
+for n in community bob; do
+  servers=$(env -u PNM_HOME "${PNM_BIN:-$HOME/vti-stack/bin/pnm}" --vta "$n" did-mgmt servers list 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c "did:webvh" || true)
   if [ "${servers:-0}" -gt 0 ]; then ok "$n has a DID host registered"; else bad "$n has NO DID host registered — persona mints will not resolve (pnm did-mgmt servers add --id dids --did \$DIDS_DID)"; fi
 done
 
