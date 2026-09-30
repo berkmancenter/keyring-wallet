@@ -286,10 +286,15 @@ A Docker Compose package, `deploy/keyring-messaging/`, sets up the server.
   replies back (inter-mediator relay on). Its own identity is a self-contained
   `did:peer:2` made by upstream's `mediator-setup`, with no VTA. Why this
   mediator and not Keyring's: [2026-09-29-al.md](./push-notifications-plan/2026-09-29-al.md).
+- **The mediator is closed.** Only the gateway has an account, created once by
+  the mediator's admin with the package's `mediator-account` tool. Everyone
+  else may only have a wake-up delivered to the gateway, or receive its reply;
+  nobody else can have a message relayed onward
+  ([2026-09-29-al.md](./push-notifications-plan/2026-09-29-al.md), D14 and F5).
 - **Caddy** for HTTPS, with automatic Let's Encrypt certificates, for two
   hostnames: the gateway and the mediator. The mediator's login endpoint answers
   only private addresses. Inside the stack the mediator's hostname resolves to
-  Caddy, so only the gateway can hold a session. The gateway's metrics listener
+  Caddy, so the gateway logs in from a private address. The gateway's metrics listener
   stays on its own loopback.
 - **CI** builds the gateway and mediator images for amd64 and arm64. It runs
   the gateway's test suite with Keyring's patch, and brings the mediator up
