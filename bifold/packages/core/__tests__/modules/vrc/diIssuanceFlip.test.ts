@@ -101,11 +101,11 @@ describe('getVrcJsonLdProofOptions capability gate', () => {
 describe('VRC credential @context on the DI path', () => {
   test('v3 peer: VCDM 2.0 shape without the Ed25519 suite context', async () => {
     const { credential } = await buildVrcCredential(buildAgent(3), MY_DID, THEIR_DID)
-    // Real DTG registry context (cred-spec's own IRI), not the legacy
-    // self-hosted DTG_CONTEXT_URL/RELATIONSHIP_CONTEXT_URL pair — those are
-    // still resolved by every document loader (dual-read for old-format
-    // credentials) but no longer emitted for new VC 2.0 issuance.
-    expect(credential['@context']).toEqual([CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL])
+    // Real DTG registry context (cred-spec's own IRI) second, then the
+    // legacy DTG_CONTEXT_URL, whose @vocab covers the hardware-attestation
+    // `evidence` block's terms (see buildVrcCredential). The legacy
+    // RELATIONSHIP_CONTEXT_URL is no longer emitted for new VC 2.0 issuance.
+    expect(credential['@context']).toEqual([CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, DTG_CONTEXT_URL])
     expect(credential.validFrom).toBeDefined()
     expect(credential.issuer).toBe(MY_DID)
   })
@@ -115,6 +115,7 @@ describe('VRC credential @context on the DI path', () => {
     expect(credential['@context']).toEqual([
       CREDENTIALS_V2_CONTEXT_URL,
       REGISTRY_DTG_CONTEXT_URL,
+      DTG_CONTEXT_URL,
       ED25519_2018_SUITE_CONTEXT_URL,
     ])
   })
