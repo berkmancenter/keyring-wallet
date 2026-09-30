@@ -350,7 +350,11 @@ describe("a community admin console's Send: a pushed invitation offer", () => {
     await flush()
     mockAgentState.isConnected = false
     mockHandlers.forEach((h) =>
-      h({ type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1', from: mockPersona.communityDid, body: {} })
+      h({
+        type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1',
+        from: mockPersona.communityDid,
+        body: {},
+      })
     )
     await flush()
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/persona inbox skipped .*removal-notice.*session/))
@@ -362,9 +366,78 @@ describe("a community admin console's Send: a pushed invitation offer", () => {
     startPersonaInbox(logged, { communityDid: 'did:webvh:other:host' })
     await flush()
     mockHandlers.forEach((h) =>
-      h({ type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1', from: mockPersona.communityDid, body: {} })
+      h({
+        type: 'https://trusttasks.org/spec/vtc/members/removal-notice/0.1',
+        from: mockPersona.communityDid,
+        body: {},
+      })
     )
     await flush()
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/persona inbox skipped .*removal-notice.*no persona/))
+  })
+})
+
+// 227 gate, Farm: the invitation push never reached the phone, and the persona
+// inbox left no line in the Release log. It now says why it did not open the
+// session, once per change, and says so when a look has hung.
+describe('what the inbox says in the Release log', () => {
+  const connect = vtiAgent.connect as jest.Mock
+  let warn: jest.SpyInstance
+  const lines = () => warn.mock.calls.map((c) => String(c[0])).filter((l) => l.startsWith('[VTI] persona inbox'))
+  beforeEach(() => {
+    mockAgentState.isConnected = false
+    mockAgentState.status = 'disconnected'
+    connect.mockReset()
+    mockAgentListeners.clear()
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+  afterEach(() => {
+    warn.mockRestore()
+    jest.useRealTimers()
+  })
+
+  it('says there is no persona for the community once, not at every look', async () => {
+    startPersonaInbox(agent, { communityDid: 'did:webvh:c:elsewhere', intervalMs: 60_000 })
+    await flush()
+    DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: 'did:webvh:p:any' })
+    await flush()
+    expect(lines()).toEqual([
+      expect.stringMatching(/\(did:webvh:c:elsew.*\): no persona for this community yet; persona none/),
+    ])
+    expect(connect).not.toHaveBeenCalled()
+  })
+
+  it('says it signs in, with the session and status it found, and that it signed in', async () => {
+    connect.mockImplementation(async () => {
+      mockAgentState.isConnected = true
+    })
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+    await flush()
+    expect(lines()).toEqual([
+      expect.stringMatching(
+        /signing in as the persona; persona did:webvh:p:host.*keyAgreement yes, session closed, status disconnected/
+      ),
+      expect.stringMatching(/signed in/),
+    ])
+  })
+
+  it('says why a sign-in failed', async () => {
+    connect.mockRejectedValue(new Error('resolving did:webvh:m took over 15 s'))
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 60_000 })
+    await flush()
+    expect(lines().at(-1)).toMatch(/sign-in failed: resolving did:webvh:m took over 15 s/)
+  })
+
+  it('says so once when a look has been running over a minute', async () => {
+    jest.useFakeTimers()
+    connect.mockImplementation(() => new Promise(() => undefined))
+    startPersonaInbox(agent, { mediatorDid: 'did:peer:m', intervalMs: 30_000 })
+    await jest.advanceTimersByTimeAsync(30_000)
+    expect(lines().filter((l) => /has been running/.test(l))).toEqual([])
+    await jest.advanceTimersByTimeAsync(60_000)
+    await jest.advanceTimersByTimeAsync(60_000)
+    expect(lines().filter((l) => /has been running/.test(l))).toEqual([
+      expect.stringMatching(/a look has been running (6|9)\d s \(status disconnected\); later looks wait for it/),
+    ])
   })
 })

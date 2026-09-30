@@ -58,6 +58,9 @@ import type { DidCommV2EncryptedMessage, DidCommV2KeyAgreementJwk, DidCommV2Plai
 import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didcomm'
 import { tsp } from '@bifold/trust-tasks'
 
+import { didPrefix } from './didPrefix'
+import { releaseWarn } from './releaseLog'
+
 const LOG_PREFIX = '[TrustTasks:VtiMediatorTransport]'
 
 const ATM_AUTHENTICATE = 'https://affinidi.com/atm/1.0/authenticate'
@@ -130,18 +133,47 @@ export interface VtiMediatorEndpoints {
 }
 
 /**
+ * How long one resolution may take before it counts as failed and is tried
+ * again. A `did:webvh` resolves over the network, and a fetch that never
+ * answers held a persona's sign-in forever: the 227 gate's Farm run resolved
+ * the persona and then never its mediator, and the persona inbox waited on
+ * that sign-in until the app was killed. Bounded, it is retried and then
+ * fails, and the inbox's next look starts over.
+ */
+export const RESOLVE_ATTEMPT_TIMEOUT_MS = 15_000
+
+function withinTime<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took over ${Math.round(ms / 1000)} s`)), ms)
+  })
+  return Promise.race([work, late]).finally(() => clearTimeout(timer))
+}
+
+/**
  * Resolve a DID document, retrying on transient failure. A `did:webvh` behind a
  * tunnel answers a burst of resolutions with 421/429 or an HTML page (VTI-19 —
  * measured on iOS as "JSON Parse error: Unexpected character: R"); Credo caches
  * a successful resolution, so one patient first look is all that is needed.
+ * Each attempt is bounded by `attemptTimeoutMs`.
  */
-export async function resolveDidDocumentRetrying(agent: Agent, did: string, attempts = 4) {
+export async function resolveDidDocumentRetrying(
+  agent: Agent,
+  did: string,
+  attempts = 4,
+  attemptTimeoutMs = RESOLVE_ATTEMPT_TIMEOUT_MS
+) {
   let lastError: unknown
   for (let i = 0; i < attempts; i++) {
     try {
-      return await agent.dids.resolveDidDocument(did)
+      return await withinTime(agent.dids.resolveDidDocument(did), attemptTimeoutMs, `resolving ${didPrefix(did)}`)
     } catch (error) {
       lastError = error
+      releaseWarn(
+        `${LOG_PREFIX} resolving ${didPrefix(did)} failed (attempt ${i + 1} of ${attempts}): ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
       await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)))
     }
   }
