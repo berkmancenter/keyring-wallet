@@ -118,6 +118,41 @@ describe('telling the agent this phone is here', () => {
   })
 })
 
+describe('a phone its agent no longer knows', () => {
+  // The agent answers a removed phone's heartbeat with a signed permissionDenied
+  // "DID not in ACL: …" (vta-service messaging/auth.rs:125, trust_tasks/mod.rs:1056-1066).
+  function refusedWith(error: Error) {
+    const failures: unknown[] = []
+    const presence = new AgentPresence({
+      port: async () => ({
+        managerDid: ME,
+        task: async <T>(type: string) => {
+          if (type === AGENT_DEVICE_TASK.register) return {} as T
+          throw error
+        },
+      }),
+      platform: 'android',
+      now: () => new Date(T0),
+      onSiblingSeen: () => undefined,
+      onFailed: (e) => failures.push(e),
+    })
+    return { presence, failures }
+  }
+
+  it('hands the refusal of its heartbeat on, so the phone can say it was removed', async () => {
+    const refusal = new VtiRefusal('permissionDenied', `DID not in ACL: ${ME}`)
+    const w = refusedWith(refusal)
+    await expect(w.presence.tick()).resolves.toBeUndefined()
+    expect(w.failures).toEqual([refusal])
+  })
+
+  it("hands on a heartbeat nobody answered too; what it means is the controller's call", async () => {
+    const w = refusedWith(new Error('[TrustTasks:VtaClient] the VTA did not answer device/heartbeat/0.2'))
+    await w.presence.tick()
+    expect(w.failures).toHaveLength(1)
+  })
+})
+
 describe('another device acting as the same agent', () => {
   it('is announced once while it stays live, and again if it goes quiet and comes back', async () => {
     let otherSeen: number | undefined = T0
@@ -140,8 +175,12 @@ describe('when presence runs', () => {
   const agent = { vtaDid: 'did:webvh:QmAgent:agent.example', label: 'agent' }
   it('only while the link is up', () => {
     expect(isLinkOnline({ kind: 'notLinked' })).toBe(false)
-    expect(isLinkOnline({ kind: 'linked', ...agent, linkedAt: 't', connection: { kind: 'offline', since: 1 } } as never)).toBe(false)
-    expect(isLinkOnline({ kind: 'linked', ...agent, linkedAt: 't', connection: { kind: 'online' } } as never)).toBe(true)
+    expect(
+      isLinkOnline({ kind: 'linked', ...agent, linkedAt: 't', connection: { kind: 'offline', since: 1 } } as never)
+    ).toBe(false)
+    expect(isLinkOnline({ kind: 'linked', ...agent, linkedAt: 't', connection: { kind: 'online' } } as never)).toBe(
+      true
+    )
     expect(isLinkOnline({ kind: 'revoked', ...agent, reason: 'x', cause: 'notInAcl' } as never)).toBe(false)
   })
 })

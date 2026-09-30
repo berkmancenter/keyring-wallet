@@ -1122,6 +1122,16 @@ export class VtaAgentController {
   }
 
   /**
+   * A presence tick that failed. The agent answers a phone another device
+   * removed with "DID not in ACL" (a signed permissionDenied, vta-service
+   * messaging/auth.rs), which moves the link to removed, as a refused owner
+   * act does; anything else — no answer, the network — is tried next tick.
+   */
+  presenceFailed(error: unknown): void {
+    this.refused(error)
+  }
+
+  /**
    * Tell this phone's agent how to wake it: the handle a push gateway gave for
    * its push token (push notifications plan §4.4). The agent provisions the
    * gateway itself; the phone signs nothing there.
@@ -1245,7 +1255,9 @@ export class VtaAgentController {
         )
       }
     } catch (e) {
-      agent.config?.logger?.warn?.(`[VTA] moving identities' keys into memory: ${e instanceof Error ? e.message : String(e)}`)
+      agent.config?.logger?.warn?.(
+        `[VTA] moving identities' keys into memory: ${e instanceof Error ? e.message : String(e)}`
+      )
     }
     const personas = await Promise.resolve(this.identityStore(agent).listPersonas?.())
       .then((all) => (all ?? []).filter((p) => p.vtaDid === vtaDid))
