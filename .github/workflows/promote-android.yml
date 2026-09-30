@@ -1,0 +1,67 @@
+name: Promote Android build
+
+# Moves the build already on a Play track (internal testing by default) to
+# another (open testing, "beta" in the API), without rebuilding it. Run it by
+# hand from the Actions tab. The first run of any change should be a dry run.
+# The real promotion waits for a reviewer on the "open-testing" environment:
+# give that environment a required reviewer in the repository settings.
+
+on:
+  workflow_dispatch:
+    inputs:
+      to_track:
+        description: 'Target track (beta = open testing)'
+        type: choice
+        options: [beta]
+        default: beta
+      version_code:
+        description: 'Build number to promote (empty = the newest on internal)'
+        type: string
+        required: false
+      rollout:
+        description: 'Share of the track that gets it, 0.01–1 (below 1 = staged)'
+        type: string
+        default: '1'
+      dry_run:
+        description: 'Only report what would change'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-22.04
+    environment: ${{ inputs.dry_run && 'open-testing-dry-run' || 'open-testing' }}
+    steps:
+      - uses: actions/checkout@v4
+      # The latest release's What to Test notes live on staging, not main.
+      - name: Take the release notes from staging
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin staging
+          # A short Play version (500 characters at most) wins when a release has one;
+          # otherwise the TestFlight notes are cut to fit.
+          git show FETCH_HEAD:.github/play/whats-new.md > "${RUNNER_TEMP}/whats-new.md" 2>/dev/null \
+            || git show FETCH_HEAD:.github/testflight/whats-new.md > "${RUNNER_TEMP}/whats-new.md"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Promote
+        working-directory: scripts/gpublish
+        env:
+          GOOGLE_API_CREDENTIALS_BASE64: ${{ secrets.GOOGLE_API_CREDENTIALS_BASE64 }}
+          GOOGLE_API_CREDENTIALS: ${{ runner.temp }}/api_keys.json
+          ANDROID_PACKAGE_NAME: asml.bkc.harvard.wallet
+          FROM_TRACK: internal
+          TO_TRACK: ${{ inputs.to_track }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          ROLLOUT: ${{ inputs.rollout }}
+          NOTES_FILE: ${{ runner.temp }}/whats-new.md
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          echo "${GOOGLE_API_CREDENTIALS_BASE64}" | base64 -d > "${GOOGLE_API_CREDENTIALS}"
+          npm ci
+          node promote.js
