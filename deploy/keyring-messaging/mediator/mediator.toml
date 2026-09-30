@@ -16,7 +16,9 @@
 #      relayed to itself (upstream docs/multi-mediator.md §5).
 #   4. Logs are JSON, for the container log collector.
 #
-# Who may use it: the ACLs below are open (ALLOW_ALL), as in the lab, but the
+# Who may use it: the ACLs below are open (ALLOW_ALL), as in the lab. Agents on
+# other mediators have no account here, so they send under global_acl_default:
+# narrowing it cuts them off (HANDOVER.md §3). The
 # login endpoint (/mediator/v1/authenticate) is reachable only from inside the
 # Docker network (Caddyfile). So the gateway is the only party that can hold a
 # session here. Everyone else can only relay messages in to it on /inbound,

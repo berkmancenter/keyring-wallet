@@ -164,7 +164,7 @@ they change which values go into `.env` and who runs §8.
 | --- | --- | --- |
 | **Which VTA issues the gateway's identity** | An admin of that VTA runs §8 step 2 | The VTA service that hosts Keyring's agents in production. Its admin runs step 2 (the project lead, or that service's operator), so you don't need to run a VTA yourself |
 | **Which DID host (`WEBVH_SERVER`)** | Where the gateway's `did:webvh` document is published. Anyone resolving the gateway's DID fetches it from there | The DID host that VTA already publishes its own DIDs on |
-| **Whether the production agents' mediator relays** | A wake-up leaves the agent's own mediator as a relay to the bundled one, and the gateway's reply comes back the same way. That mediator must relay to other mediators and accept relays from them | Nothing for you to set. The project checks that mediator's configuration once it is known (§14); the VTI lab's does both |
+| **Whether the production agents' mediator relays** | A wake-up leaves the agent's own mediator as a relay to the bundled one, and the gateway's reply comes back the same way. Remote agents need **no account** on the bundled mediator, but their own mediator must have the settings listed below | Nothing for you to set. The project checks that mediator's configuration once it is known; the VTI lab's has all of them |
 | **Which agents it serves (`GATEWAY_ALLOWED_CONTROLLERS`)** | An exact list of agent DIDs, or `*` for any agent. More below | **Still an open question**, for you and the project lead. We recommend `*` for production, for the reason below |
 
 **The allowlist, in more detail.** The setting is required: unset means every
@@ -183,6 +183,40 @@ our test agent's DID, either way.
 
 The mediator itself is not a decision: the package bundles it (§7), and you run
 it. It may move to a shared mediator later (§13).
+
+**How an agent on another mediator reaches the gateway**, and what that
+requires. This is taken from the mediator's and the VTA's source, not yet
+exercised (see §14):
+
+1. The agent (VTA) sends `push/provision` and `push/wake` encrypted to the
+   gateway's DID and signed as itself (authcrypt). It wraps them in one
+   forward to **its own** mediator, with the gateway as the next hop.
+2. Its mediator resolves the gateway's DID. The gateway's DID document names
+   the bundled mediator, whose DID document names `https://MEDIATOR_HOST`. So
+   its mediator relays the envelope to `https://MEDIATOR_HOST/mediator/v1/inbound`,
+   with no login, as an inter-mediator relay.
+3. The bundled mediator accepts it as an anonymous relay
+   (`enable_inter_mediator_relay = "true"` in our settings). Because the
+   envelope is addressed to the gateway, not to the mediator, the mediator
+   delivers it directly to the gateway's inbox without opening it. The
+   gateway later collects it over its own connection.
+4. The gateway's reply travels the same way back: from the bundled mediator,
+   relayed to the agent's mediator's `/inbound`.
+
+What the agents' mediator must have, for steps 1–2 and 4:
+
+| Setting on the agents' mediator | Why |
+| --- | --- |
+| `processors.forwarding.external_forwarding = "true"` | It relays to other mediators at all |
+| The agent's account grants `SEND_FORWARDED`, and `global_acl_default` grants `RECEIVE_FORWARDED` | It may forward, and the gateway's DID (a next hop it has never seen) may receive a forward |
+| `security.enable_inter_mediator_relay = "true"`, or a `global_acl_default` granting `SEND_FORWARDED` (upstream's deprecated older form) | It accepts the gateway's replies as relays |
+| `security.local_direct_delivery_allowed = "true"`, and a `global_acl_default` granting `SEND_MESSAGES` | It delivers the reply to the agent's inbox, and lets the gateway's DID (which has no account there) send |
+| `processors.forwarding.relay_mode` equal to ours (`blind`) | Both ends must use the same relay format |
+
+On the bundled mediator the matching settings are already in
+`mediator/mediator.toml`. Remote agents get their sending rights there from
+`global_acl_default = "ALLOW_ALL"`, as they have no account, so don't narrow
+it without the project.
 
 **You're done with this section when** you have, in writing:
 - the issuing VTA and its admin;
@@ -1111,15 +1145,17 @@ The project decides when, and sends you the steps for that mediator.
 ## 14. Known gaps
 
 - **The bundled mediator is unproven across mediators.** Until the lab proof
-  (STATUS box) passes:
-  - no wake-up has crossed from an agent's own mediator to it;
-  - nobody has checked that a stranger's relayed message, addressed to anyone
-    but the gateway, is not forwarded onward. If it is, the relay settings are
-    tightened before you deploy.
-- **The agents' mediator must relay.** The production agents' mediator has to
-  relay to other mediators and accept relays back (§3). The project checks its
-  configuration once it is known.
-
+  (STATUS box) passes, no wake-up has crossed from an agent's own mediator to
+  it.
+- **The agents' mediator must relay.** The production agents' mediator needs
+  the settings in §3's table. The project checks its configuration once it is
+  known.
+- **The bundled mediator may relay strangers' messages onward.** Reading its
+  source suggests a stranger can hand it a signed forward addressed to the
+  mediator, naming a third party as the next hop, and have it relayed on. The
+  lab proof tests this. If it does, the fix is upstream's "closed" setup: the
+  gateway's account is registered once by the mediator's admin, and the
+  default for strangers is narrowed.
 - **No unregister.** A removed phone's handle and token stay in the store. They
   can't be used once no agent wakes them, but they are still stored tokens.
 - **Disabling or wiping a device at the agent doesn't clear its wake channel**

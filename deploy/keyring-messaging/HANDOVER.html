@@ -390,8 +390,8 @@ they change which values go into <code>.env</code> and who runs §8.</p>
 </tr>
 <tr>
 <td><strong>Whether the production agents' mediator relays</strong></td>
-<td>A wake-up leaves the agent's own mediator as a relay to the bundled one, and the gateway's reply comes back the same way. That mediator must relay to other mediators and accept relays from them</td>
-<td>Nothing for you to set. The project checks that mediator's configuration once it is known (§14); the VTI lab's does both</td>
+<td>A wake-up leaves the agent's own mediator as a relay to the bundled one, and the gateway's reply comes back the same way. Remote agents need <strong>no account</strong> on the bundled mediator, but their own mediator must have the settings listed below</td>
+<td>Nothing for you to set. The project checks that mediator's configuration once it is known; the VTI lab's has all of them</td>
 </tr>
 <tr>
 <td><strong>Which agents it serves (<code>GATEWAY_ALLOWED_CONTROLLERS</code>)</strong></td>
@@ -430,6 +430,60 @@ and the limits above still apply. For the production test the list is just
 our test agent's DID, either way.</p>
 <p>The mediator itself is not a decision: the package bundles it (§7), and you run
 it. It may move to a shared mediator later (§13).</p>
+<p><strong>How an agent on another mediator reaches the gateway</strong>, and what that
+requires. This is taken from the mediator's and the VTA's source, not yet
+exercised (see §14):</p>
+<ol>
+<li>The agent (VTA) sends <code>push/provision</code> and <code>push/wake</code> encrypted to the
+gateway's DID and signed as itself (authcrypt). It wraps them in one
+forward to <strong>its own</strong> mediator, with the gateway as the next hop.</li>
+<li>Its mediator resolves the gateway's DID. The gateway's DID document names
+the bundled mediator, whose DID document names <code>https://MEDIATOR_HOST</code>. So
+its mediator relays the envelope to <code>https://MEDIATOR_HOST/mediator/v1/inbound</code>,
+with no login, as an inter-mediator relay.</li>
+<li>The bundled mediator accepts it as an anonymous relay
+(<code>enable_inter_mediator_relay = &quot;true&quot;</code> in our settings). Because the
+envelope is addressed to the gateway, not to the mediator, the mediator
+delivers it directly to the gateway's inbox without opening it. The
+gateway later collects it over its own connection.</li>
+<li>The gateway's reply travels the same way back: from the bundled mediator,
+relayed to the agent's mediator's <code>/inbound</code>.</li>
+</ol>
+<p>What the agents' mediator must have, for steps 1–2 and 4:</p>
+<div class="tablebox"><table>
+<thead>
+<tr>
+<th>Setting on the agents' mediator</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>processors.forwarding.external_forwarding = &quot;true&quot;</code></td>
+<td>It relays to other mediators at all</td>
+</tr>
+<tr>
+<td>The agent's account grants <code>SEND_FORWARDED</code>, and <code>global_acl_default</code> grants <code>RECEIVE_FORWARDED</code></td>
+<td>It may forward, and the gateway's DID (a next hop it has never seen) may receive a forward</td>
+</tr>
+<tr>
+<td><code>security.enable_inter_mediator_relay = &quot;true&quot;</code>, or a <code>global_acl_default</code> granting <code>SEND_FORWARDED</code> (upstream's deprecated older form)</td>
+<td>It accepts the gateway's replies as relays</td>
+</tr>
+<tr>
+<td><code>security.local_direct_delivery_allowed = &quot;true&quot;</code>, and a <code>global_acl_default</code> granting <code>SEND_MESSAGES</code></td>
+<td>It delivers the reply to the agent's inbox, and lets the gateway's DID (which has no account there) send</td>
+</tr>
+<tr>
+<td><code>processors.forwarding.relay_mode</code> equal to ours (<code>blind</code>)</td>
+<td>Both ends must use the same relay format</td>
+</tr>
+</tbody>
+</table></div>
+<p>On the bundled mediator the matching settings are already in
+<code>mediator/mediator.toml</code>. Remote agents get their sending rights there from
+<code>global_acl_default = &quot;ALLOW_ALL&quot;</code>, as they have no account, so don't narrow
+it without the project.</p>
 <p class="done"><strong>You're done with this section when</strong> you have, in writing:</p>
 <ul>
 <li>the issuing VTA and its admin;</li>
@@ -1612,38 +1666,27 @@ confirmed.</li>
 <p>The project decides when, and sends you the steps for that mediator.</p>
 <h2 id="14-known-gaps" tabindex="-1">14. Known gaps</h2>
 <ul>
-<li>
-<p><strong>The bundled mediator is unproven across mediators.</strong> Until the lab proof
-(STATUS box) passes:</p>
-<ul>
-<li>no wake-up has crossed from an agent's own mediator to it;</li>
-<li>nobody has checked that a stranger's relayed message, addressed to anyone
-but the gateway, is not forwarded onward. If it is, the relay settings are
-tightened before you deploy.</li>
-</ul>
-</li>
-<li>
-<p><strong>The agents' mediator must relay.</strong> The production agents' mediator has to
-relay to other mediators and accept relays back (§3). The project checks its
-configuration once it is known.</p>
-</li>
-<li>
-<p><strong>No unregister.</strong> A removed phone's handle and token stay in the store. They
-can't be used once no agent wakes them, but they are still stored tokens.</p>
-</li>
-<li>
-<p><strong>Disabling or wiping a device at the agent doesn't clear its wake channel</strong>
+<li><strong>The bundled mediator is unproven across mediators.</strong> Until the lab proof
+(STATUS box) passes, no wake-up has crossed from an agent's own mediator to
+it.</li>
+<li><strong>The agents' mediator must relay.</strong> The production agents' mediator needs
+the settings in §3's table. The project checks its configuration once it is
+known.</li>
+<li><strong>The bundled mediator may relay strangers' messages onward.</strong> Reading its
+source suggests a stranger can hand it a signed forward addressed to the
+mediator, naming a third party as the next hop, and have it relayed on. The
+lab proof tests this. If it does, the fix is upstream's &quot;closed&quot; setup: the
+gateway's account is registered once by the mediator's admin, and the
+default for strangers is narrowed.</li>
+<li><strong>No unregister.</strong> A removed phone's handle and token stay in the store. They
+can't be used once no agent wakes them, but they are still stored tokens.</li>
+<li><strong>Disabling or wiping a device at the agent doesn't clear its wake channel</strong>
 (tracked as VTI-Q37). Only the phone clearing its own channel does. Keyring's
-app clears it when it unlinks; a phone that is lost can't.</p>
-</li>
-<li>
-<p><strong>Timing is visible.</strong> The gateway, Apple and Google see <em>when</em> a wake goes
+app clears it when it unlinks; a phone that is lost can't.</li>
+<li><strong>Timing is visible.</strong> The gateway, Apple and Google see <em>when</em> a wake goes
 out, and that correlates with the agent's activity. The content is never
-visible.</p>
-</li>
-<li>
-<p><strong>The upstream commits move with the agents</strong> (§12).</p>
-</li>
+visible.</li>
+<li><strong>The upstream commits move with the agents</strong> (§12).</li>
 </ul>
 
     <footer>Same content as <code>deploy/keyring-messaging/HANDOVER.md</code>. Questions go to the project lead.</footer>
