@@ -11,8 +11,10 @@ that later carries message notifications.
 - Registering the phone's push handle rides on device registration with the
   person's agent (the "new phone is a new device" work). This plan starts after
   that has shipped.
-- The gateway's DIDComm identity and its mediator come from the VTI stack that
-  the [OpenVTC integration plan](./openvtc-integration-plan.md) covers.
+- The gateway's DIDComm identity is issued by a VTA, from the VTI stack that
+  the [OpenVTC integration plan](./openvtc-integration-plan.md) covers. Its
+  mediator is Affinidi's, the one that stack runs, bundled in the server
+  package (§5).
 - The [release flow](./release-flow-plan.md) is unchanged. The push-enabled
   signing profile is a new credential it carries; no second profile is needed,
   because the app has no notification extension (§3).
@@ -36,6 +38,7 @@ that later carries message notifications.
 | Companion | Contents |
 |---|---|
 | [2026-09-28-al.md](./push-notifications-plan/2026-09-28-al.md) | The review of the first draft (2026-09-26), and the decisions of 2026-09-28: which v2 mediator, iPhone phase scope, no mailbox swap, test isolation, hosting. Also the superseded positions: a bundled Credo mediator, silent-push-only iPhone, "simulators cannot receive pushes", and two earlier cost figures. Its Part 3 answers the review below: the register path (F2), the background handler (F3), the gateway pin move to `e542a9d7`, unregister, and `binding/push/0.1`. Its Part 4 records how push ships: built in and off, bifold's push framework reused rather than removed, the build-time push-test variant, no notification extension (one neutral line by key), and the gateway's visible-alert mode as a self-contained patch |
+| [2026-09-29-al.md](./push-notifications-plan/2026-09-29-al.md) | Why the server package bundles its own DIDComm v2 mediator (Affinidi's, v0.33.1) and not Keyring's Credo mediator, even on DIDComm v2: the gateway's client needs Affinidi's login, session and TSP (F1, F2). Keyring's mailbox is untouched and two mediators run (D12–D15). Moving the mailbox to DIDComm v2 is later and separate (D16). Part 3 lists what must be proven before a server deploy |
 | [2026-09-28-bam.md](./push-notifications-plan/2026-09-28-bam.md) | The review of the plan against the code it lands in: the lock behaviour, the registration anchor, background execution, iOS signing, the test app ID, the dormant-code scope, Firebase compatibility, privacy metadata, and the testing and coverage requirements |
 
 ---
@@ -276,8 +279,21 @@ A Docker Compose package, `deploy/keyring-messaging/`, sets up the server.
 - **vti-push-gateway**, built from source at `e542a9d7`. There is no published
   upstream image. The build is multi-stage Rust, runs as a non-root user, and
   mounts secrets read-only. It runs on a CI runner, not on the host.
-- **Caddy** for HTTPS, with automatic Let's Encrypt certificates, for one
-  hostname. The gateway's metrics listener stays on its own loopback.
+- **The gateway's mediator**: Affinidi's `affinidi-messaging-mediator` v0.33.1
+  (`55580615`), the release the VTI lab runs, built from source with
+  upstream's Dockerfile recipe, with **Redis** as its store. It serves only the
+  gateway. Agents' mediators relay wake-ups to it, and it relays the gateway's
+  replies back (inter-mediator relay on). Its own identity is a self-contained
+  `did:peer:2` made by upstream's `mediator-setup`, with no VTA. Why this
+  mediator and not Keyring's: [2026-09-29-al.md](./push-notifications-plan/2026-09-29-al.md).
+- **Caddy** for HTTPS, with automatic Let's Encrypt certificates, for two
+  hostnames: the gateway and the mediator. The mediator's login endpoint answers
+  only private addresses. Inside the stack the mediator's hostname resolves to
+  Caddy, so only the gateway can hold a session. The gateway's metrics listener
+  stays on its own loopback.
+- **CI** builds the gateway and mediator images for amd64 and arm64. It runs
+  the gateway's test suite with Keyring's patch, and brings the mediator up
+  with its operator script.
 - **`.env.example`** listing every setting without secret values. Secrets are
   mounted as files from a git-ignored `secrets/` folder.
 - **A README** covering:
@@ -312,8 +328,10 @@ serves.
   today. Moving phones to a new mailbox changes `MEDIATOR_URL`, and existing
   installs don't follow a new URL on their own. That migration is its own piece
   of work and is not bundled with push.
-- **A DIDComm v2 mediator.** The gateway uses the shared VTI mediator (§5.3),
-  and running a second one only for the gateway is avoided.
+- **A move of Keyring's mailbox to DIDComm v2.** It is worthwhile (the app is
+  already on DIDComm v2) but separate, and it wouldn't serve the gateway: the
+  gateway's client needs Affinidi's login, session and TSP, which Credo's
+  mediator doesn't have ([2026-09-29-al.md](./push-notifications-plan/2026-09-29-al.md), F2).
 - **Credo's mediator push module** (`MEDIATOR_USE_PUSH_NOTIFICATIONS`). It
   hands the FCM token to the mediator, the pairing §1 rules out.
 
@@ -353,9 +371,10 @@ Both are settled when the local test environment is provisioned (§6).
 
 The server needs:
 - a Linux host with Docker;
-- inbound 80/443 for one DNS name;
-- outbound access to the shared mediator, APNs (`api.push.apple.com`, or
-  `api.sandbox.push.apple.com` for development builds) and FCM.
+- inbound 80/443 for two DNS names, the gateway's and its mediator's;
+- outbound access to APNs (`api.push.apple.com`, or
+  `api.sandbox.push.apple.com` for development builds), FCM, the agents'
+  mediators and the `did:webvh` hosts.
 
 | Option | Cost a month |
 | --- | --- |
@@ -396,14 +415,18 @@ test infrastructure, until it works end to end on a real device:
   secret) and the committed `google-services.json` stay unchanged until the
   test passes. A capability change on an app ID means regenerating the
   profiles signed against it, which is why the release ID waits.
-- **A local stack.** The gateway runs in its own Docker stack. Its identity and
-  mediator come from the project's local VTI lab, not the hosted stack, whose
-  DID creation was failing when this plan was written. The lab adds only:
+- **A local stack.** The gateway runs in its own Docker stack. Its identity
+  comes from the project's local VTI lab, not the hosted stack, whose DID
+  creation was failing when this plan was written. The lab adds only:
   - a gateway DID;
-  - a mediator account for it;
   - a dedicated test VTA that sends the wake-ups.
 
-  No existing lab agent or persona takes part.
+  No existing lab agent or persona takes part. The first device test used the
+  lab's own mediator. The bundled mediator (§5.1) is then proven in the same
+  lab: it runs as a second instance with its own port, Redis and tunnel
+  hostname, and never touches the lab's mediator or its store. The push-test
+  agent keeps the lab mediator, so its wake-ups cross between the two
+  ([2026-09-29-al.md](./push-notifications-plan/2026-09-29-al.md), Part 3).
 - **Development builds use the APNs sandbox.** The gateway is set to sandbox for
   the test build.
 - **Simulators and emulators carry the automated part.**
@@ -488,10 +511,15 @@ Phase 3 stays inside these limits by design:
     that PR can't reach this one.
   - The pin moves only together with the agents the gateway serves.
 - **The Phase 2 gateway patch may stay Keyring's** (§3). It is kept self-contained so it can be offered upstream as it stands.
-- **The shared mediator is a dependency.** The gateway needs a `did:webvh` and
-  an account on the shared DIDComm v2 mediator, and agents must be able to
-  reach it. Until the hosted stack can create DIDs, the gateway lives on the
-  local lab (§6).
+- **The agents' mediators must relay.** A wake-up leaves the agent's own
+  mediator as an inter-mediator relay to the gateway's, and the gateway's reply
+  comes back the same way. So the agents' mediators must relay outward and
+  accept inbound relays. The lab mediator does; the production agents' mediator
+  is checked once it is known
+  ([2026-09-29-al.md](./push-notifications-plan/2026-09-29-al.md), F4 and Part 3).
+- **The gateway still needs a VTA for its identity.** Its `did:webvh` is issued
+  by a VTA and published on that VTA's DID host (§5.3), even with the mediator
+  bundled.
 - **Timing is observable.** The gateway, APNs and FCM see when each wake goes
   out, and that correlates with the agent's activity. Wakes set `apns-collapse-id`
   and the FCM `collapse_key`, because an empty push carries no `thread-id` and
@@ -525,6 +553,9 @@ Phase 3 stays inside these limits by design:
 
 - **Which agents a shared gateway serves** (§5.4), and **where it runs**. Both
   are waiting on the collaborator who offered hosting.
+- **The bundled mediator is unproven across mediators.** The four checks in
+  [2026-09-29-al.md](./push-notifications-plan/2026-09-29-al.md) Part 3 run
+  before any server deploy.
 
 Upstream sources read: vti-push-gateway `e542a9d7` (and `33bc8052`, the first
 draft's pin) and upstream VTI `2240aa7e`. The app facts are from `main` at
