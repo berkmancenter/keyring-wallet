@@ -1115,6 +1115,13 @@ export class VtaClient {
         ...(options.didUrl ? { url: options.didUrl } : {}),
         label: options.label,
         addMediatorService: true,
+        // DIDComm only. A VTA adds `#tsp` by default when it and its mediator
+        // speak TSP (VTI vta-service did_webvh/document.rs:47-67), and a
+        // community then pushes to the persona over TSP first. Across two
+        // mediators that push never reached the phone (227 gate, VTA Farm),
+        // and the community falls back to DIDComm only after an hour. Over
+        // DIDComm the same pushes arrive.
+        addTspService: false,
         setPrimary: false,
       },
       30000,
