@@ -1353,7 +1353,16 @@ warning if <code>*</code> was chosen (§3);</li>
 <li><code>DID document advertises TSPTransport</code>.</li>
 </ul>
 <p>It shows <strong>no</strong> echo-sender warning, and no <code>ERROR</code> lines.
-<code>sudo docker compose logs mediator</code> shows no <code>ERROR</code> lines either.</p>
+<code>sudo docker compose logs mediator</code> shows no <code>ERROR</code> lines either. It
+does show four <code>WARN</code> lines, which are expected with this setup:</p>
+<ul>
+<li><code>Running without SSL/TLS</code>: TLS ends at Caddy, in front of it;</li>
+<li>Redis <code>has no authentication</code> and <code>is not using TLS</code>: Redis sits on the
+<code>store</code> network, which only the mediator can reach and which has no route
+out;</li>
+<li><code>Secret backend is file://</code>: the keys are files in <code>secrets/mediator/</code>,
+owner-only (§9).</li>
+</ul>
 </li>
 <li>
 <p>Send us the gateway's URL, the gateway's DID and the mediator's DID. <strong>The production test</strong>, which we

@@ -990,7 +990,14 @@ well.
    - `DID document advertises TSPTransport`.
 
    It shows **no** echo-sender warning, and no `ERROR` lines.
-   `sudo docker compose logs mediator` shows no `ERROR` lines either.
+   `sudo docker compose logs mediator` shows no `ERROR` lines either. It
+   does show four `WARN` lines, which are expected with this setup:
+   - `Running without SSL/TLS`: TLS ends at Caddy, in front of it;
+   - Redis `has no authentication` and `is not using TLS`: Redis sits on the
+     `store` network, which only the mediator can reach and which has no route
+     out;
+   - `Secret backend is file://`: the keys are files in `secrets/mediator/`,
+     owner-only (§9).
 4. Send us the gateway's URL, the gateway's DID and the mediator's DID. **The production test**, which we
    run with you:
    - We build Keyring's push-test app with `https://<host>` as its gateway, and
