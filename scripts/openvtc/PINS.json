@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-28",
+  "updated": "2026-09-29",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -15,10 +15,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "ed672fff",
-      "commitDate": "2026-09-24",
-      "pinnedOn": "2026-09-25",
-      "why": "Match the Farm, which runs vta-service 0.42.0 and vtc-service 0.11.58: tag vta-service-v0.42.0 carries both. The local lab moves to it so lab runs test what the Farm runs.",
+      "sha": "afcf2470",
+      "commitDate": "2026-09-29",
+      "pinnedOn": "2026-09-29",
+      "why": "Latest main, which the local lab now runs (vta-service 0.45.1; #1835 and #1840 make every community call a signed Trust Task). From now on the lab follows upstream main, and the Farm was reset today. card-verify moves with it: trust-tasks-rs 0.24.6 and affinidi-data-integrity 0.7.13, per afcf2470's Cargo.lock.",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",
@@ -30,20 +30,20 @@
     },
     "affinidi-tdk-rs": {
       "url": "https://github.com/affinidi/affinidi-tdk-rs.git",
-      "sha": "ea5af502",
-      "commitDate": "2026-09-23",
-      "pinnedOn": "2026-09-25",
-      "why": "Match the Farm's mediator, 0.29.4 (tag affinidi-messaging-mediator-v0.29.4); the local lab builds its mediator from this repo and was at 0.28.11.",
+      "sha": "da432130",
+      "commitDate": "2026-09-29",
+      "pinnedOn": "2026-09-29",
+      "why": "Latest main, which the lab's mediator now runs: #905 stops a TSP payload sent right after a relationship invite from being dropped (the O10/VTI-52 lost-reply shape).",
       "watch": [
         "crates/messaging/affinidi-messaging-mediator/"
       ]
     },
     "openvtc": {
       "url": "https://github.com/OpenVTC/openvtc.git",
-      "sha": "ed13d29",
-      "commitDate": "2026-09-24",
-      "pinnedOn": "2026-09-25",
-      "why": "The openvtc build the interop harness gates on: both phases are green against it on the lab at the Farm's versions (2026-09-25). 177a218, the build this clone sat on by hand, cannot create a persona against VTA 0.42.0 (its vta-sdk 0.42.1 does not read contexts/get's 422 as NotFound; openvtc-core config/community_context.rs ~:296-303), so it cannot run either phase.",
+      "sha": "e49816c",
+      "commitDate": "2026-09-29",
+      "pinnedOn": "2026-09-29",
+      "why": "Latest main, which the lab's TUI (interop harness) now runs: it takes vta-service 0.45 (#395) and adds the PCS hidden-vetting client (#396).",
       "watch": [
         "openvtc/src/ui/pages/",
         "openvtc/src/state_handler/vetting_actions.rs",
@@ -125,7 +125,7 @@
   "npm": {
     "@openvtc/vti-tsp-js": {
       "expected": "0.2.0",
-      "tripwire": "our noble HPKE is the shipped wire layer; any bump = crypto or CESR change — audit before adopting"
+      "tripwire": "our noble HPKE is the shipped wire layer; any bump = crypto or CESR change \u2014 audit before adopting"
     },
     "@openvtc/pnm-core": {
       "expected": "0.4.0",

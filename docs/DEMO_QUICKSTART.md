@@ -296,7 +296,10 @@ for what is proven on real devices.
 - **Build your own use case on Keyring** —
   [`app/src/demo-profiles/README.md`](../app/src/demo-profiles/README.md) has a
   ~60-line starter container to copy, and explains how to replace screens,
-  style credentials without hosting anything, and package a use case.
+  style credentials without hosting anything, and package a use case. If
+  you're using Claude Code: `customizing-trading-card` automates reskinning
+  the trading-card demo, and `new-game` covers building a new game or group
+  activity from scratch.
 - **How the mediator works, and its options** —
   [`bifold/packages/mediator-server/README.md`](../bifold/packages/mediator-server/README.md).
 - **The witnessed exchange**, where a third party attests the exchange happened

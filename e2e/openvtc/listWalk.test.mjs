@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { walkTo } from './listWalk.js';
+import { rowSelected, walkTo } from './listWalk.js';
 
 /** A TUI list of `rows`, cursor at `at`, that wraps (or stops at its ends). */
 function fakeList(rows, { at = 0, wraps = false } = {}) {
@@ -54,4 +54,19 @@ test('a row that is not there ends the walk: false, after each key covered the l
 test('the eighth row that a six-press walk missed on 2026-09-25', async () => {
   const tui = fakeList(rows(8));
   assert.equal(await walkTo(tui, wanted('row-7'), { pace: 0 }), true);
+});
+
+// openvtc e49816c, 2026-09-29: with 25 tickets out the Tickets list fills the
+// pane and the "Read aloud" detail below it is off screen, so the only sign of
+// the selection is the ▸ on the ticket's own row.
+test('rowSelected: the row carrying the cursor names the ticket', () => {
+  const screen = [
+    '│║   Requests (22)  Tickets (25)  Issued (18)    ←/→   █',
+    '│║▸ 39TA-2HT0  did:webvh:QmUs…MPJB:keyring-vti-vtc.ngrok.app  1 left, until 2026-10-09  █',
+    '│║  4CPB-TAXR  did:webvh:QmUs…MPJB:keyring-vti-vtc.ngrok.app  1 left, until 2026-10-13  ║',
+  ].join('\n');
+  assert.equal(rowSelected(screen, '39TA-2HT0'), true);
+  assert.equal(rowSelected(screen, '4CPB-TAXR'), false);
+  // The Activity Log names the new ticket too; that is not a selection.
+  assert.equal(rowSelected('│[10:57:22] Ticket 4CPB-TAXR for did:webvh:… — press ⏎', '4CPB-TAXR'), false);
 });

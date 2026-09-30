@@ -16,6 +16,9 @@ git -C <vti-clone> worktree add ~/Documents/vti-main origin/main
 cd ~/Documents/vti-main
 cargo build -p vta-service -p vtc-service -p pnm-cli -p cnm-cli \
   --features vta-service/tsp,vta-service/webvh
+# pnm opens the login Keychain: sign it after EVERY rebuild (the stable path and
+# target/debug/pnm in place), or the next run re-prompts for each item
+scripts/openvtc/sign-lab-tool.sh all   # after ANY lab rebuild (VTI, webvh, tdk): every binary, before a restart
 
 # DID hosting
 git clone https://github.com/affinidi/affinidi-webvh-service ~/Documents/affinidi-webvh-service
