@@ -1032,8 +1032,11 @@ MEDIATOR_DID=did:peer:2.Vz6Mk…
 MEDIATOR_ADMIN_DID=did:key:z6Mk…
 </code></pre>
 <p>It also writes <code>secrets/mediator/mediator-secrets.json</code>, the mediator's
-private keys, and <code>secrets/mediator/admin-monitor.json</code>, its admin identity for
-upstream's <code>mediator-console</code>. Both are owned by uid 10002, mode 0600. It
+private keys, and <code>secrets/mediator/admin-monitor.json</code>, its admin identity
+(used to register the gateway in part B, and by upstream's <code>mediator-console</code>).
+Upstream's tool prints the admin's private key as it runs; the script replaces
+that line with <code>(not shown…)</code>, because the key is already in
+<code>admin-monitor.json</code>. Back that file up offline with the other secrets. Both are owned by uid 10002, mode 0600. It
 refuses to run a second time: a new mediator identity means a new gateway
 identity too.</p>
 <p>Copy the two lines into <code>.env</code>, then start the mediator and check it:</p>

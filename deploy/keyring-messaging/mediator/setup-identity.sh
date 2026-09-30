@@ -31,8 +31,14 @@ sed "s#@MEDIATOR_HOST@#$host#g" mediator/mediator-build.toml > "$work/recipe.tom
 chmod 0777 "$work"
 
 docker compose up -d --wait redis
-docker compose run --rm --no-deps --user 0:0 --entrypoint mediator-setup \
-  -v "$work:/setup" mediator --from /setup/recipe.toml
+# mediator-setup prints the admin's private key "for operator bookkeeping".
+# It is already in admin-monitor.json, so keep it out of terminals and logs.
+if ! docker compose run --rm -T --no-deps --user 0:0 --entrypoint mediator-setup \
+     -v "$work:/setup" mediator --from /setup/recipe.toml > "$work/setup.log" 2>&1; then
+  sed -E 's/(Private key \(multibase\): ).*/\1(not shown)/' "$work/setup.log" >&2
+  exit 1
+fi
+sed -E 's/(Private key \(multibase\): ).*/\1(not shown: it is in secrets\/mediator\/admin-monitor.json)/' "$work/setup.log"
 
 mediator_did=$(sed -n 's/^mediator_did *= *"did:\/\/\(.*\)"/\1/p' "$work/mediator.toml")
 admin_did=$(sed -n 's/^admin_did *= *"did:\/\/\(.*\)"/\1/p' "$work/mediator.toml")

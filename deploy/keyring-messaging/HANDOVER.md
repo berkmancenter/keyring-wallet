@@ -717,8 +717,11 @@ MEDIATOR_ADMIN_DID=did:key:z6Mk…
 ```
 
 It also writes `secrets/mediator/mediator-secrets.json`, the mediator's
-private keys, and `secrets/mediator/admin-monitor.json`, its admin identity for
-upstream's `mediator-console`. Both are owned by uid 10002, mode 0600. It
+private keys, and `secrets/mediator/admin-monitor.json`, its admin identity
+(used to register the gateway in part B, and by upstream's `mediator-console`).
+Upstream's tool prints the admin's private key as it runs; the script replaces
+that line with `(not shown…)`, because the key is already in
+`admin-monitor.json`. Back that file up offline with the other secrets. Both are owned by uid 10002, mode 0600. It
 refuses to run a second time: a new mediator identity means a new gateway
 identity too.
 
