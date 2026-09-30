@@ -199,6 +199,43 @@ describe('hardware-evidence context vocabulary', () => {
     expect(await canonize(vrc(NEW_CONTEXT, reordered))).not.toBe(await canonize(vrc(NEW_CONTEXT, evidence)))
   })
 
+  describe('issuerScope (cred-spec Base Structure: REQUIRED, pairwise for a VRC)', () => {
+    const ISSUER_SCOPE_IRI = 'https://registry.trustoverip.org/dtg/credentials#issuerScope'
+    const scoped = (context: string[], evidence?: unknown) => ({ ...vrc(context, evidence), issuerScope: 'pairwise' })
+
+    test('safe-mode URDNA2015 expands it to the registry IRI with no evidence', async () => {
+      const nquads = await canonize(scoped(NEW_CONTEXT))
+      expect(nquads).toContain(`<${ISSUER_SCOPE_IRI}> "pairwise"`)
+      expect(vocabularyIris(nquads).filter((iri) => iri.endsWith('issuerScope'))).toEqual([ISSUER_SCOPE_IRI])
+    })
+
+    test.each(Object.entries(VARIANTS))(
+      'with evidence variant %s: expands to the registry IRI only (not a firstperson namespace)',
+      async (_name, evidence) => {
+        const nquads = await canonize(scoped(NEW_CONTEXT, evidence))
+        expect(nquads).toContain(`<${ISSUER_SCOPE_IRI}> "pairwise"`)
+        expect(vocabularyIris(nquads).filter((iri) => iri.endsWith('issuerScope'))).toEqual([ISSUER_SCOPE_IRI])
+        const outside = vocabularyIris(nquads).filter(
+          (iri) =>
+            !iri.startsWith(HARDWARE_EVIDENCE_NAMESPACE) && !ALLOWED_OUTSIDE_NAMESPACE.some((ns) => iri.startsWith(ns))
+        )
+        expect(outside).toEqual([])
+      }
+    )
+
+    test('it is part of the signed bytes: a different scope changes the canonical form', async () => {
+      const a = await canonize(scoped(NEW_CONTEXT))
+      const b = await canonize({ ...scoped(NEW_CONTEXT), issuerScope: 'public' })
+      expect(b).not.toBe(a)
+    })
+
+    test('also resolves under the legacy evidence context (older peers)', async () => {
+      const legacy = [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, DTG_CONTEXT_URL]
+      const nquads = await canonize(scoped(legacy))
+      expect(nquads).toContain(`<${ISSUER_SCOPE_IRI}> "pairwise"`)
+    })
+  })
+
   test('a VRC with no evidence canonicalizes the same with or without the evidence context listed', async () => {
     const withCtx = await canonize(vrc(NEW_CONTEXT))
     const without = await canonize(vrc([CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL]))

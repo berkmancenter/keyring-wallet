@@ -15,8 +15,8 @@ const testDids = {
 const relationshipRecord = {
   myRelationshipDid: testDids.myRelationshipDid,
   counterpartyRelationshipDid: testDids.counterpartyRelationshipDid,
-  // >= 2 so the RCE-v2 gate (counterpartySpeaksVc20) lets the RCard offer proceed.
-  counterpartyRceVersion: 2,
+  // >= 3 so the VC 2.0 / DI gate (counterpartySpeaksVc20) lets the RCard offer proceed.
+  counterpartyRceVersion: 3,
 }
 
 const mockRepository = {

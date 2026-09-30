@@ -34,6 +34,8 @@ import { LocalityEvidence } from '../../src/LocalityService'
 import {
   CREDENTIALS_V2_CONTEXT_URL,
   ED25519_2018_SUITE_CONTEXT_URL,
+  HARDWARE_EVIDENCE_CONTEXT_URL,
+  REGISTRY_DTG_CONTEXT_URL,
   WITNESSED_EXCHANGE_CONTEXT_URL,
 } from '@bifold/vrc-contexts'
 import { defaultConfig, isMediatorEnabled, WitnessServerConfig } from '../../src/config'
@@ -336,6 +338,29 @@ describe('WitnessService - VWC Building', () => {
     proof: diProof,
   }
 
+  /**
+   * VRC as a v5 wallet now emits it (G32): VC 2.0, registry v1 context + the
+   * dedicated hardware-evidence context, top-level issuerScope 'pairwise',
+   * a hardware-evidence block, DataIntegrityProof.
+   */
+  const v5Vrc = {
+    '@context': [CREDENTIALS_V2_CONTEXT_URL, REGISTRY_DTG_CONTEXT_URL, HARDWARE_EVIDENCE_CONTEXT_URL],
+    type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
+    issuer: vrcIssuer,
+    issuerScope: 'pairwise',
+    validFrom: '2026-01-01T12:00:00Z',
+    validUntil: '2026-01-08T12:00:00Z',
+    credentialSubject: { id: 'did:peer:0zbob' },
+    evidence: [
+      {
+        id: 'urn:uuid:e1',
+        type: ['BiometricAttestation', 'HardwareKeyAttestation'],
+        hardwareBinding: { publicKey: 'z6Mk-v5-pubkey' },
+      },
+    ],
+    proof: diProof,
+  }
+
   function buildVwc(vrcJson: any, overrides: Partial<WitnessCredentialBuildContext> = {}) {
     return buildWitnessCredentialJson(
       { type: ['VerifiablePresentation'], verifiableCredential: [vrcJson] },
@@ -437,6 +462,33 @@ describe('WitnessService - VWC Building', () => {
       const tampered = { ...legacyVrc, credentialSubject: { id: 'did:peer:0zmallory' } }
 
       expect(computeVrcDigest(tampered)).not.toBe(computeVrcDigest(legacyVrc))
+    })
+  })
+
+  describe('v5 peer VRC shape (issuerScope, evidence context, DI proof)', () => {
+    it('builds a VWC for it: VC 2.0, DI mirrored, witnessed-exchange context, subject is the VRC issuer', () => {
+      const vwc = buildVwc(v5Vrc)
+
+      expect(vwc['@context'][0]).toBe(CREDENTIALS_V2_CONTEXT_URL)
+      expect(vwc['@context']).toContain(WITNESSED_EXCHANGE_CONTEXT_URL)
+      expect(vwc.credentialSubject.id).toBe(vrcIssuer)
+      expect(vwc.credentialSubject.digest).toBe(computeVrcDigest(v5Vrc))
+    })
+
+    it('freshness still reads validFrom on it', () => {
+      expect(checkVrcFreshness(v5Vrc, new Date('2026-01-01T12:01:00Z')).fresh).toBe(true)
+    })
+
+    it('the digest covers issuerScope and is key-order invariant (JCS)', () => {
+      const reordered = Object.fromEntries(Object.entries(v5Vrc).reverse())
+      expect(computeVrcDigest(reordered)).toBe(computeVrcDigest(v5Vrc))
+      expect(computeVrcDigest({ ...v5Vrc, issuerScope: 'public' })).not.toBe(computeVrcDigest(v5Vrc))
+    })
+
+    it('extracts the hardware attestation key from its evidence block', () => {
+      expect(
+        extractVrcHardwareAttestationPublicKey({ type: ['VerifiablePresentation'], verifiableCredential: [v5Vrc] })
+      ).toBe('z6Mk-v5-pubkey')
     })
   })
 

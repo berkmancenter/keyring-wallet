@@ -111,7 +111,12 @@ async function logIssuedCredentialSnapshot(
  * RCE (Relationship Credential Exchange) protocol version this app speaks.
  *
  * - v1: VCDM 1.1 credentials (issuanceDate/expirationDate, v1 context)
- * - v2: VCDM 2.0 credentials (validFrom/validUntil, v2 context)
+ * - v2: VCDM 2.0 credentials (validFrom/validUntil, v2 context). A peer that
+ *       announces exactly v2 is no longer issued VC 2.0 credentials: the
+ *       cred-spec requires DataIntegrityProof on every VC 2.0 VRC, so such a
+ *       peer is treated as pre-v2 (legacy VCDM 1.1 VRC, no RCard) — see
+ *       counterpartySpeaksVc20. Pre-production only: no shipped build is
+ *       known to announce v2 without v3.
  * - v3: W3C Data Integrity proofs (DataIntegrityProof + eddsa-rdfc-2022)
  *       for peer-to-peer VRC/RCard issuance. v3 implies v2 (DI is only ever
  *       issued on VCDM 2.0 credentials). Verification is dual-stack forever:
@@ -332,11 +337,13 @@ export async function buildVrcCredential(
   const issuanceTimestamp = new Date(Date.now() - CLOCK_SKEW_ALLOWANCE_MS).toISOString()
   const expirationTimestamp = new Date(Date.now() + DEFAULT_CREDENTIAL_EXPIRATION_MS).toISOString()
 
+  // A VC 2.0 VRC is only ever issued to a DI-capable peer (RCE v3+; see
+  // counterpartySpeaksVc20), so useVc20 implies DataIntegrityProof: DI needs
+  // no suite context at all (credentials/v2 already defines the
+  // DataIntegrityProof terms, nothing is appended during signing —
+  // docs/CRYPTO_SUITE_FOLLOWUP.md, Level 0 spike check 4).
   const useVc20 = await counterpartySpeaksVc20(agent, counterpartyRelationshipDid)
-  // DI (RCE v3) needs no suite context at all: credentials/v2 already defines
-  // the DataIntegrityProof terms, so nothing is appended during signing
-  // (docs/CRYPTO_SUITE_FOLLOWUP.md, Level 0 spike check 4).
-  const useDi = useVc20 && (await counterpartySpeaksDi(agent, counterpartyRelationshipDid))
+  const useDi = useVc20
 
   const useHardwareEvidenceContext =
     useVc20 && (await counterpartySpeaksHardwareEvidenceContext(agent, counterpartyRelationshipDid))
@@ -373,6 +380,16 @@ export async function buildVrcCredential(
         type: ['VerifiableCredential', 'DTGCredential', 'RelationshipCredential'],
         // Bare DID string per DTG spec — contact info rides in the RCard instead
         issuer: myRelationshipDid,
+        // cred-spec Base Structure / VRC section: REQUIRED, exactly one of
+        // pairwise|directed|public, declaring the correlation scope of the
+        // identifier in `issuer`. That identifier is the per-relationship
+        // did:peer:0 minted for ONE counterparty by getOrCreateRelationshipDid
+        // (fresh key per counterparty DID, never shared across
+        // counterparties), so it is pairwise — the value the spec RECOMMENDS
+        // for a VRC. The registry v1 context defines the term, so this is
+        // signable in JSON-LD safe mode with no further context. Emitted
+        // before hardware signing, so it is part of the hardware-signed bytes.
+        issuerScope: 'pairwise',
         validFrom: issuanceTimestamp,
         validUntil: expirationTimestamp,
         credentialSubject: {
@@ -455,12 +472,21 @@ async function counterpartyRceVersionAtLeast(
   }
 }
 
-/** RCE v2+: the counterparty can validate VCDM 2.0 credentials. */
+/**
+ * Whether we issue VCDM 2.0 credentials to this counterparty. The cred-spec
+ * requires every VC 2.0 VRC proof to be a DataIntegrityProof (body.md
+ * `proof.type` MUST), so a peer that announced RCE v2 only — VC 2.0 but no DI
+ * — is deliberately treated like a pre-v2 peer: it receives the legacy VCDM
+ * 1.1 VRC (Ed25519Signature2018, contact info in the issuer object) and no
+ * RCard, both of which every v2 build still reads. No VC 2.0 document is ever
+ * signed with Ed25519Signature2018. Equivalent to counterpartySpeaksDi; the
+ * separate name documents the intent at each call site.
+ */
 function counterpartySpeaksVc20(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
-  return counterpartyRceVersionAtLeast(agent, counterpartyRelationshipDid, 2)
+  return counterpartyRceVersionAtLeast(agent, counterpartyRelationshipDid, 3)
 }
 
-/** RCE v3+: the counterparty can verify DataIntegrityProof/eddsa-rdfc-2022. */
+/** RCE v3+: the counterparty can verify DataIntegrityProof/eddsa-rdfc-2022 (and so implies VC 2.0). */
 function counterpartySpeaksDi(agent: Agent, counterpartyRelationshipDid: string): Promise<boolean> {
   return counterpartyRceVersionAtLeast(agent, counterpartyRelationshipDid, 3)
 }

@@ -5,6 +5,7 @@
  * Covers the capability gate added for DataIntegrityProof/eddsa-rdfc-2022:
  * - getVrcJsonLdProofOptions returns DI options only for peers that announced
  *   RCE v3; v2/v1/unknown peers keep Ed25519Signature2018 exactly as before
+ *   but are issued VCDM 1.1 documents, never VC 2.0 (G32)
  * - the VRC and RCard builders drop the Ed25519 suite context on the DI path
  *   (credentials/v2 already defines the DataIntegrityProof terms) and keep it
  *   on the 2018 path
@@ -83,7 +84,7 @@ describe('getVrcJsonLdProofOptions capability gate', () => {
     })
   })
 
-  test('RCE v2 peer keeps Ed25519Signature2018 (no cryptosuite field)', async () => {
+  test('RCE v2-only peer keeps Ed25519Signature2018 (no cryptosuite field) — paired with a VCDM 1.1 VRC, see below', async () => {
     const options = await getVrcJsonLdProofOptions(buildAgent(2), THEIR_DID)
     expect(options).toEqual({ proofType: 'Ed25519Signature2018', proofPurpose: 'assertionMethod' })
   })
@@ -141,14 +142,14 @@ describe('VRC credential @context on the DI path', () => {
     expect(RCE_PROTOCOL_VERSION).toBeGreaterThanOrEqual(5)
   })
 
-  test('v2 peer: VCDM 2.0 shape still carries the Ed25519 suite context', async () => {
-    const { credential } = await buildVrcCredential(buildAgent(2), MY_DID, THEIR_DID)
-    expect(credential['@context']).toEqual([
-      CREDENTIALS_V2_CONTEXT_URL,
-      REGISTRY_DTG_CONTEXT_URL,
-      DTG_CONTEXT_URL,
-      ED25519_2018_SUITE_CONTEXT_URL,
-    ])
+  test('v2-only peer: no VC 2.0 document at all (cred-spec requires DI on VC 2.0) — legacy VCDM 1.1 shape, 2018 proof', async () => {
+    const agent = buildAgent(2)
+    const { credential } = await buildVrcCredential(agent, MY_DID, THEIR_DID)
+    expect(credential['@context']).not.toContain(CREDENTIALS_V2_CONTEXT_URL)
+    expect(credential['@context']).not.toContain(ED25519_2018_SUITE_CONTEXT_URL)
+    expect(credential.issuerScope).toBeUndefined()
+    expect(credential.issuanceDate).toBeDefined()
+    expect((await getVrcJsonLdProofOptions(agent, THEIR_DID)).proofType).toBe('Ed25519Signature2018')
   })
 })
 
