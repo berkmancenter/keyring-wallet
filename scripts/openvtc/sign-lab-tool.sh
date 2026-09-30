@@ -2,7 +2,12 @@
 # Sign a lab tool build with the one fixed local identity and point its stable
 # path at it, so the login Keychain's "Always Allow" survives every rebuild.
 #
-#   scripts/openvtc/sign-lab-tool.sh pnm|openvtc [--build]
+#   scripts/openvtc/sign-lab-tool.sh <tool> [--build]
+#   scripts/openvtc/sign-lab-tool.sh all          # every lab binary below, as built
+#
+# Tools: pnm, cnm, openvtc (CLIs; each also gets a stable ~/vti-stack/bin link)
+# and vta, vtc, mediator, did-hosting-daemon (the lab's services, signed in
+# place where restart.sh runs them).
 #
 # An ad hoc build (what cargo produces) has a new code identity each time, so
 # every rebuild re-prompts for each Keychain item it opens. Signed with the
@@ -24,14 +29,27 @@
 set -euo pipefail
 
 TOOL="${1:-}"
+if [ "$TOOL" = all ]; then
+  rc=0
+  for t in pnm cnm openvtc vta vtc mediator did-hosting-daemon; do "$0" "$t" || rc=1; done
+  exit $rc
+fi
 BUILD=0
 [ "${2:-}" = --build ] && BUILD=1
 BIN_DIR="${LAB_BIN_DIR:-$HOME/vti-stack/bin}"
 IDENTITY_NAME="${SIGN_IDENTITY:-Keyring lab tools}"
 
 case "$TOOL" in
-  pnm)
+  pnm|cnm|vta|vtc)
     SRC="${VTI_SRC:-$HOME/Documents/vti-main}"
+    TARGET_DIR="$SRC/target"
+    ;;
+  mediator)
+    SRC="${TDK_SRC:-$HOME/Documents/affinidi-tdk-rs}"
+    TARGET_DIR="$SRC/target"
+    ;;
+  did-hosting-daemon)
+    SRC="${WEBVH_SRC:-$HOME/Documents/affinidi-webvh-service}"
     TARGET_DIR="$SRC/target"
     ;;
   openvtc)
@@ -39,7 +57,7 @@ case "$TOOL" in
     TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/Documents/keyring-wallet/external/openvtc/target}"
     ;;
   *)
-    echo "usage: $0 pnm|openvtc [--build]" >&2
+    echo "usage: $0 pnm|cnm|openvtc|vta|vtc|mediator|did-hosting-daemon|all [--build]" >&2
     exit 2
     ;;
 esac
@@ -60,29 +78,31 @@ else
 fi
 [ -n "$IDENTITY" ] || { echo "no code-signing identity named \"$IDENTITY_NAME\" in the login keychain" >&2; exit 1; }
 
-mkdir -p "$BIN_DIR"
-DEST="$BIN_DIR/$TOOL-$REV"
-# Replace by rename, never overwrite a binary in place (a running copy hangs).
-cp -p "$BUILT" "$DEST.new"
-codesign --force -s "$IDENTITY" -i "org.keyring.lab.$TOOL" "$DEST.new"
-REQ=$(codesign -d -r- "$DEST.new" 2>&1 | grep '^designated')
-case "$REQ" in
-  *"identifier \"org.keyring.lab.$TOOL\""*"certificate leaf"*) ;;
-  *) echo "signature check failed: $REQ" >&2; rm -f "$DEST.new"; exit 1 ;;
-esac
-mv -f "$DEST.new" "$DEST"
+# Sign by rename, never in place on a file that may be running (a running copy
+# hangs): copy, sign, check the designated requirement, move over.
+sign_copy() { # src dest
+  cp -p "$1" "$2.signed.new"
+  codesign --force -s "$IDENTITY" -i "org.keyring.lab.$TOOL" "$2.signed.new"
+  REQ=$(codesign -d -r- "$2.signed.new" 2>&1 | grep '^designated')
+  case "$REQ" in
+    *"identifier \"org.keyring.lab.$TOOL\""*"certificate leaf"*) mv -f "$2.signed.new" "$2" ;;
+    *) echo "signature check failed for $2: $REQ" >&2; rm -f "$2.signed.new"; exit 1 ;;
+  esac
+}
 
-# Sign the cargo output in place as well, by rename (never overwrite a binary
-# that may be running): the copy is signed, checked, then moved over it.
-cp -p "$BUILT" "$BUILT.signed.new"
-codesign --force -s "$IDENTITY" -i "org.keyring.lab.$TOOL" "$BUILT.signed.new"
-case "$(codesign -d -r- "$BUILT.signed.new" 2>&1 | grep '^designated')" in
-  *"identifier \"org.keyring.lab.$TOOL\""*"certificate leaf"*) mv -f "$BUILT.signed.new" "$BUILT" ;;
-  *) echo "in-place signature check failed for $BUILT" >&2; rm -f "$BUILT.signed.new"; exit 1 ;;
-esac
-
-# Repoint the stable path (-h: replace the link itself, not what it points to).
-ln -sfh "$DEST" "$BIN_DIR/$TOOL"
-echo "$TOOL → $(readlink "$BIN_DIR/$TOOL")"
+# The cargo output itself, which restart.sh (services) and stray scripts run.
+sign_copy "$BUILT" "$BUILT"
+echo "$TOOL: $BUILT signed in place"
 echo "  $REQ"
-echo "  $BUILT signed in place"
+
+# CLIs also get a revisioned copy and a stable ~/vti-stack/bin link, which the
+# harness defaults to (-h on ln: replace the link itself).
+case "$TOOL" in
+  pnm|cnm|openvtc)
+    mkdir -p "$BIN_DIR"
+    DEST="$BIN_DIR/$TOOL-$REV"
+    sign_copy "$BUILT" "$DEST"
+    ln -sfh "$DEST" "$BIN_DIR/$TOOL"
+    echo "  $TOOL → $(readlink "$BIN_DIR/$TOOL")"
+    ;;
+esac

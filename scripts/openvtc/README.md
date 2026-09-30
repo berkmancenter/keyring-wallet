@@ -131,6 +131,7 @@ granted.
 ```sh
 scripts/openvtc/sign-lab-tool.sh pnm --build       # build VTI's pnm, sign it, repoint ~/vti-stack/bin/pnm
 scripts/openvtc/sign-lab-tool.sh openvtc --build   # same for openvtc (OPENVTC_SRC, CARGO_TARGET_DIR)
+scripts/openvtc/sign-lab-tool.sh all               # every lab binary as built: pnm, cnm, openvtc, vta, vtc, mediator, did-hosting-daemon
 ```
 
 Run it after every rebuild; without `--build` it signs the existing build. It signs the
