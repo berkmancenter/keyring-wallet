@@ -110,7 +110,8 @@ async fn run() -> Result<i32, String> {
 
     match (gateway_did, third_party, inbound) {
         (Some(gateway_did), None, None) => {
-            let secrets = with_key_agreement(&admin.did, admin.take_secrets())?;
+            let taken = admin.take_secrets();
+            let secrets = with_key_agreement(&admin.did, taken)?;
             if secrets.is_empty() {
                 return Err(format!("{profile_path} carries no secrets"));
             }
