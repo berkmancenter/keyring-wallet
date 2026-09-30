@@ -42,7 +42,13 @@ const ARTIFACTS = path.resolve(here, "../artifacts");
 const LOW = { from: 0.86 };
 
 const isIos = (d) => d.e2ePlatform === "ios";
-export const textOf = async (d, key) => (await byTestId(d, key).getAttribute(isIos(d) ? "label" : "text")) || "";
+// An Android Button carries its words in content-desc, not text (the card's
+// "Open the vetting desk", 227 gate): fall back to it when text is empty.
+export const textOf = async (d, key) => {
+  const el = byTestId(d, key);
+  if (isIos(d)) return (await el.getAttribute("label")) || "";
+  return (await el.getAttribute("text")) || (await el.getAttribute("content-desc").catch(() => "")) || "";
+};
 
 // ---------------------------------------------------------------- the record
 
@@ -895,7 +901,13 @@ export const vetter = {
         // Farm it took longer than 4 × 5 s (RC2 gate, 2026-09-25, the button
         // still spinning when the runner gave up). Wait for the answer before
         // tapping again; a second tap on a busy button does nothing.
-        await tapTestIdReliable(d, "VettingPublishProfileButton", () => byTestId(d, "VettingProfilePublished").isExisting().catch(() => false), {
+        // The "published" line sits under the button, below the fold on an
+        // Android phone, whose page leaves out what is off screen: look for it
+        // with a short scroll, not only where the screen is (227 gate).
+        const published = async () =>
+          (await byTestId(d, "VettingProfilePublished").isExisting().catch(() => false)) ||
+          Boolean(await scrollToTestId(d, "VettingProfilePublished", 2, { both: false }).catch(() => undefined));
+        await tapTestIdReliable(d, "VettingPublishProfileButton", published, {
           attempts: 3,
           settleMs: 30000,
         });
