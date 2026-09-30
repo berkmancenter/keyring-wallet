@@ -358,6 +358,25 @@ describe('vtiAgent — the peer leg on TSP', () => {
     expect((vtiAgent.getState().peerRevisions ?? []).map((r) => r.vid)).toContain(vetter.vid)
   })
 
+  test('a frame the persona cannot open is said in Release and left on the mediator', async () => {
+    // 227 gate: a push that failed to open left no trace a Release build shows.
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      // Packed for the vetter, handed to the applicant's session: it cannot open it.
+      const packed = await packTrustTaskForPeer(sessionFor(applicant), applicant.vid, vetter.vid, {
+        ...request,
+        id: 'urn:uuid:not-for-me',
+        issuer: applicant.vid,
+        recipient: vetter.vid,
+      })
+      await expect(controller.receiveTspFrame(packed.bytes, applicant.vid)).rejects.toBeDefined()
+      const said = warn.mock.calls.map((c) => String(c[0]))
+      expect(said.some((m) => /TSP frame to .* not opened \(.+\)/.test(m) && /left on the mediator/.test(m))).toBe(true)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   test('the per-peer record keeps "since when" across the same revision and restarts it on a change', async () => {
     const store = new MemoryTspPeerRevisionStore()
     const first = await store.observe('did:x', 'rev3', 2)

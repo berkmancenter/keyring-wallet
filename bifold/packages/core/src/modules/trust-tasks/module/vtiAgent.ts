@@ -878,9 +878,25 @@ class VtiAgentController {
     const tspSession = this.tsp
     const agent = this.agent
     if (!tspSession || !agent) throw new Error(`${TSP_LOG_PREFIX} no TSP identity on this session`)
-    const result = await unpackTrustTaskFromPeer(tspSession, bytes, myDid)
+    let result: Awaited<ReturnType<typeof unpackTrustTaskFromPeer>>
+    try {
+      result = await unpackTrustTaskFromPeer(tspSession, bytes, myDid)
+    } catch (e) {
+      // Release-visible: a frame this persona cannot open is withheld from the
+      // mediator (the rethrow below) and nothing else says so. The sender is
+      // inside the frame, so only the error can name it.
+      const error = e as Error
+      releaseWarn(
+        `${TSP_LOG_PREFIX} TSP frame to ${didPrefix(myDid)} not opened (${error?.name ?? 'Error'}: ${String(error?.message ?? e).slice(0, 160)}); ${frameForm(bytes)} frame, ${bytes.length} bytes, left on the mediator`
+      )
+      throw e
+    }
     if (!result) {
-      agent.config.logger.info(`${TSP_LOG_PREFIX} TSP frame opened but carried no Trust Task envelope; ignored`)
+      // Acknowledged and dropped: the sender counts it delivered and does not
+      // fall back to DIDComm, so a Release build has to show it.
+      releaseWarn(
+        `${TSP_LOG_PREFIX} TSP frame to ${didPrefix(myDid)} opened but carried no Trust Task envelope; ignored (${frameForm(bytes)} frame, ${bytes.length} bytes)`
+      )
       return
     }
     const { plaintext, unpacked } = result
