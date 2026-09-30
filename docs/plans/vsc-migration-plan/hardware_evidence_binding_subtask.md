@@ -2,7 +2,7 @@
 
 **Parent:** [`../vsc-migration-plan.md`](../vsc-migration-plan.md) §2.6 (the hardware-evidence block) and gap G33. **Reasoning and gap record:** [`2026-09-30-bam.md`](./2026-09-30-bam.md) Part 2 (§3.6 finding, §6 G33 row). This document states current design and the plan to change it; see [`../CLAUDE.md`](../CLAUDE.md) for the conventions it follows.
 
-**Status.** Not started. Stage 1 (§4.3) closes G33. Stage 2 (§4.4) removes the key-order dependence that makes Stage 1 fragile. Both are *decided, waiting on sequencing*: they follow the pre-demo device run and the demo (§8.3). Open questions for Brendan are in §8.2.
+**Status.** Stage 1 (§4.3, S1.1-S1.3) is implemented and not yet device-verified; S1.4 log assertions and S1.5's flow-doc edit are open (record: [`2026-09-30-bam.md`](./2026-09-30-bam.md) Part 4 §8.6). Stage 1 (§4.3) closes G33 once a device run passes. Stage 2 is not started. Stage 2 (§4.4) removes the key-order dependence that makes Stage 1 fragile. Stage 2 is *decided, waiting on sequencing* (§8.3). Open questions for Brendan are in §8.2.
 
 **Citations.** Source lines are cited against bifold `508482a27` (the G32 commit, pinned by superproject `171ec80f`). Between `45e02d5b3` and `508482a27` the only source file that changed is `vrc-manager.ts`, so every other bifold line number is the same at both. `e2e/` and `docs/` paths are superproject `HEAD`.
 
