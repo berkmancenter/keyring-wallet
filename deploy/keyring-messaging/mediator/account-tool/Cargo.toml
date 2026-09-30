@@ -1,0 +1,22 @@
+# Built inside the affinidi-tdk-rs workspace by ../Dockerfile, which adds it
+# as a member so it shares the mediator's pinned dependencies and build cache.
+# Its dependency lines mirror affinidi-messaging-mediator-admin's at that commit.
+[package]
+name = "keyring-mediator-account"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+description = "Registers the push gateway's account on its bundled mediator"
+
+[[bin]]
+name = "mediator-account"
+path = "src/main.rs"
+
+[dependencies]
+affinidi-messaging-sdk = { path = "../../crates/messaging/affinidi-messaging-sdk" }
+affinidi-tdk-common = "0.6"
+affinidi-secrets-resolver = "0.5"
+trust-tasks-rs = "0.24"
+serde_json = "1"
+sha256 = "1"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

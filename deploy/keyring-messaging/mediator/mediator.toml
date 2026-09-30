@@ -1,7 +1,7 @@
 # The push gateway's mediator (Affinidi messaging mediator v0.33.1).
 #
 # These are the settings of the VTI lab mediator the gateway was tested
-# against, with four deliberate differences:
+# against, with five deliberate differences:
 #
 #   1. Container paths. The identity comes from the environment (MEDIATOR_DID,
 #      ADMIN_DID, set by docker-compose.yml from .env), the keys from a file in
@@ -15,14 +15,31 @@
 #      forward addressed to its own hostname is delivered locally instead of
 #      relayed to itself (upstream docs/multi-mediator.md §5).
 #   4. Logs are JSON, for the container log collector.
+#   5. It is CLOSED (upstream's "closed / allowlist" recipe, docs/acls.md §7),
+#      where the lab is open (explicit_deny + ALLOW_ALL):
+#      - mediator_acl_mode = "explicit_allow": only DIDs with an account may log
+#        in, and only the admin creates accounts. The gateway's account is
+#        created once with mediator-account (HANDOVER.md §8), with its own
+#        rights; nobody else has one.
+#      - global_acl_default = "DENY_ALL,SEND_MESSAGES,RECEIVE_FORWARDED" is
+#        what every DID without an account gets:
+#          SEND_MESSAGES     agents on other mediators may have wake-ups
+#                            delivered to the gateway (their relayed envelope
+#                            is a direct delivery, checked against the
+#                            sender's rights, inbound.rs:1190-1204);
+#          RECEIVE_FORWARDED an agent may be the next hop of the gateway's
+#                            reply (routing.rs, the next-hop account);
+#          no SEND_FORWARDED nobody but the gateway may have a forward relayed
+#                            onward, so the mediator is not an open relay
+#                            (routing.rs resolve_forward_sender).
+#      Narrowing it further cuts agents on other mediators off (HANDOVER.md §3).
 #
-# Who may use it: the ACLs below are open (ALLOW_ALL), as in the lab. Agents on
-# other mediators have no account here, so they send under global_acl_default:
-# narrowing it cuts them off (HANDOVER.md §3). The
-# login endpoint (/mediator/v1/authenticate) is reachable only from inside the
-# Docker network (Caddyfile). So the gateway is the only party that can hold a
-# session here. Everyone else can only relay messages in to it on /inbound,
-# which is what the agents' mediators do.
+#      Lab-only override, to run it open as the lab mediator does: set
+#      mediator_acl_mode = "explicit_deny" and global_acl_default = "ALLOW_ALL".
+#      Never on a public server: ALLOW_ALL grants SEND_FORWARDED to anyone.
+#
+# The login endpoint (/mediator/v1/authenticate) is also reachable only from
+# inside the Docker network (Caddyfile), a second fence around the same rule.
 #
 # Every field is overridable by environment variable; see upstream's annotated
 # template (crates/messaging/affinidi-messaging-mediator/conf/mediator.toml).
@@ -53,8 +70,8 @@ database_url = "redis://redis:6379/"
 database_timeout = "2"
 
 [security]
-mediator_acl_mode = "explicit_deny"
-global_acl_default = "ALLOW_ALL"
+mediator_acl_mode = "explicit_allow"
+global_acl_default = "DENY_ALL,SEND_MESSAGES,RECEIVE_FORWARDED"
 local_direct_delivery_allowed = "true"
 local_direct_delivery_allow_anon = "false"
 # TLS ends at Caddy.

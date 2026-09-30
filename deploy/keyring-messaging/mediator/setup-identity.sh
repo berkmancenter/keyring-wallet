@@ -6,8 +6,9 @@
 # Reads MEDIATOR_HOST from .env. Writes, owned by the mediator's uid (10002),
 # mode 0600:
 #   secrets/mediator/mediator-secrets.json  the mediator's private keys
-#   secrets/mediator/admin-monitor.json     its admin identity (for upstream's
-#                                           mediator-console), with private key
+#   secrets/mediator/admin-monitor.json     its admin identity, with private key:
+#                                           mediator-account registers the
+#                                           gateway with it (HANDOVER.md §8)
 # and prints the MEDIATOR_DID and MEDIATOR_ADMIN_DID lines to put in .env.
 #
 # Refuses to overwrite an existing identity: a new one is a new mediator DID,
@@ -35,17 +36,16 @@ docker compose run --rm --no-deps --user 0:0 --entrypoint mediator-setup \
 
 mediator_did=$(sed -n 's/^mediator_did *= *"did:\/\/\(.*\)"/\1/p' "$work/mediator.toml")
 admin_did=$(sed -n 's/^admin_did *= *"did:\/\/\(.*\)"/\1/p' "$work/mediator.toml")
-if [ -z "$mediator_did" ] || [ -z "$admin_did" ] || [ ! -s "$work/mediator-secrets.json" ]; then
-  echo "mediator-setup did not produce a DID, an admin DID and a secrets file:" >&2
+if [ -z "$mediator_did" ] || [ -z "$admin_did" ] || [ ! -s "$work/mediator-secrets.json" ] \
+   || [ ! -s "$work/admin-monitor.json" ]; then
+  echo "mediator-setup did not produce a DID, an admin DID, a secrets file and an admin profile:" >&2
   ls -la "$work" >&2
   exit 1
 fi
 
 mkdir -p secrets/mediator
 install -m 0600 "$work/mediator-secrets.json" secrets/mediator/mediator-secrets.json
-if [ -e "$work/admin-monitor.json" ]; then
-  install -m 0600 "$work/admin-monitor.json" secrets/mediator/admin-monitor.json
-fi
+install -m 0600 "$work/admin-monitor.json" secrets/mediator/admin-monitor.json
 chown -R 10002:10002 secrets/mediator
 chmod 0700 secrets/mediator
 

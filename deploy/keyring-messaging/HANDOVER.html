@@ -152,13 +152,15 @@ own test suite with our patch applied.</li>
 <ul>
 <li>
 <p><strong>The bundled mediator.</strong> The iPhone test ran through our lab's mediator:
-the same Affinidi release, and the same settings except the two relay
-changes in §7. The package's own mediator is set up but untested:</p>
+the same Affinidi release, but open, where the package's is closed (§7).
+The package's own mediator is set up but untested:</p>
 <ul>
 <li>that CI builds and boots it is not yet confirmed;</li>
-<li>no wake-up has yet crossed from an agent's mediator to it.</li>
+<li>that a wake-up from an agent on another mediator arrives through it,
+with its closed settings;</li>
+<li>that it refuses to relay a stranger's message onward to a third party.</li>
 </ul>
-<p>We prove it in our lab before you deploy.</p>
+<p>We prove all three in our lab before you deploy.</p>
 </li>
 <li>
 <p>A real Android phone. The gateway loads the Google key at startup, but no
@@ -481,9 +483,10 @@ relayed to the agent's mediator's <code>/inbound</code>.</li>
 </tbody>
 </table></div>
 <p>On the bundled mediator the matching settings are already in
-<code>mediator/mediator.toml</code>. Remote agents get their sending rights there from
-<code>global_acl_default = &quot;ALLOW_ALL&quot;</code>, as they have no account, so don't narrow
-it without the project.</p>
+<code>mediator/mediator.toml</code>. Remote agents have no account there, so their rights
+come from its default for strangers,
+<code>global_acl_default = &quot;DENY_ALL,SEND_MESSAGES,RECEIVE_FORWARDED&quot;</code> (§7).
+Narrowing it further cuts them off.</p>
 <p class="done"><strong>You're done with this section when</strong> you have, in writing:</p>
 <ul>
 <li>the issuing VTA and its admin;</li>
@@ -890,13 +893,15 @@ or built as in §4.</p>
 </li>
 <li>
 <p><strong>Settings:</strong> <code>mediator/mediator.toml</code>, mounted read-only. These are our
-lab mediator's settings, with two relay changes:</p>
+lab mediator's settings, with three changes:</p>
 <ul>
 <li>it accepts relays from other mediators explicitly
 (<code>enable_inter_mediator_relay = &quot;true&quot;</code>);</li>
 <li>it knows its own public URL (<code>LOCAL_ENDPOINTS</code>, from <code>MEDIATOR_HOST</code>), so
 it delivers messages for itself locally instead of relaying them to
-itself.</li>
+itself;</li>
+<li>it is <strong>closed</strong> (upstream's &quot;closed / allowlist&quot; recipe), where the lab
+mediator is open.</li>
 </ul>
 <p>Its identity (<code>MEDIATOR_DID</code>, <code>ADMIN_DID</code>) and Redis address come from the
 environment.</p>
@@ -904,13 +909,26 @@ environment.</p>
 <li>
 <p><strong>Who may use it:</strong></p>
 <ul>
-<li>Anyone may relay a message in, on <code>/mediator/v1/inbound</code>. That is how
-agents' mediators deliver wake-ups.</li>
-<li>Only the gateway can log in. Caddy refuses the login endpoint
-(<code>/mediator/v1/authenticate…</code>) from public addresses. Inside the stack,
+<li><strong>Only DIDs with an account may log in, and only the gateway has one</strong>
+(<code>mediator_acl_mode = &quot;explicit_allow&quot;</code>). The mediator's admin creates it
+once with <code>mediator-account</code> (§8 part B).</li>
+<li><strong>Everyone else gets a narrow default</strong>
+(<code>global_acl_default = &quot;DENY_ALL,SEND_MESSAGES,RECEIVE_FORWARDED&quot;</code>):
+<ul>
+<li>an agent's mediator may relay a wake-up in, on
+<code>/mediator/v1/inbound</code>, for delivery to the gateway;</li>
+<li>an agent may receive the gateway's reply;</li>
+<li>nobody but the gateway may have a message relayed onward, so the
+mediator can't be used as an open relay.</li>
+</ul>
+</li>
+<li><strong>The login endpoint is fenced too.</strong> Caddy refuses
+<code>/mediator/v1/authenticate…</code> from public addresses. Inside the stack,
 <code>MEDIATOR_HOST</code> resolves to Caddy itself (a network alias), so the gateway
 logs in from a private address.</li>
-<li>Without a login, nobody can collect messages or send through it.</li>
+<li><strong>Lab only:</strong> <code>mediator/mediator.toml</code> shows how to run it open, as our lab
+mediator runs. Never do that on a public server: it would relay anyone's
+messages.</li>
 </ul>
 </li>
 <li>
@@ -1088,7 +1106,13 @@ cargo build --package pnm-cli --release     # → target/release/pnm
 <td><code>gateway-identity.json</code></td>
 </tr>
 <tr>
-<td>4. Install</td>
+<td>4. Register on the mediator</td>
+<td><strong>You</strong>, as the mediator's admin</td>
+<td>The server</td>
+<td>The gateway may log in to the closed mediator</td>
+</tr>
+<tr>
+<td>5. Install</td>
 <td><strong>You</strong></td>
 <td>The server</td>
 <td>The gateway starts with its DID</td>
@@ -1148,9 +1172,24 @@ step 1. No upstream tool writes the gateway's identity file (tracked as
 finding VTI-53), which is why <code>tools/gateway-identity</code> exists. It opens the
 bundle with the VTA SDK's documented <code>open_bundle</code>.</p>
 </blockquote>
-<p>There is no mediator account to create: the gateway registers itself the first
-time it logs in to the bundled mediator.</p>
-<p><strong>Step 4, install (you).</strong></p>
+<p><strong>Step 4, register the gateway on the mediator (you, as its admin).</strong> The
+mediator is closed, so the gateway can't log in until its admin creates its
+account. <code>mediator-account</code> does that. It is a small tool in the mediator's
+image that logs in with the admin identity from Part A and sends upstream's
+<code>messaging/account/add</code>:</p>
+<pre><code class="language-sh">cd /opt/keyring-messaging
+sudo docker compose run --rm --no-deps --entrypoint mediator-account mediator \
+  --profile /run/secrets/mediator/admin-monitor.json \
+  --add &lt;the gateway's DID, the &quot;did&quot; in gateway-identity.json&gt;
+</code></pre>
+<p>Expected: <code>gateway account registered on did:peer:2…</code>, then the gateway's DID,
+its account hash, and the account's rights. Those are <code>local</code>,
+<code>sendMessages</code>, <code>receiveMessages</code>, <code>sendForwarded</code> and <code>receiveForwarded</code>, all
+<code>true</code>, and <code>accessListMode: explicitDeny</code>. Running it again sets the same
+rights, so it is safe to repeat.</p>
+<p>It runs inside the stack, so it reaches the mediator's login through the
+network alias. Caddy and the mediator must be running (Part A).</p>
+<p><strong>Step 5, install (you).</strong></p>
 <pre><code class="language-sh">sudo install -o 10001 -g 10001 -m 600 gateway-identity.json /opt/keyring-messaging/secrets/
 # in .env: GATEWAY_IDENTITY_FILE=/run/secrets/gateway/gateway-identity.json
 cd /opt/keyring-messaging &amp;&amp; sudo docker compose up -d gateway
@@ -1436,6 +1475,21 @@ else is a <code>WARN</code> or <code>ERROR</code> line while the gateway keeps r
 <td>Check that Caddy has the <code>MEDIATOR_HOST</code> alias on <code>edge</code> (<code>sudo docker compose config</code>), and that the gateway is on <code>edge</code></td>
 </tr>
 <tr>
+<td>The gateway keeps logging <code>mediator listener failed to start</code>, and the mediator log shows <code>authentication.blocked</code> on <code>/authenticate/challenge</code></td>
+<td>The gateway has no account on the closed mediator</td>
+<td>Run <code>mediator-account</code> (§8 part B, step 4) with the gateway's exact DID. The gateway retries by itself</td>
+</tr>
+<tr>
+<td><code>mediator-account</code> fails with <code>could not reach mediator</code> or a TLS error</td>
+<td>Caddy or the mediator isn't running, or the certificate for <code>MEDIATOR_HOST</code> isn't issued yet</td>
+<td><code>sudo docker compose ps</code>; check <code>… logs caddy</code>; retry once the mediator is <code>healthy</code></td>
+</tr>
+<tr>
+<td><code>mediator-account</code> fails with <code>admin access is required</code> or a login refusal</td>
+<td>The profile isn't the mediator's admin: <code>MEDIATOR_ADMIN_DID</code> in <code>.env</code> doesn't match <code>secrets/mediator/admin-monitor.json</code></td>
+<td>Use the two lines <code>setup-identity.sh</code> printed, unchanged, and restart the mediator</td>
+</tr>
+<tr>
 <td>Agents' wake-ups never arrive; the mediator log shows a refusal on <code>/inbound</code> with an <code>authorization.…</code> code</td>
 <td>The relay settings of the agents' mediator and ours disagree (for example <code>relay_mode</code>)</td>
 <td>Send us the log lines and the time. <code>relay_mode</code> must be the same on both mediators</td>
@@ -1666,18 +1720,13 @@ confirmed.</li>
 <p>The project decides when, and sends you the steps for that mediator.</p>
 <h2 id="14-known-gaps" tabindex="-1">14. Known gaps</h2>
 <ul>
-<li><strong>The bundled mediator is unproven across mediators.</strong> Until the lab proof
-(STATUS box) passes, no wake-up has crossed from an agent's own mediator to
-it.</li>
+<li><strong>The bundled mediator is unproven.</strong> Until the lab proof (STATUS box)
+passes, no wake-up has crossed from an agent's own mediator to it, and its
+refusal to relay a stranger's message onward has been read from its source
+but not tested.</li>
 <li><strong>The agents' mediator must relay.</strong> The production agents' mediator needs
 the settings in §3's table. The project checks its configuration once it is
 known.</li>
-<li><strong>The bundled mediator may relay strangers' messages onward.</strong> Reading its
-source suggests a stranger can hand it a signed forward addressed to the
-mediator, naming a third party as the next hop, and have it relayed on. The
-lab proof tests this. If it does, the fix is upstream's &quot;closed&quot; setup: the
-gateway's account is registered once by the mediator's admin, and the
-default for strangers is narrowed.</li>
 <li><strong>No unregister.</strong> A removed phone's handle and token stay in the store. They
 can't be used once no agent wakes them, but they are still stored tokens.</li>
 <li><strong>Disabling or wiping a device at the agent doesn't clear its wake channel</strong>

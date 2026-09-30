@@ -205,6 +205,10 @@ jobs:
           docker compose exec -T mediator curl -sS http://127.0.0.1:7037/mediator/v1/readyz || true
           echo
           docker compose logs mediator | tail -n 60
+          # The account tool is in the image and runs (usage, exit 1).
+          out=$(docker compose run --rm --no-deps --entrypoint mediator-account mediator 2>&1 || true)
+          echo "$out"
+          printf '%s' "$out" | grep -q 'usage: mediator-account'
           docker compose down
 
       - name: Save the image
