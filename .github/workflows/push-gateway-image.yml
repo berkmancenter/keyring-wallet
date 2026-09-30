@@ -86,7 +86,7 @@ jobs:
       - name: Compose file is valid
         run: |
           cp .env.example .env
-          sed -i 's/^GATEWAY_HOST=$/GATEWAY_HOST=localhost/' .env
+          sed -i 's/^GATEWAY_HOST=$/GATEWAY_HOST=localhost/; s/^MEDIATOR_HOST=$/MEDIATOR_HOST=localhost/' .env
           docker compose config --quiet
 
       - name: Build the gateway image
@@ -147,5 +147,72 @@ jobs:
         with:
           name: vti-push-gateway-image-${{ matrix.arch }}
           path: deploy/keyring-messaging/vti-push-gateway.tar
+          retention-days: 14
+          if-no-files-found: error
+
+  mediator:
+    # The mediator the gateway receives wake-ups through, exactly as an operator
+    # brings it up: build the image, create its identity with
+    # mediator/setup-identity.sh, start it with Redis, and check it is healthy.
+    name: Mediator image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: deploy/keyring-messaging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned mediator commit
+        id: pin
+        run: |
+          commit=$(sed -n 's/^MEDIATOR_COMMIT=//p' .env.example)
+          if ! printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::MEDIATOR_COMMIT in .env.example is not a full SHA: '$commit'"; exit 1
+          fi
+          echo "image=keyring-messaging/messaging-mediator:$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Build the mediator image
+        run: |
+          cp .env.example .env
+          sed -i 's/^GATEWAY_HOST=$/GATEWAY_HOST=localhost/; s/^MEDIATOR_HOST=$/MEDIATOR_HOST=localhost/' .env
+          docker compose build mediator
+
+      - name: Create the mediator's identity (setup-identity.sh)
+        run: |
+          sudo ./mediator/setup-identity.sh | tee setup.out
+          grep '^MEDIATOR_DID=did:peer:2' setup.out >> .env
+          grep '^MEDIATOR_ADMIN_DID=did:' setup.out >> .env
+          sudo ls -ln secrets/mediator
+          if sudo ./mediator/setup-identity.sh; then
+            echo "::error::setup-identity.sh overwrote an existing identity"; exit 1
+          fi
+
+      - name: Boot the mediator with Redis
+        run: |
+          if ! docker compose up -d --wait --wait-timeout 120 redis mediator; then
+            docker compose logs mediator; exit 1
+          fi
+          docker compose exec -T mediator curl -fsS http://127.0.0.1:7037/mediator/v1/livez
+          echo
+          docker compose exec -T mediator curl -sS http://127.0.0.1:7037/mediator/v1/readyz || true
+          echo
+          docker compose logs mediator | tail -n 60
+          docker compose down
+
+      - name: Save the image
+        run: docker save -o messaging-mediator.tar "${{ steps.pin.outputs.image }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: messaging-mediator-image-${{ matrix.arch }}
+          path: deploy/keyring-messaging/messaging-mediator.tar
           retention-days: 14
           if-no-files-found: error

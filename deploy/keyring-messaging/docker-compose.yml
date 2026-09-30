@@ -1,15 +1,17 @@
-# Keyring push wake-up gateway (OpenVTC/vti-push-gateway) behind Caddy with
-# automatic HTTPS. See README.md, including "Unknowns".
+# Keyring push wake-up gateway (OpenVTC/vti-push-gateway) and the DIDComm v2
+# mediator it receives wake-ups through (Affinidi's messaging mediator, the one
+# the VTI stack runs), behind Caddy with automatic HTTPS. See HANDOVER.md.
 #
 #   cp .env.example .env   # then fill it in
 #   docker compose config  # static check
 #   docker compose up -d
 #
-# Keyring's mailbox (its DIDComm mediator) is not part of this stack: it keeps
-# running where it runs today, and the gateway uses the shared VTI DIDComm v2
-# mediator named in its identity file (docs/plans/push-notifications-plan.md
-# §5.2). Only Caddy publishes ports; the gateway's metrics listener stays on
-# the container's own loopback and is not reachable even from Caddy.
+# Keyring's mailbox (the Credo mediator the app's MEDIATOR_URL points at) is not
+# part of this stack and is not changed by it: phones never talk to this
+# mediator. Only Caddy publishes ports. The gateway's metrics stay on its own
+# loopback; the mediator's login endpoint is reachable only from inside this
+# stack's network (Caddyfile), so the gateway is the only party that can hold a
+# session on it.
 
 name: keyring-messaging
 
@@ -71,6 +73,53 @@ services:
     networks: [edge]
     labels: *no-auto-update
 
+  mediator:
+    # Affinidi messaging mediator v0.33.1, built from source at a pinned commit
+    # (mediator/Dockerfile); upstream's newest published image is far older.
+    build:
+      context: ./mediator
+      args:
+        MEDIATOR_COMMIT: ${MEDIATOR_COMMIT:-555806151b30a4ba2085a29384c8e048307e0083}
+    image: keyring-messaging/messaging-mediator:${MEDIATOR_COMMIT:-555806151b30a4ba2085a29384c8e048307e0083}
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["-c", "/etc/keyring-mediator/mediator.toml"]
+    environment:
+      # Its own identity, from mediator/setup-identity.sh.
+      MEDIATOR_DID: did://${MEDIATOR_DID:-}
+      ADMIN_DID: did://${MEDIATOR_ADMIN_DID:-}
+      DATABASE_URL: redis://redis:6379/
+      # Its public URL, so forwards addressed to itself are delivered locally.
+      LOCAL_ENDPOINTS: https://${MEDIATOR_HOST:?set MEDIATOR_HOST in .env}
+    volumes:
+      - ./mediator/mediator.toml:/etc/keyring-mediator/mediator.toml:ro
+      - ./secrets/mediator:/run/secrets/mediator:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7037/mediator/v1/livez"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [edge, store]
+    labels: *no-auto-update
+
+  redis:
+    # The mediator's message store. Reachable only by the mediator.
+    image: redis:7.4.6-alpine@sha256:3b73847e72874be07e6657b129a94761662b79bc0f679273757d4218573b2a98
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [store]
+    labels: *no-auto-update
+
   caddy:
     image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
     restart: unless-stopped
@@ -82,6 +131,7 @@ services:
       - "${HTTPS_PORT:-443}:443/udp"
     environment:
       GATEWAY_HOST: ${GATEWAY_HOST}
+      MEDIATOR_HOST: ${MEDIATOR_HOST}
       # https (default) = automatic certificates. http = plain HTTP, for a local
       # run or behind a tunnel that terminates TLS itself (README "Local testing").
       SITE_SCHEME: ${SITE_SCHEME:-https}
@@ -89,8 +139,17 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy/data:/data
       - ./data/caddy/config:/config
-    networks: [edge]
+    networks:
+      edge:
+        # Inside this network the mediator's public hostname resolves to Caddy
+        # itself, so the gateway reaches the mediator's login endpoint from a
+        # private address (the only place the Caddyfile allows it).
+        aliases:
+          - ${MEDIATOR_HOST}
     labels: *no-auto-update
 
 networks:
   edge: {}
+  # Redis only; no route to anything else.
+  store:
+    internal: true
